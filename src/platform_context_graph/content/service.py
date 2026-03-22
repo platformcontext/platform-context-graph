@@ -76,6 +76,17 @@ class ContentService:
     postgres_provider: _PostgresProvider | None
     workspace_provider: _WorkspaceProvider | None
 
+    def delete_repository_content(self, repo_id: str) -> None:
+        """Delete cached content for one repository.
+
+        Args:
+            repo_id: Canonical repository identifier.
+        """
+
+        provider = self.postgres_provider
+        if provider is not None and provider.enabled:
+            provider.delete_repository_content(repo_id)
+
     def get_file_content(self, *, repo_id: str, relative_path: str) -> dict[str, Any]:
         """Return file content using Postgres first and the workspace second.
 
