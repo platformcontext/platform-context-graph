@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import random
 import os
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
-
-import requests
 
 from platform_context_graph.observability import get_observability, initialize_observability
 
@@ -22,6 +19,7 @@ from .git import (
     repo_checkout_name,
     update_existing_repositories,
 )
+from .retry import MAX_REPO_SYNC_RETRY_SECONDS, classify_sync_error, retry_after_seconds
 from .support import (
     begin_index_cycle,
     fingerprint_tree,
@@ -39,8 +37,6 @@ from ..status_store import (
     update_runtime_ingester_status,
 )
 
-DEFAULT_REPO_SYNC_RETRY_SECONDS = 5
-MAX_REPO_SYNC_RETRY_SECONDS = 300
 DEFAULT_INGESTER_CONTROL_POLL_SECONDS = 5
 
 _PRESERVED_STATUS_KEYS = ("active_run_id", "repository_count", "pulled_repositories", "in_sync_repositories", "pending_repositories", "completed_repositories", "failed_repositories")
@@ -50,57 +46,6 @@ def _utc_now() -> datetime:
     """Return the current UTC timestamp."""
 
     return datetime.now(timezone.utc)
-
-
-def _classify_sync_error(exc: Exception) -> str:
-    """Classify one repo-sync exception into a coarse runtime status kind."""
-
-    if isinstance(
-        exc,
-        (
-            requests.exceptions.ConnectionError,
-            requests.exceptions.Timeout,
-            requests.exceptions.ProxyError,
-            requests.exceptions.SSLError,
-        ),
-    ):
-        return "network"
-    if isinstance(exc, requests.exceptions.HTTPError):
-        response = exc.response
-        if response is not None and response.status_code in {403, 429}:
-            return "rate_limit"
-        if response is not None and 500 <= response.status_code < 600:
-            return "github_5xx"
-        return "http"
-    if isinstance(exc, ValueError):
-        return "misconfigured"
-    return "unknown"
-
-
-def _retry_after_seconds(exc: Exception, attempt: int) -> int:
-    """Return bounded retry delay with jitter for transient sync failures."""
-
-    if isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None:
-        retry_after = exc.response.headers.get("Retry-After")
-        if retry_after:
-            try:
-                return max(1, min(MAX_REPO_SYNC_RETRY_SECONDS, int(retry_after)))
-            except ValueError:
-                pass
-        reset_header = exc.response.headers.get("X-RateLimit-Reset")
-        if reset_header:
-            try:
-                reset_time = datetime.fromtimestamp(int(reset_header), tz=timezone.utc)
-                wait_seconds = max(1, int((reset_time - _utc_now()).total_seconds()))
-                return min(MAX_REPO_SYNC_RETRY_SECONDS, wait_seconds)
-            except ValueError:
-                pass
-    base_delay = min(
-        MAX_REPO_SYNC_RETRY_SECONDS,
-        DEFAULT_REPO_SYNC_RETRY_SECONDS * (2 ** max(0, attempt - 1)),
-    )
-    jitter = random.randint(0, min(5, base_delay))
-    return min(MAX_REPO_SYNC_RETRY_SECONDS, base_delay + jitter)
 
 
 def _current_ingester_status(component: str) -> dict[str, object]:
@@ -449,13 +394,13 @@ def run_repo_sync_loop(
             attempt = 1
             pending_request = _wait_for_next_cycle(config.component, interval_seconds)
         except Exception as exc:
-            delay_seconds = _retry_after_seconds(exc, attempt)
+            delay_seconds = retry_after_seconds(exc, attempt)
             _persist_ingester_status(
                 config,
                 status="degraded",
                 last_attempt_at=started_at,
                 next_retry_at=_utc_now() + timedelta(seconds=delay_seconds),
-                last_error_kind=_classify_sync_error(exc),
+                last_error_kind=classify_sync_error(exc),
                 last_error_message=str(exc),
             )
             if claimed_request is not None:

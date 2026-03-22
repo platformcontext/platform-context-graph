@@ -700,6 +700,20 @@ def test_repo_sync_loop_records_degraded_status_and_retries_transient_failures(
     assert recorded_statuses[-1]["last_error_kind"] == "network"
 
 
+def test_retry_delay_clamps_attempt_exponent_before_growth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Retry delay should cap exponential growth before computing huge powers."""
+
+    retry = importlib.import_module("platform_context_graph.runtime.ingester.retry")
+
+    monkeypatch.setattr(retry.random, "randint", lambda _low, _high: 0)
+
+    delay = retry.retry_after_seconds(RuntimeError("boom"), attempt=10_000)
+
+    assert delay == retry.MAX_REPO_SYNC_RETRY_SECONDS
+
+
 def test_repo_sync_loop_claims_and_completes_manual_scan_requests(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

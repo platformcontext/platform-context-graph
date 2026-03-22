@@ -164,7 +164,7 @@ class IngesterScanRequestResponse(BaseModel):
     accepted: bool
     scan_request_token: str
     scan_request_state: str
-    scan_requested_at: str
+    scan_requested_at: str | None = None
     scan_requested_by: str | None = None
 
 

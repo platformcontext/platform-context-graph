@@ -32,7 +32,7 @@ def _construct_unknown_tag(
 _PermissiveSafeLoader.add_multi_constructor("", _construct_unknown_tag)
 
 
-def _load_all_yaml_documents(content: str) -> list[dict[str, Any]]:
+def _load_all_yaml_documents(content: str) -> list[Any]:
     """Load YAML documents with permissive tag handling."""
 
     return list(yaml.load_all(content, Loader=_PermissiveSafeLoader))
@@ -80,7 +80,7 @@ def build_empty_result(
     }
 
 
-def safe_load_all(content: str) -> list[dict[str, Any]]:
+def safe_load_all(content: str) -> list[Any]:
     """Load all YAML documents from a string.
 
     Args:
