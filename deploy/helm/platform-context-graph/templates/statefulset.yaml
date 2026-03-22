@@ -8,14 +8,15 @@ metadata:
     app.kubernetes.io/component: ingester
 spec:
   replicas: {{ .Values.ingester.replicas }}
-  serviceName: {{ include "pcg.ingesterHeadlessServiceName" . }}
+  serviceName: {{ include "pcg.fullname" . }}
   selector:
     matchLabels:
-      {{- include "pcg.ingesterSelectorLabels" . | nindent 6 }}
+      {{- include "pcg.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "pcg.ingesterSelectorLabels" . | nindent 8 }}
+        {{- include "pcg.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ingester
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

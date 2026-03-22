@@ -316,8 +316,9 @@ def create_service_app(
     async def lifespan(_app: FastAPI):
         """Start and stop the MCP watcher lifecycle around the app runtime."""
         server = _get_mcp_server()
-        if server is not None:
-            server.code_watcher.start()
+        watcher = getattr(server, "code_watcher", None) if server is not None else None
+        if watcher is not None:
+            watcher.start()
         try:
             yield
         finally:

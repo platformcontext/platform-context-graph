@@ -190,6 +190,31 @@ def test_create_service_app_exposes_http_api_and_mcp_routes() -> None:
         )
 
 
+def test_create_service_app_starts_without_code_watcher_for_api_role() -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+    from unittest.mock import MagicMock
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    server = SimpleNamespace(
+        code_watcher=None,
+        shutdown=MagicMock(),
+    )
+
+    app = api_app.create_service_app(
+        query_services_dependency=lambda: {"query": "services"},
+        mcp_server_dependency=lambda: server,
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    server.shutdown.assert_called_once()
+
+
 def test_create_app_exposes_repository_ingester_status_route() -> None:
     pytest.importorskip("httpx")
     from starlette.testclient import TestClient

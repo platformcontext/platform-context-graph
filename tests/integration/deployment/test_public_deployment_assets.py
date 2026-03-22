@@ -105,6 +105,11 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         "8080",
     ]
     assert worker_container["command"] == ["pcg", "internal", "repo-sync-loop"]
+    assert worker_statefulset["spec"]["serviceName"] == "platform-context-graph"
+    assert worker_statefulset["spec"]["selector"]["matchLabels"] == {
+        "app.kubernetes.io/name": "platform-context-graph",
+        "app.kubernetes.io/instance": "platform-context-graph",
+    }
 
     api_env_names = {env["name"] for env in deployment_container.get("env", [])}
     worker_env_names = {env["name"] for env in worker_container.get("env", [])}
