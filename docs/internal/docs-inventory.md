@@ -43,6 +43,34 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/reference/troubleshooting.md` | Troubleshooting guide | active |
 | `docs/docs/roadmap.md` | Public roadmap | active |
 | `docs/docs/use-cases.md` | Use cases | active |
+| `docs/docs/languages/feature-matrix.md` | Parser feature matrix | active |
+| `docs/docs/languages/python.md` | Python parser spec | active |
+| `docs/docs/languages/go.md` | Go parser spec | active |
+| `docs/docs/languages/typescript.md` | TypeScript parser spec | active |
+| `docs/docs/languages/rust.md` | Rust parser spec | active |
+| `docs/docs/languages/java.md` | Java parser spec | active |
+| `docs/docs/languages/cpp.md` | C++ parser spec | active |
+| `docs/docs/languages/csharp.md` | C# parser spec | active |
+| `docs/docs/languages/c.md` | C parser spec | active |
+| `docs/docs/languages/scala.md` | Scala parser spec | active |
+| `docs/docs/languages/javascript.md` | JavaScript parser spec | active |
+| `docs/docs/languages/ruby.md` | Ruby parser spec | active |
+| `docs/docs/languages/kotlin.md` | Kotlin parser spec | active |
+| `docs/docs/languages/swift.md` | Swift parser spec | active |
+| `docs/docs/languages/php.md` | PHP parser spec | active |
+| `docs/docs/languages/perl.md` | Perl parser spec | active |
+| `docs/docs/languages/elixir.md` | Elixir parser spec | active |
+| `docs/docs/languages/haskell.md` | Haskell parser spec | active |
+| `docs/docs/languages/dart.md` | Dart parser spec | active |
+| `docs/docs/languages/typescriptjsx.md` | TypeScript JSX parser spec | active |
+| `docs/docs/languages/terraform.md` | Terraform parser spec | active |
+| `docs/docs/languages/terragrunt.md` | Terragrunt parser spec | active |
+| `docs/docs/languages/helm.md` | Helm parser spec | active |
+| `docs/docs/languages/kustomize.md` | Kustomize parser spec | active |
+| `docs/docs/languages/argocd.md` | ArgoCD parser spec | active |
+| `docs/docs/languages/crossplane.md` | Crossplane parser spec | active |
+| `docs/docs/languages/kubernetes.md` | Kubernetes parser spec | active |
+| `docs/docs/languages/cloudformation.md` | CloudFormation parser spec | active |
 
 ## Internal docs
 
