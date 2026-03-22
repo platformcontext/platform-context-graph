@@ -1,0 +1,29 @@
+src/platform_context_graph/tools/graph_builder_persistence.py
+  c875c79fb9b4b8d5 233
+docs/docs/languages/typescript.md
+  c875c79fb9b4b8d5 26
+docs/docs/languages/feature-matrix.md
+  c875c79fb9b4b8d5 46-47,49
+src/platform_context_graph/tools/languages/java_support.py
+  c875c79fb9b4b8d5 121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "c27b731df317b16400d02f53a3ae7f4314d664bc",
+  "prompts": {
+    "c875c79fb9b4b8d5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f48fe86d-9937-4374-9a90-83ca178cfa90",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 36,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    }
+  }
+}
