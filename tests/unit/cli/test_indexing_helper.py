@@ -1,10 +1,10 @@
-"""Tests for CLI indexing helper idempotency behavior."""
+"""Tests for CLI indexing helper behavior."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -38,7 +38,7 @@ def test_index_helper_skips_when_nested_files_already_exist(
     api = SimpleNamespace(
         console=SimpleNamespace(print=prints.append),
         _initialize_services=lambda: (db_manager, graph_builder, code_finder),
-        _run_index_with_progress=MagicMock(),
+        _run_index_with_progress=AsyncMock(),
         watch_helper=MagicMock(),
     )
     monkeypatch.setattr(
@@ -55,9 +55,7 @@ def test_index_helper_skips_when_nested_files_already_exist(
     db_manager.close_driver.assert_called_once()
 
 
-def test_index_helper_raises_when_indexing_fails(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_index_helper_raises_when_indexing_fails(tmp_path: Path, monkeypatch) -> None:
     """Bootstrap callers must see a non-zero failure when indexing crashes."""
 
     repo_path = tmp_path / "repos"
@@ -92,4 +90,51 @@ def test_index_helper_raises_when_indexing_fails(
         index_helper(str(repo_path))
 
     assert any("An error occurred during indexing:" in message for message in prints)
+    db_manager.close_driver.assert_called_once()
+
+
+def test_index_helper_forwards_runtime_batch_parameters(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Runtime callers should be able to narrow indexing to a repo subset."""
+
+    workspace = tmp_path / "workspace"
+    repo_a = workspace / "payments-api"
+    workspace.mkdir()
+    repo_a.mkdir()
+    prints: list[str] = []
+
+    db_manager = SimpleNamespace(close_driver=MagicMock())
+    graph_builder = MagicMock()
+    code_finder = SimpleNamespace(list_indexed_repositories=lambda: [])
+    api = SimpleNamespace(
+        console=SimpleNamespace(print=prints.append),
+        _initialize_services=lambda: (db_manager, graph_builder, code_finder),
+        _run_index_with_progress=AsyncMock(),
+        watch_helper=MagicMock(),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing._api",
+        lambda: api,
+    )
+
+    index_helper(
+        str(workspace),
+        selected_repositories=[repo_a],
+        family="sync",
+        source="githubOrg",
+        component="repository",
+    )
+
+    api._run_index_with_progress.assert_called_once_with(
+        graph_builder,
+        workspace.resolve(),
+        is_dependency=False,
+        force=False,
+        selected_repositories=[repo_a.resolve()],
+        family="sync",
+        source="githubOrg",
+        component="repository",
+    )
     db_manager.close_driver.assert_called_once()

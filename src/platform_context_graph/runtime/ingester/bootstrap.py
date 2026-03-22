@@ -13,11 +13,17 @@ from platform_context_graph.observability import (
 )
 
 from .config import RepoSyncConfig, RepoSyncResult
-from .git import clone_missing_repositories, filesystem_sync_all, git_token
+from .git import (
+    clone_missing_repositories_detailed,
+    filesystem_sync_all,
+    git_token,
+    repo_checkout_name,
+)
 from .support import (
     begin_index_cycle,
     fingerprint_tree,
     index_workspace_default,
+    invoke_index_workspace,
     manifest_path,
     record_phase,
     log,
@@ -57,7 +63,11 @@ def _bootstrap_lock_max_wait_seconds() -> float:
 
 
 def _request_index(
-    config: RepoSyncConfig, index_workspace: Callable[[Path], None]
+    config: RepoSyncConfig,
+    index_workspace: Callable[..., None],
+    *,
+    selected_repositories: list[Path] | None = None,
+    family: str,
 ) -> None:
     """Run an index request under the repo-sync observability request context.
 
@@ -67,7 +77,14 @@ def _request_index(
     """
 
     with get_observability().request_context(component=config.component):
-        index_workspace(config.repos_dir)
+        invoke_index_workspace(
+            index_workspace,
+            config.repos_dir,
+            selected_repositories=selected_repositories,
+            family=family,
+            source=config.source_mode,
+            component=config.component,
+        )
 
 
 def _record_bootstrap_phases(
@@ -126,7 +143,7 @@ def _record_bootstrap_phases(
 def _run_bootstrap_filesystem(
     config: RepoSyncConfig,
     *,
-    index_workspace: Callable[[Path], None],
+    index_workspace: Callable[..., None],
 ) -> RepoSyncResult:
     """Run filesystem-mode bootstrap indexing.
 
@@ -152,7 +169,16 @@ def _run_bootstrap_filesystem(
             skipped_count=0,
             failed_count=0,
         )
-        _request_index(config, index_workspace)
+        selected_repositories = [
+            (config.repos_dir / repo_checkout_name(repo_id)).resolve()
+            for repo_id in discovered
+        ]
+        _request_index(
+            config,
+            index_workspace,
+            selected_repositories=selected_repositories,
+            family="bootstrap",
+        )
         if config.filesystem_root is not None:
             manifest_path(config).write_text(
                 fingerprint_tree(config.filesystem_root),
@@ -168,7 +194,7 @@ def _run_bootstrap_filesystem(
 def _run_bootstrap_git(
     config: RepoSyncConfig,
     *,
-    index_workspace: Callable[[Path], None],
+    index_workspace: Callable[..., None],
 ) -> RepoSyncResult:
     """Run Git-backed bootstrap indexing.
 
@@ -181,7 +207,10 @@ def _run_bootstrap_git(
     """
 
     token = git_token(config)
-    discovered, cloned, skipped, failed = clone_missing_repositories(config, token)
+    discovered, cloned_paths, skipped, failed = clone_missing_repositories_detailed(
+        config, token
+    )
+    cloned = len(cloned_paths)
     discovered_count = len(discovered)
     with begin_index_cycle(
         config=config,
@@ -195,7 +224,16 @@ def _run_bootstrap_git(
             skipped_count=skipped,
             failed_count=failed,
         )
-        _request_index(config, index_workspace)
+        selected_repositories = [
+            (config.repos_dir / repo_checkout_name(repo_id)).resolve()
+            for repo_id in discovered
+        ]
+        _request_index(
+            config,
+            index_workspace,
+            selected_repositories=selected_repositories,
+            family="bootstrap",
+        )
     return RepoSyncResult(
         discovered=discovered_count,
         cloned=cloned,
@@ -208,7 +246,7 @@ def _run_bootstrap_git(
 def run_bootstrap_index(
     config: RepoSyncConfig,
     *,
-    index_workspace: Callable[[Path], None] | None = None,
+    index_workspace: Callable[..., None] | None = None,
 ) -> RepoSyncResult:
     """Run the initial workspace bootstrap clone/sync and indexing pass.
 
@@ -230,7 +268,9 @@ def run_bootstrap_index(
         with workspace_lock(config) as acquired:
             if acquired:
                 if config.source_mode == "filesystem":
-                    return _run_bootstrap_filesystem(config, index_workspace=index_workspace)
+                    return _run_bootstrap_filesystem(
+                        config, index_workspace=index_workspace
+                    )
                 return _run_bootstrap_git(config, index_workspace=index_workspace)
 
         remaining = deadline - time.monotonic()

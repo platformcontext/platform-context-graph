@@ -160,21 +160,21 @@ Expected: PASS.
 - Test: `tests/unit/runtime/test_repo_sync_runtime.py`
 - Test: `tests/unit/cli/test_indexing_helper.py`
 
-- [ ] **Step 1: Add failing convergence tests**
+- [x] **Step 1: Add failing convergence tests**
 Require:
   - manual and runtime indexing publish the same repo-level status semantics
   - runtime cycles only reindex changed or newly synced repos
   - `commit_incomplete` repositories resume correctly without a full workspace rerun
 
-- [ ] **Step 2: Run the red suite**
+- [x] **Step 2: Run the red suite**
 Run:
   - `PYTHONPATH=src uv run pytest -q tests/unit/indexing/test_coordinator_execution.py tests/unit/runtime/test_repo_sync_runtime.py tests/unit/cli/test_indexing_helper.py`
 Expected: FAIL where runtime/manual paths still drift.
 
-- [ ] **Step 3: Implement the minimal convergence changes**
+- [x] **Step 3: Implement the minimal convergence changes**
 Keep the coordinator as the single execution engine and narrow any remaining workspace-wide rerun behavior to repo-partitioned worklists.
 
-- [ ] **Step 4: Re-run the focused suite**
+- [x] **Step 4: Re-run the focused suite**
 Run:
   - `PYTHONPATH=src uv run pytest -q tests/unit/indexing/test_coordinator_execution.py tests/unit/runtime/test_repo_sync_runtime.py tests/unit/cli/test_indexing_helper.py`
 Expected: PASS.

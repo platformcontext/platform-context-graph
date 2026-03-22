@@ -17,11 +17,44 @@ def _api():
     return api
 
 
-def index_helper(path: str) -> None:
+def index_helper(
+    path: str,
+    *,
+    force: bool = False,
+    selected_repositories: list[Path] | tuple[Path, ...] | None = None,
+    family: str = "index",
+    source: str | None = None,
+    component: str = "cli",
+) -> None:
+    """Index a repository path synchronously."""
+    return _index_helper(
+        path,
+        force=force,
+        selected_repositories=selected_repositories,
+        family=family,
+        source=source,
+        component=component,
+    )
+
+
+def _index_helper(
+    path: str,
+    *,
+    force: bool,
+    selected_repositories: list[Path] | tuple[Path, ...] | None,
+    family: str,
+    source: str | None,
+    component: str,
+) -> None:
     """Index a repository path synchronously.
 
     Args:
         path: Filesystem path to the repository root.
+        force: Whether to invalidate an existing checkpoint for the same run.
+        selected_repositories: Optional repository subset for coordinated runs.
+        family: Run family label used in checkpointing and telemetry.
+        source: Source label used in checkpointing and telemetry.
+        component: Observability component label for the indexing run.
     """
     api = _api()
     time_start = time.time()
@@ -82,6 +115,15 @@ def index_helper(path: str) -> None:
                 graph_builder,
                 path_obj,
                 is_dependency=False,
+                force=force,
+                selected_repositories=(
+                    [repo_path.resolve() for repo_path in selected_repositories]
+                    if selected_repositories
+                    else None
+                ),
+                family=family,
+                source=source,
+                component=component,
             )
         )
         elapsed = time.time() - time_start
@@ -177,56 +219,14 @@ def reindex_helper(path: str) -> None:
     Args:
         path: Filesystem path to the repository root.
     """
-    api = _api()
-    time_start = time.time()
-    services = api._initialize_services()
-    if not all(services):
-        return
-
-    db_manager, graph_builder, code_finder = services
-    path_obj = Path(path).resolve()
-
-    if not path_obj.exists():
-        api.console.print(f"[red]Error: Path does not exist: {path_obj}[/red]")
-        db_manager.close_driver()
-        return
-
-    indexed_repos = code_finder.list_indexed_repositories()
-    repo_exists = any(
-        Path(repo["path"]).resolve() == path_obj for repo in indexed_repos
+    _index_helper(
+        path,
+        force=True,
+        selected_repositories=None,
+        family="index",
+        source=None,
+        component="cli",
     )
-
-    if repo_exists:
-        api.console.print(f"[yellow]Deleting existing index for: {path_obj}[/yellow]")
-        try:
-            graph_builder.delete_repository_from_graph(str(path_obj))
-            api.console.print("[green]✓[/green] Deleted old index")
-        except Exception as exc:
-            api.console.print(f"[red]Error deleting old index: {exc}[/red]")
-            db_manager.close_driver()
-            return
-
-    api.console.print(f"[cyan]Re-indexing: {path_obj}[/cyan]")
-
-    try:
-        asyncio.run(
-            api._run_index_with_progress(
-                graph_builder,
-                path_obj,
-                is_dependency=False,
-            )
-        )
-        elapsed = time.time() - time_start
-        api.console.print(
-            f"[green]Successfully re-indexed: {path} in {elapsed:.2f} seconds[/green]"
-        )
-    except Exception as exc:
-        api.console.print(
-            f"[bold red]An error occurred during re-indexing:[/bold red] {exc}"
-        )
-        raise
-    finally:
-        db_manager.close_driver()
 
 
 def update_helper(path: str) -> None:

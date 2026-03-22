@@ -324,6 +324,17 @@ def _refresh_repository_origin_url(
 def clone_missing_repositories(
     config: RepoSyncConfig, token: str | None
 ) -> tuple[list[str], int, int, int]:
+    """Clone repositories that are not already present in the workspace."""
+
+    discovered, cloned_paths, skipped, failed = clone_missing_repositories_detailed(
+        config, token
+    )
+    return discovered, len(cloned_paths), skipped, failed
+
+
+def clone_missing_repositories_detailed(
+    config: RepoSyncConfig, token: str | None
+) -> tuple[list[str], list[Path], int, int]:
     """Clone repositories that are not already present in the workspace.
 
     Args:
@@ -331,13 +342,13 @@ def clone_missing_repositories(
         token: Git token used for GitHub discovery and clone URLs.
 
     Returns:
-        Tuple of discovered repository IDs, cloned count, skipped count, and
-        failed count.
+        Tuple of discovered repository IDs, cloned repository paths, skipped
+        count, and failed count.
     """
 
     config.repos_dir.mkdir(parents=True, exist_ok=True)
     discovered = list_repo_identifiers(config, token)
-    cloned = 0
+    cloned_paths: list[Path] = []
     skipped = 0
     failed = 0
     env = git_env(config)
@@ -365,7 +376,7 @@ def clone_missing_repositories(
             env=env,
         )
         if result.returncode == 0:
-            cloned += 1
+            cloned_paths.append(repo_path.resolve())
             continue
 
         failed += 1
@@ -373,7 +384,7 @@ def clone_missing_repositories(
         warning_logger(
             f"[{config.component}] Failed to clone {repo_id}: {result.stderr.strip()}"
         )
-    return discovered, cloned, skipped, failed
+    return discovered, cloned_paths, skipped, failed
 
 
 def filesystem_sync_all(config: RepoSyncConfig) -> list[str]:
@@ -409,6 +420,15 @@ def filesystem_sync_all(config: RepoSyncConfig) -> list[str]:
 def update_existing_repositories(
     config: RepoSyncConfig, token: str | None
 ) -> tuple[int, int]:
+    """Fetch and hard-reset repositories that changed upstream."""
+
+    updated_paths, failed = update_existing_repositories_detailed(config, token)
+    return len(updated_paths), failed
+
+
+def update_existing_repositories_detailed(
+    config: RepoSyncConfig, token: str | None
+) -> tuple[list[Path], int]:
     """Fetch and hard-reset repositories that changed upstream.
 
     Args:
@@ -416,10 +436,10 @@ def update_existing_repositories(
         token: Git token used for authenticated fetches when required.
 
     Returns:
-        Tuple of updated count and failed count.
+        Tuple of updated repository paths and failed count.
     """
 
-    updated = 0
+    updated_paths: list[Path] = []
     failed = 0
     env = git_env(config)
 
@@ -492,10 +512,10 @@ def update_existing_repositories(
             env=env,
         )
         if reset_result.returncode == 0:
-            updated += 1
+            updated_paths.append(repo_dir.resolve())
         else:
             failed += 1
             warning_logger(
                 f"[{config.component}] Failed to reset {repo_dir.name}: {reset_result.stderr.strip()}"
             )
-    return updated, failed
+    return updated_paths, failed

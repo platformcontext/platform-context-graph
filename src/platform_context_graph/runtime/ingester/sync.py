@@ -18,15 +18,19 @@ from .config import RepoSyncConfig, RepoSyncResult
 from .git import (
     count_stale_checkouts,
     clone_missing_repositories,
+    clone_missing_repositories_detailed,
     filesystem_sync_all,
     git_token,
+    repo_checkout_name,
     update_existing_repositories,
+    update_existing_repositories_detailed,
 )
 from .retry import MAX_REPO_SYNC_RETRY_SECONDS, classify_sync_error, retry_after_seconds
 from .support import (
     begin_index_cycle,
     fingerprint_tree,
     index_workspace_default,
+    resumable_repository_paths,
     log,
     manifest_path,
     record_lock_skip,
@@ -149,7 +153,7 @@ def _wait_for_next_cycle(
 def _run_sync_filesystem(
     config: RepoSyncConfig,
     *,
-    index_workspace: Callable[[Path], None],
+    index_workspace: Callable[..., None],
 ) -> RepoSyncResult:
     """Run a filesystem-backed repo sync cycle.
 
@@ -196,7 +200,16 @@ def _run_sync_filesystem(
             phase="indexed",
             count=discovered_count,
         )
-        _request_index(config, index_workspace)
+        selected_repositories = [
+            (config.repos_dir / repo_checkout_name(repo_id)).resolve()
+            for repo_id in discovered
+        ]
+        _request_index(
+            config,
+            index_workspace,
+            selected_repositories=selected_repositories,
+            family="sync",
+        )
         fixture_manifest_path.write_text(current_manifest, encoding="utf-8")
     return RepoSyncResult(
         discovered=discovered_count,
@@ -208,7 +221,7 @@ def _run_sync_filesystem(
 def _run_sync_git(
     config: RepoSyncConfig,
     *,
-    index_workspace: Callable[[Path], None],
+    index_workspace: Callable[..., None],
 ) -> RepoSyncResult:
     """Run a Git-backed repo sync cycle.
 
@@ -221,13 +234,23 @@ def _run_sync_git(
     """
 
     token = git_token(config)
-    discovered, cloned, clone_skipped, clone_failed = clone_missing_repositories(
-        config, token
+    discovered, cloned_paths, clone_skipped, clone_failed = (
+        clone_missing_repositories_detailed(config, token)
     )
-    updated, update_failed = update_existing_repositories(config, token)
+    updated_paths, update_failed = update_existing_repositories_detailed(config, token)
+    cloned = len(cloned_paths)
+    updated = len(updated_paths)
     stale = count_stale_checkouts(config, discovered)
     failed = clone_failed + update_failed
-    should_index = cloned > 0 or updated > 0
+    selected_repositories = sorted(
+        {
+            *[repo_path.resolve() for repo_path in cloned_paths],
+            *[repo_path.resolve() for repo_path in updated_paths],
+            *resumable_repository_paths(config.repos_dir),
+        },
+        key=str,
+    )
+    should_index = bool(selected_repositories)
     if not should_index:
         record_phase(
             config=config,
@@ -327,7 +350,12 @@ def _run_sync_git(
             phase="indexed",
             count=discovered_count,
         )
-        _request_index(config, index_workspace)
+        _request_index(
+            config,
+            index_workspace,
+            selected_repositories=selected_repositories,
+            family="sync",
+        )
     return RepoSyncResult(
         discovered=len(discovered),
         cloned=cloned,
@@ -335,14 +363,14 @@ def _run_sync_git(
         skipped=clone_skipped,
         failed=failed,
         stale=stale,
-        indexed=discovered_count,
+        indexed=len(selected_repositories),
     )
 
 
 def run_repo_sync_cycle(
     config: RepoSyncConfig,
     *,
-    index_workspace: Callable[[Path], None] | None = None,
+    index_workspace: Callable[..., None] | None = None,
 ) -> RepoSyncResult:
     """Run one repository synchronization cycle.
 
@@ -367,7 +395,7 @@ def run_repo_sync_cycle(
 def run_repo_sync_loop(
     *,
     interval_seconds: int,
-    index_workspace: Callable[[Path], None] | None = None,
+    index_workspace: Callable[..., None] | None = None,
 ) -> None:
     """Run the long-lived repo-sync sidecar loop.
 

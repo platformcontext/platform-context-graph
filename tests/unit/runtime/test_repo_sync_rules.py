@@ -175,24 +175,31 @@ def test_git_repo_sync_cycle_rediscoveries_and_indexes_only_on_change(
     calls: list[str] = []
     index_calls: list[Path] = []
 
-    def fake_clone_missing_repositories(
+    def fake_clone_missing_repositories_detailed(
         _config: object, _token: object
-    ) -> tuple[list[str], int, int, int]:
+    ) -> tuple[list[str], list[Path], int, int]:
         calls.append("clone")
-        (repos_dir / "service-b" / ".git").mkdir(parents=True, exist_ok=True)
-        return (["org/service-a", "org/service-b"], 1, 1, 0)
+        cloned_repo = repos_dir / "service-b"
+        (cloned_repo / ".git").mkdir(parents=True, exist_ok=True)
+        return (["org/service-a", "org/service-b"], [cloned_repo.resolve()], 1, 0)
 
-    def fake_update_existing_repositories(
+    def fake_update_existing_repositories_detailed(
         _config: object, _token: object
-    ) -> tuple[int, int]:
+    ) -> tuple[list[Path], int]:
         calls.append("update")
-        return (1, 0)
+        return ([existing_repo.resolve()], 0)
 
     monkeypatch.setattr(
-        sync, "clone_missing_repositories", fake_clone_missing_repositories
+        sync,
+        "clone_missing_repositories_detailed",
+        fake_clone_missing_repositories_detailed,
+        raising=False,
     )
     monkeypatch.setattr(
-        sync, "update_existing_repositories", fake_update_existing_repositories
+        sync,
+        "update_existing_repositories_detailed",
+        fake_update_existing_repositories_detailed,
+        raising=False,
     )
     monkeypatch.setattr(
         sync, "workspace_lock", lambda _config: contextlib.nullcontext(True)
@@ -246,23 +253,29 @@ def test_git_repo_sync_cycle_skips_reindex_when_no_changes(
     calls: list[str] = []
     index_calls: list[Path] = []
 
-    def fake_clone_missing_repositories(
+    def fake_clone_missing_repositories_detailed(
         _config: object, _token: object
-    ) -> tuple[list[str], int, int, int]:
+    ) -> tuple[list[str], list[Path], int, int]:
         calls.append("clone")
-        return (["org/service-a"], 0, 1, 0)
+        return (["org/service-a"], [], 1, 0)
 
-    def fake_update_existing_repositories(
+    def fake_update_existing_repositories_detailed(
         _config: object, _token: object
-    ) -> tuple[int, int]:
+    ) -> tuple[list[Path], int]:
         calls.append("update")
-        return (0, 0)
+        return ([], 0)
 
     monkeypatch.setattr(
-        sync, "clone_missing_repositories", fake_clone_missing_repositories
+        sync,
+        "clone_missing_repositories_detailed",
+        fake_clone_missing_repositories_detailed,
+        raising=False,
     )
     monkeypatch.setattr(
-        sync, "update_existing_repositories", fake_update_existing_repositories
+        sync,
+        "update_existing_repositories_detailed",
+        fake_update_existing_repositories_detailed,
+        raising=False,
     )
     monkeypatch.setattr(
         sync, "workspace_lock", lambda _config: contextlib.nullcontext(True)

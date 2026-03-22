@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import inspect
 import json
 import os
 import socket
@@ -12,7 +13,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 from platform_context_graph.observability import (
     get_observability,
@@ -36,7 +37,14 @@ _BOOT_ID: str = hashlib.sha256(
 ).hexdigest()[:16]
 
 
-def index_workspace_default(workspace: Path) -> None:
+def index_workspace_default(
+    workspace: Path,
+    *,
+    selected_repositories: list[Path] | None = None,
+    family: str = "index",
+    source: str = "manual",
+    component: str = "cli",
+) -> None:
     """Run the default CLI indexing entrypoint for a workspace.
 
     Args:
@@ -45,7 +53,60 @@ def index_workspace_default(workspace: Path) -> None:
 
     from platform_context_graph.cli.cli_helpers import index_helper
 
-    index_helper(str(workspace))
+    index_helper(
+        str(workspace),
+        selected_repositories=selected_repositories,
+        family=family,
+        source=source,
+        component=component,
+    )
+
+
+def invoke_index_workspace(
+    index_workspace: Callable[..., None],
+    workspace: Path,
+    *,
+    selected_repositories: list[Path] | None = None,
+    family: str,
+    source: str,
+    component: str,
+) -> None:
+    """Call an index callback with repo-batch metadata when supported."""
+
+    signature = inspect.signature(index_workspace)
+    accepts_var_kwargs = any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
+    kwargs: dict[str, object] = {}
+    for key, value in {
+        "selected_repositories": selected_repositories,
+        "family": family,
+        "source": source,
+        "component": component,
+    }.items():
+        if accepts_var_kwargs or key in signature.parameters:
+            kwargs[key] = value
+    index_workspace(workspace, **kwargs)
+
+
+def resumable_repository_paths(workspace: Path) -> list[Path]:
+    """Return repositories from the latest workspace run that still need work."""
+
+    from platform_context_graph.indexing import describe_latest_index_run
+    from platform_context_graph.indexing.coordinator_models import ACTIVE_REPO_STATES
+
+    summary = describe_latest_index_run(workspace.resolve())
+    if summary is None:
+        return []
+    return sorted(
+        {
+            Path(repository["repo_path"]).resolve()
+            for repository in summary.get("repositories", [])
+            if repository.get("status") in ACTIVE_REPO_STATES
+        },
+        key=str,
+    )
 
 
 def log(component: str, message: str) -> None:

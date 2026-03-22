@@ -158,7 +158,9 @@ def test_bootstrap_index_ignores_dangling_symlinks_in_filesystem_mode(
         component="bootstrap-index",
     )
 
-    result = repo_sync.run_bootstrap_index(config, index_workspace=lambda _workspace: None)
+    result = repo_sync.run_bootstrap_index(
+        config, index_workspace=lambda _workspace: None
+    )
 
     assert result.discovered == 1
     assert result.indexed == 1
@@ -216,6 +218,129 @@ def test_repo_sync_cycle_records_lock_contention_skip(
         and value == 1
         for metric_name, attrs, value in _metric_points(reader)
     )
+
+
+def test_repo_sync_cycle_indexes_only_changed_and_resumable_repositories(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sync should index only changed repos plus resumable incomplete repos."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    repo_a = repos_dir / "platformcontext--payments-api"
+    repo_c = repos_dir / "platformcontext--inventory-api"
+    repo_d = repos_dir / "platformcontext--docs"
+    (repo_a / ".git").mkdir(parents=True)
+    (repo_c / ".git").mkdir(parents=True)
+    (repo_d / ".git").mkdir(parents=True)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="githubOrg",
+        git_auth_method="token",
+        github_org="platformcontext",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=20,
+        sync_lock_dir=repos_dir / ".pcg-sync.lock",
+        component="repo-sync",
+    )
+
+    repo_b = repos_dir / "platformcontext--orders-api"
+    captured: dict[str, object] = {}
+
+    @contextmanager
+    def _workspace_lock(_config):
+        yield True
+
+    @contextmanager
+    def _index_cycle(**_kwargs):
+        yield
+
+    monkeypatch.setattr(sync, "initialize_observability", lambda **_kwargs: None)
+    monkeypatch.setattr(sync, "workspace_lock", _workspace_lock)
+    monkeypatch.setattr(sync, "begin_index_cycle", _index_cycle)
+    monkeypatch.setattr(sync, "record_phase", lambda **_kwargs: None)
+    monkeypatch.setattr(sync, "git_token", lambda _config: "token")
+    monkeypatch.setattr(
+        sync,
+        "clone_missing_repositories_detailed",
+        lambda _config, _token: (
+            [
+                "platformcontext/payments-api",
+                "platformcontext/orders-api",
+                "platformcontext/inventory-api",
+                "platformcontext/docs",
+            ],
+            [repo_b],
+            3,
+            0,
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "clone_missing_repositories",
+        lambda _config, _token: (
+            [
+                "platformcontext/payments-api",
+                "platformcontext/orders-api",
+                "platformcontext/inventory-api",
+                "platformcontext/docs",
+            ],
+            1,
+            3,
+            0,
+        ),
+    )
+    monkeypatch.setattr(
+        sync,
+        "update_existing_repositories_detailed",
+        lambda _config, _token: ([repo_a], 0),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "update_existing_repositories",
+        lambda _config, _token: (1, 0),
+    )
+    monkeypatch.setattr(
+        sync,
+        "resumable_repository_paths",
+        lambda _workspace: [repo_c.resolve()],
+        raising=False,
+    )
+
+    def _index_workspace(
+        workspace: Path,
+        *,
+        selected_repositories: list[Path] | None = None,
+        family: str | None = None,
+        source: str | None = None,
+        component: str | None = None,
+    ) -> None:
+        captured["workspace"] = workspace
+        captured["selected_repositories"] = selected_repositories
+        captured["family"] = family
+        captured["source"] = source
+        captured["component"] = component
+
+    result = sync.run_repo_sync_cycle(config, index_workspace=_index_workspace)
+
+    assert captured["workspace"] == repos_dir
+    assert captured["family"] == "sync"
+    assert captured["source"] == "githubOrg"
+    assert captured["component"] == "repo-sync"
+    assert set(captured["selected_repositories"]) == {
+        repo_a.resolve(),
+        repo_b.resolve(),
+        repo_c.resolve(),
+    }
+    assert result.indexed == 3
 
 
 def test_bootstrap_index_reaps_stale_empty_lock_and_runs(
@@ -342,7 +467,9 @@ def test_bootstrap_index_waits_for_workspace_lock_before_indexing(
 ) -> None:
     """Bootstrap should retry lock acquisition instead of exiting cleanly."""
 
-    bootstrap = importlib.import_module("platform_context_graph.runtime.ingester.bootstrap")
+    bootstrap = importlib.import_module(
+        "platform_context_graph.runtime.ingester.bootstrap"
+    )
     repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     source_root = tmp_path / "fixtures"
@@ -375,7 +502,9 @@ def test_bootstrap_index_waits_for_workspace_lock_before_indexing(
     monkeypatch.setenv("PCG_BOOTSTRAP_LOCK_RETRY_SECONDS", "1")
     monkeypatch.setenv("PCG_BOOTSTRAP_LOCK_MAX_WAIT_SECONDS", "10")
 
-    result = repo_sync.run_bootstrap_index(config, index_workspace=lambda _workspace: None)
+    result = repo_sync.run_bootstrap_index(
+        config, index_workspace=lambda _workspace: None
+    )
 
     assert attempts["count"] == 2
     assert sleeps == [1.0]
@@ -397,16 +526,15 @@ def test_github_app_token_retries_transient_request_failures(
     monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "test-private-key")
     monkeypatch.setenv("PCG_GITHUB_API_RETRY_ATTEMPTS", "3")
     monkeypatch.setenv("PCG_GITHUB_API_RETRY_DELAY_SECONDS", "1")
-    monkeypatch.setattr(github_auth.jwt, "encode", lambda *_args, **_kwargs: "encoded-jwt")
+    monkeypatch.setattr(
+        github_auth.jwt, "encode", lambda *_args, **_kwargs: "encoded-jwt"
+    )
 
     attempts = {"count": 0}
 
     def _request(method, url, **_kwargs):
         assert method == "post"
-        assert (
-            url
-            == "https://api.github.com/app/installations/456/access_tokens"
-        )
+        assert url == "https://api.github.com/app/installations/456/access_tokens"
         attempts["count"] += 1
         if attempts["count"] < 3:
             raise github_auth.requests.exceptions.ConnectionError(
@@ -419,7 +547,9 @@ def test_github_app_token_retries_transient_request_failures(
 
     sleeps: list[float] = []
     monkeypatch.setattr(github_auth.requests, "request", _request)
-    monkeypatch.setattr(github_auth.time, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(
+        github_auth.time, "sleep", lambda seconds: sleeps.append(seconds)
+    )
 
     token = github_auth.github_app_token()
 
@@ -463,7 +593,9 @@ def test_github_app_token_normalizes_flattened_pem_private_keys(
     response.raise_for_status.return_value = None
 
     monkeypatch.setattr(github_auth.jwt, "encode", _encode)
-    monkeypatch.setattr(github_auth.requests, "request", lambda *_args, **_kwargs: response)
+    monkeypatch.setattr(
+        github_auth.requests, "request", lambda *_args, **_kwargs: response
+    )
 
     token = github_auth.github_app_token()
 
@@ -533,8 +665,16 @@ def test_github_app_token_refreshes_when_near_expiry(
 
     attempts = {"count": 0}
     responses = [
-        {"token": "ghs_old", "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=20)).isoformat()},
-        {"token": "ghs_new", "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()},
+        {
+            "token": "ghs_old",
+            "expires_at": (
+                datetime.now(timezone.utc) + timedelta(seconds=20)
+            ).isoformat(),
+        },
+        {
+            "token": "ghs_new",
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        },
     ]
 
     def _request(method, url, **_kwargs):
@@ -588,14 +728,21 @@ def test_github_app_token_retries_rate_limit_responses(
             return response
 
         response = MagicMock()
-        response.json.return_value = {"token": "ghs_after_limit", "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()}
+        response.json.return_value = {
+            "token": "ghs_after_limit",
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        }
         response.raise_for_status.return_value = None
         return response
 
     sleeps: list[float] = []
     monkeypatch.setattr(github_auth.requests, "request", _request)
-    monkeypatch.setattr(github_auth.time, "sleep", lambda seconds: sleeps.append(seconds))
-    monkeypatch.setattr(github_auth, "warning_logger", lambda message: warnings.append(message))
+    monkeypatch.setattr(
+        github_auth.time, "sleep", lambda seconds: sleeps.append(seconds)
+    )
+    monkeypatch.setattr(
+        github_auth, "warning_logger", lambda message: warnings.append(message)
+    )
 
     token = github_auth.github_app_token()
 
@@ -642,8 +789,12 @@ def test_github_api_request_retries_rate_limit_403_responses(
 
     sleeps: list[float] = []
     monkeypatch.setattr(github_auth.requests, "request", _request)
-    monkeypatch.setattr(github_auth.time, "sleep", lambda seconds: sleeps.append(seconds))
-    monkeypatch.setattr(github_auth, "warning_logger", lambda message: warnings.append(message))
+    monkeypatch.setattr(
+        github_auth.time, "sleep", lambda seconds: sleeps.append(seconds)
+    )
+    monkeypatch.setattr(
+        github_auth, "warning_logger", lambda message: warnings.append(message)
+    )
 
     response = github_auth.github_api_request(
         "get",
@@ -664,7 +815,9 @@ def test_repo_sync_cycle_reports_stale_unmanaged_checkouts(
 
     observability = importlib.import_module("platform_context_graph.observability")
     repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
-    sync_module = importlib.import_module("platform_context_graph.runtime.ingester.sync")
+    sync_module = importlib.import_module(
+        "platform_context_graph.runtime.ingester.sync"
+    )
     observability.reset_observability_for_tests()
 
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
@@ -697,8 +850,24 @@ def test_repo_sync_cycle_reports_stale_unmanaged_checkouts(
         component="repo-sync",
     )
 
-    monkeypatch.setattr(sync_module, "clone_missing_repositories", lambda *_args: ([], 0, 0, 0))
-    monkeypatch.setattr(sync_module, "update_existing_repositories", lambda *_args: (0, 0))
+    monkeypatch.setattr(
+        sync_module,
+        "clone_missing_repositories_detailed",
+        lambda *_args: ([], [], 0, 0),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync_module,
+        "update_existing_repositories_detailed",
+        lambda *_args: ([], 0),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync_module, "clone_missing_repositories", lambda *_args: ([], 0, 0, 0)
+    )
+    monkeypatch.setattr(
+        sync_module, "update_existing_repositories", lambda *_args: (0, 0)
+    )
     monkeypatch.setattr(sync_module, "git_token", lambda _config: None)
 
     result = repo_sync.run_repo_sync_cycle(
@@ -738,7 +907,9 @@ def test_repo_sync_loop_records_degraded_status_and_retries_transient_failures(
     monkeypatch.setattr(
         sync,
         "run_repo_sync_cycle",
-        MagicMock(side_effect=requests.exceptions.ConnectionError("temporary dns failure")),
+        MagicMock(
+            side_effect=requests.exceptions.ConnectionError("temporary dns failure")
+        ),
     )
 
     with pytest.raises(StopIteration):
@@ -759,7 +930,9 @@ def test_persist_ingester_status_defaults_repository_counts_to_zero(
     sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
 
     recorded_statuses: list[dict[str, object]] = []
-    monkeypatch.setattr(sync, "_current_ingester_status", lambda _component: {}, raising=False)
+    monkeypatch.setattr(
+        sync, "_current_ingester_status", lambda _component: {}, raising=False
+    )
     monkeypatch.setattr(
         sync,
         "update_runtime_ingester_status",
@@ -978,7 +1151,9 @@ def test_update_existing_repositories_refreshes_https_origin_with_fresh_token(
     assert get_url_call in calls
     assert set_url_call in calls
     assert fetch_call in calls
-    assert calls.index(get_url_call) < calls.index(set_url_call) < calls.index(fetch_call)
+    assert (
+        calls.index(get_url_call) < calls.index(set_url_call) < calls.index(fetch_call)
+    )
 
 
 def test_update_existing_repositories_skips_origin_refresh_without_token(
