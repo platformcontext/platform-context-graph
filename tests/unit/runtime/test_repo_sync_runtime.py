@@ -885,3 +885,84 @@ def test_repo_sync_loop_claims_and_completes_manual_scan_requests(
             "request_token": "scan-123",
         }
     ]
+
+
+def test_update_existing_repositories_refreshes_https_origin_with_fresh_token(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Existing HTTPS remotes should be rewritten with a fresh token before fetch."""
+
+    git_module = importlib.import_module("platform_context_graph.runtime.ingester.git")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    repo_dir = repos_dir / "api-node-boattrader"
+    (repo_dir / ".git").mkdir(parents=True)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="githubOrg",
+        git_auth_method="githubApp",
+        github_org="boatsgroup",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=repos_dir / ".pcg-sync.lock",
+        component="repository",
+    )
+
+    calls: list[list[str]] = []
+
+    def _run(command, **_kwargs):
+        calls.append(command)
+        if command[3:5] == ["remote", "get-url"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=(
+                    "https://x-access-token:expired-token@github.com/"
+                    "boatsgroup/api-node-boattrader.git\n"
+                ),
+                stderr="",
+            )
+        if command[3:5] == ["remote", "set-url"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if command[3:4] == ["symbolic-ref"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="refs/remotes/origin/main\n",
+                stderr="",
+            )
+        if command[3:4] == ["fetch"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if command[3:] == ["rev-parse", "HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
+        if command[3:] == ["rev-parse", "FETCH_HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="remote-head\n", stderr="")
+        if command[3:5] == ["reset", "--hard"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(git_module.subprocess, "run", _run)
+
+    updated, failed = git_module.update_existing_repositories(config, "fresh-token")
+
+    assert (updated, failed) == (1, 0)
+    assert calls[1] == [
+        "git",
+        "-C",
+        str(repo_dir),
+        "remote",
+        "get-url",
+        "origin",
+    ]
+    assert calls[2] == [
+        "git",
+        "-C",
+        str(repo_dir),
+        "remote",
+        "set-url",
+        "origin",
+        "https://x-access-token:fresh-token@github.com/boatsgroup/api-node-boattrader.git",
+    ]

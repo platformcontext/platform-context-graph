@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from platform_context_graph.utils.debug_log import warning_logger
 
@@ -176,6 +177,63 @@ def repo_remote_url(config: RepoSyncConfig, repo_id: str, token: str | None) -> 
     return f"https://github.com/{slug}.git"
 
 
+def _refreshed_origin_url(remote_url: str, token: str | None) -> str | None:
+    """Return an HTTPS origin URL with the current token injected.
+
+    Args:
+        remote_url: Existing origin URL stored in the repository config.
+        token: GitHub token for authenticated HTTPS access.
+
+    Returns:
+        A refreshed authenticated origin URL, or ``None`` when the remote should
+        be left unchanged.
+    """
+
+    if not token:
+        return None
+
+    parsed = urlsplit(remote_url.strip())
+    if parsed.scheme != "https" or parsed.hostname != "github.com":
+        return None
+
+    path = parsed.path.lstrip("/")
+    if not path:
+        return None
+
+    return f"https://x-access-token:{token}@github.com/{path}"
+
+
+def _refresh_repository_origin_url(
+    repo_dir: Path,
+    token: str | None,
+    env: dict[str, str],
+) -> None:
+    """Rewrite an existing HTTPS origin to use the latest GitHub token."""
+
+    origin_result = subprocess.run(
+        ["git", "-C", str(repo_dir), "remote", "get-url", "origin"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    if origin_result.returncode != 0:
+        return
+
+    current_origin = origin_result.stdout.strip()
+    refreshed_origin = _refreshed_origin_url(current_origin, token)
+    if refreshed_origin is None or refreshed_origin == current_origin:
+        return
+
+    subprocess.run(
+        ["git", "-C", str(repo_dir), "remote", "set-url", "origin", refreshed_origin],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+
 def clone_missing_repositories(
     config: RepoSyncConfig, token: str | None
 ) -> tuple[list[str], int, int, int]:
@@ -274,7 +332,6 @@ def update_existing_repositories(
         Tuple of updated count and failed count.
     """
 
-    del token
     updated = 0
     failed = 0
     env = git_env(config)
@@ -298,6 +355,8 @@ def update_existing_repositories(
             and default_branch_result.stdout.strip()
             else "main"
         )
+
+        _refresh_repository_origin_url(repo_dir, token, env)
 
         fetch_result = subprocess.run(
             [
