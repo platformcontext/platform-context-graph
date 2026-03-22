@@ -7,11 +7,16 @@ import os
 import shutil
 import time
 from dataclasses import asdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
+from platform_context_graph.core.database import (
+    GraphStoreCapabilities,
+    graph_store_capabilities_for_backend,
+)
 from platform_context_graph.observability import get_observability
 from platform_context_graph.paths import get_app_home
 
@@ -20,6 +25,33 @@ from .coordinator_models import IndexRunState, RepositoryRunState, RepositorySna
 RUNS_DIRNAME = "index-runs"
 RUN_STATE_FILENAME = "run.json"
 SNAPSHOT_DIRNAME = "snapshots"
+
+
+@dataclass(frozen=True)
+class GraphStoreAdapter:
+    """Narrow graph-store contract used by coordinator-backed indexing."""
+
+    capabilities: GraphStoreCapabilities
+    initialize_schema: Callable[[], None]
+    delete_repository: Callable[[str], bool]
+
+
+def _graph_store_adapter(builder: Any) -> GraphStoreAdapter:
+    """Return the narrow graph-store contract for one builder instance."""
+
+    capabilities_getter = getattr(builder.db_manager, "graph_store_capabilities", None)
+    capabilities = (
+        capabilities_getter()
+        if callable(capabilities_getter)
+        else graph_store_capabilities_for_backend(
+            getattr(builder.db_manager, "get_backend_type", lambda: "neo4j")()
+        )
+    )
+    return GraphStoreAdapter(
+        capabilities=capabilities,
+        initialize_schema=builder.create_schema,
+        delete_repository=builder.delete_repository_from_graph,
+    )
 
 
 def _utc_now() -> str:
@@ -239,7 +271,9 @@ def _load_or_create_run(
     existing_runs = [
         run
         for run in _matching_run_states(root_path)
-        if run.family == family and run.source == source and run.is_dependency == is_dependency
+        if run.family == family
+        and run.source == source
+        and run.is_dependency == is_dependency
     ]
     for run in existing_runs:
         if run.discovery_signature == discovery_signature and run.status in {
@@ -277,7 +311,9 @@ def _load_or_create_run(
         created_at=created_at,
         updated_at=created_at,
         repositories={
-            str(repo_path.resolve()): RepositoryRunState(repo_path=str(repo_path.resolve()))
+            str(repo_path.resolve()): RepositoryRunState(
+                repo_path=str(repo_path.resolve())
+            )
             for repo_path in _normalize_paths(repo_paths)
         },
     )

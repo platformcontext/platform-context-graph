@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from platform_context_graph.observability import get_observability
-from platform_context_graph.repository_identity import git_remote_for_path, repository_metadata
+from platform_context_graph.repository_identity import (
+    git_remote_for_path,
+    repository_metadata,
+)
 from platform_context_graph.tools.graph_builder_indexing import (
     finalize_index_batch,
     merge_import_maps,
@@ -21,10 +24,13 @@ from .coordinator_models import (
     IndexExecutionResult,
     RepositorySnapshot,
 )
-from .coordinator_runtime_status import publish_runtime_progress as _publish_runtime_progress
+from .coordinator_runtime_status import (
+    publish_runtime_progress as _publish_runtime_progress,
+)
 from .coordinator_storage import (
     _archive_run,
     _delete_snapshots,
+    _graph_store_adapter,
     _load_or_create_run,
     _load_run_state_by_id,
     _load_snapshot,
@@ -106,6 +112,7 @@ def _commit_repository_snapshot(
     """Replace one repository's persisted graph/content state from a snapshot."""
 
     repo_path = Path(snapshot.repo_path).resolve()
+    graph_store = _graph_store_adapter(builder)
     metadata = repository_metadata(
         name=repo_path.name,
         local_path=str(repo_path),
@@ -122,13 +129,14 @@ def _commit_repository_snapshot(
         content_provider.delete_repository_content(metadata["id"])
 
     try:
-        builder.delete_repository_from_graph(str(repo_path))
+        graph_store.delete_repository(str(repo_path))
     except Exception:
         pass
 
     builder.add_repository_to_graph(repo_path, is_dependency=is_dependency)
     for file_data in snapshot.file_data:
         builder.add_file_to_graph(file_data, repo_path.name, snapshot.imports_map)
+
 
 async def execute_index_run(
     builder: Any,
@@ -217,7 +225,9 @@ async def execute_index_run(
         if repo_state.status in {"failed", "parsed", "running", "commit_incomplete"}
     )
     skipped_repositories = sum(
-        1 for repo_state in run_state.repositories.values() if repo_state.status == "skipped"
+        1
+        for repo_state in run_state.repositories.values()
+        if repo_state.status == "skipped"
     )
     _update_pending_repository_gauge(
         component=component,
@@ -252,7 +262,9 @@ async def execute_index_run(
                     merge_import_maps(merged_imports_map, snapshot.imports_map)
                     continue
                 repo_state.status = "pending"
-                repo_state.error = "Completed repo snapshot missing; re-parsing repository"
+                repo_state.error = (
+                    "Completed repo snapshot missing; re-parsing repository"
+                )
                 _persist_run_state(run_state)
 
             parse_targets.append(
@@ -260,9 +272,7 @@ async def execute_index_run(
             )
 
         parse_workers = _parse_worker_count()
-        snapshot_queue = asyncio_module.Queue(
-            maxsize=_index_queue_depth(parse_workers)
-        )
+        snapshot_queue = asyncio_module.Queue(maxsize=_index_queue_depth(parse_workers))
         queue_sentinel = object()
         parse_semaphore = asyncio_module.Semaphore(parse_workers)
 

@@ -7,7 +7,8 @@ import os
 import re
 import threading
 import time
-from typing import Optional, Tuple
+from dataclasses import dataclass
+from typing import Literal, Optional, Tuple
 from neo4j import GraphDatabase, Driver
 
 from platform_context_graph.observability import get_observability
@@ -25,6 +26,33 @@ def _query_kind(query: str) -> str:
     if not tokens:
         return "unknown"
     return tokens[0].upper()
+
+
+@dataclass(frozen=True)
+class GraphStoreCapabilities:
+    """Describe graph-storage features the indexing layer can rely on."""
+
+    backend_type: str
+    fulltext_index_strategy: Literal["neo4j_fulltext", "falkordb_procedure", "none"]
+
+
+def graph_store_capabilities_for_backend(backend_type: str) -> GraphStoreCapabilities:
+    """Return the indexing-facing capability contract for one backend."""
+
+    normalized_backend = backend_type.lower()
+    if normalized_backend in {"falkordb", "falkordb-remote"}:
+        strategy: Literal["neo4j_fulltext", "falkordb_procedure", "none"] = (
+            "falkordb_procedure"
+        )
+    elif normalized_backend == "kuzudb":
+        strategy = "none"
+    else:
+        strategy = "neo4j_fulltext"
+
+    return GraphStoreCapabilities(
+        backend_type=normalized_backend,
+        fulltext_index_strategy=strategy,
+    )
 
 
 class InstrumentedSession:
@@ -222,6 +250,11 @@ class DatabaseManager:
     def get_backend_type(self) -> str:
         """Returns the database backend type."""
         return "neo4j"
+
+    def graph_store_capabilities(self) -> GraphStoreCapabilities:
+        """Return the graph-store capability contract for this backend."""
+
+        return graph_store_capabilities_for_backend(self.get_backend_type())
 
     @staticmethod
     def validate_config(

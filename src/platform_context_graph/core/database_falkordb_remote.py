@@ -23,6 +23,7 @@ import threading
 from typing import Optional, Tuple
 
 from platform_context_graph.utils.debug_log import info_logger, error_logger
+from platform_context_graph.core.database import graph_store_capabilities_for_backend
 
 # Reuse the Neo4j-compatible wrapper classes from the embedded FalkorDB module
 from platform_context_graph.core.database_falkordb import (
@@ -142,6 +143,11 @@ class FalkorDBRemoteManager:
     def get_backend_type(self) -> str:
         """Returns the database backend type."""
         return "falkordb-remote"
+
+    def graph_store_capabilities(self):
+        """Return the graph-store capability contract for this backend."""
+
+        return graph_store_capabilities_for_backend(self.get_backend_type())
 
     @staticmethod
     def validate_config() -> Tuple[bool, Optional[str]]:

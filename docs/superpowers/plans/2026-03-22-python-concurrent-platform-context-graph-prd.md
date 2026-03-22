@@ -187,20 +187,20 @@ Expected: PASS.
 - Modify: `src/platform_context_graph/tools/graph_builder_schema.py`
 - Test: `tests/unit/indexing/test_coordinator_storage.py`
 
-- [ ] **Step 1: Add failing adapter-conformance tests**
+- [x] **Step 1: Add failing adapter-conformance tests**
 Require:
   - schema init, delete, and capability checks are exercised through one narrow contract
   - backend-specific branching stays out of coordinator hot paths
 
-- [ ] **Step 2: Run the red suite**
+- [x] **Step 2: Run the red suite**
 Run:
   - `PYTHONPATH=src uv run pytest -q tests/unit/indexing/test_coordinator_storage.py`
 Expected: FAIL before the adapter contract is tightened.
 
-- [ ] **Step 3: Implement the minimal adapter cleanup**
+- [x] **Step 3: Implement the minimal adapter cleanup**
 Do not remove PostgreSQL or change content retrieval contracts. Only narrow the graph-store interface used by indexing and schema setup.
 
-- [ ] **Step 4: Re-run the focused suite**
+- [x] **Step 4: Re-run the focused suite**
 Run:
   - `PYTHONPATH=src uv run pytest -q tests/unit/indexing/test_coordinator_storage.py`
 Expected: PASS.

@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from platform_context_graph.core.database import (
+    GraphStoreCapabilities,
+    graph_store_capabilities_for_backend,
+)
+
 _SCHEMA_STATEMENTS = [
     "CREATE CONSTRAINT repository_id IF NOT EXISTS FOR (r:Repository) REQUIRE r.id IS UNIQUE",
     "CREATE CONSTRAINT repository_path IF NOT EXISTS FOR (r:Repository) REQUIRE r.path IS UNIQUE",
@@ -68,6 +73,24 @@ _NEO4J_FULLTEXT_STATEMENTS = [
     """,
 ]
 
+_FALKORDB_FULLTEXT_STATEMENTS = [
+    "CALL db.idx.fulltext.createNodeIndex('Function', 'name', 'source', 'docstring')",
+    "CALL db.idx.fulltext.createNodeIndex('Class', 'name', 'source', 'docstring')",
+]
+
+
+def _schema_statements_for_capabilities(
+    capabilities: GraphStoreCapabilities,
+) -> tuple[str, ...]:
+    """Return schema statements implied by one graph-store capability contract."""
+
+    statements = list(_SCHEMA_STATEMENTS)
+    if capabilities.fulltext_index_strategy == "neo4j_fulltext":
+        statements.extend(_NEO4J_FULLTEXT_STATEMENTS)
+    elif capabilities.fulltext_index_strategy == "falkordb_procedure":
+        statements.extend(_FALKORDB_FULLTEXT_STATEMENTS)
+    return tuple(statements)
+
 
 def create_schema(builder: Any, *, info_logger_fn: Any, warning_logger_fn: Any) -> None:
     """Create constraints and indexes for the code graph.
@@ -77,30 +100,23 @@ def create_schema(builder: Any, *, info_logger_fn: Any, warning_logger_fn: Any) 
         info_logger_fn: Informational logger callable.
         warning_logger_fn: Warning logger callable.
     """
+    capabilities_getter = getattr(builder.db_manager, "graph_store_capabilities", None)
+    capabilities = (
+        capabilities_getter()
+        if callable(capabilities_getter)
+        else graph_store_capabilities_for_backend(
+            getattr(builder.db_manager, "get_backend_type", lambda: "neo4j")()
+        )
+    )
+
     with builder.driver.session() as session:
         try:
-            for statement in _SCHEMA_STATEMENTS:
+            for statement in _schema_statements_for_capabilities(capabilities):
                 session.run(statement)
-
-            is_falkordb = (
-                getattr(builder.db_manager, "get_backend_type", lambda: "neo4j")()
-                != "neo4j"
-            )
-            if is_falkordb:
-                for label in ["Function", "Class"]:
-                    try:
-                        session.run(
-                            f"CALL db.idx.fulltext.createNodeIndex('{label}', 'name', 'source', 'docstring')"
-                        )
-                    except Exception:
-                        pass
-            else:
-                for statement in _NEO4J_FULLTEXT_STATEMENTS:
-                    session.run(statement)
 
             info_logger_fn("Database schema verified/created successfully")
         except Exception as exc:
             warning_logger_fn(f"Schema creation warning: {exc}")
 
 
-__all__ = ["create_schema"]
+__all__ = ["create_schema", "_schema_statements_for_capabilities"]
