@@ -5,80 +5,13 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import time
 from pathlib import Path
-
-import jwt
-import requests
 
 from platform_context_graph.utils.debug_log import warning_logger
 
 from .config import RepoSyncConfig, RepoSyncRepositoryRule
+from .github_auth import github_api_request, github_app_token, github_headers
 from .support import log
-
-
-def require_env(name: str) -> str:
-    """Return a required environment variable or raise a configuration error.
-
-    Args:
-        name: Environment variable name.
-
-    Returns:
-        Variable value from the process environment.
-
-    Raises:
-        ValueError: The variable is missing or empty.
-    """
-
-    value = os.getenv(name)
-    if not value:
-        raise ValueError(f"Required environment variable {name} is not set")
-    return value
-
-
-def github_headers(token: str) -> dict[str, str]:
-    """Build GitHub API headers for the supplied token.
-
-    Args:
-        token: GitHub token or app bearer token.
-
-    Returns:
-        Header dictionary used for GitHub REST requests.
-    """
-
-    return {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-
-
-def github_app_token() -> str:
-    """Mint a GitHub App installation token from environment credentials.
-
-    Returns:
-        Installation access token for the configured GitHub App.
-    """
-
-    app_id = require_env("GITHUB_APP_ID")
-    installation_id = require_env("GITHUB_APP_INSTALLATION_ID")
-    private_key = require_env("GITHUB_APP_PRIVATE_KEY")
-    now = int(time.time())
-    encoded = jwt.encode(
-        {"iat": now - 60, "exp": now + 540, "iss": app_id},
-        private_key,
-        algorithm="RS256",
-    )
-    response = requests.post(
-        f"https://api.github.com/app/installations/{installation_id}/access_tokens",
-        headers=github_headers(encoded),
-        timeout=15,
-    )
-    response.raise_for_status()
-    token = response.json().get("token")
-    if not token:
-        raise RuntimeError("GitHub App token response did not include a token")
-    return str(token)
 
 
 def git_token(config: RepoSyncConfig) -> str | None:
@@ -161,7 +94,8 @@ def list_repo_identifiers(config: RepoSyncConfig, token: str | None) -> list[str
     repos: list[str] = []
     page = 1
     while len(repos) < config.repo_limit:
-        response = requests.get(
+        response = github_api_request(
+            "get",
             f"https://api.github.com/orgs/{config.github_org}/repos",
             headers=github_headers(token),
             params={
@@ -171,7 +105,6 @@ def list_repo_identifiers(config: RepoSyncConfig, token: str | None) -> list[str
             },
             timeout=15,
         )
-        response.raise_for_status()
         items = response.json()
         if not items:
             break
