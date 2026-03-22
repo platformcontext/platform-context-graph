@@ -118,7 +118,7 @@ def parse_java_file(
         final_interfaces = []
         final_annotations = []
         for cls in parsed_classes:
-            node_type = cls.get("_node_type", "class_declaration")
+            node_type = cls.pop("_node_type", "class_declaration")
             if node_type == "interface_declaration":
                 final_interfaces.append(cls)
             elif node_type == "annotation_type_declaration":

@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import re
-from pathlib import Path
 from typing import Any
-
-from ...utils.debug_log import warning_logger
 
 _AWS_TYPE_PATTERN = re.compile(r"^AWS::\w+::\w+")
 
@@ -200,31 +196,3 @@ def _parse_outputs(
     return result
 
 
-def parse_cloudformation_json(
-    path: Path,
-    language_name: str,
-) -> dict[str, Any] | None:
-    """Parse a JSON CloudFormation template.
-
-    Args:
-        path: File path to the JSON template.
-        language_name: Language name for the result.
-
-    Returns:
-        Parsed template data, or ``None`` when the file is not a
-        CloudFormation JSON template.
-    """
-    try:
-        content = path.read_text(encoding="utf-8")
-        doc = json.loads(content)
-    except (OSError, json.JSONDecodeError) as exc:
-        warning_logger(f"Cannot parse JSON CFN template {path}: {exc}")
-        return None
-
-    if not isinstance(doc, dict):
-        return None
-
-    if not is_cloudformation_template(doc):
-        return None
-
-    return parse_cloudformation_template(doc, str(path), 1, language_name)

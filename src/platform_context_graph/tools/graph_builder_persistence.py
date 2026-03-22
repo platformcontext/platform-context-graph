@@ -230,6 +230,7 @@ def add_file_to_graph(
             (file_data.get("traits", []), "Trait"),
             (file_data.get("variables", []), "Variable"),
             (file_data.get("interfaces", []), "Interface"),
+            (file_data.get("annotations", []), "Annotation"),
             (file_data.get("macros", []), "Macro"),
             (file_data.get("structs", []), "Struct"),
             (file_data.get("enums", []), "Enum"),

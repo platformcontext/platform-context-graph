@@ -23,6 +23,7 @@
 `tests/integration/test_language_graph.py::TestTypeScriptGraph`
 
 ## Known Limitations
+- Type aliases are parsed (`type_aliases` key) but not persisted to the graph — no persistence mapping exists
 - Mapped types and conditional types not fully captured
 - Namespace declarations may be incomplete
 - Declaration merging not tracked

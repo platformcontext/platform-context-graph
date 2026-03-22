@@ -43,9 +43,9 @@
 
 | Category | Count |
 |----------|-------|
-| Unit tests (passed) | 188 |
-| Unit tests (xfail) | 15 |
+| Unit tests (passed) | 203 |
+| Unit tests (xfail) | 0 |
 | Unit tests (total) | 203 |
-| Integration tests | 83 |
+| Integration tests | 80 |
 | Fixture repos | 27 |
 | Spec docs | 28 |
