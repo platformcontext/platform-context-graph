@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -30,6 +31,8 @@ class CachedGitHubAppToken:
 
 
 _CACHED_GITHUB_APP_TOKEN: CachedGitHubAppToken | None = None
+_PEM_BEGIN_MARKER = "-----BEGIN "
+_PEM_END_MARKER = "-----END "
 
 
 def _github_api_retry_attempts() -> int:
@@ -72,6 +75,30 @@ def _token_refresh_window_seconds() -> int:
             )
         ),
     )
+
+
+def _normalize_private_key_pem(private_key: str) -> str:
+    """Return a PEM-formatted private key string suitable for JWT signing."""
+
+    stripped = private_key.strip()
+    if "\n" in stripped or not stripped.startswith(_PEM_BEGIN_MARKER):
+        return stripped
+
+    match = re.match(
+        r"^(-----BEGIN [A-Z0-9 ]+-----)\s+(.+?)\s+(-----END [A-Z0-9 ]+-----)$",
+        stripped,
+        flags=re.DOTALL,
+    )
+    if match is None:
+        return stripped
+
+    header, body, footer = match.groups()
+    body_lines = [line for line in body.split() if line]
+    if not body_lines:
+        return stripped
+
+    wrapped_body = "\n".join(body_lines)
+    return f"{header}\n{wrapped_body}\n{footer}\n"
 
 
 def clear_cached_github_app_token() -> None:
@@ -226,7 +253,7 @@ def _mint_github_app_token() -> CachedGitHubAppToken:
 
     app_id = require_env("GITHUB_APP_ID")
     installation_id = require_env("GITHUB_APP_INSTALLATION_ID")
-    private_key = require_env("GITHUB_APP_PRIVATE_KEY")
+    private_key = _normalize_private_key_pem(require_env("GITHUB_APP_PRIVATE_KEY"))
     now = int(time.time())
     encoded = jwt.encode(
         {"iat": now - 60, "exp": now + 540, "iss": app_id},
