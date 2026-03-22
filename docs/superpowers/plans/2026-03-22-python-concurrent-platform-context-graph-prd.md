@@ -272,21 +272,21 @@ Expected: PASS.
 - Modify: `tests/unit/runtime/test_repo_sync_runtime.py`
 - Create: `tests/integration/runtime/test_workspace_watch_runtime.py`
 
-- [ ] **Step 1: Add failing soak-style tests**
+- [x] **Step 1: Add failing soak-style tests**
 Cover:
   - repeated edits across multiple repos in one workspace
   - rediscovery of newly added matching repos
   - unrelated repo changes not forcing whole-workspace refresh
 
-- [ ] **Step 2: Run the red suite**
+- [x] **Step 2: Run the red suite**
 Run:
   - `PYTHONPATH=src uv run pytest -q tests/unit/core/test_watcher.py tests/unit/runtime/test_repo_sync_runtime.py tests/integration/runtime/test_workspace_watch_runtime.py`
 Expected: FAIL before the remaining membership-refresh gaps are closed.
 
-- [ ] **Step 3: Implement the minimal soak fixes**
+- [x] **Step 3: Implement the minimal soak fixes**
 Prefer bounded state, repo partitioning, and deterministic cleanup over feature expansion.
 
-- [ ] **Step 4: Re-run the focused suite**
+- [x] **Step 4: Re-run the focused suite**
 Run:
   - `PYTHONPATH=src uv run pytest -q tests/unit/core/test_watcher.py tests/unit/runtime/test_repo_sync_runtime.py tests/integration/runtime/test_workspace_watch_runtime.py`
 Expected: PASS.

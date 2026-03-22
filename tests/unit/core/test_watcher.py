@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from platform_context_graph.core.watcher import CodeWatcher, resolve_watch_targets
+from platform_context_graph.core.watcher import (
+    CodeWatcher,
+    RepositoryEventHandler,
+    resolve_watch_targets,
+)
 
 
 def test_resolve_watch_targets_auto_scope_discovers_nested_repositories(
@@ -129,3 +133,132 @@ def test_refresh_watch_directory_adds_new_workspace_repository(
 
     assert result["added_repositories"] == [str(repo_b.resolve())]
     assert watcher.watches[str(workspace.resolve())]
+
+
+def test_repository_event_handlers_keep_workspace_repo_updates_partitioned(
+    tmp_path: Path,
+) -> None:
+    """One repo's file changes should not force updates in unrelated repos."""
+
+    workspace = tmp_path / "workspace"
+    repo_a = workspace / "payments-api"
+    repo_b = workspace / "orders-api"
+    file_a = repo_a / "app.py"
+    file_b = repo_b / "worker.py"
+    file_a.parent.mkdir(parents=True)
+    file_b.parent.mkdir(parents=True)
+    file_a.write_text("print('a')\n", encoding="utf-8")
+    file_b.write_text("print('b')\n", encoding="utf-8")
+
+    update_calls: list[tuple[Path, Path]] = []
+    graph_builder = SimpleNamespace(
+        parsers={".py": object()},
+        _pre_scan_for_imports=lambda _files: {},
+        update_file_in_graph=lambda path, repo_path, imports_map: (
+            update_calls.append((repo_path.resolve(), path.resolve())),
+            {"path": str(path.resolve()), "imports_map": imports_map},
+        )[1],
+        delete_file_from_graph=lambda _path: None,
+        _create_all_function_calls=lambda _file_data, _imports_map: None,
+        _create_all_inheritance_links=lambda _file_data, _imports_map: None,
+        _create_all_infra_links=lambda _file_data: None,
+    )
+
+    handler_a = RepositoryEventHandler(
+        graph_builder,
+        repo_a,
+        debounce_interval=0.1,
+        perform_initial_scan=False,
+    )
+    handler_b = RepositoryEventHandler(
+        graph_builder,
+        repo_b,
+        debounce_interval=0.1,
+        perform_initial_scan=False,
+    )
+
+    handler_a._queue_event(str(file_a))
+    handler_a._process_pending_changes()
+    handler_b._queue_event(str(file_b))
+    handler_b._process_pending_changes()
+
+    assert update_calls == [
+        (repo_a.resolve(), file_a.resolve()),
+        (repo_b.resolve(), file_b.resolve()),
+    ]
+
+
+def test_code_watcher_stop_clears_repo_partition_state(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Stopping a workspace watcher should clear watched roots and handlers."""
+
+    workspace = tmp_path / "workspace"
+    repo_a = workspace / "payments-api"
+    (repo_a / ".git").mkdir(parents=True)
+
+    class FakeObserver:
+        def __init__(self) -> None:
+            self.stop_called = False
+            self.join_called = False
+
+        def schedule(self, handler, path: str, recursive: bool = True):
+            del handler, recursive
+            return f"watch:{path}"
+
+        def unschedule(self, watch) -> None:
+            del watch
+
+        def is_alive(self) -> bool:
+            return True
+
+        def start(self) -> None:
+            return None
+
+        def stop(self) -> None:
+            self.stop_called = True
+
+        def join(self) -> None:
+            self.join_called = True
+
+    cleanup_calls: list[str] = []
+
+    class FakeHandler:
+        def __init__(
+            self,
+            graph_builder,
+            repo_path: Path,
+            debounce_interval: float = 2.0,
+            perform_initial_scan: bool = True,
+        ) -> None:
+            del graph_builder, debounce_interval, perform_initial_scan
+            self.repo_path = repo_path.resolve()
+
+        def cleanup(self) -> None:
+            cleanup_calls.append(str(self.repo_path))
+
+    monkeypatch.setattr(
+        "platform_context_graph.core.watcher.Observer",
+        lambda: FakeObserver(),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.core.watcher.RepositoryEventHandler",
+        FakeHandler,
+    )
+
+    watcher = CodeWatcher(graph_builder=SimpleNamespace())
+    watcher.watch_directory(
+        str(workspace),
+        perform_initial_scan=False,
+        scope="workspace",
+    )
+
+    watcher.stop()
+
+    assert cleanup_calls == [str(repo_a.resolve())]
+    assert watcher.watched_paths == set()
+    assert watcher.watches == {}
+    assert watcher._handlers == {}
+    assert watcher._plans == {}
+    assert watcher._watch_configs == {}

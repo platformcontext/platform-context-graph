@@ -555,3 +555,9 @@ class CodeWatcher:
             self.observer.stop()
             self.observer.join()
             info_logger("Code watcher observer thread stopped.")
+
+        self.watched_paths.clear()
+        self.watches.clear()
+        self._handlers.clear()
+        self._plans.clear()
+        self._watch_configs.clear()

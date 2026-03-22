@@ -343,6 +343,99 @@ def test_repo_sync_cycle_indexes_only_changed_and_resumable_repositories(
     assert result.indexed == 3
 
 
+def test_repo_sync_cycle_repeated_syncs_keep_repo_batches_partitioned(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repeated sync cycles should only index the repos changed in that cycle."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    repo_a = repos_dir / "platformcontext--payments-api"
+    repo_b = repos_dir / "platformcontext--orders-api"
+    (repo_a / ".git").mkdir(parents=True)
+    (repo_b / ".git").mkdir(parents=True)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="githubOrg",
+        git_auth_method="token",
+        github_org="platformcontext",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=20,
+        sync_lock_dir=repos_dir / ".pcg-sync.lock",
+        component="repo-sync",
+    )
+
+    @contextmanager
+    def _workspace_lock(_config):
+        yield True
+
+    @contextmanager
+    def _index_cycle(**_kwargs):
+        yield
+
+    update_batches = iter(
+        [
+            ([repo_a.resolve()], 0),
+            ([repo_b.resolve()], 0),
+        ]
+    )
+    indexed_batches: list[list[Path]] = []
+
+    monkeypatch.setattr(sync, "initialize_observability", lambda **_kwargs: None)
+    monkeypatch.setattr(sync, "workspace_lock", _workspace_lock)
+    monkeypatch.setattr(sync, "begin_index_cycle", _index_cycle)
+    monkeypatch.setattr(sync, "record_phase", lambda **_kwargs: None)
+    monkeypatch.setattr(sync, "git_token", lambda _config: "token")
+    monkeypatch.setattr(
+        sync,
+        "clone_missing_repositories_detailed",
+        lambda _config, _token: (
+            [
+                "platformcontext/payments-api",
+                "platformcontext/orders-api",
+            ],
+            [],
+            2,
+            0,
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "update_existing_repositories_detailed",
+        lambda _config, _token: next(update_batches),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "resumable_repository_paths",
+        lambda _workspace: [],
+        raising=False,
+    )
+
+    def _index_workspace(
+        workspace: Path,
+        *,
+        selected_repositories: list[Path] | None = None,
+        **_kwargs,
+    ) -> None:
+        assert workspace == repos_dir
+        indexed_batches.append(list(selected_repositories or []))
+
+    first = sync.run_repo_sync_cycle(config, index_workspace=_index_workspace)
+    second = sync.run_repo_sync_cycle(config, index_workspace=_index_workspace)
+
+    assert indexed_batches == [[repo_a.resolve()], [repo_b.resolve()]]
+    assert first.indexed == 1
+    assert second.indexed == 1
+
+
 def test_bootstrap_index_reaps_stale_empty_lock_and_runs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
