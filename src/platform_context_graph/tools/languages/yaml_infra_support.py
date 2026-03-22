@@ -8,6 +8,42 @@ import yaml
 from ...utils.debug_log import warning_logger
 
 
+class _PermissiveSafeLoader(yaml.SafeLoader):
+    """Safe YAML loader that preserves unknown tagged values."""
+
+
+def _construct_unknown_tag(
+    loader: _PermissiveSafeLoader,
+    tag_suffix: str,
+    node: yaml.Node,
+) -> Any:
+    """Construct an unknown YAML tag using the underlying node shape."""
+
+    del tag_suffix
+    if isinstance(node, yaml.ScalarNode):
+        return loader.construct_scalar(node)
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    return None
+
+
+_PermissiveSafeLoader.add_multi_constructor("", _construct_unknown_tag)
+
+
+def _load_all_yaml_documents(content: str) -> list[dict[str, Any]]:
+    """Load YAML documents with permissive tag handling."""
+
+    return list(yaml.load_all(content, Loader=_PermissiveSafeLoader))
+
+
+def _load_yaml_document(content: str) -> Any:
+    """Load a single YAML document with permissive tag handling."""
+
+    return yaml.load(content, Loader=_PermissiveSafeLoader)
+
+
 def build_empty_result(
     path: str,
     language_name: str,
@@ -54,8 +90,13 @@ def safe_load_all(content: str) -> list[dict[str, Any]]:
         Parsed documents, or an empty list when parsing fails.
     """
     try:
-        return list(yaml.safe_load_all(content))
+        return _load_all_yaml_documents(content)
     except yaml.YAMLError as exc:
+        if "cannot start any token" in str(exc) and "\t" in content:
+            try:
+                return _load_all_yaml_documents(content.expandtabs(2))
+            except yaml.YAMLError:
+                pass
         warning_logger(f"YAML parse error: {exc}")
         return []
 
@@ -88,7 +129,13 @@ def load_yaml_dict(file_path: Path, context_name: str) -> dict[str, Any] | None:
     """
     try:
         content = file_path.read_text(encoding="utf-8")
-        document = yaml.safe_load(content)
+        try:
+            document = _load_yaml_document(content)
+        except yaml.YAMLError as exc:
+            if "cannot start any token" in str(exc) and "\t" in content:
+                document = _load_yaml_document(content.expandtabs(2))
+            else:
+                raise
     except (OSError, yaml.YAMLError) as exc:
         warning_logger(f"Cannot parse {context_name}: {exc}")
         return None

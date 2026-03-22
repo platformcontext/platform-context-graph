@@ -144,6 +144,22 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     os.replace(tmp_path, path)
 
 
+def _normalize_json_value(value: Any) -> Any:
+    """Convert checkpoint payload values into JSON-serializable structures."""
+
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _normalize_json_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_json_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_normalize_json_value(item) for item in value]
+    if isinstance(value, set):
+        return sorted(_normalize_json_value(item) for item in value)
+    return value
+
+
 def _load_run_state(path: Path) -> IndexRunState | None:
     """Load a checkpoint JSON file when it exists."""
 
@@ -254,7 +270,10 @@ def _load_or_create_run(
 def _save_snapshot(run_id: str, snapshot: RepositorySnapshot) -> None:
     """Persist one parsed repository snapshot to disk."""
 
-    _write_json_atomic(_snapshot_path(run_id, Path(snapshot.repo_path)), asdict(snapshot))
+    _write_json_atomic(
+        _snapshot_path(run_id, Path(snapshot.repo_path)),
+        _normalize_json_value(asdict(snapshot)),
+    )
 
 
 def _load_snapshot(run_id: str, repo_path: Path) -> RepositorySnapshot | None:

@@ -228,6 +228,29 @@ class PostgresContentProvider:
                 ],
             )
 
+    def delete_repository_content(self, repo_id: str) -> None:
+        """Delete all cached content rows for one repository.
+
+        Args:
+            repo_id: Canonical repository identifier.
+        """
+
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                DELETE FROM content_entities
+                WHERE repo_id = %(repo_id)s
+                """,
+                {"repo_id": repo_id},
+            )
+            cursor.execute(
+                """
+                DELETE FROM content_files
+                WHERE repo_id = %(repo_id)s
+                """,
+                {"repo_id": repo_id},
+            )
+
     def get_file_content(self, *, repo_id: str, relative_path: str) -> dict[str, Any] | None:
         """Return file content for one repo-relative file path.
 

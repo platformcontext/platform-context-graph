@@ -259,6 +259,46 @@ spec:
         result = parser.parse(str(f))
         assert result["path"] == str(f)
 
+    def test_parse_yaml_with_ansible_vault_tag(self, parser, temp_test_dir):
+        """Unknown tags like ``!vault`` should not drop otherwise valid manifests."""
+
+        f = temp_test_dir / "vault-configmap.yaml"
+        f.write_text(
+            "apiVersion: v1\n"
+            "kind: ConfigMap\n"
+            "metadata:\n"
+            "  name: sample-config\n"
+            "data:\n"
+            "  secret: !vault |\n"
+            "    $ANSIBLE_VAULT;1.1;AES256\n"
+            "    6137616263646566\n"
+        )
+
+        result = parser.parse(str(f))
+
+        assert len(result["k8s_resources"]) == 1
+        assert result["k8s_resources"][0]["name"] == "sample-config"
+
+    def test_parse_yaml_with_tabs_after_colons(self, parser, temp_test_dir):
+        """Tab-separated values should retry with a whitespace-normalized fallback."""
+
+        f = temp_test_dir / "tabbed-openapi.yaml"
+        f.write_text(
+            "apiVersion: v1\n"
+            "kind: ConfigMap\n"
+            "metadata:\n"
+            "  name: sample-openapi\n"
+            "data:\n"
+            "  spec: |\n"
+            "    openapi: 3.0.0\n"
+            "    example:\tavailable-coop-brokerage\n"
+        )
+
+        result = parser.parse(str(f))
+
+        assert len(result["k8s_resources"]) == 1
+        assert result["k8s_resources"][0]["name"] == "sample-openapi"
+
     def test_result_structure_has_required_keys(self, parser, yaml_fixtures):
         """Verify all result dicts have the standard keys."""
         result = parser.parse(str(yaml_fixtures / "argocd" / "application.yaml"))
