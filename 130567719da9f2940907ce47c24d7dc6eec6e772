@@ -1,0 +1,27 @@
+src/platform_context_graph/tools/parser_capabilities/__init__.py
+  a034ab0d6c4453bd 1,12,19
+src/platform_context_graph/tools/parser_capabilities/catalog.py
+  a034ab0d6c4453bd 1,3-6,13,17-29,31-65,67,79,102-109,117,119-124,136-142,144-146,149,152-153,155,160-167,176-177,179-184,228-229,231-232,234-236,328,330-335,347-356,373,427,483,493,504,518-520,539,556,589
+scripts/generate_language_capability_docs.py
+  a034ab0d6c4453bd 1,7,9,14-15,17-18,20-22,32-34,37-40,52,55-57,59-60,67-68,70-71,74,76,78-92,94-100,102-105,107-114,117-118,126-127,129,135-136,141,145-146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "130567719da9f2940907ce47c24d7dc6eec6e772",
+  "prompts": {
+    "a034ab0d6c4453bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d172a-7e40-76a0-8995-46eceacac34a",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 252,
+      "total_deletions": 55,
+      "accepted_lines": 222,
+      "overriden_lines": 8
+    }
+  }
+}
