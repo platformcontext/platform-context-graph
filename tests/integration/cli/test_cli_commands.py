@@ -177,6 +177,103 @@ class TestCLICommands:
         assert result.exit_code == 0
         mock_run_repo_sync_loop.assert_called_once_with(interval_seconds=42)
 
+    @patch("platform_context_graph.cli.main.workspace_plan_helper")
+    def test_workspace_plan_command_uses_workspace_helper(
+        self,
+        mock_workspace_plan_helper,
+    ):
+        """Test that `pcg workspace plan` uses the shared workspace helper."""
+
+        result = runner.invoke(app, ["workspace", "plan"])
+
+        assert result.exit_code == 0
+        mock_workspace_plan_helper.assert_called_once_with()
+
+    @patch("platform_context_graph.cli.main.workspace_sync_helper")
+    def test_workspace_sync_command_uses_workspace_helper(
+        self,
+        mock_workspace_sync_helper,
+    ):
+        """Test that `pcg workspace sync` uses the shared workspace helper."""
+
+        result = runner.invoke(app, ["workspace", "sync"])
+
+        assert result.exit_code == 0
+        mock_workspace_sync_helper.assert_called_once_with()
+
+    @patch("platform_context_graph.cli.main.workspace_index_helper")
+    def test_workspace_index_command_uses_workspace_helper(
+        self,
+        mock_workspace_index_helper,
+    ):
+        """Test that `pcg workspace index` uses the shared workspace helper."""
+
+        result = runner.invoke(app, ["workspace", "index"])
+
+        assert result.exit_code == 0
+        mock_workspace_index_helper.assert_called_once_with()
+
+    @patch("platform_context_graph.cli.main.workspace_status_helper")
+    def test_workspace_status_command_uses_workspace_helper(
+        self,
+        mock_workspace_status_helper,
+    ):
+        """Test that `pcg workspace status` uses the shared workspace helper."""
+
+        result = runner.invoke(app, ["workspace", "status"])
+
+        assert result.exit_code == 0
+        mock_workspace_status_helper.assert_called_once_with()
+
+    @patch("platform_context_graph.cli.main.workspace_watch_helper")
+    def test_workspace_watch_command_uses_workspace_helper(
+        self,
+        mock_workspace_watch_helper,
+    ):
+        """Test that `pcg workspace watch` uses the shared workspace helper."""
+
+        result = runner.invoke(
+            app,
+            [
+                "workspace",
+                "watch",
+                "--include-repo",
+                "*-api",
+                "--sync-interval-seconds",
+                "30",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_workspace_watch_helper.assert_called_once_with(
+            include_repositories=["*-api"],
+            exclude_repositories=None,
+            rediscover_interval_seconds=30,
+        )
+
+    def test_workspace_help_describes_canonical_source_model(self):
+        """Workspace help should describe the shared source contract."""
+
+        result = runner.invoke(app, ["workspace", "--help"])
+
+        assert result.exit_code == 0
+        assert "githubOrg" in result.stdout
+        assert "explicit" in result.stdout
+        assert "filesystem" in result.stdout
+        assert "PCG_REPOSITORY_RULES_JSON" in result.stdout
+
+    def test_path_based_index_and_watch_help_remain_local_convenience_wrappers(self):
+        """Index/watch help should clarify that they are local path-first commands."""
+
+        index_result = runner.invoke(app, ["index", "--help"])
+        watch_result = runner.invoke(app, ["watch", "--help"])
+
+        assert index_result.exit_code == 0
+        assert watch_result.exit_code == 0
+        assert "local filesystem path" in index_result.stdout
+        assert "local filesystem path" in watch_result.stdout
+        assert "pcg workspace" in watch_result.stdout
+
     @patch("platform_context_graph.cli.main.index_helper")
     def test_index_command_basic(self, mock_index):
         """Test 'pcg index .' calls the indexer."""

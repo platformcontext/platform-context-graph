@@ -6,6 +6,7 @@ import asyncio
 import time
 from pathlib import Path
 
+from ...indexing.coordinator import describe_index_run
 from ...tools.package_resolver import get_local_package_path
 
 
@@ -237,3 +238,31 @@ def update_helper(path: str) -> None:
     api = _api()
     api.console.print("[cyan]Updating repository index...[/cyan]")
     reindex_helper(path)
+
+
+def index_status_helper(path_or_run_id: str | None = None) -> None:
+    """Display the latest checkpointed index run status for a path or run ID."""
+
+    api = _api()
+    target = path_or_run_id or str(Path.cwd())
+    summary = describe_index_run(target)
+    if summary is None:
+        api.console.print(
+            f"[yellow]No checkpointed index run found for '{target}'.[/yellow]"
+        )
+        return
+
+    api.console.print(
+        f"[bold cyan]Index Run:[/bold cyan] {summary['run_id']} "
+        f"[dim]({summary['status']}, finalization={summary['finalization_status']})[/dim]"
+    )
+    api.console.print(f"[cyan]Root:[/cyan] {summary['root_path']}")
+    api.console.print(
+        "[cyan]Repositories:[/cyan] "
+        f"{summary['completed_repositories']} completed / "
+        f"{summary['failed_repositories']} failed / "
+        f"{summary['pending_repositories']} pending "
+        f"of {summary['repository_count']}"
+    )
+    if summary.get("last_error"):
+        api.console.print(f"[yellow]Last error:[/yellow] {summary['last_error']}")

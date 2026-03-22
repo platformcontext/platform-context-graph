@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from ..indexing.coordinator import describe_index_run
 from ..query import status as status_queries
 
 __all__ = ["RuntimeStatusToolMixin"]
@@ -36,3 +37,12 @@ class RuntimeStatusToolMixin:
         if ingester not in status_queries.KNOWN_INGESTERS:
             return {"error": f"Unknown ingester: {ingester}"}
         return status_queries.get_ingester_status(self.db_manager, ingester=ingester)
+
+    def get_index_status_tool(self: _RuntimeStatusServer, **args: Any) -> dict[str, Any]:
+        """Return checkpointed index-run status for a path or run ID."""
+
+        target = args.get("target")
+        summary = describe_index_run(target or ".")
+        if summary is None:
+            return {"error": "Index status not found"}
+        return summary

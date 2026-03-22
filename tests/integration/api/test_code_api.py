@@ -59,6 +59,7 @@ def test_code_routes_delegate_to_query_services() -> None:
             json={
                 "query": "payments",
                 "repo_id": "repository:r_ab12cd34",
+                "scope": "workspace",
                 "exact": True,
                 "limit": 3,
             },
@@ -92,6 +93,7 @@ def test_code_routes_delegate_to_query_services() -> None:
             "database": services.database,
             "query": "payments",
             "repo_id": "repository:r_ab12cd34",
+            "scope": "workspace",
             "exact": True,
             "limit": 3,
             "edit_distance": None,
@@ -104,6 +106,7 @@ def test_code_routes_delegate_to_query_services() -> None:
             "target": "process_payment",
             "context": None,
             "repo_id": "repository:r_ab12cd34",
+            "scope": "auto",
         }
     ]
     assert calls["dead_code"] == [
@@ -121,6 +124,7 @@ def test_code_routes_delegate_to_query_services() -> None:
             "function_name": None,
             "path": None,
             "repo_id": "repository:r_ab12cd34",
+            "scope": "auto",
         }
     ]
 

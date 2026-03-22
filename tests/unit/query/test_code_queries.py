@@ -43,6 +43,30 @@ def test_search_code_supports_legacy_edit_distance_override():
     assert result == {"ranked_results": ["a"]}
 
 
+def test_search_code_workspace_scope_ignores_repository_filter() -> None:
+    """Workspace scope should search across repos even when repo_id is present."""
+
+    finder = MagicMock()
+    finder.find_related_code.return_value = {"ranked_results": ["a", "b"]}
+
+    result = search_code(
+        finder,
+        query="payment",
+        repo_id="/repo",
+        scope="workspace",
+        exact=False,
+        limit=2,
+    )
+
+    finder.find_related_code.assert_called_once_with(
+        "payment",
+        True,
+        2,
+        repo_path=None,
+    )
+    assert result == {"ranked_results": ["a", "b"]}
+
+
 def test_get_code_relationships_delegates_to_code_finder():
     finder = MagicMock()
     finder.analyze_code_relationships.return_value = {"results": []}

@@ -26,6 +26,15 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
     serve_app = typer.Typer(help="Combined service commands")
     app.add_typer(serve_app, name="serve")
 
+    workspace_app = typer.Typer(
+        help=(
+            "Workspace discovery and materialization commands using the canonical "
+            "source contract. Source modes: githubOrg, explicit, filesystem. "
+            "Use PCG_REPOSITORY_RULES_JSON as the canonical selector."
+        )
+    )
+    app.add_typer(workspace_app, name="workspace")
+
     internal_app = typer.Typer(help="Internal runtime commands")
     app.add_typer(internal_app, name="internal")
 
@@ -169,6 +178,59 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
         )
         main_module._load_credentials()
         main_module.start_service(host=host, port=port, reload=reload)
+
+    @workspace_app.command("plan")
+    def workspace_plan() -> None:
+        """Preview the repositories selected by the current workspace config."""
+
+        main_module.workspace_plan_helper()
+
+    @workspace_app.command("sync")
+    def workspace_sync() -> None:
+        """Clone, update, or copy the configured workspace without indexing."""
+
+        main_module.workspace_sync_helper()
+
+    @workspace_app.command("index")
+    def workspace_index() -> None:
+        """Index the configured materialized workspace."""
+
+        main_module.workspace_index_helper()
+
+    @workspace_app.command("status")
+    def workspace_status() -> None:
+        """Show the configured workspace path and latest workspace index summary."""
+
+        main_module.workspace_status_helper()
+
+    @workspace_app.command("watch")
+    def workspace_watch(
+        include_repo: list[str] | None = typer.Option(
+            None,
+            "--include-repo",
+            help="Repository glob(s) to include when watching the workspace.",
+        ),
+        exclude_repo: list[str] | None = typer.Option(
+            None,
+            "--exclude-repo",
+            help="Repository glob(s) to exclude when watching the workspace.",
+        ),
+        sync_interval_seconds: int | None = typer.Option(
+            None,
+            "--sync-interval-seconds",
+            help=(
+                "Seconds between workspace rediscovery passes while watch is running. "
+                "Useful when new repos are materialized under the workspace."
+            ),
+        ),
+    ) -> None:
+        """Watch the configured materialized workspace."""
+
+        main_module.workspace_watch_helper(
+            include_repositories=include_repo,
+            exclude_repositories=exclude_repo,
+            rediscover_interval_seconds=sync_interval_seconds,
+        )
 
     @internal_app.command("bootstrap-index", hidden=True)
     def internal_bootstrap_index() -> None:

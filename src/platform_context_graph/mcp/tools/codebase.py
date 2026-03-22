@@ -63,6 +63,11 @@ CODEBASE_TOOLS = {
                     "type": "string",
                     "description": "Optional: Path to the repository to restrict the search to.",
                 },
+                "scope": {
+                    "type": "string",
+                    "description": "Optional search scope: auto, repo, workspace, or ecosystem.",
+                    "default": "auto",
+                },
             },
             "required": ["query"],
         },
@@ -106,6 +111,11 @@ CODEBASE_TOOLS = {
                     "type": "string",
                     "description": "Optional: Path to the repository to restrict the search to.",
                 },
+                "scope": {
+                    "type": "string",
+                    "description": "Optional query scope: auto, repo, workspace, or ecosystem.",
+                    "default": "auto",
+                },
             },
             "required": ["query_type", "target"],
         },
@@ -116,7 +126,22 @@ CODEBASE_TOOLS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Path to directory to watch"}
+                "path": {"type": "string", "description": "Path to directory to watch"},
+                "scope": {
+                    "type": "string",
+                    "description": "Optional watch scope: auto, repo, or workspace.",
+                    "default": "auto",
+                },
+                "include_repositories": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional repository glob filters to include in workspace watch mode.",
+                },
+                "exclude_repositories": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional repository glob filters to exclude in workspace watch mode.",
+                },
             },
             "required": ["path"],
         },
@@ -206,6 +231,11 @@ CODEBASE_TOOLS = {
                     "type": "string",
                     "description": "Optional: Path to the repository to restrict the search to.",
                 },
+                "scope": {
+                    "type": "string",
+                    "description": "Optional query scope: auto, repo, workspace, or ecosystem.",
+                    "default": "auto",
+                },
             },
             "required": ["function_name"],
         },
@@ -224,6 +254,11 @@ CODEBASE_TOOLS = {
                 "repo_path": {
                     "type": "string",
                     "description": "Optional: Path to the repository to restrict the search to.",
+                },
+                "scope": {
+                    "type": "string",
+                    "description": "Optional query scope: auto, repo, workspace, or ecosystem.",
+                    "default": "auto",
                 },
             },
         },

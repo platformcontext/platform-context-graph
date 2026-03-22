@@ -5,14 +5,27 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from platform_context_graph.utils.debug_log import warning_logger
 
-from .config import RepoSyncConfig, RepoSyncRepositoryRule
+from .config import RepoSyncConfig, RepoSyncRepositoryRule, RepoSyncResult
 from .github_auth import github_api_request, github_app_token, github_headers
 from .support import log
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspacePlan:
+    """Preview of the repositories selected for one workspace."""
+
+    source_mode: str
+    repos_dir: Path
+    repository_ids: list[str]
+    matched_repositories: int
+    already_cloned: int
+    stale_checkouts: int
 
 
 def git_token(config: RepoSyncConfig) -> str | None:
@@ -121,6 +134,75 @@ def list_repo_identifiers(config: RepoSyncConfig, token: str | None) -> list[str
     ]
 
 
+def count_stale_checkouts(config: RepoSyncConfig, discovered: list[str]) -> int:
+    """Count managed git checkouts that no longer match current discovery rules."""
+
+    if not config.repos_dir.exists():
+        return 0
+
+    expected_checkout_names = {repo_checkout_name(repo_id) for repo_id in discovered}
+    return sum(
+        1
+        for path in config.repos_dir.iterdir()
+        if path.is_dir()
+        and (path / ".git").exists()
+        and path.name not in expected_checkout_names
+    )
+
+
+def build_workspace_plan(config: RepoSyncConfig) -> dict[str, object]:
+    """Return a non-mutating preview of the currently selected workspace."""
+
+    token = git_token(config)
+    repository_ids = list_repo_identifiers(config, token)
+    checkout_names = {repo_checkout_name(repo_id) for repo_id in repository_ids}
+    already_cloned = 0
+    if config.repos_dir.exists():
+        already_cloned = sum(
+            1
+            for path in config.repos_dir.iterdir()
+            if path.is_dir()
+            and (path / ".git").exists()
+            and path.name in checkout_names
+        )
+
+    return asdict(
+        WorkspacePlan(
+            source_mode=config.source_mode,
+            repos_dir=config.repos_dir,
+            repository_ids=repository_ids,
+            matched_repositories=len(repository_ids),
+            already_cloned=already_cloned,
+            stale_checkouts=count_stale_checkouts(config, repository_ids),
+        )
+    )
+
+
+def run_workspace_sync(config: RepoSyncConfig) -> RepoSyncResult:
+    """Clone, fetch, or copy the configured workspace without indexing it."""
+
+    if config.source_mode == "filesystem":
+        discovered = filesystem_sync_all(config)
+        return RepoSyncResult(
+            discovered=len(discovered),
+            cloned=len(discovered),
+        )
+
+    token = git_token(config)
+    discovered, cloned, skipped, clone_failed = clone_missing_repositories(
+        config, token
+    )
+    updated, update_failed = update_existing_repositories(config, token)
+    return RepoSyncResult(
+        discovered=len(discovered),
+        cloned=cloned,
+        updated=updated,
+        skipped=skipped,
+        failed=clone_failed + update_failed,
+        stale=count_stale_checkouts(config, discovered),
+    )
+
+
 def repository_matches_rules(
     repository_id: str, rules: tuple[RepoSyncRepositoryRule, ...]
 ) -> bool:
@@ -146,10 +228,12 @@ def repo_checkout_name(repo_id: str) -> str:
         repo_id: Repository identifier, typically ``org/repo``.
 
     Returns:
-        Last path component used as the local directory name.
+        Stable slug used as the local directory name.
     """
-
-    return repo_id.rsplit("/", 1)[-1]
+    sanitized = repo_id.strip().strip("/")
+    if not sanitized:
+        return "repository"
+    return sanitized.replace("/", "--")
 
 
 def repo_remote_url(config: RepoSyncConfig, repo_id: str, token: str | None) -> str:

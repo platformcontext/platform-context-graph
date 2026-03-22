@@ -114,6 +114,34 @@ def test_git_discovery_applies_exact_and_regex_include_rules(
     assert page_calls == [1, 2]
 
 
+def test_explicit_source_mode_uses_exact_repositories_only() -> None:
+    """Explicit mode should ignore regex rules and use the exact repository list."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    git = importlib.import_module("platform_context_graph.runtime.ingester.git")
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=Path("/tmp/repos"),
+        source_mode="explicit",
+        git_auth_method="token",
+        github_org="org",
+        repositories=["org/service-a", "org/service-b"],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=20,
+        sync_lock_dir=Path("/tmp/repos/.pcg-sync.lock"),
+        component="workspace-plan",
+        repository_rules=(
+            RepoSyncRepositoryRule(kind="regex", value=r"^org/ignored-.*$"),
+        ),
+    )
+
+    assert git.list_repo_identifiers(config, token="token") == [
+        "org/service-a",
+        "org/service-b",
+    ]
+
+
 def test_git_repo_sync_cycle_rediscoveries_and_indexes_only_on_change(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

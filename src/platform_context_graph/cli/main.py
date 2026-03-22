@@ -41,6 +41,7 @@ from .cli_helpers import (
     cypher_helper_visual,
     delete_helper,
     index_helper,
+    index_status_helper,
     list_repos_helper,
     list_watching_helper,
     reindex_helper,
@@ -48,6 +49,11 @@ from .cli_helpers import (
     unwatch_helper,
     visualize_helper,
     watch_helper,
+    workspace_index_helper,
+    workspace_plan_helper,
+    workspace_status_helper,
+    workspace_sync_helper,
+    workspace_watch_helper,
 )
 from .setup_wizard import configure_mcp_client, run_neo4j_setup_wizard
 

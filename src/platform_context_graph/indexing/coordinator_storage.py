@@ -180,6 +180,12 @@ def _load_run_state(path: Path) -> IndexRunState | None:
     return _deserialize_run_state(json.loads(path.read_text(encoding="utf-8")))
 
 
+def _load_run_state_by_id(run_id: str) -> IndexRunState | None:
+    """Load a checkpoint state by run identifier."""
+
+    return _load_run_state(_run_state_path(run_id))
+
+
 def _archive_run(run_id: str, *, reason: str) -> None:
     """Archive a checkpoint directory in place."""
 

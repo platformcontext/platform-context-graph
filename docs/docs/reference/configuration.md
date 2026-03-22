@@ -127,3 +127,26 @@ To reset everything to defaults:
 ```bash
 pcg config reset
 ```
+
+## `pcg workspace` Commands
+
+Use the workspace command group when you want local CLI behavior to follow the same
+repository-source contract as the cloud ingester.
+
+```bash
+pcg workspace plan
+pcg workspace sync
+pcg workspace index
+pcg workspace status
+pcg workspace watch
+```
+
+- `plan` previews the repositories selected by the current source configuration
+- `sync` materializes the matching repositories into `PCG_REPOS_DIR` without starting a manual index run
+- `index` indexes the materialized `PCG_REPOS_DIR` workspace using the same shared Python indexing path as manual local indexing
+- `status` reports the configured workspace path plus the latest checkpointed workspace index summary
+- `watch` watches the materialized workspace in repo-partitioned mode and can optionally rediscover newly added repos with `--sync-interval-seconds`
+
+Path-first commands such as `pcg index <path>` and `pcg watch <path>` still work as
+local filesystem convenience wrappers. They do not replace the canonical workspace
+source model.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 from ..observability import trace_query
 from ..repository_identity import build_repo_access, relative_path_from_local
@@ -21,6 +21,7 @@ __all__ = [
 ]
 
 _LEGACY_DEFAULT_EDIT_DISTANCE = 2
+_QUERY_SCOPES = {"repo", "workspace", "ecosystem", "auto"}
 _QUERY_TYPE_ALIASES = {
     "callers": "find_callers",
     "callees": "find_callees",
@@ -81,6 +82,28 @@ def _legacy_repo_path(database: Any, repo_id: str | None) -> str | None:
     return repo_id
 
 
+def _resolve_query_scope(
+    *,
+    repo_id: str | None,
+    scope: Literal["repo", "workspace", "ecosystem", "auto"] | str = "auto",
+) -> str | None:
+    """Resolve a scope label into the legacy repo-path filter contract."""
+
+    normalized_scope = scope.lower().strip()
+    if normalized_scope not in _QUERY_SCOPES:
+        raise ValueError(
+            f"Unsupported query scope '{scope}'. Expected one of: "
+            f"{', '.join(sorted(_QUERY_SCOPES))}"
+        )
+    if normalized_scope == "repo":
+        if repo_id is None:
+            raise ValueError("Query scope 'repo' requires a repository identifier")
+        return repo_id
+    if normalized_scope in {"workspace", "ecosystem"}:
+        return None
+    return repo_id
+
+
 def _portable_path_key(key: str) -> str:
     """Map legacy absolute-path keys to portable relative-path keys."""
     if key == "path":
@@ -122,6 +145,7 @@ def search_code(
     *,
     query: str,
     repo_id: str | None = None,
+    scope: Literal["repo", "workspace", "ecosystem", "auto"] | str = "auto",
     exact: bool = False,
     limit: int = 10,
     edit_distance: int | None = None,
@@ -132,6 +156,7 @@ def search_code(
         database: Database manager or code-finder-compatible object.
         query: Search query text.
         repo_id: Optional canonical repository identifier used to scope search.
+        scope: Search scope mode. ``auto`` uses ``repo_id`` when present.
         exact: Whether to disable fuzzy search.
         limit: Maximum ranked results to return.
         edit_distance: Optional fuzzy-search edit distance override.
@@ -141,7 +166,10 @@ def search_code(
     """
     with trace_query("search_code"):
         finder = _get_code_finder(database, "find_related_code")
-        repo_path = _legacy_repo_path(finder, repo_id)
+        repo_path = _legacy_repo_path(
+            finder,
+            _resolve_query_scope(repo_id=repo_id, scope=scope),
+        )
         repo_metadata = _resolve_repo_metadata(finder, repo_id)
 
         fuzzy_search = not exact
@@ -171,6 +199,7 @@ def get_code_relationships(
     target: str,
     context: str | None = None,
     repo_id: str | None = None,
+    scope: Literal["repo", "workspace", "ecosystem", "auto"] | str = "auto",
 ) -> dict[str, Any]:
     """Fetch code relationship data for a target symbol.
 
@@ -180,6 +209,7 @@ def get_code_relationships(
         target: Symbol or entity name to inspect.
         context: Optional contextual filter such as a file path.
         repo_id: Optional canonical repository identifier used to scope the query.
+        scope: Query scope mode. ``auto`` uses ``repo_id`` when present.
 
     Returns:
         Relationship result shaped with portable path fields.
@@ -193,7 +223,10 @@ def get_code_relationships(
             normalized_query_type,
             target,
             context,
-            repo_path=_legacy_repo_path(finder, repo_id),
+            repo_path=_legacy_repo_path(
+                finder,
+                _resolve_query_scope(repo_id=repo_id, scope=scope),
+            ),
         )
         return _portable_result(result, _resolve_repo_metadata(finder, repo_id))
 
@@ -224,6 +257,7 @@ def get_complexity(
     function_name: str | None = None,
     path: str | None = None,
     repo_id: str | None = None,
+    scope: Literal["repo", "workspace", "ecosystem", "auto"] | str = "auto",
 ) -> dict[str, Any] | list[dict[str, Any]]:
     """Return code complexity summaries or a single function's complexity.
 
@@ -234,6 +268,7 @@ def get_complexity(
         function_name: Function name required for ``function`` mode.
         path: Optional path filter for function mode.
         repo_id: Optional canonical repository identifier used to scope the query.
+        scope: Query scope mode. ``auto`` uses ``repo_id`` when present.
 
     Returns:
         Ranked complexity results or a single complexity mapping.
@@ -245,7 +280,10 @@ def get_complexity(
         finder = _get_code_finder(
             database, "find_most_complex_functions", "get_cyclomatic_complexity"
         )
-        repo_path = _legacy_repo_path(finder, repo_id)
+        repo_path = _legacy_repo_path(
+            finder,
+            _resolve_query_scope(repo_id=repo_id, scope=scope),
+        )
         repo_metadata = _resolve_repo_metadata(finder, repo_id)
         normalized_mode = mode.lower().strip()
 

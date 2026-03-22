@@ -101,6 +101,7 @@ class TestMCPServer:
             mock_server.code_finder,
             query="payment api",
             repo_id="/repo",
+            scope="auto",
             exact=False,
             limit=15,
             edit_distance=1,
@@ -130,6 +131,7 @@ class TestMCPServer:
             target="foo",
             context="src/foo.py",
             repo_id="/repo",
+            scope="auto",
         )
         assert result == {
             "success": True,

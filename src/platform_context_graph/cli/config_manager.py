@@ -45,6 +45,9 @@ DEFAULT_CONFIG = {
     "COMPLEXITY_THRESHOLD": "10",
     "MAX_DEPTH": "unlimited",
     "PARALLEL_WORKERS": "4",
+    "PCG_PARSE_WORKERS": "4",
+    "PCG_INDEX_QUEUE_DEPTH": "8",
+    "PCG_WATCH_DEBOUNCE_SECONDS": "2.0",
     "CACHE_ENABLED": "true",
     "IGNORE_DIRS": "node_modules,venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__,.terraform,.terragrunt-cache,.pulumi,.serverless,.aws-sam,.crossplane,cdk.out,.terramate-cache",
     "INDEX_SOURCE": "true",
@@ -80,6 +83,9 @@ CONFIG_DESCRIPTIONS = {
     "COMPLEXITY_THRESHOLD": "Cyclomatic complexity warning threshold",
     "MAX_DEPTH": "Maximum directory depth for indexing (unlimited or number)",
     "PARALLEL_WORKERS": "Number of parallel indexing workers",
+    "PCG_PARSE_WORKERS": "Number of concurrent repository parse workers for checkpointed indexing",
+    "PCG_INDEX_QUEUE_DEPTH": "Maximum queued parsed repositories waiting to commit",
+    "PCG_WATCH_DEBOUNCE_SECONDS": "Debounce interval in seconds for watcher update batches",
     "CACHE_ENABLED": "Enable caching for faster re-indexing",
     "IGNORE_DIRS": "Comma-separated list of directory names to ignore during indexing",
     "INDEX_SOURCE": "Store full source code in graph database (for faster indexing use false, for better performance use true)",
@@ -303,6 +309,22 @@ def validate_config_value(key: str, value: str) -> tuple[bool, Optional[str]]:
                 return False, "PARALLEL_WORKERS must be between 1 and 32"
         except ValueError:
             return False, "PARALLEL_WORKERS must be a number"
+
+    if key in {"PCG_PARSE_WORKERS", "PCG_INDEX_QUEUE_DEPTH"}:
+        try:
+            workers = int(value)
+            if workers <= 0 or workers > 128:
+                return False, f"{key} must be between 1 and 128"
+        except ValueError:
+            return False, f"{key} must be a number"
+
+    if key == "PCG_WATCH_DEBOUNCE_SECONDS":
+        try:
+            debounce = float(value)
+            if debounce <= 0 or debounce > 60:
+                return False, "PCG_WATCH_DEBOUNCE_SECONDS must be between 0 and 60"
+        except ValueError:
+            return False, "PCG_WATCH_DEBOUNCE_SECONDS must be a number"
 
     if key == "MAX_DEPTH":
         if value.lower() != "unlimited":
