@@ -41,6 +41,26 @@ def extract_container_images(doc: dict[str, Any]) -> list[str]:
     return images
 
 
+def _extract_httproute_backends(doc: dict[str, Any]) -> list[str]:
+    """Extract backend service names from an HTTPRoute spec.
+
+    Args:
+        doc: Parsed HTTPRoute YAML document.
+
+    Returns:
+        Service names referenced in backendRefs.
+    """
+    backends: list[str] = []
+    spec = doc.get("spec", {}) or {}
+    for rule in spec.get("rules", []) or []:
+        if not isinstance(rule, dict):
+            continue
+        for ref in rule.get("backendRefs", []) or []:
+            if isinstance(ref, dict) and ref.get("name"):
+                backends.append(ref["name"])
+    return backends
+
+
 def parse_k8s_resource(
     doc: dict[str, Any],
     metadata: dict[str, Any],
@@ -83,4 +103,8 @@ def parse_k8s_resource(
         images = extract_container_images(doc)
         if images:
             node["container_images"] = ",".join(images)
+    if kind == "HTTPRoute":
+        backends = _extract_httproute_backends(doc)
+        if backends:
+            node["backend_refs"] = ",".join(backends)
     return node

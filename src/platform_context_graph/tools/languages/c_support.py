@@ -86,6 +86,9 @@ C_QUERIES = {
         (preproc_def
             name: (identifier) @name
         ) @macro
+        (preproc_function_def
+            name: (identifier) @name
+        ) @macro
     """,
 }
 

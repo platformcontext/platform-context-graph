@@ -39,17 +39,13 @@ GO_QUERIES = {
         ) @interface_node
     """,
     "imports": """
-        (import_declaration
-            (import_spec
-                path: (interpreted_string_literal) @path
-            )
+        (import_spec
+            path: (interpreted_string_literal) @path
         ) @import
 
-        (import_declaration
-            (import_spec
-                name: (package_identifier) @alias
-                path: (interpreted_string_literal) @path
-            )
+        (import_spec
+            name: (package_identifier) @alias
+            path: (interpreted_string_literal) @path
         ) @import_alias
     """,
     "calls": """
@@ -71,6 +67,11 @@ GO_QUERIES = {
         (short_var_declaration
             left: (expression_list
                 (identifier) @name
+            )
+        )
+        (const_declaration
+            (const_spec
+                name: (identifier) @name
             )
         )
     """,

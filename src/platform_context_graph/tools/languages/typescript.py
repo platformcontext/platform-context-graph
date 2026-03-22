@@ -83,6 +83,7 @@ class TypescriptTreeSitterParser:
             "classes": self._find_classes(root_node),
             "interfaces": self._find_interfaces(root_node),
             "type_aliases": self._find_type_aliases(root_node),
+            "enums": self._find_enums(root_node),
             "variables": self._find_variables(root_node),
             "imports": self._find_imports(root_node),
             "function_calls": self._find_calls(root_node),
@@ -269,6 +270,30 @@ class TypescriptTreeSitterParser:
                 alias_data["source"] = self._get_node_text(node)
             type_aliases.append(alias_data)
         return type_aliases
+
+    def _find_enums(self, root_node: Any) -> list[dict[str, Any]]:
+        """Parse TypeScript enum declarations."""
+        enums: list[dict[str, Any]] = []
+        for node, capture_name in execute_query(
+            self.language, TS_QUERIES["enums"], root_node
+        ):
+            if capture_name != "name":
+                continue
+            name = self._get_node_text(node)
+            enum_node = node.parent
+            enums.append(
+                {
+                    "name": name,
+                    "line_number": (
+                        enum_node.start_point[0] + 1
+                        if enum_node
+                        else node.start_point[0] + 1
+                    ),
+                    "type": "enum",
+                    "lang": self.language_name,
+                }
+            )
+        return enums
 
     def _find_imports(self, root_node: Any) -> list[dict[str, Any]]:
         """Parse TypeScript ES module and CommonJS imports."""

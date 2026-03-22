@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ...utils.debug_log import warning_logger
+from .cloudformation import is_cloudformation_template, parse_cloudformation_template
 from .argocd import (
     is_argocd_application,
     is_argocd_applicationset,
@@ -129,6 +130,23 @@ class InfraYAMLParser:
             filename: Basename of the YAML file.
             line_number: 1-based document start line.
         """
+        # CloudFormation detection — must run before apiVersion/kind checks
+        # because CFN templates use AWSTemplateFormatVersion/Resources instead.
+        if is_cloudformation_template(document):
+            cfn_data = parse_cloudformation_template(
+                document, path, line_number, self.language_name
+            )
+            result["cloudformation_resources"].extend(
+                cfn_data.get("cloudformation_resources", [])
+            )
+            result["cloudformation_parameters"].extend(
+                cfn_data.get("cloudformation_parameters", [])
+            )
+            result["cloudformation_outputs"].extend(
+                cfn_data.get("cloudformation_outputs", [])
+            )
+            return
+
         api_version = document.get("apiVersion", "")
         kind = document.get("kind", "")
         metadata = document.get("metadata", {}) or {}

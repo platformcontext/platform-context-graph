@@ -69,6 +69,8 @@ def _empty_result(path: Path, is_dependency: bool) -> dict[str, Any]:
         "path": str(path),
         "functions": [],
         "classes": [],
+        "interfaces": [],
+        "annotations": [],
         "variables": [],
         "imports": [],
         "function_calls": [],
@@ -111,10 +113,25 @@ def parse_java_file(
             elif capture_name == "variables":
                 parsed_variables = _parse_variables(parser, results, source_code, path)
 
+        # Separate interfaces and annotations from classes
+        final_classes = []
+        final_interfaces = []
+        final_annotations = []
+        for cls in parsed_classes:
+            node_type = cls.get("_node_type", "class_declaration")
+            if node_type == "interface_declaration":
+                final_interfaces.append(cls)
+            elif node_type == "annotation_type_declaration":
+                final_annotations.append(cls)
+            else:
+                final_classes.append(cls)
+
         return {
             "path": str(path),
             "functions": parsed_functions,
-            "classes": parsed_classes,
+            "classes": final_classes,
+            "interfaces": final_interfaces,
+            "annotations": final_annotations,
             "variables": parsed_variables,
             "imports": parsed_imports,
             "function_calls": parsed_calls,
@@ -289,6 +306,7 @@ def _parse_classes(
                 "bases": bases,
                 "path": str(path),
                 "lang": "java",
+                "_node_type": node.type,
             }
             if parser.index_source:
                 class_data["source"] = source_text

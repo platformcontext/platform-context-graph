@@ -37,6 +37,9 @@ _SCHEMA_STATEMENTS = [
     "CREATE CONSTRAINT tf_module_unique IF NOT EXISTS FOR (m:TerraformModule) REQUIRE (m.name, m.path) IS UNIQUE",
     "CREATE CONSTRAINT tf_datasource_unique IF NOT EXISTS FOR (ds:TerraformDataSource) REQUIRE (ds.name, ds.path, ds.line_number) IS UNIQUE",
     "CREATE CONSTRAINT tg_config_unique IF NOT EXISTS FOR (tg:TerragruntConfig) REQUIRE tg.path IS UNIQUE",
+    "CREATE CONSTRAINT cf_resource_unique IF NOT EXISTS FOR (r:CloudFormationResource) REQUIRE (r.name, r.path, r.line_number) IS UNIQUE",
+    "CREATE CONSTRAINT cf_parameter_unique IF NOT EXISTS FOR (p:CloudFormationParameter) REQUIRE (p.name, p.path, p.line_number) IS UNIQUE",
+    "CREATE CONSTRAINT cf_output_unique IF NOT EXISTS FOR (o:CloudFormationOutput) REQUIRE (o.name, o.path, o.line_number) IS UNIQUE",
     "CREATE CONSTRAINT ecosystem_name IF NOT EXISTS FOR (e:Ecosystem) REQUIRE e.name IS UNIQUE",
     "CREATE CONSTRAINT tier_name IF NOT EXISTS FOR (t:Tier) REQUIRE t.name IS UNIQUE",
     "CREATE CONSTRAINT workload_id IF NOT EXISTS FOR (w:Workload) REQUIRE w.id IS UNIQUE",
@@ -60,7 +63,7 @@ _NEO4J_FULLTEXT_STATEMENTS = [
     """,
     """
         CREATE FULLTEXT INDEX infra_search_index IF NOT EXISTS
-        FOR (n:K8sResource|TerraformResource|ArgoCDApplication|CrossplaneXRD)
+        FOR (n:K8sResource|TerraformResource|ArgoCDApplication|CrossplaneXRD|CloudFormationResource)
         ON EACH [n.name, n.kind, n.resource_type]
     """,
 ]

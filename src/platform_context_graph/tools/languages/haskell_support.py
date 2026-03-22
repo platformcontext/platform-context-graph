@@ -12,47 +12,22 @@ from platform_context_graph.utils.tree_sitter_manager import execute_query
 
 HASKELL_QUERIES = {
     "functions": """
-        [
-        (function_declaration
-            name: (simple_identifier) @name
-            parameters: (parameters)* @params
-        ) @function_node
-        (init_declaration
-            parameters: (parameter)* @params
-        ) @init_node
-        ]
+        (function name: (variable) @name) @function_node
+        (bind name: (variable) @name) @function_node
     """,
     "classes": """
-    [
-        (class_declaration
-            name: (type_identifier) @name
-        ) @class
-        (
-        struct_declaration
-            name: (type_identifier) @name
-        ) @struct
-        (
-            enum_declaration
-            name: (type_identifier) @name
-        ) @enum
-        (
-            protocol_declaration
-            name: (type_identifier) @name
-        ) @protocol
-    ]
+        (data_type name: (name) @name) @class
+        (class name: (name) @name) @class
+        (newtype name: (name) @name) @class
     """,
     "imports": """
-        (import_declaration) @import
+        (import) @import
     """,
     "calls": """
-        (call_expression) @call_node
+        (apply function: (variable) @name) @call_node
     """,
     "variables": """
-        (property_declaration
-            (variable_declaration
-                (simple_identifier) @name
-            )
-        ) @variable
+        (bind name: (variable) @name) @variable
     """,
 }
 
@@ -60,7 +35,7 @@ HASKELL_QUERIES = {
 def _parse_classes(
     parser: Any, captures: list[tuple[Any, str]], source_code: str, path: Path
 ) -> list[dict[str, Any]]:
-    """Parse Haskell-like type declarations.
+    """Parse Haskell type declarations (data, class, newtype).
 
     Args:
         parser: The parser instance owning the helper methods.
@@ -72,52 +47,30 @@ def _parse_classes(
         Parsed class-like declarations.
     """
     classes: list[dict[str, Any]] = []
-    seen_nodes: set[tuple[int, int, str]] = set()
+    seen_nodes: set[tuple[int, int]] = set()
 
     for node, capture_name in captures:
-        if capture_name != "class":
-            continue
-        node_id = (node.start_byte, node.end_byte, node.type)
-        if node_id in seen_nodes:
-            continue
-        seen_nodes.add(node_id)
+        if capture_name == "name":
+            class_node = node.parent
+            if class_node is None:
+                continue
+            node_key = (class_node.start_byte, class_node.end_byte)
+            if node_key in seen_nodes:
+                continue
+            seen_nodes.add(node_key)
 
-        try:
-            start_line = node.start_point[0] + 1
-            end_line = node.end_point[0] + 1
-            class_name = "Anonymous"
-            if node.type == "companion_object":
-                class_name = "Companion"
+            class_name = parser._get_node_text(node)
+            node_type = class_node.type  # data_type, class, newtype
 
-            for child in node.children:
-                if child.type in ("type_identifier", "simple_identifier"):
-                    class_name = parser._get_node_text(child)
-                    break
-
-            bases: list[str] = []
-            for child in node.children:
-                if child.type == "delegation_specifier":
-                    for specifier in child.children:
-                        if specifier.type == "constructor_invocation":
-                            for sub in specifier.children:
-                                if sub.type == "user_type":
-                                    bases.append(parser._get_node_text(sub))
-                        elif specifier.type == "user_type":
-                            bases.append(parser._get_node_text(specifier))
-
-            class_data = {
+            classes.append({
                 "name": class_name,
-                "line_number": start_line,
-                "end_line": end_line,
-                "bases": bases,
+                "line_number": class_node.start_point[0] + 1,
+                "end_line": class_node.end_point[0] + 1,
+                "type": node_type,
+                "bases": [],
                 "path": str(path),
                 "lang": parser.language_name,
-            }
-            if parser.index_source:
-                class_data["source"] = parser._get_node_text(node)
-            classes.append(class_data)
-        except Exception as exc:
-            error_logger(f"Error parsing class in {path}: {exc}")
+            })
 
     return classes
 
@@ -125,64 +78,28 @@ def _parse_classes(
 def _parse_variables(
     parser: Any, captures: list[tuple[Any, str]], source_code: str, path: Path
 ) -> list[dict[str, Any]]:
-    """Parse Haskell-style variable declarations."""
+    """Parse Haskell top-level value bindings."""
     variables: list[dict[str, Any]] = []
-    seen_vars: set[int] = set()
+    seen: set[int] = set()
 
     for node, capture_name in captures:
-        if capture_name != "variable":
-            continue
-        try:
-            start_line = node.start_point[0] + 1
-            ctx_name, ctx_type, _ = parser._get_parent_context(node)
-
-            var_name = "unknown"
-            var_type = "Unknown"
-            var_decl = None
-            for child in node.children:
-                if child.type == "variable_declaration":
-                    var_decl = child
-                    break
-            if var_decl is not None:
-                for child in var_decl.children:
-                    if child.type == "simple_identifier":
-                        var_name = parser._get_node_text(child)
-                    if child.type == "user_type":
-                        var_type = parser._get_node_text(child)
-
-            if var_type == "Unknown":
-                for child in node.children:
-                    if child.type == "call_expression":
-                        for sub in child.children:
-                            if sub.type == "simple_identifier":
-                                var_type = parser._get_node_text(sub)
-                                break
-                        if var_type != "Unknown":
-                            break
-
-            if var_name == "unknown":
+        if capture_name == "name":
+            bind_node = node.parent
+            if bind_node is None:
                 continue
-            start_byte = node.start_byte
-            if start_byte in seen_vars:
+            key = bind_node.start_byte
+            if key in seen:
                 continue
-            seen_vars.add(start_byte)
-            variables.append(
-                {
-                    "name": var_name,
-                    "type": var_type,
-                    "line_number": start_line,
-                    "path": str(path),
-                    "lang": parser.language_name,
-                    "context": ctx_name,
-                    "class_context": (
-                        ctx_name
-                        if ctx_type and ("class" in ctx_type or "object" in ctx_type)
-                        else None
-                    ),
-                }
-            )
-        except Exception:
-            continue
+            seen.add(key)
+
+            variables.append({
+                "name": parser._get_node_text(node),
+                "line_number": bind_node.start_point[0] + 1,
+                "path": str(path),
+                "lang": parser.language_name,
+                "context": None,
+                "class_context": None,
+            })
 
     return variables
 
@@ -198,19 +115,32 @@ def _parse_imports(
             continue
         try:
             text = parser._get_node_text(node)
-            path = text.replace("import", "").strip().split(" as ")[0].strip()
-            alias = text.split(" as ")[1].strip() if " as " in text else None
-            imports.append(
-                {
-                    "name": path,
-                    "full_import_name": path,
-                    "line_number": node.start_point[0] + 1,
-                    "alias": alias,
-                    "context": (None, None),
-                    "lang": parser.language_name,
-                    "is_dependency": False,
-                }
-            )
+            # Parse module name from text like:
+            #   import Data.List (sort, nub)
+            #   import qualified Data.Map as Map
+            stripped = text.replace("import", "", 1).strip()
+            is_qualified = stripped.startswith("qualified")
+            if is_qualified:
+                stripped = stripped.replace("qualified", "", 1).strip()
+
+            # Split at first space, paren, or 'as'
+            parts = re.split(r"[\s(]", stripped, maxsplit=1)
+            module_name = parts[0].strip() if parts else stripped
+
+            alias = None
+            as_match = re.search(r"\bas\s+(\w+)", text)
+            if as_match:
+                alias = as_match.group(1)
+
+            imports.append({
+                "name": module_name,
+                "full_import_name": module_name,
+                "line_number": node.start_point[0] + 1,
+                "alias": alias,
+                "context": (None, None),
+                "lang": parser.language_name,
+                "is_dependency": False,
+            })
         except Exception:
             continue
     return imports
@@ -223,74 +153,33 @@ def _parse_calls(
     path: Path,
     variables: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Parse Haskell call expressions."""
+    """Parse Haskell function application expressions."""
     calls: list[dict[str, Any]] = []
     seen_calls: set[tuple[str, int]] = set()
-    var_map: dict[tuple[str, str | None], str] = {}
-    for variable in variables or []:
-        var_map[(variable["name"], variable["context"])] = variable["type"]
 
     for node, capture_name in captures:
-        if capture_name != "call_node":
+        if capture_name != "name":
             continue
         try:
+            call_name = parser._get_node_text(node)
             start_line = node.start_point[0] + 1
-            call_name = "unknown"
-            base_obj = None
 
-            children = node.children
-            first_child = children[0] if children else None
-            if first_child is None:
-                continue
-            if first_child.type == "simple_identifier":
-                call_name = parser._get_node_text(first_child)
-            elif first_child.type == "navigation_expression":
-                nav_children = first_child.children
-                if len(nav_children) >= 2:
-                    operand = nav_children[0]
-                    suffix = nav_children[-1]
-                    if suffix.type == "navigation_suffix":
-                        for child in suffix.children:
-                            if child.type == "simple_identifier":
-                                call_name = parser._get_node_text(child)
-                                break
-                    elif suffix.type == "simple_identifier":
-                        call_name = parser._get_node_text(suffix)
-                    base_obj = parser._get_node_text(operand)
-
-            if call_name == "unknown":
-                continue
-            full_name = f"{base_obj}.{call_name}" if base_obj else call_name
-            call_key = (full_name, start_line)
+            call_key = (call_name, start_line)
             if call_key in seen_calls:
                 continue
             seen_calls.add(call_key)
 
-            ctx_name, ctx_type, ctx_line = parser._get_parent_context(node)
-            inferred_type = None
-            if base_obj:
-                inferred_type = var_map.get((base_obj, ctx_name))
-                if not inferred_type:
-                    inferred_type = var_map.get((base_obj, None))
-                if not inferred_type:
-                    for (var_name, _), var_type in var_map.items():
-                        if var_name == base_obj:
-                            inferred_type = var_type
-                            break
-
-            calls.append(
-                {
-                    "name": call_name,
-                    "full_name": full_name,
-                    "line_number": start_line,
-                    "args": [],
-                    "inferred_obj_type": inferred_type,
-                    "context": [None, ctx_type, ctx_line],
-                    "class_context": [None, None],
-                    "lang": parser.language_name,
-                    "is_dependency": False,
-                }
-            )
+            calls.append({
+                "name": call_name,
+                "full_name": call_name,
+                "line_number": start_line,
+                "args": [],
+                "inferred_obj_type": None,
+                "context": [None, None, None],
+                "class_context": [None, None],
+                "lang": parser.language_name,
+                "is_dependency": False,
+            })
         except Exception:
             continue
 
@@ -313,23 +202,18 @@ def pre_scan_haskell(files: list[Path], parser_wrapper: Any) -> dict[str, list[s
             with open(path, "r", encoding="utf-8", errors="ignore") as handle:
                 content = handle.read()
 
-            package_name = ""
-            pkg_match = re.search(r"^\s*package\s+([\w\.]+)", content, re.MULTILINE)
-            if pkg_match:
-                package_name = pkg_match.group(1)
+            # Extract module name
+            mod_match = re.search(r"^\s*module\s+([\w.]+)", content, re.MULTILINE)
+            if mod_match:
+                imports_map.setdefault(mod_match.group(1), []).append(str(path))
 
-            matches = re.finditer(
-                r"^\s*(class|object|interface|typealias)\s+(\w+)",
-                content,
-                re.MULTILINE,
-            )
-            for match in matches:
-                name = match.group(2)
-                imports_map.setdefault(name, []).append(str(path))
-                if package_name:
-                    imports_map.setdefault(f"{package_name}.{name}", []).append(
-                        str(path)
-                    )
+            # Extract top-level function/value names
+            for match in re.finditer(
+                r"^(\w+)\s+(?:::|=)", content, re.MULTILINE
+            ):
+                name = match.group(1)
+                if name not in ("module", "import", "data", "type", "class", "instance", "where", "let", "in", "do", "if", "then", "else", "case", "of"):
+                    imports_map.setdefault(name, []).append(str(path))
         except Exception as exc:
             warning_logger(f"Tree-sitter pre-scan failed for {path}: {exc}")
     return imports_map

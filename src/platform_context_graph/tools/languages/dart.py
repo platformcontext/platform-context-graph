@@ -55,6 +55,17 @@ DART_QUERIES = {
                 )
             )
         ) @variable
+        (initialized_variable_definition
+            name: (identifier) @name
+        ) @variable
+        (static_final_declaration_list
+            (static_final_declaration) @variable
+        )
+        (initialized_identifier_list
+            (initialized_identifier
+                (identifier) @name
+            )
+        ) @variable
     """,
 }
 
