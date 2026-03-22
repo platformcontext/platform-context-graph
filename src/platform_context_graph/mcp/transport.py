@@ -51,6 +51,29 @@ class _TransportRuntime(Protocol):
 class ServerTransportMixin:
     """Provide JSON-RPC request handling and transport loops for ``MCPServer``."""
 
+    def _start_code_watcher_if_available(self: _TransportRuntime) -> None:
+        """Start the watcher only when the active runtime provisions one.
+
+        The API runtime exposes MCP over HTTP but intentionally omits the
+        mutation-capable watcher, so transport startup must treat it as
+        optional.
+        """
+
+        watcher = getattr(self, "code_watcher", None)
+        if watcher is not None:
+            watcher.start()
+
+    def _stop_code_watcher_if_available(self: _TransportRuntime) -> None:
+        """Stop the watcher only when the active runtime provisions one.
+
+        Matching the guarded startup path avoids shutdown crashes in read-only
+        API runtimes that never constructed a watcher.
+        """
+
+        watcher = getattr(self, "code_watcher", None)
+        if watcher is not None:
+            watcher.stop()
+
     async def _handle_jsonrpc_request(
         self: _TransportRuntime,
         body: dict[str, Any],
@@ -212,7 +235,7 @@ class ServerTransportMixin:
             file=sys.stderr,
             flush=True,
         )
-        self.code_watcher.start()
+        self._start_code_watcher_if_available()
         self._stdio_write_lock = asyncio.Lock()
         incoming_requests: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
@@ -323,7 +346,7 @@ class ServerTransportMixin:
         import uvicorn
 
         app = FastAPI(title="PlatformContextGraph MCP Server")
-        self.code_watcher.start()
+        self._start_code_watcher_if_available()
 
         @app.get("/health")
         async def health() -> dict[str, str]:
@@ -374,5 +397,5 @@ class ServerTransportMixin:
     def shutdown(self) -> None:
         """Stop watchers and close the database driver."""
         debug_logger("Shutting down server...")
-        self.code_watcher.stop()
+        self._stop_code_watcher_if_available()
         self.db_manager.close_driver()

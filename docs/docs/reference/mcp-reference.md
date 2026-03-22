@@ -10,7 +10,8 @@ Content-oriented tools use the same rule:
 
 - file lookup uses `repo_id + relative_path`
 - entity lookup uses `entity_id`
-- file and entity reads prefer the PostgreSQL content store and then fall back to the server workspace or graph cache
+- deployed MCP/API runtimes prefer the PostgreSQL content store and report `unavailable` when a row is not yet indexed
+- local helper flows may still use workspace or graph-cache fallbacks
 - file and entity read responses include `source_backend` so the client can see whether PCG answered from `postgres`, `workspace`, `graph-cache`, or `unavailable`
 - content search tools require the PostgreSQL content store and return an error when it is disabled
 - `repo_access` prompting is only for workflows that truly need the user's local machine
@@ -57,6 +58,15 @@ Tools for managing the graph and background jobs.
 | **`delete_repository`** | Remove a repo from the graph. | "Remove the frontend repo." |
 | **`add_code_to_graph`** | Manually add a specific path. | "Add the `lib` folder." |
 | **`add_package_to_graph`** | Index an external library/package. | "Add the `requests` library." |
+
+## Ingester Runtime
+
+Tools for inspecting the status of the deployed ingester runtimes.
+
+| Tool Name | Description | Natural Language Example |
+| :--- | :--- | :--- |
+| **`list_ingesters`** | Show the latest persisted status for all configured ingesters. | "What ingesters are configured and what state are they in?" |
+| **`get_ingester_status`** | Show detailed status for one ingester, including retry timing and repo progress counts. | "What is the repository ingester doing right now?" |
 
 ## Job Control
 

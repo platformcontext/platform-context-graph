@@ -300,7 +300,9 @@ def create_service_app(
     Args:
         database_dependency: Overrideable database dependency factory.
         query_services_dependency: Overrideable query services dependency factory.
-        mcp_server_dependency: Optional MCP server dependency factory.
+        mcp_server_dependency: Optional MCP server dependency factory. API-only
+            runtimes may provide an MCP server without a mutation-capable code
+            watcher.
 
     Returns:
         A configured FastAPI application with the HTTP API and MCP transport.
@@ -314,10 +316,16 @@ def create_service_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        """Start and stop the MCP watcher lifecycle around the app runtime."""
+        """Manage optional MCP runtime lifecycle hooks around the app runtime.
+
+        The `api` runtime role does not provision a mutation-capable code
+        watcher, so watcher startup must remain optional even when an MCP server
+        instance exists.
+        """
         server = _get_mcp_server()
-        if server is not None:
-            server.code_watcher.start()
+        watcher = getattr(server, "code_watcher", None) if server is not None else None
+        if watcher is not None:
+            watcher.start()
         try:
             yield
         finally:

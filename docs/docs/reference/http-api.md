@@ -14,13 +14,14 @@ This page is a curated reference anchored to that schema. Do not hand-maintain a
 
 ## Scope
 
-The public HTTP API is read/query focused.
+The public HTTP API exposes two surfaces:
 
-- Use it to resolve entities, fetch context, search code, trace infra, and compare environments.
-- Use the CLI for local indexing workflows.
-- Use the Helm runtime for deployment-managed bootstrap indexing and repo sync.
+- a read/query surface for context, code, infra, and content retrieval
+- a small ingester control surface for runtime status and manual scan requests
 
-The HTTP API intentionally does not expose a mutable watch/jobs control plane in v0.
+Use it to resolve entities, fetch context, search code, trace infra, compare environments, and inspect the deployed ingester state.
+
+Use the CLI for local indexing workflows. Use the Helm runtime for deployment-managed repository ingestion and steady-state sync.
 
 ## Model Basics
 
@@ -119,8 +120,9 @@ Rules:
 
 - portable file lookup uses `repo_id + relative_path`
 - portable entity lookup uses `entity_id`
-- file and entity reads prefer the PostgreSQL content store when configured
-- if PostgreSQL is disabled or missing a cached row, file and entity reads fall back to the server workspace or graph cache
+- deployed API runtimes are PostgreSQL-first and PostgreSQL-only for direct content reads
+- if PostgreSQL is disabled or missing a cached row, deployed HTTP reads return `source_backend=unavailable` instead of reading from a server workspace checkout
+- local CLI and non-deployed helper flows may still use workspace or graph-cache fallbacks
 - file and entity read responses include `source_backend` so callers can see whether the result came from `postgres`, `workspace`, `graph-cache`, or `unavailable`
 - content search routes require the PostgreSQL content store and return an error payload when it is disabled
 - content retrieval should not trigger `repo_access` prompting when the server already has the checkout
@@ -182,4 +184,26 @@ If a downstream workflow needs local file operations on a user machine, use `rep
 For local or deployed indexing workflows, use the CLI and deployment runtime:
 
 - local: `pcg index <path>`
-- Kubernetes: bootstrap indexing and repo sync are deployment-managed through the Helm chart runtime
+- Kubernetes: repository ingestion is deployment-managed through the ingester runtime
+
+## Ingester API
+
+Use these routes to inspect or control deployed ingesters without reaching into Kubernetes directly.
+
+- `GET /api/v0/ingesters`
+- `GET /api/v0/ingesters/{ingester}`
+- `POST /api/v0/ingesters/{ingester}/scan`
+
+The default ingester is `repository`.
+
+Status responses are designed for remote operation and include:
+
+- ingester identity
+- current status
+- active run id
+- last attempt / last success
+- next retry timing
+- repository progress counts
+- failure counts and last error details
+
+Manual scan requests are persisted for the ingester runtime to claim asynchronously; the API does not perform the scan inline.

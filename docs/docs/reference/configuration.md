@@ -79,22 +79,26 @@ Here are the available settings you can configure.
 
 Notes:
 
-- file and entity reads prefer the PostgreSQL content store and then fall back to the server workspace or graph cache
+- deployed API runtimes use the PostgreSQL content store directly and return `unavailable` when content is not yet indexed
+- local helper flows may still fall back to the workspace or graph cache
 - content search routes and MCP search tools require PostgreSQL and return an error when the content store is disabled
 - portable source retrieval uses `repo_id + relative_path` for files and `entity_id` for content-bearing entities
 
-### Repo Sync Runtime
+### Ingester Runtime
 
-These settings matter for deployable-service installs that use bootstrap indexing and the repo-sync sidecar.
+These settings matter for deployable-service installs that use the repository ingester runtime.
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
+| **`PCG_RUNTIME_ROLE`** | `combined` | Runtime identity. Deployed split runtimes use `api` or `ingester`. |
 | **`PCG_REPO_SOURCE_MODE`** | `githubOrg` | Repository discovery mode. Supported modes include `githubOrg`, `explicit`, and `filesystem`. |
 | **`PCG_GITHUB_ORG`** | unset | GitHub organization used for repository discovery in `githubOrg` mode. |
 | **`PCG_REPOSITORY_RULES_JSON`** | unset | Structured exact/regex include rules applied to normalized `org/repo` identifiers during repo rediscovery. |
 | **`PCG_REPOSITORIES`** | unset | Deprecated exact-repository shorthand. Prefer `PCG_REPOSITORY_RULES_JSON`. |
 | **`PCG_REPOS_DIR`** | `/data/repos` | Shared workspace directory for cloned repositories. |
 | **`PCG_REPO_LIMIT`** | `4000` | Maximum repositories to discover from GitHub in one cycle. |
+| **`PCG_REPO_SYNC_INITIAL_DELAY_SECONDS`** | `30` | Delay before the ingester begins its first sync cycle. |
+| **`PCG_REPO_SYNC_INTERVAL_SECONDS`** | `900` | Delay between ingester sync cycles after a completed pass. |
 
 `PCG_REPOSITORY_RULES_JSON` accepts either a list of rules or an object with `exact` and `regex` keys. Example:
 
@@ -105,7 +109,7 @@ These settings matter for deployable-service installs that use bootstrap indexin
 ]
 ```
 
-The repo-sync sidecar re-discovers repositories on each cycle, applies these rules, updates matching checkouts, and reports stale local checkouts that no longer match the discovery result.
+The repository ingester re-discovers repositories on each cycle, applies these rules, updates matching checkouts, and reports stale local checkouts that no longer match the discovery result.
 
 ---
 

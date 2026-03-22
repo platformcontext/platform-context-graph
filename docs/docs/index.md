@@ -14,7 +14,7 @@ PlatformContextGraph gives AI systems and engineers a fast, queryable map of cod
 - **One graph for code and infrastructure.** Index source code, Terraform, Helm, Kubernetes, Argo CD, and related deployment assets in the same model.
 - **Built for AI workflows.** Expose the same query model over the CLI, MCP, and a first-class HTTP API.
 - **Service and workload aware.** Reason about workloads, workload instances, shared infrastructure, and environment drift.
-- **Portable source retrieval.** Resolve files by `repo_id + relative_path` and entities by `entity_id`, with Postgres-backed content search and workspace fallback.
+- **Portable source retrieval.** Resolve files by `repo_id + relative_path` and entities by `entity_id`, with Postgres-backed content search and deployed-service content retrieval.
 - **Deployable as a real service.** Run it locally with Docker Compose or deploy it to Kubernetes with Helm and Argo CD.
 
 ## Primary Interfaces
@@ -33,7 +33,7 @@ Use the OpenAPI-backed API for service-to-service automation, internal tools, an
 
 ### Deployable Service
 
-Run PCG as a networked service with external Neo4j, bootstrap indexing, repo sync, and HTTP + MCP access in one deployment.
+Run PCG as a networked service with a stateless API runtime, a stateful repository ingester, and HTTP + MCP access over one product surface.
 
 ## Common Workflows
 
