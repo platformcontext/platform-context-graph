@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Literal, Sequence
 
 from ..observability import trace_query
@@ -10,6 +11,8 @@ from ..tools.code_finder import CodeFinder
 from .repositories import (
     _canonical_repository_ref,
     _get_db_manager,
+    _repository_metadata_from_row,
+    _repository_projection,
     _resolve_repository,
 )
 
@@ -62,7 +65,7 @@ def _resolve_repo_path(database: Any, repo_id: str | None) -> str | None:
 
 def _resolve_repo_metadata(database: Any, repo_id: str | None) -> dict[str, Any] | None:
     """Resolve canonical repository metadata for portable response shaping."""
-    if repo_id is None or not repo_id.startswith("repository:"):
+    if repo_id is None:
         return None
 
     db_manager = _get_db_manager(database)
@@ -113,13 +116,105 @@ def _portable_path_key(key: str) -> str:
     return key
 
 
-def _portable_result(value: Any, repo: dict[str, Any] | None) -> Any:
+def _result_repository_metadata(
+    value: dict[str, Any],
+    *,
+    database: Any | None,
+    repository_cache: dict[str, dict[str, Any] | None],
+) -> dict[str, Any] | None:
+    """Resolve repository metadata for a path-bearing result item."""
+
+    if database is None:
+        return None
+
+    for key, item in value.items():
+        if not isinstance(item, str) or (key != "path" and not key.endswith("_path")):
+            continue
+
+        candidate = item
+        path_candidate = Path(candidate)
+        cache_key = (
+            str(path_candidate.resolve()) if path_candidate.is_absolute() else candidate
+        )
+        if cache_key not in repository_cache:
+            repository_cache[cache_key] = _resolve_repo_metadata_for_result_path(
+                database,
+                cache_key,
+            )
+        if repository_cache[cache_key] is not None:
+            return repository_cache[cache_key]
+    return None
+
+
+def _resolve_repo_metadata_for_result_path(
+    database: Any,
+    candidate_path: str,
+) -> dict[str, Any] | None:
+    """Resolve repository metadata for an absolute file path result."""
+
+    path_candidate = Path(candidate_path)
+    if not path_candidate.is_absolute():
+        return None
+
+    resolved_path = path_candidate.resolve()
+    db_manager = _get_db_manager(database)
+    with db_manager.get_driver().session() as session:
+        repositories = session.run(f"""
+            MATCH (r:Repository)
+            RETURN {_repository_projection()}
+            ORDER BY r.name
+            """).data()
+
+    best_match: dict[str, Any] | None = None
+    best_depth = -1
+    for repo in repositories:
+        metadata = _repository_metadata_from_row(repo)
+        repo_root = metadata.get("local_path") or repo.get("path")
+        if repo_root is None:
+            continue
+        try:
+            repo_root_path = Path(repo_root).resolve()
+            resolved_path.relative_to(repo_root_path)
+        except ValueError:
+            continue
+        if len(repo_root_path.parts) > best_depth:
+            best_match = {**repo, **metadata, "id": repo.get("id") or metadata["id"]}
+            best_depth = len(repo_root_path.parts)
+
+    if best_match is None:
+        return None
+    return _canonical_repository_ref(best_match)
+
+
+def _portable_result(
+    value: Any,
+    repo: dict[str, Any] | None,
+    *,
+    database: Any | None = None,
+    repository_cache: dict[str, dict[str, Any] | None] | None = None,
+) -> Any:
     """Convert path-bearing query results into portable repo-relative payloads."""
+    if repository_cache is None:
+        repository_cache = {}
+
     if isinstance(value, list):
-        return [_portable_result(item, repo) for item in value]
+        return [
+            _portable_result(
+                item,
+                repo,
+                database=database,
+                repository_cache=repository_cache,
+            )
+            for item in value
+        ]
     if not isinstance(value, dict):
         return value
 
+    resolved_repo = repo or _result_repository_metadata(
+        value,
+        database=database,
+        repository_cache=repository_cache,
+    )
     portable: dict[str, Any] = {}
     saw_path = False
     for key, item in value.items():
@@ -127,15 +222,20 @@ def _portable_result(value: Any, repo: dict[str, Any] | None) -> Any:
             saw_path = True
             portable[_portable_path_key(key)] = relative_path_from_local(
                 item,
-                None if repo is None else repo.get("local_path"),
+                None if resolved_repo is None else resolved_repo.get("local_path"),
             )
             continue
-        portable[key] = _portable_result(item, repo)
+        portable[key] = _portable_result(
+            item,
+            resolved_repo,
+            database=database,
+            repository_cache=repository_cache,
+        )
 
-    if repo is not None and saw_path:
-        portable["repo_id"] = repo["id"]
+    if resolved_repo is not None and saw_path:
+        portable["repo_id"] = resolved_repo["id"]
         portable["repo_access"] = build_repo_access(
-            repo, interaction_mode="conversational"
+            resolved_repo, interaction_mode="conversational"
         )
     return portable
 
@@ -166,11 +266,13 @@ def search_code(
     """
     with trace_query("search_code"):
         finder = _get_code_finder(database, "find_related_code")
-        repo_path = _legacy_repo_path(
-            finder,
-            _resolve_query_scope(repo_id=repo_id, scope=scope),
+        scope_repo_id = _resolve_query_scope(repo_id=repo_id, scope=scope)
+        repo_path = _legacy_repo_path(finder, scope_repo_id)
+        repo_metadata = (
+            _resolve_repo_metadata(finder, scope_repo_id)
+            if scope_repo_id is not None
+            else None
         )
-        repo_metadata = _resolve_repo_metadata(finder, repo_id)
 
         fuzzy_search = not exact
         effective_edit_distance = _LEGACY_DEFAULT_EDIT_DISTANCE
@@ -186,7 +288,7 @@ def search_code(
         if limit >= 0 and "ranked_results" in results:
             results = dict(results)
             results["ranked_results"] = [
-                _portable_result(item, repo_metadata)
+                _portable_result(item, repo_metadata, database=finder)
                 for item in list(results["ranked_results"])[:limit]
             ]
         return results
@@ -216,6 +318,7 @@ def get_code_relationships(
     """
     with trace_query("code_relationships"):
         finder = _get_code_finder(database, "analyze_code_relationships")
+        scope_repo_id = _resolve_query_scope(repo_id=repo_id, scope=scope)
         normalized_query_type = _QUERY_TYPE_ALIASES.get(
             query_type.lower().strip(), query_type
         )
@@ -223,12 +326,17 @@ def get_code_relationships(
             normalized_query_type,
             target,
             context,
-            repo_path=_legacy_repo_path(
-                finder,
-                _resolve_query_scope(repo_id=repo_id, scope=scope),
-            ),
+            repo_path=_legacy_repo_path(finder, scope_repo_id),
         )
-        return _portable_result(result, _resolve_repo_metadata(finder, repo_id))
+        return _portable_result(
+            result,
+            (
+                _resolve_repo_metadata(finder, scope_repo_id)
+                if scope_repo_id is not None
+                else None
+            ),
+            database=finder,
+        )
 
 
 def find_dead_code(
@@ -246,6 +354,7 @@ def find_dead_code(
                 repo_path=repo_path,
             ),
             None,
+            database=finder,
         )
 
 
@@ -280,17 +389,20 @@ def get_complexity(
         finder = _get_code_finder(
             database, "find_most_complex_functions", "get_cyclomatic_complexity"
         )
-        repo_path = _legacy_repo_path(
-            finder,
-            _resolve_query_scope(repo_id=repo_id, scope=scope),
+        scope_repo_id = _resolve_query_scope(repo_id=repo_id, scope=scope)
+        repo_path = _legacy_repo_path(finder, scope_repo_id)
+        repo_metadata = (
+            _resolve_repo_metadata(finder, scope_repo_id)
+            if scope_repo_id is not None
+            else None
         )
-        repo_metadata = _resolve_repo_metadata(finder, repo_id)
         normalized_mode = mode.lower().strip()
 
         if normalized_mode in {"top", "find_complexity"}:
             return _portable_result(
                 finder.find_most_complex_functions(limit, repo_path=repo_path),
                 repo_metadata,
+                database=finder,
             )
 
         if normalized_mode in {"function", "single", "calculate"}:
@@ -303,6 +415,7 @@ def get_complexity(
                     function_name, path, repo_path=repo_path
                 ),
                 repo_metadata,
+                database=finder,
             )
 
         raise ValueError(f"Unsupported complexity mode: {mode}")

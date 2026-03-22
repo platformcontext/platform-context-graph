@@ -218,21 +218,21 @@ Expected: PASS.
 - Test: `tests/integration/api/test_code_api.py`
 - Test: `tests/integration/mcp/test_mcp_server.py`
 
-- [ ] **Step 1: Add failing repo-identity assertions**
+- [x] **Step 1: Add failing repo-identity assertions**
 Require:
   - workspace and ecosystem results always include repo identity
   - `auto` scope selects `repo` when repository context is resolvable
   - CLI/API/MCP status and search outputs stay consistent
 
-- [ ] **Step 2: Run the red suite**
+- [x] **Step 2: Run the red suite**
 Run:
   - `PYTHONPATH=src uv run pytest -q tests/unit/query/test_code_queries.py tests/integration/api/test_code_api.py tests/integration/mcp/test_mcp_server.py`
 Expected: FAIL where repo-aware output is incomplete.
 
-- [ ] **Step 3: Implement the minimal output polish**
+- [x] **Step 3: Implement the minimal output polish**
 Prefer output shaping and status consistency over new query features.
 
-- [ ] **Step 4: Re-run the focused suite**
+- [x] **Step 4: Re-run the focused suite**
 Run:
   - `PYTHONPATH=src uv run pytest -q tests/unit/query/test_code_queries.py tests/integration/api/test_code_api.py tests/integration/mcp/test_mcp_server.py`
 Expected: PASS.

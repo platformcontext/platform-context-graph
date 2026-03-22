@@ -67,6 +67,82 @@ def test_search_code_workspace_scope_ignores_repository_filter() -> None:
     assert result == {"ranked_results": ["a", "b"]}
 
 
+def test_search_code_workspace_scope_infers_repo_identity_per_result() -> None:
+    """Workspace search results should still carry canonical repo identity."""
+
+    class FakeResult:
+        def __init__(self, *, records=None):
+            self._records = records or []
+
+        def data(self):
+            return self._records
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def run(self, query, **_kwargs):
+            if "MATCH (r:Repository)" in query:
+                return FakeResult(
+                    records=[
+                        {
+                            "name": "payments-api",
+                            "path": "/repos/payments-api",
+                            "local_path": "/repos/payments-api",
+                            "remote_url": "https://github.com/platformcontext/payments-api",
+                            "repo_slug": "platformcontext/payments-api",
+                            "has_remote": True,
+                        }
+                    ]
+                )
+            raise AssertionError(f"unexpected query: {query}")
+
+    finder = MagicMock()
+    finder.get_driver.return_value.session.return_value = FakeSession()
+    finder.find_related_code.return_value = {
+        "ranked_results": [{"path": "/repos/payments-api/src/payments.py"}]
+    }
+
+    result = search_code(
+        finder,
+        query="payment",
+        scope="workspace",
+        exact=False,
+        limit=10,
+    )
+
+    finder.find_related_code.assert_called_once_with(
+        "payment",
+        True,
+        2,
+        repo_path=None,
+    )
+    assert result["ranked_results"] == [
+        {
+            "relative_path": "src/payments.py",
+            "repo_id": canonical_repository_id(
+                remote_url="https://github.com/platformcontext/payments-api",
+                local_path="/repos/payments-api",
+            ),
+            "repo_access": {
+                "state": "needs_local_checkout",
+                "repo_id": canonical_repository_id(
+                    remote_url="https://github.com/platformcontext/payments-api",
+                    local_path="/repos/payments-api",
+                ),
+                "repo_slug": "platformcontext/payments-api",
+                "remote_url": "https://github.com/platformcontext/payments-api",
+                "local_path": "/repos/payments-api",
+                "recommended_action": "ask_user_for_local_path",
+                "interaction_mode": "conversational",
+            },
+        }
+    ]
+
+
 def test_get_code_relationships_delegates_to_code_finder():
     finder = MagicMock()
     finder.analyze_code_relationships.return_value = {"results": []}
@@ -107,6 +183,65 @@ def test_get_code_relationships_normalizes_service_friendly_aliases():
         repo_path="/repo",
     )
     assert result == {"results": []}
+
+
+def test_get_code_relationships_workspace_scope_infers_repo_identity() -> None:
+    """Workspace relationship results should carry repo identity on nested hits."""
+
+    class FakeResult:
+        def __init__(self, *, records=None):
+            self._records = records or []
+
+        def data(self):
+            return self._records
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def run(self, query, **_kwargs):
+            if "MATCH (r:Repository)" in query:
+                return FakeResult(
+                    records=[
+                        {
+                            "name": "payments-api",
+                            "path": "/repos/payments-api",
+                            "local_path": "/repos/payments-api",
+                            "remote_url": "https://github.com/platformcontext/payments-api",
+                            "repo_slug": "platformcontext/payments-api",
+                            "has_remote": True,
+                        }
+                    ]
+                )
+            raise AssertionError(f"unexpected query: {query}")
+
+    finder = MagicMock()
+    finder.get_driver.return_value.session.return_value = FakeSession()
+    finder.analyze_code_relationships.return_value = {
+        "results": [{"path": "/repos/payments-api/src/payments.py"}]
+    }
+
+    result = get_code_relationships(
+        finder,
+        query_type="find_callers",
+        target="foo",
+        scope="workspace",
+    )
+
+    finder.analyze_code_relationships.assert_called_once_with(
+        "find_callers",
+        "foo",
+        None,
+        repo_path=None,
+    )
+    assert result["results"][0]["repo_id"] == canonical_repository_id(
+        remote_url="https://github.com/platformcontext/payments-api",
+        local_path="/repos/payments-api",
+    )
+    assert result["results"][0]["relative_path"] == "src/payments.py"
 
 
 def test_find_dead_code_delegates_to_code_finder():

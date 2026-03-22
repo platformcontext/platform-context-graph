@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from platform_context_graph.mcp import MCPServer
 from platform_context_graph.query.context import ServiceAliasError
 from platform_context_graph.mcp.tool_registry import TOOLS
+from platform_context_graph.repository_identity import canonical_repository_id
 
 
 class TestMCPServer:
@@ -110,6 +111,76 @@ class TestMCPServer:
             "success": True,
             "query": "payment api",
             "results": {"ranked_results": []},
+        }
+
+    def test_find_code_wrapper_returns_repo_identity_for_workspace_results(
+        self, mock_server
+    ):
+        class FakeResult:
+            def __init__(self, *, records=None):
+                self._records = records or []
+
+            def data(self):
+                return self._records
+
+        class FakeSession:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def run(self, query, **_kwargs):
+                if "MATCH (r:Repository)" in query:
+                    return FakeResult(
+                        records=[
+                            {
+                                "name": "payments-api",
+                                "path": "/repos/payments-api",
+                                "local_path": "/repos/payments-api",
+                                "remote_url": "https://github.com/platformcontext/payments-api",
+                                "repo_slug": "platformcontext/payments-api",
+                                "has_remote": True,
+                            }
+                        ]
+                    )
+                raise AssertionError(f"unexpected query: {query}")
+
+        mock_server.code_finder.find_related_code.return_value = {
+            "ranked_results": [{"path": "/repos/payments-api/src/payments.py"}]
+        }
+        mock_server.code_finder.get_driver.return_value.session.return_value = (
+            FakeSession()
+        )
+
+        result = mock_server.find_code_tool(query="payments", scope="workspace")
+
+        assert result == {
+            "success": True,
+            "query": "payments",
+            "results": {
+                "ranked_results": [
+                    {
+                        "relative_path": "src/payments.py",
+                        "repo_id": canonical_repository_id(
+                            remote_url="https://github.com/platformcontext/payments-api",
+                            local_path="/repos/payments-api",
+                        ),
+                        "repo_access": {
+                            "state": "needs_local_checkout",
+                            "repo_id": canonical_repository_id(
+                                remote_url="https://github.com/platformcontext/payments-api",
+                                local_path="/repos/payments-api",
+                            ),
+                            "repo_slug": "platformcontext/payments-api",
+                            "remote_url": "https://github.com/platformcontext/payments-api",
+                            "local_path": "/repos/payments-api",
+                            "recommended_action": "ask_user_for_local_path",
+                            "interaction_mode": "conversational",
+                        },
+                    }
+                ]
+            },
         }
 
     def test_relationship_wrapper_routes_through_query_service(self, mock_server):
@@ -756,10 +827,14 @@ def test_api_runtime_role_omits_indexing_tools_and_skips_graph_builder(
 
         with (
             patch("platform_context_graph.mcp.server.JobManager") as mock_job_cls,
-            patch("platform_context_graph.mcp.server.GraphBuilder") as mock_graph_builder,
+            patch(
+                "platform_context_graph.mcp.server.GraphBuilder"
+            ) as mock_graph_builder,
             patch("platform_context_graph.mcp.server.CodeFinder"),
             patch("platform_context_graph.mcp.server.CodeWatcher") as mock_code_watcher,
-            patch("platform_context_graph.mcp.server.EcosystemIndexer") as mock_ecosystem,
+            patch(
+                "platform_context_graph.mcp.server.EcosystemIndexer"
+            ) as mock_ecosystem,
             patch("platform_context_graph.mcp.server.CrossRepoLinker") as mock_linker,
         ):
             server = MCPServer()
