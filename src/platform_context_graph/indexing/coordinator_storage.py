@@ -132,13 +132,25 @@ def _deserialize_run_state(payload: dict[str, Any]) -> IndexRunState:
     )
 
 
+def _json_default(obj: Any) -> str:
+    """Fallback serializer for ``json.dumps``.
+
+    Only converts ``Path`` objects; everything else raises so that
+    unexpected types surface as bugs rather than being silently stringified.
+    """
+
+    if isinstance(obj, Path):
+        return str(obj)
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     """Write JSON atomically using temp-file-plus-rename semantics."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(f"{path.suffix}.tmp")
     tmp_path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True),
+        json.dumps(payload, indent=2, sort_keys=True, default=_json_default),
         encoding="utf-8",
     )
     os.replace(tmp_path, path)
