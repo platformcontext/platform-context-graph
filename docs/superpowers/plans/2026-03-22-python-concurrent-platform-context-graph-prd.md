@@ -325,14 +325,21 @@ Update this plan or an adjacent status note with:
   - result: succeeded, `discovered=20 cloned=20 updated=0 skipped=0 failed=0 stale=0`
 - `PYTHONPATH=src uv run pytest -q tests/integration/runtime/test_workspace_watch_runtime.py`
   - result: `1 passed`
+- `docker-compose run --rm --no-deps -v /Users/allen/personal-repos/platform-context-graph/.worktrees/python-concurrent-platform-context-graph:/work -w /work -e PYTHONPATH=/work/src -e DEFAULT_DATABASE=neo4j -e NEO4J_URI=bolt://neo4j:7687 -e NEO4J_USERNAME=neo4j -e NEO4J_PASSWORD=testpassword -e PCG_CONTENT_STORE_DSN=postgresql://pcg:testpassword@postgres:5432/platform_context_graph -e PCG_POSTGRES_DSN=postgresql://pcg:testpassword@postgres:5432/platform_context_graph -e PCG_GIT_AUTH_METHOD=none bootstrap-index sh -lc 'pcg index /work/tests/fixtures/sample_projects/sample_project'`
+  - result: succeeded against live compose Neo4j/Postgres, single-repo indexing finished in `6.09s`
+- `docker-compose run --rm --no-deps -v /Users/allen/personal-repos/platform-context-graph/.worktrees/python-concurrent-platform-context-graph:/work -w /work -e PYTHONPATH=/work/src -e DEFAULT_DATABASE=neo4j -e NEO4J_URI=bolt://neo4j:7687 -e NEO4J_USERNAME=neo4j -e NEO4J_PASSWORD=testpassword -e PCG_CONTENT_STORE_DSN=postgresql://pcg:testpassword@postgres:5432/platform_context_graph -e PCG_POSTGRES_DSN=postgresql://pcg:testpassword@postgres:5432/platform_context_graph -e PCG_REPO_SOURCE_MODE=filesystem -e PCG_FILESYSTEM_ROOT=/work/tests/fixtures/sample_projects -e PCG_REPOS_DIR=/tmp/pcg-workspace -e PCG_GIT_AUTH_METHOD=none bootstrap-index sh -lc 'pcg workspace sync && pcg workspace index'`
+  - result: succeeded against live compose Neo4j/Postgres, workspace sync discovered `20` repos and workspace indexing finished in `38.11s`
+- `docker-compose run --rm --no-deps -v /Users/allen/personal-repos/platform-context-graph/.worktrees/python-concurrent-platform-context-graph:/work -w /work -e PYTHONPATH=/work/src -e DEFAULT_DATABASE=neo4j -e NEO4J_URI=bolt://neo4j:7687 -e NEO4J_USERNAME=neo4j -e NEO4J_PASSWORD=testpassword -e PCG_CONTENT_STORE_DSN=postgresql://pcg:testpassword@postgres:5432/platform_context_graph -e PCG_POSTGRES_DSN=postgresql://pcg:testpassword@postgres:5432/platform_context_graph -e PCG_GIT_AUTH_METHOD=none bootstrap-index sh -lc 'python - <<\"PY\" ... pcg watch /tmp/live-watch-workspace --scope workspace ... PY'`
+  - result: succeeded against live compose Neo4j/Postgres, watcher started on a two-repo git workspace, completed the initial scan, and shut down cleanly with `watch_returncode=0`
 
 #### Remaining gaps
 
-- Real database-backed CLI indexing smoke is still blocked in this environment.
+- Kùzu-backed CLI smoke is still unverified in this worktree runtime.
   - `PYTHONPATH=src PCG_RUNTIME_DB_TYPE=kuzudb KUZUDB_PATH="$TMPDIR/.../kuzu" uv run pcg index tests/fixtures/sample_projects/sample_project`
-  - result: failed before indexing because Kùzu is not installed in this worktree runtime
+  - result: failed before indexing because Kùzu is not installed in this environment
 - The only benchmark available in-repo is `tests/perf/test_large_indexing.py`, which measures mocked Python loop overhead, not full end-to-end parse+persist throughput.
 - We still do not have a real 100/500/1000-repo benchmark corpus or an 8-hour watch RSS soak in this local environment.
+- Neo4j emits a benign warning for the ecosystem correlation query when `SOURCES_FROM` has not been materialized yet; this does not fail indexing or watch, but it is still log noise worth cleaning up separately.
 
 #### Escalation rule
 
