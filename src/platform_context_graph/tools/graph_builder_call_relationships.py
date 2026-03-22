@@ -19,7 +19,7 @@ def safe_run_create(session: Any, query: str, params: dict[str, Any]) -> bool:
         ``True`` when the query reports at least one created relationship.
     """
     try:
-        result = session.run(query, **params)
+        result = session.run(query, params)
         row = result.single()
         return row is not None and row.get("created", 0) > 0
     except Exception:

@@ -225,7 +225,7 @@ class CodeFinderAnalysisMixin:
                 "end_file": end_file,
                 "repo_path": repo_path,
             }
-            result = session.run(query, **params)
+            result = session.run(query, params)
             return result.data()
 
     def find_by_type(self, element_type: str, limit: int = 50) -> list[dict[str, Any]]:

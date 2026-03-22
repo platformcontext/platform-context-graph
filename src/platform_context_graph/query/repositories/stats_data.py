@@ -85,4 +85,4 @@ def _single_count(session: Any, query: str, **params: Any) -> int:
         Integer count value.
     """
 
-    return session.run(query, **params).single()["c"]
+    return session.run(query, params).single()["c"]
