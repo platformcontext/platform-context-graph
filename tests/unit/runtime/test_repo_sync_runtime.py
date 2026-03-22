@@ -700,6 +700,56 @@ def test_repo_sync_loop_records_degraded_status_and_retries_transient_failures(
     assert recorded_statuses[-1]["last_error_kind"] == "network"
 
 
+def test_persist_ingester_status_defaults_repository_counts_to_zero(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Persisted ingester status should never publish null repository counts."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
+
+    recorded_statuses: list[dict[str, object]] = []
+    monkeypatch.setattr(sync, "_current_ingester_status", lambda _component: {}, raising=False)
+    monkeypatch.setattr(
+        sync,
+        "update_runtime_ingester_status",
+        lambda **kwargs: recorded_statuses.append(kwargs),
+        raising=False,
+    )
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=tmp_path / "workspace" / "repos",
+        source_mode="githubOrg",
+        git_auth_method="githubApp",
+        github_org="platformcontext",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=tmp_path / "workspace" / "repos" / ".pcg-sync.lock",
+        component="repository",
+    )
+
+    sync._persist_ingester_status(config, status="degraded", last_error_kind="network")
+
+    assert recorded_statuses == [
+        {
+            "ingester": "repository",
+            "source_mode": "githubOrg",
+            "status": "degraded",
+            "active_run_id": None,
+            "repository_count": 0,
+            "pulled_repositories": 0,
+            "in_sync_repositories": 0,
+            "pending_repositories": 0,
+            "completed_repositories": 0,
+            "failed_repositories": 0,
+            "last_error_kind": "network",
+        }
+    ]
+
+
 def test_retry_delay_clamps_attempt_exponent_before_growth(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
