@@ -1,0 +1,64 @@
+# Docs Inventory
+
+This inventory is the current-state map for PlatformContextGraph documentation.
+
+## Public docs pages
+
+| Path | Topic | Status |
+| --- | --- | --- |
+| `docs/docs/index.md` | Product landing page | active |
+| `docs/docs/architecture.md` | System architecture | active |
+| `docs/docs/concepts/graph-model.md` | Graph model | active |
+| `docs/docs/concepts/how-it-works.md` | Processing model | active |
+| `docs/docs/concepts/modes.md` | CLI, MCP, and HTTP API roles | active |
+| `docs/docs/contributing-language-support.md` | Adding language support | active |
+| `docs/docs/contributing.md` | Public contribution guide | active |
+| `docs/docs/deployment/argocd.md` | Argo CD deployment | active |
+| `docs/docs/deployment/docker-compose.md` | Local deployment with Docker Compose | active |
+| `docs/docs/deployment/helm.md` | Helm deployment | active |
+| `docs/docs/deployment/manifests.md` | Minimal Kubernetes manifests | active |
+| `docs/docs/deployment/overview.md` | Deployment overview | active |
+| `docs/docs/getting-started/installation.md` | Installation guide | active |
+| `docs/docs/getting-started/prerequisites.md` | Prerequisites | active |
+| `docs/docs/getting-started/quickstart.md` | Quickstart | active |
+| `docs/docs/getting-started/windows-setup.md` | Windows setup | active |
+| `docs/docs/guides/bundles.md` | Bundle workflows | active |
+| `docs/docs/guides/ci-cd.md` | CI/CD guide | active |
+| `docs/docs/guides/fixture-ecosystems.md` | Fixture ecosystems | active |
+| `docs/docs/guides/mcp-guide.md` | MCP usage guide | active |
+| `docs/docs/guides/neo4j-setup.md` | Neo4j setup | active |
+| `docs/docs/guides/shared-infra-trace.md` | Shared infra tracing walkthrough | active |
+| `docs/docs/guides/visualization.md` | Visualization guide | active |
+| `docs/docs/license.md` | License page | active |
+| `docs/docs/reference/cli-analysis.md` | CLI analysis reference | active |
+| `docs/docs/reference/cli-indexing.md` | CLI indexing reference | active |
+| `docs/docs/reference/cli-reference.md` | CLI command reference | active |
+| `docs/docs/reference/cli-system.md` | CLI system reference | active |
+| `docs/docs/reference/configuration.md` | Configuration reference | active |
+| `docs/docs/reference/http-api.md` | HTTP API reference | active |
+| `docs/docs/reference/mcp-cookbook.md` | MCP examples | active |
+| `docs/docs/reference/mcp-reference.md` | MCP reference | active |
+| `docs/docs/reference/pcgignore.md` | `.pcgignore` reference | active |
+| `docs/docs/reference/source-layout.md` | Source layout map | active |
+| `docs/docs/reference/troubleshooting.md` | Troubleshooting guide | active |
+| `docs/docs/roadmap.md` | Public roadmap | active |
+| `docs/docs/use-cases.md` | Use cases | active |
+
+## Internal docs
+
+| Path | Purpose | Status |
+| --- | --- | --- |
+| `docs/internal/README.md` | Boundary rules for internal docs | active |
+| `docs/internal/docs-inventory.md` | Current docs inventory | active |
+| `docs/internal/updating-docs.md` | Maintainer workflow for docs changes | active |
+
+## Active specs and plans
+
+| Path | Purpose | Status |
+| --- | --- | --- |
+| `docs/superpowers/specs/2026-03-19-query-model-api-design.md` | Query model and API design reference | active |
+
+## Archive boundary
+
+- `docs/archive/` is reserved for retired internal material when needed.
+- The archive is intentionally empty in the current repo.

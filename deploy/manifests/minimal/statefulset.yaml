@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: platform-context-graph
+  namespace: platform-context-graph
+spec:
+  serviceName: platform-context-graph
+  replicas: 1
+  selector:
+    matchLabels:
+      app: platform-context-graph
+  template:
+    metadata:
+      labels:
+        app: platform-context-graph
+    spec:
+      containers:
+        - name: platform-context-graph
+          image: ghcr.io/platformcontext/platform-context-graph:latest
+          command: ["pcg", "serve", "start", "--host", "0.0.0.0", "--port", "8080"]
+          envFrom:
+            - configMapRef:
+                name: pcg-config
+          env:
+            - name: NEO4J_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: pcg-neo4j
+                  key: username
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pcg-neo4j
+                  key: password
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi

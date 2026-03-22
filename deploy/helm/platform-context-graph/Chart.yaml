@@ -1,0 +1,6 @@
+apiVersion: v2
+name: platform-context-graph
+description: PlatformContextGraph combined service with MCP, HTTP API, bootstrap indexing, and repo sync.
+type: application
+version: 0.1.0
+appVersion: "0.0.3"

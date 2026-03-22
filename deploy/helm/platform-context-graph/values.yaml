@@ -1,0 +1,162 @@
+image:
+  repository: ghcr.io/platformcontext/platform-context-graph
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+exposure:
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []
+    tls: []
+  gateway:
+    enabled: false
+    hostnames: []
+    parentRefs: []
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 100Gi
+  storageClass: ""
+
+resources:
+  app:
+    requests:
+      cpu: 1000m
+      memory: 4Gi
+    limits:
+      cpu: 4000m
+      memory: 16Gi
+  bootstrap:
+    requests:
+      cpu: 1000m
+      memory: 4Gi
+    limits:
+      cpu: 4000m
+      memory: 16Gi
+  repoSync:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+
+env:
+  DEFAULT_DATABASE: neo4j
+  NEO4J_DATABASE: neo4j
+  LIBRARY_LOG_LEVEL: WARNING
+
+contentStore:
+  dsn: ""
+
+observability:
+  environment: ""
+  otel:
+    enabled: false
+    endpoint: ""
+    protocol: grpc
+    insecure: true
+    headers: {}
+    resourceAttributes: {}
+    excludedUrls:
+      - /health
+      - /api/v0/health
+      - /api/v0/openapi.json
+      - /api/v0/docs
+      - /api/v0/redoc
+    metricExportIntervalSeconds: 30
+
+neo4j:
+  uri: bolt://neo4j:7687
+  auth:
+    secretName: pcg-neo4j
+    usernameKey: username
+    passwordKey: password
+
+repoSync:
+  enabled: true
+  bootstrap: true
+  initialDelaySeconds: 30
+  intervalSeconds: 900
+  source:
+    mode: githubOrg
+    githubOrg: platformcontext
+    repositories: []
+    rules: []
+    filesystemRoot: /fixtures
+    cloneDepth: 1
+    limit: 4000
+  auth:
+    method: githubApp
+    githubApp:
+      secretName: github-app-credentials
+      appIdKey: app-id
+      installationIdKey: installation-id
+      privateKeyKey: private-key
+    token:
+      secretName: github-token
+      tokenKey: token
+    ssh:
+      secretName: github-ssh
+      privateKeyKey: id_rsa
+      knownHostsKey: known_hosts
+
+pcgignore: |
+  # Python
+  __pycache__/
+  *.pyc
+  .venv/
+  .env
+
+  # Node
+  node_modules/
+
+  # Build artifacts
+  dist/
+  build/
+  target/
+  out/
+
+  # IDEs
+  .idea/
+  .vscode/
+
+  # Git and cache directories
+  .git/
+  .terraform/
+  .terragrunt-cache/
+  .terramate-cache/
+  .crossplane/
+  .pulumi/
+  cdk.out/
+  .serverless/
+  .aws-sam/
+
+  # Coverage and temp data
+  .pytest_cache/
+  coverage/
+  htmlcov/
+  *.log
+  *.sqlite3
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

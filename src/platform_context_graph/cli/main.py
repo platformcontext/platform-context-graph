@@ -1,0 +1,282 @@
+"""Public CLI entrypoint assembly for PlatformContextGraph."""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import sys
+from importlib.metadata import PackageNotFoundError, version as pkg_version
+from pathlib import Path
+
+import typer
+from dotenv import find_dotenv
+from rich.console import Console
+
+from platform_context_graph.core.database import DatabaseManager
+from platform_context_graph.runtime.repo_sync import (
+    RepoSyncConfig,
+    run_bootstrap_index,
+    run_repo_sync_cycle,
+    run_repo_sync_loop,
+)
+from platform_context_graph.mcp import MCPServer
+
+from ..paths import get_app_env_file
+from . import config_manager
+from .commands.analyze_graph import register_analyze_graph_commands
+from .commands.analyze_quality import register_analyze_quality_commands
+from .commands.basic import register_basic_commands
+from .commands.bundle_registry import register_bundle_registry_commands
+from .commands.config import register_config_commands
+from .commands.ecosystem import register_ecosystem_commands
+from .commands.find_primary import register_find_primary_commands
+from .commands.find_secondary import register_find_secondary_commands
+from .commands.runtime import register_runtime_commands
+from .cli_helpers import (
+    _initialize_services,
+    add_package_helper,
+    clean_helper,
+    cypher_helper,
+    cypher_helper_visual,
+    delete_helper,
+    index_helper,
+    list_repos_helper,
+    list_watching_helper,
+    reindex_helper,
+    stats_helper,
+    unwatch_helper,
+    visualize_helper,
+    watch_helper,
+)
+from .setup_wizard import configure_mcp_client, run_neo4j_setup_wizard
+
+console = Console(stderr=True)
+
+app = typer.Typer(
+    name="pcg",
+    help="PlatformContextGraph: An MCP server for AI-powered code analysis.\n\n[DEPRECATED] 'pcg start' is deprecated. Use 'pcg mcp start' instead.",
+    add_completion=True,
+)
+
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+)
+
+
+def _configure_library_loggers() -> None:
+    """Configure noisy third-party loggers using the CLI config."""
+    try:
+        log_level_str = config_manager.get_config_value("LIBRARY_LOG_LEVEL")
+        if log_level_str is None:
+            log_level_str = "WARNING"
+        log_level = getattr(logging, str(log_level_str).upper(), logging.WARNING)
+    except (AttributeError, Exception):
+        log_level = logging.WARNING
+
+    logging.getLogger("neo4j").setLevel(log_level)
+    logging.getLogger("asyncio").setLevel(log_level)
+    logging.getLogger("urllib3").setLevel(log_level)
+
+
+def get_version() -> str:
+    """Return the installed package version or a development fallback."""
+    try:
+        return pkg_version("platform-context-graph")
+    except PackageNotFoundError:
+        return "0.0.0 (dev)"
+
+
+def start_http_api(
+    *, host: str = "127.0.0.1", port: int = 8000, reload: bool = False
+) -> None:
+    """Start the dedicated HTTP API server.
+
+    Args:
+        host: The interface to bind.
+        port: The TCP port to bind.
+        reload: Whether to enable Uvicorn reload mode.
+    """
+    import uvicorn
+
+    uvicorn.run(
+        "platform_context_graph.api.app:create_app",
+        host=host,
+        port=port,
+        reload=reload,
+        factory=True,
+    )
+
+
+def start_service(
+    *, host: str = "0.0.0.0", port: int = 8080, reload: bool = False
+) -> None:
+    """Start the combined HTTP API and MCP service.
+
+    Args:
+        host: The interface to bind.
+        port: The TCP port to bind.
+        reload: Whether to enable Uvicorn reload mode.
+    """
+    import uvicorn
+
+    from platform_context_graph.api.app import create_service_app
+
+    mcp_server = MCPServer()
+    service_app = create_service_app(mcp_server_dependency=lambda: mcp_server)
+    uvicorn.run(service_app, host=host, port=port, reload=reload)
+
+
+def _load_credentials() -> None:
+    """Load CLI configuration and credentials into the process environment."""
+    from dotenv import dotenv_values
+
+    shell_db_type = os.environ.get("DATABASE_TYPE")
+    if shell_db_type and not os.environ.get("PCG_RUNTIME_DB_TYPE"):
+        os.environ["PCG_RUNTIME_DB_TYPE"] = shell_db_type
+
+    config_manager.ensure_config_dir()
+
+    config_sources: list[dict[str, str | None]] = []
+    config_source_names: list[str] = []
+
+    global_env_path = get_app_env_file()
+    if global_env_path.exists():
+        try:
+            config_sources.append(dotenv_values(str(global_env_path)))
+            config_source_names.append(str(global_env_path))
+        except Exception as exc:
+            console.print(
+                f"[yellow]Warning: Could not load global .env: {exc}[/yellow]"
+            )
+
+    try:
+        dotenv_path = find_dotenv(usecwd=True, raise_error_if_not_found=False)
+        if dotenv_path:
+            config_sources.append(dotenv_values(dotenv_path))
+            config_source_names.append(str(dotenv_path))
+    except Exception as exc:
+        console.print(
+            f"[yellow]Warning: Could not load .env from current directory: {exc}[/yellow]"
+        )
+
+    mcp_file_path = Path.cwd() / "mcp.json"
+    if mcp_file_path.exists():
+        try:
+            with open(mcp_file_path, "r", encoding="utf-8") as handle:
+                mcp_config = json.load(handle)
+            server_env = (
+                mcp_config.get("mcpServers", {})
+                .get("PlatformContextGraph", {})
+                .get("env", {})
+            )
+            if server_env:
+                config_sources.append(server_env)
+                config_source_names.append("mcp.json")
+        except Exception as exc:
+            console.print(f"[yellow]Warning: Could not load mcp.json: {exc}[/yellow]")
+
+    merged_config: dict[str, str | None] = {}
+    for config in config_sources:
+        merged_config.update(config)
+
+    db_override_keys = {"DATABASE_TYPE", "PCG_RUNTIME_DB_TYPE", "DEFAULT_DATABASE"}
+    for key, value in merged_config.items():
+        if value is None:
+            continue
+        if key in db_override_keys and key in os.environ:
+            continue
+        os.environ[key] = str(value)
+
+    if config_source_names:
+        if len(config_source_names) == 1:
+            console.print(
+                f"[dim]Loaded configuration from: {config_source_names[-1]}[/dim]"
+            )
+        else:
+            console.print(
+                "[dim]Loaded configuration from: "
+                f"{', '.join(config_source_names)} (highest priority: {config_source_names[-1]})[/dim]"
+            )
+    else:
+        console.print("[yellow]No configuration file found. Using defaults.[/yellow]")
+
+    runtime_db = os.environ.get("PCG_RUNTIME_DB_TYPE")
+    explicit_db = (
+        runtime_db
+        or os.environ.get("DEFAULT_DATABASE")
+        or os.environ.get("DATABASE_TYPE")
+    )
+
+    if explicit_db:
+        default_db = explicit_db.lower()
+    else:
+        try:
+            from platform_context_graph.core import get_database_manager
+
+            manager = get_database_manager()
+            default_db = manager.get_backend_type()
+        except Exception:
+            from platform_context_graph.core import _is_falkordb_available
+
+            default_db = "falkordb" if _is_falkordb_available() else "kuzudb"
+
+    if default_db == "neo4j":
+        has_neo4j_creds = all(
+            [
+                os.environ.get("NEO4J_URI"),
+                os.environ.get("NEO4J_USERNAME"),
+                os.environ.get("NEO4J_PASSWORD"),
+            ]
+        )
+        if has_neo4j_creds:
+            neo4j_db = os.environ.get("NEO4J_DATABASE")
+            if neo4j_db:
+                console.print(
+                    f"[cyan]Using database: Neo4j (database: {neo4j_db})[/cyan]"
+                )
+            else:
+                console.print("[cyan]Using database: Neo4j[/cyan]")
+        else:
+            console.print(
+                "[yellow]⚠ DEFAULT_DATABASE=neo4j but credentials not found. Falling back to default.[/yellow]"
+            )
+    elif default_db == "falkordb-remote":
+        host = os.environ.get("FALKORDB_HOST")
+        if host:
+            console.print(f"[cyan]Using database: FalkorDB Remote ({host})[/cyan]")
+        else:
+            console.print(
+                "[yellow]⚠ DATABASE_TYPE=falkordb-remote but FALKORDB_HOST not set.[/yellow]"
+            )
+    elif default_db == "falkordb":
+        if os.environ.get("FALKORDB_HOST"):
+            console.print(
+                f"[cyan]Using database: FalkorDB Remote ({os.environ.get('FALKORDB_HOST')})[/cyan]"
+            )
+        else:
+            console.print("[cyan]Using database: FalkorDB[/cyan]")
+    else:
+        console.print(f"[cyan]Using database: {default_db}[/cyan]")
+
+
+def _register_command_groups() -> None:
+    """Assemble the root Typer app from the extracted command modules."""
+    current_module = sys.modules[__name__]
+    register_runtime_commands(current_module, app)
+    register_config_commands(current_module, app)
+    register_bundle_registry_commands(current_module, app)
+    register_basic_commands(current_module, app)
+    find_app = register_find_primary_commands(current_module, app)
+    register_find_secondary_commands(current_module, find_app)
+    analyze_app = register_analyze_graph_commands(current_module, app)
+    register_analyze_quality_commands(current_module, analyze_app)
+    register_ecosystem_commands(current_module, app)
+
+
+_configure_library_loggers()
+_register_command_groups()
+
+
+if __name__ == "__main__":
+    app()

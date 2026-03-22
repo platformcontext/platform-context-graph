@@ -1,0 +1,4 @@
+prune images
+prune vscode-extension
+prune playground
+recursive-include src/platform_context_graph/viz/dist *

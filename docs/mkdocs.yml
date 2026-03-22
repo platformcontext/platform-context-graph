@@ -1,0 +1,84 @@
+site_name: PlatformContextGraph
+repo_url: https://github.com/platformcontext/platform-context-graph
+repo_name: platformcontext/platform-context-graph
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - toc.follow
+  palette: 
+    - scheme: default
+      primary: teal
+      accent: purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: lime
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Get Started:
+    - Prerequisites: getting-started/prerequisites.md
+    - Installation: getting-started/installation.md
+    - Quickstart: getting-started/quickstart.md
+    - Windows Setup: getting-started/windows-setup.md
+  - Deploy:
+    - Overview: deployment/overview.md
+    - Docker Compose: deployment/docker-compose.md
+    - Helm: deployment/helm.md
+    - Minimal Manifests: deployment/manifests.md
+    - Argo CD: deployment/argocd.md
+  - Guides:
+    - MCP Guide: guides/mcp-guide.md
+    - Neo4j Setup: guides/neo4j-setup.md
+    - Shared Infra Trace: guides/shared-infra-trace.md
+    - Fixture Ecosystems: guides/fixture-ecosystems.md
+    - Visualization: guides/visualization.md
+    - Bundles: guides/bundles.md
+    - CI/CD: guides/ci-cd.md
+  - API & MCP:
+    - HTTP API: reference/http-api.md
+    - MCP Reference: reference/mcp-reference.md
+    - MCP Cookbook: reference/mcp-cookbook.md
+  - Reference:
+    - Architecture: architecture.md
+    - How It Works: concepts/how-it-works.md
+    - Graph Model: concepts/graph-model.md
+    - Modes: concepts/modes.md
+    - Source Layout: reference/source-layout.md
+    - CLI Reference: reference/cli-reference.md
+    - CLI Indexing: reference/cli-indexing.md
+    - CLI Analysis: reference/cli-analysis.md
+    - CLI System: reference/cli-system.md
+    - Configuration: reference/configuration.md
+    - ".pcgignore": reference/pcgignore.md
+    - Troubleshooting: reference/troubleshooting.md
+  - Project:
+    - Use Cases: use-cases.md
+    - Roadmap: roadmap.md
+    - Contributing: contributing.md
+    - Language Support: contributing-language-support.md
+    - License: license.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true 
+  - attr_list
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg

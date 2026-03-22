@@ -1,0 +1,90 @@
+# MCP Reference & Natural Language Queries
+
+This page lists all available **MCP Tools** that your AI assistant (Cursor, Claude, VS Code) can use.
+
+When you ask a question in natural language, the AI selects one of these tools behind the scenes.
+
+Repository-bearing results may include `repo_access` metadata. If PCG is running remotely, treat repository identity as remote-first and use `repo_id`, `repo_slug`, and repo-relative paths before assuming any `local_path` exists on the user's machine.
+
+Content-oriented tools use the same rule:
+
+- file lookup uses `repo_id + relative_path`
+- entity lookup uses `entity_id`
+- file and entity reads prefer the PostgreSQL content store and then fall back to the server workspace or graph cache
+- file and entity read responses include `source_backend` so the client can see whether PCG answered from `postgres`, `workspace`, `graph-cache`, or `unavailable`
+- content search tools require the PostgreSQL content store and return an error when it is disabled
+- `repo_access` prompting is only for workflows that truly need the user's local machine
+
+!!! tip "File Exclusion"
+    You can control what gets indexed using `.pcgignore`.
+    [**📄 Read the Guide**](pcgignore.md)
+
+## Core Analysis Tools
+
+These are the most commonly used tools for understanding code.
+
+| Tool Name | Description | Natural Language Example |
+| :--- | :--- | :--- |
+| **`find_code`** | Search for code by name or fuzzy text. | "Where is the `User` class defined?" |
+| **`analyze_code_relationships`** | The swiss-army knife for call graphs and dependencies. | "Find all callers of `process_payment`." |
+| **`calculate_cyclomatic_complexity`** | Measure function complexity. | "What is the complexity of `main`?" |
+| **`find_most_complex_functions`** | List the hardest-to-maintain functions. | "Show me the 5 most complex functions." |
+| **`find_dead_code`** | Identify unused functions. | "Find dead code, but ignore `@route`." |
+
+## Content Retrieval & Search
+
+Tools for portable source retrieval and indexed content search.
+
+| Tool Name | Description | Natural Language Example |
+| :--- | :--- | :--- |
+| **`get_file_content`** | Read a file using `repo_id + relative_path`. | "Show me `src/payments.py` from the payments repo." |
+| **`get_file_lines`** | Read a specific line range from one repo-relative file. | "Show me lines 20 to 40 from `src/server.py`." |
+| **`get_entity_content`** | Read source for one content-bearing entity using its canonical `entity_id`. | "Show me the source for this resolved function." |
+| **`search_file_content`** | Search indexed file text through the content store. | "Find every file that mentions `shared-payments-prod`." |
+| **`search_entity_content`** | Search cached entity snippets through the content store. | "Find entities whose source mentions `process_payment`." |
+
+## System & Management
+
+Tools for managing the graph and background jobs.
+
+| Tool Name | Description | Natural Language Example |
+| :--- | :--- | :--- |
+| **`monitor_directory`** | Start monitoring a folder (Alias: `watch_directory`)| "Watch the `src` folder." |
+| **`list_watched_paths`** | See what is being monitored. | "What directories are being watched?" |
+| **`unwatch_directory`** | Stop monitoring a folder. | "Stop watching `src`." |
+| **`list_indexed_repositories`** | Show what projects are currently indexed. | "What repos are indexed?" |
+| **`get_repository_stats`** | Show counts of files, classes, LOC. | "Show stats for the backend repo." |
+| **`delete_repository`** | Remove a repo from the graph. | "Remove the frontend repo." |
+| **`add_code_to_graph`** | Manually add a specific path. | "Add the `lib` folder." |
+| **`add_package_to_graph`** | Index an external library/package. | "Add the `requests` library." |
+
+## Job Control
+
+| Tool Name | Description | Natural Language Example |
+| :--- | :--- | :--- |
+| **`list_jobs`** | View all background tasks. | "Show me active jobs." |
+| **`check_job_status`** | Check if a specific job is done. | "Is job `xyz` finished?" |
+
+## Bundles & Registry
+
+| Tool Name | Description | Natural Language Example |
+| :--- | :--- | :--- |
+| **`search_registry_bundles`** | Find shared graphs in the cloud. | "Search for a `flask` bundle." |
+| **`load_bundle`** | Install a graph bundle. | "Load the `flask` bundle." |
+
+## Advanced Querying
+
+For complex questions that standard tools can't answer.
+
+| Tool Name | Description | Natural Language Example |
+| :--- | :--- | :--- |
+| **`execute_cypher_query`** | Run a raw read-only database query. | "Find all recursive functions." |
+| **`visualize_graph_query`** | Generate a Neo4j Browser link for a query. | "Visualize the class hierarchy of `BaseModel`." |
+
+---
+
+## Example Queries (Cookbook)
+
+For a deep dive into exactly how to phrase questions and what JSON arguments look like, check out the Cookbook.
+
+[📖 View the MCP Cookbook](mcp-cookbook.md)

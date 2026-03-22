@@ -1,0 +1,33 @@
+image:
+  repository: ghcr.io/platformcontext/platform-context-graph
+  tag: latest
+
+neo4j:
+  uri: bolt://neo4j.platform.svc.cluster.local:7687
+  auth:
+    secretName: pcg-neo4j
+    usernameKey: username
+    passwordKey: password
+
+contentStore:
+  dsn: postgresql://pcg:replace-me@postgres.platform.svc.cluster.local:5432/platform_context_graph
+
+repoSync:
+  enabled: true
+  source:
+    mode: githubOrg
+    githubOrg: platformcontext
+    rules: []
+  auth:
+    method: githubApp
+    githubApp:
+      secretName: github-app-credentials
+
+service:
+  type: ClusterIP
+
+exposure:
+  ingress:
+    enabled: false
+  gateway:
+    enabled: false

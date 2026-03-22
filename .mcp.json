@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "pcg": {
+      "command": "sh",
+      "args": [
+        "-lc",
+        "cd /Users/allen/personal-repos/platform-context-graph && docker-compose exec -T platform-context-graph pcg mcp start"
+      ]
+    }
+  }
+}
