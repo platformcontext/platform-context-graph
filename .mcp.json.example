@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "pcg": {
+      "command": "sh",
+      "args": [
+        "-lc",
+        "cd <REPO_ROOT> && docker-compose exec -T platform-context-graph pcg mcp start"
+      ]
+    }
+  }
+}

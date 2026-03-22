@@ -1,0 +1,131 @@
+services:
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    environment:
+      NEO4J_AUTH: neo4j/testpassword
+      NEO4J_PLUGINS: '[]'
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "testpassword", "RETURN 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: platform_context_graph
+      POSTGRES_USER: pcg
+      POSTGRES_PASSWORD: testpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pcg -d platform_context_graph"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  bootstrap-index:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["pcg", "internal", "bootstrap-index"]
+    healthcheck:
+      disable: true
+    environment:
+      DEFAULT_DATABASE: neo4j
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: testpassword
+      PCG_CONTENT_STORE_DSN: postgresql://pcg:testpassword@postgres:5432/platform_context_graph
+      PCG_POSTGRES_DSN: postgresql://pcg:testpassword@postgres:5432/platform_context_graph
+      PCG_HOME: /data/.platform-context-graph
+      PCG_REPOS_DIR: /data/repos
+      PCG_REPO_SOURCE_MODE: filesystem
+      PCG_FILESYSTEM_ROOT: /fixtures
+      PCG_GIT_AUTH_METHOD: none
+      PCG_REPOSITORY_RULES_JSON: "[]"
+    volumes:
+      - pcg_data:/data
+      - ./:/app-src
+      - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  platform-context-graph:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["pcg", "serve", "start", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "${PCG_HTTP_PORT:-8080}:8080"
+    environment:
+      DEFAULT_DATABASE: neo4j
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: testpassword
+      PCG_CONTENT_STORE_DSN: postgresql://pcg:testpassword@postgres:5432/platform_context_graph
+      PCG_POSTGRES_DSN: postgresql://pcg:testpassword@postgres:5432/platform_context_graph
+      PCG_HOME: /data/.platform-context-graph
+      PCG_REPOSITORY_RULES_JSON: "[]"
+    volumes:
+      - pcg_data:/data
+      - ./:/app-src
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      bootstrap-index:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  repo-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["pcg", "internal", "repo-sync-loop"]
+    healthcheck:
+      disable: true
+    environment:
+      DEFAULT_DATABASE: neo4j
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: testpassword
+      PCG_CONTENT_STORE_DSN: postgresql://pcg:testpassword@postgres:5432/platform_context_graph
+      PCG_POSTGRES_DSN: postgresql://pcg:testpassword@postgres:5432/platform_context_graph
+      PCG_HOME: /data/.platform-context-graph
+      PCG_REPOS_DIR: /data/repos
+      PCG_REPO_SOURCE_MODE: filesystem
+      PCG_FILESYSTEM_ROOT: /fixtures
+      PCG_GIT_AUTH_METHOD: none
+      PCG_REPOSITORY_RULES_JSON: "[]"
+      PCG_REPO_SYNC_INITIAL_DELAY_SECONDS: "${PCG_REPO_SYNC_INITIAL_DELAY_SECONDS:-30}"
+      PCG_REPO_SYNC_INTERVAL_SECONDS: "${REPO_SYNC_INTERVAL_SECONDS:-900}"
+    volumes:
+      - pcg_data:/data
+      - ./:/app-src
+      - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      bootstrap-index:
+        condition: service_completed_successfully
+
+volumes:
+  neo4j_data:
+  postgres_data:
+  pcg_data:

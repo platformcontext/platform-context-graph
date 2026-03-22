@@ -1,0 +1,6 @@
+{{- if and .Values.exposure.ingress.enabled .Values.exposure.gateway.enabled -}}
+{{- fail "exposure.ingress.enabled and exposure.gateway.enabled cannot both be true" -}}
+{{- end -}}
+{{- if and (eq .Values.repoSync.auth.method "ssh") (eq .Values.repoSync.source.mode "githubOrg") -}}
+{{- fail "repoSync.auth.method=ssh requires repoSync.source.mode=explicit or filesystem" -}}
+{{- end -}}

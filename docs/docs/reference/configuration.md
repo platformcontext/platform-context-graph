@@ -1,0 +1,125 @@
+# Configuration & Settings
+
+PlatformContextGraph is highly configurable through environment files and the CLI.
+
+## `pcg config` Command
+
+View and modify settings directly from the terminal.
+
+### 1. View Settings
+Shows the current effective configuration (merged from defaults and `.env`).
+
+```bash
+pcg config show
+```
+
+### 2. Set a Value
+Update a setting permanently. This writes to `~/.platform-context-graph/.env`.
+
+**Syntax:** `pcg config set <KEY> <VALUE>`
+
+```bash
+# Switch to Neo4j backend
+pcg config set DEFAULT_DATABASE neo4j
+
+# Increase max file size to index (MB)
+pcg config set MAX_FILE_SIZE_MB 20
+
+# Enable automatic watching after index
+pcg config set ENABLE_AUTO_WATCH true
+```
+
+### 3. Quick Switch Database
+A shortcut to toggle between `falkordb` and `neo4j`.
+
+```bash
+pcg config db neo4j
+```
+
+---
+
+## Configuration Reference
+
+Here are the available settings you can configure.
+
+### Core Settings
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| **`DEFAULT_DATABASE`** | `falkordb` | The database engine to use (`neo4j`, `falkordb`, or `kuzudb`). |
+| **`ENABLE_AUTO_WATCH`** | `false` | If `true`, `pcg index` will automatically start watching for changes. |
+| **`PARALLEL_WORKERS`** | `4` | Number of parallel threads to use during indexing. |
+| **`CACHE_ENABLED`** | `true` | Caches file hashes to speed up re-indexing. |
+
+### Indexing Scope
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| **`MAX_FILE_SIZE_MB`** | `5` | Files larger than this (in MB) are skipped. |
+| **`IGNORE_TESTS`** | `false` | If `true`, skips folders named `tests` or `spec`. |
+| **`IGNORE_HIDDEN`** | `true` | Skips hidden files (`.git`, `.vscode`). |
+| **`IGNORE_DIRS`** | built-in list | Comma-separated directory names that PCG always skips before descent. Defaults include `.git`, `.terraform`, `.terragrunt-cache`, `.terramate-cache`, `.pulumi`, `.crossplane`, `.serverless`, `.aws-sam`, `cdk.out`, `node_modules`, and common build caches. |
+| **`INDEX_VARIABLES`** | `true` | Creates nodes for variables. Set to `false` for a smaller graph. |
+
+### Database Connection (Neo4j)
+
+| Key | Description |
+| :--- | :--- |
+| **`NEO4J_URI`** | Connection URI (e.g., `bolt://localhost:7687`). |
+| **`NEO4J_USERNAME`** | Database user (default: `neo4j`). |
+| **`NEO4J_PASSWORD`** | Database password. |
+
+### Content Store And Source Retrieval
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| **`PCG_CONTENT_STORE_ENABLED`** | `true` | Enables PostgreSQL-backed content retrieval and search. Set this to `false` to disable Postgres content access entirely. |
+| **`PCG_CONTENT_STORE_DSN`** | unset | Primary DSN for the PostgreSQL content store. |
+| **`PCG_POSTGRES_DSN`** | unset | Backward-compatible alias for the PostgreSQL content store DSN. |
+
+Notes:
+
+- file and entity reads prefer the PostgreSQL content store and then fall back to the server workspace or graph cache
+- content search routes and MCP search tools require PostgreSQL and return an error when the content store is disabled
+- portable source retrieval uses `repo_id + relative_path` for files and `entity_id` for content-bearing entities
+
+### Repo Sync Runtime
+
+These settings matter for deployable-service installs that use bootstrap indexing and the repo-sync sidecar.
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| **`PCG_REPO_SOURCE_MODE`** | `githubOrg` | Repository discovery mode. Supported modes include `githubOrg`, `explicit`, and `filesystem`. |
+| **`PCG_GITHUB_ORG`** | unset | GitHub organization used for repository discovery in `githubOrg` mode. |
+| **`PCG_REPOSITORY_RULES_JSON`** | unset | Structured exact/regex include rules applied to normalized `org/repo` identifiers during repo rediscovery. |
+| **`PCG_REPOSITORIES`** | unset | Deprecated exact-repository shorthand. Prefer `PCG_REPOSITORY_RULES_JSON`. |
+| **`PCG_REPOS_DIR`** | `/data/repos` | Shared workspace directory for cloned repositories. |
+| **`PCG_REPO_LIMIT`** | `4000` | Maximum repositories to discover from GitHub in one cycle. |
+
+`PCG_REPOSITORY_RULES_JSON` accepts either a list of rules or an object with `exact` and `regex` keys. Example:
+
+```json
+[
+  {"exact": "platformcontext/platform-context-graph"},
+  {"regex": "platformcontext/(payments|orders)-.*"}
+]
+```
+
+The repo-sync sidecar re-discovers repositories on each cycle, applies these rules, updates matching checkouts, and reports stale local checkouts that no longer match the discovery result.
+
+---
+
+## Configuration Files
+
+PlatformContextGraph uses the following hierarchy:
+
+1.  **Project Level:** `.pcgignore` in your project root (files to exclude).
+2.  **User Level:** `~/.platform-context-graph/.env` (global settings).
+3.  **Defaults:** Built-in application defaults.
+
+Use `.pcgignore` for project-specific exclusions. Use `IGNORE_DIRS` if you want to change the built-in always-ignore directory list globally.
+
+To reset everything to defaults:
+```bash
+pcg config reset
+```

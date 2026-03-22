@@ -1,0 +1,239 @@
+"""Indexing-oriented CLI helper implementations."""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from pathlib import Path
+
+from ...tools.package_resolver import get_local_package_path
+
+
+def _api():
+    """Return the canonical ``cli_helpers`` module for shared state."""
+    from .. import cli_helpers as api
+
+    return api
+
+
+def index_helper(path: str) -> None:
+    """Index a repository path synchronously.
+
+    Args:
+        path: Filesystem path to the repository root.
+    """
+    api = _api()
+    time_start = time.time()
+    services = api._initialize_services()
+    if not all(services):
+        return
+
+    db_manager, graph_builder, code_finder = services
+    path_obj = Path(path).resolve()
+
+    if not path_obj.exists():
+        api.console.print(f"[red]Error: Path does not exist: {path_obj}[/red]")
+        db_manager.close_driver()
+        return
+
+    indexed_repos = code_finder.list_indexed_repositories()
+    repo_exists = any(
+        Path(repo["path"]).resolve() == path_obj for repo in indexed_repos
+    )
+
+    if repo_exists:
+        try:
+            with db_manager.get_driver().session() as session:
+                result = session.run(
+                    "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(f:File) "
+                    "RETURN count(DISTINCT f) as file_count",
+                    path=str(path_obj),
+                )
+                record = result.single()
+                file_count = record["file_count"] if record else 0
+
+                if file_count > 0:
+                    api.console.print(
+                        f"[yellow]Repository '{path}' is already indexed with "
+                        f"{file_count} files. Skipping.[/yellow]"
+                    )
+                    api.console.print(
+                        "[dim]💡 Tip: Use 'pcg index --force' to re-index[/dim]"
+                    )
+                    db_manager.close_driver()
+                    return
+
+                api.console.print(
+                    f"[yellow]Repository '{path}' exists but has no files "
+                    "(likely interrupted). Re-indexing...[/yellow]"
+                )
+        except Exception as exc:
+            api.console.print(
+                "[yellow]Warning: Could not check file count: "
+                f"{exc}. Proceeding with indexing...[/yellow]"
+            )
+
+    api.console.print(f"Starting indexing for: {path_obj}")
+
+    try:
+        asyncio.run(
+            api._run_index_with_progress(
+                graph_builder,
+                path_obj,
+                is_dependency=False,
+            )
+        )
+        elapsed = time.time() - time_start
+        api.console.print(
+            f"[green]Successfully finished indexing: {path} in {elapsed:.2f} seconds[/green]"
+        )
+        try:
+            from platform_context_graph.cli.config_manager import get_config_value
+
+            auto_watch = get_config_value("ENABLE_AUTO_WATCH")
+            if auto_watch and str(auto_watch).lower() == "true":
+                api.console.print(
+                    "\n[cyan]🔍 ENABLE_AUTO_WATCH is enabled. Starting watcher...[/cyan]"
+                )
+                db_manager.close_driver()
+                api.watch_helper(path)
+                return
+        except Exception as exc:
+            api.console.print(
+                "[yellow]Warning: Could not check ENABLE_AUTO_WATCH: " f"{exc}[/yellow]"
+            )
+    except Exception as exc:
+        api.console.print(
+            f"[bold red]An error occurred during indexing:[/bold red] {exc}"
+        )
+        raise
+    finally:
+        db_manager.close_driver()
+
+
+def add_package_helper(package_name: str, language: str) -> None:
+    """Index a dependency package.
+
+    Args:
+        package_name: Package name to resolve locally.
+        language: Language ecosystem used to resolve the package.
+    """
+    api = _api()
+    services = api._initialize_services()
+    if not all(services):
+        return
+
+    db_manager, graph_builder, code_finder = services
+    package_path_str = get_local_package_path(package_name, language)
+    if not package_path_str:
+        api.console.print(
+            "[red]Error: Could not find package "
+            f"'{package_name}' for language '{language}'.[/red]"
+        )
+        db_manager.close_driver()
+        return
+
+    package_path = Path(package_path_str)
+    indexed_repos = code_finder.list_indexed_repositories()
+    if any(
+        repo.get("name") == package_name
+        for repo in indexed_repos
+        if repo.get("is_dependency")
+    ):
+        api.console.print(
+            f"[yellow]Package '{package_name}' is already indexed. Skipping.[/yellow]"
+        )
+        db_manager.close_driver()
+        return
+
+    api.console.print(
+        f"Starting indexing for package '{package_name}' at: {package_path}"
+    )
+
+    try:
+        asyncio.run(
+            api._run_index_with_progress(
+                graph_builder,
+                package_path,
+                is_dependency=True,
+            )
+        )
+        api.console.print(
+            f"[green]Successfully finished indexing package: {package_name}[/green]"
+        )
+    except Exception as exc:
+        api.console.print(
+            "[bold red]An error occurred during package indexing:[/bold red] " f"{exc}"
+        )
+        raise
+    finally:
+        db_manager.close_driver()
+
+
+def reindex_helper(path: str) -> None:
+    """Force a delete-and-rebuild cycle for a repository.
+
+    Args:
+        path: Filesystem path to the repository root.
+    """
+    api = _api()
+    time_start = time.time()
+    services = api._initialize_services()
+    if not all(services):
+        return
+
+    db_manager, graph_builder, code_finder = services
+    path_obj = Path(path).resolve()
+
+    if not path_obj.exists():
+        api.console.print(f"[red]Error: Path does not exist: {path_obj}[/red]")
+        db_manager.close_driver()
+        return
+
+    indexed_repos = code_finder.list_indexed_repositories()
+    repo_exists = any(
+        Path(repo["path"]).resolve() == path_obj for repo in indexed_repos
+    )
+
+    if repo_exists:
+        api.console.print(f"[yellow]Deleting existing index for: {path_obj}[/yellow]")
+        try:
+            graph_builder.delete_repository_from_graph(str(path_obj))
+            api.console.print("[green]✓[/green] Deleted old index")
+        except Exception as exc:
+            api.console.print(f"[red]Error deleting old index: {exc}[/red]")
+            db_manager.close_driver()
+            return
+
+    api.console.print(f"[cyan]Re-indexing: {path_obj}[/cyan]")
+
+    try:
+        asyncio.run(
+            api._run_index_with_progress(
+                graph_builder,
+                path_obj,
+                is_dependency=False,
+            )
+        )
+        elapsed = time.time() - time_start
+        api.console.print(
+            f"[green]Successfully re-indexed: {path} in {elapsed:.2f} seconds[/green]"
+        )
+    except Exception as exc:
+        api.console.print(
+            f"[bold red]An error occurred during re-indexing:[/bold red] {exc}"
+        )
+        raise
+    finally:
+        db_manager.close_driver()
+
+
+def update_helper(path: str) -> None:
+    """Refresh a repository index using the reindex flow.
+
+    Args:
+        path: Filesystem path to the repository root.
+    """
+    api = _api()
+    api.console.print("[cyan]Updating repository index...[/cyan]")
+    reindex_helper(path)

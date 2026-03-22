@@ -1,0 +1,185 @@
+# HTTP API Reference
+
+PlatformContextGraph exposes the same core query model over HTTP that it exposes over MCP. The HTTP API is versioned under `/api/v0` and is intended for AI agents, automation, and internal tools that need a stable contract instead of direct MCP transport.
+
+## OpenAPI Is The Source Of Truth
+
+Use the live OpenAPI surface as the canonical contract:
+
+- `GET /api/v0/openapi.json`
+- `GET /api/v0/docs`
+- `GET /api/v0/redoc`
+
+This page is a curated reference anchored to that schema. Do not hand-maintain a second contract.
+
+## Scope
+
+The public HTTP API is read/query focused.
+
+- Use it to resolve entities, fetch context, search code, trace infra, and compare environments.
+- Use the CLI for local indexing workflows.
+- Use the Helm runtime for deployment-managed bootstrap indexing and repo sync.
+
+The HTTP API intentionally does not expose a mutable watch/jobs control plane in v0.
+
+## Model Basics
+
+- `workload` is the canonical deployable compute model.
+- `service` is a convenience alias over workloads with `kind=service`.
+- environment-scoped calls return the logical workload plus the resolved `WorkloadInstance`.
+- canonical entity IDs are required on path-based context routes.
+- repository identity is remote-first when a git remote exists.
+- repository objects expose `repo_slug`, `remote_url`, and `local_path`.
+- `local_path` is server-local metadata, not a portable client filesystem path.
+- file-bearing query results should be interpreted using `repo_id + relative_path`, not an absolute server path.
+- `repo_access` indicates whether the caller may need to ask the user for a local checkout path or clone decision.
+
+## Context API
+
+### Resolve fuzzy input into canonical entities
+
+`POST /api/v0/entities/resolve`
+
+Use this before context lookups when the caller has a fuzzy name, alias, or partial resource description.
+
+```json
+{
+  "query": "payments prod rds",
+  "types": ["workload", "cloud_resource"],
+  "environment": "prod",
+  "limit": 5
+}
+```
+
+### Get canonical entity context
+
+`GET /api/v0/entities/{id}/context`
+
+Examples:
+
+- `GET /api/v0/entities/workload:payments-api/context`
+- `GET /api/v0/entities/workload-instance:payments-api:prod/context`
+
+### Get workload context
+
+`GET /api/v0/workloads/{id}/context`
+
+Logical view:
+
+- `GET /api/v0/workloads/workload:payments-api/context`
+
+Environment-scoped view:
+
+- `GET /api/v0/workloads/workload:payments-api/context?environment=prod`
+
+### Get service context
+
+`GET /api/v0/services/{id}/context`
+
+This is an alias route. It still accepts a canonical workload ID:
+
+- `GET /api/v0/services/workload:payments-api/context`
+- `GET /api/v0/services/workload:payments-api/context?environment=prod`
+
+Service alias responses include `requested_as=service`.
+
+## Code API
+
+Use these routes when you only need code relationships and do not need the full code-to-cloud graph.
+
+- `POST /api/v0/code/search`
+- `POST /api/v0/code/relationships`
+- `POST /api/v0/code/dead-code`
+- `POST /api/v0/code/complexity`
+
+Example code-only workflow:
+
+`POST /api/v0/code/search`
+
+```json
+{
+  "query": "process_payment",
+  "repo_id": "repository:r_ab12cd34",
+  "exact": false,
+  "limit": 10
+}
+```
+
+## Content API
+
+Use these routes when a caller needs source text or indexed content search without relying on raw server filesystem paths.
+
+- `POST /api/v0/content/files/read`
+- `POST /api/v0/content/files/lines`
+- `POST /api/v0/content/entities/read`
+- `POST /api/v0/content/files/search`
+- `POST /api/v0/content/entities/search`
+
+Rules:
+
+- portable file lookup uses `repo_id + relative_path`
+- portable entity lookup uses `entity_id`
+- file and entity reads prefer the PostgreSQL content store when configured
+- if PostgreSQL is disabled or missing a cached row, file and entity reads fall back to the server workspace or graph cache
+- file and entity read responses include `source_backend` so callers can see whether the result came from `postgres`, `workspace`, `graph-cache`, or `unavailable`
+- content search routes require the PostgreSQL content store and return an error payload when it is disabled
+- content retrieval should not trigger `repo_access` prompting when the server already has the checkout
+
+Example file read:
+
+```json
+{
+  "repo_id": "repository:r_ab12cd34",
+  "relative_path": "src/payments.py"
+}
+```
+
+Example entity read:
+
+```json
+{
+  "entity_id": "content-entity:e_ab12cd34ef56"
+}
+```
+
+Example file-content search:
+
+```json
+{
+  "pattern": "shared-payments-prod",
+  "repo_ids": ["repository:r_ab12cd34"]
+}
+```
+
+## Infra API
+
+- `POST /api/v0/infra/resources/search`
+- `POST /api/v0/infra/relationships`
+- `GET /api/v0/ecosystem/overview`
+- `POST /api/v0/traces/resource-to-code`
+- `POST /api/v0/paths/explain`
+- `POST /api/v0/impact/change-surface`
+- `POST /api/v0/environments/compare`
+
+These routes are for tracing shared infrastructure, blast radius, dependency explanation, and environment drift.
+
+## Repository API
+
+- `GET /api/v0/repositories`
+- `GET /api/v0/repositories/{id}/context`
+- `GET /api/v0/repositories/{id}/stats`
+
+Repository routes also require canonical repository IDs.
+
+Repository responses should be treated as:
+
+- canonical identity: `id`
+- remote identity: `repo_slug`, `remote_url`
+- server-local checkout metadata: `local_path`
+
+If a downstream workflow needs local file operations on a user machine, use `repo_access` or ask the user for a local checkout path instead of assuming the server path exists locally.
+
+For local or deployed indexing workflows, use the CLI and deployment runtime:
+
+- local: `pcg index <path>`
+- Kubernetes: bootstrap indexing and repo sync are deployment-managed through the Helm chart runtime

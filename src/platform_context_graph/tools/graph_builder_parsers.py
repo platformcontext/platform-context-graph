@@ -1,0 +1,457 @@
+"""Parser helpers and registry construction for ``GraphBuilder``."""
+
+from __future__ import annotations
+
+import importlib
+import logging
+from pathlib import Path
+from typing import Any
+
+from tree_sitter import Language, Parser
+
+from ..utils.tree_sitter_manager import get_tree_sitter_manager
+
+logger = logging.getLogger(__name__)
+
+_LANGUAGE_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
+    "python": (".languages.python", "PythonTreeSitterParser"),
+    "javascript": (".languages.javascript", "JavascriptTreeSitterParser"),
+    "go": (".languages.go", "GoTreeSitterParser"),
+    "typescript": (".languages.typescript", "TypescriptTreeSitterParser"),
+    "cpp": (".languages.cpp", "CppTreeSitterParser"),
+    "rust": (".languages.rust", "RustTreeSitterParser"),
+    "c": (".languages.c", "CTreeSitterParser"),
+    "java": (".languages.java", "JavaTreeSitterParser"),
+    "ruby": (".languages.ruby", "RubyTreeSitterParser"),
+    "c_sharp": (".languages.csharp", "CSharpTreeSitterParser"),
+    "php": (".languages.php", "PhpTreeSitterParser"),
+    "kotlin": (".languages.kotlin", "KotlinTreeSitterParser"),
+    "scala": (".languages.scala", "ScalaTreeSitterParser"),
+    "swift": (".languages.swift", "SwiftTreeSitterParser"),
+    "haskell": (".languages.haskell", "HaskellTreeSitterParser"),
+    "dart": (".languages.dart", "DartTreeSitterParser"),
+    "perl": (".languages.perl", "PerlTreeSitterParser"),
+    "elixir": (".languages.elixir", "ElixirTreeSitterParser"),
+}
+
+_TREE_SITTER_PARSER_EXTENSIONS: tuple[tuple[str, str], ...] = (
+    (".py", "python"),
+    (".ipynb", "python"),
+    (".js", "javascript"),
+    (".jsx", "javascript"),
+    (".mjs", "javascript"),
+    (".cjs", "javascript"),
+    (".go", "go"),
+    (".ts", "typescript"),
+    (".tsx", "typescript"),
+    (".cpp", "cpp"),
+    (".h", "cpp"),
+    (".hpp", "cpp"),
+    (".hh", "cpp"),
+    (".rs", "rust"),
+    (".c", "c"),
+    (".java", "java"),
+    (".rb", "ruby"),
+    (".cs", "c_sharp"),
+    (".php", "php"),
+    (".kt", "kotlin"),
+    (".scala", "scala"),
+    (".sc", "scala"),
+    (".swift", "swift"),
+    (".hs", "haskell"),
+    (".dart", "dart"),
+    (".pl", "perl"),
+    (".pm", "perl"),
+    (".ex", "elixir"),
+    (".exs", "elixir"),
+)
+
+
+def _load_attribute(module_name: str, attribute_name: str) -> Any:
+    """Load an attribute from a relative module path.
+
+    Args:
+        module_name: Relative module path from ``platform_context_graph.tools``.
+        attribute_name: Attribute name to load from the imported module.
+
+    Returns:
+        The resolved attribute object.
+    """
+    module = importlib.import_module(module_name, package=__package__)
+    return getattr(module, attribute_name)
+
+
+class TreeSitterParser:
+    """Wrap a language-specific Tree-sitter parser implementation."""
+
+    def __init__(self, language_name: str):
+        """Initialize a parser wrapper for one language.
+
+        Args:
+            language_name: Canonical language name used by the Tree-sitter manager.
+        """
+        self.language_name = language_name
+        self.ts_manager = get_tree_sitter_manager()
+        self.language: Language = self.ts_manager.get_language_safe(language_name)
+        self.parser = Parser(self.language)
+        self.language_specific_parser = None
+
+        parser_spec = _LANGUAGE_SPECIFIC_PARSERS.get(self.language_name)
+        if parser_spec is not None:
+            parser_cls = _load_attribute(*parser_spec)
+            self.language_specific_parser = parser_cls(self)
+
+    def parse(self, path: Path, is_dependency: bool = False, **kwargs: Any) -> dict:
+        """Parse a file with the language-specific parser.
+
+        Args:
+            path: File path to parse.
+            is_dependency: Whether the file belongs to a dependency repository.
+            **kwargs: Additional parser-specific keyword arguments.
+
+        Returns:
+            Parsed file data emitted by the language-specific parser.
+
+        Raises:
+            NotImplementedError: If the language has no registered parser.
+        """
+        if self.language_specific_parser:
+            return self.language_specific_parser.parse(path, is_dependency, **kwargs)
+
+        raise NotImplementedError(
+            f"No language-specific parser implemented for {self.language_name}"
+        )
+
+
+def _add_tree_sitter_parser(
+    parsers: dict[str, Any], extension: str, language_name: str
+) -> None:
+    """Add one Tree-sitter parser to the registry when its grammar is available."""
+
+    try:
+        parsers[extension] = TreeSitterParser(language_name)
+    except ValueError as exc:
+        logger.warning(
+            "Skipping parser for extension %s because language %s is unavailable: %s",
+            extension,
+            language_name,
+            exc,
+        )
+
+
+def build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
+    """Create the extension-to-parser registry used by ``GraphBuilder``.
+
+    Args:
+        get_config_value_fn: Callable that resolves runtime config keys.
+
+    Returns:
+        A mapping of file extensions to parser instances.
+    """
+    from .languages.hcl_terraform import HCLTerraformParser
+    from .languages.yaml_infra import InfraYAMLParser
+
+    parsers: dict[str, Any] = {}
+    for extension, language_name in _TREE_SITTER_PARSER_EXTENSIONS:
+        _add_tree_sitter_parser(parsers, extension, language_name)
+
+    if (get_config_value_fn("INDEX_YAML") or "true").lower() == "true":
+        yaml_parser = InfraYAMLParser("yaml")
+        parsers[".yaml"] = yaml_parser
+        parsers[".yml"] = yaml_parser
+
+    if (get_config_value_fn("INDEX_HCL") or "true").lower() == "true":
+        hcl_parser = HCLTerraformParser("hcl")
+        parsers[".tf"] = hcl_parser
+        parsers[".hcl"] = hcl_parser
+
+    return parsers
+
+
+def pre_scan_for_imports(builder: Any, files: list[Path]) -> dict[str, Any]:
+    """Pre-scan files for import resolution hints.
+
+    Args:
+        builder: ``GraphBuilder`` facade instance with a populated parser registry.
+        files: Files queued for indexing.
+
+    Returns:
+        A symbol-to-file-paths import resolution map.
+    """
+    imports_map: dict[str, Any] = {}
+    files_by_lang: dict[str, list[Path]] = {}
+
+    for file in files:
+        if file.suffix in builder.parsers:
+            lang_ext = file.suffix
+            if lang_ext not in files_by_lang:
+                files_by_lang[lang_ext] = []
+            files_by_lang[lang_ext].append(file)
+
+    if ".py" in files_by_lang:
+        from .languages import python as python_lang_module
+
+        imports_map.update(
+            python_lang_module.pre_scan_python(
+                files_by_lang[".py"], builder.parsers[".py"]
+            )
+        )
+    if ".ipynb" in files_by_lang:
+        from .languages import python as python_lang_module
+
+        imports_map.update(
+            python_lang_module.pre_scan_python(
+                files_by_lang[".ipynb"], builder.parsers[".ipynb"]
+            )
+        )
+    if ".js" in files_by_lang:
+        from .languages import javascript as js_lang_module
+
+        imports_map.update(
+            js_lang_module.pre_scan_javascript(
+                files_by_lang[".js"], builder.parsers[".js"]
+            )
+        )
+    if ".jsx" in files_by_lang:
+        from .languages import javascript as js_lang_module
+
+        imports_map.update(
+            js_lang_module.pre_scan_javascript(
+                files_by_lang[".jsx"], builder.parsers[".jsx"]
+            )
+        )
+    if ".mjs" in files_by_lang:
+        from .languages import javascript as js_lang_module
+
+        imports_map.update(
+            js_lang_module.pre_scan_javascript(
+                files_by_lang[".mjs"], builder.parsers[".mjs"]
+            )
+        )
+    if ".cjs" in files_by_lang:
+        from .languages import javascript as js_lang_module
+
+        imports_map.update(
+            js_lang_module.pre_scan_javascript(
+                files_by_lang[".cjs"], builder.parsers[".cjs"]
+            )
+        )
+    if ".go" in files_by_lang:
+        from .languages import go as go_lang_module
+
+        imports_map.update(
+            go_lang_module.pre_scan_go(files_by_lang[".go"], builder.parsers[".go"])
+        )
+    if ".ts" in files_by_lang:
+        from .languages import typescript as ts_lang_module
+
+        imports_map.update(
+            ts_lang_module.pre_scan_typescript(
+                files_by_lang[".ts"], builder.parsers[".ts"]
+            )
+        )
+    if ".tsx" in files_by_lang:
+        from .languages import typescriptjsx as tsx_lang_module
+
+        imports_map.update(
+            tsx_lang_module.pre_scan_typescript(
+                files_by_lang[".tsx"], builder.parsers[".tsx"]
+            )
+        )
+    if ".cpp" in files_by_lang:
+        from .languages import cpp as cpp_lang_module
+
+        imports_map.update(
+            cpp_lang_module.pre_scan_cpp(files_by_lang[".cpp"], builder.parsers[".cpp"])
+        )
+    if ".h" in files_by_lang:
+        from .languages import cpp as cpp_lang_module
+
+        imports_map.update(
+            cpp_lang_module.pre_scan_cpp(files_by_lang[".h"], builder.parsers[".h"])
+        )
+    if ".hpp" in files_by_lang:
+        from .languages import cpp as cpp_lang_module
+
+        imports_map.update(
+            cpp_lang_module.pre_scan_cpp(files_by_lang[".hpp"], builder.parsers[".hpp"])
+        )
+    if ".hh" in files_by_lang:
+        from .languages import cpp as cpp_lang_module
+
+        imports_map.update(
+            cpp_lang_module.pre_scan_cpp(files_by_lang[".hh"], builder.parsers[".hh"])
+        )
+    if ".rs" in files_by_lang:
+        from .languages import rust as rust_lang_module
+
+        imports_map.update(
+            rust_lang_module.pre_scan_rust(files_by_lang[".rs"], builder.parsers[".rs"])
+        )
+    if ".c" in files_by_lang:
+        from .languages import c as c_lang_module
+
+        imports_map.update(
+            c_lang_module.pre_scan_c(files_by_lang[".c"], builder.parsers[".c"])
+        )
+    elif ".java" in files_by_lang:
+        from .languages import java as java_lang_module
+
+        imports_map.update(
+            java_lang_module.pre_scan_java(
+                files_by_lang[".java"], builder.parsers[".java"]
+            )
+        )
+    elif ".rb" in files_by_lang:
+        from .languages import ruby as ruby_lang_module
+
+        imports_map.update(
+            ruby_lang_module.pre_scan_ruby(files_by_lang[".rb"], builder.parsers[".rb"])
+        )
+    elif ".cs" in files_by_lang:
+        from .languages import csharp as csharp_lang_module
+
+        imports_map.update(
+            csharp_lang_module.pre_scan_csharp(
+                files_by_lang[".cs"], builder.parsers[".cs"]
+            )
+        )
+    if ".kt" in files_by_lang:
+        from .languages import kotlin as kotlin_lang_module
+
+        imports_map.update(
+            kotlin_lang_module.pre_scan_kotlin(
+                files_by_lang[".kt"], builder.parsers[".kt"]
+            )
+        )
+    if ".scala" in files_by_lang:
+        from .languages import scala as scala_lang_module
+
+        imports_map.update(
+            scala_lang_module.pre_scan_scala(
+                files_by_lang[".scala"], builder.parsers[".scala"]
+            )
+        )
+    if ".sc" in files_by_lang:
+        from .languages import scala as scala_lang_module
+
+        imports_map.update(
+            scala_lang_module.pre_scan_scala(
+                files_by_lang[".sc"], builder.parsers[".sc"]
+            )
+        )
+    if ".swift" in files_by_lang:
+        from .languages import swift as swift_lang_module
+
+        imports_map.update(
+            swift_lang_module.pre_scan_swift(
+                files_by_lang[".swift"], builder.parsers[".swift"]
+            )
+        )
+    if ".dart" in files_by_lang:
+        from .languages import dart as dart_lang_module
+
+        imports_map.update(
+            dart_lang_module.pre_scan_dart(
+                files_by_lang[".dart"], builder.parsers[".dart"]
+            )
+        )
+    if ".pl" in files_by_lang:
+        from .languages import perl as perl_lang_module
+
+        imports_map.update(
+            perl_lang_module.pre_scan_perl(files_by_lang[".pl"], builder.parsers[".pl"])
+        )
+    if ".pm" in files_by_lang:
+        from .languages import perl as perl_lang_module
+
+        imports_map.update(
+            perl_lang_module.pre_scan_perl(files_by_lang[".pm"], builder.parsers[".pm"])
+        )
+    if ".ex" in files_by_lang:
+        from .languages import elixir as elixir_lang_module
+
+        imports_map.update(
+            elixir_lang_module.pre_scan_elixir(
+                files_by_lang[".ex"], builder.parsers[".ex"]
+            )
+        )
+    if ".exs" in files_by_lang:
+        from .languages import elixir as elixir_lang_module
+
+        imports_map.update(
+            elixir_lang_module.pre_scan_elixir(
+                files_by_lang[".exs"], builder.parsers[".exs"]
+            )
+        )
+
+    return imports_map
+
+
+def parse_file(
+    builder: Any,
+    repo_path: Path,
+    path: Path,
+    is_dependency: bool,
+    *,
+    get_config_value_fn: Any,
+    debug_log_fn: Any,
+    error_logger_fn: Any,
+    warning_logger_fn: Any,
+) -> dict[str, Any]:
+    """Parse one file using the registered parser for its extension.
+
+    Args:
+        builder: ``GraphBuilder`` facade instance.
+        repo_path: Repository root associated with the file.
+        path: File to parse.
+        is_dependency: Whether the file belongs to a dependency repository.
+        get_config_value_fn: Runtime config resolver.
+        debug_log_fn: Debug logging callable.
+        error_logger_fn: Error logging callable.
+        warning_logger_fn: Warning logging callable.
+
+    Returns:
+        Parsed file data or an error payload if parsing fails.
+    """
+    parser = builder.parsers.get(path.suffix)
+    if not parser:
+        warning_logger_fn(
+            f"No parser found for file extension {path.suffix}. Skipping {path}"
+        )
+        return {"path": str(path), "error": f"No parser for {path.suffix}"}
+
+    debug_log_fn(
+        f"[parse_file] Starting parsing for: {path} with {parser.language_name} parser"
+    )
+    try:
+        index_source = (
+            get_config_value_fn("INDEX_SOURCE") or "false"
+        ).lower() == "true"
+        if parser.language_name == "python":
+            is_notebook = path.suffix == ".ipynb"
+            file_data = parser.parse(
+                path,
+                is_dependency,
+                is_notebook=is_notebook,
+                index_source=index_source,
+            )
+        else:
+            file_data = parser.parse(path, is_dependency, index_source=index_source)
+
+        file_data["repo_path"] = str(repo_path)
+        return file_data
+    except Exception as exc:
+        error_logger_fn(
+            f"Error parsing {path} with {parser.language_name} parser: {exc}"
+        )
+        debug_log_fn(f"[parse_file] Error parsing {path}: {exc}")
+        return {"path": str(path), "error": str(exc)}
+
+
+__all__ = [
+    "TreeSitterParser",
+    "build_parser_registry",
+    "parse_file",
+    "pre_scan_for_imports",
+]

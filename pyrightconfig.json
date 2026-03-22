@@ -1,0 +1,7 @@
+{
+  "exclude": [
+    "docs/site",
+    "src/platform_context_graph.egg-info",
+    "tests/fixtures"
+  ]
+}

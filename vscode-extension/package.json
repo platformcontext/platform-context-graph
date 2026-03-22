@@ -1,0 +1,337 @@
+{
+  "name": "platform-context-graph",
+  "displayName": "PlatformContextGraph",
+  "description": "Code-to-cloud context graph for AI-assisted engineering in VS Code",
+  "version": "0.1.0",
+  "publisher": "platformcontext",
+  "icon": "resources/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "code analysis",
+    "graph database",
+    "call graph",
+    "dependencies",
+    "AI"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "pcg.index",
+        "title": "PCG: Index Current Workspace",
+        "icon": "$(database)"
+      },
+      {
+        "command": "pcg.reindex",
+        "title": "PCG: Re-index Current Workspace",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pcg.search",
+        "title": "PCG: Search Code",
+        "icon": "$(search)"
+      },
+      {
+        "command": "pcg.showCallGraph",
+        "title": "PCG: Show Call Graph",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "pcg.showCallers",
+        "title": "PCG: Show Callers",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "pcg.showCallees",
+        "title": "PCG: Show Callees",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "pcg.findDependencies",
+        "title": "PCG: Find Dependencies",
+        "icon": "$(package)"
+      },
+      {
+        "command": "pcg.analyzeCalls",
+        "title": "PCG: Analyze Calls",
+        "icon": "$(call-outgoing)"
+      },
+      {
+        "command": "pcg.analyzeComplexity",
+        "title": "PCG: Analyze Complexity",
+        "icon": "$(graph-line)"
+      },
+      {
+        "command": "pcg.findDeadCode",
+        "title": "PCG: Find Dead Code",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "pcg.showStats",
+        "title": "PCG: Show Statistics",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "pcg.openSettings",
+        "title": "PCG: Open Settings",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "pcg.refreshExplorer",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pcg.goToDefinition",
+        "title": "Go to Definition",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "pcg.showInheritance",
+        "title": "PCG: Show Inheritance Tree",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "pcg.loadBundle",
+        "title": "PCG: Load Bundle",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "pcg.visualizeRepo",
+        "title": "PCG: Visualize Repository Graph",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "pcg.showDeepCallGraph",
+        "title": "PCG: Trace Indirect Call Chain",
+        "icon": "$(debug-step-into)"
+      },
+      {
+        "command": "pcg.openConfig",
+        "title": "PCG: Open Configuration",
+        "icon": "$(gear)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pcg-explorer",
+          "title": "PlatformContextGraph",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "pcg-explorer": [
+        {
+          "id": "pcg-projects",
+          "name": "Projects",
+          "icon": "$(folder-library)",
+          "contextualTitle": "PCG Projects"
+        },
+        {
+          "id": "pcg-functions",
+          "name": "Functions",
+          "icon": "$(symbol-method)",
+          "contextualTitle": "PCG Functions"
+        },
+        {
+          "id": "pcg-classes",
+          "name": "Classes",
+          "icon": "$(symbol-class)",
+          "contextualTitle": "PCG Classes"
+        },
+        {
+          "id": "pcg-callgraph",
+          "name": "Call Graph",
+          "icon": "$(graph)",
+          "contextualTitle": "PCG Call Graph"
+        },
+        {
+          "id": "pcg-dependencies",
+          "name": "Dependencies",
+          "icon": "$(package)",
+          "contextualTitle": "PCG Dependencies"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "pcg-projects",
+        "contents": "No projects indexed yet.\n[Index Current Workspace](command:pcg.index)\n[Load Bundle](command:pcg.loadBundle)\n[⚙️ Configure Database](command:pcg.openConfig)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "pcg.refreshExplorer",
+          "when": "view =~ /^pcg-/",
+          "group": "navigation"
+        },
+        {
+          "command": "pcg.openConfig",
+          "when": "view =~ /^pcg-/",
+          "group": "navigation@0"
+        },
+        {
+          "command": "pcg.visualizeRepo",
+          "when": "view == pcg-projects",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "pcg.visualizeRepo",
+          "when": "view == pcg-projects && viewItem == project",
+          "group": "visualization@0"
+        },
+        {
+          "command": "pcg.goToDefinition",
+          "when": "view =~ /^pcg-/ && viewItem == function || viewItem == class",
+          "group": "navigation"
+        },
+        {
+          "command": "pcg.showCallGraph",
+          "when": "view =~ /^pcg-/ && viewItem == function",
+          "group": "analysis"
+        },
+        {
+          "command": "pcg.showDeepCallGraph",
+          "when": "view =~ /^pcg-/ && viewItem == function",
+          "group": "analysis"
+        },
+        {
+          "command": "pcg.showCallers",
+          "when": "view =~ /^pcg-/ && viewItem == function",
+          "group": "analysis"
+        },
+        {
+          "command": "pcg.showCallees",
+          "when": "view =~ /^pcg-/ && viewItem == function",
+          "group": "analysis"
+        },
+        {
+          "command": "pcg.showInheritance",
+          "when": "view == pcg-classes && viewItem == class",
+          "group": "analysis@0"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "pcg.showCallGraph",
+          "when": "editorTextFocus",
+          "group": "pcg@1"
+        },
+        {
+          "command": "pcg.showDeepCallGraph",
+          "when": "editorTextFocus",
+          "group": "pcg@1b"
+        },
+        {
+          "command": "pcg.showCallers",
+          "when": "editorTextFocus",
+          "group": "pcg@2"
+        },
+        {
+          "command": "pcg.showCallees",
+          "when": "editorTextFocus",
+          "group": "pcg@3"
+        },
+        {
+          "command": "pcg.findDependencies",
+          "when": "editorTextFocus",
+          "group": "pcg@4"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "pcg.goToDefinition",
+          "when": "false"
+        },
+        {
+          "command": "pcg.refreshExplorer",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "PlatformContextGraph",
+      "properties": {
+        "pcg.autoIndex": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically index workspace on startup"
+        },
+        "pcg.indexSource": {
+          "type": "boolean",
+          "default": false,
+          "description": "Index full source code (slower but enables code search)"
+        },
+        "pcg.cliPath": {
+          "type": "string",
+          "default": "pcg",
+          "description": "Path to pcg CLI executable. Leave as 'pcg' to auto-detect from virtual environments (.venv, venv, env) or use full path (e.g., /path/to/venv/bin/pcg)"
+        },
+        "pcg.enableCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show code lens for function callers/callees"
+        },
+        "pcg.enableDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show diagnostics for dead code and complexity"
+        },
+        "pcg.complexityThreshold": {
+          "type": "number",
+          "default": 10,
+          "description": "Complexity threshold for warnings"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@types/d3": "^7.4.3",
+    "d3": "^7.8.5",
+    "vscode-jsonrpc": "^8.2.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/platformcontext/platform-context-graph"
+  },
+  "bugs": {
+    "url": "https://github.com/platformcontext/platform-context-graph/issues"
+  },
+  "homepage": "https://github.com/platformcontext/platform-context-graph#readme",
+  "license": "MIT"
+}

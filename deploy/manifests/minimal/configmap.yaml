@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pcg-config
+  namespace: platform-context-graph
+data:
+  PCG_HOME: /data/.platform-context-graph
+  PYTHONUNBUFFERED: "1"
+  DEFAULT_DATABASE: neo4j
+  NEO4J_URI: bolt://external-neo4j:7687
+  PCG_CONTENT_STORE_DSN: postgresql://pcg:replace-me@external-postgres:5432/platform_context_graph
+  PCG_POSTGRES_DSN: postgresql://pcg:replace-me@external-postgres:5432/platform_context_graph
+  PCG_REPOSITORY_RULES_JSON: "[]"

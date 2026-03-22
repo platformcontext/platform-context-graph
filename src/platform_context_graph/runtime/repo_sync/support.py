@@ -1,0 +1,301 @@
+"""Support utilities for repo sync runtimes."""
+
+from __future__ import annotations
+
+import contextlib
+import hashlib
+import json
+import os
+import socket
+import shutil
+import threading
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterator
+
+from platform_context_graph.observability import (
+    get_observability,
+    initialize_observability,
+)
+from platform_context_graph.utils.debug_log import info_logger
+
+from .config import RepoSyncConfig, RepoSyncResult
+
+LOCK_METADATA_FILENAME = "lock.json"
+DEFAULT_LOCK_HEARTBEAT_SECONDS = 30
+DEFAULT_LOCK_STALE_SECONDS = 300
+
+
+def index_workspace_default(workspace: Path) -> None:
+    """Run the default CLI indexing entrypoint for a workspace.
+
+    Args:
+        workspace: Repository workspace to index.
+    """
+
+    from platform_context_graph.cli.cli_helpers import index_helper
+
+    index_helper(str(workspace))
+
+
+def log(component: str, message: str) -> None:
+    """Emit a repo-sync runtime log message.
+
+    Args:
+        component: Runtime component name.
+        message: Human-readable log message.
+    """
+
+    info_logger(f"[{component}] {message}")
+
+
+def fingerprint_tree(root: Path) -> str:
+    """Compute a stable fingerprint for the contents of a directory tree.
+
+    Args:
+        root: Directory whose file contents should be fingerprinted.
+
+    Returns:
+        SHA-256 digest over the file paths and metadata in the tree.
+    """
+
+    digest = hashlib.sha256()
+    for file_path in sorted(path for path in root.rglob("*") if path.is_file()):
+        relative_path = file_path.relative_to(root)
+        digest.update(str(relative_path).encode("utf-8"))
+        stat = file_path.stat()
+        digest.update(str(int(stat.st_mtime_ns)).encode("utf-8"))
+        digest.update(str(stat.st_size).encode("utf-8"))
+    return digest.hexdigest()
+
+
+def manifest_path(config: RepoSyncConfig) -> Path:
+    """Return the manifest file used by filesystem sync mode.
+
+    Args:
+        config: Repo sync configuration.
+
+    Returns:
+        Path to the current manifest file.
+    """
+
+    return config.repos_dir / ".pcg-fixture-manifest"
+
+
+def _lock_metadata_path(config: RepoSyncConfig) -> Path:
+    """Return the metadata path used to track workspace lock ownership."""
+
+    return config.sync_lock_dir / LOCK_METADATA_FILENAME
+
+
+def _utc_now() -> str:
+    """Return the current UTC timestamp in ISO-8601 format."""
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _lock_heartbeat_seconds() -> int:
+    """Return the configured workspace lock heartbeat interval."""
+
+    return max(
+        1,
+        int(
+            os.getenv(
+                "PCG_SYNC_LOCK_HEARTBEAT_SECONDS",
+                str(DEFAULT_LOCK_HEARTBEAT_SECONDS),
+            )
+        ),
+    )
+
+
+def _lock_stale_seconds() -> int:
+    """Return the maximum age for a workspace lock heartbeat."""
+
+    return max(
+        _lock_heartbeat_seconds() + 1,
+        int(
+            os.getenv(
+                "PCG_SYNC_LOCK_STALE_SECONDS",
+                str(DEFAULT_LOCK_STALE_SECONDS),
+            )
+        ),
+    )
+
+
+def _write_lock_metadata(config: RepoSyncConfig) -> None:
+    """Persist current workspace lock ownership metadata."""
+
+    _lock_metadata_path(config).write_text(
+        json.dumps(
+            {
+                "component": config.component,
+                "pid": os.getpid(),
+                "hostname": socket.gethostname(),
+                "heartbeat_at": _utc_now(),
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _is_stale_lock(config: RepoSyncConfig) -> bool:
+    """Return whether the current workspace lock should be treated as stale."""
+
+    metadata_path = _lock_metadata_path(config)
+    if not metadata_path.exists():
+        return True
+
+    try:
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        heartbeat_at = payload["heartbeat_at"]
+        heartbeat_time = datetime.fromisoformat(heartbeat_at)
+    except (KeyError, ValueError, json.JSONDecodeError, OSError):
+        return True
+
+    if heartbeat_time.tzinfo is None:
+        heartbeat_time = heartbeat_time.replace(tzinfo=timezone.utc)
+
+    age_seconds = (datetime.now(timezone.utc) - heartbeat_time).total_seconds()
+    return age_seconds > _lock_stale_seconds()
+
+
+def _start_lock_heartbeat(config: RepoSyncConfig) -> tuple[threading.Event, threading.Thread]:
+    """Start the background heartbeat updater for the workspace lock."""
+
+    stop_event = threading.Event()
+    interval_seconds = _lock_heartbeat_seconds()
+
+    def _heartbeat() -> None:
+        """Refresh lock ownership metadata until the lock is released."""
+
+        while not stop_event.wait(interval_seconds):
+            try:
+                _write_lock_metadata(config)
+            except OSError:
+                break
+
+    thread = threading.Thread(
+        target=_heartbeat,
+        name=f"pcg-sync-lock-heartbeat-{config.component}",
+        daemon=True,
+    )
+    thread.start()
+    return stop_event, thread
+
+
+@contextlib.contextmanager
+def workspace_lock(config: RepoSyncConfig) -> Iterator[bool]:
+    """Acquire the repo workspace lock for a sync or bootstrap cycle.
+
+    Args:
+        config: Repo sync configuration.
+
+    Yields:
+        ``True`` when the caller acquired the lock, otherwise ``False``.
+    """
+
+    if config.sync_lock_dir.exists() and _is_stale_lock(config):
+        log(
+            config.component,
+            f"Reaping stale workspace lock at {config.sync_lock_dir}",
+        )
+        shutil.rmtree(config.sync_lock_dir, ignore_errors=True)
+
+    try:
+        config.sync_lock_dir.mkdir(parents=True)
+    except FileExistsError:
+        log(
+            config.component,
+            f"Workspace lock busy at {config.sync_lock_dir}; skipping cycle",
+        )
+        yield False
+        return
+
+    _write_lock_metadata(config)
+    stop_event, heartbeat_thread = _start_lock_heartbeat(config)
+    log(config.component, f"Acquired workspace lock at {config.sync_lock_dir}")
+    try:
+        yield True
+    finally:
+        stop_event.set()
+        heartbeat_thread.join(timeout=_lock_heartbeat_seconds())
+        shutil.rmtree(config.sync_lock_dir, ignore_errors=True)
+        log(config.component, f"Released workspace lock at {config.sync_lock_dir}")
+
+
+def begin_index_cycle(
+    *,
+    config: RepoSyncConfig,
+    mode: str,
+    repo_count: int,
+) -> contextlib.AbstractContextManager[None]:
+    """Create the observability scope for a repo indexing cycle.
+
+    Args:
+        config: Repo sync configuration.
+        mode: Cycle mode, such as ``bootstrap`` or ``sync``.
+        repo_count: Number of repositories in the current cycle.
+
+    Returns:
+        Context manager that records the index run telemetry.
+    """
+
+    initialize_observability(component=config.component)
+    telemetry = get_observability()
+    return telemetry.index_run(
+        component=config.component,
+        mode=mode,
+        source=config.source_mode,
+        repo_count=repo_count,
+    )
+
+
+def record_phase(
+    *,
+    config: RepoSyncConfig,
+    mode: str,
+    phase: str,
+    count: int,
+) -> None:
+    """Record a repo-sync phase count in observability.
+
+    Args:
+        config: Repo sync configuration.
+        mode: Cycle mode, such as ``bootstrap`` or ``sync``.
+        phase: Telemetry phase name.
+        count: Number of repositories in the phase.
+    """
+
+    get_observability().record_index_repositories(
+        component=config.component,
+        phase=phase,
+        count=count,
+        mode=mode,
+        source=config.source_mode,
+    )
+
+
+def record_lock_skip(config: RepoSyncConfig, *, mode: str) -> RepoSyncResult:
+    """Record a lock-contention skip and return the standard result object.
+
+    Args:
+        config: Repo sync configuration.
+        mode: Cycle mode, such as ``bootstrap`` or ``sync``.
+
+    Returns:
+        Result object describing a skipped cycle.
+    """
+
+    get_observability().record_lock_contention_skip(
+        component=config.component,
+        mode=mode,
+        source=config.source_mode,
+    )
+    log(
+        config.component,
+        f"Skipped {mode} cycle because workspace lock {config.sync_lock_dir} is active",
+    )
+    return RepoSyncResult(lock_skipped=True)

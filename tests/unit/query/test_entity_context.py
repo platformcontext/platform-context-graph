@@ -1,0 +1,193 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+
+from platform_context_graph.domain.responses import EntityContextResponse
+from platform_context_graph.query.context import get_entity_context
+
+FIXTURE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "fixtures"
+    / "shared_infra"
+    / "shared_rds_graph.json"
+)
+
+
+def load_shared_fixture() -> dict:
+    return json.loads(FIXTURE_PATH.read_text())
+
+
+class MockRecord:
+    def __init__(self, data):
+        self._data = data
+
+    def __getitem__(self, key):
+        return self._data.get(key)
+
+    def get(self, key, default=None):
+        return self._data.get(key, default)
+
+    def keys(self):
+        return self._data.keys()
+
+
+class MockResult:
+    def __init__(self, records=None, single_record=None):
+        self._records = records or []
+        self._single_record = single_record
+
+    def single(self):
+        return self._single_record
+
+    def data(self):
+        return self._records
+
+
+def make_mock_db(query_results):
+    db = MagicMock()
+    driver = MagicMock()
+    session = MagicMock()
+
+    def mock_run(query, **kwargs):
+        for substr, result in query_results.items():
+            if substr in query:
+                return result
+        return MockResult()
+
+    session.run = mock_run
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+    driver.session.return_value = session
+    db.get_driver.return_value = driver
+    return db
+
+
+def test_get_entity_context_handles_workload_and_workload_instance_ids():
+    fixture = load_shared_fixture()
+
+    workload = get_entity_context(fixture, entity_id="workload:payments-api")
+    instance = get_entity_context(
+        fixture,
+        entity_id="workload-instance:payments-api:prod",
+    )
+
+    assert workload["entity"]["id"] == "workload:payments-api"
+    assert workload["workload"]["id"] == "workload:payments-api"
+
+    assert instance["entity"]["id"] == "workload-instance:payments-api:prod"
+    assert instance["workload"]["id"] == "workload:payments-api"
+    assert instance["instance"]["id"] == "workload-instance:payments-api:prod"
+
+
+def test_get_entity_context_has_minimal_db_backed_workload_fallback():
+    db = make_mock_db(
+        {
+            "MATCH (r:Repository)\n            WHERE r.name CONTAINS $name\n            RETURN r.name as name, r.path as path": MockResult(
+                single_record=MockRecord(
+                    {
+                        "name": "payments-platform",
+                        "path": "/srv/repos/payments-platform",
+                    }
+                )
+            ),
+            "MATCH (k:K8sResource)\n            WHERE k.name CONTAINS $name": MockResult(
+                records=[
+                    {
+                        "name": "payments-api",
+                        "kind": "Deployment",
+                        "namespace": "payments",
+                    }
+                ]
+            ),
+        }
+    )
+
+    workload = get_entity_context(db, entity_id="workload:payments-api")
+    instance = get_entity_context(db, entity_id="workload-instance:payments-api:prod")
+
+    assert workload["entity"]["id"] == "workload:payments-api"
+    assert workload["workload"]["id"] == "workload:payments-api"
+    assert instance["entity"]["id"] == "workload-instance:payments-api:prod"
+    assert instance["instance"]["id"] == "workload-instance:payments-api:prod"
+
+
+def test_db_backed_workload_instance_context_validates_against_entity_response_model():
+    db = make_mock_db(
+        {
+            "MATCH (r:Repository)\n            WHERE r.name CONTAINS $name\n            RETURN r.name as name, r.path as path": MockResult(
+                single_record=MockRecord(
+                    {
+                        "name": "payments-platform",
+                        "path": "/srv/repos/payments-platform",
+                    }
+                )
+            ),
+            "MATCH (k:K8sResource)\n            WHERE k.name CONTAINS $name": MockResult(
+                records=[
+                    {
+                        "name": "payments-api",
+                        "kind": "Deployment",
+                        "namespace": "payments",
+                    }
+                ]
+            ),
+        }
+    )
+
+    result = get_entity_context(db, entity_id="workload-instance:payments-api:prod")
+    validated = EntityContextResponse.model_validate(result)
+
+    assert validated.entity.id == "workload-instance:payments-api:prod"
+    assert validated.entity.kind == "service"
+    assert validated.instance is not None
+    assert validated.instance.id == "workload-instance:payments-api:prod"
+
+
+def test_get_entity_context_supports_content_entities(monkeypatch):
+    db = make_mock_db(
+        {
+            "WHERE r.id = $id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "repository:r_ab12cd34",
+                        "name": "payments-api",
+                        "path": "/srv/repos/payments-api",
+                        "local_path": "/srv/repos/payments-api",
+                        "repo_slug": "platformcontext/payments-api",
+                        "remote_url": "https://github.com/platformcontext/payments-api",
+                        "has_remote": True,
+                    }
+                )
+            )
+        }
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.content_entity.get_content_service",
+        lambda _database: MagicMock(
+            get_entity_content=lambda *, entity_id: {
+                "available": True,
+                "entity_id": entity_id,
+                "repo_id": "repository:r_ab12cd34",
+                "relative_path": "src/payments.py",
+                "entity_type": "Function",
+                "entity_name": "process_payment",
+                "start_line": 10,
+                "end_line": 18,
+                "content": "def process_payment():\n    return True\n",
+                "language": "python",
+                "source_backend": "postgres",
+            }
+        ),
+    )
+
+    result = get_entity_context(db, entity_id="content-entity:e_ab12cd34ef56")
+    validated = EntityContextResponse.model_validate(result)
+
+    assert validated.entity.id == "content-entity:e_ab12cd34ef56"
+    assert validated.entity.type == "content_entity"
+    assert validated.repositories[0].id == "repository:r_ab12cd34"
+    assert result["relative_path"] == "src/payments.py"

@@ -1,0 +1,75 @@
+"""Public repository query entrypoints."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from ...observability import trace_query
+from .common import (
+    canonical_repository_ref as _canonical_repository_ref,
+    canonical_repository_identifier as _canonical_repository_id,
+    get_db_manager,
+    repository_metadata_from_row as _repository_metadata_from_row,
+    repository_projection as _repository_projection,
+    resolve_repository as _resolve_repository,
+)
+from .context_data import build_repository_context
+from .listing import list_repositories_rows
+from .stats_data import build_repository_stats
+
+__all__ = [
+    "_canonical_repository_id",
+    "list_repositories",
+    "get_repository_context",
+    "get_repository_stats",
+]
+
+_get_db_manager = get_db_manager
+
+
+def list_repositories(database: Any) -> dict[str, Any]:
+    """List repositories known to the graph using remote-first identity.
+
+    Args:
+        database: Query-layer database dependency.
+
+    Returns:
+        Repository listing response payload.
+    """
+
+    with trace_query("list_repositories"):
+        return {"repositories": list_repositories_rows(database)}
+
+
+def get_repository_context(database: Any, *, repo_id: str) -> dict[str, Any]:
+    """Return repository context for a canonical or fuzzy repository identifier.
+
+    Args:
+        database: Query-layer database dependency.
+        repo_id: Repository identifier, slug, URL, path, or canonical ID.
+
+    Returns:
+        Repository context payload or an error dictionary.
+    """
+
+    with trace_query("repository_context"):
+        with get_db_manager(database).get_driver().session() as session:
+            return build_repository_context(session, repo_id)
+
+
+def get_repository_stats(
+    database: Any, *, repo_id: str | None = None
+) -> dict[str, Any]:
+    """Return repository or graph-wide statistics.
+
+    Args:
+        database: Query-layer database dependency.
+        repo_id: Optional repository identifier to scope the statistics.
+
+    Returns:
+        Statistics response payload.
+    """
+
+    with trace_query("repository_stats"):
+        with get_db_manager(database).get_driver().session() as session:
+            return build_repository_stats(session, repo_id)
