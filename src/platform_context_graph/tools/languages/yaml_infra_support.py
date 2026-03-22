@@ -77,6 +77,9 @@ def build_empty_result(
         "kustomize_overlays": [],
         "helm_charts": [],
         "helm_values": [],
+        "cloudformation_resources": [],
+        "cloudformation_parameters": [],
+        "cloudformation_outputs": [],
     }
 
 

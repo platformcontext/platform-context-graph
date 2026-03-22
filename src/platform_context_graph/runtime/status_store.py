@@ -21,6 +21,16 @@ __all__ = ["claim_ingester_scan_request", "complete_ingester_scan_request", "get
 
 _STORE_LOCK = threading.Lock()
 _STORE: PostgresRuntimeStatusStore | None = None
+_COUNT_FIELDS = frozenset(
+    {
+        "repository_count",
+        "pulled_repositories",
+        "in_sync_repositories",
+        "pending_repositories",
+        "completed_repositories",
+        "failed_repositories",
+    }
+)
 
 
 def _content_store_enabled() -> bool:
@@ -38,6 +48,12 @@ def _dsn() -> str | None:
         if value and value.strip():
             return value.strip()
     return None
+
+
+def _normalize_count(value: int | None) -> int:
+    """Normalize nullable repository count fields before persistence."""
+
+    return 0 if value is None else int(value)
 
 
 class PostgresRuntimeStatusStore:
@@ -89,14 +105,21 @@ class PostgresRuntimeStatusStore:
         next_retry_at: str | datetime | None = None,
         last_error_kind: str | None = None,
         last_error_message: str | None = None,
-        repository_count: int = 0,
-        pulled_repositories: int = 0,
-        in_sync_repositories: int = 0,
-        pending_repositories: int = 0,
-        completed_repositories: int = 0,
-        failed_repositories: int = 0,
+        repository_count: int | None = 0,
+        pulled_repositories: int | None = 0,
+        in_sync_repositories: int | None = 0,
+        pending_repositories: int | None = 0,
+        completed_repositories: int | None = 0,
+        failed_repositories: int | None = 0,
     ) -> None:
         """Insert or update one ingester status row."""
+
+        repository_count = _normalize_count(repository_count)
+        pulled_repositories = _normalize_count(pulled_repositories)
+        in_sync_repositories = _normalize_count(in_sync_repositories)
+        pending_repositories = _normalize_count(pending_repositories)
+        completed_repositories = _normalize_count(completed_repositories)
+        failed_repositories = _normalize_count(failed_repositories)
 
         with self._cursor() as cursor:
             cursor.execute(
@@ -398,6 +421,9 @@ def update_runtime_ingester_status(**kwargs: Any) -> None:
     store = get_runtime_status_store()
     if store is None or not store.enabled:
         return
+    for key in _COUNT_FIELDS:
+        if key in kwargs:
+            kwargs[key] = _normalize_count(kwargs[key])
     store.upsert_runtime_status(**kwargs)
 
 

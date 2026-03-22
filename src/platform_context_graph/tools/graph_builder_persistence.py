@@ -230,6 +230,7 @@ def add_file_to_graph(
             (file_data.get("traits", []), "Trait"),
             (file_data.get("variables", []), "Variable"),
             (file_data.get("interfaces", []), "Interface"),
+            (file_data.get("annotations", []), "Annotation"),
             (file_data.get("macros", []), "Macro"),
             (file_data.get("structs", []), "Struct"),
             (file_data.get("enums", []), "Enum"),
@@ -251,6 +252,9 @@ def add_file_to_graph(
             (file_data.get("terraform_modules", []), "TerraformModule"),
             (file_data.get("terraform_data_sources", []), "TerraformDataSource"),
             (file_data.get("terragrunt_configs", []), "TerragruntConfig"),
+            (file_data.get("cloudformation_resources", []), "CloudFormationResource"),
+            (file_data.get("cloudformation_parameters", []), "CloudFormationParameter"),
+            (file_data.get("cloudformation_outputs", []), "CloudFormationOutput"),
         ]
         for item_data, label in item_mappings:
             for item in item_data:

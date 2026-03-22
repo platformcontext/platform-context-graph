@@ -82,6 +82,11 @@ TS_QUERIES = {
     "variables": """
         (variable_declarator name: (identifier) @name)
     """,
+    "enums": """
+        (enum_declaration
+            name: (identifier) @name
+        ) @enum_node
+    """,
 }
 
 

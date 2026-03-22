@@ -366,7 +366,7 @@ def _find_calls(parser: Any, root_node: Any):
     for node, capture_name in execute_query(
         parser.language, CPP_QUERIES["calls"], root_node
     ):
-        if capture_name != "function_name":
+        if capture_name not in ("function_name", "method_name"):
             continue
 
         func_name = _get_node_text(node)

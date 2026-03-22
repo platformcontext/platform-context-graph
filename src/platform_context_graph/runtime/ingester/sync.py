@@ -40,6 +40,16 @@ from ..status_store import (
 DEFAULT_INGESTER_CONTROL_POLL_SECONDS = 5
 
 _PRESERVED_STATUS_KEYS = ("active_run_id", "repository_count", "pulled_repositories", "in_sync_repositories", "pending_repositories", "completed_repositories", "failed_repositories")
+_REPOSITORY_COUNT_KEYS = frozenset(
+    {
+        "repository_count",
+        "pulled_repositories",
+        "in_sync_repositories",
+        "pending_repositories",
+        "completed_repositories",
+        "failed_repositories",
+    }
+)
 
 
 def _utc_now() -> datetime:
@@ -58,6 +68,14 @@ def _current_ingester_status(component: str) -> dict[str, object]:
     return result or {}
 
 
+def _normalize_status_value(key: str, value: object | None) -> object | None:
+    """Normalize persisted ingester status values before writing them."""
+
+    if key in _REPOSITORY_COUNT_KEYS:
+        return int(value) if value is not None else 0
+    return value
+
+
 def _persist_ingester_status(
     config: RepoSyncConfig,
     *,
@@ -73,7 +91,10 @@ def _persist_ingester_status(
         "status": status,
     }
     for key in _PRESERVED_STATUS_KEYS:
-        payload[key] = overrides.pop(key, current.get(key, 0 if "repositories" in key else None))
+        payload[key] = _normalize_status_value(
+            key,
+            overrides.pop(key, current.get(key, 0 if key in _REPOSITORY_COUNT_KEYS else None)),
+        )
     payload.update(overrides)
     update_runtime_ingester_status(**payload)
 

@@ -107,34 +107,10 @@ class HaskellTreeSitterParser:
         """Find the nearest enclosing declaration for a Haskell node."""
         current = node.parent
         while current:
-            if current.type in ("class_declaration",):
-                for child in current.children:
-                    if child.type == "simple_identifier":
-                        return (
-                            self._get_node_text(child),
-                            current.type,
-                            current.start_point[0] + 1,
-                        )
-                return (None, current.type, current.start_point[0] + 1)
-            if current.type in ("class_declaration", "object_declaration"):
-                for child in current.children:
-                    if child.type in ("simple_identifier", "type_identifier"):
-                        return (
-                            self._get_node_text(child),
-                            current.type,
-                            current.start_point[0] + 1,
-                        )
-            if current.type == "secondary_constructor":
-                return ("constructor", current.type, current.start_point[0] + 1)
-            if current.type == "companion_object":
-                name = "Companion"
-                for child in current.children:
-                    if child.type in ("simple_identifier", "type_identifier"):
-                        name = self._get_node_text(child)
-                        break
+            if current.type in ("class", "instance"):
+                name_node = current.child_by_field_name("name")
+                name = self._get_node_text(name_node) if name_node else None
                 return (name, current.type, current.start_point[0] + 1)
-            if current.type == "object_literal":
-                return ("AnonymousObject", current.type, current.start_point[0] + 1)
             current = current.parent
         return None, None, None
 
@@ -147,67 +123,49 @@ class HaskellTreeSitterParser:
     def _parse_functions(
         self, captures: list[tuple[Any, str]], source_code: str, path: Path
     ) -> list[dict[str, Any]]:
-        """Parse Haskell function and initializer declarations."""
+        """Parse Haskell function and bind declarations."""
         functions: list[dict[str, Any]] = []
-        seen_nodes: set[tuple[int, int, str]] = set()
+        seen_nodes: set[int] = set()
 
         for node, capture_name in captures:
-            if capture_name not in ("function_node", "init_node"):
-                continue
-            node_id = (node.start_byte, node.end_byte, node.type)
-            if node_id in seen_nodes:
-                continue
-            seen_nodes.add(node_id)
-
-            try:
-                start_line = node.start_point[0] + 1
-                end_line = node.end_point[0] + 1
-
-                name_node = None
-                for child in node.children:
-                    if child.type == "simple_identifier":
-                        name_node = child
-                        break
-                if name_node is None and capture_name == "init_node":
-                    name_node = node.child_by_field_name("name")
-                if name_node is None:
+            if capture_name == "name":
+                func_node = node.parent
+                if func_node is None:
                     continue
+                key = func_node.start_byte
+                if key in seen_nodes:
+                    continue
+                seen_nodes.add(key)
 
-                params_node = None
-                for child in node.children:
-                    if child.type == "function_value_parameters":
-                        params_node = child
-                        break
-                parameters: list[str] = []
-                if params_node is not None:
-                    parameters = [
-                        self._get_node_text(child)
-                        for child in params_node.children
-                        if child.type == "simple_identifier"
-                    ]
+                try:
+                    func_name = self._get_node_text(node)
+                    # Extract parameter names from patterns after the name
+                    parameters: list[str] = []
+                    for child in func_node.children:
+                        if child.type == "patterns":
+                            for pat in child.children:
+                                if pat.type == "variable":
+                                    parameters.append(self._get_node_text(pat))
 
-                context_name, context_type, _ = self._get_parent_context(node)
-                functions.append(
-                    {
-                        "name": self._get_node_text(name_node),
+                    context_name, context_type, _ = self._get_parent_context(func_node)
+                    functions.append({
+                        "name": func_name,
                         "args": parameters,
-                        "line_number": start_line,
-                        "end_line": end_line,
+                        "line_number": func_node.start_point[0] + 1,
+                        "end_line": func_node.end_point[0] + 1,
                         "path": str(path),
                         "lang": self.language_name,
                         "context": context_name,
                         "class_context": (
                             context_name
-                            if context_type
-                            and ("class" in context_type or "object" in context_type)
+                            if context_type and "class" in context_type
                             else None
                         ),
-                    }
-                )
-                if self.index_source:
-                    functions[-1]["source"] = source_code
-            except Exception as exc:
-                error_logger(f"Error parsing function in {path}: {exc}")
+                    })
+                    if self.index_source:
+                        functions[-1]["source"] = source_code
+                except Exception as exc:
+                    error_logger(f"Error parsing function in {path}: {exc}")
 
         return functions
 

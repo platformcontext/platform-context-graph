@@ -35,7 +35,7 @@ PHP_QUERIES = {
         ) @trait
     """,
     "imports": """
-        (use_declaration) @import
+        (namespace_use_declaration) @import
     """,
     "calls": """
         (function_call_expression

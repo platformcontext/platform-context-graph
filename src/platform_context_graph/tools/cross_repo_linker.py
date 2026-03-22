@@ -244,18 +244,20 @@ class CrossRepoLinker:
             return record["cnt"] if record else 0
 
     def _link_httproute_backends(self) -> int:
-        """Link HTTPRoutes to likely backend Services.
+        """Link HTTPRoutes to backend Services via backendRefs.
 
-        Heuristic: matches routes to services by name prefix
-        within the same namespace. Does not parse actual
-        backendRef specs from the HTTPRoute.
+        Uses the ``backend_refs`` property extracted during parsing
+        which contains comma-separated service names from
+        ``spec.rules[*].backendRefs[*].name``.
         """
         with self.driver.session() as session:
             result = session.run("""
                 MATCH (route:K8sResource {kind: 'HTTPRoute'})
+                WHERE route.backend_refs IS NOT NULL
+                UNWIND split(route.backend_refs, ',') AS backend_name
                 MATCH (svc:K8sResource {kind: 'Service'})
-                WHERE route.namespace = svc.namespace
-                  AND route.name STARTS WITH svc.name
+                WHERE svc.name = trim(backend_name)
+                  AND svc.namespace = route.namespace
                 MERGE (route)-[:ROUTES_TO]->(svc)
                 RETURN count(*) as cnt
             """)

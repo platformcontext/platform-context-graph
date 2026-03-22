@@ -73,13 +73,22 @@ class RustTreeSitterParser:
         classes = self._find_structs(root_node)
         imports = self._find_imports(root_node)
         function_calls = self._find_calls(root_node)
-        traits = self._find_traits(root_node)  # <-- Added trait detection
+        traits = self._find_traits(root_node)
+
+        # Inject standard fields into each item so graph persistence
+        # can store lang, path, and is_dependency on every node.
+        path_str = str(path)
+        for items in (functions, classes, traits, imports, function_calls):
+            for item in items:
+                item.setdefault("lang", self.language_name)
+                item.setdefault("path", path_str)
+                item.setdefault("is_dependency", is_dependency)
 
         return {
-            "path": str(path),
+            "path": path_str,
             "functions": functions,
             "classes": classes,
-            "traits": traits,  # <-- Result for traits
+            "traits": traits,
             "variables": [],
             "imports": imports,
             "function_calls": function_calls,

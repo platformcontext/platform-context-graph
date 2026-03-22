@@ -82,6 +82,39 @@ def test_upsert_runtime_status_persists_ingester_status(monkeypatch) -> None:
     assert params["pending_repositories"] == 200
 
 
+def test_upsert_runtime_status_normalizes_null_repository_counts(monkeypatch) -> None:
+    """Nullable repository count inputs should be normalized before persistence."""
+
+    store = PostgresRuntimeStatusStore("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    store.upsert_runtime_status(
+        ingester="repository",
+        source_mode="githubOrg",
+        status="degraded",
+        repository_count=None,
+        pulled_repositories=None,
+        in_sync_repositories=None,
+        pending_repositories=None,
+        completed_repositories=None,
+        failed_repositories=None,
+    )
+
+    _query, params = cursor.execute.call_args.args
+    assert params["repository_count"] == 0
+    assert params["pulled_repositories"] == 0
+    assert params["in_sync_repositories"] == 0
+    assert params["pending_repositories"] == 0
+    assert params["completed_repositories"] == 0
+    assert params["failed_repositories"] == 0
+
+
 def test_get_runtime_status_returns_persisted_row(monkeypatch) -> None:
     """Ingester status reads should return the latest row for one ingester."""
 

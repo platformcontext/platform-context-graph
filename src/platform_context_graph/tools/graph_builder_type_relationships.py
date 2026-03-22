@@ -29,6 +29,7 @@ def create_all_infra_links(
         "terraform_resources",
         "terraform_modules",
         "terragrunt_configs",
+        "cloudformation_resources",
     )
     has_infra = any(
         item
