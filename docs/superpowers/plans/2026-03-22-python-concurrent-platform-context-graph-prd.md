@@ -297,18 +297,43 @@ Expected: PASS.
 - Modify: `docs/superpowers/plans/2026-03-22-python-concurrent-platform-context-graph-prd.md`
 - Modify: `docs/docs/reference/configuration.md`
 
-- [ ] **Step 1: Run the focused and broad verification commands**
+- [x] **Step 1: Run the focused and broad verification commands**
 Run:
   - `PYTHONPATH=src uv run pytest -q tests/unit/cli/test_workspace_helper.py tests/unit/cli/test_watch_helper.py tests/unit/core/test_watcher.py tests/unit/indexing/test_coordinator_execution.py tests/unit/indexing/test_coordinator_storage.py tests/unit/query/test_code_queries.py tests/unit/runtime/test_git_checkout_naming.py tests/unit/runtime/test_repo_sync_rules.py tests/unit/runtime/test_repo_sync_runtime.py tests/integration/api/test_api_app.py tests/integration/api/test_code_api.py tests/integration/cli/test_cli_commands.py tests/integration/mcp/test_mcp_server.py`
 
-- [ ] **Step 2: Run benchmark and smoke commands**
+- [x] **Step 2: Run benchmark and smoke commands**
 Run the smallest practical workspace smoke and benchmark commands available in this repo for:
   - one repo
   - a multi-repo workspace
   - watch on a multi-repo workspace
 
-- [ ] **Step 3: Record evidence and gaps**
+- [x] **Step 3: Record evidence and gaps**
 Update this plan or an adjacent status note with:
   - what passed
   - what remains unverified
   - the next escalation if Python misses the PRD benchmark gates
+
+#### Verification evidence
+
+- `PYTHONPATH=src uv run pytest -q tests/unit/cli/test_workspace_helper.py tests/unit/cli/test_watch_helper.py tests/unit/core/test_watcher.py tests/unit/indexing/test_coordinator_execution.py tests/unit/indexing/test_coordinator_storage.py tests/unit/query/test_code_queries.py tests/unit/runtime/test_git_checkout_naming.py tests/unit/runtime/test_repo_sync_rules.py tests/unit/runtime/test_repo_sync_runtime.py tests/integration/api/test_api_app.py tests/integration/api/test_code_api.py tests/integration/cli/test_cli_commands.py tests/integration/mcp/test_mcp_server.py tests/integration/runtime/test_workspace_watch_runtime.py`
+  - result: `126 passed`
+- `PYTHONPATH=src uv run pytest -q tests/perf/test_large_indexing.py`
+  - result: `1 passed`
+- `PYTHONPATH=src PCG_REPO_SOURCE_MODE=filesystem PCG_FILESYSTEM_ROOT="$PWD/tests/fixtures/sample_projects" PCG_REPOS_DIR="$TMPDIR/.../repos" uv run pcg workspace plan`
+  - result: succeeded, `20` repositories discovered from the fixture workspace
+- `PYTHONPATH=src PCG_REPO_SOURCE_MODE=filesystem PCG_FILESYSTEM_ROOT="$PWD/tests/fixtures/sample_projects" PCG_REPOS_DIR="$TMPDIR/.../repos" uv run pcg workspace sync`
+  - result: succeeded, `discovered=20 cloned=20 updated=0 skipped=0 failed=0 stale=0`
+- `PYTHONPATH=src uv run pytest -q tests/integration/runtime/test_workspace_watch_runtime.py`
+  - result: `1 passed`
+
+#### Remaining gaps
+
+- Real database-backed CLI indexing smoke is still blocked in this environment.
+  - `PYTHONPATH=src PCG_RUNTIME_DB_TYPE=kuzudb KUZUDB_PATH="$TMPDIR/.../kuzu" uv run pcg index tests/fixtures/sample_projects/sample_project`
+  - result: failed before indexing because Kùzu is not installed in this worktree runtime
+- The only benchmark available in-repo is `tests/perf/test_large_indexing.py`, which measures mocked Python loop overhead, not full end-to-end parse+persist throughput.
+- We still do not have a real 100/500/1000-repo benchmark corpus or an 8-hour watch RSS soak in this local environment.
+
+#### Escalation rule
+
+- If a real graph-backend environment still misses the PRD throughput or memory targets after profiling the Python coordinator/watch pipeline, the next escalation remains a separate PRD for a Go-based ingester/watch runtime rather than an in-flight rewrite on this branch.

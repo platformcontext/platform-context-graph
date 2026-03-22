@@ -153,7 +153,7 @@ def count_stale_checkouts(config: RepoSyncConfig, discovered: list[str]) -> int:
 def build_workspace_plan(config: RepoSyncConfig) -> dict[str, object]:
     """Return a non-mutating preview of the currently selected workspace."""
 
-    token = git_token(config)
+    token = git_token(config) if config.source_mode == "githubOrg" else None
     repository_ids = list_repo_identifiers(config, token)
     checkout_names = {repo_checkout_name(repo_id) for repo_id in repository_ids}
     already_cloned = 0

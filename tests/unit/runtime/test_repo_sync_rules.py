@@ -142,6 +142,44 @@ def test_explicit_source_mode_uses_exact_repositories_only() -> None:
     ]
 
 
+def test_workspace_plan_filesystem_mode_does_not_require_github_credentials(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Filesystem workspace planning should not depend on GitHub auth config."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    git = importlib.import_module("platform_context_graph.runtime.ingester.git")
+
+    filesystem_root = tmp_path / "fixtures"
+    (filesystem_root / "service-a").mkdir(parents=True)
+    (filesystem_root / "service-b").mkdir(parents=True)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=tmp_path / "workspace" / "repos",
+        source_mode="filesystem",
+        git_auth_method="githubApp",
+        github_org=None,
+        repositories=[],
+        filesystem_root=filesystem_root,
+        clone_depth=1,
+        repo_limit=20,
+        sync_lock_dir=tmp_path / "workspace" / "repos" / ".pcg-sync.lock",
+        component="workspace-plan",
+    )
+
+    monkeypatch.setattr(
+        git,
+        "git_token",
+        lambda _config: pytest.fail("filesystem planning should not request Git auth"),
+    )
+
+    plan = git.build_workspace_plan(config)
+
+    assert plan["repository_ids"] == ["service-a", "service-b"]
+    assert plan["matched_repositories"] == 2
+
+
 def test_git_repo_sync_cycle_rediscoveries_and_indexes_only_on_change(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
