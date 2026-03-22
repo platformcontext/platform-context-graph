@@ -16,6 +16,16 @@ service:
   port: 8080
   annotations: {}
 
+api:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+
 exposure:
   ingress:
     enabled: false
@@ -28,36 +38,22 @@ exposure:
     hostnames: []
     parentRefs: []
 
-persistence:
-  enabled: true
-  existingClaim: ""
-  accessModes:
-    - ReadWriteOnce
-  size: 100Gi
-  storageClass: ""
-
-resources:
-  app:
+worker:
+  replicas: 1
+  persistence:
+    enabled: true
+    existingClaim: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 100Gi
+    storageClass: ""
+  resources:
     requests:
       cpu: 1000m
       memory: 4Gi
     limits:
       cpu: 4000m
       memory: 16Gi
-  bootstrap:
-    requests:
-      cpu: 1000m
-      memory: 4Gi
-    limits:
-      cpu: 4000m
-      memory: 16Gi
-  repoSync:
-    requests:
-      cpu: 500m
-      memory: 2Gi
-    limits:
-      cpu: 2000m
-      memory: 8Gi
 
 env:
   DEFAULT_DATABASE: neo4j
@@ -94,7 +90,7 @@ neo4j:
 repoSync:
   enabled: true
   bootstrap: true
-  initialDelaySeconds: 30
+  initialDelaySeconds: 0
   intervalSeconds: 900
   source:
     mode: githubOrg

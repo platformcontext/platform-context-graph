@@ -93,14 +93,14 @@ read-side concerns into real subpackages:
 
 ## Runtime Package Layout
 
-The runtime boundary stays `runtime/`, with repo synchronization grouped under
-its own subpackage:
+The runtime boundary stays `runtime/`, with worker-side source acquisition and
+indexing grouped under its own subpackage:
 
-- `runtime/repo_sync/config.py`: runtime config and result models
-- `runtime/repo_sync/bootstrap.py`: bootstrap indexing orchestration
-- `runtime/repo_sync/sync.py`: steady-state sync loop
-- `runtime/repo_sync/git.py`: git sync helpers
-- `runtime/repo_sync/support.py`: shared runtime support functions
+- `runtime/worker/config.py`: runtime config and result models
+- `runtime/worker/bootstrap.py`: bootstrap indexing orchestration
+- `runtime/worker/sync.py`: steady-state sync loop
+- `runtime/worker/git.py`: git sync helpers
+- `runtime/worker/support.py`: shared runtime support functions
 
 For infrastructure parsing, YAML-family handlers are separated by domain instead of hiding everything in one monolithic file. For example, Kubernetes manifests, Argo CD, Crossplane, Helm, and Kustomize each have their own focused parser module.
 

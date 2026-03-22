@@ -1,6 +1,6 @@
 """Runtime helpers for repo sync and indexing orchestration."""
 
-from .repo_sync import (
+from .worker import (
     RepoSyncConfig,
     RepoSyncResult,
     run_bootstrap_index,

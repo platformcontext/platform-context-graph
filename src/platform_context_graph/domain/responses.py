@@ -78,6 +78,7 @@ class FileContentResponse(BaseModel):
     language: str | None = None
     commit_sha: str | None = None
     content_hash: str | None = None
+    index_status: str | None = None
     source_backend: Literal["postgres", "workspace", "graph-cache", "unavailable"]
     repo_access: RepoAccess | None = None
 
@@ -93,6 +94,7 @@ class FileLinesResponse(BaseModel):
     start_line: int
     end_line: int
     lines: list[ContentLine] = Field(default_factory=list)
+    index_status: str | None = None
     source_backend: Literal["postgres", "workspace", "graph-cache", "unavailable"]
     repo_access: RepoAccess | None = None
 
@@ -114,8 +116,30 @@ class EntityContentResponse(BaseModel):
     end_byte: int | None = None
     language: str | None = None
     content: str | None = None
+    index_status: str | None = None
     source_backend: Literal["postgres", "workspace", "graph-cache", "unavailable"]
     repo_access: RepoAccess | None = None
+
+
+class IndexStatusResponse(BaseModel):
+    """Runtime worker status exposed by the API and MCP layers."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    component: str
+    source_mode: str | None = None
+    status: str
+    active_run_id: str | None = None
+    last_attempt_at: str | None = None
+    last_success_at: str | None = None
+    next_retry_at: str | None = None
+    last_error_kind: str | None = None
+    last_error_message: str | None = None
+    repository_count: int = 0
+    pending_repositories: int = 0
+    completed_repositories: int = 0
+    failed_repositories: int = 0
+    updated_at: str | None = None
 
 
 class FileContentMatch(BaseModel):

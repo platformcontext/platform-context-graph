@@ -72,7 +72,7 @@ def test_bootstrap_index_copies_filesystem_repos_and_emits_metrics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     observability = importlib.import_module("platform_context_graph.observability")
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
     observability.reset_observability_for_tests()
 
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
@@ -131,7 +131,7 @@ def test_bootstrap_index_copies_filesystem_repos_and_emits_metrics(
 def test_bootstrap_index_ignores_dangling_symlinks_in_filesystem_mode(
     tmp_path: Path,
 ) -> None:
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
 
     source_root = tmp_path / "fixtures"
     repo_dir = source_root / "service-a"
@@ -170,7 +170,7 @@ def test_repo_sync_cycle_records_lock_contention_skip(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     observability = importlib.import_module("platform_context_graph.observability")
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
     observability.reset_observability_for_tests()
 
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
@@ -223,7 +223,7 @@ def test_bootstrap_index_reaps_stale_empty_lock_and_runs(
 ) -> None:
     """Bootstrap should recover from a stale lock directory left on disk."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
 
     source_root = tmp_path / "fixtures"
     (source_root / "service-a").mkdir(parents=True)
@@ -265,7 +265,7 @@ def test_repo_sync_cycle_skips_with_fresh_metadata_lock(
 ) -> None:
     """Fresh lock metadata should still prevent concurrent sync cycles."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
 
     repos_dir = tmp_path / "workspace" / "repos"
     repos_dir.mkdir(parents=True)
@@ -299,7 +299,7 @@ def test_bootstrap_index_reaps_stale_metadata_lock_and_runs(
 ) -> None:
     """Bootstrap should recover from stale lock metadata left on disk."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
 
     source_root = tmp_path / "fixtures"
     (source_root / "service-a").mkdir(parents=True)
@@ -341,8 +341,8 @@ def test_bootstrap_index_waits_for_workspace_lock_before_indexing(
 ) -> None:
     """Bootstrap should retry lock acquisition instead of exiting cleanly."""
 
-    bootstrap = importlib.import_module("platform_context_graph.runtime.repo_sync.bootstrap")
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    bootstrap = importlib.import_module("platform_context_graph.runtime.worker.bootstrap")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
 
     source_root = tmp_path / "fixtures"
     (source_root / "service-a").mkdir(parents=True)
@@ -387,7 +387,7 @@ def test_github_app_token_retries_transient_request_failures(
     """GitHub App token minting should retry transient request failures."""
 
     github_auth = importlib.import_module(
-        "platform_context_graph.runtime.repo_sync.github_auth"
+        "platform_context_graph.runtime.worker.github_auth"
     )
 
     github_auth.clear_cached_github_app_token()
@@ -433,7 +433,7 @@ def test_github_app_token_is_cached_until_near_expiry(
     """GitHub App tokens should be reused while they remain safely valid."""
 
     github_auth = importlib.import_module(
-        "platform_context_graph.runtime.repo_sync.github_auth"
+        "platform_context_graph.runtime.worker.github_auth"
     )
 
     github_auth.clear_cached_github_app_token()
@@ -471,7 +471,7 @@ def test_github_app_token_refreshes_when_near_expiry(
     """GitHub App tokens should refresh when they are close to expiring."""
 
     github_auth = importlib.import_module(
-        "platform_context_graph.runtime.repo_sync.github_auth"
+        "platform_context_graph.runtime.worker.github_auth"
     )
 
     github_auth.clear_cached_github_app_token()
@@ -512,7 +512,7 @@ def test_github_app_token_retries_rate_limit_responses(
     """GitHub App token minting should back off and retry on rate limits."""
 
     github_auth = importlib.import_module(
-        "platform_context_graph.runtime.repo_sync.github_auth"
+        "platform_context_graph.runtime.worker.github_auth"
     )
 
     github_auth.clear_cached_github_app_token()
@@ -561,7 +561,7 @@ def test_github_api_request_retries_rate_limit_403_responses(
     """GitHub API requests should back off on 403 rate-limit responses too."""
 
     github_auth = importlib.import_module(
-        "platform_context_graph.runtime.repo_sync.github_auth"
+        "platform_context_graph.runtime.worker.github_auth"
     )
 
     monkeypatch.setenv("PCG_GITHUB_API_RETRY_ATTEMPTS", "2")
@@ -613,8 +613,8 @@ def test_repo_sync_cycle_reports_stale_unmanaged_checkouts(
     """Count stale git checkouts when discovery no longer includes them."""
 
     observability = importlib.import_module("platform_context_graph.observability")
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
-    sync_module = importlib.import_module("platform_context_graph.runtime.repo_sync.sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
+    sync_module = importlib.import_module("platform_context_graph.runtime.worker.sync")
     observability.reset_observability_for_tests()
 
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
@@ -662,3 +662,38 @@ def test_repo_sync_cycle_reports_stale_unmanaged_checkouts(
         and value == 1
         for metric_name, attrs, value in _metric_points(reader)
     )
+
+
+def test_repo_sync_loop_records_degraded_status_and_retries_transient_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transient sync failures should degrade the worker instead of crashing it."""
+
+    requests = pytest.importorskip("requests")
+    sync = importlib.import_module("platform_context_graph.runtime.worker.sync")
+    monkeypatch.setenv("PCG_REPO_SYNC_INITIAL_DELAY_SECONDS", "0")
+
+    recorded_statuses: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        sync,
+        "update_runtime_status",
+        lambda **kwargs: recorded_statuses.append(kwargs),
+        raising=False,
+    )
+
+    def _sleep(_seconds: float) -> None:
+        raise StopIteration
+
+    monkeypatch.setattr(sync.time, "sleep", _sleep)
+    monkeypatch.setattr(
+        sync,
+        "run_repo_sync_cycle",
+        MagicMock(side_effect=requests.exceptions.ConnectionError("temporary dns failure")),
+    )
+
+    with pytest.raises(StopIteration):
+        sync.run_repo_sync_loop(interval_seconds=900)
+
+    assert recorded_statuses
+    assert recorded_statuses[-1]["status"] == "degraded"
+    assert recorded_statuses[-1]["last_error_kind"] == "network"

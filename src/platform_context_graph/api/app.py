@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.responses import Response
 
 from ..observability import initialize_observability
+from ..domain.responses import IndexStatusResponse
 from .dependencies import get_database, get_query_services
 from .routers import (
     code_router,
@@ -216,6 +217,19 @@ def create_app(
     def health(_services: Any = Depends(health_dependency)) -> dict[str, str]:
         """Report a simple health check for dependency-initialized API mode."""
         return {"status": "ok"}
+
+    @router.get(
+        "/index-status",
+        tags=["system"],
+        response_model=IndexStatusResponse,
+        response_model_exclude_none=True,
+    )
+    def index_status(
+        services: Any = Depends(get_query_services),
+    ) -> dict[str, Any]:
+        """Return the latest persisted runtime worker status."""
+
+        return services.status.get_index_status(services.database)
 
     app.include_router(router)
     app.include_router(entities_router, prefix=API_V0_PREFIX)

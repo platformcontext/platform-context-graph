@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 from importlib.metadata import PackageNotFoundError
+from types import SimpleNamespace
 
 import pytest
 
@@ -187,6 +188,47 @@ def test_create_service_app_exposes_http_api_and_mcp_routes() -> None:
             ).status_code
             == 503
         )
+
+
+def test_create_app_exposes_index_status_route() -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    class _StatusModule:
+        @staticmethod
+        def get_index_status(_database):
+            return {
+                "component": "repo-sync",
+                "source_mode": "githubOrg",
+                "status": "indexing",
+                "active_run_id": "run-123",
+                "last_attempt_at": "2026-03-22T12:00:00+00:00",
+                "last_success_at": None,
+                "next_retry_at": None,
+                "last_error_kind": None,
+                "last_error_message": None,
+                "repository_count": 200,
+                "pending_repositories": 200,
+                "completed_repositories": 0,
+                "failed_repositories": 0,
+                "updated_at": "2026-03-22T12:00:00+00:00",
+            }
+
+    app = api_app.create_app(
+        query_services_dependency=lambda: SimpleNamespace(
+            database=object(),
+            status=_StatusModule(),
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/api/v0/index-status")
+
+    assert response.status_code == 200
+    assert response.json()["component"] == "repo-sync"
+    assert response.json()["status"] == "indexing"
 
 
 def test_service_app_factory_is_exported() -> None:

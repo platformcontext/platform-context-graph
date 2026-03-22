@@ -1,10 +1,10 @@
 # PlatformContextGraph Helm Chart
 
-This chart deploys the combined PlatformContextGraph service with:
+This chart deploys PlatformContextGraph as separate API and worker workloads with:
 
 - external Neo4j connectivity
-- bootstrap indexing via an internal Python runtime `initContainer`
-- ongoing repo sync via an internal Python runtime sidecar
+- a stateless API `Deployment` for HTTP API + MCP
+- a stateful worker `StatefulSet` for repo sync and indexing
 - flexible service exposure options
 
 Render locally:

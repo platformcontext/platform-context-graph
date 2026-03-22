@@ -65,11 +65,12 @@ def test_public_deployment_layout_exists() -> None:
     assert MCP_EXAMPLE_FILE.exists()
 
 
-def test_default_chart_renders_statefulset_with_bootstrap_and_repo_sync() -> None:
+def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     docs = _render_chart()
     kinds = _kinds(docs)
 
     assert "StatefulSet" in kinds
+    assert "Deployment" in kinds
     assert "Service" in kinds
     assert "Ingress" not in kinds
     assert "HTTPRoute" not in kinds
@@ -77,33 +78,24 @@ def test_default_chart_renders_statefulset_with_bootstrap_and_repo_sync() -> Non
     assert not any(name.endswith("neo4j") or name == "neo4j" for name in metadata_names)
     assert not any(name.endswith("-scripts") for name in metadata_names)
 
-    statefulset = next(doc for doc in docs if doc["kind"] == "StatefulSet")
-    pod_spec = statefulset["spec"]["template"]["spec"]
-    container_names = {container["name"] for container in pod_spec["containers"]}
-    init_names = {container["name"] for container in pod_spec.get("initContainers", [])}
-
-    assert "platform-context-graph" in container_names
-    assert "repo-sync" in container_names
-    assert "bootstrap-index" in init_names
-
-    init_container = next(
+    deployment = next(doc for doc in docs if doc["kind"] == "Deployment")
+    deployment_pod_spec = deployment["spec"]["template"]["spec"]
+    deployment_container = next(
         container
-        for container in pod_spec["initContainers"]
-        if container["name"] == "bootstrap-index"
-    )
-    app_container = next(
-        container
-        for container in pod_spec["containers"]
+        for container in deployment_pod_spec["containers"]
         if container["name"] == "platform-context-graph"
     )
-    repo_sync_container = next(
+
+    worker_statefulset = next(doc for doc in docs if doc["kind"] == "StatefulSet")
+    worker_pod_spec = worker_statefulset["spec"]["template"]["spec"]
+    worker_container = next(
         container
-        for container in pod_spec["containers"]
+        for container in worker_pod_spec["containers"]
         if container["name"] == "repo-sync"
     )
 
-    assert init_container["command"] == ["pcg", "internal", "bootstrap-index"]
-    assert app_container["command"] == [
+    assert deployment_pod_spec.get("initContainers", []) == []
+    assert deployment_container["command"] == [
         "pcg",
         "serve",
         "start",
@@ -112,14 +104,25 @@ def test_default_chart_renders_statefulset_with_bootstrap_and_repo_sync() -> Non
         "--port",
         "8080",
     ]
-    assert repo_sync_container["command"] == ["pcg", "internal", "repo-sync-loop"]
+    assert worker_container["command"] == ["pcg", "internal", "repo-sync-loop"]
 
-    for container in [init_container, repo_sync_container]:
-        env_names = {env["name"] for env in container.get("env", [])}
-        assert "PCG_REPOSITORY_RULES_JSON" in env_names
-        assert "PCG_REPOSITORIES" in env_names
-        assert "PCG_CONTENT_STORE_DSN" not in env_names
-        assert "PCG_POSTGRES_DSN" not in env_names
+    api_env_names = {env["name"] for env in deployment_container.get("env", [])}
+    worker_env_names = {env["name"] for env in worker_container.get("env", [])}
+    api_volume_mounts = {
+        volume_mount["mountPath"]
+        for volume_mount in deployment_container.get("volumeMounts", [])
+    }
+    worker_volume_mounts = {
+        volume_mount["mountPath"]
+        for volume_mount in worker_container.get("volumeMounts", [])
+    }
+
+    assert "PCG_REPOSITORY_RULES_JSON" not in api_env_names
+    assert "PCG_REPOS_DIR" not in api_env_names
+    assert "PCG_REPOSITORY_RULES_JSON" in worker_env_names
+    assert "PCG_REPOS_DIR" in worker_env_names
+    assert "/data" not in api_volume_mounts
+    assert "/data" in worker_volume_mounts
 
 
 def test_chart_can_render_ingress() -> None:

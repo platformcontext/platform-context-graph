@@ -59,6 +59,7 @@ def build_sync_tool_map(server: Any) -> dict[str, SyncToolHandler]:
         "search_file_content": server.search_file_content_tool,
         "search_entity_content": server.search_entity_content_tool,
         "link_ecosystem": server.link_ecosystem_tool,
+        "get_index_status": server.get_index_status_tool,
     }
 
 
@@ -71,6 +72,7 @@ def build_async_tool_map(server: Any) -> dict[str, AsyncToolHandler]:
     Returns:
         A mapping from public MCP tool names to async server handlers.
     """
-    return {
-        "index_ecosystem": server.index_ecosystem_tool,
-    }
+    tool_map: dict[str, AsyncToolHandler] = {}
+    if hasattr(server, "index_ecosystem_tool"):
+        tool_map["index_ecosystem"] = server.index_ecosystem_tool
+    return tool_map

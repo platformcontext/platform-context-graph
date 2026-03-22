@@ -9,6 +9,7 @@ from . import (
     impact,
     infra,
     repositories,
+    status,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "impact",
     "infra",
     "repositories",
+    "status",
 ]

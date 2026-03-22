@@ -1,0 +1,18 @@
+{{- if .Values.repoSync.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pcg.workerHeadlessServiceName" . }}
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  clusterIP: None
+  selector:
+    {{- include "pcg.workerSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: noop
+      port: 80
+      targetPort: 80
+      protocol: TCP
+{{- end }}

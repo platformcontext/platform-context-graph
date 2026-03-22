@@ -739,3 +739,38 @@ class TestSSETransport:
         data = resp.json()
         assert data["error"]["code"] == -32700
         assert "Parse error" in data["error"]["message"]
+
+
+def test_api_runtime_role_omits_indexing_tools_and_skips_graph_builder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """API-only runtime should expose read-only MCP tools without indexing machinery."""
+
+    monkeypatch.setenv("PCG_RUNTIME_ROLE", "api")
+
+    with patch("platform_context_graph.mcp.server.get_database_manager") as mock_get_db:
+        mock_db = MagicMock()
+        mock_get_db.return_value = mock_db
+
+        with (
+            patch("platform_context_graph.mcp.server.JobManager") as mock_job_cls,
+            patch("platform_context_graph.mcp.server.GraphBuilder") as mock_graph_builder,
+            patch("platform_context_graph.mcp.server.CodeFinder"),
+            patch("platform_context_graph.mcp.server.CodeWatcher") as mock_code_watcher,
+            patch("platform_context_graph.mcp.server.EcosystemIndexer") as mock_ecosystem,
+            patch("platform_context_graph.mcp.server.CrossRepoLinker") as mock_linker,
+        ):
+            server = MCPServer()
+
+    tool_names = set(server.tools)
+
+    assert "get_index_status" in tool_names
+    assert "find_code" in tool_names
+    assert "add_code_to_graph" not in tool_names
+    assert "watch_directory" not in tool_names
+    assert "delete_repository" not in tool_names
+    mock_job_cls.assert_not_called()
+    mock_graph_builder.assert_not_called()
+    mock_code_watcher.assert_not_called()
+    mock_ecosystem.assert_not_called()
+    mock_linker.assert_not_called()

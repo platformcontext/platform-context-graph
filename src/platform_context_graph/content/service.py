@@ -74,7 +74,7 @@ class ContentService:
     """Orchestrate content retrieval across Postgres and workspace providers."""
 
     postgres_provider: _PostgresProvider | None
-    workspace_provider: _WorkspaceProvider
+    workspace_provider: _WorkspaceProvider | None
 
     def get_file_content(self, *, repo_id: str, relative_path: str) -> dict[str, Any]:
         """Return file content using Postgres first and the workspace second.
@@ -93,6 +93,11 @@ class ContentService:
         )
         if postgres_result is not None:
             return postgres_result
+        if self.workspace_provider is None:
+            return self._unavailable_file_content(
+                repo_id=repo_id,
+                relative_path=relative_path,
+            )
         return self._workspace_result(
             "file",
             self.workspace_provider.get_file_content,
@@ -120,6 +125,25 @@ class ContentService:
             Line-range response mapping.
         """
 
+        postgres_result = self._from_postgres_file(
+            repo_id=repo_id,
+            relative_path=relative_path,
+        )
+        if postgres_result is not None:
+            return self._file_lines_from_postgres(
+                postgres_result,
+                repo_id=repo_id,
+                relative_path=relative_path,
+                start_line=start_line,
+                end_line=end_line,
+            )
+        if self.workspace_provider is None:
+            return self._unavailable_file_lines(
+                repo_id=repo_id,
+                relative_path=relative_path,
+                start_line=start_line,
+                end_line=end_line,
+            )
         return self._workspace_result(
             "lines",
             self.workspace_provider.get_file_lines,
@@ -142,6 +166,8 @@ class ContentService:
         postgres_result = self._from_postgres_entity(entity_id=entity_id)
         if postgres_result is not None:
             return postgres_result
+        if self.workspace_provider is None:
+            return self._unavailable_entity_content(entity_id=entity_id)
         return self._workspace_result(
             "entity",
             self.workspace_provider.get_entity_content,
@@ -342,6 +368,87 @@ class ContentService:
                 "lines",
             }:
                 runtime.record_content_workspace_fallback(operation=operation)
+
+    def _file_lines_from_postgres(
+        self,
+        postgres_result: dict[str, Any],
+        *,
+        repo_id: str,
+        relative_path: str,
+        start_line: int,
+        end_line: int,
+    ) -> dict[str, Any]:
+        """Build a line-range response from PostgreSQL-backed file content."""
+
+        content = postgres_result.get("content") or ""
+        lines = content.splitlines()
+        bounded_start = max(1, start_line)
+        bounded_end = max(bounded_start, end_line)
+        return {
+            "available": bool(postgres_result.get("available", True)),
+            "repo_id": repo_id,
+            "relative_path": relative_path,
+            "start_line": bounded_start,
+            "end_line": bounded_end,
+            "lines": [
+                {
+                    "line_number": line_number,
+                    "content": lines[line_number - 1],
+                }
+                for line_number in range(bounded_start, min(bounded_end, len(lines)) + 1)
+            ],
+            "source_backend": "postgres",
+            "index_status": postgres_result.get("index_status"),
+        }
+
+    def _unavailable_file_content(
+        self,
+        *,
+        repo_id: str,
+        relative_path: str,
+    ) -> dict[str, Any]:
+        """Return a consistent unavailable response for file content."""
+
+        return {
+            "available": False,
+            "repo_id": repo_id,
+            "relative_path": relative_path,
+            "content": None,
+            "source_backend": "unavailable",
+            "index_status": "not_indexed",
+        }
+
+    def _unavailable_file_lines(
+        self,
+        *,
+        repo_id: str,
+        relative_path: str,
+        start_line: int,
+        end_line: int,
+    ) -> dict[str, Any]:
+        """Return a consistent unavailable response for file line ranges."""
+
+        return {
+            "available": False,
+            "repo_id": repo_id,
+            "relative_path": relative_path,
+            "start_line": start_line,
+            "end_line": end_line,
+            "lines": [],
+            "source_backend": "unavailable",
+            "index_status": "not_indexed",
+        }
+
+    def _unavailable_entity_content(self, *, entity_id: str) -> dict[str, Any]:
+        """Return a consistent unavailable response for entity content."""
+
+        return {
+            "available": False,
+            "entity_id": entity_id,
+            "content": None,
+            "source_backend": "unavailable",
+            "index_status": "not_indexed",
+        }
 
     def _record_provider_metrics(
         self,
