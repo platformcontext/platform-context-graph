@@ -38,7 +38,7 @@ def canonical_content_entity_id(
         f"{repo_id}\n{relative_path}\n{entity_type.lower()}\n"
         f"{entity_name}\n{line_number}"
     )
-    digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.blake2s(identity.encode("utf-8")).hexdigest()[:12]
     return f"content-entity:e_{digest}"
 
 

@@ -37,10 +37,6 @@ pcg mcp setup
 ```
 
 If path or shell behavior differs in your environment, prefer a Python virtual environment or `uv tool install` so the `pcg` command resolves cleanly.
-/node_modules/
-/vendor/
-*.log
-```
 
 ---
 

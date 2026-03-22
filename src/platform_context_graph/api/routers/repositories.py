@@ -70,12 +70,4 @@ def get_repository_stats(
         return service_error_response(
             request, detail=result["error"], not_found_title="Repository not found"
         )
-    if (
-        isinstance(result, dict)
-        and result.get("success") is False
-        and isinstance(result.get("error"), str)
-    ):
-        return service_error_response(
-            request, detail=result["error"], not_found_title="Repository not found"
-        )
     return result

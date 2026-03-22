@@ -23,7 +23,7 @@ DASHBOARD_FILE = (
     / "dashboards"
     / "platform-context-graph-observability.json"
 )
-CLAUDE_MCP_FILE = REPO_ROOT / ".mcp.json"
+MCP_EXAMPLE_FILE = REPO_ROOT / ".mcp.json.example"
 
 
 def _render_chart(*args: str) -> list[dict]:
@@ -62,7 +62,7 @@ def test_public_deployment_layout_exists() -> None:
     assert MINIMAL_MANIFEST_DIR.exists()
     assert ARGOCD_BASE_DIR.exists()
     assert ARGOCD_AWS_DIR.exists()
-    assert CLAUDE_MCP_FILE.exists()
+    assert MCP_EXAMPLE_FILE.exists()
 
 
 def test_default_chart_renders_statefulset_with_bootstrap_and_repo_sync() -> None:
@@ -360,14 +360,14 @@ def test_compose_stack_supports_filesystem_host_root_override() -> None:
         )
 
 
-def test_checked_in_claude_mcp_config_uses_compose_service_runtime() -> None:
-    config = json.loads(CLAUDE_MCP_FILE.read_text())
+def test_checked_in_mcp_example_uses_compose_service_runtime() -> None:
+    config = json.loads(MCP_EXAMPLE_FILE.read_text())
     server = config["mcpServers"]["pcg"]
 
     assert server["command"] == "sh"
     assert server["args"] == [
         "-lc",
-        "cd /Users/allen/personal-repos/platform-context-graph && "
+        "cd <REPO_ROOT> && "
         "docker-compose exec -T platform-context-graph pcg mcp start",
     ]
     assert "env" not in server

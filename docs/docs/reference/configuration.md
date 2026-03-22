@@ -20,7 +20,7 @@ Update a setting permanently. This writes to `~/.platform-context-graph/.env`.
 
 ```bash
 # Switch to Neo4j backend
-pcg config set DEFAULT_BACKEND neo4j
+pcg config set DEFAULT_DATABASE neo4j
 
 # Increase max file size to index (MB)
 pcg config set MAX_FILE_SIZE_MB 20
@@ -46,7 +46,7 @@ Here are the available settings you can configure.
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
-| **`DEFAULT_BACKEND`** | `falkordb` | The database engine to use (`neo4j` or `falkordb`). |
+| **`DEFAULT_DATABASE`** | `falkordb` | The database engine to use (`neo4j`, `falkordb`, or `kuzudb`). |
 | **`ENABLE_AUTO_WATCH`** | `false` | If `true`, `pcg index` will automatically start watching for changes. |
 | **`PARALLEL_WORKERS`** | `4` | Number of parallel threads to use during indexing. |
 | **`CACHE_ENABLED`** | `true` | Caches file hashes to speed up re-indexing. |

@@ -57,6 +57,7 @@ if [ $# -lt 1 ]; then
     exit 1
 fi
 
+START_DIR=$(pwd)
 REPO=$1
 OUTPUT_NAME=${2:-$(basename $REPO)}
 
@@ -68,13 +69,13 @@ print_info "Creating bundle for ${OWNER}/${REPO_NAME}"
 
 # Create temporary directory
 TEMP_DIR=$(mktemp -d)
-trap "rm -rf $TEMP_DIR" EXIT
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
 print_info "Using temporary directory: $TEMP_DIR"
 
 # Clone repository
 print_info "Cloning repository..."
-cd $TEMP_DIR
+cd "$TEMP_DIR"
 if ! git clone --depth 1 "https://github.com/${OWNER}/${REPO_NAME}.git" repo; then
     print_error "Failed to clone repository"
     exit 1
@@ -111,11 +112,11 @@ if ! pcg export "$BUNDLE_NAME" --repo .; then
 fi
 
 # Move bundle to original directory
-mv "$BUNDLE_NAME" "$OLDPWD/"
-print_success "Bundle created: $OLDPWD/$BUNDLE_NAME"
+mv "$BUNDLE_NAME" "$START_DIR/"
+print_success "Bundle created: $START_DIR/$BUNDLE_NAME"
 
 # Show bundle info
-BUNDLE_PATH="$OLDPWD/$BUNDLE_NAME"
+BUNDLE_PATH="$START_DIR/$BUNDLE_NAME"
 BUNDLE_SIZE=$(du -h "$BUNDLE_PATH" | cut -f1)
 
 echo ""

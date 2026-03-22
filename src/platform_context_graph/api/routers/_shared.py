@@ -152,4 +152,8 @@ def not_implemented_response(request: Request, *, detail: str) -> JSONResponse:
 
 def service_result_has_error(result: Any) -> bool:
     """Return whether a service-layer result is an error mapping."""
-    return isinstance(result, dict) and isinstance(result.get("error"), str)
+    return (
+        isinstance(result, dict)
+        and isinstance(result.get("error"), str)
+        and ("success" not in result or result.get("success") is False)
+    )

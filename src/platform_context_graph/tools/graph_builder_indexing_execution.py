@@ -48,6 +48,18 @@ async def parse_repository_snapshot_async(
     )
 
 
+def _snapshot_file_data(
+    snapshot: RepositoryParseSnapshot | dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return parsed file data from a snapshot object or dict payload."""
+    file_data = getattr(snapshot, "file_data", None)
+    if file_data is not None:
+        return file_data
+    if isinstance(snapshot, dict):
+        return list(snapshot.get("file_data", []))
+    raise TypeError(f"Unsupported snapshot type: {type(snapshot)!r}")
+
+
 def finalize_index_batch(
     builder: Any,
     *,
@@ -60,7 +72,7 @@ def finalize_index_batch(
     all_file_data = [
         file_data
         for snapshot in snapshots
-        for file_data in getattr(snapshot, "file_data", snapshot["file_data"])
+        for file_data in _snapshot_file_data(snapshot)
     ]
     info_logger_fn("Creating inheritance links and function calls...")
     link_start = time.monotonic()

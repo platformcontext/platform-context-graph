@@ -110,27 +110,24 @@ def _generate_mcp_json(creds: dict[str, str]) -> None:
     api._configure_ide(mcp_config)
 
 
-def find_jetbrains_mcp_config():
+def find_jetbrains_mcp_config() -> list[Path] | None:
     """Find the first available JetBrains MCP server config file.
 
     Returns:
-        A list containing the discovered config path, or ``None`` when no
-        config file could be found.
+        A single-item list containing the discovered config path, or ``None``
+        when no config file could be found.
     """
     bases = [
         Path.home() / ".config" / "JetBrains",
         Path.home() / "Library/Application Support/JetBrains",
         Path.home() / "AppData/Roaming/JetBrains",
     ]
-    configs = []
     for base in bases:
         if base.exists():
             for folder in base.iterdir():
                 mcp_file = folder / "options" / "mcpServer.xml"
                 if mcp_file.exists():
-                    configs.append(mcp_file)
-                    print(mcp_file)
-                    return configs
+                    return [mcp_file]
     return None
 
 

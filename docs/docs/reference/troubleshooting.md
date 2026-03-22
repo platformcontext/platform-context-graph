@@ -43,7 +43,8 @@ Fix:
 - inspect the generated config snippet
 - run `pcg mcp start` manually and confirm it starts cleanly
 
-For this repository's checked-in local setup, the MCP client should shell into the
+For this repository's checked-in MCP example, copy `.mcp.json.example` to a local
+`.mcp.json`, replace `<REPO_ROOT>` with your checkout path, and shell into the
 running Compose service with `docker-compose exec -T platform-context-graph pcg mcp
 start`. A host-run `uv run ... pcg mcp start` process with only Neo4j credentials
 can answer graph queries, but the content tools will fail because the PostgreSQL
