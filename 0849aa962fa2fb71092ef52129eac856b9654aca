@@ -1,0 +1,65 @@
+tests/unit/tools/test_graph_builder_parsers.py
+  27b4c4bb279c9174 37-48
+  c553f1025e0122dd 8,17
+tests/unit/parsers/test_typescriptjsx_parser.py
+  783eb3222b8d19ac 75-76,78-79,81-95,98-125
+  27b4c4bb279c9174 1-74
+src/platform_context_graph/tools/graph_builder_parsers.py
+  27b4c4bb279c9174 37-40,136-145
+tests/integration/test_language_graph.py
+  27b4c4bb279c9174 409-437,478,490-498,538
+  783eb3222b8d19ac 21-30,52-71,76,80-99,131-161,214-287,330-406,438-477,480-482,499-537,570-626,660-743,785-876,900-926,930-1003,1027-1110,1134-1188,1212-1221,1223-1232,1234-1281,1304-1377,1401-1483,1498-1570,1573-1575,1579-1581,1605-1688,1705-1788,1803-1849,1864-1928,1951-2015
+tests/integration/docs/test_language_capability_docs.py
+  c553f1025e0122dd 31-34
+  27b4c4bb279c9174 1-30
+tests/unit/tools/test_parser_capabilities.py
+  783eb3222b8d19ac 107-184,213-252
+  27b4c4bb279c9174 1-6,9-34,103-106,185-212
+  c553f1025e0122dd 7-8,35-102,253-256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "0849aa962fa2fb71092ef52129eac856b9654aca",
+  "prompts": {
+    "27b4c4bb279c9174": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d171a-4242-7d41-be3b-85b0a2479159",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 240,
+      "total_deletions": 1,
+      "accepted_lines": 234,
+      "overriden_lines": 0
+    },
+    "783eb3222b8d19ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d1710-db9c-70e1-a803-93f1cae94810",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 1628,
+      "total_deletions": 3,
+      "accepted_lines": 1624,
+      "overriden_lines": 6
+    },
+    "c553f1025e0122dd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d0c99-fd65-7971-a5ad-2438c497ea93",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 80,
+      "total_deletions": 12,
+      "accepted_lines": 80,
+      "overriden_lines": 0
+    }
+  }
+}
