@@ -39,7 +39,7 @@ def make_mock_db(query_results):
     driver = MagicMock()
     session = MagicMock()
 
-    def mock_run(query, **kwargs):
+    def mock_run(query, *args, **kwargs):
         for substr, result in query_results.items():
             if substr in query:
                 return result

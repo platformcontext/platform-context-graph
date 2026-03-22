@@ -358,3 +358,30 @@ class TestBackendCompatibilityWrappers:
         wrapped = FalkorDBResultWrapper(result)
 
         assert wrapped.data() == [{"name": "payments-api"}]
+
+    def test_falkordb_session_accepts_positional_parameter_mapping(self):
+        """Test FalkorDB sessions accept Neo4j-style positional parameter maps."""
+        from platform_context_graph.core.database_falkordb import FalkorDBSessionWrapper
+
+        graph = MagicMock()
+        session = FalkorDBSessionWrapper(graph)
+
+        session.run("RETURN $name AS name", {"name": "payments-api"})
+
+        graph.query.assert_called_once_with(
+            "RETURN $name AS name", {"name": "payments-api"}
+        )
+
+    def test_kuzu_session_accepts_positional_parameter_mapping(self):
+        """Test Kuzu sessions accept Neo4j-style positional parameter maps."""
+        from platform_context_graph.core.database_kuzu import KuzuSessionWrapper
+
+        conn = MagicMock()
+        conn.execute.return_value = None
+        session = KuzuSessionWrapper(conn)
+
+        session.run("RETURN $name AS name", {"name": "payments-api"})
+
+        conn.execute.assert_called_once()
+        _, parameters = conn.execute.call_args.args
+        assert parameters["name"] == "payments-api"
