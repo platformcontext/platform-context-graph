@@ -210,6 +210,9 @@ def _refresh_repository_origin_url(
 ) -> None:
     """Rewrite an existing HTTPS origin to use the latest GitHub token."""
 
+    if not token:
+        return
+
     origin_result = subprocess.run(
         ["git", "-C", str(repo_dir), "remote", "get-url", "origin"],
         capture_output=True,
