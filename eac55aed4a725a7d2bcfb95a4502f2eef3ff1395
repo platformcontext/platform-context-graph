@@ -1,0 +1,53 @@
+src/platform_context_graph/tools/parser_capabilities/catalog.py
+  e6ed78e414f5cb29 51-54
+tests/unit/tools/test_parser_capabilities.py
+  e6ed78e414f5cb29 255-323,396-436
+  a034ab0d6c4453bd 185-254
+  e371e2068f17f7a7 437-438
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "eac55aed4a725a7d2bcfb95a4502f2eef3ff1395",
+  "prompts": {
+    "a034ab0d6c4453bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d172a-7e40-76a0-8995-46eceacac34a",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 70,
+      "overriden_lines": 0
+    },
+    "e371e2068f17f7a7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d17ad-d821-7ab2-8ec5-ba27a278c060",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 70,
+      "overriden_lines": 0
+    },
+    "e6ed78e414f5cb29": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d17ad-d696-7641-b97a-76a161ab8425",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 190,
+      "total_deletions": 12,
+      "accepted_lines": 116,
+      "overriden_lines": 0
+    }
+  }
+}
