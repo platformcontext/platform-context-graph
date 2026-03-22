@@ -428,6 +428,55 @@ def test_github_app_token_retries_transient_request_failures(
     assert sleeps == [1.0, 1.0]
 
 
+def test_github_app_token_normalizes_flattened_pem_private_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GitHub App token minting should repair PEM keys flattened into one line."""
+
+    github_auth = importlib.import_module(
+        "platform_context_graph.runtime.ingester.github_auth"
+    )
+
+    github_auth.clear_cached_github_app_token()
+    monkeypatch.setenv("GITHUB_APP_ID", "123")
+    monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "456")
+    monkeypatch.setenv(
+        "GITHUB_APP_PRIVATE_KEY",
+        (
+            "-----BEGIN RSA PRIVATE KEY----- "
+            "LINEONE "
+            "LINETWO "
+            "-----END RSA PRIVATE KEY-----"
+        ),
+    )
+
+    captured: dict[str, object] = {}
+
+    def _encode(payload, key, algorithm):
+        captured["payload"] = payload
+        captured["key"] = key
+        captured["algorithm"] = algorithm
+        return "encoded-jwt"
+
+    response = MagicMock()
+    response.json.return_value = {"token": "ghs_test"}
+    response.raise_for_status.return_value = None
+
+    monkeypatch.setattr(github_auth.jwt, "encode", _encode)
+    monkeypatch.setattr(github_auth.requests, "request", lambda *_args, **_kwargs: response)
+
+    token = github_auth.github_app_token()
+
+    assert token == "ghs_test"
+    assert captured["algorithm"] == "RS256"
+    assert captured["key"] == (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "LINEONE\n"
+        "LINETWO\n"
+        "-----END RSA PRIVATE KEY-----\n"
+    )
+
+
 def test_github_app_token_is_cached_until_near_expiry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
