@@ -1,0 +1,23 @@
+docs/internal/docs-inventory.md
+  c875c79fb9b4b8d5 46-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "4254cf8bb001a121f620512461369c07b31afbde",
+  "prompts": {
+    "c875c79fb9b4b8d5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f48fe86d-9937-4374-9a90-83ca178cfa90",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 28,
+      "total_deletions": 0,
+      "accepted_lines": 28,
+      "overriden_lines": 0
+    }
+  }
+}
