@@ -1,0 +1,185 @@
+tests/fixtures/ecosystems/kubernetes_comprehensive/cronjob.yaml
+  c875c79fb9b4b8d5 1-16
+tests/fixtures/ecosystems/kubernetes_comprehensive/httproute.yaml
+  c875c79fb9b4b8d5 1-18
+docs/docs/languages/php.md
+  c875c79fb9b4b8d5 1-29
+tests/fixtures/ecosystems/crossplane_comprehensive/claim.yaml
+  c875c79fb9b4b8d5 1-8
+tests/fixtures/ecosystems/argocd_comprehensive/project.yaml
+  c875c79fb9b4b8d5 1-18
+docs/docs/languages/argocd.md
+  c875c79fb9b4b8d5 1-26
+tests/unit/parsers/test_go_parser.py
+  c875c79fb9b4b8d5 1-249
+tests/fixtures/ecosystems/kubernetes_comprehensive/serviceaccount.yaml
+  c875c79fb9b4b8d5 1-7
+docs/docs/languages/kotlin.md
+  c875c79fb9b4b8d5 1-27
+docs/docs/languages/FEATURE_MATRIX.md
+  c875c79fb9b4b8d5 1-51
+docs/docs/languages/ruby.md
+  c875c79fb9b4b8d5 1-27
+src/platform_context_graph/tools/languages/java_support.py
+  c875c79fb9b4b8d5 72-73,116-128,132-134,309
+tests/unit/parsers/test_csharp_parser.py
+  c875c79fb9b4b8d5 1-214
+tests/unit/parsers/test_haskell_parser.py
+  c875c79fb9b4b8d5 1-174
+docs/docs/languages/terraform.md
+  c875c79fb9b4b8d5 1-24
+src/platform_context_graph/tools/languages/c_support.py
+  c875c79fb9b4b8d5 89-91
+src/platform_context_graph/tools/cross_repo_linker.py
+  c875c79fb9b4b8d5 247,249-251,256-257,259-260
+tests/fixtures/ecosystems/crossplane_comprehensive/provider-config.yaml
+  c875c79fb9b4b8d5 1-7
+tests/fixtures/ecosystems/kubernetes_comprehensive/deployment.yaml
+  c875c79fb9b4b8d5 1-48
+tests/fixtures/ecosystems/kubernetes_comprehensive/rbac.yaml
+  c875c79fb9b4b8d5 1-48
+tests/fixtures/ecosystems/cloudformation_comprehensive/simple-stack.yaml
+  c875c79fb9b4b8d5 1-50
+src/platform_context_graph/tools/languages/php_support.py
+  c875c79fb9b4b8d5 38
+src/platform_context_graph/tools/languages/typescript_support.py
+  c875c79fb9b4b8d5 85-89
+src/platform_context_graph/tools/languages/typescript.py
+  c875c79fb9b4b8d5 86,274-297
+tests/fixtures/ecosystems/cloudformation_comprehensive/lambda.yaml
+  c875c79fb9b4b8d5 1-49
+src/platform_context_graph/tools/languages/dart.py
+  c875c79fb9b4b8d5 58-68
+tests/fixtures/ecosystems/cloudformation_comprehensive/vpc.yaml
+  c875c79fb9b4b8d5 1-50
+tests/fixtures/ecosystems/crossplane_comprehensive/managed-resource.yaml
+  c875c79fb9b4b8d5 1-11
+tests/unit/parsers/test_dart_parser.py
+  c875c79fb9b4b8d5 1-183
+docs/docs/languages/elixir.md
+  c875c79fb9b4b8d5 1-29
+docs/docs/languages/terragrunt.md
+  c875c79fb9b4b8d5 1-23
+tests/fixtures/ecosystems/kubernetes_comprehensive/hpa.yaml
+  c875c79fb9b4b8d5 1-19
+tests/unit/parsers/test_c_parser.py
+  c875c79fb9b4b8d5 1-194
+tests/integration/test_iac_graph.py
+  c875c79fb9b4b8d5 1-377
+tests/fixtures/ecosystems/kubernetes_comprehensive/pdb.yaml
+  c875c79fb9b4b8d5 1-10
+docs/docs/languages/swift.md
+  c875c79fb9b4b8d5 1-28
+docs/docs/languages/go.md
+  c875c79fb9b4b8d5 1-25
+docs/docs/languages/helm.md
+  c875c79fb9b4b8d5 1-23
+tests/unit/parsers/test_cpp_parser.py
+  c875c79fb9b4b8d5 1-280
+tests/fixtures/ecosystems/kubernetes_comprehensive/statefulset.yaml
+  c875c79fb9b4b8d5 1-32
+docs/docs/languages/cloudformation.md
+  c875c79fb9b4b8d5 1-31
+docs/docs/languages/javascript.md
+  c875c79fb9b4b8d5 1-29
+tests/unit/parsers/test_typescript_parser.py
+  c875c79fb9b4b8d5 1-258
+tests/fixtures/ecosystems/cloudformation_comprehensive/stack.json
+  c875c79fb9b4b8d5 1-25
+tests/fixtures/ecosystems/kubernetes_comprehensive/daemonset.yaml
+  c875c79fb9b4b8d5 1-21
+tests/fixtures/ecosystems/crossplane_comprehensive/composition.yaml
+  c875c79fb9b4b8d5 1-25
+docs/docs/languages/c.md
+  c875c79fb9b4b8d5 1-28
+tests/unit/parsers/test_php_parser.py
+  c875c79fb9b4b8d5 1-183
+docs/docs/languages/java.md
+  c875c79fb9b4b8d5 1-30
+tests/unit/parsers/test_java_parser.py
+  c875c79fb9b4b8d5 1-249
+tests/unit/parsers/test_rust_parser.py
+  c875c79fb9b4b8d5 1-221
+src/platform_context_graph/tools/languages/rust.py
+  c875c79fb9b4b8d5 76,78-85,88,91
+tests/fixtures/ecosystems/crossplane_comprehensive/xrd.yaml
+  c875c79fb9b4b8d5 1-29
+tests/integration/test_language_graph.py
+  c875c79fb9b4b8d5 1-506
+tests/unit/parsers/test_perl_parser.py
+  c875c79fb9b4b8d5 1-126
+docs/docs/languages/haskell.md
+  c875c79fb9b4b8d5 1-27
+docs/docs/languages/kubernetes.md
+  c875c79fb9b4b8d5 1-25
+docs/docs/languages/crossplane.md
+  c875c79fb9b4b8d5 1-25
+docs/docs/languages/dart.md
+  c875c79fb9b4b8d5 1-29
+tests/fixtures/ecosystems/kubernetes_comprehensive/networkpolicy.yaml
+  c875c79fb9b4b8d5 1-25
+tests/fixtures/ecosystems/cloudformation_comprehensive/intrinsic-functions.yaml
+  c875c79fb9b4b8d5 1-50
+src/platform_context_graph/tools/languages/haskell_support.py
+  c875c79fb9b4b8d5 15-16,19-21,24,27,30,38,50,53-60,62-65,67-70,73,81,83,86-88,90-91,93-102,118-143,156,161,164,167,172-182,205-216
+docs/docs/languages/rust.md
+  c875c79fb9b4b8d5 1-27
+docs/docs/languages/scala.md
+  c875c79fb9b4b8d5 1-28
+tests/fixtures/ecosystems/kubernetes_comprehensive/service.yaml
+  c875c79fb9b4b8d5 1-12
+docs/docs/languages/kustomize.md
+  c875c79fb9b4b8d5 1-23
+tests/unit/parsers/test_scala_parser.py
+  c875c79fb9b4b8d5 1-186
+src/platform_context_graph/tools/languages/kubernetes_manifest.py
+  c875c79fb9b4b8d5 44-63,106-109
+src/platform_context_graph/tools/languages/go_support.py
+  c875c79fb9b4b8d5 42-43,46-48,72-76
+src/platform_context_graph/tools/languages/haskell.py
+  c875c79fb9b4b8d5 110-112,126,128,131-133,135-136,138,140-148,150-152,154-155,161,164-168
+tests/fixtures/ecosystems/kubernetes_comprehensive/ingress.yaml
+  c875c79fb9b4b8d5 1-24
+docs/docs/languages/typescript.md
+  c875c79fb9b4b8d5 1-28
+docs/docs/languages/perl.md
+  c875c79fb9b4b8d5 1-27
+tests/integration/test_mcp_language_queries.py
+  c875c79fb9b4b8d5 1-125
+docs/docs/languages/cpp.md
+  c875c79fb9b4b8d5 1-30
+tests/unit/parsers/test_cloudformation_parser.py
+  c875c79fb9b4b8d5 1-353
+tests/fixtures/ecosystems/kubernetes_comprehensive/configmap.yaml
+  c875c79fb9b4b8d5 1-9
+docs/docs/languages/typescriptjsx.md
+  c875c79fb9b4b8d5 1-26
+src/platform_context_graph/tools/languages/cpp_support.py
+  c875c79fb9b4b8d5 369
+docs/docs/languages/csharp.md
+  c875c79fb9b4b8d5 1-31
+docs/docs/languages/python.md
+  c875c79fb9b4b8d5 1-27
+tests/fixtures/ecosystems/kubernetes_comprehensive/secret.yaml
+  c875c79fb9b4b8d5 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "57b1c65c5cbd866303780912670ca4ac6fbdcdac",
+  "prompts": {
+    "c875c79fb9b4b8d5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f48fe86d-9937-4374-9a90-83ca178cfa90",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 5623,
+      "total_deletions": 402,
+      "accepted_lines": 5530,
+      "overriden_lines": 0
+    }
+  }
+}
