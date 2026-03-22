@@ -48,8 +48,24 @@ Here are the available settings you can configure.
 | :--- | :--- | :--- |
 | **`DEFAULT_DATABASE`** | `falkordb` | The database engine to use (`neo4j`, `falkordb`, or `kuzudb`). |
 | **`ENABLE_AUTO_WATCH`** | `false` | If `true`, `pcg index` will automatically start watching for changes. |
-| **`PARALLEL_WORKERS`** | `4` | Number of parallel threads to use during indexing. |
+| **`PARALLEL_WORKERS`** | `4` | Legacy fallback for parse-worker count when `PCG_PARSE_WORKERS` is unset. |
 | **`CACHE_ENABLED`** | `true` | Caches file hashes to speed up re-indexing. |
+
+### Concurrency And Watch Controls
+
+These settings are the public knobs for the checkpointed Python indexing pipeline and repo-partitioned watch loop.
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| **`PCG_PARSE_WORKERS`** | `4` | Number of concurrent repository parse workers used by checkpointed indexing. |
+| **`PCG_INDEX_QUEUE_DEPTH`** | `8` | Maximum number of parsed repositories allowed to wait for commit/finalization. |
+| **`PCG_WATCH_DEBOUNCE_SECONDS`** | `2.0` | Debounce interval for batching file-system events before incremental updates run. |
+
+Notes:
+
+- `PCG_PARSE_WORKERS` is the primary worker control for modern multi-repo indexing.
+- `PARALLEL_WORKERS` is still honored as a backward-compatible fallback when `PCG_PARSE_WORKERS` is not set.
+- `pcg index` and `pcg watch` now print the effective worker/debounce values they are using so local runs match the documented configuration.
 
 ### Indexing Scope
 

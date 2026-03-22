@@ -138,3 +138,47 @@ def test_index_helper_forwards_runtime_batch_parameters(
         component="repository",
     )
     db_manager.close_driver.assert_called_once()
+
+
+def test_index_helper_reports_effective_worker_configuration(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """CLI indexing should surface effective worker settings to the user."""
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    prints: list[str] = []
+
+    db_manager = SimpleNamespace(close_driver=MagicMock())
+    graph_builder = MagicMock()
+    code_finder = SimpleNamespace(list_indexed_repositories=lambda: [])
+    api = SimpleNamespace(
+        console=SimpleNamespace(print=prints.append),
+        _initialize_services=lambda: (db_manager, graph_builder, code_finder),
+        _run_index_with_progress=AsyncMock(),
+        watch_helper=MagicMock(),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing._api",
+        lambda: api,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.config_manager.get_config_value",
+        lambda key: {
+            "PCG_PARSE_WORKERS": None,
+            "PCG_INDEX_QUEUE_DEPTH": None,
+            "PARALLEL_WORKERS": "6",
+            "ENABLE_AUTO_WATCH": "false",
+        }.get(key),
+    )
+
+    index_helper(str(workspace))
+
+    assert any(
+        "Indexing config:" in message
+        and "parse workers=6" in message
+        and "queue depth=12" in message
+        and "legacy PARALLEL_WORKERS fallback" in message
+        for message in prints
+    )

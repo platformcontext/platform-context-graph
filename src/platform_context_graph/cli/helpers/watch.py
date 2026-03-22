@@ -72,6 +72,18 @@ def watch_helper(
         f"[bold cyan]🔍 Watching {path_obj} for changes...[/bold cyan] "
         f"[dim]({plan.scope}, {len(plan.repository_paths)} repos)[/dim]"
     )
+    try:
+        from platform_context_graph.cli.config_manager import get_watch_runtime_config
+
+        runtime_config = get_watch_runtime_config()
+        api.console.print(
+            "[dim]Watch config: "
+            f"debounce={runtime_config['debounce_seconds']:.1f}s[/dim]"
+        )
+    except Exception as exc:
+        api.console.print(
+            "[yellow]Warning: Could not load watch runtime config: " f"{exc}[/yellow]"
+        )
     indexed_repos = code_finder.list_indexed_repositories()
     indexed_paths = {
         Path(repo.get("local_path") or repo["path"]).resolve()

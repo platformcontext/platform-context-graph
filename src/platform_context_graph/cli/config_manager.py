@@ -82,7 +82,7 @@ CONFIG_DESCRIPTIONS = {
     "ENABLE_AUTO_WATCH": "Automatically watch directory after indexing",
     "COMPLEXITY_THRESHOLD": "Cyclomatic complexity warning threshold",
     "MAX_DEPTH": "Maximum directory depth for indexing (unlimited or number)",
-    "PARALLEL_WORKERS": "Number of parallel indexing workers",
+    "PARALLEL_WORKERS": "Legacy fallback for parse workers when PCG_PARSE_WORKERS is unset",
     "PCG_PARSE_WORKERS": "Number of concurrent repository parse workers for checkpointed indexing",
     "PCG_INDEX_QUEUE_DEPTH": "Maximum queued parsed repositories waiting to commit",
     "PCG_WATCH_DEBOUNCE_SECONDS": "Debounce interval in seconds for watcher update batches",
@@ -362,6 +362,82 @@ def get_config_value(key: str) -> Optional[str]:
     """Get a specific configuration value."""
     config = load_config()
     return config.get(key)
+
+
+def _bounded_int_value(
+    value: str | None,
+    default: int,
+    *,
+    minimum: int,
+    maximum: int,
+) -> int:
+    """Parse a bounded integer configuration value with a safe fallback."""
+
+    if value is None or not str(value).strip():
+        return default
+    try:
+        return max(minimum, min(int(value), maximum))
+    except ValueError:
+        return default
+
+
+def _bounded_float_value(
+    value: str | None,
+    default: float,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
+    """Parse a bounded float configuration value with a safe fallback."""
+
+    if value is None or not str(value).strip():
+        return default
+    try:
+        return max(minimum, min(float(value), maximum))
+    except ValueError:
+        return default
+
+
+def get_index_runtime_config() -> Dict[str, Any]:
+    """Return the effective public indexing worker configuration."""
+
+    parse_workers_raw = get_config_value("PCG_PARSE_WORKERS")
+    legacy_workers_raw = get_config_value("PARALLEL_WORKERS")
+    parse_workers_source = (
+        "PCG_PARSE_WORKERS"
+        if parse_workers_raw is not None and str(parse_workers_raw).strip()
+        else "PARALLEL_WORKERS"
+    )
+    parse_workers = _bounded_int_value(
+        parse_workers_raw or legacy_workers_raw,
+        int(DEFAULT_CONFIG["PCG_PARSE_WORKERS"]),
+        minimum=1,
+        maximum=128,
+    )
+    queue_depth = _bounded_int_value(
+        get_config_value("PCG_INDEX_QUEUE_DEPTH"),
+        max(2, parse_workers * 2),
+        minimum=1,
+        maximum=128,
+    )
+    return {
+        "parse_workers": parse_workers,
+        "queue_depth": queue_depth,
+        "parse_workers_source": parse_workers_source,
+    }
+
+
+def get_watch_runtime_config() -> Dict[str, Any]:
+    """Return the effective public watch runtime configuration."""
+
+    return {
+        "debounce_seconds": _bounded_float_value(
+            get_config_value("PCG_WATCH_DEBOUNCE_SECONDS"),
+            float(DEFAULT_CONFIG["PCG_WATCH_DEBOUNCE_SECONDS"]),
+            minimum=0.0,
+            maximum=60.0,
+        )
+    }
 
 
 def set_config_value(key: str, value: str) -> bool:

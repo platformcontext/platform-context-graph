@@ -245,20 +245,20 @@ Expected: PASS.
 - Test: `tests/unit/cli/test_indexing_helper.py`
 - Test: `tests/unit/cli/test_watch_helper.py`
 
-- [ ] **Step 1: Add failing config-surface assertions**
+- [x] **Step 1: Add failing config-surface assertions**
 Require:
   - parse workers, queue depth, and watch debounce settings are documented and discoverable
   - legacy `PARALLEL_WORKERS` behavior remains backward-compatible but clearly secondary
 
-- [ ] **Step 2: Run the red suite**
+- [x] **Step 2: Run the red suite**
 Run:
   - `PYTHONPATH=src uv run pytest -q tests/unit/cli/test_indexing_helper.py tests/unit/cli/test_watch_helper.py`
 Expected: FAIL where config/help output still treats worker settings as opaque.
 
-- [ ] **Step 3: Implement config and docs cleanup**
+- [x] **Step 3: Implement config and docs cleanup**
 Keep the environment model explicit and aligned with the commands that consume it.
 
-- [ ] **Step 4: Re-run the focused suite**
+- [x] **Step 4: Re-run the focused suite**
 Run:
   - `PYTHONPATH=src uv run pytest -q tests/unit/cli/test_indexing_helper.py tests/unit/cli/test_watch_helper.py`
 Expected: PASS.
