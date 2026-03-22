@@ -74,3 +74,44 @@ def test_pre_scan_kotlin_keeps_public_import_surface(temp_test_dir) -> None:
     imports_map = pre_scan_kotlin([source_file], wrapper)
 
     assert imports_map["Greeter"] == [str(source_file)]
+
+
+def test_parse_kotlin_extended_surface(
+    kotlin_parser: KotlinTreeSitterParser, temp_test_dir
+) -> None:
+    """Parse Kotlin objects, companion objects, variables, and calls."""
+    source = """
+package demo
+
+class Greeter private constructor(private val prefix: String) {
+    companion object {
+        fun create(): Greeter = Greeter("hello")
+    }
+
+    constructor() : this("hello")
+
+    fun greet(name: String): String {
+        val message = "$prefix $name"
+        println(message)
+        return message
+    }
+}
+
+object Metrics {
+    fun track(value: String) {
+        println(value)
+    }
+}
+"""
+    source_file = temp_test_dir / "extended.kt"
+    source_file.write_text(source, encoding="utf-8")
+
+    result = kotlin_parser.parse(source_file)
+
+    assert any(item["name"] == "Greeter" for item in result["classes"])
+    assert any(item["name"] == "Metrics" for item in result["classes"])
+    assert any(item["name"] == "create" for item in result["functions"])
+    assert any(item["name"] == "greet" for item in result["functions"])
+    assert any(item["name"] == "message" for item in result["variables"])
+    assert any(item["name"] == "println" for item in result["function_calls"])
+    assert any(item.get("class_context") == "Greeter" for item in result["functions"])

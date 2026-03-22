@@ -1,22 +1,26 @@
 # Terraform Parser
 
-## Parser: `HCLTerraformParser` in `src/platform_context_graph/tools/languages/hcl_terraform.py`
+This file is auto-generated. Do not edit manually.
+Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/terraform.yaml`
 
-## Extracted Features
-| Feature | Dict Key | Graph Node | Status |
-|---------|----------|------------|--------|
-| Resource blocks | `terraform_resources` | TerraformResource | Supported |
-| Variable blocks | `terraform_variables` | TerraformVariable | Supported |
-| Output blocks | `terraform_outputs` | TerraformOutput | Supported |
-| Module blocks | `terraform_modules` | TerraformModule | Supported |
-| Data source blocks | `terraform_data_sources` | TerraformDataSource | Supported |
-| `terraform {}` block metadata | parsed inline | - | Supported |
+## Parser Contract
+- Language: `terraform`
+- Family: `iac`
+- Parser: `HCLTerraformParser`
+- Entrypoint: `src/platform_context_graph/tools/languages/hcl_terraform.py`
+- Fixture repo: `tests/fixtures/ecosystems/terraform_comprehensive/`
+- Unit test suite: `tests/unit/parsers/test_hcl_terraform_parser.py`
+- Integration test suite: `tests/integration/test_iac_graph.py::TestTerraformGraph`
 
-## Fixture Repo
-`tests/fixtures/ecosystems/terraform_comprehensive/`
-
-## Integration Test Class
-`tests/integration/test_iac_graph.py::TestTerraformGraph`
+## Capability Checklist
+| Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
+|-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
+| Resource blocks | `resource-blocks` | supported | `terraform_resources` | `name, line_number, resources` | `node:TerraformResource` | `tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terraform_resources` | `tests/integration/test_iac_graph.py::TestTerraformGraph::test_terraform_resources_created` | - |
+| Variable blocks | `variable-blocks` | supported | `variables` | `name, line_number` | `node:TerraformVariable` | `tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terraform_variables` | `tests/integration/test_iac_graph.py::TestTerraformGraph::test_terraform_variables_created` | - |
+| Output blocks | `output-blocks` | supported | `terraform_outputs` | `name, line_number` | `node:TerraformOutput` | `tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terraform_outputs` | `tests/integration/test_iac_graph.py::TestTerraformGraph::test_terraform_outputs_created` | - |
+| Module blocks | `module-blocks` | supported | `modules` | `name, line_number` | `node:TerraformModule` | `tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terraform_modules` | `tests/integration/test_iac_graph.py::TestTerraformGraph::test_terraform_modules_with_source` | - |
+| Data source blocks | `data-source-blocks` | supported | `terraform_data_sources` | `name, line_number` | `node:TerraformDataSource` | `tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terraform_data_sources` | `tests/integration/test_iac_graph.py::TestTerraformGraph::test_terraform_data_sources` | - |
+| `terraform {}` block metadata | `terraform-block-metadata` | supported | `terraform-block-metadata` | `name, line_number` | `node:terraform-block-metadata` | `tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_resource_with_nested_blocks` | `tests/integration/test_iac_graph.py::TestTerraformGraph::test_terraform_resources_created` | - |
 
 ## Known Limitations
 - `count` and `for_each` meta-arguments are not expanded to model multiple resource instances

@@ -34,6 +34,10 @@ _LANGUAGE_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
     "elixir": (".languages.elixir", "ElixirTreeSitterParser"),
 }
 
+_EXTENSION_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
+    ".tsx": (".languages.typescriptjsx", "TypescriptJSXTreeSitterParser"),
+}
+
 _TREE_SITTER_PARSER_EXTENSIONS: tuple[tuple[str, str], ...] = (
     (".py", "python"),
     (".ipynb", "python"),
@@ -129,7 +133,16 @@ def _add_tree_sitter_parser(
     """Add one Tree-sitter parser to the registry when its grammar is available."""
 
     try:
-        parsers[extension] = TreeSitterParser(language_name)
+        parser = TreeSitterParser(language_name)
+        parser_spec = _EXTENSION_SPECIFIC_PARSERS.get(extension)
+        if (
+            parser_spec is not None
+            and hasattr(parser, "language")
+            and hasattr(parser, "parser")
+        ):
+            parser_cls = _load_attribute(*parser_spec)
+            parser.language_specific_parser = parser_cls(parser)
+        parsers[extension] = parser
     except ValueError as exc:
         logger.warning(
             "Skipping parser for extension %s because language %s is unavailable: %s",

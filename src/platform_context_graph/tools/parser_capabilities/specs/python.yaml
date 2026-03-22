@@ -1,0 +1,132 @@
+language: python
+title: Python Parser
+family: language
+parser: PythonTreeSitterParser
+parser_entrypoint: src/platform_context_graph/tools/languages/python.py
+doc_path: docs/docs/languages/python.md
+fixture_repo: tests/fixtures/ecosystems/python_comprehensive/
+unit_test_file: tests/unit/parsers/test_python_parser.py
+integration_test_suite: tests/integration/test_language_graph.py::TestPythonGraph
+capabilities:
+- id: functions
+  name: Functions
+  status: supported
+  extracted_bucket: functions
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Function
+  unit_test: tests/unit/parsers/test_python_parser.py::TestPythonParser::test_parse_simple_function
+  integration_test: tests/integration/test_language_graph.py::TestPythonGraph::test_entity_surface
+- id: classes
+  name: Classes
+  status: supported
+  extracted_bucket: classes
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Class
+  unit_test: tests/unit/parsers/test_python_parser.py::TestPythonParser::test_parse_class_with_method
+  integration_test: tests/integration/test_language_graph.py::TestPythonGraph::test_entity_surface
+- id: imports
+  name: Imports
+  status: supported
+  extracted_bucket: imports
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: IMPORTS
+  unit_test: tests/unit/parsers/test_python_parser.py::TestPythonParser::test_parse_imports_calls_and_inheritance
+  integration_test: tests/integration/test_language_graph.py::TestPythonGraph::test_import_edges_created
+- id: function-calls
+  name: Function calls
+  status: supported
+  extracted_bucket: function_calls
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: CALLS
+  unit_test: tests/unit/parsers/test_python_parser.py::TestPythonParser::test_parse_imports_calls_and_inheritance
+  integration_test: tests/integration/test_language_graph.py::TestPythonGraph::test_function_call_edges_created
+- id: variables
+  name: Variables
+  status: supported
+  extracted_bucket: variables
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Variable
+  unit_test: tests/unit/parsers/test_python_parser.py::TestPythonParser::test_parse_variables_and_omits_decorator_metadata
+  integration_test: tests/integration/test_language_graph.py::TestPythonGraph::test_variable_nodes_created
+- id: decorators
+  name: Decorators
+  status: unsupported
+  extracted_bucket: functions
+  required_fields:
+  - name
+  - line_number
+  - decorators
+  graph_surface:
+    kind: none
+    target: not_persisted
+  unit_test: tests/unit/parsers/test_python_parser.py::TestPythonParser::test_parse_variables_and_omits_decorator_metadata
+  integration_test: tests/integration/test_language_graph.py::TestPythonGraph::test_decorator_metadata_not_persisted
+  rationale: Decorator syntax is not emitted in the current parse result, so there is
+    no decorator metadata to persist or query.
+- id: async-functions
+  name: Async functions
+  status: unsupported
+  extracted_bucket: functions
+  required_fields:
+  - name
+  - line_number
+  - async
+  graph_surface:
+    kind: none
+    target: not_persisted
+  unit_test: tests/unit/parsers/test_python_parser.py::TestPythonParser::test_parse_async_functions_do_not_emit_async_flag
+  integration_test: tests/integration/test_language_graph.py::TestPythonGraph::test_async_flag_not_persisted
+  rationale: Async function definitions are parsed as ordinary function nodes without
+    a dedicated async flag.
+- id: inheritance
+  name: Inheritance
+  status: supported
+  extracted_bucket: classes
+  required_fields:
+  - name
+  - line_number
+  - bases
+  graph_surface:
+    kind: relationship
+    target: INHERITS
+  unit_test: tests/unit/parsers/test_python_parser.py::TestPythonParser::test_parse_imports_calls_and_inheritance
+  integration_test: tests/integration/test_language_graph.py::TestPythonGraph::test_inheritance_edges
+- id: type-annotations
+  name: Type annotations
+  status: unsupported
+  extracted_bucket: type_annotations
+  required_fields:
+  - name
+  - line_number
+  - type
+  graph_surface:
+    kind: none
+    target: not_persisted
+  unit_test: tests/unit/parsers/test_python_parser.py::TestPythonParser::test_parse_does_not_emit_type_annotation_bucket
+  integration_test: tests/integration/test_language_graph.py::TestPythonGraph::test_type_annotation_nodes_not_created
+  rationale: The parser does not emit a dedicated `type_annotations` bucket, so annotation
+    metadata is neither extracted nor persisted as a first-class graph surface.
+known_limitations:
+- Lambda functions detected as unnamed functions
+- Comprehension-internal functions not always tracked
+- Metaclass relationships not captured

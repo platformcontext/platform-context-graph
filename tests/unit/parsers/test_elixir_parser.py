@@ -91,6 +91,41 @@ end
     assert my_macro["type"] == "defmacro"
 
 
+def test_parse_elixir_guards_and_delegates(elixir_parser, temp_test_dir):
+    code = """
+defmodule MyApp.Advanced do
+  defguard is_even(value) when rem(value, 2) == 0
+  defdelegate size(values), to: Enum
+end
+"""
+    f = temp_test_dir / "advanced.ex"
+    f.write_text(code)
+
+    result = elixir_parser.parse(f)
+
+    functions = result["functions"]
+    size = next(fn for fn in functions if fn["name"] == "size")
+    assert size["type"] == "defdelegate"
+
+    assert all(fn["name"] != "is_even" for fn in functions)
+    assert any(call["name"] == "is_even" for call in result["function_calls"])
+
+
+def test_parse_elixir_module_attributes_not_extracted(elixir_parser, temp_test_dir):
+    code = """
+defmodule MyApp.Config do
+  @version "1.0.0"
+  def version, do: @version
+end
+"""
+    f = temp_test_dir / "attrs.ex"
+    f.write_text(code)
+
+    result = elixir_parser.parse(f)
+
+    assert result["variables"] == []
+
+
 def test_parse_elixir_imports(elixir_parser, temp_test_dir):
     code = """
 defmodule MyApp.Worker do

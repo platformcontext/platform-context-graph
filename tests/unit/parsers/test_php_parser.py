@@ -21,7 +21,7 @@ def php_parser():
 
 
 def test_parse_functions(php_parser, temp_test_dir):
-    code = '''<?php
+    code = """<?php
 function greet(string $name): string {
     return "Hello, {$name}!";
 }
@@ -29,7 +29,7 @@ function greet(string $name): string {
 function add(int $a, int $b): int {
     return $a + $b;
 }
-'''
+"""
     f = temp_test_dir / "funcs.php"
     f.write_text(code)
     result = php_parser.parse(f)
@@ -42,7 +42,7 @@ function add(int $a, int $b): int {
 
 
 def test_parse_classes(php_parser, temp_test_dir):
-    code = '''<?php
+    code = """<?php
 class Person {
     private string $name;
 
@@ -58,7 +58,7 @@ class Person {
 abstract class Shape {
     abstract public function area(): float;
 }
-'''
+"""
     f = temp_test_dir / "classes.php"
     f.write_text(code)
     result = php_parser.parse(f)
@@ -71,7 +71,7 @@ abstract class Shape {
 
 
 def test_parse_interfaces(php_parser, temp_test_dir):
-    code = '''<?php
+    code = """<?php
 interface Identifiable {
     public function getId(): string;
 }
@@ -80,7 +80,7 @@ interface Repository {
     public function findById(string $id): ?object;
     public function findAll(): array;
 }
-'''
+"""
     f = temp_test_dir / "interfaces.php"
     f.write_text(code)
     result = php_parser.parse(f)
@@ -92,7 +92,7 @@ interface Repository {
 
 
 def test_parse_traits(php_parser, temp_test_dir):
-    code = '''<?php
+    code = """<?php
 trait Loggable {
     public function log(string $message): void {
         echo "[LOG] {$message}\\n";
@@ -104,7 +104,7 @@ trait Serializable {
         return json_encode(get_object_vars($this));
     }
 }
-'''
+"""
     f = temp_test_dir / "traits.php"
     f.write_text(code)
     result = php_parser.parse(f)
@@ -116,11 +116,11 @@ trait Serializable {
 
 
 def test_parse_imports(php_parser, temp_test_dir):
-    code = '''<?php
+    code = """<?php
 use App\\Models\\User;
 use App\\Services\\{AuthService, MailService};
 use Illuminate\\Support\\Facades\\DB;
-'''
+"""
     f = temp_test_dir / "imports.php"
     f.write_text(code)
     result = php_parser.parse(f)
@@ -130,13 +130,13 @@ use Illuminate\\Support\\Facades\\DB;
 
 
 def test_parse_function_calls(php_parser, temp_test_dir):
-    code = '''<?php
+    code = """<?php
 function demo() {
     echo "hello";
     strlen("test");
     array_map(fn($x) => $x * 2, [1, 2, 3]);
 }
-'''
+"""
     f = temp_test_dir / "calls.php"
     f.write_text(code)
     result = php_parser.parse(f)
@@ -146,7 +146,7 @@ function demo() {
 
 
 def test_parse_inheritance(php_parser, temp_test_dir):
-    code = '''<?php
+    code = """<?php
 class Animal {
     public function speak(): string { return "..."; }
 }
@@ -154,7 +154,7 @@ class Animal {
 class Dog extends Animal {
     public function speak(): string { return "Woof!"; }
 }
-'''
+"""
     f = temp_test_dir / "inheritance.php"
     f.write_text(code)
     result = php_parser.parse(f)
@@ -165,8 +165,49 @@ class Dog extends Animal {
     assert "Dog" in names
 
 
+def test_parse_variables(php_parser, temp_test_dir):
+    code = """<?php
+function buildMessage(string $name): string {
+    $prefix = "Hello";
+    return $prefix . $name;
+}
+"""
+    f = temp_test_dir / "variables.php"
+    f.write_text(code)
+    result = php_parser.parse(f)
+
+    variables = result.get("variables", [])
+    assert any(item["name"] == "$prefix" for item in variables)
+
+
+def test_parse_member_static_and_constructor_calls(php_parser, temp_test_dir):
+    code = """<?php
+class Logger {
+    public static function warn(string $message): void {}
+}
+
+class Service {
+    public function info(string $message): void {}
+}
+
+function run(): void {
+    $service = new Service();
+    $service->info("hello");
+    Logger::warn("warn");
+}
+"""
+    f = temp_test_dir / "call_kinds.php"
+    f.write_text(code)
+    result = php_parser.parse(f)
+
+    calls = result.get("function_calls", [])
+    assert any(item["name"] == "Service" for item in calls)
+    assert any(item["name"] == "info" for item in calls)
+    assert any(item["name"] == "warn" for item in calls)
+
+
 def test_result_structure(php_parser, temp_test_dir):
-    code = '<?php\nfunction placeholder() {}\n'
+    code = "<?php\nfunction placeholder() {}\n"
     f = temp_test_dir / "minimal.php"
     f.write_text(code)
     result = php_parser.parse(f)

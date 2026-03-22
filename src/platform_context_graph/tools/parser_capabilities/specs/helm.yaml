@@ -1,0 +1,78 @@
+language: helm
+title: Helm Parser
+family: iac
+parser: InfraYAMLParser
+parser_entrypoint: src/platform_context_graph/tools/languages/yaml_infra.py
+doc_path: docs/docs/languages/helm.md
+fixture_repo: tests/fixtures/ecosystems/helm_comprehensive/
+unit_test_file: tests/unit/parsers/test_yaml_infra_parser.py
+integration_test_suite: tests/integration/test_iac_graph.py::TestHelmGraph
+capabilities:
+- id: helm-charts-chart-yaml
+  name: Helm charts (`Chart.yaml`)
+  status: supported
+  extracted_bucket: helm_charts
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: HelmChart
+  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_helm_chart
+  integration_test: tests/integration/test_iac_graph.py::TestHelmGraph::test_helm_chart_indexed
+- id: chart-name-version-app-version
+  name: Chart name, version, app version
+  status: supported
+  extracted_bucket: properties
+  required_fields:
+  - name
+  - line_number
+  - version
+  - app_version
+  graph_surface:
+    kind: property
+    target: HelmChart.properties
+  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_argocd_application
+  integration_test: tests/integration/test_iac_graph.py::TestHelmGraph::test_helm_chart_has_properties
+- id: chart-dependencies
+  name: Chart dependencies
+  status: supported
+  extracted_bucket: helm_charts
+  required_fields:
+  - name
+  - line_number
+  - dependencies
+  graph_surface:
+    kind: property
+    target: HelmChart.list
+  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_helm_chart
+  integration_test: tests/integration/test_iac_graph.py::TestHelmGraph::test_helm_chart_indexed
+- id: values-files-values-yaml
+  name: Values files (`values*.yaml`)
+  status: supported
+  extracted_bucket: helm_values
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: HelmValues
+  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_helm_values
+  integration_test: tests/integration/test_iac_graph.py::TestHelmGraph::test_helm_values_indexed
+- id: values-top-level-keys
+  name: Values top-level keys
+  status: supported
+  extracted_bucket: helm_values
+  required_fields:
+  - name
+  - line_number
+  - key_count
+  graph_surface:
+    kind: property
+    target: HelmValues.key_count
+  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_helm_values
+  integration_test: tests/integration/test_iac_graph.py::TestHelmGraph::test_helm_values_indexed
+known_limitations:
+- Helm template files (`.yaml` in `templates/`) are not parsed for resource definitions
+- Values references inside templates (`{{ .Values.key }}`) are not statically resolved
+- Helm hooks and weights are not extracted as structured metadata

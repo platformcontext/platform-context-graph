@@ -78,3 +78,53 @@ end
     assert imports_map["MyApp"] == [str(source_file.resolve())]
     assert imports_map["Worker"] == [str(source_file.resolve())]
     assert imports_map["perform"] == [str(source_file.resolve())]
+
+
+def test_parse_ruby_runtime_surface(
+    ruby_parser: RubyTreeSitterParser, temp_test_dir
+) -> None:
+    """Parse Ruby variables, calls, module includes, and class context."""
+    source_file = temp_test_dir / "runtime_surface.rb"
+    source_file.write_text(
+        """module Shared
+end
+
+class Worker
+  include Shared
+
+  def perform(task)
+    retries = 1
+    @last_task = task
+    task.call
+  end
+end
+""",
+        encoding="utf-8",
+    )
+
+    result = ruby_parser.parse(source_file)
+
+    assert any(item["name"] == "Worker" for item in result["classes"])
+    assert any(item["name"] == "Shared" for item in result["modules"])
+    assert any(item["name"] == "perform" for item in result["functions"])
+    assert any(item["name"] == "retries" for item in result["variables"])
+    assert any(item["name"] == "@last_task" for item in result["variables"])
+    assert any(item["name"] == "call" for item in result["function_calls"])
+    assert any(item["module"] == "Shared" for item in result["module_inclusions"])
+    assert any(item.get("class_context") == "Worker" for item in result["functions"])
+
+
+def test_parse_ruby_require_relative_stays_out_of_imports(
+    ruby_parser: RubyTreeSitterParser, temp_test_dir
+) -> None:
+    """Ruby require-style calls are not emitted through the imports bucket."""
+    source_file = temp_test_dir / "requires.rb"
+    source_file.write_text(
+        "require_relative 'basic'\n",
+        encoding="utf-8",
+    )
+
+    result = ruby_parser.parse(source_file)
+
+    assert result["imports"] == []
+    assert any(item["name"] == "require_relative" for item in result["function_calls"])

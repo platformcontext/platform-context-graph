@@ -236,6 +236,18 @@ def test_parse_access_modifiers(ts_parser, temp_test_dir):
     assert any(c["name"] == "Service" for c in classes)
 
 
+def test_parse_decorators_do_not_emit_metadata(ts_parser, temp_test_dir):
+    code = """@sealed
+class Demo {}
+"""
+    f = temp_test_dir / "decorators.ts"
+    f.write_text(code)
+    result = ts_parser.parse(f)
+
+    demo = next(item for item in result["classes"] if item["name"] == "Demo")
+    assert demo["decorators"] == []
+
+
 def test_result_structure(ts_parser, temp_test_dir):
     code = 'const x = 1;\n'
     f = temp_test_dir / "minimal.ts"

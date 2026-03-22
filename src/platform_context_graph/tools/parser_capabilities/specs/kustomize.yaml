@@ -1,0 +1,79 @@
+language: kustomize
+title: Kustomize Parser
+family: iac
+parser: InfraYAMLParser
+parser_entrypoint: src/platform_context_graph/tools/languages/yaml_infra.py
+doc_path: docs/docs/languages/kustomize.md
+fixture_repo: tests/fixtures/ecosystems/kustomize_comprehensive/
+unit_test_file: tests/unit/parsers/test_yaml_infra_parser.py
+integration_test_suite: tests/integration/test_iac_graph.py::TestKustomizeGraph
+capabilities:
+- id: kustomization-overlays-kustomization-yaml
+  name: Kustomization overlays (`kustomization.yaml`)
+  status: supported
+  extracted_bucket: kustomize_overlays
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: KustomizeOverlay
+  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_kustomization
+  integration_test: tests/integration/test_iac_graph.py::TestKustomizeGraph::test_kustomize_overlays_indexed
+- id: namespace
+  name: Namespace
+  status: supported
+  extracted_bucket: variables
+  required_fields:
+  - name
+  - line_number
+  - namespace
+  graph_surface:
+    kind: property
+    target: Overlay.property
+  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_helm_values
+  integration_test: tests/integration/test_iac_graph.py::TestKustomizeGraph::test_kustomize_overlays_indexed
+- id: resources-list
+  name: Resources list
+  status: supported
+  extracted_bucket: k8s_resources
+  required_fields:
+  - name
+  - line_number
+  - resources
+  graph_surface:
+    kind: property
+    target: Overlay.resources
+  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_no_k8s_standalone_resources_without_api_version
+  integration_test: tests/integration/test_iac_graph.py::TestKustomizeGraph::test_kustomize_k8s_resources
+- id: patches-list
+  name: Patches list
+  status: supported
+  extracted_bucket: kustomize_overlays
+  required_fields:
+  - name
+  - line_number
+  - patches
+  graph_surface:
+    kind: property
+    target: Overlay.patches
+  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_no_k8s_standalone_resources_without_api_version
+  integration_test: tests/integration/test_iac_graph.py::TestKustomizeGraph::test_kustomize_overlays_indexed
+- id: base-references
+  name: Base references
+  status: supported
+  extracted_bucket: kustomize_overlays
+  required_fields:
+  - name
+  - line_number
+  - bases
+  graph_surface:
+    kind: property
+    target: Overlay.bases
+  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_no_k8s_standalone_resources_without_api_version
+  integration_test: tests/integration/test_iac_graph.py::TestKustomizeGraph::test_kustomize_overlays_indexed
+known_limitations:
+- Strategic merge patches are not parsed for the target resource they modify
+- '`components` and `configurations` sections are not extracted'
+- Inline patch bodies within `kustomization.yaml` are not traversed for field-level
+  details

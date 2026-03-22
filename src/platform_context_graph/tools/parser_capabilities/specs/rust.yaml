@@ -1,0 +1,124 @@
+language: rust
+title: Rust Parser
+family: language
+parser: RustTreeSitterParser
+parser_entrypoint: src/platform_context_graph/tools/languages/rust.py
+doc_path: docs/docs/languages/rust.md
+fixture_repo: tests/fixtures/ecosystems/rust_comprehensive/
+unit_test_file: tests/unit/parsers/test_rust_parser.py
+integration_test_suite: tests/integration/test_language_graph.py::TestRustGraph
+capabilities:
+- id: functions
+  name: Functions
+  status: supported
+  extracted_bucket: functions
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Function
+  unit_test: tests/unit/parsers/test_rust_parser.py::test_parse_functions
+  integration_test: tests/integration/test_language_graph.py::TestRustGraph::test_runtime_surface
+- id: structs
+  name: Structs
+  status: supported
+  extracted_bucket: classes
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Class
+  unit_test: tests/unit/parsers/test_rust_parser.py::test_parse_structs
+  integration_test: tests/integration/test_language_graph.py::TestRustGraph::test_runtime_surface
+- id: enums
+  name: Enums
+  status: supported
+  extracted_bucket: classes
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Class
+  unit_test: tests/unit/parsers/test_rust_parser.py::test_parse_enums
+  integration_test: tests/integration/test_language_graph.py::TestRustGraph::test_runtime_surface
+- id: traits
+  name: Traits
+  status: supported
+  extracted_bucket: traits
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Trait
+  unit_test: tests/unit/parsers/test_rust_parser.py::test_parse_traits
+  integration_test: tests/integration/test_language_graph.py::TestRustGraph::test_trait_nodes_created
+- id: imports
+  name: Imports
+  status: supported
+  extracted_bucket: imports
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: IMPORTS
+  unit_test: tests/unit/parsers/test_rust_parser.py::test_parse_imports
+  integration_test: tests/integration/test_language_graph.py::TestRustGraph::test_runtime_surface
+- id: function-calls
+  name: Function calls
+  status: supported
+  extracted_bucket: function_calls
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: CALLS
+  unit_test: tests/unit/parsers/test_rust_parser.py::test_parse_function_calls
+  integration_test: tests/integration/test_language_graph.py::TestRustGraph::test_runtime_surface
+- id: method-calls-field-expressions
+  name: Method calls (field expressions)
+  status: supported
+  extracted_bucket: function_calls
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: CALLS
+  unit_test: tests/unit/parsers/test_rust_parser.py::test_parse_function_calls
+  integration_test: tests/integration/test_language_graph.py::TestRustGraph::test_runtime_surface
+- id: scoped-calls-path-fn
+  name: Scoped calls (path::fn)
+  status: supported
+  extracted_bucket: function_calls
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: CALLS
+  unit_test: tests/unit/parsers/test_rust_parser.py::test_parse_function_calls
+  integration_test: tests/integration/test_language_graph.py::TestRustGraph::test_runtime_surface
+- id: impl-blocks
+  name: Impl blocks
+  status: partial
+  extracted_bucket: impl_context
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: property
+    target: Function.context
+  unit_test: tests/unit/parsers/test_rust_parser.py::test_parse_impl_block
+  integration_test: tests/integration/test_language_graph.py::TestRustGraph::test_function_nodes_created
+  rationale: Impl ownership is attached as function context, but impl blocks are not
+    persisted as dedicated graph nodes or explicit implementation edges.
+known_limitations:
+- '`impl Trait for Type` implementations are not tracked as distinct graph edges'
+- Lifetime annotations are not captured
+- Macro-generated code is not traversed

@@ -1,51 +1,40 @@
 # Parser Feature Matrix
 
+This file is auto-generated. Do not edit manually.
+
 ## Language Parsers
 
-| Language | Parser | Functions | Classes | Interfaces | Traits | Imports | Calls | Variables | Structs | Enums | Macros | Unit Tests | Integration Tests | Fixture |
-|----------|--------|-----------|---------|------------|--------|---------|-------|-----------|---------|-------|--------|------------|-------------------|---------|
-| Python | PythonTreeSitterParser | Y | Y | - | - | Y | Y | Y | - | - | - | Y | Y | Y |
-| Go | GoTreeSitterParser | Y | Y | Y | - | Y | Y | Y | - | - | - | Y | Y | Y |
-| TypeScript | TypescriptTreeSitterParser | Y | Y | Y | - | Y | Y | Y | - | Y | - | Y | Y | Y |
-| Rust | RustTreeSitterParser | Y | Y | - | Y | Y | Y | - | - | - | - | Y | Y | Y |
-| Java | JavaTreeSitterParser | Y | Y | Y | - | Y | Y | Y | - | Y | - | Y | Y | Y |
-| C++ | CppTreeSitterParser | Y | Y | - | - | Y | Y | Y | Y | Y | Y | Y | Y | Y |
-| C# | CSharpTreeSitterParser | Y | Y | Y | - | Y | Y | - | Y | Y | - | Y | Y | Y |
-| C | CTreeSitterParser | Y | - | - | - | Y | Y | Y | Y | Y | Y | Y | Y | Y |
-| Scala | ScalaTreeSitterParser | Y | Y | - | Y | Y | Y | Y | - | - | - | Y | Y | Y |
-| JavaScript | JavascriptTreeSitterParser | Y | Y | - | - | Y | Y | Y | - | - | - | Y | Y | Y |
-| Ruby | RubyTreeSitterParser | Y | Y | - | - | Y | Y | Y | - | - | - | Y | Y | Y |
-| Kotlin | KotlinTreeSitterParser | Y | Y | - | - | Y | Y | Y | - | - | - | Y | Y | Y |
-| Swift | SwiftTreeSitterParser | Y | Y | - | - | Y | Y | Y | Y | Y | - | Y | Y | Y |
-| PHP | PhpTreeSitterParser | Y | Y | Y | Y | Y | Y | Y | - | - | - | Y | Y | Y |
-| Perl | PerlTreeSitterParser | Y | Y | - | - | Y | Y | Y | - | - | - | Y | Y | Y |
-| Elixir | ElixirTreeSitterParser | Y | Y | - | - | Y | Y | - | - | - | - | Y | Y | Y |
-| Haskell | HaskellTreeSitterParser | Y | Y | - | - | Y | Y | Y | - | - | - | Y | Y | Y |
-| Dart | DartTreeSitterParser | Y | Y | - | - | Y | Y | Y | - | Y | - | Y | Y | Y |
-| TSX | TypescriptJSXTreeSitterParser | Y | Y | Y | - | Y | Y | Y | - | - | - | - | - | Y |
-
-**Legend:** Y = supported, - = not applicable or not extracted
+| Parser | Parser Class | Functions | Classes | Interfaces | Traits | Imports | Calls | Variables | Structs | Enums | Macros | Unit Coverage | Integration Coverage | Fixture |
+|--------|--------------|-----------|---------|------------|--------|---------|-------|-----------|---------|-------|--------|---------------|----------------------|---------|
+| C | `CTreeSitterParser` | Y | Y | - | - | Y | Y | Y | Y | Y | Y | 9/9 | 9/9 | `tests/fixtures/ecosystems/c_comprehensive/` |
+| C++ | `CppTreeSitterParser` | Y | Y | - | - | Y | Y | Y | Y | Y | Y | 12/12 | 12/12 | `tests/fixtures/ecosystems/cpp_comprehensive/` |
+| C# | `CSharpTreeSitterParser` | Y | Y | Y | - | Y | Y | - | Y | Y | - | 13/13 | 13/13 | `tests/fixtures/ecosystems/csharp_comprehensive/` |
+| Dart | `DartTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | Y | - | 11/11 | 11/11 | `tests/fixtures/ecosystems/dart_comprehensive/` |
+| Elixir | `ElixirTreeSitterParser` | Y | - | - | - | Y | Y | P | - | - | - | 7/7 | 7/7 | `tests/fixtures/ecosystems/elixir_comprehensive/` |
+| Go | `GoTreeSitterParser` | Y | Y | Y | - | Y | Y | Y | Y | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/go_comprehensive/` |
+| Haskell | `HaskellTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/haskell_comprehensive/` |
+| Java | `JavaTreeSitterParser` | Y | Y | Y | - | Y | Y | Y | - | Y | - | 11/11 | 11/11 | `tests/fixtures/ecosystems/java_comprehensive/` |
+| JavaScript | `JavascriptTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/javascript_comprehensive/` |
+| Kotlin | `KotlinTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/kotlin_comprehensive/` |
+| Perl | `PerlTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/perl_comprehensive/` |
+| PHP | `PhpTreeSitterParser` | Y | Y | Y | Y | Y | Y | Y | - | - | - | 10/10 | 10/10 | `tests/fixtures/ecosystems/php_comprehensive/` |
+| Python | `PythonTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 6/6 | 6/6 | `tests/fixtures/ecosystems/python_comprehensive/` |
+| Ruby | `RubyTreeSitterParser` | Y | Y | - | - | P | Y | Y | - | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/ruby_comprehensive/` |
+| Rust | `RustTreeSitterParser` | Y | Y | - | Y | Y | Y | - | Y | Y | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/rust_comprehensive/` |
+| Scala | `ScalaTreeSitterParser` | Y | Y | - | Y | Y | Y | Y | - | - | - | 10/10 | 10/10 | `tests/fixtures/ecosystems/scala_comprehensive/` |
+| Swift | `SwiftTreeSitterParser` | Y | Y | - | - | Y | Y | Y | Y | Y | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/swift_comprehensive/` |
+| TypeScript | `TypescriptTreeSitterParser` | Y | Y | Y | - | Y | Y | Y | - | Y | - | 7/7 | 7/7 | `tests/fixtures/ecosystems/typescript_comprehensive/` |
+| TypeScript JSX | `TypescriptJSXTreeSitterParser` | Y | Y | Y | - | Y | Y | Y | - | - | - | 6/6 | 6/6 | `tests/fixtures/ecosystems/tsx_comprehensive/` |
 
 ## IaC Parsers
 
-| Tool | Parser | Resources | Variables | Outputs | Modules | Unit Tests | Integration Tests | Fixture |
-|------|--------|-----------|-----------|---------|---------|------------|-------------------|---------|
-| Terraform | HCLTerraformParser | Y | Y | Y | Y | Y | Y | Y |
-| Terragrunt | HCLTerraformParser | Y (configs) | - | - | - | Y | Y | Y |
-| Helm | InfraYAMLParser | Charts + Values | - | - | - | Y | Y | Y |
-| Kustomize | InfraYAMLParser | Overlays | - | - | - | Y | Y | Y |
-| ArgoCD | InfraYAMLParser | Apps + AppSets | - | - | - | Y | Y | Y |
-| Crossplane | InfraYAMLParser | XRDs + Compositions + Claims | - | - | - | Y | Y | Y |
-| Kubernetes | InfraYAMLParser | K8s Resources | - | - | - | Y | Y | Y |
-| CloudFormation | InfraYAMLParser | CFN Resources | Parameters | Outputs | - | Y | Y | Y |
-
-## Test Counts
-
-| Category | Count |
-|----------|-------|
-| Unit tests (passed) | 203 |
-| Unit tests (xfail) | 0 |
-| Unit tests (total) | 203 |
-| Integration tests | 80 |
-| Fixture repos | 27 |
-| Spec docs | 28 |
+| Parser | Parser Class | Resources | Variables | Outputs | Modules | Unit Coverage | Integration Coverage | Fixture |
+|--------|--------------|-----------|-----------|---------|---------|---------------|----------------------|---------|
+| ArgoCD | `InfraYAMLParser` | Y | - | - | Y | 8/8 | 8/8 | `tests/fixtures/ecosystems/argocd_comprehensive/` |
+| CloudFormation | `InfraYAMLParser` | Y | Y | Y | - | 7/7 | 7/7 | `tests/fixtures/ecosystems/cloudformation_comprehensive/` |
+| Crossplane | `InfraYAMLParser` | Y | - | - | Y | 7/7 | 7/7 | `tests/fixtures/ecosystems/crossplane_comprehensive/` |
+| Helm | `InfraYAMLParser` | Y | - | - | Y | 5/5 | 5/5 | `tests/fixtures/ecosystems/helm_comprehensive/` |
+| Kubernetes | `InfraYAMLParser` | Y | - | - | - | 7/7 | 7/7 | `tests/fixtures/ecosystems/kubernetes_comprehensive/` |
+| Kustomize | `InfraYAMLParser` | Y | - | - | - | 5/5 | 5/5 | `tests/fixtures/ecosystems/kustomize_comprehensive/` |
+| Terraform | `HCLTerraformParser` | Y | - | Y | Y | 6/6 | 6/6 | `tests/fixtures/ecosystems/terraform_comprehensive/` |
+| Terragrunt | `HCLTerraformParser` | Y | - | - | - | 3/3 | 3/3 | `tests/fixtures/ecosystems/terragrunt_comprehensive/` |

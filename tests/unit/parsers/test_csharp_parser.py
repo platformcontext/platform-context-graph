@@ -21,7 +21,7 @@ def csharp_parser():
 
 
 def test_parse_class(csharp_parser, temp_test_dir):
-    code = '''namespace Test {
+    code = """namespace Test {
     public class Person {
         public string Name { get; }
         public int Age { get; }
@@ -36,7 +36,7 @@ def test_parse_class(csharp_parser, temp_test_dir):
         }
     }
 }
-'''
+"""
     f = temp_test_dir / "Person.cs"
     f.write_text(code)
     result = csharp_parser.parse(f)
@@ -47,7 +47,7 @@ def test_parse_class(csharp_parser, temp_test_dir):
 
 
 def test_parse_inheritance(csharp_parser, temp_test_dir):
-    code = '''public class Animal {
+    code = """public class Animal {
     public string Name { get; }
     public Animal(string name) { Name = name; }
     public virtual string Speak() { return "..."; }
@@ -57,7 +57,7 @@ public class Dog : Animal {
     public Dog(string name) : base(name) {}
     public override string Speak() { return "Woof!"; }
 }
-'''
+"""
     f = temp_test_dir / "Animals.cs"
     f.write_text(code)
     result = csharp_parser.parse(f)
@@ -69,7 +69,7 @@ public class Dog : Animal {
 
 
 def test_parse_interface(csharp_parser, temp_test_dir):
-    code = '''public interface IService {
+    code = """public interface IService {
     string Execute(string input);
     bool IsReady { get; }
 }
@@ -77,7 +77,7 @@ def test_parse_interface(csharp_parser, temp_test_dir):
 public interface IRepository<T> where T : class {
     T FindById(string id);
 }
-'''
+"""
     f = temp_test_dir / "IService.cs"
     f.write_text(code)
     result = csharp_parser.parse(f)
@@ -88,12 +88,12 @@ public interface IRepository<T> where T : class {
 
 
 def test_parse_methods(csharp_parser, temp_test_dir):
-    code = '''public class Calculator {
+    code = """public class Calculator {
     public int Add(int a, int b) { return a + b; }
     public static int Multiply(int a, int b) { return a * b; }
     private void Log(string msg) { Console.WriteLine(msg); }
 }
-'''
+"""
     f = temp_test_dir / "Calculator.cs"
     f.write_text(code)
     result = csharp_parser.parse(f)
@@ -104,12 +104,12 @@ def test_parse_methods(csharp_parser, temp_test_dir):
 
 
 def test_parse_record(csharp_parser, temp_test_dir):
-    code = '''public record Point(double X, double Y) {
+    code = """public record Point(double X, double Y) {
     public double DistanceTo(Point other) {
         return Math.Sqrt(Math.Pow(X - other.X, 2) + Math.Pow(Y - other.Y, 2));
     }
 }
-'''
+"""
     f = temp_test_dir / "Point.cs"
     f.write_text(code)
     result = csharp_parser.parse(f)
@@ -120,7 +120,7 @@ def test_parse_record(csharp_parser, temp_test_dir):
 
 
 def test_parse_enum(csharp_parser, temp_test_dir):
-    code = '''public enum Status {
+    code = """public enum Status {
     Active,
     Inactive,
     Pending,
@@ -135,7 +135,7 @@ public enum Permissions {
     Execute = 4,
     All = Read | Write | Execute
 }
-'''
+"""
     f = temp_test_dir / "Enums.cs"
     f.write_text(code)
     result = csharp_parser.parse(f)
@@ -146,14 +146,14 @@ public enum Permissions {
 
 
 def test_parse_imports(csharp_parser, temp_test_dir):
-    code = '''using System;
+    code = """using System;
 using System.Collections.Generic;
 using System.Linq;
 
 public class Demo {
     public void Run() {}
 }
-'''
+"""
     f = temp_test_dir / "Demo.cs"
     f.write_text(code)
     result = csharp_parser.parse(f)
@@ -163,13 +163,13 @@ public class Demo {
 
 
 def test_parse_generics(csharp_parser, temp_test_dir):
-    code = '''public class Repository<T> where T : class {
+    code = """public class Repository<T> where T : class {
     private readonly Dictionary<string, T> store = new();
 
     public T FindById(string id) { return store[id]; }
     public void Save(T entity) { store["id"] = entity; }
 }
-'''
+"""
     f = temp_test_dir / "Repository.cs"
     f.write_text(code)
     result = csharp_parser.parse(f)
@@ -179,14 +179,14 @@ def test_parse_generics(csharp_parser, temp_test_dir):
 
 
 def test_parse_struct(csharp_parser, temp_test_dir):
-    code = '''public struct Color {
+    code = """public struct Color {
     public byte R;
     public byte G;
     public byte B;
 
     public Color(byte r, byte g, byte b) { R = r; G = g; B = b; }
 }
-'''
+"""
     f = temp_test_dir / "Color.cs"
     f.write_text(code)
     result = csharp_parser.parse(f)
@@ -196,8 +196,48 @@ def test_parse_struct(csharp_parser, temp_test_dir):
     assert "Color" in names
 
 
+def test_parse_properties_and_object_creation(csharp_parser, temp_test_dir):
+    code = """using System;
+
+public class Service {
+    public string Name { get; set; } = "default";
+}
+
+public class Runner {
+    public void Execute() {
+        var service = new Service();
+        Console.WriteLine(service.Name);
+    }
+}
+"""
+    f = temp_test_dir / "Runner.cs"
+    f.write_text(code)
+    result = csharp_parser.parse(f)
+
+    properties = result.get("properties", [])
+    calls = result.get("function_calls", [])
+    assert any(item["name"] == "Name" for item in properties)
+    assert any(item["name"] == "Service" for item in calls)
+
+
+def test_parse_local_functions(csharp_parser, temp_test_dir):
+    code = """public class Demo {
+    public void Run() {
+        int Local(int value) { return value + 1; }
+        Local(1);
+    }
+}
+"""
+    f = temp_test_dir / "LocalFunctions.cs"
+    f.write_text(code)
+    result = csharp_parser.parse(f)
+
+    functions = result.get("functions", [])
+    assert any(item["name"] == "Local" for item in functions)
+
+
 def test_result_structure(csharp_parser, temp_test_dir):
-    code = 'public class Minimal {}\n'
+    code = "public class Minimal {}\n"
     f = temp_test_dir / "Minimal.cs"
     f.write_text(code)
     result = csharp_parser.parse(f)

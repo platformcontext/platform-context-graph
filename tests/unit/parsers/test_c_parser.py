@@ -21,7 +21,7 @@ def c_parser():
 
 
 def test_parse_functions(c_parser, temp_test_dir):
-    code = '''#include <stdio.h>
+    code = """#include <stdio.h>
 
 int add(int a, int b) {
     return a + b;
@@ -35,7 +35,7 @@ double divide(double a, double b) {
     if (b == 0.0) return 0.0;
     return a / b;
 }
-'''
+"""
     f = temp_test_dir / "funcs.c"
     f.write_text(code)
     result = c_parser.parse(f)
@@ -49,7 +49,7 @@ double divide(double a, double b) {
 
 
 def test_parse_structs(c_parser, temp_test_dir):
-    code = '''struct Point {
+    code = """struct Point {
     double x;
     double y;
 };
@@ -58,7 +58,7 @@ struct Config {
     char host[256];
     int port;
 };
-'''
+"""
     f = temp_test_dir / "structs.c"
     f.write_text(code)
     result = c_parser.parse(f)
@@ -69,12 +69,12 @@ struct Config {
 
 
 def test_parse_enums(c_parser, temp_test_dir):
-    code = '''enum StatusCode {
+    code = """enum StatusCode {
     STATUS_OK = 0,
     STATUS_ERROR = 1,
     STATUS_NOT_FOUND = 2
 };
-'''
+"""
     f = temp_test_dir / "enums.c"
     f.write_text(code)
     result = c_parser.parse(f)
@@ -84,12 +84,12 @@ def test_parse_enums(c_parser, temp_test_dir):
 
 
 def test_parse_unions(c_parser, temp_test_dir):
-    code = '''union GenericValue {
+    code = """union GenericValue {
     int intVal;
     float floatVal;
     char strVal[64];
 };
-'''
+"""
     f = temp_test_dir / "unions.c"
     f.write_text(code)
     result = c_parser.parse(f)
@@ -99,14 +99,14 @@ def test_parse_unions(c_parser, temp_test_dir):
 
 
 def test_parse_typedefs(c_parser, temp_test_dir):
-    code = '''typedef int (*TransformFn)(int);
+    code = """typedef int (*TransformFn)(int);
 typedef void (*CallbackFn)(const char* message);
 
 typedef struct {
     int x;
     int y;
 } Point2D;
-'''
+"""
     f = temp_test_dir / "typedefs.c"
     f.write_text(code)
     result = c_parser.parse(f)
@@ -114,12 +114,22 @@ typedef struct {
     assert result["path"] == str(f)
 
 
+def test_parse_typedefs_do_not_emit_dedicated_entities(c_parser, temp_test_dir):
+    code = """typedef int my_int;\n"""
+    f = temp_test_dir / "typedef_alias.c"
+    f.write_text(code)
+    result = c_parser.parse(f)
+
+    assert result.get("classes", []) == []
+    assert result.get("variables", []) == []
+
+
 def test_parse_includes(c_parser, temp_test_dir):
-    code = '''#include <stdio.h>
+    code = """#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "types.h"
-'''
+"""
     f = temp_test_dir / "includes.c"
     f.write_text(code)
     result = c_parser.parse(f)
@@ -129,14 +139,14 @@ def test_parse_includes(c_parser, temp_test_dir):
 
 
 def test_parse_function_calls(c_parser, temp_test_dir):
-    code = '''#include <stdio.h>
+    code = """#include <stdio.h>
 
 void demo() {
     printf("hello\\n");
     malloc(1024);
     free(NULL);
 }
-'''
+"""
     f = temp_test_dir / "calls.c"
     f.write_text(code)
     result = c_parser.parse(f)
@@ -146,10 +156,10 @@ void demo() {
 
 
 def test_parse_macros(c_parser, temp_test_dir):
-    code = '''#define MAX_SIZE 1024
+    code = """#define MAX_SIZE 1024
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define CLAMP(x, lo, hi) ((x) < (lo) ? (lo) : ((x) > (hi) ? (hi) : (x)))
-'''
+"""
     f = temp_test_dir / "macros.c"
     f.write_text(code)
     result = c_parser.parse(f)
@@ -159,13 +169,13 @@ def test_parse_macros(c_parser, temp_test_dir):
 
 
 def test_parse_function_pointers(c_parser, temp_test_dir):
-    code = '''int apply_transform(int value, int (*transform)(int)) {
+    code = """int apply_transform(int value, int (*transform)(int)) {
     return transform(value);
 }
 
 int square(int x) { return x * x; }
 int negate(int x) { return -x; }
-'''
+"""
     f = temp_test_dir / "fnptrs.c"
     f.write_text(code)
     result = c_parser.parse(f)
@@ -176,8 +186,22 @@ int negate(int x) { return -x; }
     assert "square" in names
 
 
+def test_parse_initialized_variables(c_parser, temp_test_dir):
+    code = """int compute(void) {
+    int total = 42;
+    return total;
+}
+"""
+    f = temp_test_dir / "variables.c"
+    f.write_text(code)
+    result = c_parser.parse(f)
+
+    variables = result.get("variables", [])
+    assert any(item["name"] == "total" for item in variables)
+
+
 def test_result_structure(c_parser, temp_test_dir):
-    code = 'void placeholder(void) {}\n'
+    code = "void placeholder(void) {}\n"
     f = temp_test_dir / "minimal.c"
     f.write_text(code)
     result = c_parser.parse(f)

@@ -1,0 +1,147 @@
+language: dart
+title: Dart Parser
+family: language
+parser: DartTreeSitterParser
+parser_entrypoint: src/platform_context_graph/tools/languages/dart.py
+doc_path: docs/docs/languages/dart.md
+fixture_repo: tests/fixtures/ecosystems/dart_comprehensive/
+unit_test_file: tests/unit/parsers/test_dart_parser.py
+integration_test_suite: tests/integration/test_language_graph.py::TestDartGraph
+capabilities:
+- id: functions
+  name: Functions
+  status: supported
+  extracted_bucket: functions
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Function
+  unit_test: tests/unit/parsers/test_dart_parser.py::test_parse_functions
+  integration_test: tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface
+- id: constructors
+  name: Constructors
+  status: supported
+  extracted_bucket: functions
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Function
+  unit_test: tests/unit/parsers/test_dart_parser.py::test_parse_classes
+  integration_test: tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface
+- id: classes
+  name: Classes
+  status: supported
+  extracted_bucket: classes
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Class
+  unit_test: tests/unit/parsers/test_dart_parser.py::test_parse_classes
+  integration_test: tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface
+- id: mixins
+  name: Mixins
+  status: supported
+  extracted_bucket: classes
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Class
+  unit_test: tests/unit/parsers/test_dart_parser.py::test_parse_mixins
+  integration_test: tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface
+- id: extensions
+  name: Extensions
+  status: supported
+  extracted_bucket: classes
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Class
+  unit_test: tests/unit/parsers/test_dart_parser.py::test_parse_extensions
+  integration_test: tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface
+- id: enums
+  name: Enums
+  status: supported
+  extracted_bucket: classes
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Class
+  unit_test: tests/unit/parsers/test_dart_parser.py::test_parse_enums
+  integration_test: tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface
+- id: library-imports
+  name: Library imports
+  status: supported
+  extracted_bucket: imports
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: IMPORTS
+  unit_test: tests/unit/parsers/test_dart_parser.py::test_parse_imports
+  integration_test: tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface
+- id: library-exports
+  name: Library exports
+  status: supported
+  extracted_bucket: imports
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: IMPORTS
+  unit_test: tests/unit/parsers/test_dart_parser.py::test_parse_exports
+  integration_test: tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface
+- id: function-calls
+  name: Function calls
+  status: supported
+  extracted_bucket: function_calls
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: CALLS
+  unit_test: tests/unit/parsers/test_dart_parser.py::test_parse_function_calls
+  integration_test: tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface
+- id: local-variable-declarations
+  name: Local variable declarations
+  status: supported
+  extracted_bucket: variables
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Variable
+  unit_test: tests/unit/parsers/test_dart_parser.py::test_parse_variables
+  integration_test: tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface
+- id: top-level-variable-declarations
+  name: Top-level variable declarations
+  status: supported
+  extracted_bucket: variables
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Variable
+  unit_test: tests/unit/parsers/test_dart_parser.py::test_parse_variables
+  integration_test: tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface
+known_limitations:
+- Named constructors (`ClassName.named(...)`) are captured under the constructor name
+  only
+- Cascade notation (`..method()`) is not tracked as a distinct call chain
+- '`part`/`part of` directives are not modeled as import relationships'
