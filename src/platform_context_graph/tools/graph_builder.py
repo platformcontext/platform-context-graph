@@ -13,6 +13,7 @@ import pathspec
 from ..cli.config_manager import get_config_value
 from ..core.database import DatabaseManager
 from ..core.jobs import JobManager, JobStatus
+from ..indexing import execute_index_run, raise_for_failed_index_run
 from ..observability import get_observability
 from ..repository_identity import git_remote_for_path, repository_metadata
 from ..utils.debug_log import debug_log, error_logger, info_logger, warning_logger
@@ -277,7 +278,16 @@ class GraphBuilder:
         return _name_from_symbol(symbol)
 
     async def build_graph_from_path_async(
-        self, path: Path, is_dependency: bool = False, job_id: str | None = None
+        self,
+        path: Path,
+        is_dependency: bool = False,
+        job_id: str | None = None,
+        *,
+        force: bool = False,
+        selected_repositories: list[Path] | tuple[Path, ...] | None = None,
+        family: str = "index",
+        source: str | None = None,
+        component: str = "cli",
     ) -> None:
         """Build the graph from a file or directory path.
 
@@ -285,8 +295,35 @@ class GraphBuilder:
             path: File or directory to index.
             is_dependency: Whether the path is being indexed as a dependency.
             job_id: Optional background job identifier.
+            force: Whether to invalidate an existing checkpoint for the same run.
+            selected_repositories: Optional repository subset for batch indexing.
+            family: Run family label used in checkpointing and telemetry.
+            source: Source label used in checkpointing and telemetry.
+            component: Observability component label for the indexing run.
         """
-        # Delegate the .pcgignore-aware discovery and indexing flow to the helper module.
+        if path.is_dir() or selected_repositories:
+            result = await execute_index_run(
+                self,
+                path,
+                is_dependency=is_dependency,
+                job_id=job_id,
+                selected_repositories=selected_repositories,
+                family=family,
+                source=source or os.getenv("PCG_REPO_SOURCE_MODE", "manual"),
+                force=force,
+                component=component,
+                asyncio_module=asyncio,
+                datetime_cls=datetime,
+                info_logger_fn=info_logger,
+                warning_logger_fn=warning_logger,
+                error_logger_fn=error_logger,
+                job_status_enum=JobStatus,
+                pathspec_module=pathspec,
+            )
+            raise_for_failed_index_run(result)
+            return
+
+        # Delegate the single-file .pcgignore-aware indexing flow to the helper module.
         await _build_graph_from_path_async(
             self,
             path,

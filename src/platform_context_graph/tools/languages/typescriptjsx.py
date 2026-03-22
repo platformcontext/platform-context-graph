@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from platform_context_graph.utils.source_text import read_source_text
+
 
 def pre_scan_typescript(files: list[Path], parser_wrapper) -> dict:
     """
@@ -20,9 +22,8 @@ def pre_scan_typescript(files: list[Path], parser_wrapper) -> dict:
     ]
     for path in files:
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                source_code = f.read()
-                tree = parser_wrapper.parser.parse(bytes(source_code, "utf8"))
+            source_code = read_source_text(path)
+            tree = parser_wrapper.parser.parse(bytes(source_code, "utf8"))
             for query_str in query_strings:
                 try:
                     for node, capture_name in execute_query(
@@ -95,8 +96,7 @@ class TypescriptJSXTreeSitterParser(TypescriptTreeSitterParser):
         Indexes components, functions, imports, and exports.
         """
         self.index_source = index_source
-        with open(path, "r", encoding="utf-8") as f:
-            source_code = f.read()
+        source_code = read_source_text(path)
         tree = self.parser.parse(bytes(source_code, "utf8"))
         root_node = tree.root_node
 

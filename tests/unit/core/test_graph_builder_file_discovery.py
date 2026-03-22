@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
 from platform_context_graph.tools.graph_builder import GraphBuilder
+from platform_context_graph.tools.graph_builder_indexing_execution import (
+    build_graph_from_path_async as legacy_build_graph_from_path_async,
+)
 
 
 def _make_builder() -> GraphBuilder:
@@ -31,6 +35,7 @@ def _make_builder() -> GraphBuilder:
     builder._create_all_inheritance_links = MagicMock()
     builder._create_all_function_calls = MagicMock()
     builder._create_all_infra_links = MagicMock()
+    builder._materialize_workloads = MagicMock(return_value={})
     return builder
 
 
@@ -114,7 +119,23 @@ def test_build_graph_from_path_async_skips_hidden_cache_repos_but_keeps_visible_
     cached_file = cache_repo / "generated.py"
     cached_file.write_text("print('cached')\n")
 
-    asyncio.run(builder.build_graph_from_path_async(tmp_path))
+    asyncio.run(
+        legacy_build_graph_from_path_async(
+            builder,
+            tmp_path,
+            False,
+            None,
+            asyncio_module=asyncio,
+            datetime_cls=SimpleNamespace(now=lambda: None),
+            debug_log_fn=lambda *_args, **_kwargs: None,
+            error_logger_fn=lambda *_args, **_kwargs: None,
+            get_config_value_fn=_config_value,
+            info_logger_fn=lambda *_args, **_kwargs: None,
+            pathspec_module=__import__("pathspec"),
+            warning_logger_fn=lambda *_args, **_kwargs: None,
+            job_status_enum=SimpleNamespace(COMPLETED="completed", FAILED="failed", CANCELLED="cancelled", RUNNING="running"),
+        )
+    )
 
     indexed_repos = {
         call.args[0].resolve()
@@ -128,6 +149,67 @@ def test_build_graph_from_path_async_skips_hidden_cache_repos_but_keeps_visible_
     assert indexed_repos == {tmp_path.resolve(), nested_repo.resolve()}
     assert indexed_files == {root_file.resolve(), nested_file.resolve()}
     assert cached_file.resolve() not in indexed_files
+
+
+def test_build_graph_from_path_async_uses_checkpointed_coordinator_for_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    builder = _make_builder()
+    recorded: dict[str, object] = {}
+
+    async def fake_execute_index_run(
+        builder_arg,
+        path,
+        *,
+        is_dependency,
+        job_id,
+        selected_repositories,
+        family,
+        source,
+        force,
+        component,
+        **_kwargs,
+    ):
+        recorded.update(
+            {
+                "builder": builder_arg,
+                "path": path,
+                "is_dependency": is_dependency,
+                "job_id": job_id,
+                "selected_repositories": selected_repositories,
+                "family": family,
+                "source": source,
+                "force": force,
+                "component": component,
+            }
+        )
+        return SimpleNamespace(status="completed")
+
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.execute_index_run",
+        fake_execute_index_run,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.raise_for_failed_index_run",
+        lambda result: recorded.setdefault("result", result),
+    )
+
+    asyncio.run(
+        builder.build_graph_from_path_async(
+            tmp_path,
+            force=True,
+            family="bootstrap",
+            source="githubOrg",
+            component="bootstrap-index",
+        )
+    )
+
+    assert recorded["builder"] is builder
+    assert recorded["path"] == tmp_path
+    assert recorded["family"] == "bootstrap"
+    assert recorded["source"] == "githubOrg"
+    assert recorded["force"] is True
+    assert recorded["component"] == "bootstrap-index"
 
 
 def test_collect_supported_files_records_hidden_directory_skip_metrics(

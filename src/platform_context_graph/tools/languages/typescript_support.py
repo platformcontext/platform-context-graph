@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from platform_context_graph.utils.debug_log import warning_logger
+from platform_context_graph.utils.source_text import read_source_text
 from platform_context_graph.utils.tree_sitter_manager import execute_query
 
 TS_QUERIES = {
@@ -235,8 +236,7 @@ def pre_scan_typescript(files: list[Path], parser_wrapper: Any) -> dict[str, lis
 
     for path in files:
         try:
-            with open(path, "r", encoding="utf-8") as handle:
-                source_code = handle.read()
+            source_code = read_source_text(path)
             tree = parser_wrapper.parser.parse(bytes(source_code, "utf8"))
 
             for query_str in query_strings:

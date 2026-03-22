@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any
 
+from platform_context_graph.utils.source_text import read_source_text
 from platform_context_graph.utils.tree_sitter_manager import execute_query
 
 from .typescript_support import (
@@ -72,8 +73,7 @@ class TypescriptTreeSitterParser:
             Parsed functions, classes, interfaces, imports, calls, and variables.
         """
         self.index_source = index_source
-        with open(path, "r", encoding="utf-8") as handle:
-            source_code = handle.read()
+        source_code = read_source_text(path)
         tree = self.parser.parse(bytes(source_code, "utf8"))
         root_node = tree.root_node
 

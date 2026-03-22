@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from platform_context_graph.utils.debug_log import warning_logger
+from platform_context_graph.utils.source_text import read_source_text
 from platform_context_graph.utils.tree_sitter_manager import execute_query
 from .javascript_support_queries import JS_QUERIES, pre_scan_javascript
 from .javascript_support_helpers import (
@@ -358,8 +359,7 @@ def parse_javascript_file(
     """Parse one JavaScript file into the repository graph schema."""
     try:
         parser_wrapper.index_source = index_source
-        with open(path, "r", encoding="utf-8") as handle:
-            source_code = handle.read()
+        source_code = read_source_text(path)
         tree = parser_wrapper.parser.parse(bytes(source_code, "utf8"))
         root_node = tree.root_node
         return {

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from platform_context_graph.utils.debug_log import warning_logger
+from platform_context_graph.utils.source_text import read_source_text
 from platform_context_graph.utils.tree_sitter_manager import execute_query
 
 JS_QUERIES = {
@@ -99,8 +100,8 @@ def pre_scan_javascript(files: list[Path], parser_wrapper: Any) -> dict[str, lis
     """
     for path in files:
         try:
-            with open(path, "r", encoding="utf-8") as handle:
-                tree = parser_wrapper.parser.parse(bytes(handle.read(), "utf8"))
+            source_code = read_source_text(path)
+            tree = parser_wrapper.parser.parse(bytes(source_code, "utf8"))
             for capture, _ in execute_query(
                 parser_wrapper.language, query_str, tree.root_node
             ):

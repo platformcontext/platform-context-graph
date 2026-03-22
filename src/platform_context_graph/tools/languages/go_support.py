@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from platform_context_graph.utils.debug_log import debug_log, warning_logger
+from platform_context_graph.utils.source_text import read_source_text
 from platform_context_graph.utils.tree_sitter_manager import execute_query
 
 GO_QUERIES = {
@@ -81,8 +82,7 @@ def parse_go_file(
 ) -> dict[str, Any]:
     """Parse one Go file into the repository's normalized structure."""
     parser.index_source = index_source
-    with open(path, "r", encoding="utf-8") as handle:
-        source_code = handle.read()
+    source_code = read_source_text(path)
 
     tree = parser.parser.parse(bytes(source_code, "utf8"))
     root_node = tree.root_node
@@ -470,8 +470,8 @@ def pre_scan_go(files: list[Path], parser_wrapper: Any) -> dict[str, list[str]]:
 
     for path in files:
         try:
-            with open(path, "r", encoding="utf-8") as handle:
-                tree = parser_wrapper.parser.parse(bytes(handle.read(), "utf8"))
+            source_code = read_source_text(path)
+            tree = parser_wrapper.parser.parse(bytes(source_code, "utf8"))
 
             for capture, _ in execute_query(
                 parser_wrapper.language, query_str, tree.root_node

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from platform_context_graph.utils.debug_log import error_logger, info_logger
+from platform_context_graph.utils.source_text import read_source_text
 from platform_context_graph.utils.tree_sitter_manager import execute_query
 
 from .python_support import (
@@ -91,8 +92,7 @@ class PythonTreeSitterParser:
                 temp_py_file = convert_notebook_to_temp_python(original_file_path)
                 path_to_parse = temp_py_file
 
-            with open(path_to_parse, "r", encoding="utf-8") as handle:
-                source_code = handle.read()
+            source_code = read_source_text(path_to_parse)
 
             tree = self.parser.parse(bytes(source_code, "utf8"))
             root_node = tree.root_node

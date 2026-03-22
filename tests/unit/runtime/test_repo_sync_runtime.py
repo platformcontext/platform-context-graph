@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -27,6 +29,23 @@ def _metric_points(
                         )
                     )
     return points
+
+
+def _write_active_lock(lock_dir: Path) -> None:
+    """Create a live-looking workspace lock metadata file for contention tests."""
+
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    (lock_dir / "lock.json").write_text(
+        json.dumps(
+            {
+                "component": "repo-sync",
+                "pid": 1234,
+                "hostname": "test-host",
+                "heartbeat_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_bootstrap_index_copies_filesystem_repos_and_emits_metrics(
@@ -151,7 +170,7 @@ def test_repo_sync_cycle_records_lock_contention_skip(
     repos_dir = tmp_path / "workspace" / "repos"
     repos_dir.mkdir(parents=True)
     lock_dir = repos_dir / ".pcg-sync.lock"
-    lock_dir.mkdir()
+    _write_active_lock(lock_dir)
 
     config = repo_sync.RepoSyncConfig(
         repos_dir=repos_dir,
@@ -177,6 +196,83 @@ def test_repo_sync_cycle_records_lock_contention_skip(
         and value == 1
         for metric_name, attrs, value in _metric_points(reader)
     )
+
+
+def test_bootstrap_index_reaps_stale_empty_lock_and_runs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bootstrap should recover from a stale lock directory left on disk."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+
+    source_root = tmp_path / "fixtures"
+    (source_root / "service-a").mkdir(parents=True)
+    (source_root / "service-a" / "main.py").write_text("print('a')\n")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    lock_dir = repos_dir / ".pcg-sync.lock"
+    lock_dir.mkdir(parents=True)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="filesystem",
+        git_auth_method="none",
+        github_org=None,
+        repositories=[],
+        filesystem_root=source_root,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=lock_dir,
+        component="bootstrap-index",
+    )
+
+    called: list[Path] = []
+    monkeypatch.setenv("PCG_SYNC_LOCK_STALE_SECONDS", "1")
+
+    result = repo_sync.run_bootstrap_index(
+        config,
+        index_workspace=lambda workspace: called.append(workspace),
+    )
+
+    assert result.discovered == 1
+    assert called == [repos_dir]
+    assert not lock_dir.exists()
+
+
+def test_repo_sync_cycle_skips_with_fresh_metadata_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fresh lock metadata should still prevent concurrent sync cycles."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    repos_dir.mkdir(parents=True)
+    lock_dir = repos_dir / ".pcg-sync.lock"
+    _write_active_lock(lock_dir)
+    monkeypatch.setenv("PCG_SYNC_LOCK_STALE_SECONDS", "600")
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="filesystem",
+        git_auth_method="none",
+        github_org=None,
+        repositories=[],
+        filesystem_root=tmp_path / "fixtures",
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=lock_dir,
+        component="repo-sync",
+    )
+
+    result = repo_sync.run_repo_sync_cycle(
+        config, index_workspace=lambda _workspace: pytest.fail("index should not run")
+    )
+
+    assert result.lock_skipped is True
+    assert lock_dir.exists()
 
 
 def test_repo_sync_cycle_reports_stale_unmanaged_checkouts(

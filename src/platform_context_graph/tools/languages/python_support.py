@@ -12,6 +12,7 @@ import nbformat
 from nbconvert import PythonExporter
 
 from platform_context_graph.utils.debug_log import warning_logger
+from platform_context_graph.utils.source_text import read_source_text
 from platform_context_graph.utils.tree_sitter_manager import execute_query
 
 logging.getLogger("traitlets").setLevel(logging.WARNING)
@@ -78,8 +79,15 @@ def convert_notebook_to_temp_python(path: Path | str) -> Path:
     with open(path, "r", encoding="utf-8") as handle:
         notebook_node = nbformat.read(handle, as_version=4)
 
-    exporter = PythonExporter()
-    python_code, _ = exporter.from_notebook_node(notebook_node)
+    try:
+        exporter = PythonExporter()
+        python_code, _ = exporter.from_notebook_node(notebook_node)
+    except Exception:
+        python_code = "\n\n".join(
+            str(cell.get("source", ""))
+            for cell in notebook_node.cells
+            if cell.get("cell_type") == "code"
+        )
     with tempfile.NamedTemporaryFile(
         mode="w",
         delete=False,
@@ -276,11 +284,9 @@ def pre_scan_python(files: list[Path], parser_wrapper: Any) -> dict[str, list[st
         try:
             if path.suffix == ".ipynb":
                 temp_py_file = convert_notebook_to_temp_python(path)
-                with open(temp_py_file, "r", encoding="utf-8") as handle:
-                    source_to_parse = handle.read()
+                source_to_parse = read_source_text(temp_py_file)
             else:
-                with open(path, "r", encoding="utf-8") as handle:
-                    source_to_parse = handle.read()
+                source_to_parse = read_source_text(path)
 
             tree = parser_wrapper.parser.parse(bytes(source_to_parse, "utf8"))
             for capture, _ in execute_query(
