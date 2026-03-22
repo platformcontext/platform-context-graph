@@ -6,13 +6,13 @@ This file is auto-generated. Do not edit manually.
 
 | Parser | Parser Class | Functions | Classes | Interfaces | Traits | Imports | Calls | Variables | Structs | Enums | Macros | Unit Coverage | Integration Coverage | Fixture |
 |--------|--------------|-----------|---------|------------|--------|---------|-------|-----------|---------|-------|--------|---------------|----------------------|---------|
-| C | `CTreeSitterParser` | Y | Y | - | - | Y | Y | Y | Y | Y | Y | 9/9 | 9/9 | `tests/fixtures/ecosystems/c_comprehensive/` |
+| C | `CTreeSitterParser` | Y | - | - | - | Y | Y | Y | Y | Y | Y | 9/9 | 9/9 | `tests/fixtures/ecosystems/c_comprehensive/` |
 | C++ | `CppTreeSitterParser` | Y | Y | - | - | Y | Y | Y | Y | Y | Y | 12/12 | 12/12 | `tests/fixtures/ecosystems/cpp_comprehensive/` |
 | C# | `CSharpTreeSitterParser` | Y | Y | Y | - | Y | Y | - | Y | Y | - | 13/13 | 13/13 | `tests/fixtures/ecosystems/csharp_comprehensive/` |
 | Dart | `DartTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | Y | - | 11/11 | 11/11 | `tests/fixtures/ecosystems/dart_comprehensive/` |
-| Elixir | `ElixirTreeSitterParser` | Y | - | - | - | Y | Y | P | - | - | - | 7/7 | 7/7 | `tests/fixtures/ecosystems/elixir_comprehensive/` |
-| Go | `GoTreeSitterParser` | Y | Y | Y | - | Y | Y | Y | Y | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/go_comprehensive/` |
-| Haskell | `HaskellTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/haskell_comprehensive/` |
+| Elixir | `ElixirTreeSitterParser` | Y | Y | - | - | Y | Y | P | - | - | - | 7/7 | 7/7 | `tests/fixtures/ecosystems/elixir_comprehensive/` |
+| Go | `GoTreeSitterParser` | Y | - | Y | - | Y | Y | Y | Y | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/go_comprehensive/` |
+| Haskell | `HaskellTreeSitterParser` | Y | - | - | Y | Y | Y | Y | Y | Y | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/haskell_comprehensive/` |
 | Java | `JavaTreeSitterParser` | Y | Y | Y | - | Y | Y | Y | - | Y | - | 11/11 | 11/11 | `tests/fixtures/ecosystems/java_comprehensive/` |
 | JavaScript | `JavascriptTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/javascript_comprehensive/` |
 | Kotlin | `KotlinTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/kotlin_comprehensive/` |
@@ -20,9 +20,9 @@ This file is auto-generated. Do not edit manually.
 | PHP | `PhpTreeSitterParser` | Y | Y | Y | Y | Y | Y | Y | - | - | - | 10/10 | 10/10 | `tests/fixtures/ecosystems/php_comprehensive/` |
 | Python | `PythonTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 6/6 | 6/6 | `tests/fixtures/ecosystems/python_comprehensive/` |
 | Ruby | `RubyTreeSitterParser` | Y | Y | - | - | P | Y | Y | - | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/ruby_comprehensive/` |
-| Rust | `RustTreeSitterParser` | Y | Y | - | Y | Y | Y | - | Y | Y | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/rust_comprehensive/` |
+| Rust | `RustTreeSitterParser` | Y | - | - | Y | Y | Y | - | Y | Y | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/rust_comprehensive/` |
 | Scala | `ScalaTreeSitterParser` | Y | Y | - | Y | Y | Y | Y | - | - | - | 10/10 | 10/10 | `tests/fixtures/ecosystems/scala_comprehensive/` |
-| Swift | `SwiftTreeSitterParser` | Y | Y | - | - | Y | Y | Y | Y | Y | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/swift_comprehensive/` |
+| Swift | `SwiftTreeSitterParser` | Y | Y | - | P | Y | Y | Y | Y | Y | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/swift_comprehensive/` |
 | TypeScript | `TypescriptTreeSitterParser` | Y | Y | Y | - | Y | Y | Y | - | Y | - | 7/7 | 7/7 | `tests/fixtures/ecosystems/typescript_comprehensive/` |
 | TypeScript JSX | `TypescriptJSXTreeSitterParser` | Y | Y | Y | - | Y | Y | Y | - | - | - | 6/6 | 6/6 | `tests/fixtures/ecosystems/tsx_comprehensive/` |
 

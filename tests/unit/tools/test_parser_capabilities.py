@@ -182,6 +182,145 @@ def test_validate_language_capability_specs_rejects_fixture_refs(
     ) in errors
 
 
+def test_validate_language_capability_specs_rejects_supported_capability_without_surface(
+    tmp_path: Path,
+) -> None:
+    """Supported capabilities must declare a real graph surface target."""
+
+    spec_root = (
+        tmp_path
+        / "src"
+        / "platform_context_graph"
+        / "tools"
+        / "parser_capabilities"
+        / "specs"
+    )
+    spec_root.mkdir(parents=True)
+    (tmp_path / "docs" / "docs" / "languages").mkdir(parents=True)
+    (tmp_path / "tests" / "fixtures" / "ecosystems" / "demo").mkdir(parents=True)
+    unit_test = tmp_path / "tests" / "unit" / "parsers" / "test_demo_parser.py"
+    unit_test.parent.mkdir(parents=True)
+    unit_test.write_text(
+        "def test_demo_capability():\n    assert True\n", encoding="utf-8"
+    )
+    integration_test = tmp_path / "tests" / "integration" / "test_demo_graph.py"
+    integration_test.parent.mkdir(parents=True)
+    integration_test.write_text(
+        (
+            "class TestDemoGraph:\n"
+            "    def test_demo_capability(self):\n"
+            "        assert True\n"
+        ),
+        encoding="utf-8",
+    )
+    spec_root.joinpath("demo.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "language": "demo",
+                "title": "Demo Parser",
+                "family": "language",
+                "parser": "DemoParser",
+                "parser_entrypoint": "src/platform_context_graph/tools/languages/demo.py",
+                "doc_path": "docs/docs/languages/demo.md",
+                "fixture_repo": "tests/fixtures/ecosystems/demo",
+                "unit_test_file": "tests/unit/parsers/test_demo_parser.py",
+                "integration_test_suite": "tests/integration/test_demo_graph.py::TestDemoGraph",
+                "capabilities": [
+                    {
+                        "id": "functions",
+                        "name": "Functions",
+                        "status": "supported",
+                        "extracted_bucket": "functions",
+                        "required_fields": ["name", "line_number"],
+                        "graph_surface": {},
+                        "unit_test": "tests/unit/parsers/test_demo_parser.py::test_demo_capability",
+                        "integration_test": "tests/integration/test_demo_graph.py::TestDemoGraph::test_demo_capability",
+                    }
+                ],
+                "known_limitations": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    errors = validate_language_capability_specs(tmp_path)
+
+    assert (
+        "src/platform_context_graph/tools/parser_capabilities/specs/demo.yaml:functions: "
+        "supported capability must declare graph surface"
+    ) in errors
+
+
+def test_validate_language_capability_specs_reports_missing_language_key(
+    tmp_path: Path,
+) -> None:
+    """Malformed specs should produce validation errors instead of crashing."""
+
+    spec_root = (
+        tmp_path
+        / "src"
+        / "platform_context_graph"
+        / "tools"
+        / "parser_capabilities"
+        / "specs"
+    )
+    spec_root.mkdir(parents=True)
+    (tmp_path / "docs" / "docs" / "languages").mkdir(parents=True)
+    (tmp_path / "tests" / "fixtures" / "ecosystems" / "demo").mkdir(parents=True)
+    unit_test = tmp_path / "tests" / "unit" / "parsers" / "test_demo_parser.py"
+    unit_test.parent.mkdir(parents=True)
+    unit_test.write_text(
+        "def test_demo_capability():\n    assert True\n", encoding="utf-8"
+    )
+    integration_test = tmp_path / "tests" / "integration" / "test_demo_graph.py"
+    integration_test.parent.mkdir(parents=True)
+    integration_test.write_text(
+        (
+            "class TestDemoGraph:\n"
+            "    def test_demo_capability(self):\n"
+            "        assert True\n"
+        ),
+        encoding="utf-8",
+    )
+    spec_root.joinpath("broken.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "title": "Broken Parser",
+                "family": "language",
+                "parser": "BrokenParser",
+                "parser_entrypoint": "src/platform_context_graph/tools/languages/broken.py",
+                "doc_path": "docs/docs/languages/broken.md",
+                "fixture_repo": "tests/fixtures/ecosystems/demo",
+                "unit_test_file": "tests/unit/parsers/test_demo_parser.py",
+                "integration_test_suite": "tests/integration/test_demo_graph.py::TestDemoGraph",
+                "capabilities": [
+                    {
+                        "id": "functions",
+                        "name": "Functions",
+                        "status": "supported",
+                        "extracted_bucket": "functions",
+                        "required_fields": ["name", "line_number"],
+                        "graph_surface": {"kind": "node", "target": "Function"},
+                        "unit_test": "tests/unit/parsers/test_demo_parser.py::test_demo_capability",
+                        "integration_test": "tests/integration/test_demo_graph.py::TestDemoGraph::test_demo_capability",
+                    }
+                ],
+                "known_limitations": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    errors = validate_language_capability_specs(tmp_path)
+
+    assert (
+        "src/platform_context_graph/tools/parser_capabilities/specs/broken.yaml: "
+        "missing keys ['language']"
+    ) in errors
+
+
 def test_render_language_doc_contains_generated_contract_sections() -> None:
     """Rendered language docs must expose capabilities and test coverage."""
 
@@ -252,5 +391,48 @@ def test_render_feature_matrix_counts_supported_capabilities_only() -> None:
 
     assert (
         "| Demo | `DemoParser` | Y | - | - | - | - | - | - | - | - | - | 1/1 | 1/1 | `tests/fixtures/ecosystems/demo/` |"
+        in rendered
+    )
+
+
+def test_render_feature_matrix_keeps_structs_out_of_classes_column() -> None:
+    """Shared storage buckets should not imply support for another construct."""
+
+    rendered = render_feature_matrix(
+        [
+            {
+                "language": "demo",
+                "title": "Demo Parser",
+                "family": "language",
+                "parser": "DemoParser",
+                "fixture_repo": "tests/fixtures/ecosystems/demo/",
+                "capabilities": [
+                    {
+                        "id": "structs",
+                        "name": "Structs",
+                        "status": "supported",
+                        "extracted_bucket": "classes",
+                        "required_fields": ["name", "line_number"],
+                        "graph_surface": {"kind": "node", "target": "Class"},
+                        "unit_test": "tests/unit/parsers/test_demo_parser.py::test_demo_structs",
+                        "integration_test": "tests/integration/test_demo_graph.py::TestDemoGraph::test_demo_structs",
+                    },
+                    {
+                        "id": "enums",
+                        "name": "Enums",
+                        "status": "supported",
+                        "extracted_bucket": "classes",
+                        "required_fields": ["name", "line_number"],
+                        "graph_surface": {"kind": "node", "target": "Class"},
+                        "unit_test": "tests/unit/parsers/test_demo_parser.py::test_demo_enums",
+                        "integration_test": "tests/integration/test_demo_graph.py::TestDemoGraph::test_demo_enums",
+                    },
+                ],
+            }
+        ]
+    )
+
+    assert (
+        "| Demo | `DemoParser` | - | - | - | - | - | - | - | Y | Y | - | 2/2 | 2/2 | `tests/fixtures/ecosystems/demo/` |"
         in rendered
     )

@@ -173,16 +173,20 @@ def _is_stale_lock(config: RepoSyncConfig) -> bool:
     except (KeyError, ValueError, json.JSONDecodeError, OSError):
         return True
 
-    # If the lock was written by the same hostname (same StatefulSet pod)
-    # but a different boot_id, the holder is a previous container incarnation
-    # that was killed without releasing the lock.  In Kubernetes, PID 1 and
-    # hostname are reused across restarts so heartbeat age alone cannot
-    # detect this.  We only apply this check when hostnames match to avoid
-    # breaking lock exclusion between different replicas.
+    # If both the current process and the recorded holder are PID 1 on the same
+    # hostname, a boot_id mismatch means this is a restarted container entrypoint
+    # rather than a concurrent local process. Restricting the heuristic to PID 1
+    # avoids reaping fresh locks from other live processes on the same host.
     lock_boot_id = payload.get("boot_id")
     lock_hostname = payload.get("hostname")
+    try:
+        lock_pid = int(payload.get("pid"))
+    except (TypeError, ValueError):
+        lock_pid = None
     if (
-        lock_boot_id is not None
+        os.getpid() == 1
+        and lock_pid == 1
+        and lock_boot_id is not None
         and lock_boot_id != _BOOT_ID
         and lock_hostname == socket.gethostname()
     ):
@@ -195,7 +199,9 @@ def _is_stale_lock(config: RepoSyncConfig) -> bool:
     return age_seconds > _lock_stale_seconds()
 
 
-def _start_lock_heartbeat(config: RepoSyncConfig) -> tuple[threading.Event, threading.Thread]:
+def _start_lock_heartbeat(
+    config: RepoSyncConfig,
+) -> tuple[threading.Event, threading.Thread]:
     """Start the background heartbeat updater for the workspace lock."""
 
     stop_event = threading.Event()

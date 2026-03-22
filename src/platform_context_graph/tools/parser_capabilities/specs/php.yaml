@@ -35,7 +35,7 @@ capabilities:
 - id: classes
   name: Classes
   status: supported
-  extracted_bucket: interfaces
+  extracted_bucket: classes
   required_fields:
   - name
   - line_number
@@ -47,7 +47,7 @@ capabilities:
 - id: interfaces
   name: Interfaces
   status: supported
-  extracted_bucket: classes
+  extracted_bucket: interfaces
   required_fields:
   - name
   - line_number

@@ -35,14 +35,14 @@ The language parser pages under `docs/docs/languages/` and the parser feature ma
 Generate them with:
 
 ```bash
-cd /Users/allen/personal-repos/platform-context-graph
+cd "$(git rev-parse --show-toplevel)"
 PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py
 ```
 
 Check for drift with:
 
 ```bash
-cd /Users/allen/personal-repos/platform-context-graph
+cd "$(git rev-parse --show-toplevel)"
 PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py --check
 ```
 
@@ -54,13 +54,13 @@ mkdocs serve
 ```
 
 ```bash
-cd /Users/allen/personal-repos/platform-context-graph
+cd "$(git rev-parse --show-toplevel)"
 PYTHONPATH=src uv run python -m pytest tests/integration/docs/test_docs_cleanup_contract.py tests/integration/docs/test_docs_smoke.py -q
 ```
 
 ## Build
 
 ```bash
-cd /Users/allen/personal-repos/platform-context-graph
+cd "$(git rev-parse --show-toplevel)"
 uv run --with mkdocs --with mkdocs-material --with pymdown-extensions mkdocs build --strict --clean --config-file docs/mkdocs.yml
 ```
