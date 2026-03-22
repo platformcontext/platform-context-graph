@@ -1,0 +1,31 @@
+docs/docs/languages/java.md
+  c875c79fb9b4b8d5 11,13
+docs/docs/languages/cloudformation.md
+  c875c79fb9b4b8d5 15
+docs/docs/languages/typescriptjsx.md
+  c875c79fb9b4b8d5 14
+docs/docs/languages/typescript.md
+  c875c79fb9b4b8d5 14-15
+tests/fixtures/ecosystems/kubernetes_comprehensive/secret.yaml
+  c875c79fb9b4b8d5 8-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "c96f03a3733666f3a6d2b528cfb079d2147b9562",
+  "prompts": {
+    "c875c79fb9b4b8d5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f48fe86d-9937-4374-9a90-83ca178cfa90",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 9,
+      "total_deletions": 8,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    }
+  }
+}
