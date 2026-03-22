@@ -55,6 +55,48 @@ def test_index_helper_skips_when_nested_files_already_exist(
     db_manager.close_driver.assert_called_once()
 
 
+def test_index_helper_force_bypasses_existing_repo_skip(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Force mode must still invoke the coordinator for already-indexed repos."""
+
+    repo_path = tmp_path / "repos"
+    repo_path.mkdir()
+    prints: list[str] = []
+
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.__exit__.return_value = False
+    session.run.return_value.single.return_value = {"file_count": 3}
+
+    driver = SimpleNamespace(session=MagicMock(return_value=session))
+    db_manager = SimpleNamespace(
+        get_driver=MagicMock(return_value=driver),
+        close_driver=MagicMock(),
+    )
+    graph_builder = MagicMock()
+    code_finder = SimpleNamespace(
+        list_indexed_repositories=lambda: [{"path": str(repo_path)}]
+    )
+
+    api = SimpleNamespace(
+        console=SimpleNamespace(print=prints.append),
+        _initialize_services=lambda: (db_manager, graph_builder, code_finder),
+        _run_index_with_progress=AsyncMock(),
+        watch_helper=MagicMock(),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing._api",
+        lambda: api,
+    )
+
+    index_helper(str(repo_path), force=True)
+
+    assert not any("already indexed with 3 files" in message for message in prints)
+    api._run_index_with_progress.assert_awaited_once()
+    db_manager.close_driver.assert_called_once()
+
+
 def test_index_helper_raises_when_indexing_fails(tmp_path: Path, monkeypatch) -> None:
     """Bootstrap callers must see a non-zero failure when indexing crashes."""
 

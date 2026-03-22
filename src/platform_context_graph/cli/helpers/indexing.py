@@ -75,7 +75,7 @@ def _index_helper(
         Path(repo["path"]).resolve() == path_obj for repo in indexed_repos
     )
 
-    if repo_exists:
+    if repo_exists and not force:
         try:
             with db_manager.get_driver().session() as session:
                 result = session.run(

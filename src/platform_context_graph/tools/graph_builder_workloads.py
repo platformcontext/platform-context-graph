@@ -79,16 +79,16 @@ def materialize_workloads(
     seen_deployment_sources: set[tuple[str, str]] = set()
 
     with builder.driver.session() as session:
-        candidate_rows = session.run(
-            """
+        candidate_rows = session.run("""
             MATCH (repo:Repository)
             OPTIONAL MATCH (repo)-[:CONTAINS*]->(:File)-[:CONTAINS]->(k:K8sResource)
             WHERE k.name = repo.name
             WITH repo,
                  collect(DISTINCT toLower(coalesce(k.kind, ''))) as resource_kinds,
                  collect(DISTINCT coalesce(k.namespace, '')) as namespaces
-            OPTIONAL MATCH (app)-[:SOURCES_FROM]->(deployment_repo:Repository)
+            OPTIONAL MATCH (app)-[source_rel]->(deployment_repo:Repository)
             WHERE (app:ArgoCDApplication OR app:ArgoCDApplicationSet)
+              AND type(source_rel) = 'SOURCES_FROM'
               AND app.name = repo.name
             WITH repo,
                  resource_kinds,
@@ -113,8 +113,7 @@ def materialize_workloads(
                    namespaces,
                    source_roots
             ORDER BY repo.name
-            """
-        ).data()
+            """).data()
 
         for row in candidate_rows:
             repo_id = row.get("repo_id")
