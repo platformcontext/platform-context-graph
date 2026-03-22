@@ -1,0 +1,36 @@
+src/platform_context_graph/indexing/coordinator_storage.py
+  0595d92bfe2870a0 135-146,153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "fd3955fe128b693f14b306fac6c57ef83e8257f0",
+  "prompts": {
+    "0595d92bfe2870a0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cad5bbd3-26a5-497a-9cf0-fa1b71523a57",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 13,
+      "total_deletions": 1,
+      "accepted_lines": 13,
+      "overriden_lines": 0
+    },
+    "a034ab0d6c4453bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d172a-7e40-76a0-8995-46eceacac34a",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 73,
+      "total_deletions": 1,
+      "accepted_lines": 73,
+      "overriden_lines": 0
+    }
+  }
+}
