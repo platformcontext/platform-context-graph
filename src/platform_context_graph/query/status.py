@@ -1,4 +1,4 @@
-"""Query helpers for runtime worker status and control."""
+"""Query helpers for runtime ingester status and control."""
 
 from __future__ import annotations
 
@@ -6,16 +6,28 @@ import os
 from typing import Any
 
 from ..observability import get_observability, trace_query
-from ..runtime.status_store import get_runtime_status_store, request_index_scan
+from ..runtime.status_store import (
+    get_runtime_status_store,
+    request_ingester_scan,
+)
 
-__all__ = ["get_index_status", "request_index_scan_control"]
+__all__ = [
+    "KNOWN_INGESTERS",
+    "get_ingester_status",
+    "list_ingesters",
+    "request_ingester_scan_control",
+]
+
+KNOWN_INGESTERS = ("repository",)
 
 
-def _default_status(component: str) -> dict[str, Any]:
-    """Return the default worker status payload when no row exists yet."""
+def _default_status(ingester: str) -> dict[str, Any]:
+    """Return the default ingester status payload when no row exists yet."""
 
     return {
-        "component": component,
+        "runtime_family": "ingester",
+        "ingester": ingester,
+        "provider": ingester,
         "source_mode": os.getenv("PCG_REPO_SOURCE_MODE"),
         "status": "bootstrap_pending",
         "active_run_id": None,
@@ -41,60 +53,67 @@ def _default_status(component: str) -> dict[str, Any]:
     }
 
 
-def get_index_status(_database: Any, *, component: str = "worker") -> dict[str, Any]:
-    """Return persisted runtime status for one worker component."""
+def list_ingesters(_database: Any) -> list[dict[str, Any]]:
+    """Return the current status for each known ingester."""
 
-    with trace_query("runtime_index_status"):
-        store = get_runtime_status_store()
-        if store is not None and store.enabled:
-            result = store.get_runtime_status(component=component)
-            if result is not None:
-                return result
-        if component == "worker":
-            store = get_runtime_status_store()
-            if store is not None and store.enabled:
-                legacy = store.get_runtime_status(component="repo-sync")
-                if legacy is not None:
-                    legacy = dict(legacy)
-                    legacy["component"] = "worker"
-                    return legacy
-        return _default_status(component)
+    with trace_query("runtime_list_ingesters"):
+        return [get_ingester_status(_database, ingester=name) for name in KNOWN_INGESTERS]
 
 
-def request_index_scan_control(
+def get_ingester_status(
     _database: Any,
     *,
-    component: str = "worker",
+    ingester: str = "repository",
+) -> dict[str, Any]:
+    """Return persisted runtime status for one ingester."""
+
+    with trace_query("runtime_ingester_status"):
+        store = get_runtime_status_store()
+        if store is not None and store.enabled:
+            result = store.get_runtime_status(ingester=ingester)
+            if result is not None:
+                return result
+        return _default_status(ingester)
+
+
+def request_ingester_scan_control(
+    _database: Any,
+    *,
+    ingester: str = "repository",
     requested_by: str = "api",
 ) -> dict[str, Any]:
-    """Persist a manual worker scan request and return its accepted state."""
+    """Persist a manual ingester scan request and return its accepted state."""
 
-    with trace_query("runtime_request_scan"):
-        result = request_index_scan(component=component, requested_by=requested_by)
+    with trace_query("runtime_request_ingester_scan"):
+        result = request_ingester_scan(ingester=ingester, requested_by=requested_by)
         telemetry = get_observability()
         if result is None:
-            telemetry.record_worker_scan_request(
-                component="api",
+            telemetry.record_ingester_scan_request(
+                ingester=ingester,
                 phase="requested",
                 requested_by=requested_by,
                 accepted=False,
             )
             return {
-                "component": component,
+                "runtime_family": "ingester",
+                "ingester": ingester,
+                "provider": ingester,
                 "accepted": False,
                 "scan_request_token": "",
                 "scan_request_state": "unavailable",
                 "scan_requested_at": "",
                 "scan_requested_by": requested_by,
             }
-        telemetry.record_worker_scan_request(
-            component="api",
+        telemetry.record_ingester_scan_request(
+            ingester=ingester,
             phase="requested",
             requested_by=requested_by,
             accepted=True,
         )
         return {
-            "component": result["component"],
+            "runtime_family": "ingester",
+            "ingester": result["ingester"],
+            "provider": result["ingester"],
             "accepted": True,
             "scan_request_token": result["scan_request_token"],
             "scan_request_state": result["scan_request_state"],

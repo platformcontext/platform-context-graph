@@ -45,7 +45,8 @@ _READ_ONLY_TOOL_NAMES = {
     "get_entity_content",
     "search_file_content",
     "search_entity_content",
-    "get_index_status",
+    "list_ingesters",
+    "get_ingester_status",
 }
 
 

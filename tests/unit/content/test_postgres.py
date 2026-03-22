@@ -41,8 +41,8 @@ def test_delete_repository_content_removes_entities_and_files(monkeypatch) -> No
     ]
 
 
-def test_upsert_runtime_status_persists_worker_status(monkeypatch) -> None:
-    """Worker status writes should upsert into the runtime status table."""
+def test_upsert_runtime_status_persists_ingester_status(monkeypatch) -> None:
+    """Ingester status writes should upsert into the runtime status table."""
 
     store = PostgresRuntimeStatusStore("postgresql://example")
     cursor = MagicMock()
@@ -54,7 +54,7 @@ def test_upsert_runtime_status_persists_worker_status(monkeypatch) -> None:
     monkeypatch.setattr(store, "_cursor", _cursor)
 
     store.upsert_runtime_status(
-        component="worker",
+        ingester="repository",
         source_mode="githubOrg",
         status="degraded",
         active_run_id="run-123",
@@ -72,8 +72,8 @@ def test_upsert_runtime_status_persists_worker_status(monkeypatch) -> None:
     )
 
     query, params = cursor.execute.call_args.args
-    assert "INSERT INTO runtime_worker_status" in query
-    assert params["component"] == "worker"
+    assert "INSERT INTO runtime_ingester_status" in query
+    assert params["ingester"] == "repository"
     assert params["status"] == "degraded"
     assert params["active_run_id"] == "run-123"
     assert params["last_error_kind"] == "dns"
@@ -83,12 +83,12 @@ def test_upsert_runtime_status_persists_worker_status(monkeypatch) -> None:
 
 
 def test_get_runtime_status_returns_persisted_row(monkeypatch) -> None:
-    """Worker status reads should return the latest row for one component."""
+    """Ingester status reads should return the latest row for one ingester."""
 
     store = PostgresRuntimeStatusStore("postgresql://example")
     cursor = MagicMock()
     cursor.fetchone.return_value = {
-        "component": "worker",
+        "ingester": "repository",
         "source_mode": "githubOrg",
         "status": "idle",
         "active_run_id": "run-123",
@@ -119,9 +119,9 @@ def test_get_runtime_status_returns_persisted_row(monkeypatch) -> None:
 
     monkeypatch.setattr(store, "_cursor", _cursor)
 
-    result = store.get_runtime_status(component="worker")
+    result = store.get_runtime_status(ingester="repository")
 
-    assert result["component"] == "worker"
+    assert result["ingester"] == "repository"
     assert result["status"] == "idle"
     assert result["completed_repositories"] == 200
     assert result["pulled_repositories"] == 200
@@ -129,13 +129,13 @@ def test_get_runtime_status_returns_persisted_row(monkeypatch) -> None:
     assert result["scan_request_state"] == "idle"
 
 
-def test_request_scan_persists_pending_worker_control(monkeypatch) -> None:
-    """Requesting a scan should upsert a pending worker control row."""
+def test_request_scan_persists_pending_ingester_control(monkeypatch) -> None:
+    """Requesting a scan should upsert a pending ingester control row."""
 
     store = PostgresRuntimeStatusStore("postgresql://example")
     cursor = MagicMock()
     cursor.fetchone.return_value = {
-        "component": "worker",
+        "ingester": "repository",
         "scan_request_token": "scan-123",
         "scan_request_state": "pending",
         "scan_requested_at": "2026-03-22T12:10:00+00:00",
@@ -151,22 +151,22 @@ def test_request_scan_persists_pending_worker_control(monkeypatch) -> None:
 
     monkeypatch.setattr(store, "_cursor", _cursor)
 
-    result = store.request_scan(component="worker", requested_by="api")
+    result = store.request_scan(ingester="repository", requested_by="api")
 
     query, params = cursor.execute.call_args.args
-    assert "INSERT INTO runtime_worker_control" in query
-    assert params["component"] == "worker"
+    assert "INSERT INTO runtime_ingester_control" in query
+    assert params["ingester"] == "repository"
     assert params["scan_requested_by"] == "api"
     assert result["scan_request_state"] == "pending"
 
 
 def test_claim_scan_request_marks_it_running(monkeypatch) -> None:
-    """Claiming a pending worker scan should transition it to running."""
+    """Claiming a pending ingester scan should transition it to running."""
 
     store = PostgresRuntimeStatusStore("postgresql://example")
     cursor = MagicMock()
     cursor.fetchone.return_value = {
-        "component": "worker",
+        "ingester": "repository",
         "scan_request_token": "scan-123",
         "scan_request_state": "running",
         "scan_requested_at": "2026-03-22T12:10:00+00:00",
@@ -182,16 +182,16 @@ def test_claim_scan_request_marks_it_running(monkeypatch) -> None:
 
     monkeypatch.setattr(store, "_cursor", _cursor)
 
-    result = store.claim_scan_request(component="worker")
+    result = store.claim_scan_request(ingester="repository")
 
     query, params = cursor.execute.call_args.args
-    assert "UPDATE runtime_worker_control" in query
-    assert params["component"] == "worker"
+    assert "UPDATE runtime_ingester_control" in query
+    assert params["ingester"] == "repository"
     assert result["scan_request_state"] == "running"
 
 
 def test_complete_scan_request_marks_it_completed(monkeypatch) -> None:
-    """Completing a worker scan request should persist the terminal state."""
+    """Completing an ingester scan request should persist the terminal state."""
 
     store = PostgresRuntimeStatusStore("postgresql://example")
     cursor = MagicMock()
@@ -202,10 +202,10 @@ def test_complete_scan_request_marks_it_completed(monkeypatch) -> None:
 
     monkeypatch.setattr(store, "_cursor", _cursor)
 
-    store.complete_scan_request(component="worker", request_token="scan-123")
+    store.complete_scan_request(ingester="repository", request_token="scan-123")
 
     query, params = cursor.execute.call_args.args
-    assert "UPDATE runtime_worker_control" in query
-    assert params["component"] == "worker"
+    assert "UPDATE runtime_ingester_control" in query
+    assert params["ingester"] == "repository"
     assert params["scan_request_token"] == "scan-123"
     assert params["scan_request_state"] == "completed"

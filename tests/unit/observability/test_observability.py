@@ -262,10 +262,10 @@ def test_content_provider_metrics_record_hits_and_workspace_fallbacks(
     )
 
 
-def test_worker_scan_request_metrics_and_service_name_use_worker_identity(
+def test_ingester_scan_request_metrics_and_service_name_use_ingester_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Worker control events should emit on the indexer service identity."""
+    """Repository ingester control events should emit on the ingester service."""
 
     pytest.importorskip("opentelemetry.sdk")
     from opentelemetry.sdk.metrics.export import InMemoryMetricReader
@@ -285,12 +285,12 @@ def test_worker_scan_request_metrics_and_service_name_use_worker_identity(
 
     metric_reader = InMemoryMetricReader()
     runtime = observability.initialize_observability(
-        component="worker",
+        component="repository",
         metric_reader=metric_reader,
         span_exporter=InMemorySpanExporter(),
     )
-    runtime.record_worker_scan_request(
-        component="worker",
+    runtime.record_ingester_scan_request(
+        ingester="repository",
         phase="claimed",
         requested_by="api",
         accepted=True,
@@ -298,11 +298,11 @@ def test_worker_scan_request_metrics_and_service_name_use_worker_identity(
 
     points = _metric_points(metric_reader)
 
-    assert otel.service_name_for_component("worker") == "platform-context-graph-indexer"
+    assert otel.service_name_for_component("repository") == "platform-context-graph-ingester"
     assert _matching_values(
         points,
-        "pcg_worker_scan_requests_total",
-        component="worker",
+        "pcg_ingester_scan_requests_total",
+        ingester="repository",
         phase="claimed",
         requested_by="api",
         accepted="true",

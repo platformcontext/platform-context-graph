@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from platform_context_graph.runtime.worker.config import RepoSyncRepositoryRule
+from platform_context_graph.runtime.ingester.config import RepoSyncRepositoryRule
 
 
 class _FakeResponse:
@@ -32,7 +32,7 @@ def test_config_from_env_merges_structured_and_legacy_repository_rules(
 ) -> None:
     """Merge structured rules with the deprecated exact shorthand."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     monkeypatch.setenv(
         "PCG_REPOSITORY_RULES_JSON",
@@ -61,8 +61,8 @@ def test_git_discovery_applies_exact_and_regex_include_rules(
 ) -> None:
     """Filter GitHub discovery results using mixed exact and regex rules."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
-    git = importlib.import_module("platform_context_graph.runtime.worker.git")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    git = importlib.import_module("platform_context_graph.runtime.ingester.git")
 
     config = repo_sync.RepoSyncConfig(
         repos_dir=Path("/tmp/repos"),
@@ -120,8 +120,8 @@ def test_git_repo_sync_cycle_rediscoveries_and_indexes_only_on_change(
 ) -> None:
     """Rediscover matching repos and reindex only after clone or update changes."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
-    sync = importlib.import_module("platform_context_graph.runtime.worker.sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
 
     repos_dir = tmp_path / "repos"
     existing_repo = repos_dir / "service-a"
@@ -195,8 +195,8 @@ def test_git_repo_sync_cycle_skips_reindex_when_no_changes(
 ) -> None:
     """Skip the reindex pass when rediscovery finds no material changes."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
-    sync = importlib.import_module("platform_context_graph.runtime.worker.sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
 
     repos_dir = tmp_path / "repos"
     (repos_dir / "service-a" / ".git").mkdir(parents=True)

@@ -38,7 +38,7 @@ class RuntimeMetricsMixin:
     content_provider_requests_total: Any
     content_provider_duration: Any
     content_workspace_fallback_total: Any
-    worker_scan_requests_total: Any
+    ingester_scan_requests_total: Any
 
     def record_http_request(
         self,
@@ -262,22 +262,22 @@ class RuntimeMetricsMixin:
             },
         )
 
-    def record_worker_scan_request(
+    def record_ingester_scan_request(
         self,
         *,
-        component: str,
+        ingester: str,
         phase: str,
         requested_by: str | None,
         accepted: bool,
     ) -> None:
-        """Record one worker scan control event."""
+        """Record one ingester scan control event."""
 
-        if not self.enabled or self.worker_scan_requests_total is None:
+        if not self.enabled or self.ingester_scan_requests_total is None:
             return
-        self.worker_scan_requests_total.add(
+        self.ingester_scan_requests_total.add(
             1,
             {
-                "component": component,
+                "ingester": ingester,
                 "phase": phase,
                 "requested_by": requested_by or "unknown",
                 "accepted": str(accepted).lower(),

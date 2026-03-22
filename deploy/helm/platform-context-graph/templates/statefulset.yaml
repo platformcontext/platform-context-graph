@@ -5,17 +5,17 @@ metadata:
   name: {{ include "pcg.fullname" . }}
   labels:
     {{- include "pcg.labels" . | nindent 4 }}
-    app.kubernetes.io/component: worker
+    app.kubernetes.io/component: ingester
 spec:
-  replicas: {{ .Values.worker.replicas }}
-  serviceName: {{ include "pcg.workerHeadlessServiceName" . }}
+  replicas: {{ .Values.ingester.replicas }}
+  serviceName: {{ include "pcg.ingesterHeadlessServiceName" . }}
   selector:
     matchLabels:
-      {{- include "pcg.workerSelectorLabels" . | nindent 6 }}
+      {{- include "pcg.ingesterSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "pcg.workerSelectorLabels" . | nindent 8 }}
+        {{- include "pcg.ingesterSelectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -44,7 +44,7 @@ spec:
           command: ["pcg", "internal", "repo-sync-loop"]
           env:
             - name: PCG_RUNTIME_ROLE
-              value: "worker"
+              value: "ingester"
             - name: PCG_HOME
               value: /data/.platform-context-graph
             - name: PYTHONUNBUFFERED
@@ -122,16 +122,16 @@ spec:
               readOnly: true
             {{- end }}
           resources:
-            {{- toYaml .Values.worker.resources | nindent 12 }}
+            {{- toYaml .Values.ingester.resources | nindent 12 }}
       volumes:
         - name: pcgignore
           configMap:
             name: {{ include "pcg.fullname" . }}-pcgignore
-        {{- if and .Values.worker.persistence.enabled .Values.worker.persistence.existingClaim }}
+        {{- if and .Values.ingester.persistence.enabled .Values.ingester.persistence.existingClaim }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "pcg.dataClaimName" . }}
-        {{- else if not .Values.worker.persistence.enabled }}
+        {{- else if not .Values.ingester.persistence.enabled }}
         - name: data
           emptyDir: {}
         {{- end }}
@@ -146,7 +146,7 @@ spec:
               - key: {{ .Values.repoSync.auth.ssh.knownHostsKey }}
                 path: known_hosts
         {{- end }}
-  {{- if and .Values.worker.persistence.enabled (not .Values.worker.persistence.existingClaim) }}
+  {{- if and .Values.ingester.persistence.enabled (not .Values.ingester.persistence.existingClaim) }}
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -154,12 +154,12 @@ spec:
           {{- include "pcg.selectorLabels" . | nindent 10 }}
       spec:
         accessModes:
-          {{- toYaml .Values.worker.persistence.accessModes | nindent 10 }}
-        {{- if .Values.worker.persistence.storageClass }}
-        storageClassName: {{ .Values.worker.persistence.storageClass | quote }}
+          {{- toYaml .Values.ingester.persistence.accessModes | nindent 10 }}
+        {{- if .Values.ingester.persistence.storageClass }}
+        storageClassName: {{ .Values.ingester.persistence.storageClass | quote }}
         {{- end }}
         resources:
           requests:
-            storage: {{ .Values.worker.persistence.size }}
+            storage: {{ .Values.ingester.persistence.size }}
   {{- end }}
 {{- end }}

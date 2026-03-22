@@ -1,11 +1,10 @@
-"""PostgreSQL-backed runtime worker status persistence."""
+"""PostgreSQL-backed runtime ingester status persistence."""
 
 from __future__ import annotations
 
 import os
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -16,42 +15,9 @@ except ImportError:  # pragma: no cover - exercised when optional dependency mis
     psycopg = None
     dict_row = None
 
-__all__ = ["claim_scan_request", "complete_scan_request", "get_runtime_status_store", "request_index_scan", "reset_runtime_status_store_for_tests", "update_runtime_status"]
+from .status_store_support import CONTROL_SCHEMA, STATUS_SCHEMA, idle_scan_control, utc_now
 
-_STATUS_SCHEMA = """
-CREATE TABLE IF NOT EXISTS runtime_worker_status (
-    component TEXT PRIMARY KEY,
-    source_mode TEXT,
-    status TEXT NOT NULL,
-    active_run_id TEXT,
-    last_attempt_at TIMESTAMPTZ,
-    last_success_at TIMESTAMPTZ,
-    next_retry_at TIMESTAMPTZ,
-    last_error_kind TEXT,
-    last_error_message TEXT,
-    repository_count INTEGER NOT NULL DEFAULT 0,
-    pulled_repositories INTEGER NOT NULL DEFAULT 0,
-    in_sync_repositories INTEGER NOT NULL DEFAULT 0,
-    pending_repositories INTEGER NOT NULL DEFAULT 0,
-    completed_repositories INTEGER NOT NULL DEFAULT 0,
-    failed_repositories INTEGER NOT NULL DEFAULT 0,
-    updated_at TIMESTAMPTZ NOT NULL
-);
-"""
-
-_CONTROL_SCHEMA = """
-CREATE TABLE IF NOT EXISTS runtime_worker_control (
-    component TEXT PRIMARY KEY,
-    scan_request_token TEXT,
-    scan_request_state TEXT NOT NULL DEFAULT 'idle',
-    scan_requested_at TIMESTAMPTZ,
-    scan_requested_by TEXT,
-    scan_started_at TIMESTAMPTZ,
-    scan_completed_at TIMESTAMPTZ,
-    scan_error_message TEXT,
-    updated_at TIMESTAMPTZ NOT NULL
-);
-"""
+__all__ = ["claim_ingester_scan_request", "complete_ingester_scan_request", "get_runtime_status_store", "request_ingester_scan", "reset_runtime_status_store_for_tests", "update_runtime_ingester_status"]
 
 _STORE_LOCK = threading.Lock()
 _STORE: PostgresRuntimeStatusStore | None = None
@@ -74,29 +40,8 @@ def _dsn() -> str | None:
     return None
 
 
-def _utc_now() -> datetime:
-    """Return the current UTC timestamp."""
-
-    return datetime.now(timezone.utc)
-
-
-def _idle_scan_control(component: str) -> dict[str, Any]:
-    """Return the default idle scan-control payload for one component."""
-
-    return {
-        "component": component,
-        "scan_request_token": None,
-        "scan_request_state": "idle",
-        "scan_requested_at": None,
-        "scan_requested_by": None,
-        "scan_started_at": None,
-        "scan_completed_at": None,
-        "scan_error_message": None,
-    }
-
-
 class PostgresRuntimeStatusStore:
-    """Persist worker runtime status in PostgreSQL."""
+    """Persist ingester runtime status in PostgreSQL."""
 
     def __init__(self, dsn: str) -> None:
         """Bind the status store to a PostgreSQL DSN."""
@@ -126,8 +71,8 @@ class PostgresRuntimeStatusStore:
                 self._initialized = False
             if not self._initialized:
                 with self._conn.cursor() as cursor:
-                    cursor.execute(_STATUS_SCHEMA)
-                    cursor.execute(_CONTROL_SCHEMA)
+                    cursor.execute(STATUS_SCHEMA)
+                    cursor.execute(CONTROL_SCHEMA)
                 self._initialized = True
             with self._conn.cursor() as cursor:
                 yield cursor
@@ -135,7 +80,7 @@ class PostgresRuntimeStatusStore:
     def upsert_runtime_status(
         self,
         *,
-        component: str,
+        ingester: str,
         source_mode: str | None,
         status: str,
         active_run_id: str | None = None,
@@ -151,13 +96,13 @@ class PostgresRuntimeStatusStore:
         completed_repositories: int = 0,
         failed_repositories: int = 0,
     ) -> None:
-        """Insert or update one worker status row."""
+        """Insert or update one ingester status row."""
 
         with self._cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO runtime_worker_status (
-                    component,
+                INSERT INTO runtime_ingester_status (
+                    ingester,
                     source_mode,
                     status,
                     active_run_id,
@@ -174,7 +119,7 @@ class PostgresRuntimeStatusStore:
                     failed_repositories,
                     updated_at
                 ) VALUES (
-                    %(component)s,
+                    %(ingester)s,
                     %(source_mode)s,
                     %(status)s,
                     %(active_run_id)s,
@@ -191,7 +136,7 @@ class PostgresRuntimeStatusStore:
                     %(failed_repositories)s,
                     %(updated_at)s
                 )
-                ON CONFLICT (component) DO UPDATE
+                ON CONFLICT (ingester) DO UPDATE
                 SET source_mode = EXCLUDED.source_mode,
                     status = EXCLUDED.status,
                     active_run_id = EXCLUDED.active_run_id,
@@ -209,7 +154,7 @@ class PostgresRuntimeStatusStore:
                     updated_at = EXCLUDED.updated_at
                 """,
                 {
-                    "component": component,
+                    "ingester": ingester,
                     "source_mode": source_mode,
                     "status": status,
                     "active_run_id": active_run_id,
@@ -224,17 +169,17 @@ class PostgresRuntimeStatusStore:
                     "pending_repositories": pending_repositories,
                     "completed_repositories": completed_repositories,
                     "failed_repositories": failed_repositories,
-                    "updated_at": _utc_now(),
+                    "updated_at": utc_now(),
                 },
             )
 
-    def get_runtime_status(self, *, component: str) -> dict[str, Any] | None:
-        """Return the persisted runtime status for one component."""
+    def get_runtime_status(self, *, ingester: str) -> dict[str, Any] | None:
+        """Return the persisted runtime status for one ingester."""
 
         with self._cursor() as cursor:
             cursor.execute(
                 """
-                SELECT component,
+                SELECT ingester,
                        source_mode,
                        status,
                        active_run_id,
@@ -250,15 +195,15 @@ class PostgresRuntimeStatusStore:
                        completed_repositories,
                        failed_repositories,
                        updated_at
-                FROM runtime_worker_status
-                WHERE component = %(component)s
+                FROM runtime_ingester_status
+                WHERE ingester = %(ingester)s
                 """,
-                {"component": component},
+                {"ingester": ingester},
             )
             status_row = cursor.fetchone()
             cursor.execute(
                 """
-                SELECT component,
+                SELECT ingester,
                        scan_request_token,
                        scan_request_state,
                        scan_requested_at,
@@ -266,17 +211,19 @@ class PostgresRuntimeStatusStore:
                        scan_started_at,
                        scan_completed_at,
                        scan_error_message
-                FROM runtime_worker_control
-                WHERE component = %(component)s
+                FROM runtime_ingester_control
+                WHERE ingester = %(ingester)s
                 """,
-                {"component": component},
+                {"ingester": ingester},
             )
-            control_row = cursor.fetchone() or _idle_scan_control(component)
+            control_row = cursor.fetchone() or idle_scan_control(ingester)
             if status_row is None:
                 if control_row["scan_request_state"] == "idle":
                     return None
                 return {
-                    "component": component,
+                    "runtime_family": "ingester",
+                    "ingester": ingester,
+                    "provider": ingester,
                     "source_mode": None,
                     "status": "bootstrap_pending",
                     "active_run_id": None,
@@ -294,25 +241,29 @@ class PostgresRuntimeStatusStore:
                     "updated_at": None,
                     **control_row,
                 }
-            merged = dict(status_row)
+            merged = {
+                "runtime_family": "ingester",
+                "provider": ingester,
+                **dict(status_row),
+            }
             merged.update(control_row)
             return merged
 
     def request_scan(
         self,
         *,
-        component: str,
+        ingester: str,
         requested_by: str = "api",
     ) -> dict[str, Any]:
-        """Persist a pending manual worker scan request."""
+        """Persist a pending manual ingester scan request."""
 
         request_token = str(uuid4())
-        requested_at = _utc_now()
+        requested_at = utc_now()
         with self._cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO runtime_worker_control (
-                    component,
+                INSERT INTO runtime_ingester_control (
+                    ingester,
                     scan_request_token,
                     scan_request_state,
                     scan_requested_at,
@@ -322,7 +273,7 @@ class PostgresRuntimeStatusStore:
                     scan_error_message,
                     updated_at
                 ) VALUES (
-                    %(component)s,
+                    %(ingester)s,
                     %(scan_request_token)s,
                     %(scan_request_state)s,
                     %(scan_requested_at)s,
@@ -332,7 +283,7 @@ class PostgresRuntimeStatusStore:
                     NULL,
                     %(updated_at)s
                 )
-                ON CONFLICT (component) DO UPDATE
+                ON CONFLICT (ingester) DO UPDATE
                 SET scan_request_token = EXCLUDED.scan_request_token,
                     scan_request_state = EXCLUDED.scan_request_state,
                     scan_requested_at = EXCLUDED.scan_requested_at,
@@ -341,7 +292,7 @@ class PostgresRuntimeStatusStore:
                     scan_completed_at = NULL,
                     scan_error_message = NULL,
                     updated_at = EXCLUDED.updated_at
-                RETURNING component,
+                RETURNING ingester,
                           scan_request_token,
                           scan_request_state,
                           scan_requested_at,
@@ -351,7 +302,7 @@ class PostgresRuntimeStatusStore:
                           scan_error_message
                 """,
                 {
-                    "component": component,
+                    "ingester": ingester,
                     "scan_request_token": request_token,
                     "scan_request_state": "pending",
                     "scan_requested_at": requested_at,
@@ -361,20 +312,20 @@ class PostgresRuntimeStatusStore:
             )
             return cursor.fetchone()
 
-    def claim_scan_request(self, *, component: str) -> dict[str, Any] | None:
-        """Atomically claim the next pending scan request for a worker."""
+    def claim_scan_request(self, *, ingester: str) -> dict[str, Any] | None:
+        """Atomically claim the next pending scan request for an ingester."""
 
-        started_at = _utc_now()
+        started_at = utc_now()
         with self._cursor() as cursor:
             cursor.execute(
                 """
-                UPDATE runtime_worker_control
+                UPDATE runtime_ingester_control
                 SET scan_request_state = %(scan_request_state)s,
                     scan_started_at = %(scan_started_at)s,
                     updated_at = %(updated_at)s
-                WHERE component = %(component)s
+                WHERE ingester = %(ingester)s
                   AND scan_request_state = 'pending'
-                RETURNING component,
+                RETURNING ingester,
                           scan_request_token,
                           scan_request_state,
                           scan_requested_at,
@@ -384,7 +335,7 @@ class PostgresRuntimeStatusStore:
                           scan_error_message
                 """,
                 {
-                    "component": component,
+                    "ingester": ingester,
                     "scan_request_state": "running",
                     "scan_started_at": started_at,
                     "updated_at": started_at,
@@ -395,26 +346,26 @@ class PostgresRuntimeStatusStore:
     def complete_scan_request(
         self,
         *,
-        component: str,
+        ingester: str,
         request_token: str,
         error_message: str | None = None,
     ) -> None:
         """Mark one claimed scan request completed or failed."""
 
-        completed_at = _utc_now()
+        completed_at = utc_now()
         with self._cursor() as cursor:
             cursor.execute(
                 """
-                UPDATE runtime_worker_control
+                UPDATE runtime_ingester_control
                 SET scan_request_state = %(scan_request_state)s,
                     scan_completed_at = %(scan_completed_at)s,
                     scan_error_message = %(scan_error_message)s,
                     updated_at = %(updated_at)s
-                WHERE component = %(component)s
+                WHERE ingester = %(ingester)s
                   AND scan_request_token = %(scan_request_token)s
                 """,
                 {
-                    "component": component,
+                    "ingester": ingester,
                     "scan_request_token": request_token,
                     "scan_request_state": (
                         "failed" if error_message is not None else "completed"
@@ -441,8 +392,8 @@ def get_runtime_status_store() -> PostgresRuntimeStatusStore | None:
         return _STORE
 
 
-def update_runtime_status(**kwargs: Any) -> None:
-    """Persist worker status when the runtime status store is configured."""
+def update_runtime_ingester_status(**kwargs: Any) -> None:
+    """Persist ingester status when the runtime status store is configured."""
 
     store = get_runtime_status_store()
     if store is None or not store.enabled:
@@ -450,37 +401,39 @@ def update_runtime_status(**kwargs: Any) -> None:
     store.upsert_runtime_status(**kwargs)
 
 
-def request_index_scan(*, component: str, requested_by: str = "api") -> dict[str, Any] | None:
-    """Persist a manual worker scan request when the status store is configured."""
+def request_ingester_scan(
+    *, ingester: str, requested_by: str = "api"
+) -> dict[str, Any] | None:
+    """Persist a manual ingester scan request when the status store is configured."""
 
     store = get_runtime_status_store()
     if store is None or not store.enabled:
         return None
-    return store.request_scan(component=component, requested_by=requested_by)
+    return store.request_scan(ingester=ingester, requested_by=requested_by)
 
 
-def claim_scan_request(*, component: str) -> dict[str, Any] | None:
-    """Claim the next pending manual worker scan request when configured."""
+def claim_ingester_scan_request(*, ingester: str) -> dict[str, Any] | None:
+    """Claim the next pending manual ingester scan request when configured."""
 
     store = get_runtime_status_store()
     if store is None or not store.enabled:
         return None
-    return store.claim_scan_request(component=component)
+    return store.claim_scan_request(ingester=ingester)
 
 
-def complete_scan_request(
+def complete_ingester_scan_request(
     *,
-    component: str,
+    ingester: str,
     request_token: str,
     error_message: str | None = None,
 ) -> None:
-    """Mark one claimed worker scan request completed when configured."""
+    """Mark one claimed ingester scan request completed when configured."""
 
     store = get_runtime_status_store()
     if store is None or not store.enabled:
         return
     store.complete_scan_request(
-        component=component,
+        ingester=ingester,
         request_token=request_token,
         error_message=error_message,
     )

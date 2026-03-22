@@ -84,7 +84,7 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
     content_provider_requests_total: Any = field(init=False, default=None)
     content_provider_duration: Any = field(init=False, default=None)
     content_workspace_fallback_total: Any = field(init=False, default=None)
-    worker_scan_requests_total: Any = field(init=False, default=None)
+    ingester_scan_requests_total: Any = field(init=False, default=None)
 
     def __post_init__(self) -> None:
         """Create the tracer, meter, and metric instruments for the runtime."""
@@ -125,7 +125,7 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         self.content_provider_requests_total = None
         self.content_provider_duration = None
         self.content_workspace_fallback_total = None
-        self.worker_scan_requests_total = None
+        self.ingester_scan_requests_total = None
 
         if not self.enabled or self.meter is None:
             return
@@ -196,8 +196,8 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         self.content_workspace_fallback_total = self.meter.create_counter(
             "pcg_content_workspace_fallback_total"
         )
-        self.worker_scan_requests_total = self.meter.create_counter(
-            "pcg_worker_scan_requests_total"
+        self.ingester_scan_requests_total = self.meter.create_counter(
+            "pcg_ingester_scan_requests_total"
         )
 
         self.meter.create_observable_gauge(

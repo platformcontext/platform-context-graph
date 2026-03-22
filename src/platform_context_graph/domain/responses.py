@@ -121,12 +121,14 @@ class EntityContentResponse(BaseModel):
     repo_access: RepoAccess | None = None
 
 
-class IndexStatusResponse(BaseModel):
-    """Runtime worker status exposed by the API and MCP layers."""
+class IngesterStatusResponse(BaseModel):
+    """Runtime ingester status exposed by the API and MCP layers."""
 
     model_config = ConfigDict(extra="forbid")
 
-    component: str
+    runtime_family: Literal["ingester"] = "ingester"
+    ingester: str
+    provider: str
     source_mode: str | None = None
     status: str
     active_run_id: str | None = None
@@ -151,12 +153,14 @@ class IndexStatusResponse(BaseModel):
     updated_at: str | None = None
 
 
-class ScanRequestResponse(BaseModel):
+class IngesterScanRequestResponse(BaseModel):
     """Scan-trigger response exposed by the API and control surfaces."""
 
     model_config = ConfigDict(extra="forbid")
 
-    component: str
+    runtime_family: Literal["ingester"] = "ingester"
+    ingester: str
+    provider: str
     accepted: bool
     scan_request_token: str
     scan_request_state: str

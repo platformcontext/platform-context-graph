@@ -14,7 +14,7 @@ from dotenv import find_dotenv
 from rich.console import Console
 
 from platform_context_graph.core.database import DatabaseManager
-from platform_context_graph.runtime.worker import (
+from platform_context_graph.runtime.ingester import (
     RepoSyncConfig,
     run_bootstrap_index,
     run_repo_sync_cycle,

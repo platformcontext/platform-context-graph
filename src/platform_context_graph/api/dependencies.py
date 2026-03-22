@@ -41,7 +41,7 @@ class QueryServices:
         impact: Trace and blast-radius query module.
         infra: Infrastructure query module.
         repositories: Repository query module.
-        status: Runtime worker status query module.
+        status: Runtime ingester status query module.
     """
 
     database: Any

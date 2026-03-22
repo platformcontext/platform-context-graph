@@ -1,24 +1,24 @@
-"""Runtime-status publishing helpers for checkpointed indexing runs."""
+"""Runtime-status publishing helpers for checkpointed ingester runs."""
 
 from __future__ import annotations
 
 from .coordinator_models import IndexRunState
-from ..runtime.status_store import update_runtime_status
+from ..runtime.status_store import update_runtime_ingester_status
 
 
 def publish_runtime_progress(
     *,
-    component: str,
+    ingester: str,
     source: str,
     run_state: IndexRunState,
     repository_count: int,
     status: str,
     last_success_at: str | None = None,
 ) -> None:
-    """Publish the current checkpointed run summary into runtime worker status."""
+    """Publish the current checkpointed run summary into runtime ingester status."""
 
-    update_runtime_status(
-        component=component,
+    update_runtime_ingester_status(
+        ingester=ingester,
         source_mode=source,
         status=status,
         active_run_id=run_state.run_id,

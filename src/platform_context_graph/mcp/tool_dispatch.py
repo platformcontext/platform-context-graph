@@ -59,7 +59,8 @@ def build_sync_tool_map(server: Any) -> dict[str, SyncToolHandler]:
         "search_file_content": server.search_file_content_tool,
         "search_entity_content": server.search_entity_content_tool,
         "link_ecosystem": server.link_ecosystem_tool,
-        "get_index_status": server.get_index_status_tool,
+        "list_ingesters": server.list_ingesters_tool,
+        "get_ingester_status": server.get_ingester_status_tool,
     }
 
 

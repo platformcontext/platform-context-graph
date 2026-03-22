@@ -1,4 +1,4 @@
-"""Sync loop orchestration for repo synchronization runtimes."""
+"""Sync loop orchestration for repository ingester runtimes."""
 
 from __future__ import annotations
 
@@ -33,15 +33,15 @@ from .support import (
     workspace_lock,
 )
 from ..status_store import (
-    claim_scan_request,
-    complete_scan_request,
+    claim_ingester_scan_request,
+    complete_ingester_scan_request,
     get_runtime_status_store,
-    update_runtime_status,
+    update_runtime_ingester_status,
 )
 
 DEFAULT_REPO_SYNC_RETRY_SECONDS = 5
 MAX_REPO_SYNC_RETRY_SECONDS = 300
-DEFAULT_WORKER_CONTROL_POLL_SECONDS = 5
+DEFAULT_INGESTER_CONTROL_POLL_SECONDS = 5
 
 _PRESERVED_STATUS_KEYS = ("active_run_id", "repository_count", "pulled_repositories", "in_sync_repositories", "pending_repositories", "completed_repositories", "failed_repositories")
 
@@ -103,45 +103,45 @@ def _retry_after_seconds(exc: Exception, attempt: int) -> int:
     return min(MAX_REPO_SYNC_RETRY_SECONDS, base_delay + jitter)
 
 
-def _current_worker_status(component: str) -> dict[str, object]:
-    """Return the currently persisted worker status payload, if any."""
+def _current_ingester_status(component: str) -> dict[str, object]:
+    """Return the currently persisted ingester status payload, if any."""
 
     store = get_runtime_status_store()
     if store is None or not store.enabled:
         return {}
-    result = store.get_runtime_status(component=component)
+    result = store.get_runtime_status(ingester=component)
     return result or {}
 
 
-def _persist_worker_status(
+def _persist_ingester_status(
     config: RepoSyncConfig,
     *,
     status: str,
     **overrides: object,
 ) -> None:
-    """Persist worker status while preserving the latest published repo counts."""
+    """Persist ingester status while preserving the latest published repo counts."""
 
-    current = _current_worker_status(config.component)
+    current = _current_ingester_status(config.component)
     payload: dict[str, object] = {
-        "component": config.component,
+        "ingester": config.component,
         "source_mode": config.source_mode,
         "status": status,
     }
     for key in _PRESERVED_STATUS_KEYS:
         payload[key] = overrides.pop(key, current.get(key, 0 if "repositories" in key else None))
     payload.update(overrides)
-    update_runtime_status(**payload)
+    update_runtime_ingester_status(**payload)
 
 
 def _control_poll_seconds() -> int:
-    """Return the worker control polling interval while idle/backing off."""
+    """Return the ingester control polling interval while idle/backing off."""
 
     return max(
         1,
         int(
             os.getenv(
-                "PCG_WORKER_CONTROL_POLL_SECONDS",
-                str(DEFAULT_WORKER_CONTROL_POLL_SECONDS),
+                "PCG_INGESTER_CONTROL_POLL_SECONDS",
+                str(DEFAULT_INGESTER_CONTROL_POLL_SECONDS),
             )
         ),
     )
@@ -151,12 +151,12 @@ def _wait_for_next_cycle(component: str, delay_seconds: int) -> dict[str, object
     """Sleep until the next cycle, waking early when a manual scan is requested."""
 
     if delay_seconds <= 0:
-        return claim_scan_request(component=component)
+        return claim_ingester_scan_request(ingester=component)
 
     deadline = time.monotonic() + delay_seconds
     poll_seconds = _control_poll_seconds()
     while True:
-        claimed = claim_scan_request(component=component)
+        claimed = claim_ingester_scan_request(ingester=component)
         if claimed is not None:
             return claimed
         remaining = deadline - time.monotonic()
@@ -395,7 +395,7 @@ def run_repo_sync_loop(
         index_workspace: Optional callable that indexes the workspace directory.
     """
 
-    config = RepoSyncConfig.from_env(component="worker")
+    config = RepoSyncConfig.from_env(component="repository")
     initialize_observability(component=config.component)
     initial_delay_seconds = int(os.getenv("PCG_REPO_SYNC_INITIAL_DELAY_SECONDS", "30"))
     pending_request: dict[str, object] | None = None
@@ -404,23 +404,25 @@ def run_repo_sync_loop(
     attempt = 1
     while True:
         started_at = _utc_now()
-        claimed_request = pending_request or claim_scan_request(component=config.component)
+        claimed_request = pending_request or claim_ingester_scan_request(
+            ingester=config.component
+        )
         pending_request = None
         if claimed_request is not None:
-            get_observability().record_worker_scan_request(
-                component=config.component,
+            get_observability().record_ingester_scan_request(
+                ingester=config.component,
                 phase="claimed",
                 requested_by=str(claimed_request.get("scan_requested_by") or "unknown"),
                 accepted=True,
             )
         try:
-            _persist_worker_status(
+            _persist_ingester_status(
                 config,
                 status="syncing",
                 last_attempt_at=started_at,
             )
             result = run_repo_sync_cycle(config, index_workspace=index_workspace)
-            _persist_worker_status(
+            _persist_ingester_status(
                 config,
                 status="idle",
                 last_attempt_at=started_at,
@@ -429,17 +431,17 @@ def run_repo_sync_loop(
                 last_error_kind=None,
                 last_error_message=None,
                 repository_count=result.discovered
-                or int(_current_worker_status(config.component).get("repository_count", 0)),
+                or int(_current_ingester_status(config.component).get("repository_count", 0)),
                 pulled_repositories=result.discovered
-                or int(_current_worker_status(config.component).get("pulled_repositories", 0)),
+                or int(_current_ingester_status(config.component).get("pulled_repositories", 0)),
             )
             if claimed_request is not None:
-                complete_scan_request(
-                    component=config.component,
+                complete_ingester_scan_request(
+                    ingester=config.component,
                     request_token=str(claimed_request["scan_request_token"]),
                 )
-                get_observability().record_worker_scan_request(
-                    component=config.component,
+                get_observability().record_ingester_scan_request(
+                    ingester=config.component,
                     phase="completed",
                     requested_by=str(claimed_request.get("scan_requested_by") or "unknown"),
                     accepted=True,
@@ -448,7 +450,7 @@ def run_repo_sync_loop(
             pending_request = _wait_for_next_cycle(config.component, interval_seconds)
         except Exception as exc:
             delay_seconds = _retry_after_seconds(exc, attempt)
-            _persist_worker_status(
+            _persist_ingester_status(
                 config,
                 status="degraded",
                 last_attempt_at=started_at,
@@ -457,13 +459,13 @@ def run_repo_sync_loop(
                 last_error_message=str(exc),
             )
             if claimed_request is not None:
-                complete_scan_request(
-                    component=config.component,
+                complete_ingester_scan_request(
+                    ingester=config.component,
                     request_token=str(claimed_request["scan_request_token"]),
                     error_message=str(exc),
                 )
-                get_observability().record_worker_scan_request(
-                    component=config.component,
+                get_observability().record_ingester_scan_request(
+                    ingester=config.component,
                     phase="failed",
                     requested_by=str(claimed_request.get("scan_requested_by") or "unknown"),
                     accepted=False,

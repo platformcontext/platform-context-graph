@@ -764,7 +764,8 @@ def test_api_runtime_role_omits_indexing_tools_and_skips_graph_builder(
 
     tool_names = set(server.tools)
 
-    assert "get_index_status" in tool_names
+    assert "get_ingester_status" in tool_names
+    assert "list_ingesters" in tool_names
     assert "find_code" in tool_names
     assert "add_code_to_graph" not in tool_names
     assert "watch_directory" not in tool_names

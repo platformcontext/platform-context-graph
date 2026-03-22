@@ -16,14 +16,23 @@ class _RuntimeStatusServer(Protocol):
 
 
 class RuntimeStatusToolMixin:
-    """Provide runtime-status MCP tool wrappers."""
+    """Provide runtime-ingester MCP tool wrappers."""
 
-    def get_index_status_tool(
+    def list_ingesters_tool(
+        self: _RuntimeStatusServer, **args: Any
+    ) -> list[dict[str, Any]]:
+        """Return the current status for all configured ingesters."""
+
+        return status_queries.list_ingesters(self.db_manager)
+
+    def get_ingester_status_tool(
         self: _RuntimeStatusServer, **args: Any
     ) -> dict[str, Any]:
-        """Return runtime worker status for one component."""
+        """Return runtime status for one ingester."""
 
-        component = args.get("component", "worker")
-        if not isinstance(component, str) or not component.strip():
-            return {"error": "The 'component' argument must be a non-empty string."}
-        return status_queries.get_index_status(self.db_manager, component=component)
+        ingester = args.get("ingester", "repository")
+        if not isinstance(ingester, str) or not ingester.strip():
+            return {"error": "The 'ingester' argument must be a non-empty string."}
+        if ingester not in status_queries.KNOWN_INGESTERS:
+            return {"error": f"Unknown ingester: {ingester}"}
+        return status_queries.get_ingester_status(self.db_manager, ingester=ingester)

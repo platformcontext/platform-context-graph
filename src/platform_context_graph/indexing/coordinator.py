@@ -164,7 +164,7 @@ async def execute_index_run(
         pending_count=run_state.pending_repositories(),
     )
     _publish_runtime_progress(
-        component=component,
+        ingester=component,
         source=source,
         run_state=run_state,
         repository_count=len(repo_paths),
@@ -214,7 +214,7 @@ async def execute_index_run(
                 pending_count=run_state.pending_repositories(),
             )
             _publish_runtime_progress(
-                component=component,
+                ingester=component,
                 source=source,
                 run_state=run_state,
                 repository_count=len(repo_paths),
@@ -268,7 +268,7 @@ async def execute_index_run(
                     )
                     _persist_run_state(run_state)
                     _publish_runtime_progress(
-                        component=component,
+                        ingester=component,
                         source=source,
                         run_state=run_state,
                         repository_count=len(repo_paths),
@@ -278,7 +278,7 @@ async def execute_index_run(
                     repo_state.status = "commit_incomplete"
                     _persist_run_state(run_state)
                     _publish_runtime_progress(
-                        component=component,
+                        ingester=component,
                         source=source,
                         run_state=run_state,
                         repository_count=len(repo_paths),
@@ -295,7 +295,7 @@ async def execute_index_run(
                     repo_state.finished_at = _utc_now()
                     _persist_run_state(run_state)
                     _publish_runtime_progress(
-                        component=component,
+                        ingester=component,
                         source=source,
                         run_state=run_state,
                         repository_count=len(repo_paths),
@@ -324,7 +324,7 @@ async def execute_index_run(
                     run_state.last_error = str(exc)
                     _persist_run_state(run_state)
                     _publish_runtime_progress(
-                        component=component,
+                        ingester=component,
                         source=source,
                         run_state=run_state,
                         repository_count=len(repo_paths),
@@ -362,7 +362,7 @@ async def execute_index_run(
                         pending_count=run_state.pending_repositories(),
                     )
                     _publish_runtime_progress(
-                        component=component,
+                        ingester=component,
                         source=source,
                         run_state=run_state,
                         repository_count=len(repo_paths),
@@ -415,7 +415,7 @@ async def execute_index_run(
             pending_count=run_state.pending_repositories(),
         )
         _publish_runtime_progress(
-            component=component,
+            ingester=component,
             source=source,
             run_state=run_state,
             repository_count=len(repo_paths),

@@ -1,4 +1,4 @@
-"""Runtime role helpers for split API and worker processes."""
+"""Runtime role helpers for split API and ingester processes."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ __all__ = [
     "workspace_fallback_enabled",
 ]
 
-_VALID_ROLES = {"api", "worker", "combined"}
+_VALID_ROLES = {"api", "ingester", "combined"}
 _FALSEY = {"0", "false", "no", "off"}
 
 
@@ -18,7 +18,7 @@ def get_runtime_role() -> str:
     """Return the configured runtime role.
 
     Returns:
-        One of ``api``, ``worker``, or ``combined``. Unknown values fall back to
+        One of ``api``, ``ingester``, or ``combined``. Unknown values fall back to
         ``combined`` for compatibility with existing local flows.
     """
 

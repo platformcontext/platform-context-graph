@@ -73,7 +73,7 @@ def test_bootstrap_index_copies_filesystem_repos_and_emits_metrics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     observability = importlib.import_module("platform_context_graph.observability")
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
     observability.reset_observability_for_tests()
 
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
@@ -132,7 +132,7 @@ def test_bootstrap_index_copies_filesystem_repos_and_emits_metrics(
 def test_bootstrap_index_ignores_dangling_symlinks_in_filesystem_mode(
     tmp_path: Path,
 ) -> None:
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     source_root = tmp_path / "fixtures"
     repo_dir = source_root / "service-a"
@@ -171,7 +171,7 @@ def test_repo_sync_cycle_records_lock_contention_skip(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     observability = importlib.import_module("platform_context_graph.observability")
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
     observability.reset_observability_for_tests()
 
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
@@ -224,7 +224,7 @@ def test_bootstrap_index_reaps_stale_empty_lock_and_runs(
 ) -> None:
     """Bootstrap should recover from a stale lock directory left on disk."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     source_root = tmp_path / "fixtures"
     (source_root / "service-a").mkdir(parents=True)
@@ -266,7 +266,7 @@ def test_repo_sync_cycle_skips_with_fresh_metadata_lock(
 ) -> None:
     """Fresh lock metadata should still prevent concurrent sync cycles."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     repos_dir = tmp_path / "workspace" / "repos"
     repos_dir.mkdir(parents=True)
@@ -300,7 +300,7 @@ def test_bootstrap_index_reaps_stale_metadata_lock_and_runs(
 ) -> None:
     """Bootstrap should recover from stale lock metadata left on disk."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     source_root = tmp_path / "fixtures"
     (source_root / "service-a").mkdir(parents=True)
@@ -342,8 +342,8 @@ def test_bootstrap_index_waits_for_workspace_lock_before_indexing(
 ) -> None:
     """Bootstrap should retry lock acquisition instead of exiting cleanly."""
 
-    bootstrap = importlib.import_module("platform_context_graph.runtime.worker.bootstrap")
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
+    bootstrap = importlib.import_module("platform_context_graph.runtime.ingester.bootstrap")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     source_root = tmp_path / "fixtures"
     (source_root / "service-a").mkdir(parents=True)
@@ -388,7 +388,7 @@ def test_github_app_token_retries_transient_request_failures(
     """GitHub App token minting should retry transient request failures."""
 
     github_auth = importlib.import_module(
-        "platform_context_graph.runtime.worker.github_auth"
+        "platform_context_graph.runtime.ingester.github_auth"
     )
 
     github_auth.clear_cached_github_app_token()
@@ -434,7 +434,7 @@ def test_github_app_token_is_cached_until_near_expiry(
     """GitHub App tokens should be reused while they remain safely valid."""
 
     github_auth = importlib.import_module(
-        "platform_context_graph.runtime.worker.github_auth"
+        "platform_context_graph.runtime.ingester.github_auth"
     )
 
     github_auth.clear_cached_github_app_token()
@@ -472,7 +472,7 @@ def test_github_app_token_refreshes_when_near_expiry(
     """GitHub App tokens should refresh when they are close to expiring."""
 
     github_auth = importlib.import_module(
-        "platform_context_graph.runtime.worker.github_auth"
+        "platform_context_graph.runtime.ingester.github_auth"
     )
 
     github_auth.clear_cached_github_app_token()
@@ -513,7 +513,7 @@ def test_github_app_token_retries_rate_limit_responses(
     """GitHub App token minting should back off and retry on rate limits."""
 
     github_auth = importlib.import_module(
-        "platform_context_graph.runtime.worker.github_auth"
+        "platform_context_graph.runtime.ingester.github_auth"
     )
 
     github_auth.clear_cached_github_app_token()
@@ -562,7 +562,7 @@ def test_github_api_request_retries_rate_limit_403_responses(
     """GitHub API requests should back off on 403 rate-limit responses too."""
 
     github_auth = importlib.import_module(
-        "platform_context_graph.runtime.worker.github_auth"
+        "platform_context_graph.runtime.ingester.github_auth"
     )
 
     monkeypatch.setenv("PCG_GITHUB_API_RETRY_ATTEMPTS", "2")
@@ -614,8 +614,8 @@ def test_repo_sync_cycle_reports_stale_unmanaged_checkouts(
     """Count stale git checkouts when discovery no longer includes them."""
 
     observability = importlib.import_module("platform_context_graph.observability")
-    repo_sync = importlib.import_module("platform_context_graph.runtime.worker")
-    sync_module = importlib.import_module("platform_context_graph.runtime.worker.sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    sync_module = importlib.import_module("platform_context_graph.runtime.ingester.sync")
     observability.reset_observability_for_tests()
 
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
@@ -668,16 +668,16 @@ def test_repo_sync_cycle_reports_stale_unmanaged_checkouts(
 def test_repo_sync_loop_records_degraded_status_and_retries_transient_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Transient sync failures should degrade the worker instead of crashing it."""
+    """Transient sync failures should degrade the ingester instead of crashing it."""
 
     requests = pytest.importorskip("requests")
-    sync = importlib.import_module("platform_context_graph.runtime.worker.sync")
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
     monkeypatch.setenv("PCG_REPO_SYNC_INITIAL_DELAY_SECONDS", "0")
 
     recorded_statuses: list[dict[str, object]] = []
     monkeypatch.setattr(
         sync,
-        "update_runtime_status",
+        "update_runtime_ingester_status",
         lambda **kwargs: recorded_statuses.append(kwargs),
         raising=False,
     )
@@ -703,26 +703,26 @@ def test_repo_sync_loop_records_degraded_status_and_retries_transient_failures(
 def test_repo_sync_loop_claims_and_completes_manual_scan_requests(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Manual worker scan requests should run through the normal sync cycle."""
+    """Manual ingester scan requests should run through the normal sync cycle."""
 
-    sync = importlib.import_module("platform_context_graph.runtime.worker.sync")
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
     monkeypatch.setenv("PCG_REPO_SYNC_INITIAL_DELAY_SECONDS", "0")
 
     recorded_statuses: list[dict[str, object]] = []
     completed_requests: list[dict[str, object]] = []
     monkeypatch.setattr(
         sync,
-        "update_runtime_status",
+        "update_runtime_ingester_status",
         lambda **kwargs: recorded_statuses.append(kwargs),
         raising=False,
     )
     monkeypatch.setattr(
         sync,
-        "claim_scan_request",
+        "claim_ingester_scan_request",
         MagicMock(
             side_effect=[
                 {
-                    "component": "worker",
+                    "ingester": "repository",
                     "scan_request_token": "scan-123",
                     "scan_request_state": "running",
                 },
@@ -733,13 +733,13 @@ def test_repo_sync_loop_claims_and_completes_manual_scan_requests(
     )
     monkeypatch.setattr(
         sync,
-        "complete_scan_request",
+        "complete_ingester_scan_request",
         lambda **kwargs: completed_requests.append(kwargs),
         raising=False,
     )
     monkeypatch.setattr(
         sync,
-        "_current_worker_status",
+        "_current_ingester_status",
         lambda _component: {
             "repository_count": 5,
             "pulled_repositories": 5,
@@ -765,10 +765,10 @@ def test_repo_sync_loop_claims_and_completes_manual_scan_requests(
         sync.run_repo_sync_loop(interval_seconds=900)
 
     assert recorded_statuses
-    assert recorded_statuses[0]["component"] == "worker"
+    assert recorded_statuses[0]["ingester"] == "repository"
     assert completed_requests == [
         {
-            "component": "worker",
+            "ingester": "repository",
             "request_token": "scan-123",
         }
     ]

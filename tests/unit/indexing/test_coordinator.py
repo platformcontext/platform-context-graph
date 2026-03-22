@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 
 
-def test_publish_runtime_progress_reports_worker_repo_counts(
+def test_publish_runtime_progress_reports_ingester_repo_counts(
     monkeypatch,
 ) -> None:
     """Coordinator progress payloads should expose pulled/synced/failed counts."""
@@ -46,12 +46,12 @@ def test_publish_runtime_progress_reports_worker_repo_counts(
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(
         coordinator,
-        "update_runtime_status",
+        "update_runtime_ingester_status",
         lambda **kwargs: calls.append(kwargs),
     )
 
     coordinator.publish_runtime_progress(
-        component="worker",
+        ingester="repository",
         source="githubOrg",
         run_state=run_state,
         repository_count=3,
@@ -60,7 +60,7 @@ def test_publish_runtime_progress_reports_worker_repo_counts(
 
     assert calls == [
         {
-            "component": "worker",
+            "ingester": "repository",
             "source_mode": "githubOrg",
             "status": "indexing",
             "active_run_id": "run-123",

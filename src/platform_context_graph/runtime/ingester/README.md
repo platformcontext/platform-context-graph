@@ -1,7 +1,7 @@
-# Worker Runtime
+# Ingester Runtime
 
-This subpackage owns the worker-side source sync and indexing lifecycle for PCG
-runtime processes.
+This subpackage owns the repository-ingester source sync and indexing lifecycle
+for PCG runtime processes.
 
 Module boundaries:
 
@@ -9,7 +9,7 @@ Module boundaries:
 - `support.py` contains shared runtime helpers and telemetry wiring.
 - `git.py` implements GitHub and Git checkout/update helpers.
 - `bootstrap.py` runs the initial clone/sync + indexing flow.
-- `sync.py` runs the steady-state worker sync cycle and loop.
+- `sync.py` runs the steady-state ingester sync cycle and loop.
 
 Runtime source selection is driven by `PCG_REPOSITORY_RULES_JSON`, which accepts
 structured exact and regex include rules. The legacy `PCG_REPOSITORIES`

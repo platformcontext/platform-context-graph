@@ -7,13 +7,13 @@ from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError, version as pkg_version
 from typing import Any
 
-from fastapi import APIRouter, Depends, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.responses import Response
 
 from ..observability import initialize_observability
-from ..domain.responses import IndexStatusResponse, ScanRequestResponse
+from ..domain.responses import IngesterScanRequestResponse, IngesterStatusResponse
 from .dependencies import get_database, get_query_services
 from .routers import (
     code_router,
@@ -219,46 +219,58 @@ def create_app(
         return {"status": "ok"}
 
     @router.get(
-        "/index-status",
+        "/ingesters",
         tags=["system"],
-        response_model=IndexStatusResponse,
+        response_model=list[IngesterStatusResponse],
         response_model_exclude_none=True,
     )
-    def index_status(
+    def list_ingesters(
         services: Any = Depends(get_query_services),
-    ) -> dict[str, Any]:
-        """Return the latest persisted runtime worker status."""
+    ) -> list[dict[str, Any]]:
+        """Return the latest persisted status for each configured ingester."""
 
-        return services.status.get_index_status(services.database)
-
-    @router.get(
-        "/worker/status",
-        tags=["system"],
-        response_model=IndexStatusResponse,
-        response_model_exclude_none=True,
-    )
-    def worker_status(
-        services: Any = Depends(get_query_services),
-    ) -> dict[str, Any]:
-        """Return the latest persisted status for the runtime worker."""
-
-        return services.status.get_index_status(services.database, component="worker")
+        return services.status.list_ingesters(services.database)
 
     @router.post(
-        "/worker/scan",
+        "/ingesters/{ingester}/scan",
         tags=["system"],
-        response_model=ScanRequestResponse,
+        response_model=IngesterScanRequestResponse,
         response_model_exclude_none=True,
     )
-    def worker_scan(
+    def request_ingester_scan(
+        ingester: str,
         services: Any = Depends(get_query_services),
     ) -> dict[str, Any]:
-        """Persist a manual scan request for the runtime worker."""
+        """Persist a manual scan request for one ingester."""
 
-        return services.status.request_index_scan_control(
+        known_ingesters = getattr(services.status, "KNOWN_INGESTERS", ("repository",))
+        if ingester not in known_ingesters:
+            raise HTTPException(status_code=404, detail=f"Unknown ingester: {ingester}")
+
+        return services.status.request_ingester_scan_control(
             services.database,
-            component="worker",
+            ingester=ingester,
             requested_by="api",
+        )
+
+    @router.get(
+        "/ingesters/{ingester}",
+        tags=["system"],
+        response_model=IngesterStatusResponse,
+        response_model_exclude_none=True,
+    )
+    def get_ingester_status(
+        ingester: str,
+        services: Any = Depends(get_query_services),
+    ) -> dict[str, Any]:
+        """Return the latest persisted status for one ingester."""
+
+        known_ingesters = getattr(services.status, "KNOWN_INGESTERS", ("repository",))
+        if ingester not in known_ingesters:
+            raise HTTPException(status_code=404, detail=f"Unknown ingester: {ingester}")
+        return services.status.get_ingester_status(
+            services.database,
+            ingester=ingester,
         )
 
     app.include_router(router)
