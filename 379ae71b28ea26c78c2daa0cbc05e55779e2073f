@@ -1,0 +1,23 @@
+src/platform_context_graph/runtime/ingester/support.py
+  0595d92bfe2870a0 29-37,141,155,157-163,176-188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "379ae71b28ea26c78c2daa0cbc05e55779e2073f",
+  "prompts": {
+    "0595d92bfe2870a0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cad5bbd3-26a5-497a-9cf0-fa1b71523a57",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 37,
+      "total_deletions": 4,
+      "accepted_lines": 34,
+      "overriden_lines": 0
+    }
+  }
+}
