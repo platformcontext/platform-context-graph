@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from platform_context_graph.runtime.repo_sync.config import RepoSyncRepositoryRule
+from platform_context_graph.runtime.ingester.config import RepoSyncRepositoryRule
 
 
 class _FakeResponse:
@@ -32,7 +32,7 @@ def test_config_from_env_merges_structured_and_legacy_repository_rules(
 ) -> None:
     """Merge structured rules with the deprecated exact shorthand."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     monkeypatch.setenv(
         "PCG_REPOSITORY_RULES_JSON",
@@ -61,8 +61,8 @@ def test_git_discovery_applies_exact_and_regex_include_rules(
 ) -> None:
     """Filter GitHub discovery results using mixed exact and regex rules."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
-    git = importlib.import_module("platform_context_graph.runtime.repo_sync.git")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    git = importlib.import_module("platform_context_graph.runtime.ingester.git")
 
     config = repo_sync.RepoSyncConfig(
         repos_dir=Path("/tmp/repos"),
@@ -83,8 +83,13 @@ def test_git_discovery_applies_exact_and_regex_include_rules(
 
     page_calls: list[int] = []
 
-    def fake_get(
-        _url: str, *, headers: dict[str, str], params: dict[str, object], timeout: int
+    def fake_request(
+        _method: str,
+        _url: str,
+        *,
+        headers: dict[str, str],
+        params: dict[str, object],
+        timeout: int,
     ) -> _FakeResponse:
         del headers, timeout
         page_calls.append(int(params["page"]))
@@ -99,7 +104,7 @@ def test_git_discovery_applies_exact_and_regex_include_rules(
             )
         return _FakeResponse([])
 
-    monkeypatch.setattr(git.requests, "get", fake_get)
+    monkeypatch.setattr(git, "github_api_request", fake_request)
 
     assert git.list_repo_identifiers(config, token="token") == [
         "org/service-a",
@@ -115,8 +120,8 @@ def test_git_repo_sync_cycle_rediscoveries_and_indexes_only_on_change(
 ) -> None:
     """Rediscover matching repos and reindex only after clone or update changes."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
-    sync = importlib.import_module("platform_context_graph.runtime.repo_sync.sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
 
     repos_dir = tmp_path / "repos"
     existing_repo = repos_dir / "service-a"
@@ -190,8 +195,8 @@ def test_git_repo_sync_cycle_skips_reindex_when_no_changes(
 ) -> None:
     """Skip the reindex pass when rediscovery finds no material changes."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
-    sync = importlib.import_module("platform_context_graph.runtime.repo_sync.sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
 
     repos_dir = tmp_path / "repos"
     (repos_dir / "service-a" / ".git").mkdir(parents=True)

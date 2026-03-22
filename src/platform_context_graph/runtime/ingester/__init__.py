@@ -1,4 +1,4 @@
-"""Repo synchronization runtime entrypoints."""
+"""Repository ingester runtime entrypoints."""
 
 from __future__ import annotations
 

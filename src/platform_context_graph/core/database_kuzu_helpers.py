@@ -279,18 +279,22 @@ class KuzuSessionWrapper:
         """
         return False
 
-    def run(self, query: str, **parameters) -> "KuzuResultWrapper":
+    def run(self, query: str, *args, **parameters) -> "KuzuResultWrapper":
         """Execute a translated query and wrap the result.
 
         Args:
             query: Cypher query to run.
+            *args: Optional Neo4j-style positional parameter mapping.
             **parameters: Query parameters referenced by the Cypher.
 
         Returns:
             Wrapped Kuzu result object.
         """
         debug_log(f"Original Query: {query[:200]}")
-        translated_query, translated_params = self._translate_query(query, parameters)
+        normalized_parameters = _normalize_run_parameters(args, parameters)
+        translated_query, translated_params = self._translate_query(
+            query, normalized_parameters
+        )
         debug_log(f"Translated Query: {translated_query[:200]}")
         try:
             result = self.conn.execute(translated_query, translated_params)
@@ -316,6 +320,31 @@ class KuzuSessionWrapper:
             The translated query and filtered parameters.
         """
         return translate_kuzu_query(query, parameters, uid_map=self.uid_map)
+
+
+def _normalize_run_parameters(
+    args: tuple[Any, ...], parameters: dict[str, Any]
+) -> dict[str, Any]:
+    """Normalize Neo4j-style positional/keyword query parameters."""
+
+    if len(args) > 1:
+        raise TypeError("run() accepts at most one positional parameter mapping")
+
+    normalized: dict[str, Any] = {}
+    if args:
+        positional = args[0]
+        if not isinstance(positional, dict):
+            raise TypeError("run() positional parameters must be provided as a mapping")
+        normalized.update(positional)
+
+    parameters_mapping = parameters.pop("parameters", None)
+    if parameters_mapping is not None:
+        if not isinstance(parameters_mapping, dict):
+            raise TypeError("run() parameters= value must be provided as a mapping")
+        normalized.update(parameters_mapping)
+
+    normalized.update(parameters)
+    return normalized
 
 
 class KuzuRecord:

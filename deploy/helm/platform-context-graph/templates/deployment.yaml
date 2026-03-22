@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pcg.apiFullname" . }}
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      {{- include "pcg.apiSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pcg.apiSelectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "pcg.serviceAccountName" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: platform-context-graph
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["pcg", "serve", "start", "--host", "0.0.0.0", "--port", {{ .Values.service.port | quote }}]
+          env:
+            - name: PCG_RUNTIME_ROLE
+              value: "api"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: NEO4J_URI
+              value: {{ .Values.neo4j.uri | quote }}
+            {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}
+            {{- include "pcg.renderOtelEnv" . | nindent 12 }}
+            - name: NEO4J_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.neo4j.auth.secretName }}
+                  key: {{ .Values.neo4j.auth.usernameKey }}
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.neo4j.auth.secretName }}
+                  key: {{ .Values.neo4j.auth.passwordKey }}
+            {{- include "pcg.renderEnvMap" .Values.env | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}

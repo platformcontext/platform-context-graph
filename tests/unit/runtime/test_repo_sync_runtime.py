@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import importlib
 import json
-from datetime import datetime, timezone
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -48,12 +51,29 @@ def _write_active_lock(lock_dir: Path) -> None:
     )
 
 
+def _write_stale_lock(lock_dir: Path) -> None:
+    """Create a stale workspace lock metadata file."""
+
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    (lock_dir / "lock.json").write_text(
+        json.dumps(
+            {
+                "component": "bootstrap-index",
+                "pid": 1234,
+                "hostname": "test-host",
+                "heartbeat_at": "2000-01-01T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_bootstrap_index_copies_filesystem_repos_and_emits_metrics(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     observability = importlib.import_module("platform_context_graph.observability")
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
     observability.reset_observability_for_tests()
 
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
@@ -112,7 +132,7 @@ def test_bootstrap_index_copies_filesystem_repos_and_emits_metrics(
 def test_bootstrap_index_ignores_dangling_symlinks_in_filesystem_mode(
     tmp_path: Path,
 ) -> None:
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     source_root = tmp_path / "fixtures"
     repo_dir = source_root / "service-a"
@@ -151,7 +171,7 @@ def test_repo_sync_cycle_records_lock_contention_skip(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     observability = importlib.import_module("platform_context_graph.observability")
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
     observability.reset_observability_for_tests()
 
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
@@ -204,7 +224,7 @@ def test_bootstrap_index_reaps_stale_empty_lock_and_runs(
 ) -> None:
     """Bootstrap should recover from a stale lock directory left on disk."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     source_root = tmp_path / "fixtures"
     (source_root / "service-a").mkdir(parents=True)
@@ -246,7 +266,7 @@ def test_repo_sync_cycle_skips_with_fresh_metadata_lock(
 ) -> None:
     """Fresh lock metadata should still prevent concurrent sync cycles."""
 
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     repos_dir = tmp_path / "workspace" / "repos"
     repos_dir.mkdir(parents=True)
@@ -272,7 +292,319 @@ def test_repo_sync_cycle_skips_with_fresh_metadata_lock(
     )
 
     assert result.lock_skipped is True
-    assert lock_dir.exists()
+
+
+def test_bootstrap_index_reaps_stale_metadata_lock_and_runs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bootstrap should recover from stale lock metadata left on disk."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    source_root = tmp_path / "fixtures"
+    (source_root / "service-a").mkdir(parents=True)
+    (source_root / "service-a" / "main.py").write_text("print('a')\n")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    lock_dir = repos_dir / ".pcg-sync.lock"
+    _write_stale_lock(lock_dir)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="filesystem",
+        git_auth_method="none",
+        github_org=None,
+        repositories=[],
+        filesystem_root=source_root,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=lock_dir,
+        component="bootstrap-index",
+    )
+
+    called: list[Path] = []
+    monkeypatch.setenv("PCG_SYNC_LOCK_STALE_SECONDS", "1")
+
+    result = repo_sync.run_bootstrap_index(
+        config,
+        index_workspace=lambda workspace: called.append(workspace),
+    )
+
+    assert result.discovered == 1
+    assert called == [repos_dir]
+    assert not lock_dir.exists()
+
+
+def test_bootstrap_index_waits_for_workspace_lock_before_indexing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bootstrap should retry lock acquisition instead of exiting cleanly."""
+
+    bootstrap = importlib.import_module("platform_context_graph.runtime.ingester.bootstrap")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    source_root = tmp_path / "fixtures"
+    (source_root / "service-a").mkdir(parents=True)
+    (source_root / "service-a" / "main.py").write_text("print('a')\n")
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=tmp_path / "workspace" / "repos",
+        source_mode="filesystem",
+        git_auth_method="none",
+        github_org=None,
+        repositories=[],
+        filesystem_root=source_root,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=tmp_path / "workspace" / "repos" / ".pcg-sync.lock",
+        component="bootstrap-index",
+    )
+
+    attempts = {"count": 0}
+
+    @contextmanager
+    def _workspace_lock(_config):
+        attempts["count"] += 1
+        yield attempts["count"] > 1
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(bootstrap, "workspace_lock", _workspace_lock)
+    monkeypatch.setattr(bootstrap.time, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setenv("PCG_BOOTSTRAP_LOCK_RETRY_SECONDS", "1")
+    monkeypatch.setenv("PCG_BOOTSTRAP_LOCK_MAX_WAIT_SECONDS", "10")
+
+    result = repo_sync.run_bootstrap_index(config, index_workspace=lambda _workspace: None)
+
+    assert attempts["count"] == 2
+    assert sleeps == [1.0]
+    assert result.lock_skipped is False
+
+
+def test_github_app_token_retries_transient_request_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GitHub App token minting should retry transient request failures."""
+
+    github_auth = importlib.import_module(
+        "platform_context_graph.runtime.ingester.github_auth"
+    )
+
+    github_auth.clear_cached_github_app_token()
+    monkeypatch.setenv("GITHUB_APP_ID", "123")
+    monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "456")
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "test-private-key")
+    monkeypatch.setenv("PCG_GITHUB_API_RETRY_ATTEMPTS", "3")
+    monkeypatch.setenv("PCG_GITHUB_API_RETRY_DELAY_SECONDS", "1")
+    monkeypatch.setattr(github_auth.jwt, "encode", lambda *_args, **_kwargs: "encoded-jwt")
+
+    attempts = {"count": 0}
+
+    def _request(method, url, **_kwargs):
+        assert method == "post"
+        assert (
+            url
+            == "https://api.github.com/app/installations/456/access_tokens"
+        )
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise github_auth.requests.exceptions.ConnectionError(
+                "temporary dns failure"
+            )
+        response = MagicMock()
+        response.json.return_value = {"token": "ghs_test"}
+        response.raise_for_status.return_value = None
+        return response
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(github_auth.requests, "request", _request)
+    monkeypatch.setattr(github_auth.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    token = github_auth.github_app_token()
+
+    assert token == "ghs_test"
+    assert attempts["count"] == 3
+    assert sleeps == [1.0, 1.0]
+
+
+def test_github_app_token_is_cached_until_near_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GitHub App tokens should be reused while they remain safely valid."""
+
+    github_auth = importlib.import_module(
+        "platform_context_graph.runtime.ingester.github_auth"
+    )
+
+    github_auth.clear_cached_github_app_token()
+    monkeypatch.setenv("GITHUB_APP_ID", "123")
+    monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "456")
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "test-private-key")
+    monkeypatch.setenv("PCG_GITHUB_APP_TOKEN_REFRESH_SECONDS", "60")
+    monkeypatch.setattr(github_auth.jwt, "encode", lambda *_args, **_kwargs: "jwt")
+
+    attempts = {"count": 0}
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+
+    def _request(method, url, **_kwargs):
+        assert method == "post"
+        assert "access_tokens" in url
+        attempts["count"] += 1
+        response = MagicMock()
+        response.json.return_value = {"token": "ghs_cached", "expires_at": expires_at}
+        response.raise_for_status.return_value = None
+        return response
+
+    monkeypatch.setattr(github_auth.requests, "request", _request)
+
+    first = github_auth.github_app_token()
+    second = github_auth.github_app_token()
+
+    assert first == "ghs_cached"
+    assert second == "ghs_cached"
+    assert attempts["count"] == 1
+
+
+def test_github_app_token_refreshes_when_near_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GitHub App tokens should refresh when they are close to expiring."""
+
+    github_auth = importlib.import_module(
+        "platform_context_graph.runtime.ingester.github_auth"
+    )
+
+    github_auth.clear_cached_github_app_token()
+    monkeypatch.setenv("GITHUB_APP_ID", "123")
+    monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "456")
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "test-private-key")
+    monkeypatch.setenv("PCG_GITHUB_APP_TOKEN_REFRESH_SECONDS", "60")
+    monkeypatch.setattr(github_auth.jwt, "encode", lambda *_args, **_kwargs: "jwt")
+
+    attempts = {"count": 0}
+    responses = [
+        {"token": "ghs_old", "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=20)).isoformat()},
+        {"token": "ghs_new", "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()},
+    ]
+
+    def _request(method, url, **_kwargs):
+        assert method == "post"
+        assert "access_tokens" in url
+        response = MagicMock()
+        response.json.return_value = responses[attempts["count"]]
+        response.raise_for_status.return_value = None
+        attempts["count"] += 1
+        return response
+
+    monkeypatch.setattr(github_auth.requests, "request", _request)
+
+    first = github_auth.github_app_token()
+    second = github_auth.github_app_token()
+
+    assert first == "ghs_old"
+    assert second == "ghs_new"
+    assert attempts["count"] == 2
+
+
+def test_github_app_token_retries_rate_limit_responses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GitHub App token minting should back off and retry on rate limits."""
+
+    github_auth = importlib.import_module(
+        "platform_context_graph.runtime.ingester.github_auth"
+    )
+
+    github_auth.clear_cached_github_app_token()
+    monkeypatch.setenv("GITHUB_APP_ID", "123")
+    monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "456")
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "test-private-key")
+    monkeypatch.setenv("PCG_GITHUB_API_RETRY_ATTEMPTS", "2")
+    monkeypatch.setenv("PCG_GITHUB_API_RETRY_DELAY_SECONDS", "1")
+    monkeypatch.setattr(github_auth.jwt, "encode", lambda *_args, **_kwargs: "jwt")
+
+    attempts = {"count": 0}
+    warnings: list[str] = []
+
+    def _request(method, url, **_kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            response = MagicMock()
+            response.status_code = 429
+            response.headers = {"Retry-After": "4", "X-RateLimit-Remaining": "0"}
+            response.raise_for_status.side_effect = github_auth.requests.HTTPError(
+                response=response
+            )
+            return response
+
+        response = MagicMock()
+        response.json.return_value = {"token": "ghs_after_limit", "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()}
+        response.raise_for_status.return_value = None
+        return response
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(github_auth.requests, "request", _request)
+    monkeypatch.setattr(github_auth.time, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(github_auth, "warning_logger", lambda message: warnings.append(message))
+
+    token = github_auth.github_app_token()
+
+    assert token == "ghs_after_limit"
+    assert attempts["count"] == 2
+    assert sleeps == [4.0]
+    assert any("rate limit" in message.lower() for message in warnings)
+
+
+def test_github_api_request_retries_rate_limit_403_responses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GitHub API requests should back off on 403 rate-limit responses too."""
+
+    github_auth = importlib.import_module(
+        "platform_context_graph.runtime.ingester.github_auth"
+    )
+
+    monkeypatch.setenv("PCG_GITHUB_API_RETRY_ATTEMPTS", "2")
+    monkeypatch.setenv("PCG_GITHUB_API_RETRY_DELAY_SECONDS", "1")
+
+    attempts = {"count": 0}
+    warnings: list[str] = []
+
+    def _request(method, url, **_kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            response = MagicMock()
+            response.status_code = 403
+            response.headers = {
+                "X-RateLimit-Remaining": "0",
+                "Retry-After": "3",
+            }
+            response.text = "API rate limit exceeded"
+            response.raise_for_status.side_effect = github_auth.requests.HTTPError(
+                response=response
+            )
+            return response
+
+        response = MagicMock()
+        response.json.return_value = {"ok": True}
+        response.raise_for_status.return_value = None
+        return response
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(github_auth.requests, "request", _request)
+    monkeypatch.setattr(github_auth.time, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(github_auth, "warning_logger", lambda message: warnings.append(message))
+
+    response = github_auth.github_api_request(
+        "get",
+        "https://api.github.com/orgs/platformcontext/repos",
+    )
+
+    assert response.json() == {"ok": True}
+    assert attempts["count"] == 2
+    assert sleeps == [3.0]
+    assert any("rate limit" in message.lower() for message in warnings)
 
 
 def test_repo_sync_cycle_reports_stale_unmanaged_checkouts(
@@ -282,8 +614,8 @@ def test_repo_sync_cycle_reports_stale_unmanaged_checkouts(
     """Count stale git checkouts when discovery no longer includes them."""
 
     observability = importlib.import_module("platform_context_graph.observability")
-    repo_sync = importlib.import_module("platform_context_graph.runtime.repo_sync")
-    sync_module = importlib.import_module("platform_context_graph.runtime.repo_sync.sync")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    sync_module = importlib.import_module("platform_context_graph.runtime.ingester.sync")
     observability.reset_observability_for_tests()
 
     monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
@@ -331,3 +663,126 @@ def test_repo_sync_cycle_reports_stale_unmanaged_checkouts(
         and value == 1
         for metric_name, attrs, value in _metric_points(reader)
     )
+
+
+def test_repo_sync_loop_records_degraded_status_and_retries_transient_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transient sync failures should degrade the ingester instead of crashing it."""
+
+    requests = pytest.importorskip("requests")
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
+    monkeypatch.setenv("PCG_REPO_SYNC_INITIAL_DELAY_SECONDS", "0")
+
+    recorded_statuses: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        sync,
+        "update_runtime_ingester_status",
+        lambda **kwargs: recorded_statuses.append(kwargs),
+        raising=False,
+    )
+
+    def _sleep(_seconds: float) -> None:
+        raise StopIteration
+
+    monkeypatch.setattr(sync.time, "sleep", _sleep)
+    monkeypatch.setattr(
+        sync,
+        "run_repo_sync_cycle",
+        MagicMock(side_effect=requests.exceptions.ConnectionError("temporary dns failure")),
+    )
+
+    with pytest.raises(StopIteration):
+        sync.run_repo_sync_loop(interval_seconds=900)
+
+    assert recorded_statuses
+    assert recorded_statuses[-1]["status"] == "degraded"
+    assert recorded_statuses[-1]["last_error_kind"] == "network"
+
+
+def test_retry_delay_clamps_attempt_exponent_before_growth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Retry delay should cap exponential growth before computing huge powers."""
+
+    retry = importlib.import_module("platform_context_graph.runtime.ingester.retry")
+
+    monkeypatch.setattr(retry.random, "randint", lambda _low, _high: 0)
+
+    delay = retry.retry_after_seconds(RuntimeError("boom"), attempt=10_000)
+
+    assert delay == retry.MAX_REPO_SYNC_RETRY_SECONDS
+
+
+def test_repo_sync_loop_claims_and_completes_manual_scan_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Manual ingester scan requests should run through the normal sync cycle."""
+
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
+    monkeypatch.setenv("PCG_REPO_SYNC_INITIAL_DELAY_SECONDS", "0")
+
+    recorded_statuses: list[dict[str, object]] = []
+    completed_requests: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        sync,
+        "update_runtime_ingester_status",
+        lambda **kwargs: recorded_statuses.append(kwargs),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "claim_ingester_scan_request",
+        MagicMock(
+            side_effect=[
+                {
+                    "ingester": "repository",
+                    "scan_request_token": "scan-123",
+                    "scan_request_state": "running",
+                },
+                None,
+            ]
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "complete_ingester_scan_request",
+        lambda **kwargs: completed_requests.append(kwargs),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "_current_ingester_status",
+        lambda _component: {
+            "repository_count": 5,
+            "pulled_repositories": 5,
+            "in_sync_repositories": 4,
+            "pending_repositories": 1,
+            "completed_repositories": 4,
+            "failed_repositories": 0,
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "run_repo_sync_cycle",
+        MagicMock(return_value=SimpleNamespace(discovered=5)),
+    )
+
+    def _stop_after_first_cycle(_component: str, _delay_seconds: int):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(sync, "_wait_for_next_cycle", _stop_after_first_cycle)
+
+    with pytest.raises(KeyboardInterrupt):
+        sync.run_repo_sync_loop(interval_seconds=900)
+
+    assert recorded_statuses
+    assert recorded_statuses[0]["ingester"] == "repository"
+    assert completed_requests == [
+        {
+            "ingester": "repository",
+            "request_token": "scan-123",
+        }
+    ]

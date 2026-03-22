@@ -1,19 +1,21 @@
+{{- if .Values.repoSync.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ include "pcg.fullname" . }}
   labels:
     {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ingester
 spec:
-  replicas: 1
-  serviceName: {{ include "pcg.fullname" . }}
+  replicas: {{ .Values.ingester.replicas }}
+  serviceName: {{ include "pcg.ingesterHeadlessServiceName" . }}
   selector:
     matchLabels:
-      {{- include "pcg.selectorLabels" . | nindent 6 }}
+      {{- include "pcg.ingesterSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "pcg.selectorLabels" . | nindent 8 }}
+        {{- include "pcg.ingesterSelectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -35,144 +37,14 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if and .Values.repoSync.enabled .Values.repoSync.bootstrap }}
-      initContainers:
-        - name: bootstrap-index
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["pcg", "internal", "bootstrap-index"]
-          env:
-            - name: PCG_HOME
-              value: /data/.platform-context-graph
-            - name: PYTHONUNBUFFERED
-              value: "1"
-            - name: PCG_REPOS_DIR
-              value: /data/repos
-            - name: PCG_REPO_SOURCE_MODE
-              value: {{ .Values.repoSync.source.mode | quote }}
-            - name: PCG_GIT_AUTH_METHOD
-              value: {{ .Values.repoSync.auth.method | quote }}
-            - name: PCG_GITHUB_ORG
-              value: {{ .Values.repoSync.source.githubOrg | quote }}
-            - name: PCG_REPOSITORIES
-              value: {{ join "," .Values.repoSync.source.repositories | quote }}
-            - name: PCG_REPOSITORY_RULES_JSON
-              value: {{ toJson .Values.repoSync.source.rules | quote }}
-            - name: PCG_FILESYSTEM_ROOT
-              value: {{ .Values.repoSync.source.filesystemRoot | quote }}
-            - name: PCG_CLONE_DEPTH
-              value: {{ .Values.repoSync.source.cloneDepth | quote }}
-            - name: PCG_REPO_LIMIT
-              value: {{ .Values.repoSync.source.limit | quote }}
-            - name: NEO4J_URI
-              value: {{ .Values.neo4j.uri | quote }}
-            {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}
-            {{- include "pcg.renderOtelEnv" . | nindent 12 }}
-            - name: NEO4J_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.neo4j.auth.secretName }}
-                  key: {{ .Values.neo4j.auth.usernameKey }}
-            - name: NEO4J_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.neo4j.auth.secretName }}
-                  key: {{ .Values.neo4j.auth.passwordKey }}
-            {{- include "pcg.renderEnvMap" .Values.env | nindent 12 }}
-            {{- if eq .Values.repoSync.auth.method "githubApp" }}
-            - name: GITHUB_APP_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.repoSync.auth.githubApp.secretName }}
-                  key: {{ .Values.repoSync.auth.githubApp.appIdKey }}
-            - name: GITHUB_APP_INSTALLATION_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.repoSync.auth.githubApp.secretName }}
-                  key: {{ .Values.repoSync.auth.githubApp.installationIdKey }}
-            - name: GITHUB_APP_PRIVATE_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.repoSync.auth.githubApp.secretName }}
-                  key: {{ .Values.repoSync.auth.githubApp.privateKeyKey }}
-            {{- else if eq .Values.repoSync.auth.method "token" }}
-            - name: PCG_GIT_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.repoSync.auth.token.secretName }}
-                  key: {{ .Values.repoSync.auth.token.tokenKey }}
-            {{- end }}
-          volumeMounts:
-            - name: data
-              mountPath: /data
-            - name: pcgignore
-              mountPath: /data/repos/.pcgignore
-              subPath: .pcgignore
-              readOnly: true
-            {{- if eq .Values.repoSync.auth.method "ssh" }}
-            - name: ssh-auth
-              mountPath: /var/run/secrets/pcg-ssh
-              readOnly: true
-            {{- end }}
-          resources:
-            {{- toYaml .Values.resources.bootstrap | nindent 12 }}
-      {{- end }}
       containers:
-        - name: platform-context-graph
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["pcg", "serve", "start", "--host", "0.0.0.0", "--port", {{ .Values.service.port | quote }}]
-          env:
-            - name: PCG_HOME
-              value: /data/.platform-context-graph
-            - name: PYTHONUNBUFFERED
-              value: "1"
-            - name: NEO4J_URI
-              value: {{ .Values.neo4j.uri | quote }}
-            {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}
-            {{- include "pcg.renderOtelEnv" . | nindent 12 }}
-            - name: NEO4J_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.neo4j.auth.secretName }}
-                  key: {{ .Values.neo4j.auth.usernameKey }}
-            - name: NEO4J_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.neo4j.auth.secretName }}
-                  key: {{ .Values.neo4j.auth.passwordKey }}
-            {{- include "pcg.renderEnvMap" .Values.env | nindent 12 }}
-          ports:
-            - name: http
-              containerPort: {{ .Values.service.port }}
-              protocol: TCP
-          volumeMounts:
-            - name: data
-              mountPath: /data
-            - name: pcgignore
-              mountPath: /data/repos/.pcgignore
-              subPath: .pcgignore
-              readOnly: true
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 30
-            periodSeconds: 30
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 10
-            periodSeconds: 15
-          resources:
-            {{- toYaml .Values.resources.app | nindent 12 }}
-        {{- if .Values.repoSync.enabled }}
         - name: repo-sync
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["pcg", "internal", "repo-sync-loop"]
           env:
+            - name: PCG_RUNTIME_ROLE
+              value: "ingester"
             - name: PCG_HOME
               value: /data/.platform-context-graph
             - name: PYTHONUNBUFFERED
@@ -250,17 +122,16 @@ spec:
               readOnly: true
             {{- end }}
           resources:
-            {{- toYaml .Values.resources.repoSync | nindent 12 }}
-        {{- end }}
+            {{- toYaml .Values.ingester.resources | nindent 12 }}
       volumes:
         - name: pcgignore
           configMap:
             name: {{ include "pcg.fullname" . }}-pcgignore
-        {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}
+        {{- if and .Values.ingester.persistence.enabled .Values.ingester.persistence.existingClaim }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "pcg.dataClaimName" . }}
-        {{- else if not .Values.persistence.enabled }}
+        {{- else if not .Values.ingester.persistence.enabled }}
         - name: data
           emptyDir: {}
         {{- end }}
@@ -275,19 +146,20 @@ spec:
               - key: {{ .Values.repoSync.auth.ssh.knownHostsKey }}
                 path: known_hosts
         {{- end }}
-  {{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+  {{- if and .Values.ingester.persistence.enabled (not .Values.ingester.persistence.existingClaim) }}
   volumeClaimTemplates:
     - metadata:
         name: data
         labels:
-          {{- include "pcg.labels" . | nindent 10 }}
+          {{- include "pcg.selectorLabels" . | nindent 10 }}
       spec:
         accessModes:
-          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
-        {{- if .Values.persistence.storageClass }}
-        storageClassName: {{ .Values.persistence.storageClass | quote }}
+          {{- toYaml .Values.ingester.persistence.accessModes | nindent 10 }}
+        {{- if .Values.ingester.persistence.storageClass }}
+        storageClassName: {{ .Values.ingester.persistence.storageClass | quote }}
         {{- end }}
         resources:
           requests:
-            storage: {{ .Values.persistence.size }}
+            storage: {{ .Values.ingester.persistence.size }}
   {{- end }}
+{{- end }}

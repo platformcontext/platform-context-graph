@@ -20,6 +20,7 @@ from .coordinator_models import (
     IndexExecutionResult,
     RepositorySnapshot,
 )
+from .coordinator_runtime_status import publish_runtime_progress as _publish_runtime_progress
 from .coordinator_storage import (
     _archive_run,
     _delete_snapshots,
@@ -66,7 +67,6 @@ def _commit_repository_snapshot(
     builder.add_repository_to_graph(repo_path, is_dependency=is_dependency)
     for file_data in snapshot.file_data:
         builder.add_file_to_graph(file_data, repo_path.name, snapshot.imports_map)
-
 
 async def execute_index_run(
     builder: Any,
@@ -163,6 +163,13 @@ async def execute_index_run(
         source=source,
         pending_count=run_state.pending_repositories(),
     )
+    _publish_runtime_progress(
+        ingester=component,
+        source=source,
+        run_state=run_state,
+        repository_count=len(repo_paths),
+        status="indexing",
+    )
     with telemetry.index_run(
         component=component,
         mode=family,
@@ -205,6 +212,13 @@ async def execute_index_run(
                 mode=family,
                 source=source,
                 pending_count=run_state.pending_repositories(),
+            )
+            _publish_runtime_progress(
+                ingester=component,
+                source=source,
+                run_state=run_state,
+                repository_count=len(repo_paths),
+                status="indexing",
             )
             telemetry.record_index_repositories(
                 component=component,
@@ -253,9 +267,23 @@ async def execute_index_run(
                         status="completed",
                     )
                     _persist_run_state(run_state)
+                    _publish_runtime_progress(
+                        ingester=component,
+                        source=source,
+                        run_state=run_state,
+                        repository_count=len(repo_paths),
+                        status="indexing",
+                    )
                     commit_started = True
                     repo_state.status = "commit_incomplete"
                     _persist_run_state(run_state)
+                    _publish_runtime_progress(
+                        ingester=component,
+                        source=source,
+                        run_state=run_state,
+                        repository_count=len(repo_paths),
+                        status="indexing",
+                    )
                     _commit_repository_snapshot(
                         builder,
                         snapshot,
@@ -266,6 +294,13 @@ async def execute_index_run(
                     repo_state.status = "completed"
                     repo_state.finished_at = _utc_now()
                     _persist_run_state(run_state)
+                    _publish_runtime_progress(
+                        ingester=component,
+                        source=source,
+                        run_state=run_state,
+                        repository_count=len(repo_paths),
+                        status="indexing",
+                    )
                     telemetry.record_index_repositories(
                         component=component,
                         phase="completed",
@@ -288,6 +323,13 @@ async def execute_index_run(
                     )
                     run_state.last_error = str(exc)
                     _persist_run_state(run_state)
+                    _publish_runtime_progress(
+                        ingester=component,
+                        source=source,
+                        run_state=run_state,
+                        repository_count=len(repo_paths),
+                        status="indexing",
+                    )
                     phase = (
                         "commit_incomplete"
                         if repo_state.status == "commit_incomplete"
@@ -318,6 +360,13 @@ async def execute_index_run(
                         mode=family,
                         source=source,
                         pending_count=run_state.pending_repositories(),
+                    )
+                    _publish_runtime_progress(
+                        ingester=component,
+                        source=source,
+                        run_state=run_state,
+                        repository_count=len(repo_paths),
+                        status="indexing",
                     )
 
         if run_state.failed_repositories() == 0:
@@ -364,6 +413,14 @@ async def execute_index_run(
             mode=family,
             source=source,
             pending_count=run_state.pending_repositories(),
+        )
+        _publish_runtime_progress(
+            ingester=component,
+            source=source,
+            run_state=run_state,
+            repository_count=len(repo_paths),
+            status=run_state.status,
+            last_success_at=_utc_now() if run_state.status == "completed" else None,
         )
 
     if job_id:

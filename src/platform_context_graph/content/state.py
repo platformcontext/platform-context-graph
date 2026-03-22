@@ -7,6 +7,7 @@ import threading
 
 from typing import Any
 
+from ..runtime.roles import workspace_fallback_enabled
 from .postgres import PostgresContentProvider
 from .service import ContentService
 from .workspace import WorkspaceContentProvider
@@ -77,9 +78,12 @@ def get_content_service(database: Any) -> ContentService:
         Content service combining PostgreSQL and workspace providers.
     """
 
+    workspace_provider = (
+        WorkspaceContentProvider(database) if workspace_fallback_enabled() else None
+    )
     return ContentService(
         postgres_provider=get_postgres_content_provider(),
-        workspace_provider=WorkspaceContentProvider(database),
+        workspace_provider=workspace_provider,
     )
 
 

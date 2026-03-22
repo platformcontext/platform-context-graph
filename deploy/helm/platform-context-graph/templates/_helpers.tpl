@@ -28,6 +28,24 @@ app.kubernetes.io/name: {{ include "pcg.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
+{{- define "pcg.apiFullname" -}}
+{{- printf "%s-api" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "pcg.ingesterHeadlessServiceName" -}}
+{{- printf "%s-ingester" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "pcg.apiSelectorLabels" -}}
+{{- include "pcg.selectorLabels" . }}
+app.kubernetes.io/component: api
+{{- end -}}
+
+{{- define "pcg.ingesterSelectorLabels" -}}
+{{- include "pcg.selectorLabels" . }}
+app.kubernetes.io/component: ingester
+{{- end -}}
+
 {{- define "pcg.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
 {{- default (include "pcg.fullname" .) .Values.serviceAccount.name -}}
@@ -37,8 +55,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{- define "pcg.dataClaimName" -}}
-{{- if .Values.persistence.existingClaim -}}
-{{- .Values.persistence.existingClaim -}}
+{{- if .Values.ingester.persistence.existingClaim -}}
+{{- .Values.ingester.persistence.existingClaim -}}
 {{- else -}}
 {{- printf "%s-data" (include "pcg.fullname" .) -}}
 {{- end -}}

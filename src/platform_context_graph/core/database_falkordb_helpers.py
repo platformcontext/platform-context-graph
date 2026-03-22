@@ -109,19 +109,21 @@ class FalkorDBSessionWrapper:
         """
         self.graph = graph
 
-    def run(self, query: str, **parameters) -> "FalkorDBResultWrapper":
+    def run(self, query: str, *args, **parameters) -> "FalkorDBResultWrapper":
         """Execute a Cypher query on FalkorDB.
 
         Args:
             query: Cypher query to execute.
+            *args: Optional Neo4j-style positional parameter mapping.
             **parameters: Query parameters referenced by the statement.
 
         Returns:
             Wrapped FalkorDB result object.
         """
         translated_query = self._translate_schema_query(query)
+        normalized_parameters = _normalize_run_parameters(args, parameters)
         try:
-            result = self.graph.query(translated_query, parameters)
+            result = self.graph.query(translated_query, normalized_parameters)
             return FalkorDBResultWrapper(result)
         except Exception as exc:
             error_msg = str(exc).lower()
@@ -147,6 +149,31 @@ class FalkorDBSessionWrapper:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Provide a no-op context-manager exit hook."""
+
+
+def _normalize_run_parameters(
+    args: tuple[object, ...], parameters: dict[str, object]
+) -> dict[str, object]:
+    """Normalize Neo4j-style positional/keyword query parameters."""
+
+    if len(args) > 1:
+        raise TypeError("run() accepts at most one positional parameter mapping")
+
+    normalized: dict[str, object] = {}
+    if args:
+        positional = args[0]
+        if not isinstance(positional, dict):
+            raise TypeError("run() positional parameters must be provided as a mapping")
+        normalized.update(positional)
+
+    parameters_mapping = parameters.pop("parameters", None)
+    if parameters_mapping is not None:
+        if not isinstance(parameters_mapping, dict):
+            raise TypeError("run() parameters= value must be provided as a mapping")
+        normalized.update(parameters_mapping)
+
+    normalized.update(parameters)
+    return normalized
 
 
 class FalkorDBRecord(dict):

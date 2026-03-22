@@ -255,7 +255,7 @@ class _BundleExportMixin:
                 params = {}
 
             try:
-                result = session.run(query, **params)
+                result = session.run(query, params)
             except TypeError:
                 result = session.run(query)
 
@@ -308,7 +308,7 @@ class _BundleExportMixin:
                 params = {}
 
             try:
-                result = session.run(query, **params)
+                result = session.run(query, params)
             except TypeError:
                 result = session.run(query)
 

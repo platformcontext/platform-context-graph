@@ -17,6 +17,7 @@ from platform_context_graph.query import (
     impact as impact_queries,
     infra as infra_queries,
     repositories as repository_queries,
+    status as status_queries,
 )
 
 __all__ = [
@@ -40,6 +41,7 @@ class QueryServices:
         impact: Trace and blast-radius query module.
         infra: Infrastructure query module.
         repositories: Repository query module.
+        status: Runtime ingester status query module.
     """
 
     database: Any
@@ -51,6 +53,7 @@ class QueryServices:
     impact: Any = impact_queries
     infra: Any = infra_queries
     repositories: Any = repository_queries
+    status: Any = status_queries
 
 
 def get_database() -> Any:

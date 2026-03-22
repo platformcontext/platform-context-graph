@@ -253,6 +253,32 @@ def test_get_entity_content_falls_back_to_workspace_when_postgres_misses() -> No
     assert workspace.entity_calls == ["content-entity:e_ab12cd34ef56"]
 
 
+def test_get_file_content_returns_not_indexed_when_workspace_fallback_is_disabled() -> None:
+    """Return an explicit not-indexed response when Postgres misses and no workspace exists."""
+
+    postgres = _FakePostgresProvider(file_result=None)
+
+    service = ContentService(
+        postgres_provider=postgres,
+        workspace_provider=None,
+    )
+
+    result = service.get_file_content(
+        repo_id="repository:r_ab12cd34",
+        relative_path="src/payments.py",
+    )
+
+    assert result == {
+        "available": False,
+        "repo_id": "repository:r_ab12cd34",
+        "relative_path": "src/payments.py",
+        "content": None,
+        "source_backend": "unavailable",
+        "index_status": "not_indexed",
+    }
+    assert postgres.file_calls == [("repository:r_ab12cd34", "src/payments.py")]
+
+
 def test_search_routes_to_postgres_content_store() -> None:
     """Run content search through the content store backend."""
 

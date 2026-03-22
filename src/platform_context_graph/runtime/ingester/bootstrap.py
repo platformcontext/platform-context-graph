@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -17,10 +19,41 @@ from .support import (
     fingerprint_tree,
     index_workspace_default,
     manifest_path,
-    record_lock_skip,
     record_phase,
+    log,
     workspace_lock,
 )
+
+DEFAULT_BOOTSTRAP_LOCK_RETRY_SECONDS = 5
+DEFAULT_BOOTSTRAP_LOCK_MAX_WAIT_SECONDS = 600
+
+
+def _bootstrap_lock_retry_seconds() -> float:
+    """Return the delay between bootstrap lock acquisition attempts."""
+
+    return max(
+        1.0,
+        float(
+            os.getenv(
+                "PCG_BOOTSTRAP_LOCK_RETRY_SECONDS",
+                str(DEFAULT_BOOTSTRAP_LOCK_RETRY_SECONDS),
+            )
+        ),
+    )
+
+
+def _bootstrap_lock_max_wait_seconds() -> float:
+    """Return the maximum time bootstrap waits for the workspace lock."""
+
+    return max(
+        _bootstrap_lock_retry_seconds(),
+        float(
+            os.getenv(
+                "PCG_BOOTSTRAP_LOCK_MAX_WAIT_SECONDS",
+                str(DEFAULT_BOOTSTRAP_LOCK_MAX_WAIT_SECONDS),
+            )
+        ),
+    )
 
 
 def _request_index(
@@ -189,9 +222,25 @@ def run_bootstrap_index(
 
     initialize_observability(component=config.component)
     index_workspace = index_workspace or index_workspace_default
-    with workspace_lock(config) as acquired:
-        if not acquired:
-            return record_lock_skip(config, mode="bootstrap")
-        if config.source_mode == "filesystem":
-            return _run_bootstrap_filesystem(config, index_workspace=index_workspace)
-        return _run_bootstrap_git(config, index_workspace=index_workspace)
+    retry_seconds = _bootstrap_lock_retry_seconds()
+    max_wait_seconds = _bootstrap_lock_max_wait_seconds()
+    deadline = time.monotonic() + max_wait_seconds
+
+    while True:
+        with workspace_lock(config) as acquired:
+            if acquired:
+                if config.source_mode == "filesystem":
+                    return _run_bootstrap_filesystem(config, index_workspace=index_workspace)
+                return _run_bootstrap_git(config, index_workspace=index_workspace)
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(
+                f"Bootstrap could not acquire workspace lock within {max_wait_seconds:.0f}s"
+            )
+        sleep_seconds = min(retry_seconds, remaining)
+        log(
+            config.component,
+            f"Workspace lock busy; retrying bootstrap in {sleep_seconds:.0f}s",
+        )
+        time.sleep(sleep_seconds)

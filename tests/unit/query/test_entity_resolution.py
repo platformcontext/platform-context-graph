@@ -41,6 +41,7 @@ def test_query_module_exports_are_present():
         impact,
         infra,
         repositories,
+        status,
     )
 
     assert query_pkg.__all__ == [
@@ -52,6 +53,7 @@ def test_query_module_exports_are_present():
         "impact",
         "infra",
         "repositories",
+        "status",
     ]
     assert query_pkg.code is code
     assert query_pkg.compare is compare
@@ -61,6 +63,7 @@ def test_query_module_exports_are_present():
     assert query_pkg.impact is impact
     assert query_pkg.infra is infra
     assert query_pkg.repositories is repositories
+    assert query_pkg.status is status
 
     assert hasattr(entity_resolution, "resolve_entity")
     assert hasattr(context, "get_entity_context")
@@ -82,6 +85,9 @@ def test_query_module_exports_are_present():
     assert hasattr(impact, "explain_dependency_path")
     assert hasattr(impact, "find_change_surface")
     assert hasattr(compare, "compare_environments")
+    assert hasattr(status, "list_ingesters")
+    assert hasattr(status, "get_ingester_status")
+    assert hasattr(status, "request_ingester_scan")
 
 
 def test_shared_service_signatures_stay_keyword_only_and_stable():

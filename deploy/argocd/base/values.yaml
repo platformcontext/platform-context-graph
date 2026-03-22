@@ -26,6 +26,14 @@ repoSync:
 service:
   type: ClusterIP
 
+api:
+  replicas: 1
+
+worker:
+  replicas: 1
+  persistence:
+    enabled: true
+
 exposure:
   ingress:
     enabled: false

@@ -264,7 +264,7 @@ def add_file_to_graph(
                     use_uid_identity=label in CONTENT_ENTITY_LABELS
                     and bool(item.get("uid")),
                 )
-                session.run(query, **params)
+                session.run(query, params)
 
                 if label == "Function":
                     for arg_name in item.get("args", []):
