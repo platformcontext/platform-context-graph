@@ -11,8 +11,8 @@
 | Imports | `imports` | (IMPORTS edge) | Supported |
 | Function calls | `function_calls` | (CALLS edge) | Supported |
 | Variables | `variables` | Variable | Supported |
-| Enums | `classes` | Class | Supported |
-| Type aliases | `variables` | Variable | Partial |
+| Enums | `enums` | Enum | Supported |
+| Type aliases | `type_aliases` | TypeAlias | Partial |
 | Decorators | decorator property | - | Supported |
 | Generics | type parameters | - | Partial |
 

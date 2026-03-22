@@ -12,7 +12,7 @@
 | Conditions | `condition` property | - | Supported |
 | Export names | `export_name` property | - | Supported |
 | AllowedValues | `allowed_values` property | - | Supported |
-| JSON templates | via `parse_cloudformation_json` | Same as YAML | Supported |
+| JSON templates | - | - | Not wired into indexing pipeline (YAML only) |
 
 ## Detection
 - Document has `AWSTemplateFormatVersion` key, OR

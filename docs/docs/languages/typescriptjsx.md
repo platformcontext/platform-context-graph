@@ -11,7 +11,7 @@
 | Imports | `imports` | (IMPORTS edge) | Supported |
 | Function calls | `function_calls` | (CALLS edge) | Supported |
 | Variables | `variables` | Variable | Supported |
-| Type aliases | `variables` | Variable | Partial |
+| Type aliases | `type_aliases` | TypeAlias | Partial |
 | JSX component usage | `function_calls` | (CALLS edge) | Partial |
 
 ## Fixture Repo

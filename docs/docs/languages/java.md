@@ -8,9 +8,9 @@
 | Methods | `functions` | Function | Supported |
 | Constructors | `functions` | Function | Supported |
 | Classes | `classes` | Class | Supported |
-| Interfaces | `classes` | Class | Supported |
+| Interfaces | `interfaces` | Interface | Supported |
 | Enums | `classes` | Class | Supported |
-| Annotation types | `classes` | Class | Supported |
+| Annotation types | `annotations` | Annotation | Supported |
 | Imports | `imports` | (IMPORTS edge) | Supported |
 | Method invocations | `function_calls` | (CALLS edge) | Supported |
 | Object creation | `function_calls` | (CALLS edge) | Supported |
