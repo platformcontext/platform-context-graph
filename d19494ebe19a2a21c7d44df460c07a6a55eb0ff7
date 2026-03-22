@@ -1,0 +1,36 @@
+src/platform_context_graph/content/service.py
+  0595d92bfe2870a0 79-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "d19494ebe19a2a21c7d44df460c07a6a55eb0ff7",
+  "prompts": {
+    "0595d92bfe2870a0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cad5bbd3-26a5-497a-9cf0-fa1b71523a57",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 11,
+      "total_deletions": 0,
+      "accepted_lines": 11,
+      "overriden_lines": 0
+    },
+    "a034ab0d6c4453bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d172a-7e40-76a0-8995-46eceacac34a",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 73,
+      "overriden_lines": 0
+    }
+  }
+}
