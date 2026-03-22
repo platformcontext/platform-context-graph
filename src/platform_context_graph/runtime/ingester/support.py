@@ -26,6 +26,15 @@ LOCK_METADATA_FILENAME = "lock.json"
 DEFAULT_LOCK_HEARTBEAT_SECONDS = 30
 DEFAULT_LOCK_STALE_SECONDS = 300
 
+# Unique identifier for this process lifetime.  In Kubernetes, PID 1 and
+# hostname are reused across container restarts so they cannot distinguish
+# a new incarnation from the previous one.  A random boot ID lets
+# ``_is_stale_lock`` detect that the holder no longer exists even when
+# the heartbeat file on the PVC still looks fresh.
+_BOOT_ID: str = hashlib.sha256(
+    f"{os.getpid()}-{time.monotonic_ns()}".encode()
+).hexdigest()[:16]
+
 
 def index_workspace_default(workspace: Path) -> None:
     """Run the default CLI indexing entrypoint for a workspace.
@@ -129,6 +138,7 @@ def _write_lock_metadata(config: RepoSyncConfig) -> None:
     _lock_metadata_path(config).write_text(
         json.dumps(
             {
+                "boot_id": _BOOT_ID,
                 "component": config.component,
                 "pid": os.getpid(),
                 "hostname": socket.gethostname(),
@@ -142,7 +152,15 @@ def _write_lock_metadata(config: RepoSyncConfig) -> None:
 
 
 def _is_stale_lock(config: RepoSyncConfig) -> bool:
-    """Return whether the current workspace lock should be treated as stale."""
+    """Return whether the current workspace lock should be treated as stale.
+
+    A lock is stale when either:
+    * The heartbeat is older than ``_lock_stale_seconds()``, **or**
+    * The lock was written by a different boot (i.e. a previous container
+      incarnation that no longer exists).  In Kubernetes, PID 1 and the
+      pod hostname are reused after a restart, so heartbeat age alone is
+      not sufficient to detect a dead holder.
+    """
 
     metadata_path = _lock_metadata_path(config)
     if not metadata_path.exists():
@@ -153,6 +171,21 @@ def _is_stale_lock(config: RepoSyncConfig) -> bool:
         heartbeat_at = payload["heartbeat_at"]
         heartbeat_time = datetime.fromisoformat(heartbeat_at)
     except (KeyError, ValueError, json.JSONDecodeError, OSError):
+        return True
+
+    # If the lock was written by the same hostname (same StatefulSet pod)
+    # but a different boot_id, the holder is a previous container incarnation
+    # that was killed without releasing the lock.  In Kubernetes, PID 1 and
+    # hostname are reused across restarts so heartbeat age alone cannot
+    # detect this.  We only apply this check when hostnames match to avoid
+    # breaking lock exclusion between different replicas.
+    lock_boot_id = payload.get("boot_id")
+    lock_hostname = payload.get("hostname")
+    if (
+        lock_boot_id is not None
+        and lock_boot_id != _BOOT_ID
+        and lock_hostname == socket.gethostname()
+    ):
         return True
 
     if heartbeat_time.tzinfo is None:
