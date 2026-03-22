@@ -9,7 +9,7 @@ from platform_context_graph.utils.debug_log import debug_log, warning_logger
 KUZU_NODE_TABLES: Sequence[tuple[str, str]] = [
     (
         "Repository",
-        "path STRING, name STRING, is_dependency BOOLEAN, PRIMARY KEY (path)",
+        "id STRING, path STRING, local_path STRING, name STRING, remote_url STRING, repo_slug STRING, has_remote BOOLEAN, is_dependency BOOLEAN, PRIMARY KEY (path)",
     ),
     (
         "File",
@@ -86,7 +86,7 @@ KUZU_NODE_TABLES: Sequence[tuple[str, str]] = [
     ),
     (
         "CrossplaneXRD",
-        "uid STRING, name STRING, group STRING, kind STRING, plural STRING, claim_kind STRING, claim_plural STRING, path STRING, line_number INT64, lang STRING, PRIMARY KEY (uid)",
+        "uid STRING, name STRING, `group` STRING, kind STRING, plural STRING, claim_kind STRING, claim_plural STRING, path STRING, line_number INT64, lang STRING, PRIMARY KEY (uid)",
     ),
     (
         "CrossplaneComposition",
@@ -114,7 +114,7 @@ KUZU_NODE_TABLES: Sequence[tuple[str, str]] = [
     ),
     (
         "TerraformVariable",
-        "uid STRING, name STRING, var_type STRING, default STRING, description STRING, path STRING, line_number INT64, lang STRING, PRIMARY KEY (uid)",
+        "uid STRING, name STRING, var_type STRING, `default` STRING, description STRING, path STRING, line_number INT64, lang STRING, PRIMARY KEY (uid)",
     ),
     (
         "TerraformOutput",
@@ -160,11 +160,17 @@ KUZU_REL_TABLES: Sequence[tuple[str, str]] = [
         "FROM Class TO Interface, FROM Struct TO Interface, FROM Record TO Interface",
     ),
     ("DEPENDS_ON", "FROM Repository TO Repository"),
-    ("SOURCES_FROM", "FROM ArgoCDApplication TO Repository, FROM ArgoCDApplicationSet TO Repository"),
+    (
+        "SOURCES_FROM",
+        "FROM ArgoCDApplication TO Repository, FROM ArgoCDApplicationSet TO Repository",
+    ),
     ("SATISFIED_BY", "FROM CrossplaneClaim TO CrossplaneXRD"),
     ("IMPLEMENTED_BY", "FROM CrossplaneXRD TO CrossplaneComposition"),
     ("USES_MODULE", "FROM TerraformModule TO Repository"),
-    ("DEPLOYS", "FROM ArgoCDApplication TO K8sResource, FROM ArgoCDApplicationSet TO K8sResource"),
+    (
+        "DEPLOYS",
+        "FROM ArgoCDApplication TO K8sResource, FROM ArgoCDApplicationSet TO K8sResource",
+    ),
     ("CONFIGURES", "FROM HelmValues TO HelmChart"),
     ("SELECTS", "FROM K8sResource TO K8sResource"),
     ("USES_IAM", "FROM K8sResource TO TerraformResource"),
@@ -190,7 +196,16 @@ KUZU_UID_MAP: dict[str, list[str]] = {
 }
 
 KUZU_SCHEMA_MAP: dict[str, set[str]] = {
-    "Repository": {"path", "name", "is_dependency"},
+    "Repository": {
+        "id",
+        "path",
+        "local_path",
+        "name",
+        "remote_url",
+        "repo_slug",
+        "has_remote",
+        "is_dependency",
+    },
     "File": {"path", "name", "relative_path", "is_dependency"},
     "Directory": {"path", "name"},
     "Module": {"name", "lang", "full_import_name"},

@@ -62,9 +62,9 @@ def add_repository_to_graph(
         if existing is None:
             session.run(
                 """
-                CREATE (r:Repository {id: $repo_id})
-                SET r.name = $name,
-                    r.path = $repo_path,
+                CREATE (r:Repository {path: $repo_path})
+                SET r.id = $repo_id,
+                    r.name = $name,
                     r.local_path = $local_path,
                     r.remote_url = $remote_url,
                     r.repo_slug = $repo_slug,
@@ -406,6 +406,7 @@ def add_file_to_graph(
                 file_path=file_path_str,
                 module_name=inclusion["module"],
             )
+
 
 __all__ = [
     "add_file_to_graph",

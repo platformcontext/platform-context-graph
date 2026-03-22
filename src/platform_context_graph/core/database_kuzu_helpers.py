@@ -17,6 +17,8 @@ from platform_context_graph.utils.debug_log import (
     warning_logger,
 )
 
+_KUZU_RESERVED_PROPERTIES = {"group", "default"}
+
 
 def _expand_property_updates(
     query: str, parameters: dict[str, Any]
@@ -188,6 +190,26 @@ def _translate_label_predicates(query: str) -> str:
     )
 
 
+def _escape_reserved_properties(query: str) -> str:
+    """Escape reserved property identifiers used in Kuzu schemas.
+
+    Args:
+        query: Query text to sanitize.
+
+    Returns:
+        Query text with reserved property accesses backticked.
+    """
+
+    def property_replacer(match: re.Match[str]) -> str:
+        var_name = match.group(1)
+        prop_name = match.group(2)
+        if prop_name not in _KUZU_RESERVED_PROPERTIES:
+            return match.group(0)
+        return f"{var_name}.`{prop_name}`"
+
+    return re.sub(r"\b(\w+)\.(\w+)\b", property_replacer, query)
+
+
 def translate_kuzu_query(
     query: str,
     parameters: dict[str, Any],
@@ -216,6 +238,7 @@ def translate_kuzu_query(
     translated_query = translated_query.replace("labels(n)[0]", "label(n)")
     translated_query = _translate_polymorphic_matches(translated_query)
     translated_query = _translate_label_predicates(translated_query)
+    translated_query = _escape_reserved_properties(translated_query)
     translated_query = translated_query.replace("coalesce(", "COALESCE(")
 
     if any(

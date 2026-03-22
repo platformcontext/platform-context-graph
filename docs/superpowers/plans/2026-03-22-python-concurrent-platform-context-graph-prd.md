@@ -336,9 +336,9 @@ Update this plan or an adjacent status note with:
 
 #### Remaining gaps
 
-- Kùzu-backed CLI smoke is still unverified in this worktree runtime.
-  - `PYTHONPATH=src PCG_RUNTIME_DB_TYPE=kuzudb KUZUDB_PATH="$TMPDIR/.../kuzu" uv run pcg index tests/fixtures/sample_projects/sample_project`
-  - result: failed before indexing because Kùzu is not installed in this environment
+- Kùzu-backed CLI smoke still fails on fresh databases because the Kùzu schema/translation layer is incomplete for current graph shapes.
+  - `PYTHONPATH=src DEFAULT_DATABASE=kuzudb PCG_HOME="$TMPDIR/.../home" KUZUDB_PATH="$TMPDIR/.../kuzu" uv run python -m platform_context_graph.cli.main index tests/fixtures/sample_projects/sample_project`
+  - result: packaging/bootstrap succeeded on Python `3.12`, but indexing still ended in `partial_failure`; after fixing repository identity fields and reserved-property DDL issues, the latest blocker is `Binder exception: Cannot find property bases for n.`
 - The only benchmark available in-repo is `tests/perf/test_large_indexing.py`, which measures mocked Python loop overhead, not full end-to-end parse+persist throughput.
 - We still do not have a real 100/500/1000-repo benchmark corpus or an 8-hour watch RSS soak in this local environment.
 
