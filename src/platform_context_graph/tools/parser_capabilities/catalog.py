@@ -1,17 +1,70 @@
-"""Helpers for canonical parser capability specs and generated docs."""
+"""Load, validate, and render parser capability specifications.
+
+This module is the canonical Python API for the YAML capability specs under
+``tools/parser_capabilities/specs``. It keeps the YAML boundary narrow while
+providing typed helpers for validation and Markdown generation.
+"""
 
 from __future__ import annotations
 
 import ast
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Final, Literal, TypedDict, cast
 
 import yaml
 
-AUTO_GENERATED_BANNER = "This file is auto-generated. Do not edit manually."
-SUPPORTED_STATUSES = {"supported", "partial", "unsupported"}
-MATRIX_CAPABILITY_IDS = (
+CapabilityStatus = Literal["supported", "partial", "unsupported"]
+SpecFamily = Literal["language", "iac"]
+
+
+class GraphSurface(TypedDict, total=False):
+    """Structured description of a graph surface exposed by one capability."""
+
+    kind: str
+    target: str
+
+
+class CapabilitySpec(TypedDict, total=False):
+    """One checklist item inside a parser capability spec."""
+
+    id: str
+    name: str
+    status: CapabilityStatus
+    extracted_bucket: str
+    required_fields: list[str]
+    graph_surface: GraphSurface
+    unit_test: str
+    integration_test: str
+    rationale: str
+
+
+class LanguageCapabilitySpec(TypedDict, total=False):
+    """Top-level parser capability spec loaded from one YAML file."""
+
+    language: str
+    title: str
+    family: SpecFamily
+    parser: str
+    parser_entrypoint: str
+    doc_path: str
+    fixture_repo: str
+    unit_test_file: str
+    integration_test_suite: str
+    capabilities: list[CapabilitySpec]
+    known_limitations: list[str]
+    spec_path: str
+
+
+NamedTestNode = ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+
+AUTO_GENERATED_BANNER: Final = "This file is auto-generated. Do not edit manually."
+SUPPORTED_STATUSES: Final[set[CapabilityStatus]] = {
+    "supported",
+    "partial",
+    "unsupported",
+}
+MATRIX_CAPABILITY_IDS: Final[tuple[str, ...]] = (
     "functions",
     "classes",
     "interfaces",
@@ -23,7 +76,7 @@ MATRIX_CAPABILITY_IDS = (
     "enums",
     "macros",
 )
-MATRIX_IAC_CAPABILITY_IDS = (
+MATRIX_IAC_CAPABILITY_IDS: Final[tuple[str, ...]] = (
     "terraform_resources",
     "terraform_variables",
     "terraform_outputs",
@@ -46,7 +99,14 @@ MATRIX_IAC_CAPABILITY_IDS = (
 
 
 def repo_root(default: Path | None = None) -> Path:
-    """Return the repository root for capability spec operations."""
+    """Return the repository root used by parser capability helpers.
+
+    Args:
+        default: Optional repository root override.
+
+    Returns:
+        Absolute repository root path.
+    """
 
     if default is not None:
         return default.resolve()
@@ -54,7 +114,14 @@ def repo_root(default: Path | None = None) -> Path:
 
 
 def specs_dir(root: Path | None = None) -> Path:
-    """Return the directory containing canonical parser capability specs."""
+    """Return the directory containing canonical parser capability specs.
+
+    Args:
+        root: Optional repository root override.
+
+    Returns:
+        Absolute path to the YAML spec directory.
+    """
 
     return (
         repo_root(root)
@@ -66,20 +133,38 @@ def specs_dir(root: Path | None = None) -> Path:
     )
 
 
-def load_language_capability_specs(root: Path | None = None) -> list[dict[str, Any]]:
-    """Load all parser capability specs from YAML files on disk."""
+def load_language_capability_specs(
+    root: Path | None = None,
+) -> list[LanguageCapabilitySpec]:
+    """Load all parser capability specs from YAML files on disk.
+
+    Args:
+        root: Optional repository root override.
+
+    Returns:
+        Sorted parser capability specs enriched with ``spec_path`` metadata.
+    """
 
     resolved_root = repo_root(root)
-    specs: list[dict[str, Any]] = []
+    specs: list[LanguageCapabilitySpec] = []
     for path in sorted(specs_dir(resolved_root).glob("*.yaml")):
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(data, dict):
+            data = {}
         data["spec_path"] = path.relative_to(resolved_root).as_posix()
-        specs.append(data)
+        specs.append(cast(LanguageCapabilitySpec, data))
     return sorted(specs, key=lambda spec: spec["language"])
 
 
 def validate_language_capability_specs(root: Path | None = None) -> list[str]:
-    """Return a list of spec validation errors."""
+    """Validate every parser capability spec under the repository root.
+
+    Args:
+        root: Optional repository root override.
+
+    Returns:
+        Validation errors. Returns an empty list when every spec is valid.
+    """
 
     resolved_root = repo_root(root)
     errors: list[str] = []
@@ -88,8 +173,15 @@ def validate_language_capability_specs(root: Path | None = None) -> list[str]:
     return errors
 
 
-def render_language_doc(spec: dict[str, Any]) -> str:
-    """Render one language capability spec into Markdown."""
+def render_language_doc(spec: LanguageCapabilitySpec) -> str:
+    """Render one parser capability spec into Markdown.
+
+    Args:
+        spec: Parsed spec payload to render.
+
+    Returns:
+        Markdown content for one generated language or IaC doc page.
+    """
 
     lines = [
         f"# {spec['title']}",
@@ -133,8 +225,15 @@ def render_language_doc(spec: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_feature_matrix(specs: list[dict[str, Any]]) -> str:
-    """Render a generated parser feature matrix from capability specs."""
+def render_feature_matrix(specs: list[LanguageCapabilitySpec]) -> str:
+    """Render the generated parser feature matrix.
+
+    Args:
+        specs: Parsed parser capability specs.
+
+    Returns:
+        Markdown feature matrix derived from the supplied specs.
+    """
 
     code_specs = [spec for spec in specs if spec["family"] == "language"]
     iac_specs = [spec for spec in specs if spec["family"] == "iac"]
@@ -226,7 +325,14 @@ def render_feature_matrix(specs: list[dict[str, Any]]) -> str:
 def expected_generated_language_docs(
     root: Path | None = None,
 ) -> dict[str, str]:
-    """Return the expected generated docs keyed by repo-relative path."""
+    """Return the generated doc content expected from the current specs.
+
+    Args:
+        root: Optional repository root override.
+
+    Returns:
+        Mapping of repo-relative doc paths to generated Markdown content.
+    """
 
     resolved_root = repo_root(root)
     specs = load_language_capability_specs(resolved_root)
@@ -238,7 +344,16 @@ def expected_generated_language_docs(
 def write_generated_language_docs(
     root: Path | None = None, *, check: bool = False
 ) -> list[str]:
-    """Write generated language docs or report drift when ``check`` is set."""
+    """Write generated language docs or report drift when ``check`` is set.
+
+    Args:
+        root: Optional repository root override.
+        check: When ``True``, do not write files and only report drift.
+
+    Returns:
+        Repo-relative doc paths whose tracked content differs from the expected
+        generated output.
+    """
 
     resolved_root = repo_root(root)
     changed: list[str] = []
@@ -255,7 +370,7 @@ def write_generated_language_docs(
     return changed
 
 
-def _validate_spec(root: Path, spec: dict[str, Any]) -> list[str]:
+def _validate_spec(root: Path, spec: LanguageCapabilitySpec) -> list[str]:
     """Validate one parser capability spec payload."""
 
     errors: list[str] = []
@@ -309,7 +424,7 @@ def _validate_spec(root: Path, spec: dict[str, Any]) -> list[str]:
 
 
 def _validate_capability(
-    root: Path, spec_path: str, capability: dict[str, Any]
+    root: Path, spec_path: str, capability: CapabilitySpec
 ) -> list[str]:
     """Validate one capability entry."""
 
@@ -365,7 +480,7 @@ def _validate_capability(
     return errors
 
 
-def _render_graph_surface(surface: dict[str, Any]) -> str:
+def _render_graph_surface(surface: GraphSurface) -> str:
     """Render a graph surface descriptor as compact Markdown text."""
 
     kind = surface.get("kind", "none")
@@ -375,7 +490,7 @@ def _render_graph_surface(surface: dict[str, Any]) -> str:
     return f"{kind}:{target}"
 
 
-def _matrix_status(spec: dict[str, Any], capability_id: str) -> str:
+def _matrix_status(spec: LanguageCapabilitySpec, capability_id: str) -> str:
     """Return matrix status symbol for a named code capability."""
 
     status = _capability_status(spec, capability_id)
@@ -386,7 +501,7 @@ def _matrix_status(spec: dict[str, Any], capability_id: str) -> str:
     return "P"
 
 
-def _iac_status(spec: dict[str, Any], capability_ids: tuple[str, ...]) -> str:
+def _iac_status(spec: LanguageCapabilitySpec, capability_ids: tuple[str, ...]) -> str:
     """Return matrix status symbol across a set of IaC capability IDs."""
 
     statuses = [
@@ -400,7 +515,9 @@ def _iac_status(spec: dict[str, Any], capability_ids: tuple[str, ...]) -> str:
     return "P"
 
 
-def _capability_status(spec: dict[str, Any], capability_id: str) -> str | None:
+def _capability_status(
+    spec: LanguageCapabilitySpec, capability_id: str
+) -> CapabilityStatus | None:
     """Return the status for a capability id, when present."""
 
     statuses: list[str] = []
@@ -419,7 +536,7 @@ def _capability_status(spec: dict[str, Any], capability_id: str) -> str | None:
     return "unsupported"
 
 
-def _coverage_count(spec: dict[str, Any], ref_type: str) -> str:
+def _coverage_count(spec: LanguageCapabilitySpec, ref_type: str) -> str:
     """Return coverage fraction text for a capability spec."""
 
     key = "unit_test" if ref_type == "unit" else "integration_test"
@@ -436,7 +553,7 @@ def _coverage_count(spec: dict[str, Any], ref_type: str) -> str:
 
 
 @lru_cache(maxsize=None)
-def _parsed_test_file(path: str) -> ast.AST:
+def _parsed_test_file(path: str) -> ast.Module:
     """Return the parsed AST for a test file path."""
 
     return ast.parse(Path(path).read_text(encoding="utf-8"))
@@ -469,7 +586,7 @@ def _test_ref_exists(root: Path, ref: str) -> bool:
     return True
 
 
-def _find_named_node(nodes: list[ast.stmt], name: str) -> ast.AST | None:
+def _find_named_node(nodes: list[ast.stmt], name: str) -> NamedTestNode | None:
     """Return the class or function node matching ``name``."""
 
     for node in nodes:
