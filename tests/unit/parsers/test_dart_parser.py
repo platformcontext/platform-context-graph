@@ -99,8 +99,22 @@ class Service with Loggable {
     assert "Loggable" in names or "Service" in names
 
 
+def test_parse_extensions(dart_parser, temp_test_dir):
+    code = r"""extension StringTools on String {
+  String shout() => toUpperCase();
+}
+"""
+    f = temp_test_dir / "extensions.dart"
+    f.write_text(code)
+    result = dart_parser.parse(f)
+
+    classes = result.get("classes", [])
+    names = [c["name"] for c in classes]
+    assert "StringTools" in names
+
+
 def test_parse_enums(dart_parser, temp_test_dir):
-    code = '''enum Color {
+    code = """enum Color {
   red,
   green,
   blue;
@@ -112,7 +126,7 @@ enum Status {
 
   bool get isTerminal => this == Status.inactive;
 }
-'''
+"""
     f = temp_test_dir / "enums.dart"
     f.write_text(code)
     result = dart_parser.parse(f)
@@ -134,6 +148,16 @@ import 'package:http/http.dart' as http;
 
     imports = result.get("imports", [])
     assert len(imports) >= 2
+
+
+def test_parse_exports(dart_parser, temp_test_dir):
+    code = "export 'foo.dart';\n"
+    f = temp_test_dir / "exports.dart"
+    f.write_text(code)
+    result = dart_parser.parse(f)
+
+    imports = result.get("imports", [])
+    assert any(item["name"] == "foo.dart" for item in imports)
 
 
 def test_parse_variables(dart_parser, temp_test_dir):
@@ -166,7 +190,7 @@ def test_parse_function_calls(dart_parser, temp_test_dir):
 
 
 def test_result_structure(dart_parser, temp_test_dir):
-    code = 'void main() {}\n'
+    code = "void main() {}\n"
     f = temp_test_dir / "minimal.dart"
     f.write_text(code)
     result = dart_parser.parse(f)

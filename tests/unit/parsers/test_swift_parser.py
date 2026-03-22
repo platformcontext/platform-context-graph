@@ -84,3 +84,38 @@ def test_pre_scan_swift_keeps_public_import_surface(temp_test_dir) -> None:
 
     assert imports_map["MetricTracker"] == [str(source_file)]
     assert imports_map["GenericController"] == [str(source_file)]
+
+
+def test_parse_swift_calls_and_initializers_without_protocol_nodes(
+    swift_parser, temp_test_dir
+):
+    """Parse Swift runtime surface while documenting missing protocol nodes."""
+    code = """
+import Foundation
+
+protocol Runnable {
+    func run()
+}
+
+class Worker: Runnable {
+    let identifier: String
+
+    init(identifier: String) {
+        self.identifier = identifier
+    }
+
+    func run() {
+        print(identifier)
+    }
+}
+"""
+    f = temp_test_dir / "runtime_surface.swift"
+    f.write_text(code)
+
+    result = swift_parser.parse(f)
+
+    assert any(item["name"] == "Worker" for item in result["classes"])
+    assert any(item["name"] == "init" for item in result["functions"])
+    assert any(item["name"] == "identifier" for item in result["variables"])
+    assert any(item["name"] == "print" for item in result["function_calls"])
+    assert result.get("protocols", []) == []

@@ -147,6 +147,7 @@ __marimo__/
 
 # Repo-local tooling and scratch files
 .claude/
+.worktrees/
 .mcp.json
 .vercel/
 mcp.json

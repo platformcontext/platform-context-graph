@@ -22,8 +22,29 @@ PCG currently has **one** public documentation surface:
 
 1. update or add Markdown under `docs/docs/`
 2. update navigation in `docs/mkdocs.yml`
-3. run the docs tests
-4. build the site locally
+3. if you changed parser capability specs under `src/platform_context_graph/tools/parser_capabilities/specs/`, regenerate the language docs and feature matrix
+4. run the docs tests
+5. build the site locally
+
+## Generated parser capability docs
+
+The language parser pages under `docs/docs/languages/` and the parser feature matrix are generated from canonical YAML specs:
+
+- `src/platform_context_graph/tools/parser_capabilities/specs/*.yaml`
+
+Generate them with:
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py
+```
+
+Check for drift with:
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py --check
+```
 
 ## Local verification
 
@@ -33,13 +54,13 @@ mkdocs serve
 ```
 
 ```bash
-cd /Users/allen/personal-repos/platform-context-graph
+cd "$(git rev-parse --show-toplevel)"
 PYTHONPATH=src uv run python -m pytest tests/integration/docs/test_docs_cleanup_contract.py tests/integration/docs/test_docs_smoke.py -q
 ```
 
 ## Build
 
 ```bash
-cd /Users/allen/personal-repos/platform-context-graph
+cd "$(git rev-parse --show-toplevel)"
 uv run --with mkdocs --with mkdocs-material --with pymdown-extensions mkdocs build --strict --clean --config-file docs/mkdocs.yml
 ```

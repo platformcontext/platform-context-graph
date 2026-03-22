@@ -1,21 +1,25 @@
 # Kustomize Parser
 
-## Parser: `InfraYAMLParser` (kustomize module) in `src/platform_context_graph/tools/languages/yaml_infra.py`
+This file is auto-generated. Do not edit manually.
+Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/kustomize.yaml`
 
-## Extracted Features
-| Feature | Dict Key | Graph Node | Status |
-|---------|----------|------------|--------|
-| Kustomization overlays (`kustomization.yaml`) | `kustomize_overlays` | KustomizeOverlay | Supported |
-| Namespace | namespace property on Overlay | - | Supported |
-| Resources list | resources on Overlay | - | Supported |
-| Patches list | patches on Overlay | - | Supported |
-| Base references | bases on Overlay | - | Supported |
+## Parser Contract
+- Language: `kustomize`
+- Family: `iac`
+- Parser: `InfraYAMLParser`
+- Entrypoint: `src/platform_context_graph/tools/languages/yaml_infra.py`
+- Fixture repo: `tests/fixtures/ecosystems/kustomize_comprehensive/`
+- Unit test suite: `tests/unit/parsers/test_yaml_infra_parser.py`
+- Integration test suite: `tests/integration/test_iac_graph.py::TestKustomizeGraph`
 
-## Fixture Repo
-`tests/fixtures/ecosystems/kustomize_comprehensive/`
-
-## Integration Test Class
-`tests/integration/test_iac_graph.py::TestKustomizeGraph`
+## Capability Checklist
+| Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
+|-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
+| Kustomization overlays (`kustomization.yaml`) | `kustomization-overlays-kustomization-yaml` | supported | `kustomize_overlays` | `name, line_number` | `node:KustomizeOverlay` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_kustomization` | `tests/integration/test_iac_graph.py::TestKustomizeGraph::test_kustomize_overlays_indexed` | - |
+| Namespace | `namespace` | supported | `variables` | `name, line_number, namespace` | `property:Overlay.property` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_helm_values` | `tests/integration/test_iac_graph.py::TestKustomizeGraph::test_kustomize_overlays_indexed` | - |
+| Resources list | `resources-list` | supported | `k8s_resources` | `name, line_number, resources` | `property:Overlay.resources` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_no_k8s_standalone_resources_without_api_version` | `tests/integration/test_iac_graph.py::TestKustomizeGraph::test_kustomize_k8s_resources` | - |
+| Patches list | `patches-list` | supported | `kustomize_overlays` | `name, line_number, patches` | `property:Overlay.patches` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_no_k8s_standalone_resources_without_api_version` | `tests/integration/test_iac_graph.py::TestKustomizeGraph::test_kustomize_overlays_indexed` | - |
+| Base references | `base-references` | supported | `kustomize_overlays` | `name, line_number, bases` | `property:Overlay.bases` | `tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_no_k8s_standalone_resources_without_api_version` | `tests/integration/test_iac_graph.py::TestKustomizeGraph::test_kustomize_overlays_indexed` | - |
 
 ## Known Limitations
 - Strategic merge patches are not parsed for the target resource they modify

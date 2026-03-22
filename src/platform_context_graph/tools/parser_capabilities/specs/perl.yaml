@@ -1,0 +1,122 @@
+language: perl
+title: Perl Parser
+family: language
+parser: PerlTreeSitterParser
+parser_entrypoint: src/platform_context_graph/tools/languages/perl.py
+doc_path: docs/docs/languages/perl.md
+fixture_repo: tests/fixtures/ecosystems/perl_comprehensive/
+unit_test_file: tests/unit/parsers/test_perl_parser.py
+integration_test_suite: tests/integration/test_language_graph.py::TestPerlGraph
+capabilities:
+- id: subroutines
+  name: Subroutines
+  status: supported
+  extracted_bucket: functions
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Function
+  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_subroutines
+  integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
+- id: packages
+  name: Packages
+  status: supported
+  extracted_bucket: classes
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Class
+  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_packages
+  integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
+- id: use-statements
+  name: Use statements
+  status: supported
+  extracted_bucket: imports
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: IMPORTS
+  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_imports
+  integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
+- id: method-calls
+  name: Method calls
+  status: supported
+  extracted_bucket: function_calls
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: CALLS
+  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_function_calls
+  integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
+- id: ambiguous-function-calls
+  name: Ambiguous function calls
+  status: supported
+  extracted_bucket: function_calls
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: CALLS
+  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_function_calls
+  integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
+- id: plain-function-calls
+  name: Plain function calls
+  status: supported
+  extracted_bucket: function_calls
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: CALLS
+  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_function_calls
+  integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
+- id: scalar-variables-my-x
+  name: Scalar variables (`my $x`)
+  status: supported
+  extracted_bucket: variables
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Variable
+  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_variables
+  integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
+- id: array-variables-my-x
+  name: Array variables (`my @x`)
+  status: supported
+  extracted_bucket: variables
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Variable
+  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_variables
+  integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
+- id: hash-variables-my-x
+  name: Hash variables (`my %x`)
+  status: supported
+  extracted_bucket: variables
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Variable
+  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_variables
+  integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
+known_limitations:
+- Anonymous subroutines assigned to variables are not captured as named functions
+- '`AUTOLOAD` dynamic dispatch is not tracked'
+- '`BEGIN`/`END` blocks are not modeled as distinct graph nodes'

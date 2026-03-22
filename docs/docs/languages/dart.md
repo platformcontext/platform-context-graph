@@ -1,27 +1,31 @@
 # Dart Parser
 
-## Parser: `DartTreeSitterParser` in `src/platform_context_graph/tools/languages/dart.py`
+This file is auto-generated. Do not edit manually.
+Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/dart.yaml`
 
-## Extracted Features
-| Feature | Dict Key | Graph Node | Status |
-|---------|----------|------------|--------|
-| Functions | `functions` | Function | Supported |
-| Constructors | `functions` | Function | Supported |
-| Classes | `classes` | Class | Supported |
-| Mixins | `classes` | Class | Supported |
-| Extensions | `classes` | Class | Supported |
-| Enums | `classes` | Class | Supported |
-| Library imports | `imports` | (IMPORTS edge) | Supported |
-| Library exports | `imports` | (IMPORTS edge) | Supported |
-| Function calls | `function_calls` | (CALLS edge) | Supported |
-| Local variable declarations | `variables` | Variable | Supported |
-| Top-level variable declarations | `variables` | Variable | Supported |
+## Parser Contract
+- Language: `dart`
+- Family: `language`
+- Parser: `DartTreeSitterParser`
+- Entrypoint: `src/platform_context_graph/tools/languages/dart.py`
+- Fixture repo: `tests/fixtures/ecosystems/dart_comprehensive/`
+- Unit test suite: `tests/unit/parsers/test_dart_parser.py`
+- Integration test suite: `tests/integration/test_language_graph.py::TestDartGraph`
 
-## Fixture Repo
-`tests/fixtures/ecosystems/dart_comprehensive/`
-
-## Integration Test Class
-`tests/integration/test_language_graph.py::TestDartGraph`
+## Capability Checklist
+| Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
+|-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
+| Functions | `functions` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_dart_parser.py::test_parse_functions` | `tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface` | - |
+| Constructors | `constructors` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_dart_parser.py::test_parse_classes` | `tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface` | - |
+| Classes | `classes` | supported | `classes` | `name, line_number` | `node:Class` | `tests/unit/parsers/test_dart_parser.py::test_parse_classes` | `tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface` | - |
+| Mixins | `mixins` | supported | `classes` | `name, line_number` | `node:Class` | `tests/unit/parsers/test_dart_parser.py::test_parse_mixins` | `tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface` | - |
+| Extensions | `extensions` | supported | `classes` | `name, line_number` | `node:Class` | `tests/unit/parsers/test_dart_parser.py::test_parse_extensions` | `tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface` | - |
+| Enums | `enums` | supported | `classes` | `name, line_number` | `node:Class` | `tests/unit/parsers/test_dart_parser.py::test_parse_enums` | `tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface` | - |
+| Library imports | `library-imports` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `tests/unit/parsers/test_dart_parser.py::test_parse_imports` | `tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface` | - |
+| Library exports | `library-exports` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `tests/unit/parsers/test_dart_parser.py::test_parse_exports` | `tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface` | - |
+| Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_dart_parser.py::test_parse_function_calls` | `tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface` | - |
+| Local variable declarations | `local-variable-declarations` | supported | `variables` | `name, line_number` | `node:Variable` | `tests/unit/parsers/test_dart_parser.py::test_parse_variables` | `tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface` | - |
+| Top-level variable declarations | `top-level-variable-declarations` | supported | `variables` | `name, line_number` | `node:Variable` | `tests/unit/parsers/test_dart_parser.py::test_parse_variables` | `tests/integration/test_language_graph.py::TestDartGraph::test_runtime_surface` | - |
 
 ## Known Limitations
 - Named constructors (`ClassName.named(...)`) are captured under the constructor name only

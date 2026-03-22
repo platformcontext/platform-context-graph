@@ -21,7 +21,7 @@ def cpp_parser():
 
 
 def test_parse_functions(cpp_parser, temp_test_dir):
-    code = '''#include <string>
+    code = """#include <string>
 
 std::string greet(const std::string& name) {
     return "Hello, " + name + "!";
@@ -30,7 +30,7 @@ std::string greet(const std::string& name) {
 int add(int a, int b) {
     return a + b;
 }
-'''
+"""
     f = temp_test_dir / "funcs.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -43,7 +43,7 @@ int add(int a, int b) {
 
 
 def test_parse_classes(cpp_parser, temp_test_dir):
-    code = '''class Shape {
+    code = """class Shape {
 public:
     virtual ~Shape() = default;
     virtual double area() const = 0;
@@ -56,7 +56,7 @@ public:
 private:
     double radius_;
 };
-'''
+"""
     f = temp_test_dir / "classes.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -68,7 +68,7 @@ private:
 
 
 def test_parse_class_methods(cpp_parser, temp_test_dir):
-    code = '''#include <string>
+    code = """#include <string>
 
 class Greeter {
 public:
@@ -81,7 +81,7 @@ public:
 std::string Greeter::greet(const std::string& name) {
     return "Hello, " + name;
 }
-'''
+"""
     f = temp_test_dir / "methods.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -91,7 +91,7 @@ std::string Greeter::greet(const std::string& name) {
 
 
 def test_parse_structs(cpp_parser, temp_test_dir):
-    code = '''struct Point {
+    code = """struct Point {
     double x;
     double y;
 };
@@ -100,7 +100,7 @@ struct Config {
     std::string host;
     int port;
 };
-'''
+"""
     f = temp_test_dir / "structs.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -112,7 +112,7 @@ struct Config {
 
 
 def test_parse_enums(cpp_parser, temp_test_dir):
-    code = '''enum OldColor { RED, GREEN, BLUE };
+    code = """enum OldColor { RED, GREEN, BLUE };
 
 enum class Direction {
     North,
@@ -125,7 +125,7 @@ enum class HttpStatus : int {
     OK = 200,
     NotFound = 404
 };
-'''
+"""
     f = temp_test_dir / "enums.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -135,12 +135,12 @@ enum class HttpStatus : int {
 
 
 def test_parse_unions(cpp_parser, temp_test_dir):
-    code = '''union DataValue {
+    code = """union DataValue {
     int intVal;
     float floatVal;
     char charVal;
 };
-'''
+"""
     f = temp_test_dir / "unions.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -151,11 +151,11 @@ def test_parse_unions(cpp_parser, temp_test_dir):
 
 
 def test_parse_includes(cpp_parser, temp_test_dir):
-    code = '''#include <iostream>
+    code = """#include <iostream>
 #include <vector>
 #include <string>
 #include "shapes.h"
-'''
+"""
     f = temp_test_dir / "includes.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -165,7 +165,7 @@ def test_parse_includes(cpp_parser, temp_test_dir):
 
 
 def test_parse_function_calls(cpp_parser, temp_test_dir):
-    code = '''#include <iostream>
+    code = """#include <iostream>
 #include <vector>
 
 void demo() {
@@ -174,7 +174,7 @@ void demo() {
     v.push_back(1);
     v.size();
 }
-'''
+"""
     f = temp_test_dir / "calls.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -184,10 +184,10 @@ void demo() {
 
 
 def test_parse_macros(cpp_parser, temp_test_dir):
-    code = '''#define MAX_SIZE 1024
+    code = """#define MAX_SIZE 1024
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define VERSION "1.0.0"
-'''
+"""
     f = temp_test_dir / "macros.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -197,7 +197,7 @@ def test_parse_macros(cpp_parser, temp_test_dir):
 
 
 def test_parse_templates(cpp_parser, temp_test_dir):
-    code = '''template<typename T>
+    code = """template<typename T>
 T max_value(T a, T b) {
     return (a > b) ? a : b;
 }
@@ -206,7 +206,7 @@ template<typename T>
 class Stack {
     void push(const T& item);
 };
-'''
+"""
     f = temp_test_dir / "templates.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -216,7 +216,7 @@ class Stack {
 
 
 def test_parse_lambdas(cpp_parser, temp_test_dir):
-    code = '''#include <functional>
+    code = """#include <functional>
 
 void demo() {
     auto greet = []() { return "hello"; };
@@ -226,7 +226,7 @@ void demo() {
     greet();
     add(1, 2);
 }
-'''
+"""
     f = temp_test_dir / "lambdas.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -236,7 +236,7 @@ void demo() {
 
 
 def test_parse_smart_ptrs(cpp_parser, temp_test_dir):
-    code = '''#include <memory>
+    code = """#include <memory>
 
 class Resource {
 public:
@@ -249,7 +249,7 @@ void demo() {
     auto s = std::make_shared<Resource>();
     s->use();
 }
-'''
+"""
     f = temp_test_dir / "smartptrs.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)
@@ -258,8 +258,27 @@ void demo() {
     assert len(calls) >= 1
 
 
+def test_parse_variables_and_fields(cpp_parser, temp_test_dir):
+    code = """class Counter {
+public:
+    int current = 0;
+};
+
+void demo() {
+    int total = 1;
+}
+"""
+    f = temp_test_dir / "variables.cpp"
+    f.write_text(code)
+    result = cpp_parser.parse(f)
+
+    variables = result.get("variables", [])
+    assert any(item["name"] == "current" for item in variables)
+    assert any(item["name"] == "total" for item in variables)
+
+
 def test_result_structure(cpp_parser, temp_test_dir):
-    code = 'void placeholder() {}\n'
+    code = "void placeholder() {}\n"
     f = temp_test_dir / "minimal.cpp"
     f.write_text(code)
     result = cpp_parser.parse(f)

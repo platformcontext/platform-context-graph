@@ -79,3 +79,43 @@ def test_pre_scan_javascript_keeps_public_import_surface(temp_test_dir) -> None:
 
     assert imports_map["Greeter"] == [str(source_file.resolve())]
     assert imports_map["hello"] == [str(source_file.resolve())]
+
+
+def test_parse_javascript_runtime_surface(
+    javascript_parser: JavascriptTreeSitterParser, temp_test_dir
+) -> None:
+    """Parse the JavaScript constructs referenced by the capability spec."""
+    source = """
+import helper from "./helper.js";
+
+/** Documented utility. */
+const documented = function documented(value) {
+  return helper(value);
+};
+
+const increment = (value) => helper(value + 1);
+const version = "1.0.0";
+
+class Counter {
+  get count() {
+    return version.length;
+  }
+
+  async load() {
+    return helper(version);
+  }
+}
+"""
+    source_file = temp_test_dir / "runtime_surface.js"
+    source_file.write_text(source, encoding="utf-8")
+
+    result = javascript_parser.parse(source_file, index_source=True)
+
+    assert any(item["name"] == "documented" for item in result["functions"])
+    assert any(item["name"] == "increment" for item in result["functions"])
+    assert any(item["name"] == "Counter" for item in result["classes"])
+    assert any(item["source"] == "./helper.js" for item in result["imports"])
+    assert any(item["name"] == "helper" for item in result["function_calls"])
+    assert any(item["name"] == "version" for item in result["variables"])
+    assert all(item.get("docstring") is None for item in result["functions"])
+    assert any(item.get("type") == "getter" for item in result["functions"])

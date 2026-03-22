@@ -1,0 +1,136 @@
+language: swift
+title: Swift Parser
+family: language
+parser: SwiftTreeSitterParser
+parser_entrypoint: src/platform_context_graph/tools/languages/swift.py
+doc_path: docs/docs/languages/swift.md
+fixture_repo: tests/fixtures/ecosystems/swift_comprehensive/
+unit_test_file: tests/unit/parsers/test_swift_parser.py
+integration_test_suite: tests/integration/test_language_graph.py::TestSwiftGraph
+capabilities:
+- id: functions
+  name: Functions
+  status: supported
+  extracted_bucket: functions
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Function
+  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
+- id: initializers-init
+  name: Initializers (`init`)
+  status: supported
+  extracted_bucket: functions
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Function
+  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_calls_and_initializers_without_protocol_nodes
+  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
+- id: classes
+  name: Classes
+  status: supported
+  extracted_bucket: classes
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Class
+  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
+- id: structs
+  name: Structs
+  status: supported
+  extracted_bucket: structs
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Struct
+  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
+- id: enums
+  name: Enums
+  status: supported
+  extracted_bucket: enums
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Enum
+  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
+- id: protocols
+  name: Protocols
+  status: unsupported
+  extracted_bucket: protocols
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: none
+    target: not_persisted
+  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_calls_and_initializers_without_protocol_nodes
+  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_protocol_nodes_not_created
+  rationale: The parser leaves the `protocols` bucket empty for the comprehensive fixture
+    set, so protocol definitions are not available as persisted graph nodes.
+- id: actors
+  name: Actors
+  status: supported
+  extracted_bucket: classes
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Class
+  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
+- id: imports
+  name: Imports
+  status: supported
+  extracted_bucket: imports
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: IMPORTS
+  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
+- id: function-calls
+  name: Function calls
+  status: supported
+  extracted_bucket: function_calls
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: relationship
+    target: CALLS
+  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_calls_and_initializers_without_protocol_nodes
+  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
+- id: property-declarations
+  name: Property declarations
+  status: supported
+  extracted_bucket: variables
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: Variable
+  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_calls_and_initializers_without_protocol_nodes
+  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
+known_limitations:
+- Property wrappers are not tracked as distinct decorators
+- '`@objc` and dynamic dispatch attributes are not modeled in the graph'
+- Computed property bodies are not traversed for embedded function calls

@@ -26,6 +26,15 @@ LOCK_METADATA_FILENAME = "lock.json"
 DEFAULT_LOCK_HEARTBEAT_SECONDS = 30
 DEFAULT_LOCK_STALE_SECONDS = 300
 
+# Unique identifier for this process lifetime.  In Kubernetes, PID 1 and
+# hostname are reused across container restarts so they cannot distinguish
+# a new incarnation from the previous one.  A random boot ID lets
+# ``_is_stale_lock`` detect that the holder no longer exists even when
+# the heartbeat file on the PVC still looks fresh.
+_BOOT_ID: str = hashlib.sha256(
+    f"{os.getpid()}-{time.monotonic_ns()}".encode()
+).hexdigest()[:16]
+
 
 def index_workspace_default(workspace: Path) -> None:
     """Run the default CLI indexing entrypoint for a workspace.
@@ -129,6 +138,7 @@ def _write_lock_metadata(config: RepoSyncConfig) -> None:
     _lock_metadata_path(config).write_text(
         json.dumps(
             {
+                "boot_id": _BOOT_ID,
                 "component": config.component,
                 "pid": os.getpid(),
                 "hostname": socket.gethostname(),
@@ -142,7 +152,15 @@ def _write_lock_metadata(config: RepoSyncConfig) -> None:
 
 
 def _is_stale_lock(config: RepoSyncConfig) -> bool:
-    """Return whether the current workspace lock should be treated as stale."""
+    """Return whether the current workspace lock should be treated as stale.
+
+    A lock is stale when either:
+    * The heartbeat is older than ``_lock_stale_seconds()``, **or**
+    * The lock was written by a different boot (i.e. a previous container
+      incarnation that no longer exists).  In Kubernetes, PID 1 and the
+      pod hostname are reused after a restart, so heartbeat age alone is
+      not sufficient to detect a dead holder.
+    """
 
     metadata_path = _lock_metadata_path(config)
     if not metadata_path.exists():
@@ -155,6 +173,25 @@ def _is_stale_lock(config: RepoSyncConfig) -> bool:
     except (KeyError, ValueError, json.JSONDecodeError, OSError):
         return True
 
+    # If both the current process and the recorded holder are PID 1 on the same
+    # hostname, a boot_id mismatch means this is a restarted container entrypoint
+    # rather than a concurrent local process. Restricting the heuristic to PID 1
+    # avoids reaping fresh locks from other live processes on the same host.
+    lock_boot_id = payload.get("boot_id")
+    lock_hostname = payload.get("hostname")
+    try:
+        lock_pid = int(payload.get("pid"))
+    except (TypeError, ValueError):
+        lock_pid = None
+    if (
+        os.getpid() == 1
+        and lock_pid == 1
+        and lock_boot_id is not None
+        and lock_boot_id != _BOOT_ID
+        and lock_hostname == socket.gethostname()
+    ):
+        return True
+
     if heartbeat_time.tzinfo is None:
         heartbeat_time = heartbeat_time.replace(tzinfo=timezone.utc)
 
@@ -162,7 +199,9 @@ def _is_stale_lock(config: RepoSyncConfig) -> bool:
     return age_seconds > _lock_stale_seconds()
 
 
-def _start_lock_heartbeat(config: RepoSyncConfig) -> tuple[threading.Event, threading.Thread]:
+def _start_lock_heartbeat(
+    config: RepoSyncConfig,
+) -> tuple[threading.Event, threading.Thread]:
     """Start the background heartbeat updater for the workspace lock."""
 
     stop_event = threading.Event()

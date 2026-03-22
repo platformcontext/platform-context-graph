@@ -1,25 +1,29 @@
 # Perl Parser
 
-## Parser: `PerlTreeSitterParser` in `src/platform_context_graph/tools/languages/perl.py`
+This file is auto-generated. Do not edit manually.
+Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/perl.yaml`
 
-## Extracted Features
-| Feature | Dict Key | Graph Node | Status |
-|---------|----------|------------|--------|
-| Subroutines | `functions` | Function | Supported |
-| Packages | `classes` | Class | Supported |
-| Use statements | `imports` | (IMPORTS edge) | Supported |
-| Method calls | `function_calls` | (CALLS edge) | Supported |
-| Ambiguous function calls | `function_calls` | (CALLS edge) | Supported |
-| Plain function calls | `function_calls` | (CALLS edge) | Supported |
-| Scalar variables (`my $x`) | `variables` | Variable | Supported |
-| Array variables (`my @x`) | `variables` | Variable | Supported |
-| Hash variables (`my %x`) | `variables` | Variable | Supported |
+## Parser Contract
+- Language: `perl`
+- Family: `language`
+- Parser: `PerlTreeSitterParser`
+- Entrypoint: `src/platform_context_graph/tools/languages/perl.py`
+- Fixture repo: `tests/fixtures/ecosystems/perl_comprehensive/`
+- Unit test suite: `tests/unit/parsers/test_perl_parser.py`
+- Integration test suite: `tests/integration/test_language_graph.py::TestPerlGraph`
 
-## Fixture Repo
-`tests/fixtures/ecosystems/perl_comprehensive/`
-
-## Integration Test Class
-`tests/integration/test_language_graph.py::TestPerlGraph`
+## Capability Checklist
+| Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
+|-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
+| Subroutines | `subroutines` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_perl_parser.py::test_parse_subroutines` | `tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface` | - |
+| Packages | `packages` | supported | `classes` | `name, line_number` | `node:Class` | `tests/unit/parsers/test_perl_parser.py::test_parse_packages` | `tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface` | - |
+| Use statements | `use-statements` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `tests/unit/parsers/test_perl_parser.py::test_parse_imports` | `tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface` | - |
+| Method calls | `method-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_perl_parser.py::test_parse_function_calls` | `tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface` | - |
+| Ambiguous function calls | `ambiguous-function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_perl_parser.py::test_parse_function_calls` | `tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface` | - |
+| Plain function calls | `plain-function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_perl_parser.py::test_parse_function_calls` | `tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface` | - |
+| Scalar variables (`my $x`) | `scalar-variables-my-x` | supported | `variables` | `name, line_number` | `node:Variable` | `tests/unit/parsers/test_perl_parser.py::test_parse_variables` | `tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface` | - |
+| Array variables (`my @x`) | `array-variables-my-x` | supported | `variables` | `name, line_number` | `node:Variable` | `tests/unit/parsers/test_perl_parser.py::test_parse_variables` | `tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface` | - |
+| Hash variables (`my %x`) | `hash-variables-my-x` | supported | `variables` | `name, line_number` | `node:Variable` | `tests/unit/parsers/test_perl_parser.py::test_parse_variables` | `tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface` | - |
 
 ## Known Limitations
 - Anonymous subroutines assigned to variables are not captured as named functions

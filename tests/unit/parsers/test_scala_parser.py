@@ -168,6 +168,20 @@ object Person {
     assert "Person" in names
 
 
+def test_parse_function_class_context(scala_parser, temp_test_dir):
+    code = """class Service {
+  def run(): Unit = println("ok")
+}
+"""
+    f = temp_test_dir / "context.scala"
+    f.write_text(code)
+    result = scala_parser.parse(f)
+
+    functions = result.get("functions", [])
+    run = next(item for item in functions if item["name"] == "run")
+    assert run["class_context"] == "Service"
+
+
 def test_result_structure(scala_parser, temp_test_dir):
     code = 'object Minimal\n'
     f = temp_test_dir / "minimal.scala"
