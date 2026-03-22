@@ -138,7 +138,7 @@ def service_name_for_component(component: str) -> str:
         The service name reported through OpenTelemetry resources.
     """
 
-    if component in {"bootstrap-index", "repo-sync"}:
+    if component in {"bootstrap-index", "repo-sync", "worker"}:
         return "platform-context-graph-indexer"
     return "platform-context-graph-api"
 

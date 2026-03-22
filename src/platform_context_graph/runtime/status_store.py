@@ -7,6 +7,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 try:
     import psycopg
@@ -15,11 +16,7 @@ except ImportError:  # pragma: no cover - exercised when optional dependency mis
     psycopg = None
     dict_row = None
 
-__all__ = [
-    "get_runtime_status_store",
-    "reset_runtime_status_store_for_tests",
-    "update_runtime_status",
-]
+__all__ = ["claim_scan_request", "complete_scan_request", "get_runtime_status_store", "request_index_scan", "reset_runtime_status_store_for_tests", "update_runtime_status"]
 
 _STATUS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS runtime_worker_status (
@@ -33,9 +30,25 @@ CREATE TABLE IF NOT EXISTS runtime_worker_status (
     last_error_kind TEXT,
     last_error_message TEXT,
     repository_count INTEGER NOT NULL DEFAULT 0,
+    pulled_repositories INTEGER NOT NULL DEFAULT 0,
+    in_sync_repositories INTEGER NOT NULL DEFAULT 0,
     pending_repositories INTEGER NOT NULL DEFAULT 0,
     completed_repositories INTEGER NOT NULL DEFAULT 0,
     failed_repositories INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+"""
+
+_CONTROL_SCHEMA = """
+CREATE TABLE IF NOT EXISTS runtime_worker_control (
+    component TEXT PRIMARY KEY,
+    scan_request_token TEXT,
+    scan_request_state TEXT NOT NULL DEFAULT 'idle',
+    scan_requested_at TIMESTAMPTZ,
+    scan_requested_by TEXT,
+    scan_started_at TIMESTAMPTZ,
+    scan_completed_at TIMESTAMPTZ,
+    scan_error_message TEXT,
     updated_at TIMESTAMPTZ NOT NULL
 );
 """
@@ -65,6 +78,21 @@ def _utc_now() -> datetime:
     """Return the current UTC timestamp."""
 
     return datetime.now(timezone.utc)
+
+
+def _idle_scan_control(component: str) -> dict[str, Any]:
+    """Return the default idle scan-control payload for one component."""
+
+    return {
+        "component": component,
+        "scan_request_token": None,
+        "scan_request_state": "idle",
+        "scan_requested_at": None,
+        "scan_requested_by": None,
+        "scan_started_at": None,
+        "scan_completed_at": None,
+        "scan_error_message": None,
+    }
 
 
 class PostgresRuntimeStatusStore:
@@ -99,6 +127,7 @@ class PostgresRuntimeStatusStore:
             if not self._initialized:
                 with self._conn.cursor() as cursor:
                     cursor.execute(_STATUS_SCHEMA)
+                    cursor.execute(_CONTROL_SCHEMA)
                 self._initialized = True
             with self._conn.cursor() as cursor:
                 yield cursor
@@ -116,6 +145,8 @@ class PostgresRuntimeStatusStore:
         last_error_kind: str | None = None,
         last_error_message: str | None = None,
         repository_count: int = 0,
+        pulled_repositories: int = 0,
+        in_sync_repositories: int = 0,
         pending_repositories: int = 0,
         completed_repositories: int = 0,
         failed_repositories: int = 0,
@@ -136,6 +167,8 @@ class PostgresRuntimeStatusStore:
                     last_error_kind,
                     last_error_message,
                     repository_count,
+                    pulled_repositories,
+                    in_sync_repositories,
                     pending_repositories,
                     completed_repositories,
                     failed_repositories,
@@ -151,6 +184,8 @@ class PostgresRuntimeStatusStore:
                     %(last_error_kind)s,
                     %(last_error_message)s,
                     %(repository_count)s,
+                    %(pulled_repositories)s,
+                    %(in_sync_repositories)s,
                     %(pending_repositories)s,
                     %(completed_repositories)s,
                     %(failed_repositories)s,
@@ -166,6 +201,8 @@ class PostgresRuntimeStatusStore:
                     last_error_kind = EXCLUDED.last_error_kind,
                     last_error_message = EXCLUDED.last_error_message,
                     repository_count = EXCLUDED.repository_count,
+                    pulled_repositories = EXCLUDED.pulled_repositories,
+                    in_sync_repositories = EXCLUDED.in_sync_repositories,
                     pending_repositories = EXCLUDED.pending_repositories,
                     completed_repositories = EXCLUDED.completed_repositories,
                     failed_repositories = EXCLUDED.failed_repositories,
@@ -182,6 +219,8 @@ class PostgresRuntimeStatusStore:
                     "last_error_kind": last_error_kind,
                     "last_error_message": last_error_message,
                     "repository_count": repository_count,
+                    "pulled_repositories": pulled_repositories,
+                    "in_sync_repositories": in_sync_repositories,
                     "pending_repositories": pending_repositories,
                     "completed_repositories": completed_repositories,
                     "failed_repositories": failed_repositories,
@@ -205,6 +244,8 @@ class PostgresRuntimeStatusStore:
                        last_error_kind,
                        last_error_message,
                        repository_count,
+                       pulled_repositories,
+                       in_sync_repositories,
                        pending_repositories,
                        completed_repositories,
                        failed_repositories,
@@ -214,7 +255,175 @@ class PostgresRuntimeStatusStore:
                 """,
                 {"component": component},
             )
+            status_row = cursor.fetchone()
+            cursor.execute(
+                """
+                SELECT component,
+                       scan_request_token,
+                       scan_request_state,
+                       scan_requested_at,
+                       scan_requested_by,
+                       scan_started_at,
+                       scan_completed_at,
+                       scan_error_message
+                FROM runtime_worker_control
+                WHERE component = %(component)s
+                """,
+                {"component": component},
+            )
+            control_row = cursor.fetchone() or _idle_scan_control(component)
+            if status_row is None:
+                if control_row["scan_request_state"] == "idle":
+                    return None
+                return {
+                    "component": component,
+                    "source_mode": None,
+                    "status": "bootstrap_pending",
+                    "active_run_id": None,
+                    "last_attempt_at": None,
+                    "last_success_at": None,
+                    "next_retry_at": None,
+                    "last_error_kind": None,
+                    "last_error_message": None,
+                    "repository_count": 0,
+                    "pulled_repositories": 0,
+                    "in_sync_repositories": 0,
+                    "pending_repositories": 0,
+                    "completed_repositories": 0,
+                    "failed_repositories": 0,
+                    "updated_at": None,
+                    **control_row,
+                }
+            merged = dict(status_row)
+            merged.update(control_row)
+            return merged
+
+    def request_scan(
+        self,
+        *,
+        component: str,
+        requested_by: str = "api",
+    ) -> dict[str, Any]:
+        """Persist a pending manual worker scan request."""
+
+        request_token = str(uuid4())
+        requested_at = _utc_now()
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO runtime_worker_control (
+                    component,
+                    scan_request_token,
+                    scan_request_state,
+                    scan_requested_at,
+                    scan_requested_by,
+                    scan_started_at,
+                    scan_completed_at,
+                    scan_error_message,
+                    updated_at
+                ) VALUES (
+                    %(component)s,
+                    %(scan_request_token)s,
+                    %(scan_request_state)s,
+                    %(scan_requested_at)s,
+                    %(scan_requested_by)s,
+                    NULL,
+                    NULL,
+                    NULL,
+                    %(updated_at)s
+                )
+                ON CONFLICT (component) DO UPDATE
+                SET scan_request_token = EXCLUDED.scan_request_token,
+                    scan_request_state = EXCLUDED.scan_request_state,
+                    scan_requested_at = EXCLUDED.scan_requested_at,
+                    scan_requested_by = EXCLUDED.scan_requested_by,
+                    scan_started_at = NULL,
+                    scan_completed_at = NULL,
+                    scan_error_message = NULL,
+                    updated_at = EXCLUDED.updated_at
+                RETURNING component,
+                          scan_request_token,
+                          scan_request_state,
+                          scan_requested_at,
+                          scan_requested_by,
+                          scan_started_at,
+                          scan_completed_at,
+                          scan_error_message
+                """,
+                {
+                    "component": component,
+                    "scan_request_token": request_token,
+                    "scan_request_state": "pending",
+                    "scan_requested_at": requested_at,
+                    "scan_requested_by": requested_by,
+                    "updated_at": requested_at,
+                },
+            )
             return cursor.fetchone()
+
+    def claim_scan_request(self, *, component: str) -> dict[str, Any] | None:
+        """Atomically claim the next pending scan request for a worker."""
+
+        started_at = _utc_now()
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE runtime_worker_control
+                SET scan_request_state = %(scan_request_state)s,
+                    scan_started_at = %(scan_started_at)s,
+                    updated_at = %(updated_at)s
+                WHERE component = %(component)s
+                  AND scan_request_state = 'pending'
+                RETURNING component,
+                          scan_request_token,
+                          scan_request_state,
+                          scan_requested_at,
+                          scan_requested_by,
+                          scan_started_at,
+                          scan_completed_at,
+                          scan_error_message
+                """,
+                {
+                    "component": component,
+                    "scan_request_state": "running",
+                    "scan_started_at": started_at,
+                    "updated_at": started_at,
+                },
+            )
+            return cursor.fetchone()
+
+    def complete_scan_request(
+        self,
+        *,
+        component: str,
+        request_token: str,
+        error_message: str | None = None,
+    ) -> None:
+        """Mark one claimed scan request completed or failed."""
+
+        completed_at = _utc_now()
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE runtime_worker_control
+                SET scan_request_state = %(scan_request_state)s,
+                    scan_completed_at = %(scan_completed_at)s,
+                    scan_error_message = %(scan_error_message)s,
+                    updated_at = %(updated_at)s
+                WHERE component = %(component)s
+                  AND scan_request_token = %(scan_request_token)s
+                """,
+                {
+                    "component": component,
+                    "scan_request_token": request_token,
+                    "scan_request_state": (
+                        "failed" if error_message is not None else "completed"
+                    ),
+                    "scan_completed_at": completed_at,
+                    "scan_error_message": error_message,
+                    "updated_at": completed_at,
+                },
+            )
 
 
 def get_runtime_status_store() -> PostgresRuntimeStatusStore | None:
@@ -239,6 +448,42 @@ def update_runtime_status(**kwargs: Any) -> None:
     if store is None or not store.enabled:
         return
     store.upsert_runtime_status(**kwargs)
+
+
+def request_index_scan(*, component: str, requested_by: str = "api") -> dict[str, Any] | None:
+    """Persist a manual worker scan request when the status store is configured."""
+
+    store = get_runtime_status_store()
+    if store is None or not store.enabled:
+        return None
+    return store.request_scan(component=component, requested_by=requested_by)
+
+
+def claim_scan_request(*, component: str) -> dict[str, Any] | None:
+    """Claim the next pending manual worker scan request when configured."""
+
+    store = get_runtime_status_store()
+    if store is None or not store.enabled:
+        return None
+    return store.claim_scan_request(component=component)
+
+
+def complete_scan_request(
+    *,
+    component: str,
+    request_token: str,
+    error_message: str | None = None,
+) -> None:
+    """Mark one claimed worker scan request completed when configured."""
+
+    store = get_runtime_status_store()
+    if store is None or not store.enabled:
+        return
+    store.complete_scan_request(
+        component=component,
+        request_token=request_token,
+        error_message=error_message,
+    )
 
 
 def reset_runtime_status_store_for_tests() -> None:

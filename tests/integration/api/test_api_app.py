@@ -200,7 +200,7 @@ def test_create_app_exposes_index_status_route() -> None:
         @staticmethod
         def get_index_status(_database):
             return {
-                "component": "repo-sync",
+                "component": "worker",
                 "source_mode": "githubOrg",
                 "status": "indexing",
                 "active_run_id": "run-123",
@@ -210,9 +210,18 @@ def test_create_app_exposes_index_status_route() -> None:
                 "last_error_kind": None,
                 "last_error_message": None,
                 "repository_count": 200,
+                "pulled_repositories": 180,
+                "in_sync_repositories": 20,
                 "pending_repositories": 200,
                 "completed_repositories": 0,
                 "failed_repositories": 0,
+                "scan_request_state": "idle",
+                "scan_request_token": None,
+                "scan_requested_at": None,
+                "scan_requested_by": None,
+                "scan_started_at": None,
+                "scan_completed_at": None,
+                "scan_error_message": None,
                 "updated_at": "2026-03-22T12:00:00+00:00",
             }
 
@@ -227,8 +236,76 @@ def test_create_app_exposes_index_status_route() -> None:
         response = client.get("/api/v0/index-status")
 
     assert response.status_code == 200
-    assert response.json()["component"] == "repo-sync"
+    assert response.json()["component"] == "worker"
     assert response.json()["status"] == "indexing"
+    assert response.json()["pulled_repositories"] == 180
+    assert response.json()["in_sync_repositories"] == 20
+
+
+def test_create_app_exposes_worker_status_and_scan_routes() -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    class _StatusModule:
+        @staticmethod
+        def get_index_status(_database, *, component="worker"):
+            return {
+                "component": component,
+                "source_mode": "githubOrg",
+                "status": "idle",
+                "active_run_id": "run-123",
+                "last_attempt_at": "2026-03-22T12:00:00+00:00",
+                "last_success_at": "2026-03-22T12:01:00+00:00",
+                "next_retry_at": None,
+                "last_error_kind": None,
+                "last_error_message": None,
+                "repository_count": 200,
+                "pulled_repositories": 200,
+                "in_sync_repositories": 200,
+                "pending_repositories": 0,
+                "completed_repositories": 200,
+                "failed_repositories": 0,
+                "scan_request_state": "idle",
+                "scan_request_token": None,
+                "scan_requested_at": None,
+                "scan_requested_by": None,
+                "scan_started_at": None,
+                "scan_completed_at": None,
+                "scan_error_message": None,
+                "updated_at": "2026-03-22T12:01:00+00:00",
+            }
+
+        @staticmethod
+        def request_index_scan_control(
+            _database, *, component="worker", requested_by="api"
+        ):
+            return {
+                "component": component,
+                "accepted": True,
+                "scan_request_token": "scan-123",
+                "scan_request_state": "pending",
+                "scan_requested_at": "2026-03-22T12:05:00+00:00",
+                "scan_requested_by": requested_by,
+            }
+
+    app = api_app.create_app(
+        query_services_dependency=lambda: SimpleNamespace(
+            database=object(),
+            status=_StatusModule(),
+        )
+    )
+
+    with TestClient(app) as client:
+        status_response = client.get("/api/v0/worker/status")
+        scan_response = client.post("/api/v0/worker/scan")
+
+    assert status_response.status_code == 200
+    assert status_response.json()["component"] == "worker"
+    assert scan_response.status_code == 200
+    assert scan_response.json()["accepted"] is True
+    assert scan_response.json()["scan_request_state"] == "pending"
 
 
 def test_service_app_factory_is_exported() -> None:

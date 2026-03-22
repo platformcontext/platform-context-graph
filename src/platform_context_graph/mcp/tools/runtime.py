@@ -3,14 +3,14 @@
 RUNTIME_TOOLS = {
     "get_index_status": {
         "name": "get_index_status",
-        "description": "Return the current repo-sync/index worker status, including degraded states and retry timing.",
+        "description": "Return the current worker sync/index status, including degraded states, retry timing, and repo progress counts.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "component": {
                     "type": "string",
-                    "description": "Runtime component name. Defaults to repo-sync.",
-                    "default": "repo-sync",
+                    "description": "Runtime component name. Defaults to worker.",
+                    "default": "worker",
                 }
             },
         },

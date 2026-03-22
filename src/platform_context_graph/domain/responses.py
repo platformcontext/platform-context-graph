@@ -136,10 +136,32 @@ class IndexStatusResponse(BaseModel):
     last_error_kind: str | None = None
     last_error_message: str | None = None
     repository_count: int = 0
+    pulled_repositories: int = 0
+    in_sync_repositories: int = 0
     pending_repositories: int = 0
     completed_repositories: int = 0
     failed_repositories: int = 0
+    scan_request_state: str = "idle"
+    scan_request_token: str | None = None
+    scan_requested_at: str | None = None
+    scan_requested_by: str | None = None
+    scan_started_at: str | None = None
+    scan_completed_at: str | None = None
+    scan_error_message: str | None = None
     updated_at: str | None = None
+
+
+class ScanRequestResponse(BaseModel):
+    """Scan-trigger response exposed by the API and control surfaces."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    component: str
+    accepted: bool
+    scan_request_token: str
+    scan_request_state: str
+    scan_requested_at: str
+    scan_requested_by: str | None = None
 
 
 class FileContentMatch(BaseModel):

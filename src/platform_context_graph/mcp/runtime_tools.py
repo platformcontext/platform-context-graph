@@ -23,7 +23,7 @@ class RuntimeStatusToolMixin:
     ) -> dict[str, Any]:
         """Return runtime worker status for one component."""
 
-        component = args.get("component", "repo-sync")
+        component = args.get("component", "worker")
         if not isinstance(component, str) or not component.strip():
             return {"error": "The 'component' argument must be a non-empty string."}
         return status_queries.get_index_status(self.db_manager, component=component)

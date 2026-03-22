@@ -5,6 +5,7 @@ import json
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -697,3 +698,77 @@ def test_repo_sync_loop_records_degraded_status_and_retries_transient_failures(
     assert recorded_statuses
     assert recorded_statuses[-1]["status"] == "degraded"
     assert recorded_statuses[-1]["last_error_kind"] == "network"
+
+
+def test_repo_sync_loop_claims_and_completes_manual_scan_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Manual worker scan requests should run through the normal sync cycle."""
+
+    sync = importlib.import_module("platform_context_graph.runtime.worker.sync")
+    monkeypatch.setenv("PCG_REPO_SYNC_INITIAL_DELAY_SECONDS", "0")
+
+    recorded_statuses: list[dict[str, object]] = []
+    completed_requests: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        sync,
+        "update_runtime_status",
+        lambda **kwargs: recorded_statuses.append(kwargs),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "claim_scan_request",
+        MagicMock(
+            side_effect=[
+                {
+                    "component": "worker",
+                    "scan_request_token": "scan-123",
+                    "scan_request_state": "running",
+                },
+                None,
+            ]
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "complete_scan_request",
+        lambda **kwargs: completed_requests.append(kwargs),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "_current_worker_status",
+        lambda _component: {
+            "repository_count": 5,
+            "pulled_repositories": 5,
+            "in_sync_repositories": 4,
+            "pending_repositories": 1,
+            "completed_repositories": 4,
+            "failed_repositories": 0,
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "run_repo_sync_cycle",
+        MagicMock(return_value=SimpleNamespace(discovered=5)),
+    )
+
+    def _stop_after_first_cycle(_component: str, _delay_seconds: int):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(sync, "_wait_for_next_cycle", _stop_after_first_cycle)
+
+    with pytest.raises(KeyboardInterrupt):
+        sync.run_repo_sync_loop(interval_seconds=900)
+
+    assert recorded_statuses
+    assert recorded_statuses[0]["component"] == "worker"
+    assert completed_requests == [
+        {
+            "component": "worker",
+            "request_token": "scan-123",
+        }
+    ]

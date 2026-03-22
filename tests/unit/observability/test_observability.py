@@ -262,6 +262,53 @@ def test_content_provider_metrics_record_hits_and_workspace_fallbacks(
     )
 
 
+def test_worker_scan_request_metrics_and_service_name_use_worker_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Worker control events should emit on the indexer service identity."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    observability = importlib.import_module("platform_context_graph.observability")
+    otel = importlib.import_module("platform_context_graph.observability.otel")
+    observability.reset_observability_for_tests()
+
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv(
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "http://otel-collector.monitoring.svc.cluster.local:4317",
+    )
+
+    metric_reader = InMemoryMetricReader()
+    runtime = observability.initialize_observability(
+        component="worker",
+        metric_reader=metric_reader,
+        span_exporter=InMemorySpanExporter(),
+    )
+    runtime.record_worker_scan_request(
+        component="worker",
+        phase="claimed",
+        requested_by="api",
+        accepted=True,
+    )
+
+    points = _metric_points(metric_reader)
+
+    assert otel.service_name_for_component("worker") == "platform-context-graph-indexer"
+    assert _matching_values(
+        points,
+        "pcg_worker_scan_requests_total",
+        component="worker",
+        phase="claimed",
+        requested_by="api",
+        accepted="true",
+    )
+
+
 def test_observability_public_api_has_docstrings() -> None:
     """Expose docstrings on the public observability module and API."""
 
