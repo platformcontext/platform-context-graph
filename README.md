@@ -22,7 +22,7 @@ PlatformContextGraph gives AI systems and engineers a fast, queryable map of sou
 
 Repository identity is remote-first when a git remote exists, so deployed PCG instances can return portable repository metadata and repo-relative file references instead of assuming the server checkout path exists on the caller's machine.
 
-When Postgres is configured, PCG also keeps indexed file content and cached entity snippets for portable source retrieval and content search. When the server already has a shared checkout, it can still fall back to workspace reads without asking the user to clone locally.
+When Postgres is configured, PCG also keeps indexed file content and cached entity snippets for portable source retrieval and content search. Deployed API runtimes serve content from the content store directly and report unavailable content until the ingester has written it.
 
 ## Quick Navigation
 
@@ -107,7 +107,7 @@ Use the OpenAPI-backed API for service-to-service automation, internal tools, an
 
 ### Deployable Service
 
-Run PCG as a networked service with bootstrap indexing, repo sync, external Neo4j, and combined HTTP + MCP access.
+Run PCG as a networked service with a stateless API runtime, a stateful repository ingester, external Neo4j, and external Postgres.
 
 ## Deploy
 
@@ -132,9 +132,8 @@ The chart is designed for the production shape used in EKS:
 
 - external Neo4j
 - external Postgres for indexed content retrieval and search
-- `StatefulSet` with attached workspace storage
-- bootstrap indexing via a Python runtime `initContainer`
-- ongoing repo sync and re-index via a Python runtime sidecar
+- API `Deployment` for HTTP + MCP
+- repository ingester `StatefulSet` with attached workspace storage
 - repo rediscovery filtered by exact/regex repository rules over normalized `org/repo` identifiers
 - flexible exposure through `ClusterIP`, `Ingress`, `HTTPRoute`, or `LoadBalancer`
 

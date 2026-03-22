@@ -4,9 +4,9 @@ PlatformContextGraph can be run locally or as a networked service, but the publi
 
 - **external Neo4j**
 - **external Postgres for indexed content retrieval and search**
-- **bootstrap indexing before serving traffic**
-- **repo sync and re-index as part of the runtime**
-- **one deployment that can expose HTTP API and MCP**
+- **stateless API runtime for HTTP and MCP**
+- **stateful repository ingester runtime for sync and indexing**
+- **API can serve before ingestion catches up**
 
 ## Choose a deployment path
 
@@ -30,14 +30,13 @@ Use [Argo CD](argocd.md) when you want GitOps-managed deployment with the public
 
 The chart and deployable-service story assume:
 
-- a `StatefulSet`
-- attached workspace storage
-- a bootstrap indexing `initContainer`
-- a long-running repo-sync sidecar
+- an API `Deployment`
+- a repository ingester `StatefulSet`
+- attached workspace storage only on the ingester
 - external Neo4j credentials provided through environment or secret management
 - external Postgres credentials provided through environment or secret management
 
-The repo-sync sidecar is responsible for ongoing rediscovery:
+The repository ingester is responsible for ongoing rediscovery:
 
 - it re-evaluates the configured repository source on each sync cycle
 - when `repositoryRules` are configured, it applies exact and regex filters against normalized `org/repo` identifiers

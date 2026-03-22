@@ -52,14 +52,23 @@ class ServerTransportMixin:
     """Provide JSON-RPC request handling and transport loops for ``MCPServer``."""
 
     def _start_code_watcher_if_available(self: _TransportRuntime) -> None:
-        """Start the watcher only when the active runtime provisions one."""
+        """Start the watcher only when the active runtime provisions one.
+
+        The API runtime exposes MCP over HTTP but intentionally omits the
+        mutation-capable watcher, so transport startup must treat it as
+        optional.
+        """
 
         watcher = getattr(self, "code_watcher", None)
         if watcher is not None:
             watcher.start()
 
     def _stop_code_watcher_if_available(self: _TransportRuntime) -> None:
-        """Stop the watcher only when the active runtime provisions one."""
+        """Stop the watcher only when the active runtime provisions one.
+
+        Matching the guarded startup path avoids shutdown crashes in read-only
+        API runtimes that never constructed a watcher.
+        """
 
         watcher = getattr(self, "code_watcher", None)
         if watcher is not None:

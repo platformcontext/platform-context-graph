@@ -9,25 +9,24 @@ It can run locally as a CLI and stdio MCP server, or as a deployable service tha
 ```mermaid
 graph TD
     Client[CLI / AI Client / HTTP Caller]
-    Server[PCG Service]
+    API["PCG API Runtime"]
+    Ingester["Repository Ingester"]
     Query[Query Layer]
     Graph[Graph Builder]
-    Runtime["Bootstrap Index + Repo Sync Runtime"]
     DB[(Graph Database)]
     FS[File System]
     IaC[Terraform / Helm / K8s / Argo CD]
+    Content[(Postgres Content Store)]
 
-    Client -- "1. Query (CLI / MCP / HTTP)" --> Server
-    Server -- "2. Resolve request" --> Query
+    Client -- "1. Query (CLI / MCP / HTTP)" --> API
+    API -- "2. Resolve request" --> Query
     Query -- "3. Read graph" --> DB
     Query -- "3b. Read cached source / search content" --> Content
-    Runtime -- "4. Invoke indexing pipeline" --> Graph
+    Ingester -- "4. Sync repos and invoke indexing pipeline" --> Graph
     Graph -- "5. Scan code" --> FS
     Graph -- "6. Parse IaC" --> IaC
     Graph -- "7. Store nodes and edges" --> DB
     Graph -- "8. Dual-write file and entity content" --> Content
-
-    Content[(Postgres Content Store)]
 ```
 
 ## 1. The Core
@@ -42,8 +41,8 @@ The core lives in `src/platform_context_graph`. It is a Python application organ
 | **Query Layer** | Canonical entity-first query model shared by MCP and HTTP. |
 | **Graph Builder** | Indexer that parses code, IaC, and related deployment assets into graph nodes and edges. |
 | **Database Layer** | Graph storage, with Neo4j as the canonical deployable-service backend. |
-| **Content Store** | PostgreSQL-backed file and entity content cache with workspace fallback for source retrieval. |
-| **Runtime Sync / Index** | Bootstrap indexing plus long-running repo sync and re-index behavior in the deployable-service path. |
+| **Content Store** | PostgreSQL-backed file and entity content cache used by deployed API and MCP runtimes. |
+| **Ingester Runtime** | Long-running repository ingestion, indexing, retry/backoff, and sync behavior in the deployable-service path. |
 | **Observability** | Shared OTEL instrumentation for API, MCP, and indexing runtime signals. |
 
 ## 2. Public Site and UI
@@ -58,14 +57,14 @@ PCG does **not** currently ship a separate marketing site or rich application fr
 ## 3. Data Flow
 
 1. **Indexing**
-   - `pcg index .` or the deployable-service runtime scans repositories, parses code and IaC, resolves relationships, and writes graph data to the database.
+   - `pcg index .` or the deployable-service ingester scans repositories, parses code and IaC, resolves relationships, and writes graph data to the database.
    - When the content store is configured, the same indexing pass also writes file content and entity snippets into Postgres.
-   - In Kubernetes, bootstrap indexing and repo sync are deployment-managed through the runtime containers rather than mutable HTTP control endpoints.
+   - In Kubernetes, the repository ingester owns repo sync, retries, and indexing while the API runtime can serve independently.
 2. **Querying**
    - a user or agent asks a question
    - CLI, MCP, or HTTP resolves the request into the shared query layer
    - the query layer reads the graph and, when needed, the content provider layer
-   - the server prefers Postgres for content search and cached reads, then falls back to the shared workspace when the server already has the checkout
+   - deployed API and MCP runtimes read content from Postgres and report unavailable content until the ingester has populated it
 
 ## 4. Source Tree Shape
 
@@ -77,7 +76,7 @@ The source package is intentionally organized for contributor readability.
 - `content/`: content-store models, dual-write helpers, Postgres provider, and workspace fallback
 - `observability/`: OTEL bootstrap, runtime state, and metrics helpers
 - `query/`: shared read/query layer
-- `runtime/`: repo sync and bootstrap indexing helpers
+- `runtime/`: runtime-role, ingester, and status helpers
 - `tools/`: graph builder and parser implementations
 
 See [Source Layout](reference/source-layout.md) for the contributor-oriented package map.
