@@ -43,6 +43,3 @@ The repository ingester is responsible for ongoing rediscovery:
 - it re-indexes the shared workspace when repositories were cloned or updated
 - it reports stale local checkouts that no longer match current discovery, but does not remove them automatically
 
-## What this replaces
-
-Older Docker-only setup guides and generic hosting comparisons have been removed from the public docs because they no longer describe the current release story accurately.
