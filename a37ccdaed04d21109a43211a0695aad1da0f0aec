@@ -1,0 +1,84 @@
+tests/unit/indexing/test_coordinator_execution.py
+  eae21d7de878a51f 52,54,73-75,101-103
+src/platform_context_graph/runtime/status_store_support.py
+  eae21d7de878a51f 14-19,33-44
+src/platform_context_graph/indexing/coordinator_pipeline.py
+  eae21d7de878a51f 107-145,156,159-174,189-198,229,231,233-238,248,255-262,265,302,304-313,315-317,325-338,340-341,358-372,375,445,450-451,453-459,461-466,476,481-489,491-494,502-503
+src/platform_context_graph/tools/graph_builder_indexing_execution.py
+  eae21d7de878a51f 26,41-42,57-59,86-87,95-132
+src/platform_context_graph/cli/config_manager.py
+  eae21d7de878a51f 216-220
+src/platform_context_graph/tools/graph_builder_persistence.py
+  eae21d7de878a51f 8,21,280-282,301-305,349-351,410-414
+tests/unit/tools/test_graph_builder_persistence_unwind.py
+  eae21d7de878a51f 1-53
+src/platform_context_graph/runtime/ingester/sync.py
+  eae21d7de878a51f 51-56
+src/platform_context_graph/domain/responses.py
+  eae21d7de878a51f 140-145
+tests/unit/tools/test_graph_builder_parsers.py
+  eae21d7de878a51f 3,5-6,52-104
+src/platform_context_graph/tools/graph_builder_persistence_unwind.py
+  eae21d7de878a51f 8,48-81,89,114-118
+src/platform_context_graph/tools/graph_builder_parsers.py
+  eae21d7de878a51f 8,101-102,107-111,113-134,150-152,173
+src/platform_context_graph/indexing/coordinator_models.py
+  eae21d7de878a51f 11,25-31,48-54,83-101
+tests/unit/indexing/test_coordinator_pipeline.py
+  eae21d7de878a51f 94,450-668
+tests/unit/content/test_postgres.py
+  eae21d7de878a51f 61-66,85-86
+src/platform_context_graph/runtime/status_store.py
+  eae21d7de878a51f 18-23,25-31,115-120,150-155,173-178,196-201,220-225,251-256,301-306
+src/platform_context_graph/indexing/coordinator_runtime_status.py
+  eae21d7de878a51f 20,34-49
+src/platform_context_graph/tools/graph_builder_persistence_batch.py
+  eae21d7de878a51f 25-26,57-63
+tests/unit/indexing/test_coordinator.py
+  eae21d7de878a51f 42-47,80-85,88-131
+src/platform_context_graph/query/status.py
+  eae21d7de878a51f 27-29,52-57,90-92
+src/platform_context_graph/cli/config_catalog.py
+  eae21d7de878a51f 39,74
+tests/unit/parsers/test_javascript_parser.py
+  eae21d7de878a51f 122-141
+tests/unit/runtime/test_repo_sync_runtime.py
+  eae21d7de878a51f 1088-1093
+src/platform_context_graph/indexing/coordinator.py
+  eae21d7de878a51f 59-65,80-86,313
+tests/unit/query/test_status.py
+  eae21d7de878a51f 31-39,49-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "a37ccdaed04d21109a43211a0695aad1da0f0aec",
+  "prompts": {
+    "9ae8d30bd5179d76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ec0e99d7-bcea-4da2-805f-6c6404aebdd0",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 1611,
+      "total_deletions": 0,
+      "accepted_lines": 1611,
+      "overriden_lines": 0
+    },
+    "eae21d7de878a51f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d1ad9-5824-7a81-9a36-270ee73e7bfe",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 926,
+      "total_deletions": 77,
+      "accepted_lines": 923,
+      "overriden_lines": 0
+    }
+  }
+}
