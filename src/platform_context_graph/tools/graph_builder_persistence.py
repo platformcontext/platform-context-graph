@@ -192,6 +192,24 @@ def _content_dual_write(
         warning_logger_fn(f"Content store dual-write failed for {file_name}: {exc}")
 
 
+def _begin_transaction(session: Any) -> tuple[Any, bool]:
+    """Begin an explicit transaction if the backend supports it.
+
+    Returns:
+        Tuple of ``(tx, is_explicit)`` where ``tx`` is a transaction object
+        (or the session itself for backends without transaction support) and
+        ``is_explicit`` indicates whether ``commit()``/``rollback()`` should
+        be called.
+    """
+    begin = getattr(session, "begin_transaction", None)
+    if begin is not None:
+        try:
+            return begin(), True
+        except (AttributeError, NotImplementedError, TypeError):
+            pass
+    return session, False
+
+
 def add_file_to_graph(
     builder: Any,
     file_data: dict[str, Any],
@@ -258,8 +276,9 @@ def add_file_to_graph(
         # Postgres content dual-write is outside the Neo4j transaction.
         _content_dual_write(file_data, file_name, repository, warning_logger_fn)
 
-        # All Neo4j writes go inside a single explicit transaction.
-        tx = session.begin_transaction()
+        # All Neo4j writes go inside a single explicit transaction when
+        # the backend supports it; otherwise fall back to auto-commit.
+        tx, is_explicit = _begin_transaction(session)
         try:
             tx.run(
                 """
@@ -277,9 +296,11 @@ def add_file_to_graph(
             write_data = collect_file_write_data(file_data, file_path_str)
             flush_write_batches(tx, write_data)
 
-            tx.commit()
+            if is_explicit:
+                tx.commit()
         except Exception:
-            tx.rollback()
+            if is_explicit:
+                tx.rollback()
             raise
 
 
@@ -344,8 +365,9 @@ def commit_file_batch_to_graph(
             file_name = Path(file_data["path"]).name
             _content_dual_write(file_data, file_name, repository, warning_logger_fn)
 
-        # One explicit Neo4j transaction for the entire batch.
-        tx = session.begin_transaction()
+        # One explicit Neo4j transaction for the entire batch when the
+        # backend supports it; otherwise fall back to auto-commit.
+        tx, is_explicit = _begin_transaction(session)
         try:
             accumulator = empty_accumulator()
 
@@ -377,9 +399,11 @@ def commit_file_batch_to_graph(
                 merge_batches(accumulator, file_batches)
 
             flush_write_batches(tx, accumulator)
-            tx.commit()
+            if is_explicit:
+                tx.commit()
         except Exception:
-            tx.rollback()
+            if is_explicit:
+                tx.rollback()
             raise
 
 
