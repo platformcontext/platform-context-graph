@@ -1,0 +1,27 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "pcg.fullname" . }}-api
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "pcg.apiSelectorLabels" . | nindent 6 }}
+---
+{{- if .Values.repoSync.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "pcg.fullname" . }}-ingester
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ingester
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "pcg.ingesterSelectorLabels" . | nindent 6 }}
+{{- end }}
