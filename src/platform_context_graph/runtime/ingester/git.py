@@ -168,7 +168,7 @@ def build_workspace_plan(config: RepoSyncConfig) -> dict[str, object]:
             and path.name in checkout_names
         )
 
-    return asdict(
+    plan = asdict(
         WorkspacePlan(
             source_mode=config.source_mode,
             repos_dir=config.repos_dir,
@@ -178,6 +178,8 @@ def build_workspace_plan(config: RepoSyncConfig) -> dict[str, object]:
             stale_checkouts=count_stale_checkouts(config, repository_ids),
         )
     )
+    plan["repos_dir"] = str(config.repos_dir)
+    return plan
 
 
 def run_workspace_sync(config: RepoSyncConfig) -> RepoSyncResult:

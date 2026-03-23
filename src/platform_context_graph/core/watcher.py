@@ -26,6 +26,8 @@ class CodeWatcher:
         graph_builder: "GraphBuilder",
         job_manager: "JobManager | None" = None,
     ) -> None:
+        """Initialize one process-wide watcher manager and its root registries."""
+
         self.graph_builder = graph_builder
         self.observer = Observer()
         self.watched_paths: set[str] = set()

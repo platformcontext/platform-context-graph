@@ -176,6 +176,7 @@ def test_workspace_plan_filesystem_mode_does_not_require_github_credentials(
 
     plan = git.build_workspace_plan(config)
 
+    assert plan["repos_dir"] == str(config.repos_dir)
     assert plan["repository_ids"] == ["service-a", "service-b"]
     assert plan["matched_repositories"] == 2
 

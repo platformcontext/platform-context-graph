@@ -30,6 +30,7 @@ _QUERY_TYPE_ALIASES = {
     "callees": "find_callees",
     "imports": "find_importers",
 }
+_REPOSITORY_ROOTS_CACHE_KEY = "__repository_root_candidates__"
 
 
 def _get_code_finder(database: Any, *required_methods: str) -> Any:
@@ -120,7 +121,7 @@ def _result_repository_metadata(
     value: dict[str, Any],
     *,
     database: Any | None,
-    repository_cache: dict[str, dict[str, Any] | None],
+    repository_cache: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Resolve repository metadata for a path-bearing result item."""
 
@@ -140,23 +141,24 @@ def _result_repository_metadata(
             repository_cache[cache_key] = _resolve_repo_metadata_for_result_path(
                 database,
                 cache_key,
+                repository_cache=repository_cache,
             )
         if repository_cache[cache_key] is not None:
             return repository_cache[cache_key]
     return None
 
 
-def _resolve_repo_metadata_for_result_path(
+def _repository_root_candidates(
     database: Any,
-    candidate_path: str,
-) -> dict[str, Any] | None:
-    """Resolve repository metadata for an absolute file path result."""
+    *,
+    repository_cache: dict[str, Any],
+) -> list[tuple[Path, dict[str, Any]]]:
+    """Return cached repository roots for workspace result shaping."""
 
-    path_candidate = Path(candidate_path)
-    if not path_candidate.is_absolute():
-        return None
+    cached_candidates = repository_cache.get(_REPOSITORY_ROOTS_CACHE_KEY)
+    if cached_candidates is not None:
+        return cached_candidates
 
-    resolved_path = path_candidate.resolve()
     db_manager = _get_db_manager(database)
     with db_manager.get_driver().session() as session:
         repositories = session.run(f"""
@@ -165,25 +167,52 @@ def _resolve_repo_metadata_for_result_path(
             ORDER BY r.name
             """).data()
 
-    best_match: dict[str, Any] | None = None
-    best_depth = -1
+    candidates: list[tuple[Path, dict[str, Any]]] = []
     for repo in repositories:
         metadata = _repository_metadata_from_row(repo)
         repo_root = metadata.get("local_path") or repo.get("path")
         if repo_root is None:
             continue
+        candidates.append(
+            (
+                Path(repo_root).resolve(),
+                _canonical_repository_ref(
+                    {**repo, **metadata, "id": repo.get("id") or metadata["id"]}
+                ),
+            )
+        )
+    repository_cache[_REPOSITORY_ROOTS_CACHE_KEY] = candidates
+    return candidates
+
+
+def _resolve_repo_metadata_for_result_path(
+    database: Any,
+    candidate_path: str,
+    *,
+    repository_cache: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Resolve repository metadata for an absolute file path result."""
+
+    path_candidate = Path(candidate_path)
+    if not path_candidate.is_absolute():
+        return None
+
+    resolved_path = path_candidate.resolve()
+    best_match: dict[str, Any] | None = None
+    best_depth = -1
+    for repo_root_path, repository_ref in _repository_root_candidates(
+        database,
+        repository_cache=repository_cache,
+    ):
         try:
-            repo_root_path = Path(repo_root).resolve()
             resolved_path.relative_to(repo_root_path)
         except ValueError:
             continue
         if len(repo_root_path.parts) > best_depth:
-            best_match = {**repo, **metadata, "id": repo.get("id") or metadata["id"]}
+            best_match = repository_ref
             best_depth = len(repo_root_path.parts)
 
-    if best_match is None:
-        return None
-    return _canonical_repository_ref(best_match)
+    return best_match
 
 
 def _portable_result(
@@ -191,7 +220,7 @@ def _portable_result(
     repo: dict[str, Any] | None,
     *,
     database: Any | None = None,
-    repository_cache: dict[str, dict[str, Any] | None] | None = None,
+    repository_cache: dict[str, Any] | None = None,
 ) -> Any:
     """Convert path-bearing query results into portable repo-relative payloads."""
     if repository_cache is None:
@@ -287,8 +316,14 @@ def search_code(
         )
         if limit >= 0 and "ranked_results" in results:
             results = dict(results)
+            repository_cache: dict[str, Any] = {}
             results["ranked_results"] = [
-                _portable_result(item, repo_metadata, database=finder)
+                _portable_result(
+                    item,
+                    repo_metadata,
+                    database=finder,
+                    repository_cache=repository_cache,
+                )
                 for item in list(results["ranked_results"])[:limit]
             ]
         return results

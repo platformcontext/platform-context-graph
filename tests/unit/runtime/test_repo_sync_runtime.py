@@ -168,6 +168,37 @@ def test_bootstrap_index_ignores_dangling_symlinks_in_filesystem_mode(
     assert not (config.repos_dir / "service-a" / "missing.tpl").exists()
 
 
+def test_invoke_index_workspace_falls_back_when_signature_inspection_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Signature inspection failures should not block repo-sync indexing."""
+
+    support = importlib.import_module("platform_context_graph.runtime.ingester.support")
+    workspace = tmp_path / "workspace"
+    captured: list[Path] = []
+
+    def index_workspace(path: Path) -> None:
+        captured.append(path)
+
+    monkeypatch.setattr(
+        support.inspect,
+        "signature",
+        lambda _callable: (_ for _ in ()).throw(TypeError("no signature available")),
+    )
+
+    support.invoke_index_workspace(
+        index_workspace,
+        workspace,
+        selected_repositories=[workspace / "repo-a"],
+        family="sync",
+        source="githubOrg",
+        component="repository",
+    )
+
+    assert captured == [workspace]
+
+
 def test_repo_sync_cycle_records_lock_contention_skip(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

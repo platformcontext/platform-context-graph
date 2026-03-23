@@ -87,6 +87,8 @@ async def process_repository_snapshots(
     parse_semaphore = asyncio_module.Semaphore(parse_workers)
 
     def _publish_indexing_state() -> None:
+        """Publish the current pending-repo count and indexing progress snapshot."""
+
         update_pending_repository_gauge_fn(
             component=component,
             mode=family,
@@ -106,6 +108,8 @@ async def process_repository_snapshots(
         *,
         resume_candidate: bool,
     ) -> None:
+        """Parse one repository snapshot and enqueue it for serialized commit."""
+
         repo_state = run_state.repositories[str(repo_path.resolve())]
         repo_state.started_at = utc_now_fn()
         repo_state.finished_at = None
@@ -213,6 +217,8 @@ async def process_repository_snapshots(
                 _publish_indexing_state()
 
     async def _commit_snapshots() -> None:
+        """Commit parsed repository snapshots from the queue in arrival order."""
+
         while True:
             item = await snapshot_queue.get()
             if item is queue_sentinel:

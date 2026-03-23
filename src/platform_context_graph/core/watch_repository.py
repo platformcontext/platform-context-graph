@@ -24,6 +24,8 @@ class RepositoryEventHandler(FileSystemEventHandler):
         debounce_interval: float = 2.0,
         perform_initial_scan: bool = True,
     ) -> None:
+        """Initialize one repo-local event handler and optional warm cache."""
+
         super().__init__()
         self.graph_builder = graph_builder
         self.repo_path = repo_path.resolve()
@@ -159,6 +161,8 @@ class RepositoryEventHandler(FileSystemEventHandler):
             self._pending_deleted_paths.clear()
 
     def on_created(self, event) -> None:
+        """Queue supported file creations for the next incremental batch."""
+
         if (
             not event.is_directory
             and Path(event.src_path).suffix in self.graph_builder.parsers
@@ -166,6 +170,8 @@ class RepositoryEventHandler(FileSystemEventHandler):
             self._queue_event(event.src_path)
 
     def on_modified(self, event) -> None:
+        """Queue supported file modifications for the next incremental batch."""
+
         if (
             not event.is_directory
             and Path(event.src_path).suffix in self.graph_builder.parsers
@@ -173,6 +179,8 @@ class RepositoryEventHandler(FileSystemEventHandler):
             self._queue_event(event.src_path)
 
     def on_deleted(self, event) -> None:
+        """Queue supported file deletions for the next incremental batch."""
+
         if (
             not event.is_directory
             and Path(event.src_path).suffix in self.graph_builder.parsers
@@ -180,6 +188,8 @@ class RepositoryEventHandler(FileSystemEventHandler):
             self._queue_event(event.src_path, deleted=True)
 
     def on_moved(self, event) -> None:
+        """Queue supported file move events as delete/create updates."""
+
         if event.is_directory:
             return
         if Path(event.src_path).suffix in self.graph_builder.parsers:

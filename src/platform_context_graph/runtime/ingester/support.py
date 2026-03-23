@@ -73,7 +73,12 @@ def invoke_index_workspace(
 ) -> None:
     """Call an index callback with repo-batch metadata when supported."""
 
-    signature = inspect.signature(index_workspace)
+    try:
+        signature = inspect.signature(index_workspace)
+    except (TypeError, ValueError):
+        index_workspace(workspace)
+        return
+
     accepts_var_kwargs = any(
         parameter.kind == inspect.Parameter.VAR_KEYWORD
         for parameter in signature.parameters.values()

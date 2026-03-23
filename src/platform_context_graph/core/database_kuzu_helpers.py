@@ -201,6 +201,8 @@ def _escape_reserved_properties(query: str) -> str:
     """
 
     def property_replacer(match: re.Match[str]) -> str:
+        """Backtick reserved property names in one matched property access."""
+
         var_name = match.group(1)
         prop_name = match.group(2)
         if prop_name not in _KUZU_RESERVED_PROPERTIES:
