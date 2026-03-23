@@ -1,0 +1,27 @@
+docs/docs/guides/visualization.md
+  bc8de5acf5b9d599 3,5,11,13,15,17,19-21,23
+docs/docs/guides/ci-cd.md
+  bc8de5acf5b9d599 1,3,5,14,16-17,19,21-28,30-43,45,47-49
+docs/docs/guides/shared-infra-trace.md
+  bc8de5acf5b9d599 94-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "de6b6d22145b4526c5e12e123c6627b774605b22",
+  "prompts": {
+    "bc8de5acf5b9d599": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a1a75ed0-af0f-4475-8453-82f9a3b36f3f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 50,
+      "total_deletions": 30,
+      "accepted_lines": 50,
+      "overriden_lines": 0
+    }
+  }
+}
