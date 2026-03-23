@@ -1637,6 +1637,7 @@ def test_update_existing_repositories_retries_with_remote_default_branch_after_f
     )
 
     fetch_calls: list[list[str]] = []
+    set_head_calls: list[list[str]] = []
 
     def _run(command, **_kwargs):
         if command[3:4] == ["symbolic-ref"]:
@@ -1661,6 +1662,9 @@ def test_update_existing_repositories_retries_with_remote_default_branch_after_f
                 )
             if command[5] == "master":
                 return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if command[3:5] == ["remote", "set-head"]:
+            set_head_calls.append(command)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
         if command[3:] == ["rev-parse", "HEAD"]:
             return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
         if command[3:] == ["rev-parse", "FETCH_HEAD"]:
@@ -1691,4 +1695,15 @@ def test_update_existing_repositories_retries_with_remote_default_branch_after_f
             "master",
             "--depth=1",
         ],
+    ]
+    assert set_head_calls == [
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "remote",
+            "set-head",
+            "origin",
+            "master",
+        ]
     ]

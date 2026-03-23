@@ -19,6 +19,7 @@ class DefaultBranchResolution:
 
     branch: str | None
     error: str | None = None
+    from_remote_head: bool = False
 
 
 def _parse_remote_head_branch(symbolic_ref: str, *, prefix: str) -> str | None:
@@ -80,6 +81,7 @@ def _resolve_remote_default_branch(
         return DefaultBranchResolution(
             branch=None,
             error=error or "unable to query remote HEAD",
+            from_remote_head=True,
         )
 
     for line in remote_head.stdout.splitlines():
@@ -88,8 +90,8 @@ def _resolve_remote_default_branch(
             prefix="ref: refs/heads/",
         )
         if branch is not None:
-            return DefaultBranchResolution(branch=branch)
-    return DefaultBranchResolution(branch=None)
+            return DefaultBranchResolution(branch=branch, from_remote_head=True)
+    return DefaultBranchResolution(branch=None, from_remote_head=True)
 
 
 def _is_missing_remote_ref(stderr: str, branch: str) -> bool:
@@ -170,6 +172,30 @@ def _fetch_branch(
         fetch_result,
         subprocess_run_fn=subprocess_run_fn,
     )
+
+
+def _set_remote_head_branch(
+    repo_dir: Path,
+    branch: str,
+    env: dict[str, str],
+    component: str,
+    *,
+    subprocess_run_fn,
+) -> None:
+    """Update the cached ``origin/HEAD`` symref after remote resolution succeeds."""
+
+    set_head_result = subprocess_run_fn(
+        ["git", "-C", str(repo_dir), "remote", "set-head", "origin", branch],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    if set_head_result.returncode != 0:
+        warning_logger(
+            f"[{component}] Failed to update origin/HEAD for {repo_dir.name}: "
+            f"{set_head_result.stderr.strip()}"
+        )
 
 
 def refreshed_origin_url(remote_url: str, token: str | None) -> str | None:
@@ -352,6 +378,7 @@ def update_existing_repositories_detailed_impl(
             continue
 
         default_branch = default_branch_resolution.branch
+        heal_remote_head = default_branch_resolution.from_remote_head
         fetch_result = _fetch_branch(
             repo_dir,
             default_branch,
@@ -381,6 +408,7 @@ def update_existing_repositories_detailed_impl(
                     continue
                 if remote_branch_resolution.branch != default_branch:
                     default_branch = remote_branch_resolution.branch
+                    heal_remote_head = remote_branch_resolution.from_remote_head
                     fetch_result = _fetch_branch(
                         repo_dir,
                         default_branch,
@@ -395,6 +423,14 @@ def update_existing_repositories_detailed_impl(
                     f"[{config.component}] Failed to fetch {repo_dir.name}: {fetch_result.stderr.strip()}"
                 )
                 continue
+        if heal_remote_head:
+            _set_remote_head_branch(
+                repo_dir,
+                default_branch,
+                env,
+                config.component,
+                subprocess_run_fn=subprocess_run_fn,
+            )
 
         local_head = subprocess_run_fn(
             ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
