@@ -1,34 +1,35 @@
 # Ingester Runtime
 
-This subpackage owns the repository-ingester source sync and indexing lifecycle
-for PCG runtime processes.
+The ingester discovers, clones, and indexes repositories for the PCG deployable service. It runs as a StatefulSet in Kubernetes and handles the ongoing sync cycle that keeps the graph up to date.
 
-Module boundaries:
+## Modules
 
-- `config.py` holds runtime configuration and result models.
-- `support.py` contains shared runtime helpers and telemetry wiring.
-- `git.py` implements GitHub and Git checkout/update helpers.
-- `bootstrap.py` runs the initial clone/sync + indexing flow.
-- `sync.py` runs the steady-state ingester sync cycle and loop.
+| Module | Responsibility |
+| :--- | :--- |
+| `config.py` | Runtime configuration and result models |
+| `support.py` | Shared runtime helpers and telemetry wiring |
+| `git.py` | GitHub and Git checkout/update helpers |
+| `bootstrap.py` | Initial clone/sync + indexing flow |
+| `sync.py` | Steady-state ingester sync cycle and loop |
 
-Runtime source selection is driven by `PCG_REPOSITORY_RULES_JSON`, which accepts
-structured exact and regex include rules. The legacy `PCG_REPOSITORIES`
-shorthand is still merged as exact rules for one release.
+## Source Discovery
 
-Public CLI parity works through the `pcg workspace` command group, which uses
-the same canonical source contract:
+Repository selection is driven by `PCG_REPOSITORY_RULES_JSON`, which accepts structured exact and regex include rules against normalized `org/repo` identifiers. The legacy `PCG_REPOSITORIES` shorthand is still merged as exact rules for backward compatibility.
 
-- `plan` previews which repositories match the current source config
-- `sync` materializes those repositories into `PCG_REPOS_DIR`
-- `index` indexes the materialized workspace
-- `status` reports the current workspace configuration and latest checkpointed index run
-- `watch` watches the materialized workspace and can rediscover newly added repos on a bounded cadence
-- `githubOrg` for org discovery plus exact/regex filtering
-- `explicit` for exact repository identifiers only
-- `filesystem` for an already-materialized local mono-folder or workspace
+Three source modes are supported:
 
-Path-first `pcg index <path>` and `pcg watch <path>` remain local filesystem
-convenience wrappers. They are not the canonical remote discovery interface.
+- **`githubOrg`** — org-level discovery with exact/regex filtering
+- **`explicit`** — exact repository identifiers only
+- **`filesystem`** — an already-materialized local workspace
 
-The top-level `platform_context_graph.runtime` package re-exports the public
-entrypoints from here so callers do not need to know the internal layout.
+## CLI Parity
+
+The `pcg workspace` command group uses the same source contract:
+
+- `plan` — preview which repositories match the current config
+- `sync` — materialize matching repos into `PCG_REPOS_DIR`
+- `index` — index the materialized workspace
+- `status` — report workspace config and latest index run
+- `watch` — watch the workspace with optional repo rediscovery
+
+Path-first `pcg index <path>` and `pcg watch <path>` remain local convenience wrappers and are not the canonical remote discovery interface.
