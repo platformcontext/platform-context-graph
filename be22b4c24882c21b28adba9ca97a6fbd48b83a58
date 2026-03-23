@@ -1,0 +1,23 @@
+src/platform_context_graph/tools/graph_builder_persistence.py
+  4de1f16cf36eb252 195-212,279-281,299-300,302-303,368-370,402-403,405-406
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "be22b4c24882c21b28adba9ca97a6fbd48b83a58",
+  "prompts": {
+    "4de1f16cf36eb252": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2fefa212-3194-4199-be77-d18cd7c7251b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 32,
+      "total_deletions": 8,
+      "accepted_lines": 32,
+      "overriden_lines": 0
+    }
+  }
+}
