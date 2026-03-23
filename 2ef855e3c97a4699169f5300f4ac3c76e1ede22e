@@ -1,0 +1,23 @@
+tests/unit/indexing/test_coordinator_pipeline.py
+  4be1093bfa1a4ffc 6-7,10,12-13,16-64,110-112,132,135,146,233-235,280-311,313-394,396-398
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "2ef855e3c97a4699169f5300f4ac3c76e1ede22e",
+  "prompts": {
+    "4be1093bfa1a4ffc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d1865-00fa-72e2-a8a5-4a927fefb8c3",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 184,
+      "total_deletions": 20,
+      "accepted_lines": 183,
+      "overriden_lines": 0
+    }
+  }
+}
