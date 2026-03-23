@@ -161,6 +161,8 @@ async def process_repository_snapshots(
             def _progress_callback(
                 *, current_file: str | None = None, force: bool = False
             ):
+                """Persist repo progress while throttling checkpoint churn."""
+
                 nonlocal last_progress_publish
                 _update_repo_progress(
                     repo_state,

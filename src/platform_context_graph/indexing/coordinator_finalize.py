@@ -44,6 +44,8 @@ def finalize_repository_batch(
         persist_run_state_fn(run_state)
 
         def _stage_progress_callback(stage_name: str) -> None:
+            """Persist the current finalization stage as it advances."""
+
             run_state.finalization_current_stage = stage_name
             run_state.finalization_stage_started_at = utc_now_fn()
             persist_run_state_fn(run_state)
