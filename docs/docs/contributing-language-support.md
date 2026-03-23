@@ -1,71 +1,79 @@
 # Contributing Parser Support
 
-PlatformContextGraph now treats parser support as a spec-driven contract, not a handwritten docs exercise.
+Parser support in PlatformContextGraph is spec-driven. Each parser has a machine-readable capability spec that defines what it extracts, what the graph surfaces, and which tests prove it.
 
-The canonical source of truth for each language or IaC parser lives in:
+The canonical source of truth for each language or IaC parser:
 
-- `src/platform_context_graph/tools/parser_capabilities/specs/<language>.yaml`
+```
+src/platform_context_graph/tools/parser_capabilities/specs/<language>.yaml
+```
 
-The generated outputs are:
+The generated outputs:
 
-- `docs/docs/languages/*.md`
-- `docs/docs/languages/feature-matrix.md`
+```
+docs/docs/languages/*.md
+docs/docs/languages/feature-matrix.md
+```
 
 Do not hand-edit those generated docs. Update the YAML spec, then regenerate.
 
 ## Contract Model
 
-Every parser has one machine-readable capability spec. Each spec records:
+Every parser has one capability spec that records:
 
-- parser and language identity
-- fixture repo used for coverage
-- the capability checklist
-- known limitations
+- Parser and language identity
+- Fixture repo used for test coverage
+- The capability checklist
+- Known limitations
 
-Each capability entry records:
+Each capability entry includes:
 
-- a stable `id`
+- A stable `id`
 - `status`: `supported`, `partial`, or `unsupported`
-- the extracted bucket or key
-- required extracted fields
-- the graph or query surface that is actually exposed
-- one unit-test reference
-- one integration-test reference
-- a rationale whenever the status is `partial` or `unsupported`
+- The extracted bucket or key
+- Required extracted fields
+- The graph or query surface exposed
+- One unit-test reference
+- One integration-test reference
+- A rationale (required for `partial` or `unsupported`)
 
-Status semantics are strict:
+### Status semantics
 
-- `supported` means the capability is extracted, surfaced end to end, and covered by both unit and integration tests
-- `partial` means only the explicitly documented subset is promised
-- `unsupported` means the capability is intentionally not claimed, and the absence must still be documented and tested
+- **supported** — extracted, surfaced end-to-end, covered by unit and integration tests
+- **partial** — only the documented subset is promised
+- **unsupported** — intentionally not claimed, but documented so the absence is explicit
 
 Parse-only features must not remain `supported`.
 
-## Required Workflow
+## Workflow
 
-1. Add or update unit tests first.
+1. **Add or update unit tests first.**
    Use the smallest parser-level test that proves the capability or regression.
-2. Implement or adjust the parser behavior.
+
+2. **Implement or adjust the parser.**
    Keep the parser output and the persisted/queryable graph surface aligned with the claimed capability.
-3. Add or update integration coverage.
-   The integration test must prove the capability exists end to end in the indexed graph or API surface.
-4. Update the capability spec.
-   Add, remove, or reclassify checklist entries in `src/platform_context_graph/tools/parser_capabilities/specs/<language>.yaml`.
-5. Regenerate the docs.
-   Run the generator so the public language docs and feature matrix match the spec.
-6. Run the spec/doc consistency check and the relevant tests.
 
-## Capability Spec Expectations
+3. **Add or update integration coverage.**
+   The integration test must prove the capability exists end-to-end in the indexed graph or API surface.
 
-Use one YAML file per parser. Keep it explicit and boring. A good spec should let a reviewer answer:
+4. **Update the capability spec.**
+   Add, remove, or reclassify entries in the YAML spec.
 
-- what the parser claims to extract
-- what the graph actually exposes
-- which test proves the parser behavior
-- which test proves the end-to-end indexed behavior
-- what is intentionally partial or unsupported
+5. **Regenerate the docs.**
 
-Example capability entry:
+6. **Run the spec/doc consistency check and the relevant tests.**
+
+## Writing a Good Capability Spec
+
+One YAML file per parser. Keep it explicit. A reviewer should be able to answer:
+
+- What does the parser claim to extract?
+- What does the graph actually expose?
+- Which test proves the parser behavior?
+- Which test proves the end-to-end indexed behavior?
+- What is intentionally partial or unsupported?
+
+Example entry:
 
 ```yaml
 - id: type-aliases
@@ -83,54 +91,54 @@ Example capability entry:
   rationale: Type aliases are extracted into a dedicated parse bucket, but the persistence layer does not currently materialize TypeAlias graph nodes.
 ```
 
-## Generated Docs
+## Generating and Checking Docs
 
-Generate or check the parser capability docs with:
+Generate:
 
 ```bash
-cd /Users/allen/personal-repos/platform-context-graph
 PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py
 ```
 
+Check for drift:
+
 ```bash
-cd /Users/allen/personal-repos/platform-context-graph
 PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py --check
 ```
 
 The `--check` mode fails when:
 
-- a spec references a missing test or fixture
-- a `partial` or `unsupported` capability is missing a rationale
-- a `supported` capability declares no surfaced graph/query target
-- generated docs drift from the YAML specs
+- A spec references a missing test or fixture
+- A `partial` or `unsupported` capability is missing a rationale
+- A `supported` capability declares no surfaced graph/query target
+- Generated docs drift from the YAML specs
 
 ## Testing Rules
 
-For every `supported` capability:
+**For `supported` capabilities:**
 
-- one unit test must validate extraction and required fields
-- one integration test must validate the persisted or queryable end-to-end behavior
+- One unit test validates extraction and required fields
+- One integration test validates persisted or queryable end-to-end behavior
 
-For every `partial` capability:
+**For `partial` capabilities:**
 
-- the spec must describe only the part that is truly supported
-- tests must match that narrower claim
-- the rationale must explain the missing or deferred parts
+- The spec describes only the part that is truly supported
+- Tests match that narrower claim
+- The rationale explains the missing or deferred parts
 
-For every `unsupported` capability:
+**For `unsupported` capabilities:**
 
-- keep it in the checklist instead of silently omitting it
-- add negative coverage that proves the parser and graph surface do not overclaim support
+- Keep it in the checklist instead of silently omitting it
+- Add negative coverage proving the parser and graph surface do not overclaim
 
-## Review Standard
+## Review Checklist
 
-Before approving parser-support changes, check:
+Before approving parser-support changes:
 
-- the parser behavior changed under test-first discipline
-- the capability YAML matches the actual parser output
-- the graph/query surface matches the claimed `supported` capabilities
-- the generated docs were regenerated, not hand-edited
-- unit and integration references in the spec point to real tests
-- `partial` and `unsupported` entries have concrete rationales
+- [ ] Parser behavior changed under test-first discipline
+- [ ] Capability YAML matches actual parser output
+- [ ] Graph/query surface matches claimed `supported` capabilities
+- [ ] Generated docs were regenerated, not hand-edited
+- [ ] Unit and integration references point to real tests
+- [ ] `partial` and `unsupported` entries have concrete rationales
 
-If the YAML, tests, and generated docs disagree, the spec is wrong, the code is wrong, or both. Fix the disagreement before merging.
+If the YAML, tests, and generated docs disagree, fix the disagreement before merging.

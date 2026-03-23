@@ -1,8 +1,8 @@
 # System Architecture
 
-PlatformContextGraph (PCG) is a **code-to-cloud context graph** that connects repositories, infrastructure definitions, runtime topology, and graph-backed query surfaces.
+PlatformContextGraph (PCG) is a code-to-cloud context graph that connects repositories, infrastructure definitions, runtime topology, and graph-backed query surfaces.
 
-It can run locally as a CLI and stdio MCP server, or as a deployable service that exposes HTTP API and MCP while continuously maintaining graph state.
+It runs in two modes: locally as a CLI and stdio MCP server, or as a deployed service that exposes HTTP API and MCP while continuously maintaining graph state.
 
 ## High-Level Diagram
 
@@ -29,63 +29,64 @@ graph TD
     Graph -- "8. Dual-write file and entity content" --> Content
 ```
 
-## 1. The Core
-
-The core lives in `src/platform_context_graph`. It is a Python application organized around a shared query model.
+## Components
 
 | Component | Responsibility |
 | :--- | :--- |
 | **CLI** | Local command surface for indexing, search, analysis, setup, and runtime management. |
 | **MCP Server** | JSON-RPC surface for AI development tools. |
 | **HTTP API** | OpenAPI-backed surface for automation and service-to-service use. |
-| **Query Layer** | Canonical entity-first query model shared by MCP and HTTP. |
-| **Graph Builder** | Indexer that parses code, IaC, and related deployment assets into graph nodes and edges. |
-| **Database Layer** | Graph storage, with Neo4j as the canonical deployable-service backend. |
-| **Content Store** | PostgreSQL-backed file and entity content cache used by deployed API and MCP runtimes. |
-| **Ingester Runtime** | Long-running repository ingestion, indexing, retry/backoff, and sync behavior in the deployable-service path. |
+| **Query Layer** | Entity-first query model shared by CLI, MCP, and HTTP. |
+| **Graph Builder** | Parses code and IaC into graph nodes and edges. |
+| **Database Layer** | Graph storage. Neo4j is the canonical backend for deployed services. |
+| **Content Store** | PostgreSQL-backed file and entity content cache for deployed API and MCP runtimes. |
+| **Ingester Runtime** | Long-running repository ingestion, indexing, retry/backoff, and sync. |
 | **Observability** | Shared OTEL instrumentation for API, MCP, and indexing runtime signals. |
 
-## 2. Public Site and UI
+## Interfaces
 
-PCG does **not** currently ship a separate marketing site or rich application frontend. The primary user interfaces are:
+CLI, MCP, and HTTP API are the primary interfaces. All three share the same query layer — there is no separate UI frontend.
 
-1. **CLI**
-2. **AI chat clients connected over MCP**
-3. **HTTP API consumers**
-4. **The docs-first public site**
+The docs site (built with MkDocs) is the public reference surface.
 
-## 3. Data Flow
+## Data Flow
 
-1. **Indexing**
-   - `pcg index .` or the deployable-service ingester scans repositories, parses code and IaC, resolves relationships, and writes graph data to the database.
-   - When the content store is configured, the same indexing pass also writes file content and entity snippets into Postgres.
-   - In Kubernetes, the repository ingester owns repo sync, retries, and indexing while the API runtime can serve independently.
-2. **Querying**
-   - a user or agent asks a question
-   - CLI, MCP, or HTTP resolves the request into the shared query layer
-   - the query layer reads the graph and, when needed, the content provider layer
-   - deployed API and MCP runtimes read content from Postgres and report unavailable content until the ingester has populated it
+### Indexing
 
-## 4. Source Tree Shape
+`pcg index .` or the deployed ingester scans repositories, parses code and IaC, resolves relationships, and writes graph data to the database.
 
-The source package is intentionally organized for contributor readability.
+When the content store is configured, the same indexing pass also writes file content and entity snippets into Postgres.
 
-- `api/`: HTTP wiring and routers
-- `cli/`: Typer entrypoints, command packages, setup flows, and visualization helpers
-- `mcp/`: MCP server, transport, tool registry, and handler wiring
-- `content/`: content-store models, dual-write helpers, Postgres provider, and workspace fallback
-- `observability/`: OTEL bootstrap, runtime state, and metrics helpers
-- `query/`: shared read/query layer
-- `runtime/`: runtime-role, ingester, and status helpers
-- `tools/`: graph builder and parser implementations
+In Kubernetes, the repository ingester owns repo sync, retries, and indexing. The API runtime serves independently.
 
-See [Source Layout](reference/source-layout.md) for the contributor-oriented package map.
+### Querying
 
-## 5. Key Technologies
+1. A user or agent asks a question.
+2. CLI, MCP, or HTTP resolves the request into the shared query layer.
+3. The query layer reads the graph and, when needed, the content store.
+4. Deployed API and MCP runtimes read content from Postgres and report unavailable content until the ingester has populated it.
 
-*   **Language:** Python 3.10+
-*   **Parsing:** Tree-sitter plus infrastructure/domain-specific parsers
-*   **Protocol:** Model Context Protocol (MCP)
-*   **HTTP:** FastAPI + OpenAPI
-*   **Database:** Neo4j for the deployable-service path
-*   **Packaging:** Docker, Helm, Argo CD examples
+## Source Tree
+
+The source package is organized by responsibility under `src/platform_context_graph/`:
+
+- `api/` — HTTP wiring and routers
+- `cli/` — Typer entrypoints, command packages, setup flows, and visualization helpers
+- `mcp/` — MCP server, transport, tool registry, and handler wiring
+- `content/` — Content-store models, dual-write helpers, Postgres provider, and workspace fallback
+- `observability/` — OTEL bootstrap, runtime state, and metrics helpers
+- `query/` — Shared read/query layer
+- `runtime/` — Runtime role management, ingester, and status helpers
+- `tools/` — Graph builder and parser implementations
+
+See [Source Layout](reference/source-layout.md) for the full package map.
+
+## Key Technologies
+
+- **Language:** Python 3.10+
+- **Parsing:** Tree-sitter plus infrastructure-specific parsers
+- **Protocol:** Model Context Protocol (MCP)
+- **HTTP:** FastAPI + OpenAPI
+- **Database:** Neo4j
+- **Content Store:** PostgreSQL
+- **Packaging:** Docker, Helm, Argo CD
