@@ -1,0 +1,23 @@
+src/platform_context_graph/tools/graph_builder_mutations.py
+  0595d92bfe2870a0 86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "54320b98a7bd15e3634592c742dac3481f8d7f2b",
+  "prompts": {
+    "0595d92bfe2870a0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cad5bbd3-26a5-497a-9cf0-fa1b71523a57",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
