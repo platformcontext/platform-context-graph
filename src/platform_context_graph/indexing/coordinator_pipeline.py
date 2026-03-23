@@ -111,19 +111,22 @@ async def process_repository_snapshots(
     ) -> None:
         """Parse one repository snapshot and enqueue it for serialized commit."""
 
-        repo_state = run_state.repositories[str(repo_path.resolve())]
-        started = time.perf_counter()
-        with telemetry.start_span(
-            "pcg.index.repository",
-            component=component,
-            attributes={
-                "pcg.index.run_id": run_state.run_id,
-                "pcg.index.repo_path": str(repo_path.resolve()),
-                "pcg.index.resume": resume_candidate,
-            },
-        ) as repo_span:
-            try:
+        repo_key = str(repo_path.resolve())
+        started: float | None = None
+        repo_span = None
+        try:
+            repo_state = run_state.repositories[repo_key]
+            with telemetry.start_span(
+                "pcg.index.repository",
+                component=component,
+                attributes={
+                    "pcg.index.run_id": run_state.run_id,
+                    "pcg.index.repo_path": repo_key,
+                    "pcg.index.resume": resume_candidate,
+                },
+            ) as repo_span:
                 async with parse_semaphore:
+                    started = time.perf_counter()
                     repo_state.started_at = utc_now_fn()
                     repo_state.finished_at = None
                     repo_state.error = None
@@ -181,26 +184,29 @@ async def process_repository_snapshots(
                 )
                 await snapshot_queue.put((repo_path, snapshot, started))
                 return
-            except Exception as exc:
+        except Exception as exc:
+            repo_state = run_state.repositories.get(repo_key)
+            if repo_state is not None:
                 repo_state.error = str(exc)
                 repo_state.finished_at = utc_now_fn()
                 repo_state.status = "failed"
-                run_state.last_error = str(exc)
-                persist_run_state_fn(run_state)
-                publish_runtime_progress_fn(
-                    ingester=component,
-                    source=source,
-                    run_state=run_state,
-                    repository_count=len(repo_paths),
-                    status="indexing",
-                )
-                telemetry.record_index_repositories(
-                    component=component,
-                    phase="failed",
-                    count=1,
-                    mode=family,
-                    source=source,
-                )
+            run_state.last_error = str(exc)
+            persist_run_state_fn(run_state)
+            publish_runtime_progress_fn(
+                ingester=component,
+                source=source,
+                run_state=run_state,
+                repository_count=len(repo_paths),
+                status="indexing",
+            )
+            telemetry.record_index_repositories(
+                component=component,
+                phase="failed",
+                count=1,
+                mode=family,
+                source=source,
+            )
+            if started is not None:
                 telemetry.record_index_repository_duration(
                     component=component,
                     mode=family,
@@ -208,15 +214,15 @@ async def process_repository_snapshots(
                     status="failed",
                     duration_seconds=time.perf_counter() - started,
                 )
-                if repo_span is not None:
-                    repo_span.record_exception(exc)
-                tb = traceback.format_exception(exc)
-                warning_logger_fn(
-                    f"Failed to index repository {repo_path.resolve()}: {exc}\n"
-                    f"{''.join(tb)}"
-                )
-            finally:
-                _publish_indexing_state()
+            if repo_span is not None:
+                repo_span.record_exception(exc)
+            tb = traceback.format_exception(exc)
+            warning_logger_fn(
+                f"Failed to index repository {repo_path.resolve()}: {exc}\n"
+                f"{''.join(tb)}"
+            )
+        finally:
+            _publish_indexing_state()
 
     async def _commit_snapshots() -> None:
         """Commit parsed repository snapshots from the queue in arrival order."""
@@ -313,11 +319,10 @@ async def process_repository_snapshots(
         )
         for repo_path, resume_candidate in parse_targets
     ]
+    escaped_parse_exception: Exception | None = None
     try:
         if parse_tasks:
-            results = await asyncio_module.gather(
-                *parse_tasks, return_exceptions=True
-            )
+            results = await asyncio_module.gather(*parse_tasks, return_exceptions=True)
             for idx, result in enumerate(results):
                 if isinstance(result, Exception):
                     repo_path = parse_targets[idx][0]
@@ -326,9 +331,13 @@ async def process_repository_snapshots(
                         f"Parse task for {repo_path.resolve()} escaped error handler: {result}\n"
                         f"{''.join(tb)}"
                     )
+                    if escaped_parse_exception is None:
+                        escaped_parse_exception = result
     finally:
         await snapshot_queue.put(queue_sentinel)
         await commit_task
+    if escaped_parse_exception is not None:
+        raise escaped_parse_exception
     return snapshots, merged_imports_map
 
 

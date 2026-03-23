@@ -3,20 +3,65 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+import sys
 from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
-import pytest
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PACKAGE_ROOT = REPO_ROOT / "src" / "platform_context_graph"
 
-from platform_context_graph.indexing.coordinator_models import (
-    IndexRunState,
-    RepositoryRunState,
-    RepositorySnapshot,
-)
-from platform_context_graph.indexing.coordinator_pipeline import (
-    process_repository_snapshots,
-)
+
+def _load_module(module_name: str, module_path: Path) -> ModuleType:
+    """Load one module from source without importing package side effects."""
+
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    assert spec is not None
+    assert spec.loader is not None
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.pop(module_name, None)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_pipeline_modules() -> tuple[ModuleType, ModuleType]:
+    """Load coordinator modules with a minimal package skeleton."""
+
+    platform_pkg = ModuleType("platform_context_graph")
+    platform_pkg.__path__ = [str(PACKAGE_ROOT)]
+    sys.modules["platform_context_graph"] = platform_pkg
+
+    indexing_pkg = ModuleType("platform_context_graph.indexing")
+    indexing_pkg.__path__ = [str(PACKAGE_ROOT / "indexing")]
+    sys.modules["platform_context_graph.indexing"] = indexing_pkg
+
+    tools_pkg = ModuleType("platform_context_graph.tools")
+    tools_pkg.__path__ = [str(PACKAGE_ROOT / "tools")]
+    sys.modules["platform_context_graph.tools"] = tools_pkg
+
+    _load_module(
+        "platform_context_graph.tools.graph_builder_indexing",
+        PACKAGE_ROOT / "tools" / "graph_builder_indexing.py",
+    )
+    models = _load_module(
+        "platform_context_graph.indexing.coordinator_models",
+        PACKAGE_ROOT / "indexing" / "coordinator_models.py",
+    )
+    pipeline = _load_module(
+        "platform_context_graph.indexing.coordinator_pipeline",
+        PACKAGE_ROOT / "indexing" / "coordinator_pipeline.py",
+    )
+    return models, pipeline
+
+
+MODELS, PIPELINE = _load_pipeline_modules()
+IndexRunState = MODELS.IndexRunState
+RepositoryRunState = MODELS.RepositoryRunState
+RepositorySnapshot = MODELS.RepositorySnapshot
+process_repository_snapshots = PIPELINE.process_repository_snapshots
 
 
 def _make_run_state(repo_paths: list[Path]) -> IndexRunState:
@@ -62,6 +107,9 @@ async def _run_pipeline(
     parse_fn,
     commit_fn=None,
     warning_logger_fn=None,
+    parse_worker_count: int = 4,
+    telemetry=None,
+    asyncio_module=asyncio,
 ):
     """Drive process_repository_snapshots with minimal stubs."""
     run_state = _make_run_state(repo_paths)
@@ -81,10 +129,10 @@ async def _run_pipeline(
         component="test",
         family="index",
         source="manual",
-        asyncio_module=asyncio,
+        asyncio_module=asyncio_module,
         info_logger_fn=lambda *_a, **_kw: None,
         warning_logger_fn=warning_logger_fn or _capture_warning,
-        parse_worker_count_fn=lambda: 4,
+        parse_worker_count_fn=lambda: parse_worker_count,
         index_queue_depth_fn=lambda _w: 8,
         parse_repository_snapshot_async_fn=parse_fn,
         commit_repository_snapshot_fn=commit_fn or (lambda *_a, **_kw: None),
@@ -95,7 +143,7 @@ async def _run_pipeline(
         update_pending_repository_gauge_fn=_noop,
         publish_runtime_progress_fn=_noop,
         utc_now_fn=lambda: "2026-01-01T00:00:00Z",
-        telemetry=_telemetry(),
+        telemetry=telemetry or _telemetry(),
     )
     return snapshots, merged, run_state, warnings
 
@@ -182,9 +230,9 @@ def test_pipeline_does_not_set_running_before_semaphore(tmp_path: Path) -> None:
     status_snapshots: list[dict[str, str]] = []
 
     def capture_persist(_state):
-        status_snapshots.append({
-            k: v.status for k, v in run_state.repositories.items()
-        })
+        status_snapshots.append(
+            {k: v.status for k, v in run_state.repositories.items()}
+        )
 
     async def simple_parse(_builder, repo_path, repo_files, **_kw):
         return RepositorySnapshot(
@@ -229,9 +277,125 @@ def test_pipeline_does_not_set_running_before_semaphore(tmp_path: Path) -> None:
     # With semaphore=1, no checkpoint snapshot should ever have both repos "running"
     for snap in status_snapshots:
         running_count = sum(1 for s in snap.values() if s == "running")
-        assert running_count <= 1, (
-            f"Expected at most 1 repo running at a time, got {running_count}: {snap}"
+        assert (
+            running_count <= 1
+        ), f"Expected at most 1 repo running at a time, got {running_count}: {snap}"
+
+
+def test_pipeline_marks_repo_failed_when_span_setup_raises(tmp_path: Path) -> None:
+    """Escaped setup errors should be attributed to the repository as failures."""
+
+    repo = tmp_path / "span-failure-repo"
+    repo.mkdir()
+    (repo / "main.py").write_text("x", encoding="utf-8")
+
+    @contextmanager
+    def raising_span(*_args, **_kwargs):
+        raise RuntimeError("span enter failed")
+        yield
+
+    telemetry = SimpleNamespace(
+        start_span=raising_span,
+        record_index_repositories=_noop,
+        record_index_repository_duration=_noop,
+    )
+
+    async def should_not_parse(*_a, **_kw):
+        raise AssertionError("parse should not run when span setup fails")
+
+    snapshots, _, run_state, warnings = asyncio.run(
+        _run_pipeline(
+            [repo],
+            {repo: [repo / "main.py"]},
+            should_not_parse,
+            telemetry=telemetry,
         )
+    )
+
+    repo_state = run_state.repositories[str(repo.resolve())]
+    assert snapshots == []
+    assert repo_state.status == "failed"
+    assert repo_state.error == "span enter failed"
+    assert run_state.failed_repositories() == 1
+    assert any("span enter failed" in warning for warning in warnings)
+
+
+def test_pipeline_duration_excludes_time_waiting_for_parse_semaphore(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Duration metrics should begin when the repo actually starts running."""
+
+    repo_a = tmp_path / "repo-a"
+    repo_b = tmp_path / "repo-b"
+    repo_a.mkdir()
+    repo_b.mkdir()
+    (repo_a / "main.py").write_text("a", encoding="utf-8")
+    (repo_b / "main.py").write_text("b", encoding="utf-8")
+
+    current_time = {"value": 0.0}
+    durations: list[float] = []
+
+    def fake_perf_counter() -> float:
+        return current_time["value"]
+
+    monkeypatch.setattr(PIPELINE.time, "perf_counter", fake_perf_counter)
+
+    class TimingSemaphore:
+        """Semaphore that advances the synthetic clock when the second repo starts."""
+
+        def __init__(self, value: int) -> None:
+            self._semaphore = asyncio.Semaphore(value)
+            self._acquire_count = 0
+
+        async def __aenter__(self):
+            await self._semaphore.acquire()
+            self._acquire_count += 1
+            if self._acquire_count == 2:
+                current_time["value"] += 5.0
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            self._semaphore.release()
+
+    telemetry = SimpleNamespace(
+        start_span=_span_scope,
+        record_index_repositories=_noop,
+        record_index_repository_duration=lambda **kwargs: durations.append(
+            kwargs["duration_seconds"]
+        ),
+    )
+
+    timing_asyncio = SimpleNamespace(
+        Queue=asyncio.Queue,
+        create_task=asyncio.create_task,
+        gather=asyncio.gather,
+        sleep=asyncio.sleep,
+        Semaphore=TimingSemaphore,
+    )
+
+    async def parse_snapshot(_builder, repo_path, repo_files, **_kw):
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={},
+            file_data=[],
+        )
+
+    asyncio.run(
+        _run_pipeline(
+            [repo_a, repo_b],
+            {
+                repo_a: [repo_a / "main.py"],
+                repo_b: [repo_b / "main.py"],
+            },
+            parse_snapshot,
+            parse_worker_count=1,
+            telemetry=telemetry,
+            asyncio_module=timing_asyncio,
+        )
+    )
+
+    assert durations == [5.0, 0.0]
 
 
 def test_pipeline_sentinel_delivered_on_all_tasks_failing(tmp_path: Path) -> None:

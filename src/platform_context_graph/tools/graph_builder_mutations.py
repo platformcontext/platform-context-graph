@@ -83,7 +83,7 @@ def delete_repository_from_graph(
             repo_path=repo_path_str,
         )
         info_logger_fn(
-            f"Cleared previous graph state for re-index: {repo_path_str}"
+            f"Deleted repository and its contents from graph: {repo_path_str}"
         )
         return True
 
