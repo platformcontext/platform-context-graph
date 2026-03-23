@@ -19,12 +19,13 @@ router = APIRouter(prefix="/code", tags=["code"])
 
 
 class SearchCodeRequest(BaseModel):
-    """Request body for repository-scoped code search."""
+    """Request body for code search."""
 
     model_config = ConfigDict(extra="forbid")
 
     query: str
     repo_id: str | None = None
+    scope: str = "auto"
     exact: bool = False
     limit: int = Field(default=10, ge=0)
     edit_distance: int | None = Field(default=None, ge=0)
@@ -39,6 +40,7 @@ class CodeRelationshipsRequest(BaseModel):
     target: str
     context: str | None = None
     repo_id: str | None = None
+    scope: str = "auto"
 
 
 class DeadCodeRequest(BaseModel):
@@ -60,6 +62,7 @@ class ComplexityRequest(BaseModel):
     function_name: str | None = None
     path: str | None = None
     repo_id: str | None = None
+    scope: str = "auto"
 
 
 def _validate_repo_id(repo_id: str | None, request: Request):
@@ -100,14 +103,23 @@ def search_code(
     if invalid is not None:
         return invalid
 
-    return services.code.search_code(
-        services.database,
-        query=payload.query,
-        repo_id=payload.repo_id,
-        exact=payload.exact,
-        limit=payload.limit,
-        edit_distance=payload.edit_distance,
-    )
+    try:
+        return services.code.search_code(
+            services.database,
+            query=payload.query,
+            repo_id=payload.repo_id,
+            scope=payload.scope,
+            exact=payload.exact,
+            limit=payload.limit,
+            edit_distance=payload.edit_distance,
+        )
+    except ValueError as exc:
+        return problem_response(
+            request,
+            title="Invalid code search request",
+            status_code=400,
+            detail=str(exc),
+        )
 
 
 @router.post("/relationships", responses=problem_detail_responses(400))
@@ -130,13 +142,22 @@ def code_relationships(
     if invalid is not None:
         return invalid
 
-    return services.code.get_code_relationships(
-        services.database,
-        query_type=payload.query_type,
-        target=payload.target,
-        context=payload.context,
-        repo_id=payload.repo_id,
-    )
+    try:
+        return services.code.get_code_relationships(
+            services.database,
+            query_type=payload.query_type,
+            target=payload.target,
+            context=payload.context,
+            repo_id=payload.repo_id,
+            scope=payload.scope,
+        )
+    except ValueError as exc:
+        return problem_response(
+            request,
+            title="Invalid code relationship request",
+            status_code=400,
+            detail=str(exc),
+        )
 
 
 @router.post("/dead-code", responses=problem_detail_responses(400))
@@ -189,6 +210,7 @@ def complexity(
             function_name=payload.function_name,
             path=payload.path,
             repo_id=payload.repo_id,
+            scope=payload.scope,
         )
     except ValueError as exc:
         return problem_response(

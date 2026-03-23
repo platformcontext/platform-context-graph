@@ -140,6 +140,7 @@ class MCPServer(
                 function_name=function_name,
                 path=path,
                 repo_id=args.get("repo_path"),
+                scope=args.get("scope", "auto"),
             )
         except Exception as exc:
             return {"error": f"Failed to calculate cyclomatic complexity: {exc}"}
@@ -161,6 +162,7 @@ class MCPServer(
                 mode="top",
                 limit=limit,
                 repo_id=args.get("repo_path"),
+                scope=args.get("scope", "auto"),
             )
         except Exception as exc:
             return {"error": f"Failed to find most complex functions: {exc}"}
@@ -199,6 +201,7 @@ class MCPServer(
                 target=target,
                 context=args.get("context"),
                 repo_id=args.get("repo_path"),
+                scope=args.get("scope", "auto"),
             )
         except Exception as exc:
             return {"error": f"Failed to analyze relationships: {exc}"}
@@ -225,6 +228,7 @@ class MCPServer(
                 self.code_finder,
                 query=query,
                 repo_id=args.get("repo_path"),
+                scope=args.get("scope", "auto"),
                 exact=not fuzzy_search,
                 limit=15,
                 edit_distance=edit_distance if fuzzy_search else None,

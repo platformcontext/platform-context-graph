@@ -217,13 +217,16 @@ def register_basic_commands(main_module: Any, app: typer.Typer) -> None:
     def index(
         path: str | None = typer.Argument(
             None,
-            help="Path to the directory or file to index. Defaults to the current directory.",
+            help=(
+                "Local filesystem path to index. Defaults to the current directory. "
+                "Use 'pcg workspace ...' for the canonical shared workspace source model."
+            ),
         ),
         force: bool = typer.Option(
             False, "--force", "-f", help="Force re-index (delete existing and rebuild)"
         ),
     ) -> None:
-        """Add a directory or file to the code graph."""
+        """Index a local filesystem path into the code graph."""
         main_module._load_credentials()
         target_path = path or str(Path.cwd())
         if force:
@@ -233,6 +236,17 @@ def register_basic_commands(main_module: Any, app: typer.Typer) -> None:
             main_module.reindex_helper(target_path)
         else:
             main_module.index_helper(target_path)
+
+    @app.command(name="index-status")
+    def index_status(
+        target: str | None = typer.Argument(
+            None,
+            help="Repository/workspace path or checkpoint run ID. Defaults to the current directory.",
+        )
+    ) -> None:
+        """Show the latest checkpointed indexing status for a path or run ID."""
+
+        main_module.index_status_helper(target)
 
     @app.command()
     def clean() -> None:
@@ -365,12 +379,36 @@ def register_basic_commands(main_module: Any, app: typer.Typer) -> None:
     @app.command()
     def watch(
         path: str = typer.Argument(
-            ".", help="Path to the directory to watch. Defaults to current directory."
-        )
+            ".",
+            help=(
+                "Local filesystem path to watch. Defaults to current directory. "
+                "Use 'pcg workspace ...' for shared workspace discovery and sync."
+            ),
+        ),
+        scope: str = typer.Option(
+            "auto",
+            "--scope",
+            help="Watch scope: auto, repo, or workspace.",
+        ),
+        include_repo: list[str] | None = typer.Option(
+            None,
+            "--include-repo",
+            help="Repository glob(s) to include when watching a workspace.",
+        ),
+        exclude_repo: list[str] | None = typer.Option(
+            None,
+            "--exclude-repo",
+            help="Repository glob(s) to exclude when watching a workspace.",
+        ),
     ) -> None:
-        """Watch a directory for changes and update the graph automatically."""
+        """Watch a local filesystem path for changes and update the graph automatically."""
         main_module._load_credentials()
-        main_module.watch_helper(path)
+        main_module.watch_helper(
+            path,
+            scope=scope,
+            include_repositories=include_repo,
+            exclude_repositories=exclude_repo,
+        )
 
     @app.command()
     def unwatch(path: str = typer.Argument(..., help="Path to stop watching")) -> None:
@@ -452,6 +490,9 @@ def register_basic_commands(main_module: Any, app: typer.Typer) -> None:
         main_module.visualize_helper(repo, port)
 
     @app.command("w", rich_help_panel="Shortcuts")
-    def watch_abbrev(path: str = typer.Argument(".", help="Path to watch")) -> None:
+    def watch_abbrev(
+        path: str = typer.Argument(".", help="Path to watch"),
+        scope: str = typer.Option("auto", "--scope", help="Watch scope."),
+    ) -> None:
         """Run the ``pcg watch`` shortcut."""
-        watch(path)
+        watch(path, scope=scope)

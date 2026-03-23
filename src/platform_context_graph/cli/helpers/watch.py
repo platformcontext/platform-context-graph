@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 
 from ...core.jobs import JobManager
-from ...core.watcher import CodeWatcher
+from ...core.watcher import CodeWatcher, resolve_watch_targets
 
 
 def _api():
@@ -25,7 +25,14 @@ def _configure_watchdog_logging() -> None:
     logging.getLogger("watchdog.observers.inotify_buffer").setLevel(logging.WARNING)
 
 
-def watch_helper(path: str) -> None:
+def watch_helper(
+    path: str,
+    *,
+    scope: str = "auto",
+    include_repositories: list[str] | None = None,
+    exclude_repositories: list[str] | None = None,
+    rediscover_interval_seconds: int | None = None,
+) -> None:
     """Watch a directory and keep the graph updated.
 
     Args:
@@ -49,22 +56,57 @@ def watch_helper(path: str) -> None:
         db_manager.close_driver()
         return
 
-    api.console.print(f"[bold cyan]🔍 Watching {path_obj} for changes...[/bold cyan]")
+    try:
+        plan = resolve_watch_targets(
+            path_obj,
+            scope=scope,
+            include_repositories=include_repositories,
+            exclude_repositories=exclude_repositories,
+        )
+    except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
+        api.console.print(f"[red]Error: {exc}[/red]")
+        db_manager.close_driver()
+        return
+
+    api.console.print(
+        f"[bold cyan]🔍 Watching {path_obj} for changes...[/bold cyan] "
+        f"[dim]({plan.scope}, {len(plan.repository_paths)} repos)[/dim]"
+    )
+    try:
+        from platform_context_graph.cli.config_manager import get_watch_runtime_config
+
+        runtime_config = get_watch_runtime_config()
+        api.console.print(
+            "[dim]Watch config: "
+            f"debounce={runtime_config['debounce_seconds']:.1f}s[/dim]"
+        )
+    except Exception as exc:
+        api.console.print(
+            "[yellow]Warning: Could not load watch runtime config: " f"{exc}[/yellow]"
+        )
     indexed_repos = code_finder.list_indexed_repositories()
-    is_indexed = any(Path(repo["path"]).resolve() == path_obj for repo in indexed_repos)
+    indexed_paths = {
+        Path(repo.get("local_path") or repo["path"]).resolve()
+        for repo in indexed_repos
+        if repo.get("path") or repo.get("local_path")
+    }
+    missing_repositories = [
+        repo_path
+        for repo_path in plan.repository_paths
+        if repo_path not in indexed_paths
+    ]
 
     watcher = CodeWatcher(graph_builder, JobManager())
     try:
         watcher.start()
 
-        if is_indexed:
+        if not missing_repositories:
             api.console.print(
                 "[green]✓[/green] Already indexed (no initial scan needed)"
             )
-            watcher.watch_directory(str(path_obj), perform_initial_scan=False)
         else:
             api.console.print(
-                "[yellow]⚠[/yellow]  Not indexed yet. Performing initial scan..."
+                "[yellow]⚠[/yellow]  Missing repo index data. Performing initial scan..."
             )
 
             async def do_index() -> None:
@@ -76,7 +118,15 @@ def watch_helper(path: str) -> None:
 
             asyncio.run(do_index())
             api.console.print("[green]✓[/green] Initial scan complete")
-            watcher.watch_directory(str(path_obj), perform_initial_scan=False)
+
+        watcher.watch_directory(
+            str(path_obj),
+            perform_initial_scan=False,
+            scope=scope,
+            include_repositories=include_repositories,
+            exclude_repositories=exclude_repositories,
+            rediscover_interval_seconds=rediscover_interval_seconds,
+        )
 
         api.console.print(
             "[bold green]👀 Monitoring for file changes...[/bold green] "

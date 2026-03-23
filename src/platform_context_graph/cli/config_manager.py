@@ -10,107 +10,16 @@ from typing import Optional, Dict, Any
 from rich.console import Console
 from rich.table import Table
 
-from ..paths import get_app_env_file, get_app_home
+from .config_catalog import (
+    CONFIG_DESCRIPTIONS,
+    CONFIG_DIR,
+    CONFIG_FILE,
+    CONFIG_VALIDATORS,
+    DATABASE_CREDENTIAL_KEYS,
+    DEFAULT_CONFIG,
+)
 
 console = Console()
-
-# Configuration file location
-CONFIG_DIR = get_app_home()
-CONFIG_FILE = get_app_env_file()
-
-# Database credential keys (stored in same .env file but not managed as config)
-DATABASE_CREDENTIAL_KEYS = {
-    "NEO4J_URI",
-    "NEO4J_USERNAME",
-    "NEO4J_PASSWORD",
-    "NEO4J_DATABASE",
-}
-
-# Default configuration values
-DEFAULT_CONFIG = {
-    "DEFAULT_DATABASE": "falkordb",
-    "FALKORDB_PATH": str(CONFIG_DIR / "falkordb.db"),
-    "FALKORDB_SOCKET_PATH": str(CONFIG_DIR / "falkordb.sock"),
-    "INDEX_VARIABLES": "true",
-    "ALLOW_DB_DELETION": "false",
-    "DEBUG_LOGS": "false",
-    "DEBUG_LOG_PATH": str(Path.home() / "mcp_debug.log"),
-    "ENABLE_APP_LOGS": "CRITICAL",
-    "LIBRARY_LOG_LEVEL": "WARNING",
-    "LOG_FILE_PATH": str(CONFIG_DIR / "logs" / "pcg.log"),
-    "MAX_FILE_SIZE_MB": "10",
-    "IGNORE_TEST_FILES": "false",
-    "IGNORE_HIDDEN_FILES": "true",
-    "ENABLE_AUTO_WATCH": "false",
-    "COMPLEXITY_THRESHOLD": "10",
-    "MAX_DEPTH": "unlimited",
-    "PARALLEL_WORKERS": "4",
-    "CACHE_ENABLED": "true",
-    "IGNORE_DIRS": "node_modules,venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__,.terraform,.terragrunt-cache,.pulumi,.serverless,.aws-sam,.crossplane,cdk.out,.terramate-cache",
-    "INDEX_SOURCE": "true",
-    # SCIP indexer feature flag (default off — existing Tree-sitter behaviour unchanged)
-    "SCIP_INDEXER": "false",
-    "SCIP_LANGUAGES": "python,typescript,go,rust,java",
-    "SKIP_EXTERNAL_RESOLUTION": "false",
-    # Infrastructure indexing
-    "INDEX_YAML": "true",
-    "INDEX_HCL": "true",
-    # Ecosystem settings
-    "ECOSYSTEM_MANIFEST_PATH": "",
-    "ECOSYSTEM_BASE_PATH": "",
-    "ECOSYSTEM_PARALLEL_REPOS": "4",
-}
-
-# Configuration key descriptions
-CONFIG_DESCRIPTIONS = {
-    "DEFAULT_DATABASE": "Default database backend (neo4j|falkordb|kuzudb)",
-    "FALKORDB_PATH": "Path to FalkorDB database file",
-    "FALKORDB_SOCKET_PATH": "Path to FalkorDB Unix socket",
-    "INDEX_VARIABLES": "Index variable nodes in the graph (lighter graph if false)",
-    "ALLOW_DB_DELETION": "Allow full database deletion commands",
-    "DEBUG_LOGS": "Enable debug logging (for development/troubleshooting)",
-    "DEBUG_LOG_PATH": "Path to debug log file",
-    "ENABLE_APP_LOGS": "Application log level (DEBUG|INFO|WARNING|ERROR|CRITICAL|DISABLED)",
-    "LIBRARY_LOG_LEVEL": "Log level for third-party libraries (neo4j, asyncio, urllib3) (DEBUG|INFO|WARNING|ERROR|CRITICAL)",
-    "LOG_FILE_PATH": "Path to application log file",
-    "MAX_FILE_SIZE_MB": "Maximum file size to index (in MB)",
-    "IGNORE_TEST_FILES": "Skip test files during indexing",
-    "IGNORE_HIDDEN_FILES": "Skip hidden files/directories",
-    "ENABLE_AUTO_WATCH": "Automatically watch directory after indexing",
-    "COMPLEXITY_THRESHOLD": "Cyclomatic complexity warning threshold",
-    "MAX_DEPTH": "Maximum directory depth for indexing (unlimited or number)",
-    "PARALLEL_WORKERS": "Number of parallel indexing workers",
-    "CACHE_ENABLED": "Enable caching for faster re-indexing",
-    "IGNORE_DIRS": "Comma-separated list of directory names to ignore during indexing",
-    "INDEX_SOURCE": "Store full source code in graph database (for faster indexing use false, for better performance use true)",
-    "SCIP_INDEXER": "Use SCIP-based indexing for higher accuracy call/inheritance resolution (requires scip-<lang> tools installed)",
-    "SCIP_LANGUAGES": "Comma-separated languages to index via SCIP when SCIP_INDEXER=true (python,typescript,go,rust,java)",
-    "SKIP_EXTERNAL_RESOLUTION": "Skip resolution attempts for external library method calls (recommended for enterprise large Java/Spring codebases)",
-    "INDEX_YAML": "Index YAML infrastructure files (K8s, ArgoCD, Crossplane, Helm, Kustomize)",
-    "INDEX_HCL": "Index HCL/Terraform infrastructure files (.tf, .hcl)",
-    "ECOSYSTEM_MANIFEST_PATH": "Path to ecosystem dependency-graph.yaml manifest",
-    "ECOSYSTEM_BASE_PATH": "Base directory where ecosystem repos are cloned",
-    "ECOSYSTEM_PARALLEL_REPOS": "Number of repos to index in parallel during ecosystem indexing",
-}
-
-# Valid values for each config key
-CONFIG_VALIDATORS = {
-    "DEFAULT_DATABASE": ["neo4j", "falkordb", "kuzudb"],
-    "INDEX_VARIABLES": ["true", "false"],
-    "ALLOW_DB_DELETION": ["true", "false"],
-    "DEBUG_LOGS": ["true", "false"],
-    "ENABLE_APP_LOGS": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "DISABLED"],
-    "LIBRARY_LOG_LEVEL": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-    "IGNORE_TEST_FILES": ["true", "false"],
-    "IGNORE_HIDDEN_FILES": ["true", "false"],
-    "ENABLE_AUTO_WATCH": ["true", "false"],
-    "CACHE_ENABLED": ["true", "false"],
-    "INDEX_SOURCE": ["true", "false"],
-    "SCIP_INDEXER": ["true", "false"],
-    "SKIP_EXTERNAL_RESOLUTION": ["true", "false"],
-    "INDEX_YAML": ["true", "false"],
-    "INDEX_HCL": ["true", "false"],
-}
 
 
 def ensure_config_dir(path: Path = CONFIG_DIR):
@@ -304,6 +213,22 @@ def validate_config_value(key: str, value: str) -> tuple[bool, Optional[str]]:
         except ValueError:
             return False, "PARALLEL_WORKERS must be a number"
 
+    if key in {"PCG_PARSE_WORKERS", "PCG_INDEX_QUEUE_DEPTH"}:
+        try:
+            workers = int(value)
+            if workers <= 0 or workers > 128:
+                return False, f"{key} must be between 1 and 128"
+        except ValueError:
+            return False, f"{key} must be a number"
+
+    if key == "PCG_WATCH_DEBOUNCE_SECONDS":
+        try:
+            debounce = float(value)
+            if debounce <= 0 or debounce > 60:
+                return False, "PCG_WATCH_DEBOUNCE_SECONDS must be between 0 and 60"
+        except ValueError:
+            return False, "PCG_WATCH_DEBOUNCE_SECONDS must be a number"
+
     if key == "MAX_DEPTH":
         if value.lower() != "unlimited":
             try:
@@ -340,6 +265,82 @@ def get_config_value(key: str) -> Optional[str]:
     """Get a specific configuration value."""
     config = load_config()
     return config.get(key)
+
+
+def _bounded_int_value(
+    value: str | None,
+    default: int,
+    *,
+    minimum: int,
+    maximum: int,
+) -> int:
+    """Parse a bounded integer configuration value with a safe fallback."""
+
+    if value is None or not str(value).strip():
+        return default
+    try:
+        return max(minimum, min(int(value), maximum))
+    except ValueError:
+        return default
+
+
+def _bounded_float_value(
+    value: str | None,
+    default: float,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
+    """Parse a bounded float configuration value with a safe fallback."""
+
+    if value is None or not str(value).strip():
+        return default
+    try:
+        return max(minimum, min(float(value), maximum))
+    except ValueError:
+        return default
+
+
+def get_index_runtime_config() -> Dict[str, Any]:
+    """Return the effective public indexing worker configuration."""
+
+    parse_workers_raw = get_config_value("PCG_PARSE_WORKERS")
+    legacy_workers_raw = get_config_value("PARALLEL_WORKERS")
+    parse_workers_source = (
+        "PCG_PARSE_WORKERS"
+        if parse_workers_raw is not None and str(parse_workers_raw).strip()
+        else "PARALLEL_WORKERS"
+    )
+    parse_workers = _bounded_int_value(
+        parse_workers_raw or legacy_workers_raw,
+        int(DEFAULT_CONFIG["PCG_PARSE_WORKERS"]),
+        minimum=1,
+        maximum=128,
+    )
+    queue_depth = _bounded_int_value(
+        get_config_value("PCG_INDEX_QUEUE_DEPTH"),
+        max(2, parse_workers * 2),
+        minimum=1,
+        maximum=128,
+    )
+    return {
+        "parse_workers": parse_workers,
+        "queue_depth": queue_depth,
+        "parse_workers_source": parse_workers_source,
+    }
+
+
+def get_watch_runtime_config() -> Dict[str, Any]:
+    """Return the effective public watch runtime configuration."""
+
+    return {
+        "debounce_seconds": _bounded_float_value(
+            get_config_value("PCG_WATCH_DEBOUNCE_SECONDS"),
+            float(DEFAULT_CONFIG["PCG_WATCH_DEBOUNCE_SECONDS"]),
+            minimum=0.0,
+            maximum=60.0,
+        )
+    }
 
 
 def set_config_value(key: str, value: str) -> bool:

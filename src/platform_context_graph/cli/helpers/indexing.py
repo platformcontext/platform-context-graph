@@ -6,6 +6,7 @@ import asyncio
 import time
 from pathlib import Path
 
+from ...indexing.coordinator import describe_index_run
 from ...tools.package_resolver import get_local_package_path
 
 
@@ -16,11 +17,44 @@ def _api():
     return api
 
 
-def index_helper(path: str) -> None:
+def index_helper(
+    path: str,
+    *,
+    force: bool = False,
+    selected_repositories: list[Path] | tuple[Path, ...] | None = None,
+    family: str = "index",
+    source: str | None = None,
+    component: str = "cli",
+) -> None:
+    """Index a repository path synchronously."""
+    return _index_helper(
+        path,
+        force=force,
+        selected_repositories=selected_repositories,
+        family=family,
+        source=source,
+        component=component,
+    )
+
+
+def _index_helper(
+    path: str,
+    *,
+    force: bool,
+    selected_repositories: list[Path] | tuple[Path, ...] | None,
+    family: str,
+    source: str | None,
+    component: str,
+) -> None:
     """Index a repository path synchronously.
 
     Args:
         path: Filesystem path to the repository root.
+        force: Whether to invalidate an existing checkpoint for the same run.
+        selected_repositories: Optional repository subset for coordinated runs.
+        family: Run family label used in checkpointing and telemetry.
+        source: Source label used in checkpointing and telemetry.
+        component: Observability component label for the indexing run.
     """
     api = _api()
     time_start = time.time()
@@ -41,7 +75,7 @@ def index_helper(path: str) -> None:
         Path(repo["path"]).resolve() == path_obj for repo in indexed_repos
     )
 
-    if repo_exists:
+    if repo_exists and not force:
         try:
             with db_manager.get_driver().session() as session:
                 result = session.run(
@@ -74,6 +108,24 @@ def index_helper(path: str) -> None:
             )
 
     api.console.print(f"Starting indexing for: {path_obj}")
+    try:
+        from platform_context_graph.cli.config_manager import get_index_runtime_config
+
+        runtime_config = get_index_runtime_config()
+        config_suffix = ""
+        if runtime_config["parse_workers_source"] == "PARALLEL_WORKERS":
+            config_suffix = " (legacy PARALLEL_WORKERS fallback)"
+        api.console.print(
+            "[dim]Indexing config: "
+            f"parse workers={runtime_config['parse_workers']}, "
+            f"queue depth={runtime_config['queue_depth']}"
+            f"{config_suffix}[/dim]"
+        )
+    except Exception as exc:
+        api.console.print(
+            "[yellow]Warning: Could not load indexing runtime config: "
+            f"{exc}[/yellow]"
+        )
 
     try:
         asyncio.run(
@@ -81,6 +133,15 @@ def index_helper(path: str) -> None:
                 graph_builder,
                 path_obj,
                 is_dependency=False,
+                force=force,
+                selected_repositories=(
+                    [repo_path.resolve() for repo_path in selected_repositories]
+                    if selected_repositories
+                    else None
+                ),
+                family=family,
+                source=source,
+                component=component,
             )
         )
         elapsed = time.time() - time_start
@@ -176,56 +237,14 @@ def reindex_helper(path: str) -> None:
     Args:
         path: Filesystem path to the repository root.
     """
-    api = _api()
-    time_start = time.time()
-    services = api._initialize_services()
-    if not all(services):
-        return
-
-    db_manager, graph_builder, code_finder = services
-    path_obj = Path(path).resolve()
-
-    if not path_obj.exists():
-        api.console.print(f"[red]Error: Path does not exist: {path_obj}[/red]")
-        db_manager.close_driver()
-        return
-
-    indexed_repos = code_finder.list_indexed_repositories()
-    repo_exists = any(
-        Path(repo["path"]).resolve() == path_obj for repo in indexed_repos
+    _index_helper(
+        path,
+        force=True,
+        selected_repositories=None,
+        family="index",
+        source=None,
+        component="cli",
     )
-
-    if repo_exists:
-        api.console.print(f"[yellow]Deleting existing index for: {path_obj}[/yellow]")
-        try:
-            graph_builder.delete_repository_from_graph(str(path_obj))
-            api.console.print("[green]✓[/green] Deleted old index")
-        except Exception as exc:
-            api.console.print(f"[red]Error deleting old index: {exc}[/red]")
-            db_manager.close_driver()
-            return
-
-    api.console.print(f"[cyan]Re-indexing: {path_obj}[/cyan]")
-
-    try:
-        asyncio.run(
-            api._run_index_with_progress(
-                graph_builder,
-                path_obj,
-                is_dependency=False,
-            )
-        )
-        elapsed = time.time() - time_start
-        api.console.print(
-            f"[green]Successfully re-indexed: {path} in {elapsed:.2f} seconds[/green]"
-        )
-    except Exception as exc:
-        api.console.print(
-            f"[bold red]An error occurred during re-indexing:[/bold red] {exc}"
-        )
-        raise
-    finally:
-        db_manager.close_driver()
 
 
 def update_helper(path: str) -> None:
@@ -237,3 +256,31 @@ def update_helper(path: str) -> None:
     api = _api()
     api.console.print("[cyan]Updating repository index...[/cyan]")
     reindex_helper(path)
+
+
+def index_status_helper(path_or_run_id: str | None = None) -> None:
+    """Display the latest checkpointed index run status for a path or run ID."""
+
+    api = _api()
+    target = path_or_run_id or str(Path.cwd())
+    summary = describe_index_run(target)
+    if summary is None:
+        api.console.print(
+            f"[yellow]No checkpointed index run found for '{target}'.[/yellow]"
+        )
+        return
+
+    api.console.print(
+        f"[bold cyan]Index Run:[/bold cyan] {summary['run_id']} "
+        f"[dim]({summary['status']}, finalization={summary['finalization_status']})[/dim]"
+    )
+    api.console.print(f"[cyan]Root:[/cyan] {summary['root_path']}")
+    api.console.print(
+        "[cyan]Repositories:[/cyan] "
+        f"{summary['completed_repositories']} completed / "
+        f"{summary['failed_repositories']} failed / "
+        f"{summary['pending_repositories']} pending "
+        f"of {summary['repository_count']}"
+    )
+    if summary.get("last_error"):
+        api.console.print(f"[yellow]Last error:[/yellow] {summary['last_error']}")

@@ -8,22 +8,29 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
-from platform_context_graph.observability import get_observability, initialize_observability
+from platform_context_graph.observability import (
+    get_observability,
+    initialize_observability,
+)
 
 from .bootstrap import _request_index
 from .config import RepoSyncConfig, RepoSyncResult
 from .git import (
+    count_stale_checkouts,
     clone_missing_repositories,
+    clone_missing_repositories_detailed,
     filesystem_sync_all,
     git_token,
     repo_checkout_name,
     update_existing_repositories,
+    update_existing_repositories_detailed,
 )
 from .retry import MAX_REPO_SYNC_RETRY_SECONDS, classify_sync_error, retry_after_seconds
 from .support import (
     begin_index_cycle,
     fingerprint_tree,
     index_workspace_default,
+    resumable_repository_paths,
     log,
     manifest_path,
     record_lock_skip,
@@ -39,7 +46,15 @@ from ..status_store import (
 
 DEFAULT_INGESTER_CONTROL_POLL_SECONDS = 5
 
-_PRESERVED_STATUS_KEYS = ("active_run_id", "repository_count", "pulled_repositories", "in_sync_repositories", "pending_repositories", "completed_repositories", "failed_repositories")
+_PRESERVED_STATUS_KEYS = (
+    "active_run_id",
+    "repository_count",
+    "pulled_repositories",
+    "in_sync_repositories",
+    "pending_repositories",
+    "completed_repositories",
+    "failed_repositories",
+)
 _REPOSITORY_COUNT_KEYS = frozenset(
     {
         "repository_count",
@@ -93,7 +108,9 @@ def _persist_ingester_status(
     for key in _PRESERVED_STATUS_KEYS:
         payload[key] = _normalize_status_value(
             key,
-            overrides.pop(key, current.get(key, 0 if key in _REPOSITORY_COUNT_KEYS else None)),
+            overrides.pop(
+                key, current.get(key, 0 if key in _REPOSITORY_COUNT_KEYS else None)
+            ),
         )
     payload.update(overrides)
     update_runtime_ingester_status(**payload)
@@ -113,7 +130,9 @@ def _control_poll_seconds() -> int:
     )
 
 
-def _wait_for_next_cycle(component: str, delay_seconds: int) -> dict[str, object] | None:
+def _wait_for_next_cycle(
+    component: str, delay_seconds: int
+) -> dict[str, object] | None:
     """Sleep until the next cycle, waking early when a manual scan is requested."""
 
     if delay_seconds <= 0:
@@ -134,7 +153,7 @@ def _wait_for_next_cycle(component: str, delay_seconds: int) -> dict[str, object
 def _run_sync_filesystem(
     config: RepoSyncConfig,
     *,
-    index_workspace: Callable[[Path], None],
+    index_workspace: Callable[..., None],
 ) -> RepoSyncResult:
     """Run a filesystem-backed repo sync cycle.
 
@@ -181,7 +200,16 @@ def _run_sync_filesystem(
             phase="indexed",
             count=discovered_count,
         )
-        _request_index(config, index_workspace)
+        selected_repositories = [
+            (config.repos_dir / repo_checkout_name(repo_id)).resolve()
+            for repo_id in discovered
+        ]
+        _request_index(
+            config,
+            index_workspace,
+            selected_repositories=selected_repositories,
+            family="sync",
+        )
         fixture_manifest_path.write_text(current_manifest, encoding="utf-8")
     return RepoSyncResult(
         discovered=discovered_count,
@@ -193,7 +221,7 @@ def _run_sync_filesystem(
 def _run_sync_git(
     config: RepoSyncConfig,
     *,
-    index_workspace: Callable[[Path], None],
+    index_workspace: Callable[..., None],
 ) -> RepoSyncResult:
     """Run a Git-backed repo sync cycle.
 
@@ -206,13 +234,23 @@ def _run_sync_git(
     """
 
     token = git_token(config)
-    discovered, cloned, clone_skipped, clone_failed = clone_missing_repositories(
-        config, token
+    discovered, cloned_paths, clone_skipped, clone_failed = (
+        clone_missing_repositories_detailed(config, token)
     )
-    updated, update_failed = update_existing_repositories(config, token)
-    stale = _stale_checkout_count(config, discovered)
+    updated_paths, update_failed = update_existing_repositories_detailed(config, token)
+    cloned = len(cloned_paths)
+    updated = len(updated_paths)
+    stale = count_stale_checkouts(config, discovered)
     failed = clone_failed + update_failed
-    should_index = cloned > 0 or updated > 0
+    selected_repositories = sorted(
+        {
+            *[repo_path.resolve() for repo_path in cloned_paths],
+            *[repo_path.resolve() for repo_path in updated_paths],
+            *resumable_repository_paths(config.repos_dir),
+        },
+        key=str,
+    )
+    should_index = bool(selected_repositories)
     if not should_index:
         record_phase(
             config=config,
@@ -312,7 +350,12 @@ def _run_sync_git(
             phase="indexed",
             count=discovered_count,
         )
-        _request_index(config, index_workspace)
+        _request_index(
+            config,
+            index_workspace,
+            selected_repositories=selected_repositories,
+            family="sync",
+        )
     return RepoSyncResult(
         discovered=len(discovered),
         cloned=cloned,
@@ -320,14 +363,14 @@ def _run_sync_git(
         skipped=clone_skipped,
         failed=failed,
         stale=stale,
-        indexed=discovered_count,
+        indexed=len(selected_repositories),
     )
 
 
 def run_repo_sync_cycle(
     config: RepoSyncConfig,
     *,
-    index_workspace: Callable[[Path], None] | None = None,
+    index_workspace: Callable[..., None] | None = None,
 ) -> RepoSyncResult:
     """Run one repository synchronization cycle.
 
@@ -352,7 +395,7 @@ def run_repo_sync_cycle(
 def run_repo_sync_loop(
     *,
     interval_seconds: int,
-    index_workspace: Callable[[Path], None] | None = None,
+    index_workspace: Callable[..., None] | None = None,
 ) -> None:
     """Run the long-lived repo-sync sidecar loop.
 
@@ -397,9 +440,17 @@ def run_repo_sync_loop(
                 last_error_kind=None,
                 last_error_message=None,
                 repository_count=result.discovered
-                or int(_current_ingester_status(config.component).get("repository_count", 0)),
+                or int(
+                    _current_ingester_status(config.component).get(
+                        "repository_count", 0
+                    )
+                ),
                 pulled_repositories=result.discovered
-                or int(_current_ingester_status(config.component).get("pulled_repositories", 0)),
+                or int(
+                    _current_ingester_status(config.component).get(
+                        "pulled_repositories", 0
+                    )
+                ),
             )
             if claimed_request is not None:
                 complete_ingester_scan_request(
@@ -409,7 +460,9 @@ def run_repo_sync_loop(
                 get_observability().record_ingester_scan_request(
                     ingester=config.component,
                     phase="completed",
-                    requested_by=str(claimed_request.get("scan_requested_by") or "unknown"),
+                    requested_by=str(
+                        claimed_request.get("scan_requested_by") or "unknown"
+                    ),
                     accepted=True,
                 )
             attempt = 1
@@ -433,7 +486,9 @@ def run_repo_sync_loop(
                 get_observability().record_ingester_scan_request(
                     ingester=config.component,
                     phase="failed",
-                    requested_by=str(claimed_request.get("scan_requested_by") or "unknown"),
+                    requested_by=str(
+                        claimed_request.get("scan_requested_by") or "unknown"
+                    ),
                     accepted=False,
                 )
             attempt += 1
@@ -442,24 +497,3 @@ def run_repo_sync_loop(
                 f"Repo sync degraded after transient failure: {exc}. Retrying in {delay_seconds}s",
             )
             pending_request = _wait_for_next_cycle(config.component, delay_seconds)
-
-
-def _stale_checkout_count(config: RepoSyncConfig, discovered: list[str]) -> int:
-    """Count managed git checkouts that no longer match current discovery rules.
-
-    Args:
-        config: Repo sync runtime configuration.
-        discovered: Repository identifiers discovered during the current cycle.
-
-    Returns:
-        Number of existing git worktrees left unmanaged in the workspace.
-    """
-
-    expected_checkout_names = {repo_checkout_name(repo_id) for repo_id in discovered}
-    return sum(
-        1
-        for path in config.repos_dir.iterdir()
-        if path.is_dir()
-        and (path / ".git").exists()
-        and path.name not in expected_checkout_names
-    )

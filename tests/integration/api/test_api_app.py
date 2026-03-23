@@ -380,6 +380,38 @@ def test_create_app_exposes_ingester_status_and_scan_routes() -> None:
     assert scan_response.json()["scan_request_state"] == "pending"
 
 
+def test_create_app_exposes_index_status_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    monkeypatch.setattr(
+        api_app,
+        "describe_index_run",
+        lambda target=None: {
+            "run_id": "run-123",
+            "root_path": "/srv/repos",
+            "status": "indexing",
+            "finalization_status": "pending",
+            "repository_count": 12,
+            "completed_repositories": 5,
+            "failed_repositories": 1,
+            "pending_repositories": 6,
+        },
+    )
+
+    app = api_app.create_app(
+        query_services_dependency=lambda: SimpleNamespace(database=object())
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/api/v0/index-status", params={"target": "/srv/repos"})
+
+    assert response.status_code == 200
+    assert response.json()["run_id"] == "run-123"
+
+
 def test_service_app_factory_is_exported() -> None:
     api_app = importlib.import_module("platform_context_graph.api.app")
     assert hasattr(api_app, "create_service_app")

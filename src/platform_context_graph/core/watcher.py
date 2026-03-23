@@ -1,219 +1,134 @@
 # src/platform_context_graph/core/watcher.py
-"""
-This module implements the live file-watching functionality using the `watchdog` library.
-It observes directories for changes and triggers updates to the code graph.
-"""
+"""Repo-partitioned live file watching for indexed workspaces."""
+
+from __future__ import annotations
 
 import threading
 from pathlib import Path
 import typing
+
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+
+from platform_context_graph.utils.debug_log import info_logger, warning_logger
+from .watch_repository import RepositoryEventHandler
+from .watch_targets import WatchPlan, resolve_watch_targets, watch_debounce_seconds
 
 if typing.TYPE_CHECKING:
-    from platform_context_graph.tools.graph_builder import GraphBuilder
     from platform_context_graph.core.jobs import JobManager
-
-from platform_context_graph.utils.debug_log import (
-    debug_log,
-    info_logger,
-    error_logger,
-    warning_logger,
-)
-
-
-class RepositoryEventHandler(FileSystemEventHandler):
-    """
-    A dedicated event handler for a single repository being watched.
-
-    This handler is stateful. It performs an initial scan of the repository
-    to build a baseline and then uses this cached state to perform efficient
-    updates when files are changed, created, or deleted.
-    """
-
-    def __init__(
-        self,
-        graph_builder: "GraphBuilder",
-        repo_path: Path,
-        debounce_interval=2.0,
-        perform_initial_scan: bool = True,
-    ):
-        """
-        Initializes the event handler.
-
-        Args:
-            graph_builder: An instance of the GraphBuilder to perform graph operations.
-            repo_path: The absolute path to the repository directory to watch.
-            debounce_interval: The time in seconds to wait for more changes before processing an event.
-            perform_initial_scan: Whether to perform an initial scan of the repository.
-        """
-        super().__init__()
-        self.graph_builder = graph_builder
-        self.repo_path = repo_path
-        self.debounce_interval = debounce_interval
-        self.timers = {}  # A dictionary to manage debounce timers for file paths.
-
-        # Caches for the repository's state.
-        self.all_file_data = []
-        self.imports_map = {}
-
-        # Perform the initial scan and linking when the watcher is created.
-        if perform_initial_scan:
-            self._initial_scan()
-
-    def _initial_scan(self):
-        """Scans the entire repository, parses all files, and builds the initial graph."""
-        info_logger(f"Performing initial scan for watcher: {self.repo_path}")
-        supported_extensions = self.graph_builder.parsers.keys()
-        all_files = [
-            f
-            for f in self.repo_path.rglob("*")
-            if f.is_file() and f.suffix in supported_extensions
-        ]
-
-        # 1. Pre-scan all files to get a global map of where every symbol is defined.
-        self.imports_map = self.graph_builder._pre_scan_for_imports(all_files)
-
-        # 2. Parse all files in detail and cache the parsed data.
-        for f in all_files:
-            parsed_data = self.graph_builder.parse_file(self.repo_path, f)
-            if "error" not in parsed_data:
-                self.all_file_data.append(parsed_data)
-
-        # 3. After all files are parsed, create the relationships (e.g., function calls) between them.
-        self.graph_builder._create_all_function_calls(
-            self.all_file_data, self.imports_map
-        )
-        self.graph_builder._create_all_inheritance_links(
-            self.all_file_data, self.imports_map
-        )
-        info_logger(f"Initial scan and graph linking complete for: {self.repo_path}")
-
-    def _debounce(self, event_path, action):
-        """
-        Schedules an action to run after a debounce interval.
-        This prevents the handler from firing on every single file save event in rapid
-        succession, which is common in IDEs. It waits for a quiet period before processing.
-        """
-        # If a timer already exists for this path, cancel it.
-        if event_path in self.timers:
-            self.timers[event_path].cancel()
-        # Create and start a new timer.
-        timer = threading.Timer(self.debounce_interval, action)
-        timer.start()
-        self.timers[event_path] = timer
-
-    def _handle_modification(self, event_path_str: str):
-        """
-        Orchestrates the complete update cycle for a modified or created file.
-        This involves re-scanning the entire repo to update cross-file relationships.
-        """
-        info_logger(
-            f"File change detected, starting full repository refresh for: {event_path_str}"
-        )
-        modified_path = Path(event_path_str)
-
-        # 1. Get all supported files in the repository.
-        supported_extensions = self.graph_builder.parsers.keys()
-        all_files = [
-            f
-            for f in self.repo_path.rglob("*")
-            if f.is_file() and f.suffix in supported_extensions
-        ]
-
-        # 2. Re-scan all files to get a fresh, global map of all symbols.
-        self.imports_map = self.graph_builder._pre_scan_for_imports(all_files)
-        info_logger("Refreshed global imports map.")
-
-        # 3. Update the specific file that changed in the graph.
-        # This deletes old nodes and adds new ones for the single file.
-        self.graph_builder.update_file_in_graph(
-            modified_path, self.repo_path, self.imports_map
-        )
-
-        # 4. Re-parse all files to have a complete, in-memory representation for the linking pass.
-        # This is necessary because a change in one file can affect relationships in others.
-        self.all_file_data = []
-        for f in all_files:
-            parsed_data = self.graph_builder.parse_file(self.repo_path, f)
-            if "error" not in parsed_data:
-                self.all_file_data.append(parsed_data)
-        info_logger("Refreshed in-memory cache of all file data.")
-
-        # 5. CRITICAL: Re-link the entire graph using the fully updated cache and imports map.
-        info_logger("Re-linking the entire graph for calls and inheritance...")
-        self.graph_builder._create_all_function_calls(
-            self.all_file_data, self.imports_map
-        )
-        self.graph_builder._create_all_inheritance_links(
-            self.all_file_data, self.imports_map
-        )
-        info_logger(f"Graph refresh for change in {event_path_str} complete! ✅")
-
-    # The following methods are called by the watchdog observer when a file event occurs.
-    def on_created(self, event):
-        """Handle created file events."""
-        if (
-            not event.is_directory
-            and Path(event.src_path).suffix in self.graph_builder.parsers
-        ):
-            self._debounce(
-                event.src_path, lambda: self._handle_modification(event.src_path)
-            )
-
-    def on_modified(self, event):
-        """Handle modified file events."""
-        if (
-            not event.is_directory
-            and Path(event.src_path).suffix in self.graph_builder.parsers
-        ):
-            self._debounce(
-                event.src_path, lambda: self._handle_modification(event.src_path)
-            )
-
-    def on_deleted(self, event):
-        """Handle deleted file events."""
-        if (
-            not event.is_directory
-            and Path(event.src_path).suffix in self.graph_builder.parsers
-        ):
-            self._debounce(
-                event.src_path, lambda: self._handle_modification(event.src_path)
-            )
-
-    def on_moved(self, event):
-        """Handle moved file events."""
-        if not event.is_directory:
-            if Path(event.src_path).suffix in self.graph_builder.parsers:
-                self._debounce(
-                    event.src_path, lambda: self._handle_modification(event.src_path)
-                )
-            if Path(event.dest_path).suffix in self.graph_builder.parsers:
-                self._debounce(
-                    event.dest_path, lambda: self._handle_modification(event.dest_path)
-                )
+    from platform_context_graph.tools.graph_builder import GraphBuilder
 
 
 class CodeWatcher:
-    """
-    Manages the file system observer thread. It can watch multiple directories,
-    assigning a separate `RepositoryEventHandler` to each one.
-    """
+    """Manage repo-partitioned filesystem watches for one process."""
 
     def __init__(
         self,
         graph_builder: "GraphBuilder",
         job_manager: "JobManager | None" = None,
-    ):
-        """Initialize the repository watcher coordinator."""
+    ) -> None:
+        """Initialize one process-wide watcher manager and its root registries."""
+
         self.graph_builder = graph_builder
         self.observer = Observer()
-        self.watched_paths = set()  # Keep track of paths already being watched.
-        self.watches = {}  # Store watch objects to allow unscheduling
+        self.watched_paths: set[str] = set()
+        self.watches: dict[str, dict[str, typing.Any]] = {}
+        self._handlers: dict[str, dict[str, RepositoryEventHandler]] = {}
+        self._plans: dict[str, WatchPlan] = {}
+        self._watch_configs: dict[str, dict[str, typing.Any]] = {}
+        self._refresh_stop_events: dict[str, threading.Event] = {}
+        self._refresh_threads: dict[str, threading.Thread] = {}
         self.job_manager = job_manager
 
-    def watch_directory(self, path: str, perform_initial_scan: bool = True):
-        """Schedules a directory to be watched for changes."""
+    def _add_repository_watch(
+        self,
+        path_str: str,
+        repo_path: Path,
+        *,
+        perform_initial_scan: bool,
+    ) -> None:
+        """Attach one repo-specific handler under an existing watched root."""
+
+        repo_key = str(repo_path.resolve())
+        if repo_key in self._handlers[path_str]:
+            return
+
+        handler = RepositoryEventHandler(
+            self.graph_builder,
+            repo_path,
+            debounce_interval=watch_debounce_seconds(),
+            perform_initial_scan=perform_initial_scan,
+        )
+        watch = self.observer.schedule(handler, str(repo_path), recursive=True)
+        self._handlers[path_str][repo_key] = handler
+        self.watches[path_str][repo_key] = watch
+
+    def _remove_repository_watch(self, path_str: str, repo_path: Path) -> None:
+        """Detach one repo-specific handler from an existing watched root."""
+
+        repo_key = str(repo_path.resolve())
+        handler = self._handlers.get(path_str, {}).pop(repo_key, None)
+        if handler is not None:
+            handler.cleanup()
+        watch = self.watches.get(path_str, {}).pop(repo_key, None)
+        if watch is not None:
+            self.observer.unschedule(watch)
+
+    def _stop_refresh_thread(self, path_str: str) -> None:
+        """Stop the background rediscovery thread for one watched root."""
+
+        stop_event = self._refresh_stop_events.pop(path_str, None)
+        if stop_event is not None:
+            stop_event.set()
+        thread = self._refresh_threads.pop(path_str, None)
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=1.0)
+
+    def _refresh_loop(
+        self,
+        path_str: str,
+        interval_seconds: float,
+        stop_event: threading.Event,
+    ) -> None:
+        """Run periodic repo rediscovery for one workspace watch."""
+
+        while not stop_event.wait(interval_seconds):
+            if path_str not in self.watched_paths:
+                return
+            try:
+                self.refresh_watch_directory(path_str)
+            except Exception as exc:
+                warning_logger(
+                    f"Workspace watch rediscovery failed for {path_str}: {exc}"
+                )
+
+    def _start_refresh_thread(self, path_str: str, interval_seconds: float) -> None:
+        """Start periodic repo rediscovery for a watched workspace."""
+
+        if interval_seconds <= 0:
+            return
+        self._stop_refresh_thread(path_str)
+        stop_event = threading.Event()
+        thread = threading.Thread(
+            target=self._refresh_loop,
+            args=(path_str, interval_seconds, stop_event),
+            daemon=True,
+        )
+        self._refresh_stop_events[path_str] = stop_event
+        self._refresh_threads[path_str] = thread
+        thread.start()
+
+    def watch_directory(
+        self,
+        path: str,
+        perform_initial_scan: bool = True,
+        *,
+        scope: str = "auto",
+        include_repositories: list[str] | None = None,
+        exclude_repositories: list[str] | None = None,
+        rediscover_interval_seconds: int | None = None,
+    ) -> dict[str, typing.Any]:
+        """Schedule a path for watching using repo-partitioned handlers."""
+
         path_obj = Path(path).resolve()
         path_str = str(path_obj)
 
@@ -221,20 +136,96 @@ class CodeWatcher:
             info_logger(f"Path already being watched: {path_str}")
             return {"message": f"Path already being watched: {path_str}"}
 
-        # Create a new, dedicated event handler for this specific repository path.
-        event_handler = RepositoryEventHandler(
-            self.graph_builder, path_obj, perform_initial_scan=perform_initial_scan
+        plan = resolve_watch_targets(
+            path_obj,
+            scope=scope,
+            include_repositories=include_repositories,
+            exclude_repositories=exclude_repositories,
         )
 
-        watch = self.observer.schedule(event_handler, path_str, recursive=True)
-        self.watches[path_str] = watch
+        self.watches[path_str] = {}
+        self._handlers[path_str] = {}
+        self._plans[path_str] = plan
+        self._watch_configs[path_str] = {
+            "scope": scope,
+            "include_repositories": include_repositories,
+            "exclude_repositories": exclude_repositories,
+            "rediscover_interval_seconds": rediscover_interval_seconds,
+        }
+        for repo_path in plan.repository_paths:
+            self._add_repository_watch(
+                path_str,
+                repo_path,
+                perform_initial_scan=perform_initial_scan,
+            )
+
+        if (
+            rediscover_interval_seconds is not None
+            and plan.scope == "workspace"
+            and rediscover_interval_seconds > 0
+        ):
+            self._start_refresh_thread(path_str, float(rediscover_interval_seconds))
+
         self.watched_paths.add(path_str)
-        info_logger(f"Started watching for code changes in: {path_str}")
+        info_logger(
+            f"Started watching {path_str} as {plan.scope} "
+            f"({len(plan.repository_paths)} repos)"
+        )
+        return {
+            "message": f"Started watching {path_str}.",
+            "scope": plan.scope,
+            "repository_count": len(plan.repository_paths),
+            "repositories": [str(repo_path) for repo_path in plan.repository_paths],
+        }
 
-        return {"message": f"Started watching {path_str}."}
+    def refresh_watch_directory(self, path: str) -> dict[str, typing.Any]:
+        """Refresh a watched workspace and attach/detach repo handlers as needed."""
 
-    def unwatch_directory(self, path: str):
-        """Stops watching a directory for changes."""
+        path_obj = Path(path).resolve()
+        path_str = str(path_obj)
+        if path_str not in self.watched_paths:
+            return {"error": f"Path not currently being watched: {path_str}"}
+
+        config = self._watch_configs.get(path_str, {})
+        updated_plan = resolve_watch_targets(
+            path_obj,
+            scope=str(config.get("scope", "auto")),
+            include_repositories=config.get("include_repositories"),
+            exclude_repositories=config.get("exclude_repositories"),
+        )
+        current_repositories = set(self._plans[path_str].repository_paths)
+        updated_repositories = set(updated_plan.repository_paths)
+        removed_repositories = sorted(current_repositories - updated_repositories)
+        added_repositories = sorted(updated_repositories - current_repositories)
+
+        for repo_path in removed_repositories:
+            self._remove_repository_watch(path_str, repo_path)
+        for repo_path in added_repositories:
+            self._add_repository_watch(
+                path_str,
+                repo_path,
+                perform_initial_scan=True,
+            )
+
+        self._plans[path_str] = updated_plan
+        if added_repositories or removed_repositories:
+            info_logger(
+                f"Refreshed watch plan for {path_str}: "
+                f"+{len(added_repositories)} / -{len(removed_repositories)} repos"
+            )
+        return {
+            "message": f"Refreshed watched workspace {path_str}.",
+            "scope": updated_plan.scope,
+            "repository_count": len(updated_plan.repository_paths),
+            "added_repositories": [str(repo_path) for repo_path in added_repositories],
+            "removed_repositories": [
+                str(repo_path) for repo_path in removed_repositories
+            ],
+        }
+
+    def unwatch_directory(self, path: str) -> dict[str, str]:
+        """Stop watching a previously watched root path."""
+
         path_obj = Path(path).resolve()
         path_str = str(path_obj)
 
@@ -244,27 +235,47 @@ class CodeWatcher:
             )
             return {"error": f"Path not currently being watched: {path_str}"}
 
-        watch = self.watches.pop(path_str, None)
-        if watch:
-            self.observer.unschedule(watch)
+        self._stop_refresh_thread(path_str)
+        for repo_key in list(self._handlers.get(path_str, {})):
+            self._remove_repository_watch(path_str, Path(repo_key))
 
+        self._handlers.pop(path_str, None)
+        self.watches.pop(path_str, None)
+        self._plans.pop(path_str, None)
+        self._watch_configs.pop(path_str, None)
         self.watched_paths.discard(path_str)
         info_logger(f"Stopped watching for code changes in: {path_str}")
         return {"message": f"Stopped watching {path_str}."}
 
-    def list_watched_paths(self) -> list:
-        """Returns a list of all currently watched directory paths."""
-        return list(self.watched_paths)
+    def list_watched_paths(self) -> list[str]:
+        """Return the currently watched root paths."""
 
-    def start(self):
-        """Starts the observer thread."""
+        return sorted(self.watched_paths)
+
+    def start(self) -> None:
+        """Start the underlying watchdog observer thread."""
+
         if not self.observer.is_alive():
             self.observer.start()
             info_logger("Code watcher observer thread started.")
 
-    def stop(self):
-        """Stops the observer thread gracefully."""
+    def stop(self) -> None:
+        """Stop the observer and clean up handler timers."""
+
+        for path_str in list(self._refresh_stop_events):
+            self._stop_refresh_thread(path_str)
+
+        for handlers in self._handlers.values():
+            for handler in handlers.values():
+                handler.cleanup()
+
         if self.observer.is_alive():
             self.observer.stop()
-            self.observer.join()  # Wait for the thread to terminate.
+            self.observer.join()
             info_logger("Code watcher observer thread stopped.")
+
+        self.watched_paths.clear()
+        self.watches.clear()
+        self._handlers.clear()
+        self._plans.clear()
+        self._watch_configs.clear()

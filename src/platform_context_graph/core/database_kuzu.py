@@ -12,6 +12,7 @@ from platform_context_graph.core.database_kuzu_helpers import (
     KuzuResultWrapper,
     KuzuSessionWrapper,
 )
+from platform_context_graph.core.database import graph_store_capabilities_for_backend
 from platform_context_graph.core.database_kuzu_schema import initialize_kuzu_schema
 from platform_context_graph.paths import get_app_home
 from platform_context_graph.utils.debug_log import error_logger, info_logger
@@ -102,6 +103,11 @@ class KuzuDBManager:
     def get_backend_type(self) -> str:
         """Return the backend identifier for this manager."""
         return "kuzudb"
+
+    def graph_store_capabilities(self):
+        """Return the graph-store capability contract for this backend."""
+
+        return graph_store_capabilities_for_backend(self.get_backend_type())
 
     @staticmethod
     def validate_config(db_path: str | None = None) -> tuple[bool, str | None]:

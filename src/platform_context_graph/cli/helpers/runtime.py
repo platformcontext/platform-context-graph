@@ -96,6 +96,12 @@ async def _run_index_with_progress(
     graph_builder: GraphBuilder,
     path_obj: Path,
     is_dependency: bool = False,
+    *,
+    force: bool = False,
+    selected_repositories: list[Path] | tuple[Path, ...] | None = None,
+    family: str = "index",
+    source: str | None = None,
+    component: str = "cli",
 ) -> None:
     """Run graph indexing while rendering a Rich progress bar.
 
@@ -103,6 +109,11 @@ async def _run_index_with_progress(
         graph_builder: Graph builder used to index the target path.
         path_obj: Repository or package path to index.
         is_dependency: Whether the indexed path should be tracked as a dependency.
+        force: Whether to invalidate an existing checkpoint for the same run.
+        selected_repositories: Optional repository subset for coordinated runs.
+        family: Run family label used in checkpointing and telemetry.
+        source: Source label used in checkpointing and telemetry.
+        component: Observability component label for the indexing run.
 
     Raises:
         RuntimeError: If the indexing job finishes in a failed state.
@@ -134,6 +145,11 @@ async def _run_index_with_progress(
                 path_obj,
                 is_dependency=is_dependency,
                 job_id=job_id,
+                force=force,
+                selected_repositories=selected_repositories,
+                family=family,
+                source=source,
+                component=component,
             )
         )
 

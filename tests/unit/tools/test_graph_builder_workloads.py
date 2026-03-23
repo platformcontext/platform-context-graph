@@ -16,7 +16,9 @@ class _FakeResult:
         return self._records
 
 
-def test_materialize_workloads_creates_workload_instance_and_deployment_source() -> None:
+def test_materialize_workloads_creates_workload_instance_and_deployment_source() -> (
+    None
+):
     session = MagicMock()
     session.__enter__.return_value = session
     session.__exit__.return_value = False
@@ -53,7 +55,15 @@ def test_materialize_workloads_creates_workload_instance_and_deployment_source()
         driver=SimpleNamespace(session=MagicMock(return_value=session))
     )
 
-    stats = materialize_workloads(builder, info_logger_fn=lambda *_args, **_kwargs: None)
+    stats = materialize_workloads(
+        builder, info_logger_fn=lambda *_args, **_kwargs: None
+    )
+
+    candidate_query = next(
+        query
+        for query, _kwargs in recorded_calls
+        if "RETURN repo.id as repo_id" in query
+    )
 
     workload_merge = next(
         kwargs
@@ -92,6 +102,12 @@ def test_materialize_workloads_creates_workload_instance_and_deployment_source()
         "instance_id": "workload-instance:api-node-search:bg-qa",
         "workload_name": "api-node-search",
     }
+    assert (
+        "OPTIONAL MATCH (app)-[source_rel]->(deployment_repo:Repository)"
+        in candidate_query
+    )
+    assert "type(source_rel) = 'SOURCES_FROM'" in candidate_query
+    assert "[:SOURCES_FROM]" not in candidate_query
     assert stats == {"workloads": 1, "instances": 1, "deployment_sources": 1}
 
 

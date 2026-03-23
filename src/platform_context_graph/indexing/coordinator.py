@@ -2,29 +2,38 @@
 
 from __future__ import annotations
 
-import time
+import os
 from pathlib import Path
 from typing import Any
 
 from platform_context_graph.observability import get_observability
-from platform_context_graph.repository_identity import git_remote_for_path, repository_metadata
+from platform_context_graph.repository_identity import (
+    git_remote_for_path,
+    repository_metadata,
+)
 from platform_context_graph.tools.graph_builder_indexing import (
     finalize_index_batch,
-    merge_import_maps,
     parse_repository_snapshot_async,
     resolve_repository_file_sets,
 )
+from .coordinator_pipeline import (
+    finalize_repository_batch,
+    process_repository_snapshots,
+)
 
 from .coordinator_models import (
-    ACTIVE_REPO_STATES,
     IndexExecutionResult,
     RepositorySnapshot,
 )
-from .coordinator_runtime_status import publish_runtime_progress as _publish_runtime_progress
+from .coordinator_runtime_status import (
+    publish_runtime_progress as _publish_runtime_progress,
+)
 from .coordinator_storage import (
     _archive_run,
     _delete_snapshots,
+    _graph_store_adapter,
     _load_or_create_run,
+    _load_run_state_by_id,
     _load_snapshot,
     _matching_run_states,
     _persist_run_state,
@@ -33,6 +42,66 @@ from .coordinator_storage import (
     _update_pending_repository_gauge,
     _utc_now,
 )
+
+
+def _describe_run_state(run_state: Any) -> dict[str, Any]:
+    """Return a CLI/API-friendly summary for one checkpointed run."""
+
+    return {
+        "run_id": run_state.run_id,
+        "root_path": run_state.root_path,
+        "family": run_state.family,
+        "source": run_state.source,
+        "status": run_state.status,
+        "finalization_status": run_state.finalization_status,
+        "created_at": run_state.created_at,
+        "updated_at": run_state.updated_at,
+        "last_error": run_state.last_error,
+        "repository_count": len(run_state.repositories),
+        "completed_repositories": run_state.completed_repositories(),
+        "failed_repositories": run_state.failed_repositories(),
+        "pending_repositories": run_state.pending_repositories(),
+        "repositories": [
+            {
+                "repo_path": state.repo_path,
+                "status": state.status,
+                "file_count": state.file_count,
+                "error": state.error,
+                "started_at": state.started_at,
+                "finished_at": state.finished_at,
+                "updated_at": state.updated_at,
+            }
+            for state in sorted(
+                run_state.repositories.values(),
+                key=lambda item: item.repo_path,
+            )
+        ],
+    }
+
+
+def _positive_int_env(name: str, default: int, *, maximum: int = 128) -> int:
+    """Return a bounded positive integer from the environment."""
+
+    raw_value = os.getenv(name)
+    if raw_value is None or not raw_value.strip():
+        return default
+    try:
+        return max(1, min(int(raw_value), maximum))
+    except ValueError:
+        return default
+
+
+def _parse_worker_count() -> int:
+    """Return the configured repository-parse concurrency."""
+
+    legacy_default = _positive_int_env("PARALLEL_WORKERS", 4)
+    return _positive_int_env("PCG_PARSE_WORKERS", legacy_default)
+
+
+def _index_queue_depth(parse_workers: int) -> int:
+    """Return the maximum number of parsed repositories awaiting commit."""
+
+    return _positive_int_env("PCG_INDEX_QUEUE_DEPTH", max(2, parse_workers * 2))
 
 
 def _commit_repository_snapshot(
@@ -44,6 +113,7 @@ def _commit_repository_snapshot(
     """Replace one repository's persisted graph/content state from a snapshot."""
 
     repo_path = Path(snapshot.repo_path).resolve()
+    graph_store = _graph_store_adapter(builder)
     metadata = repository_metadata(
         name=repo_path.name,
         local_path=str(repo_path),
@@ -60,13 +130,14 @@ def _commit_repository_snapshot(
         content_provider.delete_repository_content(metadata["id"])
 
     try:
-        builder.delete_repository_from_graph(str(repo_path))
+        graph_store.delete_repository(str(repo_path))
     except Exception:
         pass
 
     builder.add_repository_to_graph(repo_path, is_dependency=is_dependency)
     for file_data in snapshot.file_data:
         builder.add_file_to_graph(file_data, repo_path.name, snapshot.imports_map)
+
 
 async def execute_index_run(
     builder: Any,
@@ -155,7 +226,9 @@ async def execute_index_run(
         if repo_state.status in {"failed", "parsed", "running", "commit_incomplete"}
     )
     skipped_repositories = sum(
-        1 for repo_state in run_state.repositories.values() if repo_state.status == "skipped"
+        1
+        for repo_state in run_state.repositories.values()
+        if repo_state.status == "skipped"
     )
     _update_pending_repository_gauge(
         component=component,
@@ -178,233 +251,50 @@ async def execute_index_run(
         run_id=run_state.run_id,
         resume=resumed,
     ) as run_scope:
-        snapshots: list[RepositorySnapshot] = []
-        merged_imports_map: dict[str, list[str]] = {}
-
-        for repo_path in repo_paths:
-            repo_state = run_state.repositories[str(repo_path.resolve())]
-            if repo_state.status == "completed":
-                snapshot = _load_snapshot(run_state.run_id, repo_path)
-                if snapshot is not None:
-                    snapshots.append(snapshot)
-                    merge_import_maps(merged_imports_map, snapshot.imports_map)
-                else:
-                    repo_state.status = "pending"
-                    repo_state.error = "Completed repo snapshot missing; re-parsing repository"
-                    _persist_run_state(run_state)
-                continue
-
-            started = time.perf_counter()
-            repo_state.started_at = _utc_now()
-            repo_state.finished_at = None
-            repo_state.error = None
-            repo_state.status = "running"
-            _persist_run_state(run_state)
-            _record_checkpoint_metric(
-                component=component,
-                mode=family,
-                source=source,
-                operation="save",
-                status="completed",
-            )
-            _update_pending_repository_gauge(
-                component=component,
-                mode=family,
-                source=source,
-                pending_count=run_state.pending_repositories(),
-            )
-            _publish_runtime_progress(
-                ingester=component,
-                source=source,
-                run_state=run_state,
-                repository_count=len(repo_paths),
-                status="indexing",
-            )
-            telemetry.record_index_repositories(
-                component=component,
-                phase="started",
-                count=1,
-                mode=family,
-                source=source,
-            )
-            if resumed and repo_state.status in ACTIVE_REPO_STATES:
-                telemetry.record_index_repositories(
-                    component=component,
-                    phase="resumed",
-                    count=1,
-                    mode=family,
-                    source=source,
-                )
-
-            with telemetry.start_span(
-                "pcg.index.repository",
-                component=component,
-                attributes={
-                    "pcg.index.run_id": run_state.run_id,
-                    "pcg.index.repo_path": str(repo_path.resolve()),
-                    "pcg.index.resume": resumed,
-                },
-            ) as repo_span:
-                commit_started = False
-                try:
-                    snapshot = await parse_repository_snapshot_async(
-                        builder,
-                        repo_path,
-                        repo_file_sets[repo_path],
-                        is_dependency=is_dependency,
-                        job_id=job_id,
-                        asyncio_module=asyncio_module,
-                        info_logger_fn=info_logger_fn,
-                    )
-                    repo_state.file_count = snapshot.file_count
-                    repo_state.status = "parsed"
-                    _save_snapshot(run_state.run_id, snapshot)
-                    _record_checkpoint_metric(
-                        component=component,
-                        mode=family,
-                        source=source,
-                        operation="save",
-                        status="completed",
-                    )
-                    _persist_run_state(run_state)
-                    _publish_runtime_progress(
-                        ingester=component,
-                        source=source,
-                        run_state=run_state,
-                        repository_count=len(repo_paths),
-                        status="indexing",
-                    )
-                    commit_started = True
-                    repo_state.status = "commit_incomplete"
-                    _persist_run_state(run_state)
-                    _publish_runtime_progress(
-                        ingester=component,
-                        source=source,
-                        run_state=run_state,
-                        repository_count=len(repo_paths),
-                        status="indexing",
-                    )
-                    _commit_repository_snapshot(
-                        builder,
-                        snapshot,
-                        is_dependency=is_dependency,
-                    )
-                    snapshots.append(snapshot)
-                    merge_import_maps(merged_imports_map, snapshot.imports_map)
-                    repo_state.status = "completed"
-                    repo_state.finished_at = _utc_now()
-                    _persist_run_state(run_state)
-                    _publish_runtime_progress(
-                        ingester=component,
-                        source=source,
-                        run_state=run_state,
-                        repository_count=len(repo_paths),
-                        status="indexing",
-                    )
-                    telemetry.record_index_repositories(
-                        component=component,
-                        phase="completed",
-                        count=1,
-                        mode=family,
-                        source=source,
-                    )
-                    telemetry.record_index_repository_duration(
-                        component=component,
-                        mode=family,
-                        source=source,
-                        status="completed",
-                        duration_seconds=time.perf_counter() - started,
-                    )
-                except Exception as exc:
-                    repo_state.error = str(exc)
-                    repo_state.finished_at = _utc_now()
-                    repo_state.status = (
-                        "commit_incomplete" if commit_started else "failed"
-                    )
-                    run_state.last_error = str(exc)
-                    _persist_run_state(run_state)
-                    _publish_runtime_progress(
-                        ingester=component,
-                        source=source,
-                        run_state=run_state,
-                        repository_count=len(repo_paths),
-                        status="indexing",
-                    )
-                    phase = (
-                        "commit_incomplete"
-                        if repo_state.status == "commit_incomplete"
-                        else "failed"
-                    )
-                    telemetry.record_index_repositories(
-                        component=component,
-                        phase=phase,
-                        count=1,
-                        mode=family,
-                        source=source,
-                    )
-                    telemetry.record_index_repository_duration(
-                        component=component,
-                        mode=family,
-                        source=source,
-                        status=phase,
-                        duration_seconds=time.perf_counter() - started,
-                    )
-                    if repo_span is not None:
-                        repo_span.record_exception(exc)
-                    warning_logger_fn(
-                        f"Failed to index repository {repo_path.resolve()}: {exc}"
-                    )
-                finally:
-                    _update_pending_repository_gauge(
-                        component=component,
-                        mode=family,
-                        source=source,
-                        pending_count=run_state.pending_repositories(),
-                    )
-                    _publish_runtime_progress(
-                        ingester=component,
-                        source=source,
-                        run_state=run_state,
-                        repository_count=len(repo_paths),
-                        status="indexing",
-                    )
-
-        if run_state.failed_repositories() == 0:
-            run_state.finalization_status = "running"
-            _persist_run_state(run_state)
-            with telemetry.start_span(
-                "pcg.index.finalize",
-                component=component,
-                attributes={
-                    "pcg.index.run_id": run_state.run_id,
-                    "pcg.index.repo_count": len(repo_paths),
-                },
-            ) as finalize_span:
-                try:
-                    finalize_index_batch(
-                        builder,
-                        snapshots=snapshots,
-                        merged_imports_map=merged_imports_map,
-                        info_logger_fn=info_logger_fn,
-                    )
-                    run_state.finalization_status = "completed"
-                    run_state.status = "completed"
-                    _persist_run_state(run_state)
-                    _delete_snapshots(run_state.run_id)
-                except Exception as exc:
-                    run_state.status = "failed"
-                    run_state.finalization_status = "failed"
-                    run_state.last_error = str(exc)
-                    _persist_run_state(run_state)
-                    if finalize_span is not None:
-                        finalize_span.record_exception(exc)
-                    error_logger_fn(
-                        f"Failed to finalize repository batch for {root_path.resolve()}: {exc}"
-                    )
-        else:
-            run_state.status = "partial_failure"
-            run_state.finalization_status = "pending"
-            _persist_run_state(run_state)
+        snapshots, merged_imports_map = await process_repository_snapshots(
+            builder=builder,
+            run_state=run_state,
+            repo_paths=repo_paths,
+            repo_file_sets=repo_file_sets,
+            resumed=resumed,
+            is_dependency=is_dependency,
+            job_id=job_id,
+            component=component,
+            family=family,
+            source=source,
+            asyncio_module=asyncio_module,
+            info_logger_fn=info_logger_fn,
+            warning_logger_fn=warning_logger_fn,
+            parse_worker_count_fn=_parse_worker_count,
+            index_queue_depth_fn=_index_queue_depth,
+            parse_repository_snapshot_async_fn=parse_repository_snapshot_async,
+            commit_repository_snapshot_fn=_commit_repository_snapshot,
+            load_snapshot_fn=_load_snapshot,
+            save_snapshot_fn=_save_snapshot,
+            persist_run_state_fn=_persist_run_state,
+            record_checkpoint_metric_fn=_record_checkpoint_metric,
+            update_pending_repository_gauge_fn=_update_pending_repository_gauge,
+            publish_runtime_progress_fn=_publish_runtime_progress,
+            utc_now_fn=_utc_now,
+            telemetry=telemetry,
+        )
+        finalize_repository_batch(
+            builder=builder,
+            root_path=root_path,
+            run_state=run_state,
+            repo_paths=repo_paths,
+            snapshots=snapshots,
+            merged_imports_map=merged_imports_map,
+            component=component,
+            family=family,
+            source=source,
+            info_logger_fn=info_logger_fn,
+            error_logger_fn=error_logger_fn,
+            finalize_index_batch_fn=finalize_index_batch,
+            persist_run_state_fn=_persist_run_state,
+            delete_snapshots_fn=_delete_snapshots,
+            telemetry=telemetry,
+        )
 
         run_scope.status = run_state.status
         run_scope.finalization_status = run_state.finalization_status
@@ -477,19 +367,18 @@ def describe_latest_index_run(path: Path) -> dict[str, Any] | None:
     matches = _matching_run_states(path.resolve())
     if not matches:
         return None
-    latest = matches[0]
-    return {
-        "run_id": latest.run_id,
-        "root_path": latest.root_path,
-        "family": latest.family,
-        "source": latest.source,
-        "status": latest.status,
-        "finalization_status": latest.finalization_status,
-        "created_at": latest.created_at,
-        "updated_at": latest.updated_at,
-        "last_error": latest.last_error,
-        "repository_count": len(latest.repositories),
-        "completed_repositories": latest.completed_repositories(),
-        "failed_repositories": latest.failed_repositories(),
-        "pending_repositories": latest.pending_repositories(),
-    }
+    return _describe_run_state(matches[0])
+
+
+def describe_index_run(path_or_run_id: str | Path) -> dict[str, Any] | None:
+    """Return a persisted run summary for a root path or explicit run ID."""
+
+    if isinstance(path_or_run_id, Path):
+        return describe_latest_index_run(path_or_run_id)
+
+    candidate = str(path_or_run_id).strip()
+    if candidate and all(char in "0123456789abcdef" for char in candidate.lower()):
+        run_state = _load_run_state_by_id(candidate)
+        if run_state is not None:
+            return _describe_run_state(run_state)
+    return describe_latest_index_run(Path(candidate).resolve())

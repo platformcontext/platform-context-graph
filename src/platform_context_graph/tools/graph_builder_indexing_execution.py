@@ -28,14 +28,26 @@ async def parse_repository_snapshot_async(
 
     repo_path = repo_path.resolve()
     info_logger_fn(f"Starting repo {repo_path.name} ({len(repo_files)} files)")
-    imports_map = builder._pre_scan_for_imports(repo_files)
+    to_thread = getattr(asyncio_module, "to_thread", None)
+    if callable(to_thread):
+        imports_map = await to_thread(builder._pre_scan_for_imports, repo_files)
+    else:
+        imports_map = builder._pre_scan_for_imports(repo_files)
     file_data_items: list[dict[str, Any]] = []
     for file_path in repo_files:
         if not file_path.is_file():
             continue
         if job_id:
             builder.job_manager.update_job(job_id, current_file=str(file_path))
-        file_data = builder.parse_file(repo_path, file_path, is_dependency)
+        if callable(to_thread):
+            file_data = await to_thread(
+                builder.parse_file,
+                repo_path,
+                file_path,
+                is_dependency,
+            )
+        else:
+            file_data = builder.parse_file(repo_path, file_path, is_dependency)
         if "error" not in file_data:
             file_data_items.append(file_data)
         await asyncio_module.sleep(0.01)

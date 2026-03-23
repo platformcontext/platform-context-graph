@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError, version as pkg_version
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
@@ -14,6 +15,7 @@ from starlette.responses import Response
 
 from ..observability import initialize_observability
 from ..domain.responses import IngesterScanRequestResponse, IngesterStatusResponse
+from ..indexing.coordinator import describe_index_run
 from .dependencies import get_database, get_query_services
 from .routers import (
     code_router,
@@ -217,6 +219,15 @@ def create_app(
     def health(_services: Any = Depends(health_dependency)) -> dict[str, str]:
         """Report a simple health check for dependency-initialized API mode."""
         return {"status": "ok"}
+
+    @router.get("/index-status", tags=["system"])
+    def index_status(target: str | None = None) -> dict[str, Any]:
+        """Return the latest checkpointed index status for a path or run ID."""
+
+        summary = describe_index_run(target or Path.cwd())
+        if summary is None:
+            raise HTTPException(status_code=404, detail="Index status not found")
+        return summary
 
     @router.get(
         "/ingesters",

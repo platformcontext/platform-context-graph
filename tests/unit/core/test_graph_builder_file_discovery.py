@@ -133,7 +133,12 @@ def test_build_graph_from_path_async_skips_hidden_cache_repos_but_keeps_visible_
             info_logger_fn=lambda *_args, **_kwargs: None,
             pathspec_module=__import__("pathspec"),
             warning_logger_fn=lambda *_args, **_kwargs: None,
-            job_status_enum=SimpleNamespace(COMPLETED="completed", FAILED="failed", CANCELLED="cancelled", RUNNING="running"),
+            job_status_enum=SimpleNamespace(
+                COMPLETED="completed",
+                FAILED="failed",
+                CANCELLED="cancelled",
+                RUNNING="running",
+            ),
         )
     )
 
@@ -319,7 +324,8 @@ def test_add_repository_to_graph_persists_remote_first_repository_metadata(
     query = session.run.call_args_list[-1].args[0]
     params = session.run.call_args_list[-1].kwargs
 
-    assert "CREATE (r:Repository {id: $repo_id})" in query
+    assert "CREATE (r:Repository {path: $repo_path})" in query
+    assert "SET r.id = $repo_id" in query
     assert params["repo_id"].startswith("repository:r_")
     assert params["name"] == "payments-api"
     assert params["local_path"] == str(repo_path.resolve())

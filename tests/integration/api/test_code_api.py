@@ -59,6 +59,7 @@ def test_code_routes_delegate_to_query_services() -> None:
             json={
                 "query": "payments",
                 "repo_id": "repository:r_ab12cd34",
+                "scope": "workspace",
                 "exact": True,
                 "limit": 3,
             },
@@ -92,6 +93,7 @@ def test_code_routes_delegate_to_query_services() -> None:
             "database": services.database,
             "query": "payments",
             "repo_id": "repository:r_ab12cd34",
+            "scope": "workspace",
             "exact": True,
             "limit": 3,
             "edit_distance": None,
@@ -104,6 +106,7 @@ def test_code_routes_delegate_to_query_services() -> None:
             "target": "process_payment",
             "context": None,
             "repo_id": "repository:r_ab12cd34",
+            "scope": "auto",
         }
     ]
     assert calls["dead_code"] == [
@@ -121,6 +124,7 @@ def test_code_routes_delegate_to_query_services() -> None:
             "function_name": None,
             "path": None,
             "repo_id": "repository:r_ab12cd34",
+            "scope": "auto",
         }
     ]
 
@@ -232,5 +236,94 @@ def test_code_search_resolves_canonical_repository_ids_before_querying_database(
             "fuzzy_search": False,
             "edit_distance": 2,
             "repo_path": "/repos/payments-api",
+        }
+    ]
+
+
+def test_code_search_workspace_scope_returns_repo_identity_per_result() -> None:
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    class FakeResult:
+        def __init__(self, *, records=None):
+            self._records = records or []
+
+        def data(self):
+            return self._records
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def run(self, query: str, **_kwargs):
+            if (
+                "MATCH (r:Repository)" in query
+                and "coalesce(r.local_path, r.path) as local_path" in query
+            ):
+                return FakeResult(
+                    records=[
+                        {
+                            "id": canonical_repository_id(
+                                remote_url="https://github.com/platformcontext/payments-api",
+                                local_path="/repos/payments-api",
+                            ),
+                            "name": "payments-api",
+                            "path": "/repos/payments-api",
+                            "local_path": "/repos/payments-api",
+                            "remote_url": "https://github.com/platformcontext/payments-api",
+                            "repo_slug": "platformcontext/payments-api",
+                            "has_remote": True,
+                        }
+                    ]
+                )
+            raise AssertionError(f"unexpected query: {query}")
+
+    class FakeDriver:
+        def session(self):
+            return FakeSession()
+
+    class FakeDatabase:
+        def get_driver(self):
+            return FakeDriver()
+
+        def find_related_code(self, query, fuzzy_search, edit_distance, repo_path=None):
+            assert query == "payments"
+            assert fuzzy_search is True
+            assert edit_distance == 2
+            assert repo_path is None
+            return {"ranked_results": [{"path": "/repos/payments-api/src/payments.py"}]}
+
+    with TestClient(
+        api_app.create_app(
+            query_services_dependency=lambda: QueryServices(database=FakeDatabase())
+        )
+    ) as client:
+        response = client.post(
+            "/api/v0/code/search",
+            json={"query": "payments", "scope": "workspace"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["ranked_results"] == [
+        {
+            "relative_path": "src/payments.py",
+            "repo_id": canonical_repository_id(
+                remote_url="https://github.com/platformcontext/payments-api",
+                local_path="/repos/payments-api",
+            ),
+            "repo_access": {
+                "state": "needs_local_checkout",
+                "repo_id": canonical_repository_id(
+                    remote_url="https://github.com/platformcontext/payments-api",
+                    local_path="/repos/payments-api",
+                ),
+                "repo_slug": "platformcontext/payments-api",
+                "remote_url": "https://github.com/platformcontext/payments-api",
+                "local_path": "/repos/payments-api",
+                "recommended_action": "ask_user_for_local_path",
+                "interaction_mode": "conversational",
+            },
         }
     ]

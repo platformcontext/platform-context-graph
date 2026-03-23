@@ -19,6 +19,7 @@ from platform_context_graph.core.database_falkordb_helpers import (
     FalkorDBSessionWrapper,
     apply_unix_socket_connection_patch,
 )
+from platform_context_graph.core.database import graph_store_capabilities_for_backend
 from platform_context_graph.paths import get_app_home
 from platform_context_graph.utils.debug_log import error_logger, info_logger
 
@@ -235,6 +236,11 @@ class FalkorDBManager:
     def get_backend_type(self) -> str:
         """Return the backend identifier for this manager."""
         return "falkordb"
+
+    def graph_store_capabilities(self):
+        """Return the graph-store capability contract for this backend."""
+
+        return graph_store_capabilities_for_backend(self.get_backend_type())
 
     @staticmethod
     def validate_config(db_path: str | None = None) -> tuple[bool, str | None]:

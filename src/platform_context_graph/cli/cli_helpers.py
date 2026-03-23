@@ -13,6 +13,7 @@ from .helpers.database import (
 from .helpers.indexing import (
     add_package_helper,
     index_helper,
+    index_status_helper,
     reindex_helper,
     update_helper,
 )
@@ -23,6 +24,13 @@ from .helpers.visualization import (
     visualize_helper,
 )
 from .helpers.watch import list_watching_helper, unwatch_helper, watch_helper
+from .helpers.workspace import (
+    workspace_index_helper,
+    workspace_plan_helper,
+    workspace_status_helper,
+    workspace_sync_helper,
+    workspace_watch_helper,
+)
 
 __all__ = [
     "console",
@@ -36,6 +44,7 @@ __all__ = [
     "cypher_helper_visual",
     "delete_helper",
     "index_helper",
+    "index_status_helper",
     "list_repos_helper",
     "list_watching_helper",
     "reindex_helper",
@@ -44,4 +53,9 @@ __all__ = [
     "update_helper",
     "visualize_helper",
     "watch_helper",
+    "workspace_index_helper",
+    "workspace_plan_helper",
+    "workspace_status_helper",
+    "workspace_sync_helper",
+    "workspace_watch_helper",
 ]

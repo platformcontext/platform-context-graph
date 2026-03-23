@@ -286,6 +286,28 @@ class TestTestConnection:
 class TestBackendCompatibilityWrappers:
     """Characterization tests for non-Neo4j backend compatibility wrappers."""
 
+    def test_kuzu_repository_schema_includes_remote_identity_fields(self):
+        """Fresh Kuzu databases must support the canonical repository contract."""
+        from platform_context_graph.core.database_kuzu_schema import (
+            KUZU_NODE_TABLES,
+            KUZU_SCHEMA_MAP,
+        )
+
+        repository_schema = dict(KUZU_NODE_TABLES)["Repository"]
+
+        assert "id STRING" in repository_schema
+        assert "local_path STRING" in repository_schema
+        assert "remote_url STRING" in repository_schema
+        assert "repo_slug STRING" in repository_schema
+        assert "has_remote BOOLEAN" in repository_schema
+        assert {
+            "id",
+            "local_path",
+            "remote_url",
+            "repo_slug",
+            "has_remote",
+        }.issubset(KUZU_SCHEMA_MAP["Repository"])
+
     def test_kuzu_session_translates_merge_uid_and_drops_unused_parameters(self):
         """Test Kuzu query translation preserves UID injection and param filtering."""
         from platform_context_graph.core.database_kuzu import KuzuSessionWrapper
@@ -335,6 +357,20 @@ class TestBackendCompatibilityWrappers:
             "props_name": "do_work",
             "props_args": ["tenant_id"],
         }
+
+    def test_kuzu_session_escapes_reserved_property_names(self):
+        """Reserved Kuzu property identifiers should be backticked in queries."""
+        from platform_context_graph.core.database_kuzu import KuzuSessionWrapper
+
+        session = KuzuSessionWrapper(MagicMock())
+        query, parameters = session._translate_query(
+            "MATCH (x:CrossplaneXRD) RETURN x.group as api_group, x.default as default_value",
+            {},
+        )
+
+        assert "x.`group` as api_group" in query
+        assert "x.`default` as default_value" in query
+        assert parameters == {}
 
     def test_falkordb_session_downgrades_unique_constraint_to_index(self):
         """Test FalkorDB schema translation preserves constraint downgrade behavior."""

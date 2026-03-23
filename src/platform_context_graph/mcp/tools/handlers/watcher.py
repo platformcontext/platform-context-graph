@@ -71,7 +71,13 @@ def watch_directory(
         # 3. Decide whether to perform an initial scan
         if is_already_indexed:
             # If already indexed, just start the watcher without a scan
-            code_watcher.watch_directory(path_str, perform_initial_scan=False)
+            code_watcher.watch_directory(
+                path_str,
+                perform_initial_scan=False,
+                scope=args.get("scope", "auto"),
+                include_repositories=args.get("include_repositories"),
+                exclude_repositories=args.get("exclude_repositories"),
+            )
             return {
                 "success": True,
                 "message": f"Path '{path_str}' is already indexed. Now watching for live changes.",
@@ -83,7 +89,13 @@ def watch_directory(
             if "error" in scan_job_result:
                 return scan_job_result
 
-            code_watcher.watch_directory(path_str, perform_initial_scan=True)
+            code_watcher.watch_directory(
+                path_str,
+                perform_initial_scan=True,
+                scope=args.get("scope", "auto"),
+                include_repositories=args.get("include_repositories"),
+                exclude_repositories=args.get("exclude_repositories"),
+            )
 
             return {
                 "success": True,
