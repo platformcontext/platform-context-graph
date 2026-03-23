@@ -1,6 +1,6 @@
 # PlatformContextGraph
 
-**Code-to-cloud context graph for AI development, debugging, and re-architecture.**
+**A deployable, Kubernetes-native context graph that connects code to cloud infrastructure.**
 
 <p align="center">
   <a href="LICENSE">
@@ -18,39 +18,31 @@
   <img src="https://img.shields.io/badge/helm-OCI-0F1689?style=flat-square&logo=helm&logoColor=white" alt="Helm OCI Chart">
 </p>
 
-PlatformContextGraph gives AI systems and engineers a fast, queryable map of source code, dependencies, infrastructure, workloads, and deployment topology. It can answer code-only questions, trace cloud resources back to repos and code, and power AI-assisted engineering with a shared graph model exposed through the CLI, MCP, and HTTP API.
+## What is this
 
-Repository identity is remote-first when a git remote exists, so deployed PCG instances can return portable repository metadata and repo-relative file references instead of assuming the server checkout path exists on the caller's machine.
+PlatformContextGraph started as a fork of [CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext), which builds a graph of source code relationships for AI-assisted development. That was a good starting point, but we needed more.
 
-When Postgres is configured, PCG also keeps indexed file content and cached entity snippets for portable source retrieval and content search. Deployed API runtimes serve content from the content store directly and report unavailable content until the ingester has written it.
+We needed the graph to understand infrastructure — Terraform modules, Helm charts, Kubernetes manifests, ArgoCD Applications, Crossplane XRDs, CloudFormation stacks. We needed to trace from a running workload back to the repo and code that defines it. We needed it to run on the network as a service, not just on a developer's laptop. And we needed it deployable to Kubernetes with proper separation of API and ingester workloads.
 
-## Quick Navigation
+So we rebuilt it into that.
 
-- [Quick Start](#quick-start)
-- [What It Does](#what-it-does)
-- [Experience PCG](#experience-pcg)
-- [Interfaces](#interfaces)
-- [Deploy](#deploy)
-- [Documentation](#documentation)
-- [Acknowledgment](#acknowledgment)
+## What we built that's new
 
-## What It Does
+**IaC-native graph** — First-class parsers for Terraform/HCL, Kubernetes manifests, ArgoCD Applications and ApplicationSets, Crossplane XRDs, CloudFormation, Helm, and Kustomize. Infrastructure is a first-class citizen in the graph, not an afterthought.
 
-- indexes code across repositories and languages
-- maps Terraform, Helm, Kubernetes, Argo CD, Crossplane, and related deployment assets
-- traces relationships from workloads and runtime resources back to infrastructure and code
-- exposes the same core query model through CLI, MCP, and an OpenAPI-backed HTTP API
-- retrieves source content through `repo_id + relative_path` and `entity_id` instead of raw server filesystem paths
+**Bidirectional tracing** — Trace from a cloud resource back to the repo and code that defines it, or from code forward to what it deploys. `trace_resource_to_code`, `trace_deployment_chain`, `explain_dependency_path`.
 
-## Experience PCG
+**Blast radius and change surface** — Before you merge, see what breaks. Transitive dependency analysis across repos and infrastructure boundaries.
 
-### Index code and infrastructure
+**Deployable service architecture** — Stateless API Deployment + stateful Ingester StatefulSet. Neo4j for the graph, Postgres for portable content retrieval. Helm chart, Kustomize manifests, and ArgoCD overlays included.
 
-![Indexing demo](docs/docs/images/indexing-demo.gif)
+**Portable content model** — Queries return `repo_id + relative_path`, not server filesystem paths. The Postgres content store means the API serves source code without needing the repo checked out locally.
 
-### Power AI workflows with graph context
+**Three interfaces, one query model** — CLI for local dev, MCP for AI assistants, HTTP API for automation. Same capabilities everywhere.
 
-![MCP demo](docs/docs/images/mcp-demo.gif)
+**Multi-repo ecosystem indexing** — Index entire orgs. Cross-repo dependency resolution. Environment comparison across prod, staging, and dev.
+
+**30+ language parsers** — Python, Go, TypeScript, Java, Rust, C/C++, and more via tree-sitter.
 
 ## Quick Start
 
@@ -73,7 +65,7 @@ Index a repository:
 pcg index .
 ```
 
-Run a code-only query:
+Run a query:
 
 ```bash
 pcg analyze callers process_payment
@@ -93,21 +85,13 @@ pcg serve start --host 0.0.0.0 --port 8080
 
 ## Interfaces
 
-### CLI
+**CLI** — `pcg` for local indexing, repository management, search, and graph-backed analysis.
 
-Use `pcg` locally for indexing, repository management, search, and graph-backed analysis.
+**MCP** — Connect PCG to AI development tools so questions resolve against real code and infrastructure context.
 
-### MCP
+**HTTP API** — OpenAPI-backed API for service-to-service automation, internal tools, and agent frameworks.
 
-Connect PCG to AI development tools so natural-language questions resolve against real code and infrastructure context.
-
-### HTTP API
-
-Use the OpenAPI-backed API for service-to-service automation, internal tools, and agent frameworks that need a stable contract.
-
-### Deployable Service
-
-Run PCG as a networked service with a stateless API runtime, a stateful repository ingester, external Neo4j, and external Postgres.
+**Deployable Service** — Run PCG as a networked service with a stateless API runtime, a stateful repository ingester, external Neo4j, and external Postgres.
 
 ## Deploy
 
@@ -145,6 +129,7 @@ docker compose up --build
 
 ## Documentation
 
+- Developer guide: [DEVELOPING.md](DEVELOPING.md) — parser architecture, adding languages, integration testing, spec contracts
 - Docs site source: [docs/](docs/)
 - Quickstart: [docs/docs/getting-started/quickstart.md](docs/docs/getting-started/quickstart.md)
 - MCP Guide: [docs/docs/guides/mcp-guide.md](docs/docs/guides/mcp-guide.md)
