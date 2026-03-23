@@ -213,10 +213,17 @@ def validate_config_value(key: str, value: str) -> tuple[bool, Optional[str]]:
         except ValueError:
             return False, "PARALLEL_WORKERS must be a number"
 
+    if key == "PCG_MAX_ENTITY_VALUE_LENGTH":
+        try:
+            preview_length = int(value)
+            if preview_length <= 0 or preview_length > 100000:
+                return False, f"{key} must be between 1 and 100000"
+        except ValueError:
+            return False, f"{key} must be a number"
+
     if key in {
         "PCG_PARSE_WORKERS",
         "PCG_INDEX_QUEUE_DEPTH",
-        "PCG_MAX_ENTITY_VALUE_LENGTH",
     }:
         try:
             workers = int(value)

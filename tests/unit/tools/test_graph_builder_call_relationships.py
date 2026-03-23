@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import platform_context_graph.tools.graph_builder_call_relationships as call_relationships
 from platform_context_graph.tools.graph_builder_call_relationships import (
+    _contextual_call_batch_queries,
+    _file_level_call_batch_queries,
     create_all_function_calls,
     create_function_calls,
     safe_run_create,
@@ -309,3 +311,27 @@ def test_run_call_batch_query_chunks_large_row_sets(monkeypatch) -> None:
 
     assert remaining_rows == []
     assert len(session.calls) == 2
+
+
+def test_contextual_exact_query_preserves_rows_without_constructor_match() -> None:
+    """Exact contextual resolution should not filter out null init rows."""
+
+    query = _contextual_call_batch_queries()[0]
+
+    assert 'WHERE init.name IN ["__init__", "constructor"]' not in query
+    assert (
+        'CASE WHEN init.name IN ["__init__", "constructor"] THEN init END AS init'
+        in query
+    )
+
+
+def test_file_level_exact_query_preserves_rows_without_constructor_match() -> None:
+    """Exact file-level resolution should not filter out null init rows."""
+
+    query = _file_level_call_batch_queries()[0]
+
+    assert 'WHERE init.name IN ["__init__", "constructor"]' not in query
+    assert (
+        'CASE WHEN init.name IN ["__init__", "constructor"] THEN init END AS init'
+        in query
+    )

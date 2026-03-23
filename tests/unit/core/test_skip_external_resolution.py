@@ -4,12 +4,12 @@ Tests config_manager.py and graph_builder.py integration.
 """
 
 import os
-import asyncio
 import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import patch
 from platform_context_graph.cli.config_manager import (
     get_config_value,
     set_config_value,
+    validate_config_value,
     CONFIG_DESCRIPTIONS,
     CONFIG_VALIDATORS,
     DEFAULT_CONFIG,
@@ -68,6 +68,14 @@ class TestSkipExternalResolutionConfig:
         assert ".serverless" in ignore_dirs
         assert ".aws-sam" in ignore_dirs
         assert "cdk.out" in ignore_dirs
+
+    def test_max_entity_value_length_accepts_default_preview_cap(self):
+        """Entity preview length validation should accept the default 200-char cap."""
+
+        valid, error = validate_config_value("PCG_MAX_ENTITY_VALUE_LENGTH", "200")
+
+        assert valid is True
+        assert error is None
 
     def test_set_and_get_config_value(self):
         """Test setting and getting the configuration value."""

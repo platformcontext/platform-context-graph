@@ -434,7 +434,8 @@ def _contextual_call_batch_queries() -> tuple[str, ...]:
         OPTIONAL MATCH (called_function:Function {name: row.called_name, path: row.called_file_path})
         OPTIONAL MATCH (called_class:Class {name: row.called_name, path: row.called_file_path})
         OPTIONAL MATCH (called_class)-[:CONTAINS]->(init:Function)
-        WHERE init.name IN ["__init__", "constructor"]
+        WITH row, caller, called_function, called_class,
+             CASE WHEN init.name IN ["__init__", "constructor"] THEN init END AS init
         WITH row, caller, COALESCE(called_function, init, called_class) AS final_target
         WHERE caller IS NOT NULL AND final_target IS NOT NULL
         MERGE (caller)-[:CALLS {line_number: row.line_number, args: row.args, full_call_name: row.full_call_name}]->(final_target)
@@ -469,7 +470,8 @@ def _file_level_call_batch_queries() -> tuple[str, ...]:
         OPTIONAL MATCH (called_function:Function {name: row.called_name, path: row.called_file_path})
         OPTIONAL MATCH (called_class:Class {name: row.called_name, path: row.called_file_path})
         OPTIONAL MATCH (called_class)-[:CONTAINS]->(init:Function)
-        WHERE init.name IN ["__init__", "constructor"]
+        WITH row, caller, called_function, called_class,
+             CASE WHEN init.name IN ["__init__", "constructor"] THEN init END AS init
         WITH row, caller, COALESCE(called_function, init, called_class) AS final_target
         WHERE caller IS NOT NULL AND final_target IS NOT NULL
         MERGE (caller)-[:CALLS {line_number: row.line_number, args: row.args, full_call_name: row.full_call_name}]->(final_target)
@@ -490,11 +492,3 @@ def _file_level_call_fallback_batch_query() -> str:
         MERGE (caller)-[:CALLS {line_number: row.line_number, args: row.args, full_call_name: row.full_call_name}]->(called)
         RETURN collect(DISTINCT row.row_id) AS matched_row_ids
     """
-
-
-__all__ = [
-    "create_all_function_calls",
-    "create_function_calls",
-    "name_from_symbol",
-    "safe_run_create",
-]
