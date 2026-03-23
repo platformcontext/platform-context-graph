@@ -1,6 +1,6 @@
 # Contributing to PlatformContextGraph
 
-Contributions are welcome. This repository is in the middle of a product and identity cleanup, so small, well-scoped changes are preferred over broad refactors.
+Contributions are welcome. Small, well-scoped pull requests are preferred over broad refactors.
 
 ## Guidelines
 
@@ -14,10 +14,10 @@ Contributions are welcome. This repository is in the middle of a product and ide
 ## Development Setup
 
 1. Fork the repository.
-2. Install the project in editable mode:
+2. Install the development environment:
 
 ```bash
-pip install -e ".[dev]"
+uv sync
 ```
 
 3. Create a branch for your work:
@@ -26,22 +26,23 @@ pip install -e ".[dev]"
 git checkout -b feature/my-change
 ```
 
-## Running Tests
+## Running Checks
 
-See [TESTING.md](TESTING.md) for the current test strategy.
-
-Quick check:
+Before opening a pull request:
 
 ```bash
-python3 scripts/check_python_file_lengths.py
+python3 scripts/check_python_file_lengths.py --max-lines 500
 python3 scripts/check_python_docstrings.py
+uv run black --check src tests
 ./tests/run_tests.sh fast
 ```
+
+See [TESTING.md](TESTING.md) for the full test strategy and layer breakdown.
 
 ## Submitting Changes
 
 1. Make the smallest change that solves the problem.
-2. Run the relevant tests locally.
+2. Run the checks above locally.
 3. Commit with a clear message.
 4. Open a pull request against `main`.
 

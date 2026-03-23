@@ -2,24 +2,24 @@
 
 ## Supported Versions
 
-Security fixes are prioritized for the latest version of PlatformContextGraph.
+Security fixes target the latest release only.
 
 | Version | Supported |
-| --- | --- |
-| Latest | Yes |
-| Older | No |
+| ------- | --------- |
+| Latest  | Yes       |
+| Older   | No        |
 
 ## Reporting a Vulnerability
 
-Please do not open a public GitHub issue for security problems.
+Do not open a public GitHub issue for security problems.
 
 Instead:
 
-1. Use GitHub private vulnerability reporting if it is enabled for this repository.
-2. If private reporting is not available, contact the maintainers privately before disclosure.
+1. Use [GitHub private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability) if enabled for this repository.
+2. If private reporting is unavailable, contact the maintainers privately before disclosure.
 3. Include the impact, reproduction steps, affected components, and any suggested mitigation.
 
-We aim to acknowledge valid reports promptly and coordinate disclosure after a fix is available.
+We aim to acknowledge reports promptly and coordinate disclosure after a fix is available.
 
 ## Disclosure Guidelines
 
@@ -27,14 +27,14 @@ We aim to acknowledge valid reports promptly and coordinate disclosure after a f
 - Avoid testing in ways that could harm users, systems, or data.
 - Report in good faith with enough detail to reproduce the issue.
 
-## Operational Guidance
+## Operational Notes
 
-When running PlatformContextGraph:
+When running PlatformContextGraph in production:
 
-- keep dependencies up to date
-- restrict network exposure of any HTTP endpoints
-- avoid committing credentials or environment files
-- review graph data sources and access boundaries carefully
+- Keep dependencies up to date.
+- Restrict network exposure of HTTP endpoints — the API is designed for internal use.
+- Avoid committing credentials or `.env` files.
+- Review graph data sources and access boundaries, especially when indexing repos from multiple orgs.
 
 ## Maintainer
 

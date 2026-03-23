@@ -1,7 +1,5 @@
 # Acknowledgments
 
-PlatformContextGraph is based on the original [CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext) project created by [Shashank Shekhar Singh](https://github.com/Shashankss1205) and supported by its contributors.
+PlatformContextGraph started as a fork of [CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext), created by [Shashank Shekhar Singh](https://github.com/Shashankss1205) and its contributors. Their work established the code graph foundation this project builds on.
 
-This repository started from that work and is being developed in a new direction focused on AI-assisted code-to-cloud reasoning, including code, infrastructure, deployment topology, and ecosystem context.
-
-We are grateful for the original project and the foundation it provided.
+PlatformContextGraph has since grown into a code-to-cloud context graph with IaC-native parsing, bidirectional tracing, and a deployable service architecture — but the original project made that trajectory possible.
