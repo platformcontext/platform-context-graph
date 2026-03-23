@@ -116,14 +116,17 @@ def test_shared_service_signatures_stay_keyword_only_and_stable():
     assert_kwonly(context.get_workload_context, ["workload_id", "environment"])
     assert_kwonly(context.get_service_context, ["workload_id", "environment"])
     assert_kwonly(
-        code.search_code, ["query", "repo_id", "exact", "limit", "edit_distance"]
+        code.search_code,
+        ["query", "repo_id", "scope", "exact", "limit", "edit_distance"],
     )
     assert_kwonly(
-        code.get_code_relationships, ["query_type", "target", "context", "repo_id"]
+        code.get_code_relationships,
+        ["query_type", "target", "context", "repo_id", "scope"],
     )
     assert_kwonly(code.find_dead_code, ["repo_path", "exclude_decorated_with"])
     assert_kwonly(
-        code.get_complexity, ["mode", "limit", "function_name", "path", "repo_id"]
+        code.get_complexity,
+        ["mode", "limit", "function_name", "path", "repo_id", "scope"],
     )
     assert_kwonly(repositories.get_repository_context, ["repo_id"])
     assert_kwonly(repositories.get_repository_stats, ["repo_id"])
