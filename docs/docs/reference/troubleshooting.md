@@ -1,89 +1,105 @@
 # Troubleshooting
 
-Use this page when CLI commands, MCP startup, the HTTP API, or the graph backend do not behave as expected.
+## `pcg` is not on PATH
 
-## 1. `pcg` is not on PATH
+**Cause:** The installation completed, but the scripts directory is not on your PATH.
 
-Cause:
-
-- the installation completed, but the scripts directory is not on your PATH
-
-Fix:
+**Fix:**
 
 - macOS / Linux: add the relevant scripts directory to your shell profile
 - Windows: reinstall Python with PATH enabled, or prefer `uv tool install` / `pipx`
 
-## 2. Neo4j connection refused
+## Neo4j connection refused
 
-Cause:
+**Cause:** Neo4j is not running, the URI is wrong, or the service is unreachable.
 
-- Neo4j is not running
-- the URI is wrong
-- the service is not reachable from the runtime environment
-
-Fix:
+**Fix:**
 
 ```bash
 docker start pcg-neo4j
 ```
 
-Then verify your configured `NEO4J_URI`, username, and password.
+Then verify your `NEO4J_URI`, username, and password. Run `pcg doctor` to confirm.
 
-## 3. MCP client cannot find the server
+## MCP client cannot find the server
 
-Cause:
+**Cause:** The client config was not updated, the command points at the wrong interpreter, or database credentials are missing.
 
-- the client config was not updated correctly
-- the configured command points at the wrong interpreter or virtualenv
-- the database credentials are unavailable to the runtime
+**Fix:**
 
-Fix:
+1. Rerun `pcg mcp setup`
+2. Inspect the generated config snippet
+3. Run `pcg mcp start` manually and confirm it starts cleanly
 
-- rerun `pcg mcp setup`
-- inspect the generated config snippet
-- run `pcg mcp start` manually and confirm it starts cleanly
+For this repository's checked-in MCP example, copy `.mcp.json.example` to `.mcp.json`, replace `<REPO_ROOT>` with your checkout path. Note that a host-run `uv run pcg mcp start` with only Neo4j credentials can answer graph queries, but content tools require the PostgreSQL DSN and container workspace mounts.
 
-For this repository's checked-in MCP example, copy `.mcp.json.example` to a local
-`.mcp.json`, replace `<REPO_ROOT>` with your checkout path, and shell into the
-running Compose service with `docker-compose exec -T platform-context-graph pcg mcp
-start`. A host-run `uv run ... pcg mcp start` process with only Neo4j credentials
-can answer graph queries, but the content tools will fail because the PostgreSQL
-content-store DSN and the container workspace mounts are missing from that runtime.
+## HTTP API starts but queries fail
 
-## 4. The HTTP API starts but queries fail
+**Cause:** The service can start without a meaningful graph loaded — the repository was never indexed, or the entity ID is wrong.
 
-Cause:
+**Fix:**
 
-- the service can start without a meaningful graph loaded
-- the repository was never indexed
-- the entity ID is wrong or unresolved
+1. Confirm indexing completed: `pcg list`
+2. Check repositories: `GET /api/v0/repositories`
+3. Resolve fuzzy inputs: `POST /api/v0/entities/resolve`
 
-Fix:
+## IaC cache directories polluting the graph
 
-- confirm indexing completed
-- inspect `GET /api/v0/repositories`
-- resolve fuzzy inputs with `POST /api/v0/entities/resolve`
-
-## 5. Hidden IaC cache directories are polluting the graph
-
-PCG should skip hidden and ignored cache trees such as `.git`, `.terraform`, and `.terragrunt-cache` before descent.
+PCG should skip `.git`, `.terraform`, `.terragrunt-cache`, and similar cache trees automatically.
 
 If you suspect this is not happening:
 
-- verify your ignore configuration
-- re-index the repository with `pcg index <path> --force`
-- inspect repository and file paths in the graph for hidden cache segments
+1. Check your `.pcgignore` and `IGNORE_DIRS` configuration
+2. Re-index with `pcg index <path> --force`
+3. Inspect file paths in the graph for hidden cache segments
 
-## 6. Docker Compose or Kubernetes deployment is unhealthy
+## Docker Compose deployment is unhealthy
 
-Check:
+Check these in order:
 
-- Neo4j connectivity
-- mounted workspace permissions
-- bootstrap indexing completion
-- repo-sync logs
-- health endpoint readiness
+```bash
+# Neo4j connectivity
+docker compose logs neo4j | tail -20
+
+# Bootstrap indexing completion
+docker compose logs bootstrap-index | tail -20
+
+# API service health
+docker compose logs platform-context-graph | tail -20
+
+# Repo sync status
+docker compose logs repo-sync | tail -20
+```
+
+Common causes:
+
+- Neo4j not ready before API startup (check depends_on health checks)
+- Workspace mount permissions
+- Port conflicts — override with `NEO4J_HTTP_PORT`, `NEO4J_BOLT_PORT`, `PCG_HTTP_PORT`
+
+## Kubernetes deployment is unhealthy
+
+```bash
+# Check pod status
+kubectl get pods -n platform-context-graph
+
+# API logs
+kubectl logs -n platform-context-graph deployment/platform-context-graph-api --tail=50
+
+# Ingester logs
+kubectl logs -n platform-context-graph statefulset/platform-context-graph-ingester --tail=50
+
+# Check events for scheduling or resource issues
+kubectl get events -n platform-context-graph --sort-by=.lastTimestamp | tail -20
+```
+
+Common causes:
+
+- Neo4j secret missing or incorrect credentials
+- Postgres DSN not configured or `pg_trgm` extension not enabled
+- PVC not bound for the ingester workspace
+- Resource limits too low — the ingester needs enough memory for large repo indexing
 
 ## Getting help
 
-If these do not solve the issue, open an issue on [GitHub](https://github.com/platformcontext/platform-context-graph/issues) with the output of `pcg doctor`.
+If these don't solve the issue, open an issue on [GitHub](https://github.com/platformcontext/platform-context-graph/issues) with the output of `pcg doctor`.
