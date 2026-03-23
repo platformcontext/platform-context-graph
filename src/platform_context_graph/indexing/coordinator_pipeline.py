@@ -104,6 +104,45 @@ async def process_repository_snapshots(
             status="indexing",
         )
 
+    def _update_repo_progress(
+        repo_state: Any,
+        *,
+        status: str | None = None,
+        phase: str | None = None,
+        current_file: str | None = None,
+        clear_current_file: bool = False,
+        persist: bool = False,
+        finished_at: str | None = None,
+        commit_started_at: str | None = None,
+        commit_finished_at: str | None = None,
+        commit_duration_seconds: float | None = None,
+    ) -> None:
+        """Update one repository checkpoint with additive phase diagnostics."""
+
+        now = utc_now_fn()
+        repo_state.updated_at = now
+        repo_state.last_progress_at = now
+        if status is not None:
+            repo_state.status = status
+        if phase is not None and phase != repo_state.phase:
+            repo_state.phase = phase
+            repo_state.phase_started_at = now
+        if clear_current_file:
+            repo_state.current_file = None
+        elif current_file is not None:
+            repo_state.current_file = current_file
+        if finished_at is not None:
+            repo_state.finished_at = finished_at
+        if commit_started_at is not None:
+            repo_state.commit_started_at = commit_started_at
+        if commit_finished_at is not None:
+            repo_state.commit_finished_at = commit_finished_at
+        if commit_duration_seconds is not None:
+            repo_state.commit_duration_seconds = commit_duration_seconds
+        if persist:
+            persist_run_state_fn(run_state)
+            _publish_indexing_state()
+
     async def _parse_repository(
         repo_path: Path,
         *,
@@ -114,8 +153,25 @@ async def process_repository_snapshots(
         repo_key = str(repo_path.resolve())
         started: float | None = None
         repo_span = None
+        last_progress_publish = 0.0
         try:
             repo_state = run_state.repositories[repo_key]
+
+            def _progress_callback(
+                *, current_file: str | None = None, force: bool = False
+            ):
+                nonlocal last_progress_publish
+                _update_repo_progress(
+                    repo_state,
+                    current_file=current_file,
+                    persist=False,
+                )
+                now_monotonic = time.monotonic()
+                if force or now_monotonic - last_progress_publish >= 1.0:
+                    last_progress_publish = now_monotonic
+                    persist_run_state_fn(run_state)
+                    _publish_indexing_state()
+
             with telemetry.start_span(
                 "pcg.index.repository",
                 component=component,
@@ -130,8 +186,16 @@ async def process_repository_snapshots(
                     repo_state.started_at = utc_now_fn()
                     repo_state.finished_at = None
                     repo_state.error = None
-                    repo_state.status = "running"
-                    persist_run_state_fn(run_state)
+                    repo_state.commit_started_at = None
+                    repo_state.commit_finished_at = None
+                    repo_state.commit_duration_seconds = None
+                    _update_repo_progress(
+                        repo_state,
+                        status="running",
+                        phase="parsing",
+                        clear_current_file=True,
+                        persist=True,
+                    )
                     record_checkpoint_metric_fn(
                         component=component,
                         mode=family,
@@ -139,7 +203,6 @@ async def process_repository_snapshots(
                         operation="save",
                         status="completed",
                     )
-                    _publish_indexing_state()
                     telemetry.record_index_repositories(
                         component=component,
                         phase="started",
@@ -163,9 +226,16 @@ async def process_repository_snapshots(
                         job_id=job_id,
                         asyncio_module=asyncio_module,
                         info_logger_fn=info_logger_fn,
+                        progress_callback=_progress_callback,
                     )
+                    _progress_callback(force=True)
                 repo_state.file_count = snapshot.file_count
-                repo_state.status = "parsed"
+                _update_repo_progress(
+                    repo_state,
+                    status="parsed",
+                    phase="parsed",
+                    persist=False,
+                )
                 save_snapshot_fn(run_state.run_id, snapshot)
                 record_checkpoint_metric_fn(
                     component=component,
@@ -175,30 +245,24 @@ async def process_repository_snapshots(
                     status="completed",
                 )
                 persist_run_state_fn(run_state)
-                publish_runtime_progress_fn(
-                    ingester=component,
-                    source=source,
-                    run_state=run_state,
-                    repository_count=len(repo_paths),
-                    status="indexing",
-                )
+                _publish_indexing_state()
                 await snapshot_queue.put((repo_path, snapshot, started))
                 return
         except Exception as exc:
             repo_state = run_state.repositories.get(repo_key)
             if repo_state is not None:
                 repo_state.error = str(exc)
-                repo_state.finished_at = utc_now_fn()
-                repo_state.status = "failed"
+                _update_repo_progress(
+                    repo_state,
+                    status="failed",
+                    phase="failed",
+                    clear_current_file=True,
+                    finished_at=utc_now_fn(),
+                    persist=False,
+                )
             run_state.last_error = str(exc)
             persist_run_state_fn(run_state)
-            publish_runtime_progress_fn(
-                ingester=component,
-                source=source,
-                run_state=run_state,
-                repository_count=len(repo_paths),
-                status="indexing",
-            )
+            _publish_indexing_state()
             telemetry.record_index_repositories(
                 component=component,
                 phase="failed",
@@ -235,16 +299,22 @@ async def process_repository_snapshots(
 
             repo_path, snapshot, started = item
             repo_state = run_state.repositories[str(repo_path.resolve())]
+            commit_started: float | None = None
             try:
-                repo_state.status = "commit_incomplete"
-                persist_run_state_fn(run_state)
-                publish_runtime_progress_fn(
-                    ingester=component,
-                    source=source,
-                    run_state=run_state,
-                    repository_count=len(repo_paths),
-                    status="indexing",
+                commit_started_at = utc_now_fn()
+                _update_repo_progress(
+                    repo_state,
+                    status="commit_incomplete",
+                    phase="committing",
+                    clear_current_file=True,
+                    persist=False,
+                    commit_started_at=commit_started_at,
+                    commit_finished_at=None,
+                    commit_duration_seconds=None,
                 )
+                persist_run_state_fn(run_state)
+                _publish_indexing_state()
+                commit_started = time.perf_counter()
                 commit_repository_snapshot_fn(
                     builder,
                     snapshot,
@@ -252,16 +322,23 @@ async def process_repository_snapshots(
                 )
                 snapshots.append(snapshot)
                 merge_import_maps(merged_imports_map, snapshot.imports_map)
-                repo_state.status = "completed"
-                repo_state.finished_at = utc_now_fn()
-                persist_run_state_fn(run_state)
-                publish_runtime_progress_fn(
-                    ingester=component,
-                    source=source,
-                    run_state=run_state,
-                    repository_count=len(repo_paths),
-                    status="indexing",
+                commit_finished_at = utc_now_fn()
+                _update_repo_progress(
+                    repo_state,
+                    status="completed",
+                    phase="completed",
+                    clear_current_file=True,
+                    persist=False,
+                    finished_at=commit_finished_at,
+                    commit_finished_at=commit_finished_at,
+                    commit_duration_seconds=(
+                        time.perf_counter() - commit_started
+                        if commit_started is not None
+                        else None
+                    ),
                 )
+                persist_run_state_fn(run_state)
+                _publish_indexing_state()
                 telemetry.record_index_repositories(
                     component=component,
                     phase="completed",
@@ -278,17 +355,24 @@ async def process_repository_snapshots(
                 )
             except Exception as exc:
                 repo_state.error = str(exc)
-                repo_state.finished_at = utc_now_fn()
-                repo_state.status = "commit_incomplete"
+                commit_finished_at = utc_now_fn()
+                _update_repo_progress(
+                    repo_state,
+                    status="commit_incomplete",
+                    phase="commit_incomplete",
+                    clear_current_file=True,
+                    persist=False,
+                    finished_at=commit_finished_at,
+                    commit_finished_at=commit_finished_at,
+                    commit_duration_seconds=(
+                        time.perf_counter() - commit_started
+                        if commit_started is not None
+                        else None
+                    ),
+                )
                 run_state.last_error = str(exc)
                 persist_run_state_fn(run_state)
-                publish_runtime_progress_fn(
-                    ingester=component,
-                    source=source,
-                    run_state=run_state,
-                    repository_count=len(repo_paths),
-                    status="indexing",
-                )
+                _publish_indexing_state()
                 telemetry.record_index_repositories(
                     component=component,
                     phase="commit_incomplete",
@@ -358,12 +442,28 @@ def finalize_repository_batch(
     persist_run_state_fn: Any,
     delete_snapshots_fn: Any,
     telemetry: Any,
+    utc_now_fn: Any,
 ) -> None:
     """Finalize one successful repo batch or mark the run as partial failure."""
 
     if run_state.failed_repositories() == 0:
+        started_at = utc_now_fn()
+        started = time.perf_counter()
         run_state.finalization_status = "running"
+        run_state.finalization_started_at = started_at
+        run_state.finalization_finished_at = None
+        run_state.finalization_duration_seconds = None
+        run_state.finalization_current_stage = None
+        run_state.finalization_stage_started_at = None
+        run_state.finalization_stage_durations = {}
+        run_state.finalization_stage_details = {}
         persist_run_state_fn(run_state)
+
+        def _stage_progress_callback(stage_name: str) -> None:
+            run_state.finalization_current_stage = stage_name
+            run_state.finalization_stage_started_at = utc_now_fn()
+            persist_run_state_fn(run_state)
+
         with telemetry.start_span(
             "pcg.index.finalize",
             component=component,
@@ -373,12 +473,25 @@ def finalize_repository_batch(
             },
         ) as finalize_span:
             try:
-                finalize_index_batch_fn(
+                stage_timings = finalize_index_batch_fn(
                     builder,
                     snapshots=snapshots,
                     merged_imports_map=merged_imports_map,
                     info_logger_fn=info_logger_fn,
+                    stage_progress_callback=_stage_progress_callback,
                 )
+                run_state.finalization_finished_at = utc_now_fn()
+                run_state.finalization_duration_seconds = time.perf_counter() - started
+                run_state.finalization_current_stage = None
+                run_state.finalization_stage_started_at = None
+                run_state.finalization_stage_durations = dict(stage_timings or {})
+                call_relationship_metrics = getattr(
+                    builder, "_last_call_relationship_metrics", None
+                )
+                if call_relationship_metrics is not None:
+                    run_state.finalization_stage_details = {
+                        "function_calls": dict(call_relationship_metrics)
+                    }
                 run_state.finalization_status = "completed"
                 run_state.status = "completed"
                 persist_run_state_fn(run_state)
@@ -386,6 +499,8 @@ def finalize_repository_batch(
             except Exception as exc:
                 run_state.status = "failed"
                 run_state.finalization_status = "failed"
+                run_state.finalization_finished_at = utc_now_fn()
+                run_state.finalization_duration_seconds = time.perf_counter() - started
                 run_state.last_error = str(exc)
                 persist_run_state_fn(run_state)
                 if finalize_span is not None:

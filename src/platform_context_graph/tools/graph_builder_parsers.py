@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import logging
 from pathlib import Path
+import threading
 from typing import Any
 
 from tree_sitter import Language, Parser
@@ -97,13 +98,40 @@ class TreeSitterParser:
         self.language_name = language_name
         self.ts_manager = get_tree_sitter_manager()
         self.language: Language = self.ts_manager.get_language_safe(language_name)
-        self.parser = Parser(self.language)
-        self.language_specific_parser = None
+        self._parser_local = threading.local()
+        self._language_specific_parser_cls = None
 
         parser_spec = _LANGUAGE_SPECIFIC_PARSERS.get(self.language_name)
         if parser_spec is not None:
             parser_cls = _load_attribute(*parser_spec)
-            self.language_specific_parser = parser_cls(self)
+            self._language_specific_parser_cls = parser_cls
+
+    @property
+    def parser(self) -> Parser:
+        """Return the parser instance bound to the current thread."""
+
+        parser = getattr(self._parser_local, "parser", None)
+        if parser is None:
+            create_parser = getattr(self.ts_manager, "create_parser", None)
+            if callable(create_parser):
+                parser = create_parser(self.language_name)
+            else:
+                parser = Parser(self.language)
+            self._parser_local.parser = parser
+        return parser
+
+    @property
+    def language_specific_parser(self) -> Any:
+        """Return a fresh language-specific parser bound to the current thread."""
+
+        if self._language_specific_parser_cls is None:
+            return None
+        return self._language_specific_parser_cls(self)
+
+    def override_language_specific_parser(self, parser_cls: Any) -> None:
+        """Override the language-specific parser class for this registry entry."""
+
+        self._language_specific_parser_cls = parser_cls
 
     def parse(self, path: Path, is_dependency: bool = False, **kwargs: Any) -> dict:
         """Parse a file with the language-specific parser.
@@ -119,8 +147,9 @@ class TreeSitterParser:
         Raises:
             NotImplementedError: If the language has no registered parser.
         """
-        if self.language_specific_parser:
-            return self.language_specific_parser.parse(path, is_dependency, **kwargs)
+        language_specific_parser = self.language_specific_parser
+        if language_specific_parser is not None:
+            return language_specific_parser.parse(path, is_dependency, **kwargs)
 
         raise NotImplementedError(
             f"No language-specific parser implemented for {self.language_name}"
@@ -141,7 +170,7 @@ def _add_tree_sitter_parser(
             and hasattr(parser, "parser")
         ):
             parser_cls = _load_attribute(*parser_spec)
-            parser.language_specific_parser = parser_cls(parser)
+            parser.override_language_specific_parser(parser_cls)
         parsers[extension] = parser
     except ValueError as exc:
         logger.warning(

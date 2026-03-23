@@ -48,6 +48,12 @@ DEFAULT_INGESTER_CONTROL_POLL_SECONDS = 5
 
 _PRESERVED_STATUS_KEYS = (
     "active_run_id",
+    "active_repository_path",
+    "active_phase",
+    "active_phase_started_at",
+    "active_current_file",
+    "active_last_progress_at",
+    "active_commit_started_at",
     "repository_count",
     "pulled_repositories",
     "in_sync_repositories",

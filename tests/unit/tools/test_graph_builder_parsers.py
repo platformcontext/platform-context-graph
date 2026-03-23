@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import logging
+from pathlib import Path
+import threading
 
 from platform_context_graph.tools import graph_builder_parsers
 
@@ -46,3 +49,56 @@ def test_build_parser_registry_uses_dedicated_tsx_parser() -> None:
         registry[".tsx"].language_specific_parser.__class__.__name__
         == "TypescriptJSXTreeSitterParser"
     )
+
+
+def test_tree_sitter_parser_creates_distinct_parsers_per_thread(
+    monkeypatch,
+) -> None:
+    """Concurrent parse calls must not share the same parser instance."""
+
+    created_tokens = iter(("parser-a", "parser-b", "parser-c", "parser-d"))
+    barrier = threading.Barrier(2)
+
+    class FakeManager:
+        def get_language_safe(self, _language_name: str) -> object:
+            return object()
+
+    class FakeLanguageParser:
+        def __init__(self, wrapper) -> None:
+            self.parser = wrapper.parser
+
+        def parse(self, path: Path, is_dependency: bool = False, **kwargs) -> dict:
+            del path, is_dependency, kwargs
+            barrier.wait(timeout=1.0)
+            return {"parser_token": self.parser["token"]}
+
+    monkeypatch.setattr(
+        graph_builder_parsers,
+        "get_tree_sitter_manager",
+        lambda: FakeManager(),
+    )
+    monkeypatch.setattr(
+        graph_builder_parsers,
+        "Parser",
+        lambda _language: {"token": next(created_tokens)},
+    )
+    monkeypatch.setattr(
+        graph_builder_parsers,
+        "_load_attribute",
+        lambda *_args, **_kwargs: FakeLanguageParser,
+    )
+    monkeypatch.setattr(
+        graph_builder_parsers,
+        "_LANGUAGE_SPECIFIC_PARSERS",
+        {"python": (".languages.python", "PythonTreeSitterParser")},
+    )
+
+    parser = graph_builder_parsers.TreeSitterParser("python")
+    sample_path = Path("sample.py")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(parser.parse, sample_path)
+        second = executor.submit(parser.parse, sample_path)
+        results = [first.result(timeout=1.0), second.result(timeout=1.0)]
+
+    assert {result["parser_token"] for result in results} == {"parser-a", "parser-b"}

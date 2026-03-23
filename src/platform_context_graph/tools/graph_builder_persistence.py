@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..cli.config_manager import get_config_value
 from ..core.records import record_to_dict
 from ..content.ingest import (
     prepare_content_entries,
@@ -17,6 +18,7 @@ from .graph_builder_persistence_batch import (
     flush_write_batches,
     merge_batches,
 )
+from .graph_builder_persistence_unwind import resolve_max_entity_value_length
 
 
 def add_repository_to_graph(
@@ -275,6 +277,9 @@ def add_file_to_graph(
 
         # Postgres content dual-write is outside the Neo4j transaction.
         _content_dual_write(file_data, file_name, repository, warning_logger_fn)
+        max_entity_value_length = resolve_max_entity_value_length(
+            get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH")
+        )
 
         # All Neo4j writes go inside a single explicit transaction when
         # the backend supports it; otherwise fall back to auto-commit.
@@ -293,7 +298,11 @@ def add_file_to_graph(
 
             _merge_directory_chain(tx, file_path_obj, repo_path_obj, file_path_str)
 
-            write_data = collect_file_write_data(file_data, file_path_str)
+            write_data = collect_file_write_data(
+                file_data,
+                file_path_str,
+                max_entity_value_length=max_entity_value_length,
+            )
             flush_write_batches(tx, write_data)
 
             if is_explicit:
@@ -336,6 +345,9 @@ def commit_file_batch_to_graph(
 
     debug_log_fn(
         f"commit_file_batch_to_graph: {len(file_data_list)} files for {repo_path_str}"
+    )
+    max_entity_value_length = resolve_max_entity_value_length(
+        get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH")
     )
 
     with builder.driver.session() as session:
@@ -395,7 +407,11 @@ def commit_file_batch_to_graph(
 
                 _merge_directory_chain(tx, file_path_obj, repo_path_obj, file_path_str)
 
-                file_batches = collect_file_write_data(file_data, file_path_str)
+                file_batches = collect_file_write_data(
+                    file_data,
+                    file_path_str,
+                    max_entity_value_length=max_entity_value_length,
+                )
                 merge_batches(accumulator, file_batches)
 
             flush_write_batches(tx, accumulator)

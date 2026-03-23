@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..cli.config_manager import get_config_value
 from ..content.ingest import CONTENT_ENTITY_LABELS
-
 
 # ---------------------------------------------------------------------------
 # Entity property normalisation
@@ -45,12 +45,48 @@ ITEM_MAPPINGS_KEYS: list[tuple[str, str]] = [
     ("cloudformation_outputs", "CloudFormationOutput"),
 ]
 
+VALUE_TRUNCATION_MARKER = " [truncated]"
+DEFAULT_MAX_ENTITY_VALUE_LENGTH = 200
+
+
+def resolve_max_entity_value_length(raw_value: str | None = None) -> int:
+    """Return the configured entity value preview length."""
+
+    configured = raw_value
+    if configured is None:
+        configured = get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH")
+    try:
+        return max(1, int(configured or DEFAULT_MAX_ENTITY_VALUE_LENGTH))
+    except ValueError:
+        return DEFAULT_MAX_ENTITY_VALUE_LENGTH
+
+
+def cap_entity_value(
+    value: Any,
+    *,
+    max_entity_value_length: int | None = None,
+) -> Any:
+    """Return a capped graph value preview while preserving non-string payloads."""
+
+    if not isinstance(value, str):
+        return value
+
+    preview_limit = (
+        resolve_max_entity_value_length()
+        if max_entity_value_length is None
+        else max_entity_value_length
+    )
+    if len(value) <= preview_limit:
+        return value
+    return f"{value[:preview_limit]}{VALUE_TRUNCATION_MARKER}"
+
 
 def entity_props_for_unwind(
     label: str,
     item: dict[str, Any],
     file_path: str,
     use_uid_identity: bool,
+    max_entity_value_length: int | None = None,
 ) -> dict[str, Any]:
     """Return a normalised property dict suitable for use in an UNWIND batch.
 
@@ -75,7 +111,11 @@ def entity_props_for_unwind(
     }
     extra_keys = [k for k in item if k not in {"name", "line_number", "path"}]
     for key in extra_keys:
-        props[key] = item[key]
+        props[key] = (
+            cap_entity_value(item[key], max_entity_value_length=max_entity_value_length)
+            if key == "value"
+            else item[key]
+        )
     return props
 
 

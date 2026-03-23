@@ -119,3 +119,23 @@ class Counter {
     assert any(item["name"] == "version" for item in result["variables"])
     assert all(item.get("docstring") is None for item in result["functions"])
     assert any(item.get("type") == "getter" for item in result["functions"])
+
+
+def test_parse_javascript_minified_value_keeps_full_initializer(
+    javascript_parser: JavascriptTreeSitterParser, temp_test_dir
+) -> None:
+    """Minified files should still parse fully before the persistence preview cap."""
+
+    payload = "x" * 256
+    source_file = temp_test_dir / "bundle.min.js"
+    source_file.write_text(
+        f'var BIG={{"payload":"{payload}"}};\n',
+        encoding="utf-8",
+    )
+
+    result = javascript_parser.parse(source_file)
+
+    variable = next(item for item in result["variables"] if item["name"] == "BIG")
+    assert variable["value"] is not None
+    assert payload in variable["value"]
+    assert len(variable["value"]) > 200

@@ -11,6 +11,12 @@ CREATE TABLE IF NOT EXISTS runtime_ingester_status (
     source_mode TEXT,
     status TEXT NOT NULL,
     active_run_id TEXT,
+    active_repository_path TEXT,
+    active_phase TEXT,
+    active_phase_started_at TIMESTAMPTZ,
+    active_current_file TEXT,
+    active_last_progress_at TIMESTAMPTZ,
+    active_commit_started_at TIMESTAMPTZ,
     last_attempt_at TIMESTAMPTZ,
     last_success_at TIMESTAMPTZ,
     next_retry_at TIMESTAMPTZ,
@@ -24,6 +30,18 @@ CREATE TABLE IF NOT EXISTS runtime_ingester_status (
     failed_repositories INTEGER NOT NULL DEFAULT 0,
     updated_at TIMESTAMPTZ NOT NULL
 );
+ALTER TABLE runtime_ingester_status
+    ADD COLUMN IF NOT EXISTS active_repository_path TEXT;
+ALTER TABLE runtime_ingester_status
+    ADD COLUMN IF NOT EXISTS active_phase TEXT;
+ALTER TABLE runtime_ingester_status
+    ADD COLUMN IF NOT EXISTS active_phase_started_at TIMESTAMPTZ;
+ALTER TABLE runtime_ingester_status
+    ADD COLUMN IF NOT EXISTS active_current_file TEXT;
+ALTER TABLE runtime_ingester_status
+    ADD COLUMN IF NOT EXISTS active_last_progress_at TIMESTAMPTZ;
+ALTER TABLE runtime_ingester_status
+    ADD COLUMN IF NOT EXISTS active_commit_started_at TIMESTAMPTZ;
 """
 
 CONTROL_SCHEMA = """

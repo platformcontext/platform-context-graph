@@ -23,6 +23,7 @@ async def parse_repository_snapshot_async(
     job_id: str | None,
     asyncio_module: Any,
     info_logger_fn: Any,
+    progress_callback: Any | None = None,
 ) -> RepositoryParseSnapshot:
     """Parse one repository into an in-memory snapshot without writing state."""
 
@@ -37,6 +38,8 @@ async def parse_repository_snapshot_async(
     for file_path in repo_files:
         if not file_path.is_file():
             continue
+        if callable(progress_callback):
+            progress_callback(current_file=str(file_path.resolve()))
         if job_id:
             builder.job_manager.update_job(job_id, current_file=str(file_path))
         if callable(to_thread):
@@ -51,7 +54,9 @@ async def parse_repository_snapshot_async(
         if "error" not in file_data:
             file_data_items.append(file_data)
         await asyncio_module.sleep(0.01)
-    info_logger_fn(f"Finished repo {repo_path.name} ({len(file_data_items)} parsed files)")
+    info_logger_fn(
+        f"Finished repo {repo_path.name} ({len(file_data_items)} parsed files)"
+    )
     return RepositoryParseSnapshot(
         repo_path=str(repo_path),
         file_count=len(repo_files),
@@ -78,7 +83,8 @@ def finalize_index_batch(
     snapshots: list[RepositoryParseSnapshot | Any],
     merged_imports_map: dict[str, list[str]],
     info_logger_fn: Any,
-) -> None:
+    stage_progress_callback: Any | None = None,
+) -> dict[str, float]:
     """Create cross-file and cross-repo relationships after repo commits finish."""
 
     all_file_data = [
@@ -86,14 +92,44 @@ def finalize_index_batch(
         for snapshot in snapshots
         for file_data in _snapshot_file_data(snapshot)
     ]
-    info_logger_fn("Creating inheritance links and function calls...")
-    link_start = time.monotonic()
-    builder._create_all_inheritance_links(all_file_data, merged_imports_map)
-    builder._create_all_function_calls(all_file_data, merged_imports_map)
-    builder._create_all_infra_links(all_file_data)
-    builder._materialize_workloads()
-    link_elapsed = time.monotonic() - link_start
-    info_logger_fn(f"Link creation done in {link_elapsed:.1f}s")
+    info_logger_fn(
+        f"Creating inheritance links and function calls for {len(all_file_data)} parsed files..."
+    )
+    total_start = time.monotonic()
+    stage_timings: dict[str, float] = {}
+    for stage_name, stage_fn in (
+        (
+            "inheritance",
+            lambda: builder._create_all_inheritance_links(
+                all_file_data, merged_imports_map
+            ),
+        ),
+        (
+            "function_calls",
+            lambda: builder._create_all_function_calls(
+                all_file_data, merged_imports_map
+            ),
+        ),
+        ("infra_links", lambda: builder._create_all_infra_links(all_file_data)),
+        ("workloads", builder._materialize_workloads),
+    ):
+        if callable(stage_progress_callback):
+            stage_progress_callback(stage_name)
+        stage_start = time.monotonic()
+        stage_fn()
+        elapsed = time.monotonic() - stage_start
+        stage_timings[stage_name] = elapsed
+        info_logger_fn(f"Finalization stage {stage_name} done in {elapsed:.1f}s")
+    total_elapsed = time.monotonic() - total_start
+    info_logger_fn(
+        "Finalization timings: "
+        f"inheritance={stage_timings['inheritance']:.1f}s, "
+        f"function_calls={stage_timings['function_calls']:.1f}s, "
+        f"infra_links={stage_timings['infra_links']:.1f}s, "
+        f"workloads={stage_timings['workloads']:.1f}s, "
+        f"total={total_elapsed:.1f}s"
+    )
+    return stage_timings
 
 
 async def build_graph_from_path_async(

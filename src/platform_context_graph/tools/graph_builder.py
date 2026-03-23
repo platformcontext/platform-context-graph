@@ -167,7 +167,12 @@ class GraphBuilder:
     ) -> None:
         """Create ``CALLS`` relationships after all files are indexed."""
         _create_all_function_calls(
-            self, all_file_data, imports_map, debug_log_fn=debug_log
+            self,
+            all_file_data,
+            imports_map,
+            debug_log_fn=debug_log,
+            get_config_value_fn=get_config_value,
+            warning_logger_fn=warning_logger,
         )
 
     def _create_all_infra_links(self, all_file_data: list[dict[str, Any]]) -> None:

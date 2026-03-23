@@ -8,6 +8,7 @@ from typing import Any
 
 ACTIVE_REPO_STATES = {"pending", "running", "parsed", "commit_incomplete", "failed"}
 TERMINAL_REPO_STATES = {"completed", "skipped"}
+ACTIVE_PROGRESS_REPO_STATES = {"running", "parsed", "commit_incomplete"}
 
 
 @dataclass(slots=True)
@@ -21,6 +22,13 @@ class RepositoryRunState:
     started_at: str | None = None
     finished_at: str | None = None
     updated_at: str | None = None
+    phase: str | None = None
+    phase_started_at: str | None = None
+    last_progress_at: str | None = None
+    current_file: str | None = None
+    commit_started_at: str | None = None
+    commit_finished_at: str | None = None
+    commit_duration_seconds: float | None = None
 
 
 @dataclass(slots=True)
@@ -37,6 +45,13 @@ class IndexRunState:
     finalization_status: str
     created_at: str
     updated_at: str
+    finalization_started_at: str | None = None
+    finalization_finished_at: str | None = None
+    finalization_duration_seconds: float | None = None
+    finalization_current_stage: str | None = None
+    finalization_stage_started_at: str | None = None
+    finalization_stage_durations: dict[str, float] = field(default_factory=dict)
+    finalization_stage_details: dict[str, Any] = field(default_factory=dict)
     last_error: str | None = None
     repositories: dict[str, RepositoryRunState] = field(default_factory=dict)
 
@@ -63,6 +78,27 @@ class IndexRunState:
             1
             for state in self.repositories.values()
             if state.status in {"failed", "commit_incomplete"}
+        )
+
+    def active_repository_state(self) -> RepositoryRunState | None:
+        """Return the most recently active repository state for diagnostics."""
+
+        candidates = [
+            state
+            for state in self.repositories.values()
+            if state.status in ACTIVE_PROGRESS_REPO_STATES or state.phase is not None
+        ]
+        if not candidates:
+            return None
+        return max(
+            candidates,
+            key=lambda state: (
+                state.last_progress_at
+                or state.phase_started_at
+                or state.started_at
+                or "",
+                state.repo_path,
+            ),
         )
 
 
