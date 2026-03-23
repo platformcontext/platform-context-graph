@@ -1,25 +1,23 @@
 # Visualizing the Graph
 
-Sometimes a table of text isn't enough. You need to see the map.
+## Neo4j Browser (`pcg visualize`)
 
-## 1. Browser link (`pcg visualize`)
-
-The easiest way involves the `pcg visualize` command (alias `pcg v`).
+The `pcg visualize` command (alias `pcg v`) generates a URL that opens Neo4j Browser with a pre-filled Cypher query:
 
 ```bash
 pcg visualize
 ```
 
-This will print a URL (e.g., `http://localhost:7474/browser?cmd=edit&arg=MATCH...`).
-Clicking this links opens the **Neo4j Browser** with a pre-filled query to show the immediate neighborhood of your code.
+This prints a URL like `http://localhost:7474/browser?cmd=edit&arg=MATCH...` that shows the immediate neighborhood of your indexed code.
 
-## 2. Using Neo4j Bloom (Advanced)
+Requires a running Neo4j instance (local or remote).
 
-If you are using Neo4j Desktop, you can use **Bloom**.
-*   Bloom allows "Google Maps" style zooming.
-*   Type logical phrases like "Show me callers of X".
+## Neo4j Bloom
 
-## 3. Interactive Web View (Coming Soon)
+If you use Neo4j Desktop, Bloom provides a richer exploration experience:
 
-We are building a lightweight React-based visualizer that runs directly from `pcg analyze --viz`.
-*   [View Roadmap](../roadmap.md)
+- Spatial zoom and pan across the graph
+- Natural-language-style search (e.g., "Show me callers of X")
+- Visual filtering by node type
+
+Bloom is part of Neo4j Desktop and requires no additional PCG configuration.

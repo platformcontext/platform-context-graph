@@ -91,3 +91,9 @@ Use this to show why a workload depends on the shared RDS cluster and what evide
 - The shared RDS resource stays first-class instead of being flattened into one app.
 - Each workload keeps its own runtime context.
 - Engineers can still use the service alias when that is the natural language of the question.
+
+## See also
+
+- [MCP Cookbook](../reference/mcp-cookbook.md) — more query examples
+- [Graph Model](../concepts/graph-model.md) — node types and relationships
+- [HTTP API Reference](../reference/http-api.md) — full endpoint documentation
