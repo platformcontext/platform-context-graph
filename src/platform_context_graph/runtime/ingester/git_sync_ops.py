@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -10,6 +11,165 @@ from platform_context_graph.utils.debug_log import warning_logger
 
 from .config import RepoSyncConfig
 from .support import log
+
+
+@dataclass(frozen=True, slots=True)
+class DefaultBranchResolution:
+    """Resolved default-branch state for one repository checkout."""
+
+    branch: str | None
+    error: str | None = None
+
+
+def _parse_remote_head_branch(symbolic_ref: str, *, prefix: str) -> str | None:
+    """Extract a branch name from a symbolic ref output string."""
+
+    normalized = symbolic_ref.strip()
+    if not normalized.startswith(prefix):
+        return None
+    branch = normalized.removeprefix(prefix).strip()
+    return branch or None
+
+
+def _resolve_default_branch(
+    repo_dir: Path,
+    env: dict[str, str],
+    *,
+    subprocess_run_fn,
+) -> DefaultBranchResolution:
+    """Return the default branch for a checkout, or failure details."""
+
+    local_head = subprocess_run_fn(
+        ["git", "-C", str(repo_dir), "symbolic-ref", "refs/remotes/origin/HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    branch = _parse_remote_head_branch(
+        local_head.stdout,
+        prefix="refs/remotes/origin/",
+    )
+    if branch is not None:
+        return DefaultBranchResolution(branch=branch)
+
+    return _resolve_remote_default_branch(
+        repo_dir,
+        env,
+        subprocess_run_fn=subprocess_run_fn,
+    )
+
+
+def _resolve_remote_default_branch(
+    repo_dir: Path,
+    env: dict[str, str],
+    *,
+    subprocess_run_fn,
+) -> DefaultBranchResolution:
+    """Return the current remote HEAD branch or the lookup failure."""
+
+    remote_head = subprocess_run_fn(
+        ["git", "-C", str(repo_dir), "ls-remote", "--symref", "origin", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    if remote_head.returncode != 0:
+        error = remote_head.stderr.strip() or remote_head.stdout.strip()
+        return DefaultBranchResolution(
+            branch=None,
+            error=error or "unable to query remote HEAD",
+        )
+
+    for line in remote_head.stdout.splitlines():
+        branch = _parse_remote_head_branch(
+            line.split("\t", 1)[0],
+            prefix="ref: refs/heads/",
+        )
+        if branch is not None:
+            return DefaultBranchResolution(branch=branch)
+    return DefaultBranchResolution(branch=None)
+
+
+def _is_missing_remote_ref(stderr: str, branch: str) -> bool:
+    """Return whether a fetch failed because the remote branch does not exist."""
+
+    normalized = stderr.strip().lower()
+    return (
+        "couldn't find remote ref" in normalized
+        and branch.strip().lower() in normalized
+    )
+
+
+def _retry_fetch_after_stale_shallow_lock(
+    repo_dir: Path,
+    fetch_command: list[str],
+    env: dict[str, str],
+    component: str,
+    fetch_result,
+    *,
+    subprocess_run_fn,
+):
+    """Remove a stale ``.git/shallow.lock`` file and retry fetch once."""
+
+    normalized = fetch_result.stderr.strip()
+    shallow_lock = repo_dir / ".git" / "shallow.lock"
+    if ".git/shallow.lock" not in normalized or "File exists" not in normalized:
+        return fetch_result
+    if not shallow_lock.exists():
+        return fetch_result
+
+    try:
+        shallow_lock.unlink()
+    except OSError:
+        return fetch_result
+
+    log(component, f"Removed stale shallow lock for {repo_dir.name}; retrying fetch")
+    return subprocess_run_fn(
+        fetch_command,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+
+def _fetch_branch(
+    repo_dir: Path,
+    branch: str,
+    clone_depth: int,
+    env: dict[str, str],
+    component: str,
+    *,
+    subprocess_run_fn,
+):
+    """Fetch one branch and retry once if a stale shallow lock is present."""
+
+    fetch_command = [
+        "git",
+        "-C",
+        str(repo_dir),
+        "fetch",
+        "origin",
+        branch,
+        f"--depth={clone_depth}",
+    ]
+    fetch_result = subprocess_run_fn(
+        fetch_command,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    return _retry_fetch_after_stale_shallow_lock(
+        repo_dir,
+        fetch_command,
+        env,
+        component,
+        fetch_result,
+        subprocess_run_fn=subprocess_run_fn,
+    )
 
 
 def refreshed_origin_url(remote_url: str, token: str | None) -> str | None:
@@ -166,20 +326,6 @@ def update_existing_repositories_detailed_impl(
         if not (repo_dir / ".git").exists():
             continue
 
-        default_branch_result = subprocess_run_fn(
-            ["git", "-C", str(repo_dir), "symbolic-ref", "refs/remotes/origin/HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-            env=env,
-        )
-        default_branch = (
-            default_branch_result.stdout.strip().replace("refs/remotes/origin/", "")
-            if default_branch_result.returncode == 0
-            and default_branch_result.stdout.strip()
-            else "main"
-        )
-
         refresh_repository_origin_url_fn(
             repo_dir,
             token,
@@ -187,27 +333,68 @@ def update_existing_repositories_detailed_impl(
             subprocess_run_fn=subprocess_run_fn,
         )
 
-        fetch_result = subprocess_run_fn(
-            [
-                "git",
-                "-C",
-                str(repo_dir),
-                "fetch",
-                "origin",
-                default_branch,
-                f"--depth={config.clone_depth}",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            env=env,
+        default_branch_resolution = _resolve_default_branch(
+            repo_dir,
+            env,
+            subprocess_run_fn=subprocess_run_fn,
         )
-        if fetch_result.returncode != 0:
+        if default_branch_resolution.error is not None:
             failed += 1
             warning_logger(
-                f"[{config.component}] Failed to fetch {repo_dir.name}: {fetch_result.stderr.strip()}"
+                f"[{config.component}] Failed to resolve default branch for "
+                f"{repo_dir.name}: {default_branch_resolution.error}"
             )
             continue
+        if default_branch_resolution.branch is None:
+            warning_logger(
+                f"[{config.component}] Skipping {repo_dir.name}: no discoverable default branch"
+            )
+            continue
+
+        default_branch = default_branch_resolution.branch
+        fetch_result = _fetch_branch(
+            repo_dir,
+            default_branch,
+            config.clone_depth,
+            env,
+            config.component,
+            subprocess_run_fn=subprocess_run_fn,
+        )
+        if fetch_result.returncode != 0:
+            if _is_missing_remote_ref(fetch_result.stderr, default_branch):
+                remote_branch_resolution = _resolve_remote_default_branch(
+                    repo_dir,
+                    env,
+                    subprocess_run_fn=subprocess_run_fn,
+                )
+                if remote_branch_resolution.error is not None:
+                    failed += 1
+                    warning_logger(
+                        f"[{config.component}] Failed to resolve default branch for "
+                        f"{repo_dir.name}: {remote_branch_resolution.error}"
+                    )
+                    continue
+                if remote_branch_resolution.branch is None:
+                    warning_logger(
+                        f"[{config.component}] Skipping {repo_dir.name}: no discoverable default branch"
+                    )
+                    continue
+                if remote_branch_resolution.branch != default_branch:
+                    default_branch = remote_branch_resolution.branch
+                    fetch_result = _fetch_branch(
+                        repo_dir,
+                        default_branch,
+                        config.clone_depth,
+                        env,
+                        config.component,
+                        subprocess_run_fn=subprocess_run_fn,
+                    )
+            if fetch_result.returncode != 0:
+                failed += 1
+                warning_logger(
+                    f"[{config.component}] Failed to fetch {repo_dir.name}: {fetch_result.stderr.strip()}"
+                )
+                continue
 
         local_head = subprocess_run_fn(
             ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],

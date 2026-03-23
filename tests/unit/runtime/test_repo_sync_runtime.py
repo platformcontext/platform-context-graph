@@ -1337,3 +1337,358 @@ def test_update_existing_repositories_skips_origin_refresh_without_token(
     assert (updated, failed) == (0, 0)
     assert all(command[3:5] != ["remote", "get-url"] for command in calls)
     assert all(command[3:5] != ["remote", "set-url"] for command in calls)
+
+
+def test_update_existing_repositories_skips_repo_without_default_branch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repositories without a discoverable default branch should be skipped."""
+
+    git_module = importlib.import_module("platform_context_graph.runtime.ingester.git")
+    git_sync_ops = importlib.import_module(
+        "platform_context_graph.runtime.ingester.git_sync_ops"
+    )
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    repo_dir = repos_dir / "boatsgroup--Test-mobileapp"
+    (repo_dir / ".git").mkdir(parents=True)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="githubOrg",
+        git_auth_method="none",
+        github_org="boatsgroup",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=repos_dir / ".pcg-sync.lock",
+        component="repository",
+    )
+
+    calls: list[list[str]] = []
+    warnings: list[str] = []
+
+    def _run(command, **_kwargs):
+        calls.append(command)
+        if command[3:4] == ["symbolic-ref"]:
+            return SimpleNamespace(
+                returncode=1,
+                stdout="",
+                stderr="fatal: ref refs/remotes/origin/HEAD is not a symbolic ref",
+            )
+        if command[3:5] == ["ls-remote", "--symref"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(git_module.subprocess, "run", _run)
+    monkeypatch.setattr(git_sync_ops, "warning_logger", warnings.append)
+
+    updated, failed = git_module.update_existing_repositories(config, None)
+
+    assert (updated, failed) == (0, 0)
+    assert all(command[3:4] != ["fetch"] for command in calls)
+    assert warnings == [
+        "[repository] Skipping boatsgroup--Test-mobileapp: no discoverable default branch"
+    ]
+
+
+def test_update_existing_repositories_retries_after_stale_shallow_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stale shallow lock files should be cleaned up before one fetch retry."""
+
+    git_module = importlib.import_module("platform_context_graph.runtime.ingester.git")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    repo_dir = repos_dir / "boatsgroup--automate-crm"
+    git_dir = repo_dir / ".git"
+    git_dir.mkdir(parents=True)
+    shallow_lock = git_dir / "shallow.lock"
+    shallow_lock.write_text("stale", encoding="utf-8")
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="githubOrg",
+        git_auth_method="none",
+        github_org="boatsgroup",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=repos_dir / ".pcg-sync.lock",
+        component="repository",
+    )
+
+    fetch_attempts = 0
+    fetch_calls: list[list[str]] = []
+
+    def _run(command, **_kwargs):
+        nonlocal fetch_attempts
+        if command[3:4] == ["symbolic-ref"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="refs/remotes/origin/main\n",
+                stderr="",
+            )
+        if command[3:4] == ["fetch"]:
+            fetch_calls.append(command)
+            fetch_attempts += 1
+            if fetch_attempts == 1:
+                return SimpleNamespace(
+                    returncode=128,
+                    stdout="",
+                    stderr=(
+                        f"fatal: Unable to create '{shallow_lock}': File exists"
+                    ),
+                )
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if command[3:] == ["rev-parse", "HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
+        if command[3:] == ["rev-parse", "FETCH_HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(git_module.subprocess, "run", _run)
+
+    updated, failed = git_module.update_existing_repositories(config, None)
+
+    assert (updated, failed) == (0, 0)
+    assert fetch_attempts == 2
+    assert fetch_calls == [
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "fetch",
+            "origin",
+            "main",
+            "--depth=1",
+        ],
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "fetch",
+            "origin",
+            "main",
+            "--depth=1",
+        ],
+    ]
+    assert not shallow_lock.exists()
+
+
+def test_update_existing_repositories_skips_when_remote_default_branch_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing remote default branches should be logged once and skipped."""
+
+    git_module = importlib.import_module("platform_context_graph.runtime.ingester.git")
+    git_sync_ops = importlib.import_module(
+        "platform_context_graph.runtime.ingester.git_sync_ops"
+    )
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    repo_dir = repos_dir / "boatsgroup--devops-captain"
+    (repo_dir / ".git").mkdir(parents=True)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="githubOrg",
+        git_auth_method="none",
+        github_org="boatsgroup",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=repos_dir / ".pcg-sync.lock",
+        component="repository",
+    )
+
+    warnings: list[str] = []
+
+    calls: list[list[str]] = []
+
+    def _run(command, **_kwargs):
+        calls.append(command)
+        if command[3:4] == ["symbolic-ref"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="refs/remotes/origin/main\n",
+                stderr="",
+            )
+        if command[3:5] == ["ls-remote", "--symref"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if command[3:4] == ["fetch"]:
+            return SimpleNamespace(
+                returncode=128,
+                stdout="",
+                stderr="fatal: couldn't find remote ref main",
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(git_module.subprocess, "run", _run)
+    monkeypatch.setattr(git_sync_ops, "warning_logger", warnings.append)
+
+    updated, failed = git_module.update_existing_repositories(config, None)
+
+    assert (updated, failed) == (0, 0)
+    assert [command[3:] for command in calls] == [
+        ["symbolic-ref", "refs/remotes/origin/HEAD"],
+        ["fetch", "origin", "main", "--depth=1"],
+        ["ls-remote", "--symref", "origin", "HEAD"],
+    ]
+    assert warnings == [
+        "[repository] Skipping boatsgroup--devops-captain: no discoverable default branch"
+    ]
+
+
+def test_update_existing_repositories_fails_when_remote_default_branch_lookup_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Remote default-branch lookup failures should remain hard failures."""
+
+    git_module = importlib.import_module("platform_context_graph.runtime.ingester.git")
+    git_sync_ops = importlib.import_module(
+        "platform_context_graph.runtime.ingester.git_sync_ops"
+    )
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    repo_dir = repos_dir / "boatsgroup--private-service"
+    (repo_dir / ".git").mkdir(parents=True)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="githubOrg",
+        git_auth_method="none",
+        github_org="boatsgroup",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=repos_dir / ".pcg-sync.lock",
+        component="repository",
+    )
+
+    warnings: list[str] = []
+
+    def _run(command, **_kwargs):
+        if command[3:4] == ["symbolic-ref"]:
+            return SimpleNamespace(
+                returncode=1,
+                stdout="",
+                stderr="fatal: ref refs/remotes/origin/HEAD is not a symbolic ref",
+            )
+        if command[3:5] == ["ls-remote", "--symref"]:
+            return SimpleNamespace(
+                returncode=128,
+                stdout="",
+                stderr="fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(git_module.subprocess, "run", _run)
+    monkeypatch.setattr(git_sync_ops, "warning_logger", warnings.append)
+
+    updated, failed = git_module.update_existing_repositories(config, None)
+
+    assert (updated, failed) == (0, 1)
+    assert warnings == [
+        (
+            "[repository] Failed to resolve default branch for "
+            "boatsgroup--private-service: fatal: could not read Username for "
+            "'https://github.com': terminal prompts disabled"
+        )
+    ]
+
+
+def test_update_existing_repositories_retries_with_remote_default_branch_after_fetch_miss(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing cached branches should recover using the current remote HEAD branch."""
+
+    git_module = importlib.import_module("platform_context_graph.runtime.ingester.git")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    repo_dir = repos_dir / "boatsgroup--renamed-default"
+    (repo_dir / ".git").mkdir(parents=True)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="githubOrg",
+        git_auth_method="none",
+        github_org="boatsgroup",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=repos_dir / ".pcg-sync.lock",
+        component="repository",
+    )
+
+    fetch_calls: list[list[str]] = []
+
+    def _run(command, **_kwargs):
+        if command[3:4] == ["symbolic-ref"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="refs/remotes/origin/main\n",
+                stderr="",
+            )
+        if command[3:5] == ["ls-remote", "--symref"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="ref: refs/heads/master\tHEAD\n95fe482\tHEAD\n",
+                stderr="",
+            )
+        if command[3:4] == ["fetch"]:
+            fetch_calls.append(command)
+            if command[5] == "main":
+                return SimpleNamespace(
+                    returncode=128,
+                    stdout="",
+                    stderr="fatal: couldn't find remote ref main",
+                )
+            if command[5] == "master":
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if command[3:] == ["rev-parse", "HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
+        if command[3:] == ["rev-parse", "FETCH_HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(git_module.subprocess, "run", _run)
+
+    updated, failed = git_module.update_existing_repositories(config, None)
+
+    assert (updated, failed) == (0, 0)
+    assert fetch_calls == [
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "fetch",
+            "origin",
+            "main",
+            "--depth=1",
+        ],
+        [
+            "git",
+            "-C",
+            str(repo_dir),
+            "fetch",
+            "origin",
+            "master",
+            "--depth=1",
+        ],
+    ]
