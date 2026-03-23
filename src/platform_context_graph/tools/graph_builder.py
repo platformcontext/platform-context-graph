@@ -37,6 +37,7 @@ from .graph_builder_parsers import (
 from .graph_builder_persistence import (
     add_file_to_graph as _add_file_to_graph,
     add_repository_to_graph as _add_repository_to_graph,
+    commit_file_batch_to_graph as _commit_file_batch_to_graph,
 )
 from .graph_builder_relationships import (
     create_all_function_calls as _create_all_function_calls,
@@ -118,6 +119,24 @@ class GraphBuilder:
             file_data,
             repo_name,
             imports_map,
+            debug_log_fn=debug_log,
+            info_logger_fn=info_logger,
+            warning_logger_fn=warning_logger,
+        )
+
+    def commit_file_batch_to_graph(
+        self, file_data_list: list[dict[str, Any]], repo_path: Path
+    ) -> None:
+        """Persist a batch of parsed files in a single Neo4j transaction.
+
+        Args:
+            file_data_list: List of parsed file payloads.
+            repo_path: Repository root path for the batch.
+        """
+        _commit_file_batch_to_graph(
+            self,
+            file_data_list,
+            repo_path,
             debug_log_fn=debug_log,
             info_logger_fn=info_logger,
             warning_logger_fn=warning_logger,

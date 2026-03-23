@@ -1,0 +1,325 @@
+"""UNWIND query helpers for batched Neo4j writes in the persistence layer."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from ..content.ingest import CONTENT_ENTITY_LABELS
+
+
+# ---------------------------------------------------------------------------
+# Entity property normalisation
+# ---------------------------------------------------------------------------
+
+ITEM_MAPPINGS_KEYS: list[tuple[str, str]] = [
+    ("functions", "Function"),
+    ("classes", "Class"),
+    ("traits", "Trait"),
+    ("variables", "Variable"),
+    ("interfaces", "Interface"),
+    ("annotations", "Annotation"),
+    ("macros", "Macro"),
+    ("structs", "Struct"),
+    ("enums", "Enum"),
+    ("unions", "Union"),
+    ("records", "Record"),
+    ("properties", "Property"),
+    ("k8s_resources", "K8sResource"),
+    ("argocd_applications", "ArgoCDApplication"),
+    ("argocd_applicationsets", "ArgoCDApplicationSet"),
+    ("crossplane_xrds", "CrossplaneXRD"),
+    ("crossplane_compositions", "CrossplaneComposition"),
+    ("crossplane_claims", "CrossplaneClaim"),
+    ("kustomize_overlays", "KustomizeOverlay"),
+    ("helm_charts", "HelmChart"),
+    ("helm_values", "HelmValues"),
+    ("terraform_resources", "TerraformResource"),
+    ("terraform_variables", "TerraformVariable"),
+    ("terraform_outputs", "TerraformOutput"),
+    ("terraform_modules", "TerraformModule"),
+    ("terraform_data_sources", "TerraformDataSource"),
+    ("terragrunt_configs", "TerragruntConfig"),
+    ("cloudformation_resources", "CloudFormationResource"),
+    ("cloudformation_parameters", "CloudFormationParameter"),
+    ("cloudformation_outputs", "CloudFormationOutput"),
+]
+
+
+def entity_props_for_unwind(
+    label: str,
+    item: dict[str, Any],
+    file_path: str,
+    use_uid_identity: bool,
+) -> dict[str, Any]:
+    """Return a normalised property dict suitable for use in an UNWIND batch.
+
+    All keys that could appear for any item of this label are present; missing
+    values are ``None`` so the UNWIND rows have a uniform shape.
+
+    Args:
+        label: Graph label for the entity.
+        item: Parsed entity payload.
+        file_path: Absolute file path containing the entity.
+        use_uid_identity: Whether to use UID-based identity for this item.
+
+    Returns:
+        Flat dict of all properties for this entity row.
+    """
+    props: dict[str, Any] = {
+        "file_path": file_path,
+        "name": item["name"],
+        "line_number": item["line_number"],
+        "use_uid_identity": use_uid_identity,
+        "uid": item.get("uid"),
+    }
+    extra_keys = [k for k in item if k not in {"name", "line_number", "path"}]
+    for key in extra_keys:
+        props[key] = item[key]
+    return props
+
+
+# ---------------------------------------------------------------------------
+# UNWIND query runners
+# ---------------------------------------------------------------------------
+
+
+def run_entity_unwind(
+    tx: Any,
+    label: str,
+    rows: list[dict[str, Any]],
+) -> None:
+    """Execute UNWIND merges for a list of entity property dicts.
+
+    Entities are split into two groups and executed as separate UNWIND
+    queries so Neo4j can use indexes directly on the MERGE clause:
+
+    - UID-identity rows are merged by ``{uid: row.uid}``
+    - Name-identity rows are merged by ``{name, path, line_number}``
+
+    Args:
+        tx: Neo4j transaction (or session) to run the query against.
+        label: Node label for the MERGE clause.
+        rows: List of property dicts built by ``entity_props_for_unwind``.
+    """
+    if not rows:
+        return
+
+    uid_rows: list[dict[str, Any]] = []
+    name_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if row.get("use_uid_identity") and row.get("uid"):
+            uid_rows.append(row)
+        else:
+            name_rows.append(row)
+
+    all_keys: set[str] = set()
+    for row in rows:
+        all_keys.update(row.keys())
+    reserved = {"file_path", "name", "line_number", "use_uid_identity", "uid"}
+    extra_keys = sorted(all_keys - reserved)
+
+    for row in rows:
+        for key in extra_keys:
+            if key not in row:
+                row[key] = None
+
+    set_parts = [
+        "n.name = row.name",
+        "n.path = row.file_path",
+        "n.line_number = row.line_number",
+    ]
+    for key in extra_keys:
+        set_parts.append(f"n.`{key}` = row.`{key}`")
+    set_clause = ", ".join(set_parts)
+
+    if uid_rows:
+        tx.run(
+            f"""
+            UNWIND $rows AS row
+            MATCH (f:File {{path: row.file_path}})
+            MERGE (n:{label} {{uid: row.uid}})
+            SET {set_clause}
+            MERGE (f)-[:CONTAINS]->(n)
+            """,
+            rows=uid_rows,
+        )
+
+    if name_rows:
+        tx.run(
+            f"""
+            UNWIND $rows AS row
+            MATCH (f:File {{path: row.file_path}})
+            MERGE (n:{label} {{name: row.name, path: row.file_path, line_number: row.line_number}})
+            SET {set_clause}
+            MERGE (f)-[:CONTAINS]->(n)
+            """,
+            rows=name_rows,
+        )
+
+
+def run_parameter_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
+    """UNWIND-merge all function parameters collected from one or more files.
+
+    Args:
+        tx: Neo4j transaction (or session).
+        rows: List of dicts with keys ``func_name``, ``file_path``,
+              ``line_number``, ``arg_name``.
+    """
+    if not rows:
+        return
+    tx.run(
+        """
+        UNWIND $rows AS row
+        MATCH (fn:Function {name: row.func_name, path: row.file_path, line_number: row.line_number})
+        MERGE (p:Parameter {name: row.arg_name, path: row.file_path, function_line_number: row.line_number})
+        MERGE (fn)-[:HAS_PARAMETER]->(p)
+        """,
+        rows=rows,
+    )
+
+
+def run_module_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
+    """UNWIND-merge all module nodes collected from one or more files.
+
+    Args:
+        tx: Neo4j transaction (or session).
+        rows: List of dicts with keys ``name``, ``lang``.
+    """
+    if not rows:
+        return
+    tx.run(
+        """
+        UNWIND $rows AS row
+        MERGE (mod:Module {name: row.name})
+        ON CREATE SET mod.lang = row.lang
+        ON MATCH  SET mod.lang = coalesce(mod.lang, row.lang)
+        """,
+        rows=rows,
+    )
+
+
+def run_nested_function_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
+    """UNWIND-merge CONTAINS edges between outer and inner functions.
+
+    Args:
+        tx: Neo4j transaction (or session).
+        rows: List of dicts with keys ``context``, ``file_path``, ``name``,
+              ``line_number``.
+    """
+    if not rows:
+        return
+    tx.run(
+        """
+        UNWIND $rows AS row
+        MATCH (outer:Function {name: row.context, path: row.file_path})
+        MATCH (inner:Function {name: row.name, path: row.file_path, line_number: row.line_number})
+        MERGE (outer)-[:CONTAINS]->(inner)
+        """,
+        rows=rows,
+    )
+
+
+def run_class_function_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
+    """UNWIND-merge CONTAINS edges between classes and their methods.
+
+    Args:
+        tx: Neo4j transaction (or session).
+        rows: List of dicts with keys ``class_name``, ``file_path``,
+              ``func_name``, ``func_line``.
+    """
+    if not rows:
+        return
+    tx.run(
+        """
+        UNWIND $rows AS row
+        MATCH (c:Class {name: row.class_name, path: row.file_path})
+        MATCH (fn:Function {name: row.func_name, path: row.file_path, line_number: row.func_line})
+        MERGE (c)-[:CONTAINS]->(fn)
+        """,
+        rows=rows,
+    )
+
+
+def run_module_inclusion_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
+    """UNWIND-merge INCLUDES edges between classes and included modules.
+
+    Args:
+        tx: Neo4j transaction (or session).
+        rows: List of dicts with keys ``class_name``, ``file_path``,
+              ``module_name``.
+    """
+    if not rows:
+        return
+    tx.run(
+        """
+        UNWIND $rows AS row
+        MATCH (c:Class {name: row.class_name, path: row.file_path})
+        MERGE (m:Module {name: row.module_name})
+        MERGE (c)-[:INCLUDES]->(m)
+        """,
+        rows=rows,
+    )
+
+
+def run_js_import_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
+    """UNWIND-merge JavaScript IMPORTS relationships.
+
+    Args:
+        tx: Neo4j transaction (or session).
+        rows: List of dicts with keys ``file_path``, ``module_name``,
+              ``imported_name``, ``alias`` (nullable), ``imp_line`` (nullable).
+    """
+    if not rows:
+        return
+    tx.run(
+        """
+        UNWIND $rows AS row
+        MATCH (f:File {path: row.file_path})
+        MERGE (m:Module {name: row.module_name})
+        MERGE (f)-[r:IMPORTS]->(m)
+        SET r.imported_name = row.imported_name,
+            r.alias = CASE WHEN row.alias IS NOT NULL THEN row.alias ELSE r.alias END,
+            r.line_number = CASE WHEN row.imp_line IS NOT NULL THEN row.imp_line ELSE r.line_number END
+        """,
+        rows=rows,
+    )
+
+
+def run_generic_import_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
+    """UNWIND-merge non-JavaScript IMPORTS relationships.
+
+    Args:
+        tx: Neo4j transaction (or session).
+        rows: List of dicts with keys ``file_path``, ``module_name``,
+              ``full_import_name`` (nullable), ``line_number_rel`` (nullable),
+              ``alias_rel`` (nullable).
+    """
+    if not rows:
+        return
+    tx.run(
+        """
+        UNWIND $rows AS row
+        MATCH (f:File {path: row.file_path})
+        MERGE (m:Module {name: row.module_name})
+        SET m.full_import_name = CASE WHEN row.full_import_name IS NOT NULL THEN row.full_import_name ELSE m.full_import_name END
+        MERGE (f)-[r:IMPORTS]->(m)
+        SET r.line_number = CASE WHEN row.line_number_rel IS NOT NULL THEN row.line_number_rel ELSE r.line_number END,
+            r.alias = CASE WHEN row.alias_rel IS NOT NULL THEN row.alias_rel ELSE r.alias END
+        """,
+        rows=rows,
+    )
+
+
+__all__ = [
+    "ITEM_MAPPINGS_KEYS",
+    "entity_props_for_unwind",
+    "run_class_function_unwind",
+    "run_entity_unwind",
+    "run_generic_import_unwind",
+    "run_js_import_unwind",
+    "run_module_inclusion_unwind",
+    "run_module_unwind",
+    "run_nested_function_unwind",
+    "run_parameter_unwind",
+]

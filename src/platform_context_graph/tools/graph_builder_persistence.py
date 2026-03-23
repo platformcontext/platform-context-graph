@@ -7,12 +7,16 @@ from typing import Any
 
 from ..core.records import record_to_dict
 from ..content.ingest import (
-    CONTENT_ENTITY_LABELS,
     prepare_content_entries,
     repository_metadata_from_row,
 )
 from ..content.state import get_postgres_content_provider
-from .graph_builder_entities import build_entity_merge_statement
+from .graph_builder_persistence_batch import (
+    collect_file_write_data,
+    empty_accumulator,
+    flush_write_batches,
+    merge_batches,
+)
 
 
 def add_repository_to_graph(
@@ -106,6 +110,106 @@ def add_repository_to_graph(
         )
 
 
+def _merge_directory_chain(
+    tx: Any,
+    file_path_obj: Path,
+    repo_path_obj: Path,
+    file_path_str: str,
+) -> None:
+    """Write the directory chain and file-containment edge within a transaction.
+
+    Args:
+        tx: Open Neo4j transaction.
+        file_path_obj: Resolved absolute file path.
+        repo_path_obj: Resolved repository root.
+        file_path_str: String form of the resolved file path.
+    """
+    try:
+        relative_path_to_file = file_path_obj.relative_to(repo_path_obj)
+    except ValueError:
+        relative_path_to_file = Path(file_path_obj.name)
+
+    parent_path = str(repo_path_obj)
+    parent_label = "Repository"
+
+    for part in relative_path_to_file.parts[:-1]:
+        current_path = Path(parent_path) / part
+        current_path_str = str(current_path)
+
+        tx.run(
+            f"""
+            MATCH (p:{parent_label} {{path: $parent_path}})
+            MERGE (d:Directory {{path: $current_path}})
+            SET d.name = $part
+            MERGE (p)-[:CONTAINS]->(d)
+            """,
+            parent_path=parent_path,
+            current_path=current_path_str,
+            part=part,
+        )
+
+        parent_path = current_path_str
+        parent_label = "Directory"
+
+    tx.run(
+        f"""
+        MATCH (p:{parent_label} {{path: $parent_path}})
+        MATCH (f:File {{path: $file_path}})
+        MERGE (p)-[:CONTAINS]->(f)
+        """,
+        parent_path=parent_path,
+        file_path=file_path_str,
+    )
+
+
+def _content_dual_write(
+    file_data: dict[str, Any],
+    file_name: str,
+    repository: dict[str, Any],
+    warning_logger_fn: Any,
+) -> None:
+    """Attempt a Postgres content-store dual-write for one file.
+
+    Args:
+        file_data: Parsed file payload.
+        file_name: Basename of the file (for log messages).
+        repository: Canonical repository metadata dict.
+        warning_logger_fn: Warning logger callable.
+    """
+    content_provider = get_postgres_content_provider()
+    if content_provider is None or not content_provider.enabled:
+        return
+    try:
+        file_entry, entity_entries = prepare_content_entries(
+            file_data=file_data,
+            repository=repository,
+        )
+        if file_entry is not None:
+            content_provider.upsert_file(file_entry)
+        if entity_entries:
+            content_provider.upsert_entities(entity_entries)
+    except Exception as exc:
+        warning_logger_fn(f"Content store dual-write failed for {file_name}: {exc}")
+
+
+def _begin_transaction(session: Any) -> tuple[Any, bool]:
+    """Begin an explicit transaction if the backend supports it.
+
+    Returns:
+        Tuple of ``(tx, is_explicit)`` where ``tx`` is a transaction object
+        (or the session itself for backends without transaction support) and
+        ``is_explicit`` indicates whether ``commit()``/``rollback()`` should
+        be called.
+    """
+    begin = getattr(session, "begin_transaction", None)
+    if begin is not None:
+        try:
+            return begin(), True
+        except (AttributeError, NotImplementedError, TypeError):
+            pass
+    return session, False
+
+
 def add_file_to_graph(
     builder: Any,
     file_data: dict[str, Any],
@@ -118,6 +222,9 @@ def add_file_to_graph(
 ) -> None:
     """Persist a parsed file, its contained nodes, and immediate edges.
 
+    Uses a single explicit Neo4j transaction for all write operations and
+    UNWIND queries for bulk entity/import operations.
+
     Args:
         builder: ``GraphBuilder`` facade instance.
         file_data: Parsed file payload emitted by the language parser.
@@ -127,7 +234,7 @@ def add_file_to_graph(
         info_logger_fn: Info logger callable.
         warning_logger_fn: Warning logger callable.
     """
-    _ = (repo_name, imports_map)
+    _ = (repo_name, imports_map, info_logger_fn)
     calls_count = len(file_data.get("function_calls", []))
     debug_log_fn(
         f"Executing add_file_to_graph for {file_data.get('path', 'unknown')} - Calls found: {calls_count}"
@@ -137,8 +244,10 @@ def add_file_to_graph(
     file_path_obj = Path(file_path_str)
     file_name = Path(file_path_str).name
     is_dependency = file_data.get("is_dependency", False)
+    repo_path_obj = Path(file_data["repo_path"]).resolve()
 
     with builder.driver.session() as session:
+        # Read repo metadata outside the write transaction (auto-commit read).
         try:
             repo_result = session.run(
                 """
@@ -151,264 +260,155 @@ def add_file_to_graph(
                        r.repo_slug as repo_slug,
                        coalesce(r.has_remote, false) as has_remote
                 """,
-                repo_path=str(Path(file_data["repo_path"]).resolve()),
+                repo_path=str(repo_path_obj),
             ).single()
         except ValueError:
             repo_result = None
 
         repo_row = record_to_dict(repo_result) if repo_result is not None else None
-        repo_path_obj = Path(file_data["repo_path"]).resolve()
         repository = repository_metadata_from_row(row=repo_row, repo_path=repo_path_obj)
+
         try:
             relative_path = file_path_obj.relative_to(repo_path_obj).as_posix()
         except ValueError:
             relative_path = file_name
 
-        session.run(
-            """
-            MERGE (f:File {path: $file_path})
-            SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
-        """,
-            file_path=file_path_str,
-            name=file_name,
-            relative_path=relative_path,
-            is_dependency=is_dependency,
-        )
+        # Postgres content dual-write is outside the Neo4j transaction.
+        _content_dual_write(file_data, file_name, repository, warning_logger_fn)
 
-        content_provider = get_postgres_content_provider()
-        if content_provider is not None and content_provider.enabled:
-            try:
-                file_entry, entity_entries = prepare_content_entries(
-                    file_data=file_data,
-                    repository=repository,
-                )
-                if file_entry is not None:
-                    content_provider.upsert_file(file_entry)
-                if entity_entries:
-                    content_provider.upsert_entities(entity_entries)
-            except Exception as exc:
-                warning_logger_fn(
-                    f"Content store dual-write failed for {file_name}: {exc}"
-                )
-
-        relative_path_to_file = file_path_obj.relative_to(repo_path_obj)
-        parent_path = str(repo_path_obj)
-        parent_label = "Repository"
-
-        for part in relative_path_to_file.parts[:-1]:
-            current_path = Path(parent_path) / part
-            current_path_str = str(current_path)
-
-            session.run(
-                f"""
-                MATCH (p:{parent_label} {{path: $parent_path}})
-                MERGE (d:Directory {{path: $current_path}})
-                SET d.name = $part
-                MERGE (p)-[:CONTAINS]->(d)
-            """,
-                parent_path=parent_path,
-                current_path=current_path_str,
-                part=part,
-            )
-
-            parent_path = current_path_str
-            parent_label = "Directory"
-
-        session.run(
-            f"""
-            MATCH (p:{parent_label} {{path: $parent_path}})
-            MATCH (f:File {{path: $file_path}})
-            MERGE (p)-[:CONTAINS]->(f)
-        """,
-            parent_path=parent_path,
-            file_path=file_path_str,
-        )
-
-        item_mappings = [
-            (file_data.get("functions", []), "Function"),
-            (file_data.get("classes", []), "Class"),
-            (file_data.get("traits", []), "Trait"),
-            (file_data.get("variables", []), "Variable"),
-            (file_data.get("interfaces", []), "Interface"),
-            (file_data.get("annotations", []), "Annotation"),
-            (file_data.get("macros", []), "Macro"),
-            (file_data.get("structs", []), "Struct"),
-            (file_data.get("enums", []), "Enum"),
-            (file_data.get("unions", []), "Union"),
-            (file_data.get("records", []), "Record"),
-            (file_data.get("properties", []), "Property"),
-            (file_data.get("k8s_resources", []), "K8sResource"),
-            (file_data.get("argocd_applications", []), "ArgoCDApplication"),
-            (file_data.get("argocd_applicationsets", []), "ArgoCDApplicationSet"),
-            (file_data.get("crossplane_xrds", []), "CrossplaneXRD"),
-            (file_data.get("crossplane_compositions", []), "CrossplaneComposition"),
-            (file_data.get("crossplane_claims", []), "CrossplaneClaim"),
-            (file_data.get("kustomize_overlays", []), "KustomizeOverlay"),
-            (file_data.get("helm_charts", []), "HelmChart"),
-            (file_data.get("helm_values", []), "HelmValues"),
-            (file_data.get("terraform_resources", []), "TerraformResource"),
-            (file_data.get("terraform_variables", []), "TerraformVariable"),
-            (file_data.get("terraform_outputs", []), "TerraformOutput"),
-            (file_data.get("terraform_modules", []), "TerraformModule"),
-            (file_data.get("terraform_data_sources", []), "TerraformDataSource"),
-            (file_data.get("terragrunt_configs", []), "TerragruntConfig"),
-            (file_data.get("cloudformation_resources", []), "CloudFormationResource"),
-            (file_data.get("cloudformation_parameters", []), "CloudFormationParameter"),
-            (file_data.get("cloudformation_outputs", []), "CloudFormationOutput"),
-        ]
-        for item_data, label in item_mappings:
-            for item in item_data:
-                if label == "Function" and "cyclomatic_complexity" not in item:
-                    item["cyclomatic_complexity"] = 1
-
-                query, params = build_entity_merge_statement(
-                    label=label,
-                    item=item,
-                    file_path=file_path_str,
-                    use_uid_identity=label in CONTENT_ENTITY_LABELS
-                    and bool(item.get("uid")),
-                )
-                session.run(query, params)
-
-                if label == "Function":
-                    for arg_name in item.get("args", []):
-                        session.run(
-                            """
-                            MATCH (fn:Function {name: $func_name, path: $file_path, line_number: $line_number})
-                            MERGE (p:Parameter {name: $arg_name, path: $file_path, function_line_number: $line_number})
-                            MERGE (fn)-[:HAS_PARAMETER]->(p)
-                        """,
-                            func_name=item["name"],
-                            file_path=file_path_str,
-                            line_number=item["line_number"],
-                            arg_name=arg_name,
-                        )
-
-        for module_item in file_data.get("modules", []):
-            session.run(
+        # All Neo4j writes go inside a single explicit transaction when
+        # the backend supports it; otherwise fall back to auto-commit.
+        tx, is_explicit = _begin_transaction(session)
+        try:
+            tx.run(
                 """
-                MERGE (mod:Module {name: $name})
-                ON CREATE SET mod.lang = $lang
-                ON MATCH  SET mod.lang = coalesce(mod.lang, $lang)
-            """,
-                name=module_item["name"],
-                lang=file_data.get("lang"),
-            )
-
-        for item in file_data.get("functions", []):
-            if item.get("context_type") == "function_definition":
-                session.run(
-                    """
-                    MATCH (outer:Function {name: $context, path: $file_path})
-                    MATCH (inner:Function {name: $name, path: $file_path, line_number: $line_number})
-                    MERGE (outer)-[:CONTAINS]->(inner)
+                MERGE (f:File {path: $file_path})
+                SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
                 """,
-                    context=item["context"],
-                    file_path=file_path_str,
-                    name=item["name"],
-                    line_number=item["line_number"],
-                )
-
-        for imp in file_data.get("imports", []):
-            info_logger_fn(f"Processing import: {imp}")
-            lang = file_data.get("lang")
-            if lang == "javascript":
-                module_name = imp.get("source")
-                if not module_name:
-                    continue
-
-                rel_params = {
-                    "file_path": file_path_str,
-                    "module_name": module_name,
-                    "imported_name": imp.get("name", "*"),
-                }
-                set_parts = ["r.imported_name = $imported_name"]
-                if imp.get("alias"):
-                    rel_params["alias"] = imp["alias"]
-                    set_parts.append("r.alias = $alias")
-                if imp.get("line_number"):
-                    rel_params["imp_line"] = imp["line_number"]
-                    set_parts.append("r.line_number = $imp_line")
-                set_clause = f"SET {', '.join(set_parts)}"
-
-                session.run(
-                    f"""
-                    MATCH (f:File {{path: $file_path}})
-                    MERGE (m:Module {{name: $module_name}})
-                    MERGE (f)-[r:IMPORTS]->(m)
-                    {set_clause}
-                """,
-                    **rel_params,
-                )
-            else:
-                set_clauses = []
-                if "full_import_name" in imp:
-                    set_clauses.append("m.full_import_name = $full_import_name")
-
-                set_clause_str = (
-                    ("SET " + ", ".join(set_clauses)) if set_clauses else ""
-                )
-
-                rel_props: dict[str, Any] = {}
-                if imp.get("line_number"):
-                    rel_props["line_number"] = imp.get("line_number")
-                if imp.get("alias"):
-                    rel_props["alias"] = imp.get("alias")
-
-                params: dict[str, Any] = {
-                    "file_path": file_path_str,
-                    "module_name": imp.get("name"),
-                }
-                for key, value in imp.items():
-                    if key not in ("path", "name"):
-                        params[key] = value
-
-                rel_set_parts = [f"r.{key} = ${key}_rel" for key in rel_props]
-                rel_set_clause = (
-                    f"SET {', '.join(rel_set_parts)}" if rel_set_parts else ""
-                )
-                for key, value in rel_props.items():
-                    params[f"{key}_rel"] = value
-
-                session.run(
-                    f"""
-                    MATCH (f:File {{path: $file_path}})
-                    MERGE (m:Module {{name: $module_name}})
-                    {set_clause_str}
-                    MERGE (f)-[r:IMPORTS]->(m)
-                    {rel_set_clause}
-                """,
-                    **params,
-                )
-
-        for func in file_data.get("functions", []):
-            if func.get("class_context"):
-                session.run(
-                    """
-                    MATCH (c:Class {name: $class_name, path: $file_path})
-                    MATCH (fn:Function {name: $func_name, path: $file_path, line_number: $func_line})
-                    MERGE (c)-[:CONTAINS]->(fn)
-                """,
-                    class_name=func["class_context"],
-                    file_path=file_path_str,
-                    func_name=func["name"],
-                    func_line=func["line_number"],
-                )
-
-        for inclusion in file_data.get("module_inclusions", []):
-            session.run(
-                """
-                MATCH (c:Class {name: $class_name, path: $file_path})
-                MERGE (m:Module {name: $module_name})
-                MERGE (c)-[:INCLUDES]->(m)
-            """,
-                class_name=inclusion["class"],
                 file_path=file_path_str,
-                module_name=inclusion["module"],
+                name=file_name,
+                relative_path=relative_path,
+                is_dependency=is_dependency,
             )
+
+            _merge_directory_chain(tx, file_path_obj, repo_path_obj, file_path_str)
+
+            write_data = collect_file_write_data(file_data, file_path_str)
+            flush_write_batches(tx, write_data)
+
+            if is_explicit:
+                tx.commit()
+        except Exception:
+            if is_explicit:
+                tx.rollback()
+            raise
+
+
+def commit_file_batch_to_graph(
+    builder: Any,
+    file_data_list: list[dict[str, Any]],
+    repo_path: Path,
+    *,
+    debug_log_fn: Any,
+    info_logger_fn: Any,
+    warning_logger_fn: Any,
+) -> None:
+    """Persist a batch of parsed files in a single Neo4j transaction.
+
+    Opens one session, reads repository metadata once, then writes all files,
+    directory chains, entities, imports, and edges via UNWIND queries in one
+    explicit transaction.  Postgres content writes are handled per-file outside
+    the Neo4j transaction.
+
+    Args:
+        builder: ``GraphBuilder`` facade instance.
+        file_data_list: List of parsed file payloads to persist.
+        repo_path: Resolved repository root path.
+        debug_log_fn: Debug logger callable.
+        info_logger_fn: Info logger callable.
+        warning_logger_fn: Warning logger callable.
+    """
+    if not file_data_list:
+        return
+
+    repo_path_obj = repo_path.resolve()
+    repo_path_str = str(repo_path_obj)
+
+    debug_log_fn(
+        f"commit_file_batch_to_graph: {len(file_data_list)} files for {repo_path_str}"
+    )
+
+    with builder.driver.session() as session:
+        # Single read to get repo metadata for the whole batch.
+        try:
+            repo_result = session.run(
+                """
+                MATCH (r:Repository {path: $repo_path})
+                RETURN r.id as id,
+                       r.name as name,
+                       r.path as path,
+                       coalesce(r.local_path, r.path) as local_path,
+                       r.remote_url as remote_url,
+                       r.repo_slug as repo_slug,
+                       coalesce(r.has_remote, false) as has_remote
+                """,
+                repo_path=repo_path_str,
+            ).single()
+        except ValueError:
+            repo_result = None
+
+        repo_row = record_to_dict(repo_result) if repo_result is not None else None
+        repository = repository_metadata_from_row(row=repo_row, repo_path=repo_path_obj)
+
+        # Postgres dual-writes are per-file and happen before the Neo4j tx.
+        for file_data in file_data_list:
+            file_name = Path(file_data["path"]).name
+            _content_dual_write(file_data, file_name, repository, warning_logger_fn)
+
+        # One explicit Neo4j transaction for the entire batch when the
+        # backend supports it; otherwise fall back to auto-commit.
+        tx, is_explicit = _begin_transaction(session)
+        try:
+            accumulator = empty_accumulator()
+
+            for file_data in file_data_list:
+                file_path_str = str(Path(file_data["path"]).resolve())
+                file_path_obj = Path(file_path_str)
+                file_name = Path(file_path_str).name
+                is_dependency = file_data.get("is_dependency", False)
+
+                try:
+                    relative_path = file_path_obj.relative_to(repo_path_obj).as_posix()
+                except ValueError:
+                    relative_path = file_name
+
+                tx.run(
+                    """
+                    MERGE (f:File {path: $file_path})
+                    SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
+                    """,
+                    file_path=file_path_str,
+                    name=file_name,
+                    relative_path=relative_path,
+                    is_dependency=is_dependency,
+                )
+
+                _merge_directory_chain(tx, file_path_obj, repo_path_obj, file_path_str)
+
+                file_batches = collect_file_write_data(file_data, file_path_str)
+                merge_batches(accumulator, file_batches)
+
+            flush_write_batches(tx, accumulator)
+            if is_explicit:
+                tx.commit()
+        except Exception:
+            if is_explicit:
+                tx.rollback()
+            raise
 
 
 __all__ = [
     "add_file_to_graph",
     "add_repository_to_graph",
+    "commit_file_batch_to_graph",
 ]
