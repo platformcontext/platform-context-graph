@@ -1,0 +1,31 @@
+src/platform_context_graph/indexing/coordinator.py
+  4de1f16cf36eb252 138-141
+src/platform_context_graph/tools/graph_builder.py
+  4de1f16cf36eb252 40,127-144
+tests/unit/core/test_graph_builder_content_store.py
+  4de1f16cf36eb252 25,29,69,83-87,120-127,129-134,139,155-156,193-196,198-200
+src/platform_context_graph/tools/graph_builder_persistence.py
+  4de1f16cf36eb252 14-19,113-194,207-209,219,229,232,245,252,258-259,261-273,275,277-278,280-283,286-295,297-300,302-311,313-314,316-318,320-323,325-332,334-337,339-356,358-363,365-367,369-371,374-383,389
+src/platform_context_graph/tools/graph_builder_persistence_unwind.py
+  4de1f16cf36eb252 1-496
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "60bb88c32758bb30dcfcf26caf2385fd2c06397a",
+  "prompts": {
+    "4de1f16cf36eb252": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2fefa212-3194-4199-be77-d18cd7c7251b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 1306,
+      "total_deletions": 789,
+      "accepted_lines": 770,
+      "overriden_lines": 0
+    }
+  }
+}
