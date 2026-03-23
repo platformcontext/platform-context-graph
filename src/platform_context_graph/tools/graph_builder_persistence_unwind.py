@@ -12,7 +12,7 @@ from ..content.ingest import CONTENT_ENTITY_LABELS
 # Entity property normalisation
 # ---------------------------------------------------------------------------
 
-_ITEM_MAPPINGS_KEYS: list[tuple[str, str]] = [
+ITEM_MAPPINGS_KEYS: list[tuple[str, str]] = [
     ("functions", "Function"),
     ("classes", "Class"),
     ("traits", "Trait"),
@@ -312,7 +312,7 @@ def run_generic_import_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
 
 
 __all__ = [
-    "_ITEM_MAPPINGS_KEYS",
+    "ITEM_MAPPINGS_KEYS",
     "entity_props_for_unwind",
     "run_class_function_unwind",
     "run_entity_unwind",

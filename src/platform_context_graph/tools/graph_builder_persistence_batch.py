@@ -6,7 +6,7 @@ from typing import Any
 
 from ..content.ingest import CONTENT_ENTITY_LABELS
 from .graph_builder_persistence_unwind import (
-    _ITEM_MAPPINGS_KEYS,
+    ITEM_MAPPINGS_KEYS,
     entity_props_for_unwind,
     run_class_function_unwind,
     run_entity_unwind,
@@ -46,7 +46,7 @@ def collect_file_write_data(
     js_import_rows: list[dict[str, Any]] = []
     generic_import_rows: list[dict[str, Any]] = []
 
-    for field_key, label in _ITEM_MAPPINGS_KEYS:
+    for field_key, label in ITEM_MAPPINGS_KEYS:
         for item in file_data.get(field_key, []):
             if label == "Function" and "cyclomatic_complexity" not in item:
                 item["cyclomatic_complexity"] = 1

@@ -135,7 +135,7 @@ def _commit_repository_snapshot(
         pass
 
     builder.add_repository_to_graph(repo_path, is_dependency=is_dependency)
-    batch_size = int(os.getenv("PCG_FILE_BATCH_SIZE", "50"))
+    batch_size = _positive_int_env("PCG_FILE_BATCH_SIZE", 50, maximum=512)
     for i in range(0, len(snapshot.file_data), batch_size):
         batch = snapshot.file_data[i : i + batch_size]
         builder.commit_file_batch_to_graph(batch, repo_path)

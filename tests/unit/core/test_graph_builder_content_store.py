@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from platform_context_graph.tools.graph_builder_persistence import add_file_to_graph
+from platform_context_graph.tools.graph_builder_persistence import (
+    add_file_to_graph,
+    commit_file_batch_to_graph,
+)
 
 
 def test_add_file_to_graph_dual_writes_content_and_uses_uid_merges(
@@ -198,3 +202,114 @@ def test_add_file_to_graph_passes_reserved_parameter_names_as_mapping(
     rows = params.get("rows", [])
     assert rows, "Expected non-empty rows in UNWIND query"
     assert rows[0]["parameters"] == ["context", "reactInstanceManager"]
+
+
+def test_commit_file_batch_uses_single_transaction_with_unwind(
+    tmp_path, monkeypatch
+) -> None:
+    """Batching multiple files should use one begin_transaction/commit cycle with UNWIND."""
+
+    repo_path = tmp_path / "batch-repo"
+    repo_path.mkdir()
+    files = []
+    for i in range(3):
+        fp = repo_path / "src" / f"mod_{i}.py"
+        fp.parent.mkdir(exist_ok=True)
+        fp.write_text(f"def func_{i}(): pass\n", encoding="utf-8")
+        files.append(
+            {
+                "path": str(fp),
+                "repo_path": str(repo_path),
+                "lang": "python",
+                "functions": [
+                    {"name": f"func_{i}", "line_number": 1, "args": ["x", "y"]}
+                ],
+                "imports": [{"name": f"os_{i}", "line_number": 1}],
+                "function_calls": [],
+            }
+        )
+
+    repo_row = {
+        "id": "repository:r_batch",
+        "name": "batch-repo",
+        "path": str(repo_path.resolve()),
+        "local_path": str(repo_path.resolve()),
+        "remote_url": "https://github.com/platformcontext/batch-repo",
+        "repo_slug": "platformcontext/batch-repo",
+        "has_remote": True,
+    }
+
+    class _Result:
+        def __init__(self, row=None) -> None:
+            self._row = row
+
+        def single(self):
+            if self._row is None:
+                return None
+            return SimpleNamespace(data=lambda: self._row)
+
+    class _Tx:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+            self.committed = False
+
+        def run(self, query, parameters=None, **kwargs):
+            merged = dict(parameters or {}, **kwargs)
+            self.calls.append((query, merged))
+            return _Result()
+
+        def commit(self):
+            self.committed = True
+
+        def rollback(self):
+            pass
+
+    class _Session:
+        def __init__(self) -> None:
+            self.tx = _Tx()
+            self.begin_transaction_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def run(self, query, parameters=None, **kwargs):
+            return _Result(repo_row)
+
+        def begin_transaction(self):
+            self.begin_transaction_count += 1
+            return self.tx
+
+    session = _Session()
+    builder = SimpleNamespace(
+        driver=SimpleNamespace(session=MagicMock(return_value=session)),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
+        lambda: None,
+    )
+
+    commit_file_batch_to_graph(
+        builder,
+        files,
+        Path(repo_path),
+        debug_log_fn=lambda *_a, **_kw: None,
+        info_logger_fn=lambda *_a, **_kw: None,
+        warning_logger_fn=lambda *_a, **_kw: None,
+    )
+
+    # Single transaction for the whole batch
+    assert session.begin_transaction_count == 1
+    assert session.tx.committed
+
+    # UNWIND queries were used for entities and params
+    tx_queries = [call[0] for call in session.tx.calls]
+    unwind_queries = [q for q in tx_queries if "UNWIND" in q]
+    assert len(unwind_queries) >= 2, (
+        f"Expected at least 2 UNWIND queries (entities + params). Got {len(unwind_queries)}: "
+        f"{[q[:60] for q in unwind_queries]}"
+    )
+    assert any("Function" in q for q in unwind_queries)
+    assert any("Parameter" in q or "HAS_PARAMETER" in q for q in unwind_queries)
