@@ -1,0 +1,21 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "10e2d5164835a7b48b22ec855dd61aee9cfbc0bb",
+  "prompts": {
+    "1286a4baddf5927c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "34b94960-60f3-4fea-a89a-3a64ed782a17",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 27,
+      "total_deletions": 0,
+      "accepted_lines": 27,
+      "overriden_lines": 0
+    }
+  }
+}
