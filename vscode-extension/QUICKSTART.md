@@ -1,15 +1,18 @@
-# 🚀 Quick Start Guide - PlatformContextGraph VS Code Extension
+# Quick Start
 
-## Installation
+## Before you start
 
-### Step 1: Install pcg CLI
-```bash
-pip install platform-context-graph
-```
+Make sure you have:
 
-### Step 2: Install the Extension
+- [ ] VS Code 1.85.0 or higher
+- [ ] pcg CLI installed (`uv tool install platform-context-graph` or `pip install platform-context-graph`)
+- [ ] pcg is on your PATH (run `pcg --version` to verify)
+- [ ] A code project to index
 
-#### Option A: From VSIX (Development)
+## Install the extension
+
+### From VSIX (development builds)
+
 ```bash
 cd vscode-extension
 npm install
@@ -18,148 +21,60 @@ npm run package
 code --install-extension platform-context-graph-0.1.0.vsix
 ```
 
-#### Option B: From Marketplace (Coming Soon)
-1. Open VS Code
-2. Go to Extensions (`Cmd+Shift+X` or `Ctrl+Shift+X`)
-3. Search for "PlatformContextGraph"
-4. Click Install
+Then reload VS Code: `Cmd+Shift+P` -> "Developer: Reload Window"
 
-## First Steps
+## First steps
 
-### 1. Open a Project
+### 1. Open a project
+
 Open any code project in VS Code.
 
-### 2. Index Your Code
-- Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux)
-- Type "PCG: Index Current Workspace"
-- Press Enter
+### 2. Index your code
 
-The extension will index your code in the background. You'll see a status indicator in the status bar.
+`Cmd+Shift+P` / `Ctrl+Shift+P` -> "PCG: Index Current Workspace"
 
-### 3. Explore the Sidebar
-Click the PCG icon in the Activity Bar (left sidebar) to see:
-- **Projects**: All indexed projects
-- **Functions**: All functions in your code
-- **Classes**: All classes in your code
-- **Call Graph**: Callers and callees for the current function
-- **Dependencies**: Dependencies for the active file
+The status bar shows progress.
 
-### 4. Use Code Lens
-Open any file with functions. You'll see inline information above each function:
+### 3. Explore the sidebar
+
+Click the PCG icon in the activity bar:
+
+- **Projects** — indexed projects with statistics
+- **Functions** — functions grouped by file
+- **Classes** — classes grouped by file
+- **Call Graph** — callers and callees for the current function
+- **Dependencies** — imports for the active file
+
+### 4. View a call graph
+
+Right-click a function name -> "PCG: Show Call Graph"
+
+The interactive graph supports zoom (mouse wheel), pan (drag), and node repositioning.
+
+### 5. Use code lens
+
+With code lens enabled, you'll see inline info above function definitions:
+
 ```
 ← 3 callers | → 5 callees | Show Call Graph
-def my_function():
+def process_data(data):
     ...
 ```
 
-Click on any code lens to navigate or visualize.
+Click any label to navigate or visualize.
 
-### 5. Search Code
-- Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux)
-- Type "PCG: Search Code"
-- Enter a function, class, or file name
-- Select from results to navigate
+## Common tasks
 
-## Common Tasks
-
-### View Call Graph
-1. Right-click on a function name
-2. Select "PCG: Show Call Graph"
-3. Explore the interactive graph visualization
-
-### Find Dead Code
-1. Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux)
-2. Type "PCG: Find Dead Code"
-3. View unused functions and classes
-
-### Analyze Complexity
-1. Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux)
-2. Type "PCG: Analyze Complexity"
-3. See functions that exceed the complexity threshold
-
-### Load a Bundle
-1. Press `Cmd+Shift+P` (Mac) or `Ctrl+Shift+P` (Windows/Linux)
-2. Type "PCG: Load Bundle"
-3. Enter a bundle name (e.g., "numpy", "pandas")
-4. Explore the pre-indexed code
-
-## Configuration
-
-### Open Settings
-1. Press `Cmd+,` (Mac) or `Ctrl+,` (Windows/Linux)
-2. Search for "pcg"
-3. Adjust settings as needed
-
-### Key Settings
-- **Auto Index**: Automatically index workspace on startup
-- **Code Lens**: Show inline caller/callee information
-- **Diagnostics**: Show warnings for dead code and complexity
-- **Complexity Threshold**: Set the complexity warning threshold
-
-## Keyboard Shortcuts
-
-You can add custom keyboard shortcuts:
-1. Press `Cmd+K Cmd+S` (Mac) or `Ctrl+K Ctrl+S` (Windows/Linux)
-2. Search for "pcg"
-3. Click the + icon to add a shortcut
-
-Suggested shortcuts:
-- `Cmd+Shift+G` (Mac) or `Ctrl+Shift+G` (Windows/Linux): Show Call Graph
-- `Cmd+Shift+F` (Mac) or `Ctrl+Shift+F` (Windows/Linux): Search Code
-
-## Tips & Tricks
-
-### 1. Use the Status Bar
-Click the "PCG: Ready" status bar item to see project statistics.
-
-### 2. Navigate Quickly
-Click on any function or class in the tree views to jump to its definition.
-
-### 3. Explore Dependencies
-Open a file and check the Dependencies panel to see what it imports.
-
-### 4. Interactive Graphs
-In graph visualizations:
-- **Zoom**: Mouse wheel or pinch
-- **Pan**: Click and drag empty space
-- **Move nodes**: Drag individual nodes
-- **Hover**: See detailed information
-
-### 5. Context Menus
-Right-click on functions in the editor to access PCG commands.
+| Task | How |
+| :--- | :--- |
+| Search code | `Cmd+Shift+P` -> "PCG: Search Code" |
+| Find dead code | `Cmd+Shift+P` -> "PCG: Find Dead Code" |
+| Analyze complexity | `Cmd+Shift+P` -> "PCG: Analyze Complexity" |
+| Load a bundle | `Cmd+Shift+P` -> "PCG: Load Bundle" |
+| Re-index | `Cmd+Shift+P` -> "PCG: Re-index Current Workspace" |
 
 ## Troubleshooting
 
-### "pcg: command not found"
-Make sure pcg is installed and in your PATH:
-```bash
-pip install platform-context-graph
-which pcg  # Should show the path to pcg
-```
+If `pcg` is not found, either install it globally or set `pcg.cliPath` in VS Code settings to the full path.
 
-### Extension Not Working
-1. Check the Output panel (View → Output)
-2. Select "PlatformContextGraph" from the dropdown
-3. Look for error messages
-
-### Slow Indexing
-For large codebases:
-1. Disable "Index Source" in settings (faster but no code search)
-2. Use `.pcgignore` to exclude unnecessary directories
-3. Consider loading a pre-indexed bundle instead
-
-### No Results in Tree Views
-1. Make sure you've indexed the workspace
-2. Check that pcg is working: `pcg list` in terminal
-3. Try re-indexing: "PCG: Re-index Current Workspace"
-
-## Next Steps
-
-- Read the [full README](README.md) for detailed features
-- Check the [development guide](DEVELOPMENT.md) to contribute
-- Join our [Discord community](https://discord.gg/VCwUdCnn)
-- Report issues on [GitHub](https://github.com/platformcontext/platform-context-graph/issues)
-
----
-
-**Happy coding with PlatformContextGraph!** 🎉
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for more.

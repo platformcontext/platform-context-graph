@@ -1,60 +1,27 @@
-# Change Log
-
-All notable changes to the "PlatformContextGraph" extension will be documented in this file.
+# Changelog
 
 ## [0.1.0] - 2026-02-04
 
 ### Added
-- Initial release of PlatformContextGraph VS Code Extension
-- Complete integration with pcg CLI
-- Tree view providers:
-  - Projects explorer
-  - Functions browser
-  - Classes browser
-  - Call graph viewer
-  - Dependencies tracker
-- Interactive graph visualization using D3.js
-  - Force-directed layout
-  - Zoom and pan controls
-  - Drag-to-reposition nodes
-  - Hover tooltips
-- Code lens provider:
-  - Inline caller/callee counts
-  - Quick access to call graph
-  - One-click navigation
-- Diagnostics provider:
-  - Dead code warnings
-  - Complexity warnings
-  - Integration with Problems panel
-- Command palette integration:
-  - Indexing commands
-  - Search and navigation
-  - Analysis tools
-  - Settings access
-- Configuration options:
-  - Database path
-  - Auto-indexing
-  - Code lens toggle
-  - Diagnostics toggle
-  - Complexity threshold
+
+- Initial release
+- pcg CLI integration via `pcgManager.ts`
+- Tree view providers: Projects, Functions, Classes, Call Graph, Dependencies
+- Interactive D3.js force-directed graph visualization
+- Code lens with inline caller/callee counts
+- Diagnostics for dead code and complexity warnings
+- 16 commands in the command palette
+- 9 configuration settings
+- Virtual environment auto-detection for pcg CLI
 - Bundle loading support
 - Status bar integration
 - Context menu integration
-- Keyboard shortcuts support
-
-### Features
-- Real-time file watching and auto-indexing
-- Multi-workspace support
-- Comprehensive error handling
-- Performance optimizations for large codebases
 
 ## [Unreleased]
 
 ### Planned
+
 - Language Server Protocol (LSP) integration
-- Advanced graph filtering options
+- Advanced graph filtering
 - Export graph visualizations as images
 - Custom Cypher query builder UI
-- Integration with Git for change analysis
-- Collaborative features
-- Performance profiling integration
