@@ -1,0 +1,25 @@
+src/platform_context_graph/indexing/coordinator_pipeline.py
+  4de1f16cf36eb252 6,127-154,213,215-216,300,302-303,316-331
+tests/unit/indexing/test_coordinator_pipeline.py
+  4de1f16cf36eb252 1-255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "8195496a958d7c31f9281fc4a438f8da517d1b79",
+  "prompts": {
+    "4de1f16cf36eb252": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2fefa212-3194-4199-be77-d18cd7c7251b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 331,
+      "total_deletions": 61,
+      "accepted_lines": 306,
+      "overriden_lines": 0
+    }
+  }
+}
