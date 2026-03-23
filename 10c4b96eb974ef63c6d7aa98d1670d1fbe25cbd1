@@ -1,0 +1,29 @@
+src/platform_context_graph/indexing/coordinator.py
+  4de1f16cf36eb252 138
+src/platform_context_graph/tools/graph_builder_persistence_batch.py
+  4de1f16cf36eb252 9,49
+src/platform_context_graph/tools/graph_builder_persistence_unwind.py
+  4de1f16cf36eb252 15,315
+tests/unit/core/test_graph_builder_content_store.py
+  4de1f16cf36eb252 5,9-12,205-315
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "10c4b96eb974ef63c6d7aa98d1670d1fbe25cbd1",
+  "prompts": {
+    "4de1f16cf36eb252": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2fefa212-3194-4199-be77-d18cd7c7251b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 121,
+      "total_deletions": 6,
+      "accepted_lines": 121,
+      "overriden_lines": 0
+    }
+  }
+}
