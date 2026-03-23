@@ -11,7 +11,7 @@ from ..content.ingest import (
     repository_metadata_from_row,
 )
 from ..content.state import get_postgres_content_provider
-from .graph_builder_persistence_unwind import (
+from .graph_builder_persistence_batch import (
     collect_file_write_data,
     empty_accumulator,
     flush_write_batches,
