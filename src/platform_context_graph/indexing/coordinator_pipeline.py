@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -111,35 +112,6 @@ async def process_repository_snapshots(
         """Parse one repository snapshot and enqueue it for serialized commit."""
 
         repo_state = run_state.repositories[str(repo_path.resolve())]
-        repo_state.started_at = utc_now_fn()
-        repo_state.finished_at = None
-        repo_state.error = None
-        repo_state.status = "running"
-        persist_run_state_fn(run_state)
-        record_checkpoint_metric_fn(
-            component=component,
-            mode=family,
-            source=source,
-            operation="save",
-            status="completed",
-        )
-        _publish_indexing_state()
-        telemetry.record_index_repositories(
-            component=component,
-            phase="started",
-            count=1,
-            mode=family,
-            source=source,
-        )
-        if resume_candidate:
-            telemetry.record_index_repositories(
-                component=component,
-                phase="resumed",
-                count=1,
-                mode=family,
-                source=source,
-            )
-
         started = time.perf_counter()
         with telemetry.start_span(
             "pcg.index.repository",
@@ -152,6 +124,34 @@ async def process_repository_snapshots(
         ) as repo_span:
             try:
                 async with parse_semaphore:
+                    repo_state.started_at = utc_now_fn()
+                    repo_state.finished_at = None
+                    repo_state.error = None
+                    repo_state.status = "running"
+                    persist_run_state_fn(run_state)
+                    record_checkpoint_metric_fn(
+                        component=component,
+                        mode=family,
+                        source=source,
+                        operation="save",
+                        status="completed",
+                    )
+                    _publish_indexing_state()
+                    telemetry.record_index_repositories(
+                        component=component,
+                        phase="started",
+                        count=1,
+                        mode=family,
+                        source=source,
+                    )
+                    if resume_candidate:
+                        telemetry.record_index_repositories(
+                            component=component,
+                            phase="resumed",
+                            count=1,
+                            mode=family,
+                            source=source,
+                        )
                     snapshot = await parse_repository_snapshot_async_fn(
                         builder,
                         repo_path,
@@ -210,8 +210,10 @@ async def process_repository_snapshots(
                 )
                 if repo_span is not None:
                     repo_span.record_exception(exc)
+                tb = traceback.format_exception(exc)
                 warning_logger_fn(
-                    f"Failed to index repository {repo_path.resolve()}: {exc}"
+                    f"Failed to index repository {repo_path.resolve()}: {exc}\n"
+                    f"{''.join(tb)}"
                 )
             finally:
                 _publish_indexing_state()
@@ -295,8 +297,10 @@ async def process_repository_snapshots(
                     status="commit_incomplete",
                     duration_seconds=time.perf_counter() - started,
                 )
+                tb = traceback.format_exception(exc)
                 warning_logger_fn(
-                    f"Failed to commit repository {repo_path.resolve()}: {exc}"
+                    f"Failed to commit repository {repo_path.resolve()}: {exc}\n"
+                    f"{''.join(tb)}"
                 )
             finally:
                 snapshot_queue.task_done()
@@ -309,11 +313,22 @@ async def process_repository_snapshots(
         )
         for repo_path, resume_candidate in parse_targets
     ]
-    if parse_tasks:
-        await asyncio_module.gather(*parse_tasks)
-    await snapshot_queue.join()
-    await snapshot_queue.put(queue_sentinel)
-    await commit_task
+    try:
+        if parse_tasks:
+            results = await asyncio_module.gather(
+                *parse_tasks, return_exceptions=True
+            )
+            for idx, result in enumerate(results):
+                if isinstance(result, Exception):
+                    repo_path = parse_targets[idx][0]
+                    tb = traceback.format_exception(result)
+                    warning_logger_fn(
+                        f"Parse task for {repo_path.resolve()} escaped error handler: {result}\n"
+                        f"{''.join(tb)}"
+                    )
+    finally:
+        await snapshot_queue.put(queue_sentinel)
+        await commit_task
     return snapshots, merged_imports_map
 
 
