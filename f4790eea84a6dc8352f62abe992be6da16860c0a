@@ -1,0 +1,25 @@
+docs/docs/deployment/helm.md
+  bc8de5acf5b9d599 5-7,9,11-12,14,16,22,25-28,34,36-42,44,46-64,66,68,70-73,75,77,79,88-100
+docs/docs/deployment/argocd.md
+  bc8de5acf5b9d599 3,5-6,8,10,12-14,16-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "f4790eea84a6dc8352f62abe992be6da16860c0a",
+  "prompts": {
+    "bc8de5acf5b9d599": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a1a75ed0-af0f-4475-8453-82f9a3b36f3f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 117,
+      "total_deletions": 47,
+      "accepted_lines": 117,
+      "overriden_lines": 0
+    }
+  }
+}
