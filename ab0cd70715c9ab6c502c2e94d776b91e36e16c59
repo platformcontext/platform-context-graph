@@ -1,0 +1,27 @@
+src/platform_context_graph/runtime/ingester/README.md
+  bc8de5acf5b9d599 3-17,19-27,29-35
+src/platform_context_graph/query/README.md
+  bc8de5acf5b9d599 3,5,7-16
+src/platform_context_graph/content/README.md
+  bc8de5acf5b9d599 3,5,7-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "ab0cd70715c9ab6c502c2e94d776b91e36e16c59",
+  "prompts": {
+    "bc8de5acf5b9d599": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a1a75ed0-af0f-4475-8453-82f9a3b36f3f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 60,
+      "total_deletions": 49,
+      "accepted_lines": 58,
+      "overriden_lines": 0
+    }
+  }
+}
