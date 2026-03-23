@@ -217,6 +217,33 @@ def test_build_graph_from_path_async_uses_checkpointed_coordinator_for_directori
     assert recorded["component"] == "bootstrap-index"
 
 
+def test_graph_builder_create_all_function_calls_returns_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The GraphBuilder wrapper should return finalization call metrics."""
+
+    import platform_context_graph.tools.graph_builder as graph_builder_module
+
+    builder = GraphBuilder.__new__(GraphBuilder)
+    expected = {
+        "contextual_exact_duration_seconds": 1.0,
+        "contextual_fallback_duration_seconds": 2.0,
+        "file_level_exact_duration_seconds": 3.0,
+        "file_level_fallback_duration_seconds": 4.0,
+        "total_duration_seconds": 10.0,
+    }
+
+    monkeypatch.setattr(
+        graph_builder_module,
+        "_create_all_function_calls",
+        lambda *_args, **_kwargs: expected,
+    )
+
+    metrics = builder._create_all_function_calls([], {})
+
+    assert metrics is expected
+
+
 def test_collect_supported_files_records_hidden_directory_skip_metrics(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):

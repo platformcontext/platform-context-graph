@@ -207,7 +207,7 @@ def _begin_transaction(session: Any) -> tuple[Any, bool]:
     if begin is not None:
         try:
             return begin(), True
-        except (AttributeError, NotImplementedError, TypeError):
+        except (AttributeError, NotImplementedError, RuntimeError, TypeError):
             pass
     return session, False
 

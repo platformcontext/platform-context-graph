@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from platform_context_graph.tools.graph_builder_persistence import (
+    _begin_transaction,
     add_file_to_graph,
     commit_file_batch_to_graph,
 )
@@ -86,9 +87,9 @@ def test_add_file_to_graph_dual_writes_content_and_uses_uid_merges(
     content_provider.upsert_entities.assert_called_once()
     # Entity writes now go through tx.run via UNWIND; check for uid-based merge
     tx_queries = [call.args[0] for call in tx.run.call_args_list]
-    assert any("uid: row.uid" in query for query in tx_queries), (
-        f"Expected uid-based UNWIND merge in tx queries. Got: {tx_queries}"
-    )
+    assert any(
+        "uid: row.uid" in query for query in tx_queries
+    ), f"Expected uid-based UNWIND merge in tx queries. Got: {tx_queries}"
 
 
 def test_add_file_to_graph_passes_reserved_parameter_names_as_mapping(
@@ -151,7 +152,10 @@ def test_add_file_to_graph_passes_reserved_parameter_names_as_mapping(
         def run(self, query, parameters=None, **kwargs):
             merged = dict(parameters or {}, **kwargs)
             self.calls.append((query, merged))
-            if "MATCH (r:Repository {path: $repo_path})" in query and not self._repo_lookup_done:
+            if (
+                "MATCH (r:Repository {path: $repo_path})" in query
+                and not self._repo_lookup_done
+            ):
                 self._repo_lookup_done = True
                 return _Result(repo_row)
             return _Result()
@@ -196,8 +200,14 @@ def test_add_file_to_graph_passes_reserved_parameter_names_as_mapping(
 
     # Entity writes go through tx.run via UNWIND; the rows list contains the entity props.
     tx_calls = session.tx.calls
-    entity_calls = [call for call in tx_calls if "UNWIND $rows AS row" in call[0] and "Function" in call[0]]
-    assert entity_calls, f"Expected UNWIND Function query in tx calls. Got: {[c[0][:80] for c in tx_calls]}"
+    entity_calls = [
+        call
+        for call in tx_calls
+        if "UNWIND $rows AS row" in call[0] and "Function" in call[0]
+    ]
+    assert (
+        entity_calls
+    ), f"Expected UNWIND Function query in tx calls. Got: {[c[0][:80] for c in tx_calls]}"
     _, params = entity_calls[0]
     rows = params.get("rows", [])
     assert rows, "Expected non-empty rows in UNWIND query"
@@ -313,3 +323,33 @@ def test_commit_file_batch_uses_single_transaction_with_unwind(
     )
     assert any("Function" in q for q in unwind_queries)
     assert any("Parameter" in q or "HAS_PARAMETER" in q for q in unwind_queries)
+
+
+def test_begin_transaction_falls_back_when_driver_raises_runtime_error() -> None:
+    """Drivers that raise RuntimeError should fall back to session auto-commit."""
+
+    class _Session:
+        def begin_transaction(self):
+            raise RuntimeError("transactions unsupported")
+
+    session = _Session()
+
+    tx, is_explicit = _begin_transaction(session)
+
+    assert tx is session
+    assert is_explicit is False
+
+
+def test_begin_transaction_falls_back_when_driver_raises_not_implemented() -> None:
+    """Drivers that raise NotImplementedError should fall back to auto-commit."""
+
+    class _Session:
+        def begin_transaction(self):
+            raise NotImplementedError("transactions unsupported")
+
+    session = _Session()
+
+    tx, is_explicit = _begin_transaction(session)
+
+    assert tx is session
+    assert is_explicit is False

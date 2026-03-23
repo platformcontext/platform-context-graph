@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import re
 from typing import Any
 
 from ..cli.config_manager import get_config_value
-from ..content.ingest import CONTENT_ENTITY_LABELS
 
 # ---------------------------------------------------------------------------
 # Entity property normalisation
@@ -47,6 +46,7 @@ ITEM_MAPPINGS_KEYS: list[tuple[str, str]] = [
 
 VALUE_TRUNCATION_MARKER = " [truncated]"
 DEFAULT_MAX_ENTITY_VALUE_LENGTH = 200
+CYPHER_PROPERTY_KEY_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 def resolve_max_entity_value_length(raw_value: str | None = None) -> int:
@@ -158,6 +158,13 @@ def run_entity_unwind(
         all_keys.update(row.keys())
     reserved = {"file_path", "name", "line_number", "use_uid_identity", "uid"}
     extra_keys = sorted(all_keys - reserved)
+    invalid_keys = [
+        key for key in extra_keys if CYPHER_PROPERTY_KEY_PATTERN.fullmatch(key) is None
+    ]
+    if invalid_keys:
+        raise ValueError(
+            "Invalid Cypher property key(s): " + ", ".join(sorted(invalid_keys))
+        )
 
     for row in rows:
         for key in extra_keys:
