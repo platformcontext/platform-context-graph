@@ -22,9 +22,11 @@ def test_add_file_to_graph_dual_writes_content_and_uses_uid_merges(
         encoding="utf-8",
     )
 
+    tx = MagicMock()
     session = MagicMock()
     session.__enter__.return_value = session
     session.__exit__.return_value = False
+    session.begin_transaction.return_value = tx
     session.run.side_effect = [
         SimpleNamespace(
             single=lambda: SimpleNamespace(
@@ -39,11 +41,6 @@ def test_add_file_to_graph_dual_writes_content_and_uses_uid_merges(
                 }
             )
         ),
-        MagicMock(),
-        MagicMock(),
-        MagicMock(),
-        MagicMock(),
-        MagicMock(),
     ]
 
     builder = SimpleNamespace(
@@ -69,6 +66,7 @@ def test_add_file_to_graph_dual_writes_content_and_uses_uid_merges(
                     "end_line": 2,
                     "source": "def process_payment():\n    return True\n",
                     "args": [],
+                    "uid": "repository:r_ab12cd34:payments.py:Function:process_payment:1",
                 }
             ],
             "function_calls": [],
@@ -82,8 +80,11 @@ def test_add_file_to_graph_dual_writes_content_and_uses_uid_merges(
 
     content_provider.upsert_file.assert_called_once()
     content_provider.upsert_entities.assert_called_once()
-    merge_queries = [call.args[0] for call in session.run.call_args_list]
-    assert any("MERGE (n:Function {uid: $uid})" in query for query in merge_queries)
+    # Entity writes now go through tx.run via UNWIND; check for uid-based merge
+    tx_queries = [call.args[0] for call in tx.run.call_args_list]
+    assert any("uid: row.uid" in query for query in tx_queries), (
+        f"Expected uid-based UNWIND merge in tx queries. Got: {tx_queries}"
+    )
 
 
 def test_add_file_to_graph_passes_reserved_parameter_names_as_mapping(
@@ -116,10 +117,26 @@ def test_add_file_to_graph_passes_reserved_parameter_names_as_mapping(
                 return None
             return SimpleNamespace(data=lambda: self._row)
 
+    class _Tx:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        def run(self, query, parameters=None, **kwargs):
+            merged = dict(parameters or {}, **kwargs)
+            self.calls.append((query, merged))
+            return _Result()
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
     class _Session:
         def __init__(self) -> None:
             self.calls: list[tuple[str, dict[str, object]]] = []
             self._repo_lookup_done = False
+            self.tx = _Tx()
 
         def __enter__(self):
             return self
@@ -134,6 +151,9 @@ def test_add_file_to_graph_passes_reserved_parameter_names_as_mapping(
                 self._repo_lookup_done = True
                 return _Result(repo_row)
             return _Result()
+
+        def begin_transaction(self):
+            return self.tx
 
     session = _Session()
     builder = SimpleNamespace(
@@ -170,7 +190,11 @@ def test_add_file_to_graph_passes_reserved_parameter_names_as_mapping(
         warning_logger_fn=lambda *_args, **_kwargs: None,
     )
 
-    entity_calls = [call for call in session.calls if "MERGE (n:Function" in call[0]]
-    assert entity_calls
+    # Entity writes go through tx.run via UNWIND; the rows list contains the entity props.
+    tx_calls = session.tx.calls
+    entity_calls = [call for call in tx_calls if "UNWIND $rows AS row" in call[0] and "Function" in call[0]]
+    assert entity_calls, f"Expected UNWIND Function query in tx calls. Got: {[c[0][:80] for c in tx_calls]}"
     _, params = entity_calls[0]
-    assert params["parameters"] == ["context", "reactInstanceManager"]
+    rows = params.get("rows", [])
+    assert rows, "Expected non-empty rows in UNWIND query"
+    assert rows[0]["parameters"] == ["context", "reactInstanceManager"]
