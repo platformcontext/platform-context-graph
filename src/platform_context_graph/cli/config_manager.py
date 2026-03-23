@@ -10,113 +10,16 @@ from typing import Optional, Dict, Any
 from rich.console import Console
 from rich.table import Table
 
-from ..paths import get_app_env_file, get_app_home
+from .config_catalog import (
+    CONFIG_DESCRIPTIONS,
+    CONFIG_DIR,
+    CONFIG_FILE,
+    CONFIG_VALIDATORS,
+    DATABASE_CREDENTIAL_KEYS,
+    DEFAULT_CONFIG,
+)
 
 console = Console()
-
-# Configuration file location
-CONFIG_DIR = get_app_home()
-CONFIG_FILE = get_app_env_file()
-
-# Database credential keys (stored in same .env file but not managed as config)
-DATABASE_CREDENTIAL_KEYS = {
-    "NEO4J_URI",
-    "NEO4J_USERNAME",
-    "NEO4J_PASSWORD",
-    "NEO4J_DATABASE",
-}
-
-# Default configuration values
-DEFAULT_CONFIG = {
-    "DEFAULT_DATABASE": "falkordb",
-    "FALKORDB_PATH": str(CONFIG_DIR / "falkordb.db"),
-    "FALKORDB_SOCKET_PATH": str(CONFIG_DIR / "falkordb.sock"),
-    "INDEX_VARIABLES": "true",
-    "ALLOW_DB_DELETION": "false",
-    "DEBUG_LOGS": "false",
-    "DEBUG_LOG_PATH": str(Path.home() / "mcp_debug.log"),
-    "ENABLE_APP_LOGS": "CRITICAL",
-    "LIBRARY_LOG_LEVEL": "WARNING",
-    "LOG_FILE_PATH": str(CONFIG_DIR / "logs" / "pcg.log"),
-    "MAX_FILE_SIZE_MB": "10",
-    "IGNORE_TEST_FILES": "false",
-    "IGNORE_HIDDEN_FILES": "true",
-    "ENABLE_AUTO_WATCH": "false",
-    "COMPLEXITY_THRESHOLD": "10",
-    "MAX_DEPTH": "unlimited",
-    "PARALLEL_WORKERS": "4",
-    "PCG_PARSE_WORKERS": "4",
-    "PCG_INDEX_QUEUE_DEPTH": "8",
-    "PCG_WATCH_DEBOUNCE_SECONDS": "2.0",
-    "CACHE_ENABLED": "true",
-    "IGNORE_DIRS": "node_modules,venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__,.terraform,.terragrunt-cache,.pulumi,.serverless,.aws-sam,.crossplane,cdk.out,.terramate-cache",
-    "INDEX_SOURCE": "true",
-    # SCIP indexer feature flag (default off — existing Tree-sitter behaviour unchanged)
-    "SCIP_INDEXER": "false",
-    "SCIP_LANGUAGES": "python,typescript,go,rust,java",
-    "SKIP_EXTERNAL_RESOLUTION": "false",
-    # Infrastructure indexing
-    "INDEX_YAML": "true",
-    "INDEX_HCL": "true",
-    # Ecosystem settings
-    "ECOSYSTEM_MANIFEST_PATH": "",
-    "ECOSYSTEM_BASE_PATH": "",
-    "ECOSYSTEM_PARALLEL_REPOS": "4",
-}
-
-# Configuration key descriptions
-CONFIG_DESCRIPTIONS = {
-    "DEFAULT_DATABASE": "Default database backend (neo4j|falkordb|kuzudb)",
-    "FALKORDB_PATH": "Path to FalkorDB database file",
-    "FALKORDB_SOCKET_PATH": "Path to FalkorDB Unix socket",
-    "INDEX_VARIABLES": "Index variable nodes in the graph (lighter graph if false)",
-    "ALLOW_DB_DELETION": "Allow full database deletion commands",
-    "DEBUG_LOGS": "Enable debug logging (for development/troubleshooting)",
-    "DEBUG_LOG_PATH": "Path to debug log file",
-    "ENABLE_APP_LOGS": "Application log level (DEBUG|INFO|WARNING|ERROR|CRITICAL|DISABLED)",
-    "LIBRARY_LOG_LEVEL": "Log level for third-party libraries (neo4j, asyncio, urllib3) (DEBUG|INFO|WARNING|ERROR|CRITICAL)",
-    "LOG_FILE_PATH": "Path to application log file",
-    "MAX_FILE_SIZE_MB": "Maximum file size to index (in MB)",
-    "IGNORE_TEST_FILES": "Skip test files during indexing",
-    "IGNORE_HIDDEN_FILES": "Skip hidden files/directories",
-    "ENABLE_AUTO_WATCH": "Automatically watch directory after indexing",
-    "COMPLEXITY_THRESHOLD": "Cyclomatic complexity warning threshold",
-    "MAX_DEPTH": "Maximum directory depth for indexing (unlimited or number)",
-    "PARALLEL_WORKERS": "Legacy fallback for parse workers when PCG_PARSE_WORKERS is unset",
-    "PCG_PARSE_WORKERS": "Number of concurrent repository parse workers for checkpointed indexing",
-    "PCG_INDEX_QUEUE_DEPTH": "Maximum queued parsed repositories waiting to commit",
-    "PCG_WATCH_DEBOUNCE_SECONDS": "Debounce interval in seconds for watcher update batches",
-    "CACHE_ENABLED": "Enable caching for faster re-indexing",
-    "IGNORE_DIRS": "Comma-separated list of directory names to ignore during indexing",
-    "INDEX_SOURCE": "Store full source code in graph database (for faster indexing use false, for better performance use true)",
-    "SCIP_INDEXER": "Use SCIP-based indexing for higher accuracy call/inheritance resolution (requires scip-<lang> tools installed)",
-    "SCIP_LANGUAGES": "Comma-separated languages to index via SCIP when SCIP_INDEXER=true (python,typescript,go,rust,java)",
-    "SKIP_EXTERNAL_RESOLUTION": "Skip resolution attempts for external library method calls (recommended for enterprise large Java/Spring codebases)",
-    "INDEX_YAML": "Index YAML infrastructure files (K8s, ArgoCD, Crossplane, Helm, Kustomize)",
-    "INDEX_HCL": "Index HCL/Terraform infrastructure files (.tf, .hcl)",
-    "ECOSYSTEM_MANIFEST_PATH": "Path to ecosystem dependency-graph.yaml manifest",
-    "ECOSYSTEM_BASE_PATH": "Base directory where ecosystem repos are cloned",
-    "ECOSYSTEM_PARALLEL_REPOS": "Number of repos to index in parallel during ecosystem indexing",
-}
-
-# Valid values for each config key
-CONFIG_VALIDATORS = {
-    "DEFAULT_DATABASE": ["neo4j", "falkordb", "kuzudb"],
-    "INDEX_VARIABLES": ["true", "false"],
-    "ALLOW_DB_DELETION": ["true", "false"],
-    "DEBUG_LOGS": ["true", "false"],
-    "ENABLE_APP_LOGS": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "DISABLED"],
-    "LIBRARY_LOG_LEVEL": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-    "IGNORE_TEST_FILES": ["true", "false"],
-    "IGNORE_HIDDEN_FILES": ["true", "false"],
-    "ENABLE_AUTO_WATCH": ["true", "false"],
-    "CACHE_ENABLED": ["true", "false"],
-    "INDEX_SOURCE": ["true", "false"],
-    "SCIP_INDEXER": ["true", "false"],
-    "SKIP_EXTERNAL_RESOLUTION": ["true", "false"],
-    "INDEX_YAML": ["true", "false"],
-    "INDEX_HCL": ["true", "false"],
-}
 
 
 def ensure_config_dir(path: Path = CONFIG_DIR):
