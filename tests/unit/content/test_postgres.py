@@ -58,6 +58,12 @@ def test_upsert_runtime_status_persists_ingester_status(monkeypatch) -> None:
         source_mode="githubOrg",
         status="degraded",
         active_run_id="run-123",
+        active_repository_path="/tmp/repos/repo-c",
+        active_phase="committing",
+        active_phase_started_at="2026-03-22T12:03:00+00:00",
+        active_current_file="/tmp/repos/repo-c/app.js",
+        active_last_progress_at="2026-03-22T12:04:00+00:00",
+        active_commit_started_at="2026-03-22T12:04:30+00:00",
         last_attempt_at="2026-03-22T12:00:00+00:00",
         last_success_at="2026-03-22T11:00:00+00:00",
         next_retry_at="2026-03-22T12:05:00+00:00",
@@ -76,6 +82,8 @@ def test_upsert_runtime_status_persists_ingester_status(monkeypatch) -> None:
     assert params["ingester"] == "repository"
     assert params["status"] == "degraded"
     assert params["active_run_id"] == "run-123"
+    assert params["active_repository_path"] == "/tmp/repos/repo-c"
+    assert params["active_phase"] == "committing"
     assert params["last_error_kind"] == "dns"
     assert params["pulled_repositories"] == 180
     assert params["in_sync_repositories"] == 160

@@ -137,6 +137,12 @@ class IngesterStatusResponse(BaseModel):
     next_retry_at: str | None = None
     last_error_kind: str | None = None
     last_error_message: str | None = None
+    active_repository_path: str | None = None
+    active_phase: str | None = None
+    active_phase_started_at: str | None = None
+    active_current_file: str | None = None
+    active_last_progress_at: str | None = None
+    active_commit_started_at: str | None = None
     repository_count: int = 0
     pulled_repositories: int = 0
     in_sync_repositories: int = 0

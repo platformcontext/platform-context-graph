@@ -24,6 +24,9 @@ _TIMESTAMP_FIELDS = (
     "last_attempt_at",
     "last_success_at",
     "next_retry_at",
+    "active_phase_started_at",
+    "active_last_progress_at",
+    "active_commit_started_at",
     "scan_requested_at",
     "scan_started_at",
     "scan_completed_at",
@@ -46,6 +49,12 @@ def _default_status(ingester: str) -> dict[str, Any]:
         "next_retry_at": None,
         "last_error_kind": None,
         "last_error_message": None,
+        "active_repository_path": None,
+        "active_phase": None,
+        "active_phase_started_at": None,
+        "active_current_file": None,
+        "active_last_progress_at": None,
+        "active_commit_started_at": None,
         "repository_count": 0,
         "pulled_repositories": 0,
         "in_sync_repositories": 0,
@@ -78,7 +87,9 @@ def list_ingesters(_database: Any) -> list[dict[str, Any]]:
     """Return the current status for each known ingester."""
 
     with trace_query("runtime_list_ingesters"):
-        return [get_ingester_status(_database, ingester=name) for name in KNOWN_INGESTERS]
+        return [
+            get_ingester_status(_database, ingester=name) for name in KNOWN_INGESTERS
+        ]
 
 
 def get_ingester_status(

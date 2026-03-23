@@ -28,6 +28,15 @@ def test_get_ingester_status_normalizes_datetime_fields(
                 "provider": "repository",
                 "status": "idle",
                 "last_attempt_at": datetime(2026, 3, 22, 12, 0, tzinfo=timezone.utc),
+                "active_phase_started_at": datetime(
+                    2026, 3, 22, 12, 0, 30, tzinfo=timezone.utc
+                ),
+                "active_last_progress_at": datetime(
+                    2026, 3, 22, 12, 0, 45, tzinfo=timezone.utc
+                ),
+                "active_commit_started_at": datetime(
+                    2026, 3, 22, 12, 0, 50, tzinfo=timezone.utc
+                ),
                 "updated_at": datetime(2026, 3, 22, 12, 1, tzinfo=timezone.utc),
             }
         }
@@ -37,6 +46,9 @@ def test_get_ingester_status_normalizes_datetime_fields(
     result = status_queries.get_ingester_status(object(), ingester="repository")
 
     assert result["last_attempt_at"] == "2026-03-22T12:00:00+00:00"
+    assert result["active_phase_started_at"] == "2026-03-22T12:00:30+00:00"
+    assert result["active_last_progress_at"] == "2026-03-22T12:00:45+00:00"
+    assert result["active_commit_started_at"] == "2026-03-22T12:00:50+00:00"
     assert result["updated_at"] == "2026-03-22T12:01:00+00:00"
 
 

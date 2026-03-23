@@ -159,6 +159,15 @@ def _deserialize_run_state(payload: dict[str, Any]) -> IndexRunState:
         finalization_status=payload["finalization_status"],
         created_at=payload["created_at"],
         updated_at=payload["updated_at"],
+        finalization_started_at=payload.get("finalization_started_at"),
+        finalization_finished_at=payload.get("finalization_finished_at"),
+        finalization_duration_seconds=payload.get("finalization_duration_seconds"),
+        finalization_current_stage=payload.get("finalization_current_stage"),
+        finalization_stage_started_at=payload.get("finalization_stage_started_at"),
+        finalization_stage_durations=dict(
+            payload.get("finalization_stage_durations", {})
+        ),
+        finalization_stage_details=dict(payload.get("finalization_stage_details", {})),
         last_error=payload.get("last_error"),
         repositories=repositories,
     )

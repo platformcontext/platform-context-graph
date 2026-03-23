@@ -49,7 +49,9 @@ def test_execute_index_run_parses_multiple_repositories_concurrently(
         job_id,
         asyncio_module,
         info_logger_fn,
+        progress_callback=None,
     ) -> RepositorySnapshot:
+        del is_dependency, job_id, asyncio_module, info_logger_fn, progress_callback
         parse_order.append(repo_path.name)
         if len(parse_order) == 1:
             await asyncio.wait_for(second_started.wait(), timeout=0.5)
@@ -68,7 +70,9 @@ def test_execute_index_run_parses_multiple_repositories_concurrently(
     )
     monkeypatch.setattr(
         "platform_context_graph.indexing.coordinator._commit_repository_snapshot",
-        lambda _builder, snapshot, *, is_dependency: committed.append(snapshot.repo_path),
+        lambda _builder, snapshot, *, is_dependency: committed.append(
+            snapshot.repo_path
+        ),
     )
     monkeypatch.setattr(
         "platform_context_graph.indexing.coordinator.finalize_index_batch",
@@ -94,7 +98,9 @@ def test_execute_index_run_parses_multiple_repositories_concurrently(
         lambda: telemetry,
     )
 
-    builder = SimpleNamespace(job_manager=SimpleNamespace(update_job=lambda *_args, **_kwargs: None))
+    builder = SimpleNamespace(
+        job_manager=SimpleNamespace(update_job=lambda *_args, **_kwargs: None)
+    )
 
     result = asyncio.run(
         execute_index_run(

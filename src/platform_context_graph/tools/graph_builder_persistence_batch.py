@@ -22,6 +22,8 @@ from .graph_builder_persistence_unwind import (
 def collect_file_write_data(
     file_data: dict[str, Any],
     file_path_str: str,
+    *,
+    max_entity_value_length: int | None = None,
 ) -> dict[str, Any]:
     """Return all write-batches for a single file, ready for UNWIND dispatch.
 
@@ -52,7 +54,13 @@ def collect_file_write_data(
                 item["cyclomatic_complexity"] = 1
 
             use_uid = label in CONTENT_ENTITY_LABELS and bool(item.get("uid"))
-            row = entity_props_for_unwind(label, item, file_path_str, use_uid)
+            row = entity_props_for_unwind(
+                label,
+                item,
+                file_path_str,
+                use_uid,
+                max_entity_value_length=max_entity_value_length,
+            )
             entities_by_label.setdefault(label, []).append(row)
 
             if label == "Function":

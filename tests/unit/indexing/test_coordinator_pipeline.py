@@ -91,6 +91,7 @@ IndexRunState = MODELS.IndexRunState
 RepositoryRunState = MODELS.RepositoryRunState
 RepositorySnapshot = MODELS.RepositorySnapshot
 process_repository_snapshots = PIPELINE.process_repository_snapshots
+finalize_repository_batch = PIPELINE.finalize_repository_batch
 
 
 def _make_run_state(repo_paths: list[Path]) -> IndexRunState:
@@ -446,3 +447,222 @@ def test_pipeline_sentinel_delivered_on_all_tasks_failing(tmp_path: Path) -> Non
     assert snapshots == []
     assert run_state.failed_repositories() == 3
     assert run_state.completed_repositories() == 0
+
+
+def test_pipeline_tracks_repository_phase_transitions(tmp_path: Path) -> None:
+    """Checkpoint state should show parsing and committing progress for a repo."""
+
+    repo = tmp_path / "repo-a"
+    repo.mkdir()
+    file_path = repo / "main.py"
+    file_path.write_text("print('a')\n", encoding="utf-8")
+    repo_paths = [repo]
+    repo_file_sets = {repo: [file_path]}
+    run_state = _make_run_state(repo_paths)
+    phase_snapshots: list[tuple[str | None, str | None, str | None, str | None]] = []
+
+    def capture_persist(_state) -> None:
+        repo_state = run_state.repositories[str(repo.resolve())]
+        phase_snapshots.append(
+            (
+                repo_state.status,
+                repo_state.phase,
+                repo_state.current_file,
+                repo_state.last_progress_at,
+            )
+        )
+
+    async def parse_snapshot(_builder, repo_path, repo_files, **_kw):
+        del repo_path
+        progress_callback = _kw["progress_callback"]
+        progress_callback(current_file=str(repo_files[0].resolve()))
+        return RepositorySnapshot(
+            repo_path=str(repo.resolve()),
+            file_count=len(repo_files),
+            imports_map={},
+            file_data=[],
+        )
+
+    asyncio.run(
+        process_repository_snapshots(
+            builder=SimpleNamespace(),
+            run_state=run_state,
+            repo_paths=repo_paths,
+            repo_file_sets=repo_file_sets,
+            resumed=False,
+            is_dependency=False,
+            job_id=None,
+            component="test",
+            family="index",
+            source="manual",
+            asyncio_module=asyncio,
+            info_logger_fn=lambda *_a, **_kw: None,
+            warning_logger_fn=lambda *_a, **_kw: None,
+            parse_worker_count_fn=lambda: 1,
+            index_queue_depth_fn=lambda _w: 8,
+            parse_repository_snapshot_async_fn=parse_snapshot,
+            commit_repository_snapshot_fn=lambda *_a, **_kw: None,
+            load_snapshot_fn=lambda *_a: None,
+            save_snapshot_fn=lambda *_a: None,
+            persist_run_state_fn=capture_persist,
+            record_checkpoint_metric_fn=_noop,
+            update_pending_repository_gauge_fn=_noop,
+            publish_runtime_progress_fn=_noop,
+            utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+            telemetry=_telemetry(),
+        )
+    )
+
+    assert ("running", "parsing", None, "2026-01-01T00:00:00Z") in phase_snapshots
+    assert (
+        "running",
+        "parsing",
+        str(file_path.resolve()),
+        "2026-01-01T00:00:00Z",
+    ) in phase_snapshots
+    assert (
+        "commit_incomplete",
+        "committing",
+        None,
+        "2026-01-01T00:00:00Z",
+    ) in phase_snapshots
+
+    repo_state = run_state.repositories[str(repo.resolve())]
+    assert repo_state.phase == "completed"
+    assert repo_state.current_file is None
+    assert repo_state.last_progress_at == "2026-01-01T00:00:00Z"
+
+
+def test_pipeline_commit_duration_tracks_commit_only(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Commit timing should exclude parse time for hotspot diagnosis."""
+
+    repo = tmp_path / "repo-a"
+    repo.mkdir()
+    file_path = repo / "main.py"
+    file_path.write_text("print('a')\n", encoding="utf-8")
+    current_time = {"value": 100.0}
+
+    def fake_perf_counter() -> float:
+        return current_time["value"]
+
+    monkeypatch.setattr(PIPELINE.time, "perf_counter", fake_perf_counter)
+
+    async def parse_snapshot(_builder, repo_path, repo_files, **_kw):
+        current_time["value"] += 5.0
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={},
+            file_data=[],
+        )
+
+    def commit_snapshot(_builder, _snapshot, **_kw) -> None:
+        current_time["value"] += 0.25
+
+    _, _, run_state, _ = asyncio.run(
+        _run_pipeline(
+            [repo],
+            {repo: [file_path]},
+            parse_snapshot,
+            commit_fn=commit_snapshot,
+        )
+    )
+
+    repo_state = run_state.repositories[str(repo.resolve())]
+    assert repo_state.commit_duration_seconds == 0.25
+
+
+def test_finalize_repository_batch_records_stage_timings(monkeypatch) -> None:
+    """Successful finalization should persist stage timings for hotspot ranking."""
+
+    repo_path = Path("/tmp/repo-a")
+    run_state = _make_run_state([repo_path])
+    run_state.repositories[str(repo_path.resolve())].status = "completed"
+    persisted_states: list[tuple[str | None, dict[str, float]]] = []
+    current_time = {"value": 50.0}
+    timestamps = iter(
+        [
+            "2026-01-01T00:00:01Z",
+            "2026-01-01T00:00:02Z",
+            "2026-01-01T00:00:03Z",
+            "2026-01-01T00:00:04Z",
+            "2026-01-01T00:00:05Z",
+        ]
+    )
+
+    def fake_perf_counter() -> float:
+        return current_time["value"]
+
+    monkeypatch.setattr(PIPELINE.time, "perf_counter", fake_perf_counter)
+
+    def capture_persist(state) -> None:
+        persisted_states.append(
+            (
+                state.finalization_current_stage,
+                dict(state.finalization_stage_durations),
+            )
+        )
+
+    def finalize_index_batch_fn(*_args, stage_progress_callback, **_kwargs):
+        stage_progress_callback("inheritance")
+        current_time["value"] += 1.5
+        stage_progress_callback("function_calls")
+        current_time["value"] += 3.0
+        return {"inheritance": 1.5, "function_calls": 3.0}
+
+    builder = SimpleNamespace(
+        _last_call_relationship_metrics={
+            "fallback_duration_seconds": 3.0,
+            "exact_duration_seconds": 1.5,
+        }
+    )
+
+    finalize_repository_batch(
+        builder=builder,
+        root_path=repo_path,
+        run_state=run_state,
+        repo_paths=[repo_path],
+        snapshots=[],
+        merged_imports_map={},
+        component="test",
+        family="index",
+        source="manual",
+        info_logger_fn=lambda *_a, **_kw: None,
+        error_logger_fn=lambda *_a, **_kw: None,
+        finalize_index_batch_fn=finalize_index_batch_fn,
+        persist_run_state_fn=capture_persist,
+        delete_snapshots_fn=lambda *_a, **_kw: None,
+        telemetry=_telemetry(),
+        utc_now_fn=lambda: next(timestamps),
+    )
+
+    assert run_state.finalization_status == "completed"
+    assert run_state.finalization_started_at == "2026-01-01T00:00:01Z"
+    assert run_state.finalization_finished_at == "2026-01-01T00:00:04Z"
+    assert run_state.finalization_duration_seconds == 4.5
+    assert run_state.finalization_stage_durations == {
+        "inheritance": 1.5,
+        "function_calls": 3.0,
+    }
+    assert run_state.finalization_stage_details == {
+        "function_calls": {
+            "fallback_duration_seconds": 3.0,
+            "exact_duration_seconds": 1.5,
+        }
+    }
+    assert run_state.finalization_current_stage is None
+    assert run_state.finalization_stage_started_at is None
+    assert persisted_states == [
+        (None, {}),
+        ("inheritance", {}),
+        ("function_calls", {}),
+        (
+            None,
+            {
+                "inheritance": 1.5,
+                "function_calls": 3.0,
+            },
+        ),
+    ]
