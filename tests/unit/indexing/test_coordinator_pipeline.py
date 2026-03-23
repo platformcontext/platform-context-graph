@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import importlib.util
 import sys
 from contextlib import contextmanager
@@ -30,31 +31,59 @@ def _load_module(module_name: str, module_path: Path) -> ModuleType:
 def _load_pipeline_modules() -> tuple[ModuleType, ModuleType]:
     """Load coordinator modules with a minimal package skeleton."""
 
-    platform_pkg = ModuleType("platform_context_graph")
-    platform_pkg.__path__ = [str(PACKAGE_ROOT)]
-    sys.modules["platform_context_graph"] = platform_pkg
+    try:
+        return (
+            importlib.import_module(
+                "platform_context_graph.indexing.coordinator_models"
+            ),
+            importlib.import_module(
+                "platform_context_graph.indexing.coordinator_pipeline"
+            ),
+        )
+    except ImportError:
+        module_names = (
+            "platform_context_graph",
+            "platform_context_graph.indexing",
+            "platform_context_graph.tools",
+            "platform_context_graph.tools.graph_builder_indexing",
+            "platform_context_graph.indexing.coordinator_models",
+            "platform_context_graph.indexing.coordinator_pipeline",
+        )
+        original_modules = {
+            module_name: sys.modules.get(module_name) for module_name in module_names
+        }
+        try:
+            platform_pkg = ModuleType("platform_context_graph")
+            platform_pkg.__path__ = [str(PACKAGE_ROOT)]
+            sys.modules["platform_context_graph"] = platform_pkg
 
-    indexing_pkg = ModuleType("platform_context_graph.indexing")
-    indexing_pkg.__path__ = [str(PACKAGE_ROOT / "indexing")]
-    sys.modules["platform_context_graph.indexing"] = indexing_pkg
+            indexing_pkg = ModuleType("platform_context_graph.indexing")
+            indexing_pkg.__path__ = [str(PACKAGE_ROOT / "indexing")]
+            sys.modules["platform_context_graph.indexing"] = indexing_pkg
 
-    tools_pkg = ModuleType("platform_context_graph.tools")
-    tools_pkg.__path__ = [str(PACKAGE_ROOT / "tools")]
-    sys.modules["platform_context_graph.tools"] = tools_pkg
+            tools_pkg = ModuleType("platform_context_graph.tools")
+            tools_pkg.__path__ = [str(PACKAGE_ROOT / "tools")]
+            sys.modules["platform_context_graph.tools"] = tools_pkg
 
-    _load_module(
-        "platform_context_graph.tools.graph_builder_indexing",
-        PACKAGE_ROOT / "tools" / "graph_builder_indexing.py",
-    )
-    models = _load_module(
-        "platform_context_graph.indexing.coordinator_models",
-        PACKAGE_ROOT / "indexing" / "coordinator_models.py",
-    )
-    pipeline = _load_module(
-        "platform_context_graph.indexing.coordinator_pipeline",
-        PACKAGE_ROOT / "indexing" / "coordinator_pipeline.py",
-    )
-    return models, pipeline
+            _load_module(
+                "platform_context_graph.tools.graph_builder_indexing",
+                PACKAGE_ROOT / "tools" / "graph_builder_indexing.py",
+            )
+            models = _load_module(
+                "platform_context_graph.indexing.coordinator_models",
+                PACKAGE_ROOT / "indexing" / "coordinator_models.py",
+            )
+            pipeline = _load_module(
+                "platform_context_graph.indexing.coordinator_pipeline",
+                PACKAGE_ROOT / "indexing" / "coordinator_pipeline.py",
+            )
+        finally:
+            for module_name, original_module in original_modules.items():
+                if original_module is None:
+                    sys.modules.pop(module_name, None)
+                else:
+                    sys.modules[module_name] = original_module
+        return models, pipeline
 
 
 MODELS, PIPELINE = _load_pipeline_modules()
