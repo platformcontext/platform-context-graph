@@ -1,0 +1,27 @@
+docs/docs/concepts/graph-model.md
+  bc8de5acf5b9d599 3
+docs/docs/concepts/how-it-works.md
+  bc8de5acf5b9d599 33
+docs/docs/concepts/modes.md
+  bc8de5acf5b9d599 1,3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.17",
+  "base_commit_sha": "d74b8c3dea84f5577dcf5be2608d0d2f47ca9011",
+  "prompts": {
+    "bc8de5acf5b9d599": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a1a75ed0-af0f-4475-8453-82f9a3b36f3f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 11,
+      "accepted_lines": 4,
+      "overriden_lines": 0
+    }
+  }
+}
