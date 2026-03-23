@@ -1,141 +1,139 @@
-# CLI: Analysis & Querying
+# CLI: Analysis & Search
 
-These commands allow you to extract insights from your indexed code.
+Commands for extracting insights from indexed code.
 
 ## Code Analysis
 
 ### `analyze callers`
-Finds every function that calls a specific function. Essential for "Impact Analysis" before refactoring.
 
-**Usage:**
+Find every function that calls a given function. Use this before refactoring to understand who depends on it.
+
 ```bash
-pcg analyze callers <func_name>
+pcg analyze callers process_payment
 ```
 
 ### `analyze calls`
-The reverse of `callers`. Shows what a specific function calls.
 
-**Usage:**
+The reverse — show what a function calls (its callees).
+
 ```bash
-pcg analyze calls <func_name>
+pcg analyze calls process_payment
 ```
 
 ### `analyze chain`
-Connects the dots. Finds the path of execution between two functions.
 
-**Usage:**
+Find the execution path between two functions. Useful for understanding how data flows from one entry point to another.
+
 ```bash
-pcg analyze chain <start_func> <end_func> --depth 5
+pcg analyze chain handle_request process_payment --depth 5
 ```
 
 ### `analyze deps`
-Shows dependencies and imports for a specific module.
 
-**Usage:**
+Show imports and dependencies for a module.
+
 ```bash
-pcg analyze deps <module>
+pcg analyze deps payments
 ```
 
 ### `analyze tree`
-Visualizes the Class Inheritance hierarchy for a given class.
 
-**Usage:**
+Show the class inheritance hierarchy for a given class.
+
 ```bash
-pcg analyze tree <class_name>
+pcg analyze tree BaseProcessor
 ```
 
 ### `analyze complexity`
-Finds functions that are difficult to maintain (Cyclomatic Complexity).
 
-**Usage:**
+Find functions with high cyclomatic complexity. The threshold controls the minimum complexity reported.
+
 ```bash
 pcg analyze complexity --threshold 10
 ```
 
 ### `analyze dead-code`
-Finds potentially unused functions (0 callers).
 
-**Usage:**
+Find functions with zero callers. Use `--exclude` to skip known entry points like route handlers.
+
 ```bash
 pcg analyze dead-code --exclude "@route"
 ```
 
 ### `analyze overrides`
-Shows methods that override parent class methods.
 
-**Usage:**
+Show methods that override parent class methods.
+
 ```bash
-pcg analyze overrides <class_name>
+pcg analyze overrides PaymentProcessor
 ```
 
 ### `analyze variable`
-Analyzes where a variable is defined and used.
 
-**Usage:**
+Find where a variable is defined and used across files.
+
 ```bash
-pcg analyze variable <var_name>
+pcg analyze variable MAX_RETRIES
 ```
 
 ---
 
 ## Discovery & Search
 
-### `find pattern`
-Fuzzy search for code elements. Use this when you don't know the exact name.
-
-**Usage:**
-```bash
-pcg find pattern <text>
-```
+These commands search the graph index, not the raw filesystem. They operate on what PCG has already parsed.
 
 ### `find name`
-Finds code elements (Class, Function) by their **exact** name.
 
-**Usage:**
+Find code elements by exact name.
+
 ```bash
-pcg find name <name>
+pcg find name PaymentProcessor
+```
+
+### `find pattern`
+
+Fuzzy substring search. Use this when you don't know the exact name.
+
+```bash
+pcg find pattern payment
 ```
 
 ### `find type`
-List all nodes of a specific type.
 
-**Usage:**
+List all nodes of a given type: `class`, `function`, or `module`.
+
 ```bash
-pcg find type <type>
-```
-
-**Supported Types:**
-
-*   `class`: Find all classes.
-*   `function`: Find all functions/methods.
-*   `module`: Find all indexed files/modules.
-
-**Example:**
-```bash
-# Find all classes in the codebase
 pcg find type class
 ```
 
-### `find content`
-Full-text search across your source code and docstrings.
+### `find variable`
 
-**Usage:**
+Find variables by name across the graph.
+
 ```bash
-pcg find content "search term"
+pcg find variable config
+```
+
+### `find content`
+
+Full-text search across source code and docstrings.
+
+```bash
+pcg find content "shared-payments-prod"
 ```
 
 ### `find decorator`
-Finds all functions that are decorated with a specific decorator.
 
-**Usage:**
+Find functions with a specific decorator.
+
 ```bash
 pcg find decorator @app.route
 ```
 
 ### `find argument`
-Finds all functions that define a specific argument name.
 
-**Usage:**
+Find functions that accept a specific argument name.
+
 ```bash
 pcg find argument user_id
 ```

@@ -2,7 +2,7 @@
 
 This document is for anyone writing code in this repo. It covers how the parser system works, how to add new language or IaC support, how integration testing is structured, and the spec-driven contract model that keeps everything honest.
 
-For general contribution rules (PR hygiene, file length limits, branch naming), see [docs/docs/contributing.md](docs/docs/contributing.md).
+For general contribution rules (PR hygiene, file length limits, branch naming), see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Development Environment
 

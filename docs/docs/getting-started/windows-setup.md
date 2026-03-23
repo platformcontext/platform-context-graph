@@ -46,7 +46,7 @@ If path or shell behavior differs in your environment, prefer a Python virtual e
 
 * Restart your terminal after installation
 * Ensure Python Scripts directory is in PATH
-* Try: `python -m pip install platform-context-graph`
+* Try: `uv tool install platform-context-graph` or `pip install platform-context-graph`
 
 ### WSL path confusion
 
@@ -71,4 +71,4 @@ Run:
 ```bash
 pcg list
 ```
-If no errors are shown, setup is complete 
+If no errors are shown, setup is complete.

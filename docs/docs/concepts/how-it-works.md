@@ -30,14 +30,7 @@ The graph is written to the backing database and becomes queryable through CLI, 
 
 Queries resolve from user-friendly input into canonical entities such as repositories, workloads, workload instances, or cloud resources.
 
-That is why a request like:
-
-```cypher
-MATCH (caller:Function)-[:CALLS]->(callee:Function {name: 'process_payment'})
-RETURN caller
-```
-
-is only one part of the product now. PCG can also answer:
+A Cypher query like `MATCH (caller)-[:CALLS]->(callee {name: 'process_payment'}) RETURN caller` is one kind of question. PCG also answers:
 
 - which workloads use a shared database
 - which Terraform module provisions a resource

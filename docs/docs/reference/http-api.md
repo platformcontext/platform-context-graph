@@ -1,16 +1,14 @@
 # HTTP API Reference
 
-PlatformContextGraph exposes the same core query model over HTTP that it exposes over MCP. The HTTP API is versioned under `/api/v0` and is intended for AI agents, automation, and internal tools that need a stable contract instead of direct MCP transport.
+The HTTP API is versioned under `/api/v0` and shares the same query model as CLI and MCP. It is intended for AI agents, automation, and internal tools that need a stable contract.
 
-## OpenAPI Is The Source Of Truth
+## OpenAPI is the source of truth
 
-Use the live OpenAPI surface as the canonical contract:
+The live OpenAPI spec is always canonical. If this page and the spec disagree, the spec wins.
 
-- `GET /api/v0/openapi.json`
-- `GET /api/v0/docs`
-- `GET /api/v0/redoc`
-
-This page is a curated reference anchored to that schema. Do not hand-maintain a second contract.
+- `GET /api/v0/openapi.json` — machine-readable schema
+- `GET /api/v0/docs` — Swagger UI
+- `GET /api/v0/redoc` — ReDoc
 
 ## Scope
 

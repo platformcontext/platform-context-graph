@@ -1,28 +1,24 @@
 # Roadmap
 
-PCG is moving from a code-graph utility toward a broader AI context system for code, infrastructure, workloads, and deployable services.
-
 ## Current focus
 
-- stabilize the shared query model across CLI, MCP, and HTTP
-- tighten the deployable-service path around Helm, Docker Compose, and Argo CD
-- improve workload and shared-infrastructure context
-- strengthen observability, testing fixtures, and deployment examples
+- Stabilize the shared query model across CLI, MCP, and HTTP
+- Strengthen the deployable-service path (Helm, Docker Compose, Argo CD)
+- Improve workload and shared-infrastructure context
+- Expand testing fixtures and deployment examples
 
-## Near-term work
+## Near-term
 
-- richer workload and environment context
-- stronger code-to-resource tracing and change-surface analysis
-- better deployment and runtime ergonomics for long-running service usage
-- cleaner end-to-end fixtures that exercise real code + IaC + shared infrastructure flows
+- Richer workload and environment context
+- Stronger code-to-resource tracing and change-surface analysis
+- Better deployment and runtime ergonomics for long-running service usage
+- Cleaner end-to-end fixtures exercising real code + IaC + shared infrastructure flows
 
-## Longer-term themes
+## Longer-term
 
-- deeper cloud scanning and freshness pipelines
-- stronger semantic resolution and ranking
-- richer environment comparison and blast-radius analysis
-- broader language and IaC coverage
-
-## Notes
+- Deeper cloud scanning and freshness pipelines
+- Stronger semantic resolution and ranking
+- Richer environment comparison and blast-radius analysis
+- Broader language and IaC coverage
 
 This roadmap is the single public place for forward-looking project direction.

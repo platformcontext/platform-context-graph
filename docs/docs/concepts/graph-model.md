@@ -1,6 +1,6 @@
 # The Graph Model
 
-PCG is no longer just "code as a graph." It is an **entity-first graph** that can represent code, workloads, infrastructure, and deployment context together.
+PCG uses an **entity-first graph** that represents code, workloads, infrastructure, and deployment context together.
 
 ## Canonical entities
 

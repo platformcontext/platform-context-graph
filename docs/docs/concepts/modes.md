@@ -1,6 +1,6 @@
-# CLI Mode vs. MCP Mode
+# Interfaces: CLI, MCP, and HTTP API
 
-PCG exposes the same graph through multiple interfaces. The right entry point depends on who is driving the workflow.
+PCG exposes the same graph through three interfaces. The right one depends on who is driving the workflow.
 
 ## CLI
 

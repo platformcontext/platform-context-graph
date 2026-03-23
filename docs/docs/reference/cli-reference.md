@@ -1,6 +1,6 @@
-# Comprehensive CLI Reference
+# CLI Reference
 
-This page lists **every single command** available in PlatformContextGraph.
+All available PlatformContextGraph CLI commands.
 
 ## Indexing & Management
 

@@ -1,108 +1,35 @@
-# PlatformContextGraph VS Code Extension - Development Guide
+# Development Guide
 
-## 🏗️ Architecture
-
-### Overview
-The extension is built with TypeScript and integrates with the pcg CLI to provide code analysis features directly in VS Code.
-
-### Core Components
-
-#### 1. **Extension Entry Point** (`src/extension.ts`)
-- Activates the extension
-- Registers all commands
-- Initializes providers
-- Sets up file watchers
-
-#### 2. **PCG Manager** (`src/pcgManager.ts`)
-- Handles all communication with pcg CLI
-- Executes commands and parses output
-- Provides typed interfaces for results
-
-#### 3. **Tree View Providers** (`src/providers/`)
-- **ProjectsTreeProvider**: Shows indexed projects
-- **FunctionsTreeProvider**: Lists functions grouped by file
-- **ClassesTreeProvider**: Lists classes grouped by file
-- **CallGraphTreeProvider**: Shows callers/callees for current function
-- **DependenciesTreeProvider**: Shows dependencies for active file
-
-#### 4. **Code Lens Provider** (`src/providers/codeLensProvider.ts`)
-- Shows inline caller/callee counts
-- Provides quick navigation links
-
-#### 5. **Diagnostics Provider** (`src/providers/diagnosticsProvider.ts`)
-- Detects dead code
-- Warns about high complexity
-- Integrates with VS Code Problems panel
-
-#### 6. **Graph Visualization** (`src/panels/graphVisualizationPanel.ts`)
-- Interactive D3.js force-directed graph
-- Zoom, pan, and drag capabilities
-- Webview-based rendering
-
-#### 7. **Status Bar Manager** (`src/statusBarManager.ts`)
-- Shows indexing status
-- Provides quick access to stats
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Node.js 20.x or higher
-- npm or yarn
-- VS Code 1.85.0 or higher
-- pcg CLI installed (`pip install platform-context-graph`)
-
-### Installation
+## Quick Onboarding
 
 ```bash
-# Navigate to the extension directory
 cd vscode-extension
-
-# Install dependencies
 npm install
-
-# Compile TypeScript
 npm run compile
 ```
 
-### Development Workflow
+Then in VS Code:
 
-1. **Open in VS Code**
-   ```bash
-   code .
-   ```
+1. Open the `vscode-extension/` directory
+2. Press `F5` to launch the Extension Development Host
+3. A new VS Code window opens with the extension loaded
 
-2. **Start Watch Mode**
-   ```bash
-   npm run watch
-   ```
+Make changes, then `Cmd+R` / `Ctrl+R` in the host window to reload.
 
-3. **Launch Extension**
-   - Press `F5` or use "Run Extension" from the Debug panel
-   - A new VS Code window will open with the extension loaded
+## Prerequisites
 
-4. **Make Changes**
-   - Edit TypeScript files
-   - The watch task will automatically recompile
-   - Reload the extension host window (`Cmd+R` or `Ctrl+R`)
+- Node.js 20.x or higher
+- VS Code 1.85.0 or higher
+- pcg CLI installed (`uv tool install platform-context-graph`)
 
-### Testing
-
-```bash
-# Run linter
-npm run lint
-
-# Run tests (when implemented)
-npm test
-```
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 vscode-extension/
 ├── src/
-│   ├── extension.ts              # Main entry point
-│   ├── pcgManager.ts              # PCG CLI integration
-│   ├── statusBarManager.ts        # Status bar UI
+│   ├── extension.ts              # Entry point, command registration
+│   ├── pcgManager.ts             # CLI integration layer
+│   ├── statusBarManager.ts       # Status bar UI
 │   ├── providers/
 │   │   ├── projectsTreeProvider.ts
 │   │   ├── functionsTreeProvider.ts
@@ -112,204 +39,70 @@ vscode-extension/
 │   │   ├── codeLensProvider.ts
 │   │   └── diagnosticsProvider.ts
 │   └── panels/
-│       └── graphVisualizationPanel.ts
-├── resources/
-│   └── icon.svg                   # Extension icon
-├── .vscode/
-│   ├── launch.json                # Debug configuration
-│   └── tasks.json                 # Build tasks
-├── package.json                   # Extension manifest
-├── tsconfig.json                  # TypeScript config
-├── .eslintrc.json                 # ESLint config
-├── README.md                      # User documentation
-├── CHANGELOG.md                   # Version history
-└── DEVELOPMENT.md                 # This file
+│       └── graphVisualizationPanel.ts  # D3.js force-directed graph
+├── package.json                  # Extension manifest
+├── tsconfig.json
+└── .eslintrc.json
 ```
 
-## 🔧 Key Concepts
+## Architecture
 
-### Command Registration
-Commands are registered in `extension.ts`:
-```typescript
-context.subscriptions.push(
-    vscode.commands.registerCommand('pcg.index', async () => {
-        // Command implementation
-    })
-);
-```
+**Extension Entry Point** (`extension.ts`) — Activates the extension, registers commands, initializes providers, and sets up file watchers.
 
-### Tree View Data Providers
-Implement `vscode.TreeDataProvider<T>`:
-```typescript
-export class MyTreeProvider implements vscode.TreeDataProvider<MyTreeItem> {
-    getTreeItem(element: MyTreeItem): vscode.TreeItem {
-        return element;
-    }
-    
-    async getChildren(element?: MyTreeItem): Promise<MyTreeItem[]> {
-        // Return children
-    }
-}
-```
+**PCG Manager** (`pcgManager.ts`) — All communication with the pcg CLI. Executes commands, parses output, and provides typed interfaces.
 
-### Webview Panels
-Create interactive HTML panels:
-```typescript
-const panel = vscode.window.createWebviewPanel(
-    'myView',
-    'My View',
-    vscode.ViewColumn.Two,
-    { enableScripts: true }
-);
-panel.webview.html = getHtmlContent();
-```
+**Tree View Providers** (`providers/`) — Five data providers implementing `vscode.TreeDataProvider` for Projects, Functions, Classes, Call Graph, and Dependencies views.
 
-### PCG CLI Integration
-Execute pcg commands:
-```typescript
-const output = await this.executePcgCommand(['search', 'myFunction']);
-const results = this.parseSearchResults(output);
-```
+**Code Lens Provider** — Shows inline caller/callee counts above function definitions.
 
-## 🎨 UI/UX Guidelines
+**Diagnostics Provider** — Dead code and complexity warnings fed into the Problems panel.
 
-### Icons
-- Use VS Code's built-in Codicons: `$(icon-name)`
-- Keep icons consistent with VS Code's design language
+**Graph Visualization** (`panels/graphVisualizationPanel.ts`) — Interactive D3.js force-directed graph rendered in a webview panel.
 
-### Colors
-- Use CSS variables for theming: `var(--vscode-editor-background)`
-- Support both light and dark themes
+## Development Workflow
 
-### Progress Indicators
-- Use `vscode.window.withProgress()` for long operations
-- Update status bar for background tasks
-
-### Error Handling
-- Show user-friendly error messages
-- Log detailed errors to console for debugging
-
-## 🐛 Debugging
-
-### Extension Host
-- Set breakpoints in TypeScript files
-- Press `F5` to start debugging
-- Use Debug Console for logging
-
-### Webview Debugging
-- Open Developer Tools in the extension host window
-- Use `console.log()` in webview HTML
-- Inspect webview elements
-
-### PCG CLI Debugging
-- Check pcg command output in console
-- Verify pcg is in PATH
-- Test commands manually in terminal
-
-## 📦 Building & Publishing
-
-### Create VSIX Package
 ```bash
+# Watch mode (auto-recompile on changes)
+npm run watch
+
+# Lint
+npm run lint
+
+# Run tests
+npm test
+```
+
+## Adding a New Command
+
+1. Register it in `extension.ts`:
+   ```typescript
+   context.subscriptions.push(
+       vscode.commands.registerCommand('pcg.myCommand', async () => {
+           // implementation
+       })
+   );
+   ```
+2. Add it to `package.json` under `contributes.commands`
+
+## Adding a New Tree View
+
+1. Create a provider in `src/providers/` implementing `vscode.TreeDataProvider`
+2. Register it in `extension.ts`
+3. Add it to `package.json` under `contributes.views`
+
+## Building and Packaging
+
+```bash
+# Create VSIX package
 npm run package
-```
 
-### Install Locally
-```bash
+# Install locally
 code --install-extension platform-context-graph-0.1.0.vsix
 ```
 
-### Publish to Marketplace
-```bash
-# First time: Create publisher account
-vsce create-publisher <publisher-name>
+## UI Guidelines
 
-# Login
-vsce login <publisher-name>
-
-# Publish
-npm run publish
-```
-
-## 🔄 Release Process
-
-1. Update version in `package.json`
-2. Update `CHANGELOG.md`
-3. Commit changes
-4. Create git tag: `git tag v0.1.0`
-5. Push tag: `git push --tags`
-6. Build package: `npm run package`
-7. Publish: `npm run publish`
-
-## 🤝 Contributing
-
-### Code Style
-- Follow TypeScript best practices
-- Use ESLint for linting
-- Format code consistently
-- Add JSDoc comments for public APIs
-
-### Pull Requests
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-### Commit Messages
-Follow conventional commits:
-- `feat:` New feature
-- `fix:` Bug fix
-- `docs:` Documentation changes
-- `refactor:` Code refactoring
-- `test:` Test changes
-
-## 📚 Resources
-
-- [VS Code Extension API](https://code.visualstudio.com/api)
-- [VS Code Extension Samples](https://github.com/microsoft/vscode-extension-samples)
-- [Tree View Guide](https://code.visualstudio.com/api/extension-guides/tree-view)
-- [Webview Guide](https://code.visualstudio.com/api/extension-guides/webview)
-- [D3.js Documentation](https://d3js.org/)
-
-## 🎯 Roadmap
-
-### Short Term (v0.2.0)
-- [ ] Add unit tests
-- [ ] Improve error handling
-- [ ] Optimize performance for large codebases
-- [ ] Add more graph layout options
-
-### Medium Term (v0.3.1)
-- [ ] Language Server Protocol (LSP) integration
-- [ ] Custom Cypher query builder UI
-- [ ] Export graph visualizations
-- [ ] Advanced filtering options
-
-### Long Term (v1.0.0)
-- [ ] Git integration for change analysis
-- [ ] Collaborative features
-- [ ] Performance profiling
-- [ ] AI-powered code suggestions
-
-## ❓ FAQ
-
-**Q: How do I add a new command?**
-A: Register it in `extension.ts` and add to `package.json` contributes.commands
-
-**Q: How do I add a new tree view?**
-A: Create a provider in `src/providers/`, register in `extension.ts`, and add to `package.json` contributes.views
-
-**Q: How do I debug webview panels?**
-A: Open Developer Tools in the extension host window and inspect the webview
-
-**Q: How do I handle pcg CLI errors?**
-A: Wrap calls in try-catch and show user-friendly messages with `vscode.window.showErrorMessage()`
-
-## 📞 Support
-
-- GitHub Issues: [Report bugs](https://github.com/platformcontext/platform-context-graph/issues)
-- Discord: [Join community](https://discord.gg/VCwUdCnn)
-
----
-
-Happy coding! 🚀
+- Use VS Code Codicons: `$(icon-name)`
+- Use CSS variables for theming: `var(--vscode-editor-background)`
+- Use `vscode.window.withProgress()` for long operations
+- Show user-friendly errors via `vscode.window.showErrorMessage()`
