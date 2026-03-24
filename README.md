@@ -20,7 +20,7 @@
 
 ## What is this
 
-PlatformContextGraph started as a fork of [CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext), which builds a graph of source code relationships for AI-assisted development. That was a good starting point, but we needed more.
+PlatformContextGraph started as a fork of [CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext), which builds a graph of source code relationships for AI-assisted development. That was a good starting point, but we needed more. PlatformContextGraph is a **Code-to-cloud context graph** for teams that need to connect source code, infrastructure, and running workloads in one place.
 
 We needed the graph to understand infrastructure — Terraform modules, Helm charts, Kubernetes manifests, ArgoCD Applications, Crossplane XRDs, CloudFormation stacks. We needed to trace from a running workload back to the repo and code that defines it. We needed it to run on the network as a service, not just on a developer's laptop. And we needed it deployable to Kubernetes with proper separation of API and ingester workloads.
 
@@ -42,7 +42,16 @@ So we rebuilt it into that.
 
 **Multi-repo ecosystem indexing** — Index entire orgs. Cross-repo dependency resolution. Environment comparison across prod, staging, and dev.
 
+**Repo-scoped ingest boundaries** — Repo and workspace indexing honor each repository's own `.gitignore` by default, so generated and published assets stay out of routine ingest unless explicitly targeted.
+
 **30+ language parsers** — Python, Go, TypeScript, Java, Rust, C/C++, and more via tree-sitter.
+
+## Quick Navigation
+
+- CLI: local indexing, search, and graph-backed analysis
+- MCP: AI-assistant access to code and infrastructure context
+- HTTP API: automation and service-to-service access
+- Deploy: Docker Compose, Helm, Kustomize, and ArgoCD flows
 
 ## Quick Start
 

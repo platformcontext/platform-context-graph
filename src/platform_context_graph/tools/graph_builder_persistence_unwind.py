@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
 
 from ..cli.config_manager import get_config_value
@@ -128,7 +129,7 @@ def run_entity_unwind(
     tx: Any,
     label: str,
     rows: list[dict[str, Any]],
-) -> None:
+) -> dict[str, float | int]:
     """Execute UNWIND merges for a list of entity property dicts.
 
     Entities are split into two groups and executed as separate UNWIND
@@ -143,7 +144,12 @@ def run_entity_unwind(
         rows: List of property dicts built by ``entity_props_for_unwind``.
     """
     if not rows:
-        return
+        return {
+            "total_rows": 0,
+            "uid_rows": 0,
+            "name_rows": 0,
+            "duration_seconds": 0.0,
+        }
 
     uid_rows: list[dict[str, Any]] = []
     name_rows: list[dict[str, Any]] = []
@@ -171,9 +177,17 @@ def run_entity_unwind(
             if key not in row:
                 row[key] = None
 
+    unique_file_paths = {
+        file_path
+        for row in rows
+        if isinstance((file_path := row.get("file_path")), str) and file_path
+    }
+    single_file_path = next(iter(unique_file_paths)) if len(unique_file_paths) == 1 else None
+
+    started = time.perf_counter()
     set_parts = [
         "n.name = row.name",
-        "n.path = row.file_path",
+        f"n.path = {'$file_path' if single_file_path else 'row.file_path'}",
         "n.line_number = row.line_number",
     ]
     for key in extra_keys:
@@ -181,28 +195,61 @@ def run_entity_unwind(
     set_clause = ", ".join(set_parts)
 
     if uid_rows:
-        tx.run(
-            f"""
-            UNWIND $rows AS row
-            MATCH (f:File {{path: row.file_path}})
-            MERGE (n:{label} {{uid: row.uid}})
-            SET {set_clause}
-            MERGE (f)-[:CONTAINS]->(n)
-            """,
-            rows=uid_rows,
-        )
+        if single_file_path:
+            tx.run(
+                f"""
+                MATCH (f:File {{path: $file_path}})
+                UNWIND $rows AS row
+                MERGE (n:{label} {{uid: row.uid}})
+                SET {set_clause}
+                MERGE (f)-[:CONTAINS]->(n)
+                """,
+                rows=uid_rows,
+                file_path=single_file_path,
+            )
+        else:
+            tx.run(
+                f"""
+                UNWIND $rows AS row
+                MATCH (f:File {{path: row.file_path}})
+                MERGE (n:{label} {{uid: row.uid}})
+                SET {set_clause}
+                MERGE (f)-[:CONTAINS]->(n)
+                """,
+                rows=uid_rows,
+            )
 
     if name_rows:
-        tx.run(
-            f"""
-            UNWIND $rows AS row
-            MATCH (f:File {{path: row.file_path}})
-            MERGE (n:{label} {{name: row.name, path: row.file_path, line_number: row.line_number}})
-            SET {set_clause}
-            MERGE (f)-[:CONTAINS]->(n)
-            """,
-            rows=name_rows,
-        )
+        if single_file_path:
+            tx.run(
+                f"""
+                MATCH (f:File {{path: $file_path}})
+                UNWIND $rows AS row
+                MERGE (n:{label} {{name: row.name, path: $file_path, line_number: row.line_number}})
+                SET {set_clause}
+                MERGE (f)-[:CONTAINS]->(n)
+                """,
+                rows=name_rows,
+                file_path=single_file_path,
+            )
+        else:
+            tx.run(
+                f"""
+                UNWIND $rows AS row
+                MATCH (f:File {{path: row.file_path}})
+                MERGE (n:{label} {{name: row.name, path: row.file_path, line_number: row.line_number}})
+                SET {set_clause}
+                MERGE (f)-[:CONTAINS]->(n)
+                """,
+                rows=name_rows,
+            )
+
+    return {
+        "total_rows": len(rows),
+        "uid_rows": len(uid_rows),
+        "name_rows": len(name_rows),
+        "duration_seconds": time.perf_counter() - started,
+    }
 
 
 def run_parameter_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:

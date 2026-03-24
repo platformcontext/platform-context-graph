@@ -5,6 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..cli.config_manager import get_config_value
+from ..utils.debug_log import info_logger
+from .graph_builder_gitignore import (
+    filter_repo_gitignore_files,
+    summarize_gitignored_paths,
+)
+
 
 def estimate_processing_time(
     builder: Any, path: Path, *, error_logger_fn: Any
@@ -20,8 +27,13 @@ def estimate_processing_time(
         A ``(file_count, estimated_seconds)`` tuple or ``None`` if discovery failed.
     """
     try:
-        files = builder._collect_supported_files(path)
-        total_files = len(files)
+        repo_file_sets = resolve_repository_file_sets(
+            builder,
+            path,
+            selected_repositories=None,
+            pathspec_module=__import__("pathspec"),
+        )
+        total_files = sum(len(files) for files in repo_file_sets.values())
         estimated_time = total_files * 0.05
         return total_files, estimated_time
     except Exception as exc:
@@ -301,12 +313,20 @@ def discover_index_files(
         pathspec_module=pathspec_module,
     )
     files = builder._collect_supported_files(path)
-    return _apply_ignore_spec(
+    filtered_files = _apply_ignore_spec(
         files,
         spec,
         ignore_root,
         debug_log_fn=debug_log_fn,
-    ), spec, ignore_root
+    )
+    if path.is_dir() and (path / ".git").exists():
+        gitignore_result = filter_repo_gitignore_files(
+            path.resolve(),
+            filtered_files,
+            get_config_value_fn=get_config_value,
+        )
+        return gitignore_result.kept_files, spec, ignore_root
+    return filtered_files, spec, ignore_root
 
 
 def resolve_repository_file_sets(
@@ -321,23 +341,79 @@ def resolve_repository_file_sets(
     if selected_repositories:
         resolved: dict[Path, list[Path]] = {}
         for repo_path in sorted({repo.resolve() for repo in selected_repositories}):
-            files, _spec, _ignore_root = discover_index_files(
-                builder,
+            raw_files = builder._collect_supported_files(repo_path)
+            spec, ignore_root = _find_pcgignore(
                 repo_path,
+                debug_log_fn=lambda *_args, **_kwargs: None,
                 pathspec_module=pathspec_module,
+            )
+            files = _apply_ignore_spec(
+                raw_files,
+                spec,
+                ignore_root,
                 debug_log_fn=lambda *_args, **_kwargs: None,
             )
-            resolved[repo_path] = files
+            gitignore_result = filter_repo_gitignore_files(
+                repo_path.resolve(),
+                files,
+                get_config_value_fn=get_config_value,
+            )
+            info_logger(
+                f"Repository discovery {repo_path.name}: "
+                f"supported={len(raw_files)} "
+                f"pcgignore_excluded={len(raw_files) - len(files)} "
+                f"gitignore_excluded={len(gitignore_result.ignored_files)} "
+                f"indexed={len(gitignore_result.kept_files)} "
+                f"gitignore_top={summarize_gitignored_paths(repo_path, gitignore_result.ignored_files)}"
+            )
+            resolved[repo_path] = gitignore_result.kept_files
         return resolved
 
-    files, _spec, _ignore_root = discover_index_files(
-        builder,
+    raw_files = builder._collect_supported_files(path)
+    raw_git_repos, _ = _discover_git_repositories(path, raw_files)
+    spec, ignore_root = _find_pcgignore(
         path,
+        debug_log_fn=lambda *_args, **_kwargs: None,
         pathspec_module=pathspec_module,
+    )
+    files = _apply_ignore_spec(
+        raw_files,
+        spec,
+        ignore_root,
         debug_log_fn=lambda *_args, **_kwargs: None,
     )
     git_repos, _file_to_repo = _discover_git_repositories(path, files)
     if git_repos:
-        return {repo_root.resolve(): repo_files for repo_root, repo_files in git_repos.items()}
+        resolved: dict[Path, list[Path]] = {}
+        for repo_root, repo_files in sorted(git_repos.items()):
+            raw_repo_files = raw_git_repos.get(repo_root, [])
+            gitignore_result = filter_repo_gitignore_files(
+                repo_root.resolve(),
+                repo_files,
+                get_config_value_fn=get_config_value,
+            )
+            info_logger(
+                f"Repository discovery {repo_root.name}: "
+                f"supported={len(raw_repo_files)} "
+                f"pcgignore_excluded={len(raw_repo_files) - len(repo_files)} "
+                f"gitignore_excluded={len(gitignore_result.ignored_files)} "
+                f"indexed={len(gitignore_result.kept_files)} "
+                f"gitignore_top={summarize_gitignored_paths(repo_root, gitignore_result.ignored_files)}"
+            )
+            resolved[repo_root.resolve()] = gitignore_result.kept_files
+        return resolved
     repo_root = path.resolve() if path.is_dir() else path.resolve().parent
-    return {repo_root: files}
+    gitignore_result = filter_repo_gitignore_files(
+        repo_root,
+        files,
+        get_config_value_fn=get_config_value,
+    )
+    info_logger(
+        f"Repository discovery {repo_root.name}: "
+        f"supported={len(raw_files)} "
+        f"pcgignore_excluded={len(raw_files) - len(files)} "
+        f"gitignore_excluded={len(gitignore_result.ignored_files)} "
+        f"indexed={len(gitignore_result.kept_files)} "
+        f"gitignore_top={summarize_gitignored_paths(repo_root, gitignore_result.ignored_files)}"
+    )
+    return {repo_root: gitignore_result.kept_files}

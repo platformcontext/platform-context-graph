@@ -4,9 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..content.ingest import CONTENT_ENTITY_LABELS
 from platform_context_graph.core.database import (
     GraphStoreCapabilities,
     graph_store_capabilities_for_backend,
+)
+
+_UID_SCHEMA_LABELS = tuple(sorted(CONTENT_ENTITY_LABELS))
+_UID_CONSTRAINT_STATEMENTS = tuple(
+    (
+        "CREATE CONSTRAINT "
+        f"{label.lower()}_uid_unique "
+        f"IF NOT EXISTS FOR (n:{label}) REQUIRE n.uid IS UNIQUE"
+    )
+    for label in _UID_SCHEMA_LABELS
 )
 
 _SCHEMA_STATEMENTS = [
@@ -59,6 +70,7 @@ _SCHEMA_STATEMENTS = [
     "CREATE INDEX workload_repo_id IF NOT EXISTS FOR (w:Workload) ON (w.repo_id)",
     "CREATE INDEX workload_instance_environment IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.environment)",
 ]
+_SCHEMA_STATEMENTS.extend(_UID_CONSTRAINT_STATEMENTS)
 
 _NEO4J_FULLTEXT_STATEMENTS = [
     """

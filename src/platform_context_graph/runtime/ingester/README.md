@@ -33,3 +33,41 @@ The `pcg workspace` command group uses the same source contract:
 - `watch` — watch the workspace with optional repo rediscovery
 
 Path-first `pcg index <path>` and `pcg watch <path>` remain local convenience wrappers and are not the canonical remote discovery interface.
+
+## Repo-Local Ignore Rules
+
+Repo and workspace indexing honor the target repository's own `.gitignore` files by
+default through `PCG_HONOR_GITIGNORE=true`.
+
+- Ignore scope is **repo-local only**. A workspace parent `.gitignore` does not
+  leak into sibling repositories.
+- Nested `.gitignore` files inside a repo are honored for that repo.
+- Ignored files are hard-excluded from repo/workspace ingest: they are not
+  parsed, not dual-written to Postgres, and do not create graph state.
+- Direct single-file indexing remains an explicit override and can still index a
+  targeted file.
+
+Use `.pcgignore` for PCG-specific exclusions that should apply regardless of
+Git semantics. Effective exclusion for repo/workspace ingest is the union of
+repo-local `.gitignore` and `.pcgignore`.
+
+## Local Stress Tuning
+
+When a repo is slow to ingest, inspect these signals first before changing batch
+sizes or database settings:
+
+- repository discovery summary logs:
+  `supported=... pcgignore_excluded=... gitignore_excluded=... indexed=...`
+- graph entity batch preparation logs:
+  `Prepared graph entity batches for <repo>: Variable=..., Function=...`
+- per-batch write timing logs:
+  `Graph write batch entity label=Variable rows=... uid_rows=... name_rows=... duration=...s`
+
+The first benchmark repos for local tuning should remain:
+
+- `~/repos/services/aquasolyachtsales`
+- `~/repos/services/api-php-boatwizardwebsolutions`
+
+If `aquasolyachtsales` improves materially after repo-local `.gitignore`
+filtering but `api-php-boatwizardwebsolutions` does not, the next tuning target
+is the Neo4j write path rather than more discovery filtering.

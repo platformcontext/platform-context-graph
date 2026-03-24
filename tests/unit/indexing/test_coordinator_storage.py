@@ -128,3 +128,9 @@ def test_schema_statements_follow_graph_store_capabilities() -> None:
     assert not any(
         "db.idx.fulltext.createNodeIndex" in stmt for stmt in kuzu_statements
     )
+    assert any(
+        "CREATE CONSTRAINT function_uid_unique" in stmt for stmt in neo4j_statements
+    )
+    assert any(
+        "CREATE CONSTRAINT variable_uid_unique" in stmt for stmt in neo4j_statements
+    )

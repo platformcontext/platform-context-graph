@@ -325,6 +325,151 @@ def test_commit_file_batch_uses_single_transaction_with_unwind(
     assert any("Parameter" in q or "HAS_PARAMETER" in q for q in unwind_queries)
 
 
+def test_commit_file_batch_logs_top_files_for_large_variable_batches(
+    tmp_path, monkeypatch
+) -> None:
+    """Large prepared variable batches should log the heaviest source files."""
+
+    repo_path = tmp_path / "batch-repo"
+    repo_path.mkdir()
+    files = []
+    for name in ("heavy.php", "medium.php", "small.php"):
+        file_path = repo_path / "src" / name
+        file_path.parent.mkdir(exist_ok=True)
+        file_path.write_text("<?php\n", encoding="utf-8")
+        files.append(
+            {
+                "path": str(file_path),
+                "repo_path": str(repo_path),
+                "lang": "php",
+                "functions": [],
+                "imports": [],
+                "variables": [],
+                "function_calls": [],
+            }
+        )
+
+    repo_row = {
+        "id": "repository:r_batch",
+        "name": "batch-repo",
+        "path": str(repo_path.resolve()),
+        "local_path": str(repo_path.resolve()),
+        "remote_url": "https://github.com/platformcontext/batch-repo",
+        "repo_slug": "platformcontext/batch-repo",
+        "has_remote": True,
+    }
+
+    class _Result:
+        def __init__(self, row=None) -> None:
+            self._row = row
+
+        def single(self):
+            if self._row is None:
+                return None
+            return SimpleNamespace(data=lambda: self._row)
+
+    class _Tx:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+            self.committed = False
+
+        def run(self, query, parameters=None, **kwargs):
+            merged = dict(parameters or {}, **kwargs)
+            self.calls.append((query, merged))
+            return _Result()
+
+        def commit(self):
+            self.committed = True
+
+        def rollback(self):
+            pass
+
+    class _Session:
+        def __init__(self) -> None:
+            self.tx = _Tx()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def run(self, query, parameters=None, **kwargs):
+            return _Result(repo_row)
+
+        def begin_transaction(self):
+            return self.tx
+
+    session = _Session()
+    builder = SimpleNamespace(
+        driver=SimpleNamespace(session=MagicMock(return_value=session)),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
+        lambda: None,
+    )
+
+    def _fake_collect_file_write_data(file_data, file_path_str, **_kwargs):
+        if file_path_str.endswith("heavy.php"):
+            variable_count = 800
+        elif file_path_str.endswith("medium.php"):
+            variable_count = 150
+        else:
+            variable_count = 50
+        return {
+            "entities_by_label": {
+                "Variable": [
+                    {
+                        "file_path": file_path_str,
+                        "name": f"var_{index}",
+                        "line_number": index + 1,
+                        "uid": f"{Path(file_path_str).name}:{index}",
+                        "use_uid_identity": True,
+                    }
+                    for index in range(variable_count)
+                ]
+            },
+            "params_rows": [],
+            "module_rows": [],
+            "nested_fn_rows": [],
+            "class_fn_rows": [],
+            "module_inclusion_rows": [],
+            "js_import_rows": [],
+            "generic_import_rows": [],
+        }
+
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_persistence.collect_file_write_data",
+        _fake_collect_file_write_data,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_persistence.flush_write_batches",
+        lambda *_args, **_kwargs: {},
+    )
+
+    info_logs: list[str] = []
+    commit_file_batch_to_graph(
+        builder,
+        files,
+        Path(repo_path),
+        debug_log_fn=lambda *_a, **_kw: None,
+        info_logger_fn=info_logs.append,
+        warning_logger_fn=lambda *_a, **_kw: None,
+    )
+
+    assert any(
+        (
+            "Prepared graph entity batch detail" in line
+            and "label=Variable" in line
+            and "files=3" in line
+            and "src/heavy.php(800)" in line
+            and "src/medium.php(150)" in line
+            and "src/small.php(50)" in line
+        )
+        for line in info_logs
+    ), info_logs
+
+
 def test_begin_transaction_falls_back_when_driver_raises_runtime_error() -> None:
     """Drivers that raise RuntimeError should fall back to session auto-commit."""
 

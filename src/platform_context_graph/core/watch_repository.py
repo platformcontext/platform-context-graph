@@ -6,8 +6,12 @@ import threading
 from pathlib import Path
 import typing
 
+import pathspec
 from watchdog.events import FileSystemEventHandler
 
+from platform_context_graph.tools.graph_builder_indexing_discovery import (
+    discover_index_files,
+)
 from platform_context_graph.utils.debug_log import info_logger
 
 if typing.TYPE_CHECKING:
@@ -43,12 +47,13 @@ class RepositoryEventHandler(FileSystemEventHandler):
     def _supported_files(self) -> list[Path]:
         """Return all parser-supported files in the repository."""
 
-        supported_extensions = set(self.graph_builder.parsers.keys())
-        return sorted(
-            file_path
-            for file_path in self.repo_path.rglob("*")
-            if file_path.is_file() and file_path.suffix in supported_extensions
+        files, _spec, _ignore_root = discover_index_files(
+            self.graph_builder,
+            self.repo_path,
+            pathspec_module=pathspec,
+            debug_log_fn=lambda *_args, **_kwargs: None,
         )
+        return sorted(files)
 
     def _relink_repository(self) -> None:
         """Recreate cross-file relationships from the current repo cache."""
@@ -145,6 +150,7 @@ class RepositoryEventHandler(FileSystemEventHandler):
             if file_path not in current_files
         ]
         for stale_path in stale_paths:
+            self.graph_builder.delete_file_from_graph(stale_path)
             self.file_data_by_path.pop(stale_path, None)
 
         self._relink_repository()
@@ -163,28 +169,19 @@ class RepositoryEventHandler(FileSystemEventHandler):
     def on_created(self, event) -> None:
         """Queue supported file creations for the next incremental batch."""
 
-        if (
-            not event.is_directory
-            and Path(event.src_path).suffix in self.graph_builder.parsers
-        ):
+        if not event.is_directory and self._should_track_path(Path(event.src_path)):
             self._queue_event(event.src_path)
 
     def on_modified(self, event) -> None:
         """Queue supported file modifications for the next incremental batch."""
 
-        if (
-            not event.is_directory
-            and Path(event.src_path).suffix in self.graph_builder.parsers
-        ):
+        if not event.is_directory and self._should_track_path(Path(event.src_path)):
             self._queue_event(event.src_path)
 
     def on_deleted(self, event) -> None:
         """Queue supported file deletions for the next incremental batch."""
 
-        if (
-            not event.is_directory
-            and Path(event.src_path).suffix in self.graph_builder.parsers
-        ):
+        if not event.is_directory and self._should_track_path(Path(event.src_path)):
             self._queue_event(event.src_path, deleted=True)
 
     def on_moved(self, event) -> None:
@@ -192,10 +189,15 @@ class RepositoryEventHandler(FileSystemEventHandler):
 
         if event.is_directory:
             return
-        if Path(event.src_path).suffix in self.graph_builder.parsers:
+        if self._should_track_path(Path(event.src_path)):
             self._queue_event(event.src_path, deleted=True)
-        if Path(event.dest_path).suffix in self.graph_builder.parsers:
+        if self._should_track_path(Path(event.dest_path)):
             self._queue_event(event.dest_path)
+
+    def _should_track_path(self, path: Path) -> bool:
+        """Return whether a watcher event path should trigger a refresh batch."""
+
+        return path.name == ".gitignore" or path.suffix in self.graph_builder.parsers
 
 
 __all__ = ["RepositoryEventHandler"]

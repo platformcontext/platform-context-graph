@@ -77,6 +77,19 @@ class TestSkipExternalResolutionConfig:
         assert valid is True
         assert error is None
 
+    def test_honor_gitignore_default_is_true(self):
+        """Repo/workspace indexing should honor repo-local .gitignore by default."""
+
+        assert "PCG_HONOR_GITIGNORE" in DEFAULT_CONFIG
+        assert DEFAULT_CONFIG["PCG_HONOR_GITIGNORE"] == "true"
+
+    def test_honor_gitignore_validator_accepts_boolean_values(self):
+        """PCG_HONOR_GITIGNORE should validate like the other boolean toggles."""
+
+        assert CONFIG_VALIDATORS["PCG_HONOR_GITIGNORE"] == ["true", "false"]
+        assert validate_config_value("PCG_HONOR_GITIGNORE", "true") == (True, None)
+        assert validate_config_value("PCG_HONOR_GITIGNORE", "false") == (True, None)
+
     def test_set_and_get_config_value(self):
         """Test setting and getting the configuration value."""
         # Set to true
