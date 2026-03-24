@@ -15,7 +15,7 @@ def test_repo_sync_cycle_indexes_repositories_missing_from_graph(
     sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
 
     repos_dir = tmp_path / "workspace" / "repos"
-    repo_a = repos_dir / "platformcontext--payments-api"
+    repo_a = repos_dir / "platformcontext" / "payments-api"
     (repo_a / ".git").mkdir(parents=True)
 
     config = repo_sync.RepoSyncConfig(
@@ -71,7 +71,7 @@ def test_repo_sync_cycle_indexes_repositories_missing_from_graph(
     )
     monkeypatch.setattr(
         sync,
-        "graph_missing_repository_paths",
+        "graph_recovery_repository_paths",
         lambda repo_paths: [path for path in repo_paths if path == repo_a.resolve()],
         raising=False,
     )
@@ -102,7 +102,7 @@ def test_repo_sync_cycle_ignores_resumable_paths_outside_current_discovery(
     sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
 
     repos_dir = tmp_path / "workspace" / "repos"
-    canonical_repo = repos_dir / "boatsgroup--aquasolyachtsales"
+    canonical_repo = repos_dir / "boatsgroup" / "aquasolyachtsales"
     legacy_repo = repos_dir / "aquasolyachtsales"
     (canonical_repo / ".git").mkdir(parents=True)
     (legacy_repo / ".git").mkdir(parents=True)
@@ -160,7 +160,7 @@ def test_repo_sync_cycle_ignores_resumable_paths_outside_current_discovery(
     )
     monkeypatch.setattr(
         sync,
-        "graph_missing_repository_paths",
+        "graph_recovery_repository_paths",
         lambda _repo_paths: [],
         raising=False,
     )

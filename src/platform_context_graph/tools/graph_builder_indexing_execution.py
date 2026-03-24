@@ -10,6 +10,7 @@ from typing import Any
 
 from .graph_builder_indexing_discovery import resolve_repository_file_sets
 from .graph_builder_indexing_types import RepositoryParseSnapshot
+from .repository_display import repository_display_name
 
 _REPO_PARSE_PROGRESS_MIN_FILES = 250
 _REPO_PARSE_PROGRESS_TARGET_STEPS = 20
@@ -65,11 +66,12 @@ async def parse_repository_snapshot_async(
     """Parse one repository into an in-memory snapshot without writing state."""
 
     repo_path = repo_path.resolve()
-    info_logger_fn(f"Starting repo {repo_path.name} ({len(repo_files)} files)")
+    repo_label = repository_display_name(repo_path)
+    info_logger_fn(f"Starting repo {repo_label} ({len(repo_files)} files)")
     repo_start = time.monotonic()
     to_thread = getattr(asyncio_module, "to_thread", None)
     info_logger_fn(
-        f"Pre-scanning repo {repo_path.name} ({len(repo_files)} files) for imports map..."
+        f"Pre-scanning repo {repo_label} ({len(repo_files)} files) for imports map..."
     )
     prescan_start = time.monotonic()
     if callable(to_thread):
@@ -78,7 +80,7 @@ async def parse_repository_snapshot_async(
         imports_map = builder._pre_scan_for_imports(repo_files)
     prescan_elapsed = time.monotonic() - prescan_start
     info_logger_fn(
-        f"Pre-scan repo {repo_path.name} done in {prescan_elapsed:.1f}s — "
+        f"Pre-scan repo {repo_label} done in {prescan_elapsed:.1f}s — "
         f"{len(imports_map)} definitions found"
     )
     parsed_file_data: list[dict[str, Any] | None] = [None] * len(repo_files)
@@ -132,14 +134,14 @@ async def parse_repository_snapshot_async(
         if file_parse_elapsed >= _SLOW_PARSE_FILE_THRESHOLD_SECONDS:
             _record_slow_parse_file(slow_files, file_parse_elapsed, relative_path)
             info_logger_fn(
-                f"Slow parse file in repo {repo_path.name}: "
+                f"Slow parse file in repo {repo_label}: "
                 f"{relative_path} took {file_parse_elapsed:.1f}s"
             )
         if "error" not in file_data:
             parsed_file_data[index] = file_data
         if processed_files == len(repo_files) or processed_files % progress_every == 0:
             info_logger_fn(
-                f"Repo {repo_path.name} parse progress: "
+                f"Repo {repo_label} parse progress: "
                 f"{processed_files}/{len(repo_files)} files in "
                 f"{time.monotonic() - repo_start:.1f}s"
             )
@@ -185,11 +187,11 @@ async def parse_repository_snapshot_async(
             for elapsed_seconds, relative_path in sorted(slow_files, reverse=True)
         )
         info_logger_fn(
-            f"Slowest parse files in repo {repo_path.name}: {slowest_summary}"
+            f"Slowest parse files in repo {repo_label}: {slowest_summary}"
         )
     total_elapsed = time.monotonic() - repo_start
     info_logger_fn(
-        f"Finished repo {repo_path.name} ({len(file_data_items)} parsed files) "
+        f"Finished repo {repo_label} ({len(file_data_items)} parsed files) "
         f"in {total_elapsed:.1f}s"
     )
     return RepositoryParseSnapshot(
@@ -417,7 +419,7 @@ async def build_graph_from_path_async(
                     file_path.parent.resolve() if not path.is_dir() else path.resolve()
                 )
             )
-            repo_name = repo_path.name
+            repo_name = repository_display_name(repo_path)
 
             if repo_name != current_repo_name:
                 if current_repo_name is not None:

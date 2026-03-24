@@ -181,6 +181,114 @@ def test_workspace_plan_filesystem_mode_does_not_require_github_credentials(
     assert plan["matched_repositories"] == 2
 
 
+def test_filesystem_mode_preserves_nested_repository_paths(
+    tmp_path: Path,
+) -> None:
+    """Filesystem mode should preserve relative repo paths from the source root."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    git = importlib.import_module("platform_context_graph.runtime.ingester.git")
+
+    filesystem_root = tmp_path / "fixtures"
+    nested_repo = filesystem_root / "org" / "repo"
+    nested_repo.mkdir(parents=True)
+    (nested_repo / "main.py").write_text("print('nested')\n", encoding="utf-8")
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=tmp_path / "workspace" / "repos",
+        source_mode="filesystem",
+        git_auth_method="none",
+        github_org=None,
+        repositories=["org/repo"],
+        filesystem_root=filesystem_root,
+        clone_depth=1,
+        repo_limit=20,
+        sync_lock_dir=tmp_path / "workspace" / "repos" / ".pcg-sync.lock",
+        component="workspace-plan",
+    )
+
+    assert git.list_repo_identifiers(config, token=None) == ["org/repo"]
+
+    discovered = git.filesystem_sync_all(config)
+
+    assert discovered == ["org/repo"]
+    assert (config.repos_dir / "org" / "repo" / "main.py").exists()
+
+
+def test_filesystem_mode_auto_discovers_nested_repository_paths(
+    tmp_path: Path,
+) -> None:
+    """Filesystem mode should recursively discover nested repo roots."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    git = importlib.import_module("platform_context_graph.runtime.ingester.git")
+
+    filesystem_root = tmp_path / "fixtures"
+    nested_repo = filesystem_root / "boatsgroup" / "api-bridge"
+    nested_repo.mkdir(parents=True)
+    (nested_repo / ".git").mkdir()
+    (nested_repo / "main.py").write_text("print('nested')\n", encoding="utf-8")
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=tmp_path / "workspace" / "repos",
+        source_mode="filesystem",
+        git_auth_method="none",
+        github_org=None,
+        repositories=[],
+        filesystem_root=filesystem_root,
+        clone_depth=1,
+        repo_limit=20,
+        sync_lock_dir=tmp_path / "workspace" / "repos" / ".pcg-sync.lock",
+        component="workspace-plan",
+    )
+
+    discovered = git.list_repo_identifiers(config, token=None)
+
+    assert discovered == ["boatsgroup/api-bridge"]
+
+
+def test_workspace_plan_counts_nested_managed_checkouts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Workspace planning should count nested managed repos and stale siblings."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    git = importlib.import_module("platform_context_graph.runtime.ingester.git")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    nested_repo = repos_dir / "boatsgroup" / "devops-captain"
+    stale_repo = repos_dir / "boatsgroup" / "legacy-service"
+    (nested_repo / ".git").mkdir(parents=True)
+    (stale_repo / ".git").mkdir(parents=True)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="githubOrg",
+        git_auth_method="githubApp",
+        github_org="boatsgroup",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=20,
+        sync_lock_dir=repos_dir / ".pcg-sync.lock",
+        component="workspace-plan",
+    )
+
+    monkeypatch.setattr(git, "git_token", lambda _config: "token")
+    monkeypatch.setattr(
+        git,
+        "list_repo_identifiers",
+        lambda _config, _token: ["boatsgroup/devops-captain"],
+    )
+
+    plan = git.build_workspace_plan(config)
+
+    assert plan["repository_ids"] == ["boatsgroup/devops-captain"]
+    assert plan["already_cloned"] == 1
+    assert plan["stale_checkouts"] == 1
+
+
 def test_git_repo_sync_cycle_rediscoveries_and_indexes_only_on_change(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

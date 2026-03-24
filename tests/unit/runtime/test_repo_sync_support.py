@@ -93,3 +93,34 @@ def test_is_stale_lock_reaps_pid1_lock_from_prior_container_boot(
     monkeypatch.setattr(support.os, "getpid", lambda: 1)
 
     assert support._is_stale_lock(config) is True
+
+
+def test_managed_repository_roots_ignores_nested_git_directories(
+    tmp_path: Path,
+) -> None:
+    """Nested Git directories inside one managed repo must not count as extra repos."""
+
+    layout = importlib.import_module(
+        "platform_context_graph.runtime.ingester.repository_layout"
+    )
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    repo_root = repos_dir / "boatsgroup" / "payments-api"
+    nested_git = repo_root / "vendor" / "example" / ".git"
+    (repo_root / ".git").mkdir(parents=True)
+    nested_git.mkdir(parents=True)
+
+    roots = layout.managed_repository_roots(repos_dir)
+
+    assert roots == [repo_root.resolve()]
+
+
+def test_default_branch_retry_seconds_reads_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default-branch retry TTL should be configurable from the environment."""
+
+    support = importlib.import_module("platform_context_graph.runtime.ingester.support")
+    monkeypatch.setenv("PCG_DEFAULT_BRANCH_RETRY_SECONDS", "120")
+
+    assert support.default_branch_retry_seconds() == 120

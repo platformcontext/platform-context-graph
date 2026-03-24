@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
+import importlib
+
 from platform_context_graph.indexing.coordinator import execute_index_run
 from platform_context_graph.indexing.coordinator_models import RepositorySnapshot
 
@@ -129,3 +131,49 @@ def test_execute_index_run_parses_multiple_repositories_concurrently(
         str(repo_a.resolve()),
     ]
     assert result.status == "completed"
+
+
+def test_commit_repository_snapshot_deletes_by_canonical_repo_id(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Coordinator commits should clear old graph state via canonical repo ids."""
+
+    coordinator = importlib.import_module("platform_context_graph.indexing.coordinator")
+    snapshot = RepositorySnapshot(
+        repo_path=str(tmp_path / "payments-api"),
+        file_count=1,
+        imports_map={},
+        file_data=[{"path": str(tmp_path / "payments-api" / "main.py")}],
+    )
+
+    delete_calls: list[str] = []
+    monkeypatch.setattr(
+        coordinator,
+        "_graph_store_adapter",
+        lambda _builder: SimpleNamespace(
+            delete_repository=lambda repo_identifier: delete_calls.append(
+                repo_identifier
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        coordinator,
+        "repository_metadata",
+        lambda **_kwargs: {"id": "repository:r_12345678"},
+    )
+    monkeypatch.setattr(coordinator, "git_remote_for_path", lambda _path: None)
+
+    builder = SimpleNamespace(
+        _content_provider=SimpleNamespace(enabled=False),
+        add_repository_to_graph=lambda *_args, **_kwargs: None,
+        commit_file_batch_to_graph=lambda *_args, **_kwargs: None,
+    )
+
+    coordinator._commit_repository_snapshot(
+        builder,
+        snapshot,
+        is_dependency=False,
+    )
+
+    assert delete_calls == ["repository:r_12345678"]

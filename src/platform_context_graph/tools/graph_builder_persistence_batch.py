@@ -9,6 +9,7 @@ from typing import Any
 
 from ..content.ingest import CONTENT_ENTITY_LABELS
 from ..observability import get_observability
+from ..utils.debug_log import debug_logger
 from .graph_builder_persistence_unwind import (
     ITEM_MAPPINGS_KEYS,
     entity_props_for_unwind,
@@ -299,11 +300,10 @@ def _flush_entity_label_batches(
     for start in range(0, len(rows), chunk_size):
         chunk = rows[start : start + chunk_size]
         chunk_number = chunk_count + 1
-        if callable(info_logger_fn):
-            info_logger_fn(
-                f"Graph write batch entity start "
-                f"label={label} chunk={chunk_number}/{total_chunks} rows={len(chunk)}"
-            )
+        debug_logger(
+            f"Graph write batch entity start "
+            f"label={label} chunk={chunk_number}/{total_chunks} rows={len(chunk)}"
+        )
         chunk_summary = run_entity_unwind(tx, label, chunk)
         total_rows += int(chunk_summary["total_rows"])
         uid_rows += int(chunk_summary["uid_rows"])
@@ -311,12 +311,11 @@ def _flush_entity_label_batches(
         duration_seconds += float(chunk_summary["duration_seconds"])
         chunk_count += 1
         max_chunk_rows = max(max_chunk_rows, len(chunk))
-        if callable(info_logger_fn):
-            info_logger_fn(
-                f"Graph write batch entity done "
-                f"label={label} chunk={chunk_number}/{total_chunks} "
-                f"rows={len(chunk)} duration={float(chunk_summary['duration_seconds']):.2f}s"
-            )
+        debug_logger(
+            f"Graph write batch entity done "
+            f"label={label} chunk={chunk_number}/{total_chunks} "
+            f"rows={len(chunk)} duration={float(chunk_summary['duration_seconds']):.2f}s"
+        )
 
     return {
         "total_rows": total_rows,

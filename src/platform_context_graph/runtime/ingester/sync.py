@@ -14,7 +14,7 @@ from platform_context_graph.observability import (
 
 from .bootstrap import _request_index
 from .config import RepoSyncConfig, RepoSyncResult
-from .graph_state import graph_missing_repository_paths
+from .graph_state import graph_recovery_repository_paths
 from .git import (
     clone_missing_repositories,
     clone_missing_repositories_detailed,
@@ -76,6 +76,22 @@ _REPOSITORY_COUNT_KEYS = frozenset(
     }
 )
 _PATCHABLE_GIT_HELPERS = (clone_missing_repositories, update_existing_repositories)
+
+
+def content_store_dsn_resolution_active() -> bool:
+    """Return whether content-store DSN resolution is currently active."""
+
+    from ...content.state import content_store_dsn_resolution_active as _helper
+
+    return _helper()
+
+
+def runtime_status_persistence_active() -> bool:
+    """Return whether runtime status persistence is currently active."""
+
+    from ..status_store_runtime import runtime_status_persistence_active as _helper
+
+    return _helper()
 
 
 def _utc_now() -> datetime:
@@ -196,7 +212,7 @@ def _run_sync_git(
         clone_missing_repositories_detailed_fn=clone_missing_repositories_detailed,
         update_existing_repositories_detailed_fn=update_existing_repositories_detailed,
         count_stale_checkouts_fn=count_stale_checkouts,
-        graph_missing_repository_paths_fn=graph_missing_repository_paths,
+        graph_missing_repository_paths_fn=graph_recovery_repository_paths,
         repo_checkout_name_fn=repo_checkout_name,
         resumable_repository_paths_fn=resumable_repository_paths,
         begin_index_cycle_fn=begin_index_cycle,
@@ -245,6 +261,12 @@ def run_repo_sync_loop(
 
     config = RepoSyncConfig.from_env(component="repository")
     initialize_observability(component=config.component)
+    log(
+        config.component,
+        "Repo sync startup diagnostics "
+        f"content_store_dsn_resolution_active={content_store_dsn_resolution_active()} "
+        f"runtime_status_persistence_active={runtime_status_persistence_active()}",
+    )
     initial_delay_seconds = int(os.getenv("PCG_REPO_SYNC_INITIAL_DELAY_SECONDS", "30"))
     pending_request: dict[str, object] | None = None
     if initial_delay_seconds > 0:

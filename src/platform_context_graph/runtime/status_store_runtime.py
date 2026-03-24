@@ -39,6 +39,13 @@ def _dsn() -> str | None:
     return None
 
 
+def runtime_status_persistence_active() -> bool:
+    """Return whether runtime status persistence is currently active."""
+
+    dsn = _dsn()
+    return bool(_content_store_enabled() and dsn and PostgresRuntimeStatusStore(dsn).enabled)
+
+
 def _normalize_count(value: int | None) -> int:
     """Normalize nullable repository count fields before persistence."""
 

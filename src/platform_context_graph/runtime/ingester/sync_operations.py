@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from .config import RepoSyncConfig, RepoSyncResult
+from .repository_layout import managed_repository_roots
 
 
 def _run_sync_filesystem(
@@ -94,6 +95,15 @@ def _run_sync_git(
 ) -> RepoSyncResult:
     """Run a Git-backed repo sync cycle."""
 
+    def _repo_label(path: Path) -> str:
+        """Return a workspace-relative repository label when possible."""
+
+        resolved_path = path.resolve()
+        try:
+            return resolved_path.relative_to(config.repos_dir.resolve()).as_posix()
+        except ValueError:
+            return resolved_path.name
+
     token = git_token_fn(config)
     discovered, cloned_paths, clone_skipped, clone_failed = (
         clone_missing_repositories_detailed_fn(config, token)
@@ -177,20 +187,14 @@ def _run_sync_git(
                 stale=stale,
             )
 
-    discovered_count = len(
-        [
-            path
-            for path in config.repos_dir.iterdir()
-            if path.is_dir() and (path / ".git").exists()
-        ]
-    )
+    discovered_count = len(managed_repository_roots(config.repos_dir))
     if graph_missing_repositories:
-        preview = ", ".join(path.name for path in graph_missing_repositories[:5])
+        preview = ", ".join(_repo_label(path) for path in graph_missing_repositories[:5])
         if len(graph_missing_repositories) > 5:
             preview = f"{preview}, ..."
         log_fn(
             config.component,
-            "Recovering repositories missing graph state: "
+            "Recovering repositories with missing or drifted graph state: "
             f"count={len(graph_missing_repositories)} repos={preview}",
         )
     with begin_index_cycle_fn(config=config, mode="sync", repo_count=discovered_count):

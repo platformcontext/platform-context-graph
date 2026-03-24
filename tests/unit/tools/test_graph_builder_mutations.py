@@ -62,3 +62,28 @@ def test_delete_repository_logs_repository_deletion(tmp_path: Path) -> None:
     assert info_logs == [
         f"Deleted repository and its contents from graph: {repo_path.resolve()}"
     ]
+
+
+def test_delete_repository_accepts_canonical_repo_id() -> None:
+    """Canonical repository ids should delete without needing a checkout path."""
+
+    session = _FakeSession()
+    builder = SimpleNamespace(
+        driver=SimpleNamespace(session=lambda: session),
+    )
+    info_logs: list[str] = []
+    warning_logs: list[str] = []
+
+    deleted = delete_repository_from_graph(
+        builder,
+        "repository:r_12345678",
+        info_logger_fn=info_logs.append,
+        warning_logger_fn=warning_logs.append,
+    )
+
+    assert deleted is True
+    assert warning_logs == []
+    assert session.calls[0][1]["lookup_values"] == ("repository:r_12345678",)
+    assert info_logs == [
+        "Deleted repository and its contents from graph: repository:r_12345678"
+    ]

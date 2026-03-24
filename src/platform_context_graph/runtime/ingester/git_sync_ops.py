@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -10,8 +11,14 @@ from urllib.parse import urlsplit
 from platform_context_graph.utils.debug_log import warning_logger
 
 from .config import RepoSyncConfig
-from .support import log
-
+from .repository_layout import managed_repository_roots
+from .support import (
+    branchless_retry_key,
+    default_branch_retry_seconds,
+    load_default_branch_retry_cache,
+    log,
+    save_default_branch_retry_cache,
+)
 
 @dataclass(frozen=True, slots=True)
 class DefaultBranchResolution:
@@ -277,6 +284,7 @@ def clone_missing_repositories_detailed_impl(
             continue
 
         remote_url = repo_remote_url_fn(config, repo_id, token)
+        repo_path.parent.mkdir(parents=True, exist_ok=True)
         log(config.component, f"Cloning {repo_id}")
         result = subprocess_run_fn(
             [
@@ -318,7 +326,7 @@ def filesystem_sync_all_impl(
     discovered = list_repo_identifiers_fn(config, token=None)
     config.repos_dir.mkdir(parents=True, exist_ok=True)
     for path in config.repos_dir.iterdir():
-        if path.name == ".pcg-sync.lock":
+        if path.name.startswith(".pcg-"):
             continue
         if path.is_dir():
             shutil.rmtree(path)
@@ -328,6 +336,7 @@ def filesystem_sync_all_impl(
     for repo_id in discovered:
         source_path = config.filesystem_root / repo_id
         target_path = config.repos_dir / repo_checkout_name_fn(repo_id)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source_path, target_path, ignore_dangling_symlinks=True)
     return discovered
 
@@ -335,6 +344,7 @@ def filesystem_sync_all_impl(
 def update_existing_repositories_detailed_impl(
     config: RepoSyncConfig,
     token: str | None,
+    force_default_branch_refresh: bool = False,
     *,
     git_env_fn,
     refresh_repository_origin_url_fn,
@@ -345,12 +355,19 @@ def update_existing_repositories_detailed_impl(
     updated_paths: list[Path] = []
     failed = 0
     env = git_env_fn(config)
+    retry_cache = load_default_branch_retry_cache(config)
+    branchless_repos: list[str] = []
+    now = time.time()
+    retry_ttl_seconds = default_branch_retry_seconds()
 
-    for repo_dir in sorted(
-        path for path in config.repos_dir.iterdir() if path.is_dir()
-    ):
-        if not (repo_dir / ".git").exists():
-            continue
+    for repo_dir in managed_repository_roots(config.repos_dir):
+        cache_key = branchless_retry_key(config, repo_dir)
+        if not force_default_branch_refresh:
+            expires_at = retry_cache.get(cache_key)
+            if expires_at is not None and expires_at > now:
+                continue
+            if expires_at is not None:
+                retry_cache.pop(cache_key, None)
 
         refresh_repository_origin_url_fn(
             repo_dir,
@@ -368,15 +385,15 @@ def update_existing_repositories_detailed_impl(
             failed += 1
             warning_logger(
                 f"[{config.component}] Failed to resolve default branch for "
-                f"{repo_dir.name}: {default_branch_resolution.error}"
+                f"{cache_key}: {default_branch_resolution.error}"
             )
             continue
         if default_branch_resolution.branch is None:
-            warning_logger(
-                f"[{config.component}] Skipping {repo_dir.name}: no discoverable default branch"
-            )
+            retry_cache[cache_key] = now + retry_ttl_seconds
+            branchless_repos.append(cache_key)
             continue
 
+        retry_cache.pop(cache_key, None)
         default_branch = default_branch_resolution.branch
         heal_remote_head = default_branch_resolution.from_remote_head
         fetch_result = _fetch_branch(
@@ -396,15 +413,11 @@ def update_existing_repositories_detailed_impl(
                 )
                 if remote_branch_resolution.error is not None:
                     failed += 1
-                    warning_logger(
-                        f"[{config.component}] Failed to resolve default branch for "
-                        f"{repo_dir.name}: {remote_branch_resolution.error}"
-                    )
+                    warning_logger(f"[{config.component}] Failed to resolve default branch for {cache_key}: {remote_branch_resolution.error}")
                     continue
                 if remote_branch_resolution.branch is None:
-                    warning_logger(
-                        f"[{config.component}] Skipping {repo_dir.name}: no discoverable default branch"
-                    )
+                    retry_cache[cache_key] = now + retry_ttl_seconds
+                    branchless_repos.append(cache_key)
                     continue
                 if remote_branch_resolution.branch != default_branch:
                     default_branch = remote_branch_resolution.branch
@@ -420,7 +433,7 @@ def update_existing_repositories_detailed_impl(
             if fetch_result.returncode != 0:
                 failed += 1
                 warning_logger(
-                    f"[{config.component}] Failed to fetch {repo_dir.name}: {fetch_result.stderr.strip()}"
+                    f"[{config.component}] Failed to fetch {cache_key}: {fetch_result.stderr.strip()}"
                 )
                 continue
         if heal_remote_head:
@@ -461,8 +474,18 @@ def update_existing_repositories_detailed_impl(
         else:
             failed += 1
             warning_logger(
-                f"[{config.component}] Failed to reset {repo_dir.name}: {reset_result.stderr.strip()}"
+                f"[{config.component}] Failed to reset {cache_key}: {reset_result.stderr.strip()}"
             )
+    if branchless_repos:
+        preview = ", ".join(branchless_repos[:5])
+        if len(branchless_repos) > 5:
+            preview = f"{preview}, ..."
+        warning_logger(
+            f"[{config.component}] Skipping {len(branchless_repos)} "
+            f"{'repository' if len(branchless_repos) == 1 else 'repositories'} "
+            f"with no discoverable default branch: {preview}"
+        )
+    save_default_branch_retry_cache(config, retry_cache)
     return updated_paths, failed
 
 
