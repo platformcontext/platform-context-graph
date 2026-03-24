@@ -8,6 +8,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from platform_context_graph.tools.graph_builder import GraphBuilder
+from platform_context_graph.tools.graph_builder_indexing_discovery import (
+    resolve_repository_file_sets,
+)
 from platform_context_graph.tools.graph_builder_indexing_execution import (
     build_graph_from_path_async as legacy_build_graph_from_path_async,
 )
@@ -42,6 +45,8 @@ def _make_builder() -> GraphBuilder:
 def _config_value(key: str) -> str | None:
     if key == "IGNORE_DIRS":
         return ".terraform,.terragrunt-cache,.pulumi,.crossplane,.serverless,.aws-sam,cdk.out,.terramate-cache,node_modules"
+    if key == "PCG_HONOR_GITIGNORE":
+        return "true"
     if key == "SCIP_INDEXER":
         return "false"
     return None
@@ -154,6 +159,136 @@ def test_build_graph_from_path_async_skips_hidden_cache_repos_but_keeps_visible_
     assert indexed_repos == {tmp_path.resolve(), nested_repo.resolve()}
     assert indexed_files == {root_file.resolve(), nested_file.resolve()}
     assert cached_file.resolve() not in indexed_files
+
+
+def test_resolve_repository_file_sets_honors_repo_local_gitignore_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each repo should honor only its own .gitignore, not workspace parents."""
+
+    builder = _make_builder()
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value", _config_value
+    )
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    repo_a = workspace / "repo-a"
+    repo_b = workspace / "repo-b"
+    (workspace / ".gitignore").write_text("*.py\n", encoding="utf-8")
+    (repo_a / ".git").mkdir(parents=True)
+    (repo_b / ".git").mkdir(parents=True)
+    (repo_a / ".gitignore").write_text("ignored.py\n", encoding="utf-8")
+    (repo_b / ".gitignore").write_text("skip.py\n", encoding="utf-8")
+
+    kept_a = repo_a / "kept.py"
+    ignored_a = repo_a / "ignored.py"
+    kept_b = repo_b / "kept.py"
+    ignored_b = repo_b / "skip.py"
+    for path in (kept_a, ignored_a, kept_b, ignored_b):
+        path.write_text("print('x')\n", encoding="utf-8")
+
+    repo_file_sets = resolve_repository_file_sets(
+        builder,
+        workspace,
+        selected_repositories=None,
+        pathspec_module=__import__("pathspec"),
+    )
+
+    assert repo_file_sets == {
+        repo_a.resolve(): [kept_a.resolve()],
+        repo_b.resolve(): [kept_b.resolve()],
+    }
+
+
+def test_resolve_repository_file_sets_honors_nested_gitignore_negation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nested .gitignore files should apply only within their subtrees."""
+
+    builder = _make_builder()
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value", _config_value
+    )
+
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    nested = repo / "generated"
+    nested.mkdir()
+    (nested / ".gitignore").write_text("*\n!keep.py\n", encoding="utf-8")
+
+    kept = nested / "keep.py"
+    dropped = nested / "drop.py"
+    outside = repo / "outside.py"
+    for path in (kept, dropped, outside):
+        path.write_text("print('x')\n", encoding="utf-8")
+
+    repo_file_sets = resolve_repository_file_sets(
+        builder,
+        repo,
+        selected_repositories=None,
+        pathspec_module=__import__("pathspec"),
+    )
+
+    assert set(repo_file_sets) == {repo.resolve()}
+    assert set(repo_file_sets[repo.resolve()]) == {
+        outside.resolve(),
+        kept.resolve(),
+    }
+
+
+def test_build_graph_from_path_async_explicit_file_bypasses_gitignore(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Direct single-file indexing should remain an explicit override."""
+
+    builder = _make_builder()
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value", _config_value
+    )
+
+    async def immediate_sleep(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.asyncio.sleep", immediate_sleep
+    )
+
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    (repo / ".gitignore").write_text("ignored.py\n", encoding="utf-8")
+    ignored_file = repo / "ignored.py"
+    ignored_file.write_text("print('override')\n", encoding="utf-8")
+
+    asyncio.run(
+        legacy_build_graph_from_path_async(
+            builder,
+            ignored_file,
+            False,
+            None,
+            asyncio_module=asyncio,
+            datetime_cls=SimpleNamespace(now=lambda: None),
+            debug_log_fn=lambda *_args, **_kwargs: None,
+            error_logger_fn=lambda *_args, **_kwargs: None,
+            get_config_value_fn=_config_value,
+            info_logger_fn=lambda *_args, **_kwargs: None,
+            pathspec_module=__import__("pathspec"),
+            warning_logger_fn=lambda *_args, **_kwargs: None,
+            job_status_enum=SimpleNamespace(
+                COMPLETED="completed",
+                FAILED="failed",
+                CANCELLED="cancelled",
+                RUNNING="running",
+            ),
+        )
+    )
+
+    indexed_files = {
+        Path(call.args[0]["path"]).resolve()
+        for call in builder.add_file_to_graph.call_args_list
+    }
+
+    assert indexed_files == {ignored_file.resolve()}
 
 
 def test_build_graph_from_path_async_uses_checkpointed_coordinator_for_directories(

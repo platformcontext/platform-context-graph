@@ -20,6 +20,20 @@ It also skips other common dependency and build directories such as `node_module
 
 Use `.pcgignore` for repo-local choices that are specific to your project, team, or indexing goals.
 
+## `.gitignore` Interaction
+
+PCG also honors the target repository's own `.gitignore` files during repo and
+workspace indexing by default (`PCG_HONOR_GITIGNORE=true`).
+
+- Only `.gitignore` files inside the target repo are used.
+- Parent workspace `.gitignore` files do not leak into sibling repos.
+- Nested `.gitignore` files inside the repo still apply within their subtree.
+- Matching files are hard-excluded from repo/workspace ingest.
+
+This means `.gitignore` is the best place to keep vendor, generated, or
+published asset trees out of routine ingest, while `.pcgignore` remains the
+PCG-specific override for additional indexing choices.
+
 ## Why use it?
 
 - **Performance:** Skip large generated trees that are not part of the code or infrastructure you want to analyze.

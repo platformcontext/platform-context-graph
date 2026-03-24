@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from pathlib import Path
+import time
 from typing import Any
 
 from ..content.ingest import CONTENT_ENTITY_LABELS
+from ..observability import get_observability
 from .graph_builder_persistence_unwind import (
     ITEM_MAPPINGS_KEYS,
     entity_props_for_unwind,
@@ -17,6 +21,12 @@ from .graph_builder_persistence_unwind import (
     run_nested_function_unwind,
     run_parameter_unwind,
 )
+
+_DEFAULT_ENTITY_BATCH_SIZE = 10_000
+_ENTITY_BATCH_SIZE_BY_LABEL = {
+    "Variable": 100,
+}
+_LARGE_LABEL_SUMMARY_THRESHOLD = 1_000
 
 
 def collect_file_write_data(
@@ -149,7 +159,9 @@ def collect_file_write_data(
 def flush_write_batches(
     tx: Any,
     batches: dict[str, Any],
-) -> None:
+    *,
+    info_logger_fn: Any | None = None,
+) -> dict[str, dict[str, float | int]]:
     """Flush all accumulated write batches through UNWIND queries.
 
     Args:
@@ -158,16 +170,162 @@ def flush_write_batches(
                  ``entities_by_label`` potentially being a merged accumulation
                  across multiple files).
     """
+    batch_metrics: dict[str, dict[str, float | int]] = {}
+    telemetry = get_observability()
     for label, rows in batches["entities_by_label"].items():
-        run_entity_unwind(tx, label, rows)
+        summary = _flush_entity_label_batches(
+            tx,
+            label,
+            rows,
+            info_logger_fn=info_logger_fn,
+        )
+        batch_metrics[f"entity:{label}"] = summary
+        telemetry.record_graph_write_batch(
+            batch_type="entity",
+            label=label,
+            rows=int(summary["total_rows"]),
+            duration_seconds=float(summary["duration_seconds"]),
+        )
+        if callable(info_logger_fn):
+            info_logger_fn(
+                f"Graph write batch entity label={label} "
+                f"rows={summary['total_rows']} "
+                f"uid_rows={summary['uid_rows']} "
+                f"name_rows={summary['name_rows']} "
+                f"chunks={summary['chunk_count']} "
+                f"max_chunk_rows={summary['max_chunk_rows']} "
+                f"duration={summary['duration_seconds']:.2f}s"
+            )
 
-    run_parameter_unwind(tx, batches["params_rows"])
-    run_module_unwind(tx, batches["module_rows"])
-    run_nested_function_unwind(tx, batches["nested_fn_rows"])
-    run_class_function_unwind(tx, batches["class_fn_rows"])
-    run_module_inclusion_unwind(tx, batches["module_inclusion_rows"])
-    run_js_import_unwind(tx, batches["js_import_rows"])
-    run_generic_import_unwind(tx, batches["generic_import_rows"])
+    for batch_name, rows, runner in (
+        ("parameters", batches["params_rows"], run_parameter_unwind),
+        ("modules", batches["module_rows"], run_module_unwind),
+        ("nested_functions", batches["nested_fn_rows"], run_nested_function_unwind),
+        ("class_functions", batches["class_fn_rows"], run_class_function_unwind),
+        (
+            "module_inclusions",
+            batches["module_inclusion_rows"],
+            run_module_inclusion_unwind,
+        ),
+        ("js_imports", batches["js_import_rows"], run_js_import_unwind),
+        (
+            "generic_imports",
+            batches["generic_import_rows"],
+            run_generic_import_unwind,
+        ),
+    ):
+        if not rows:
+            continue
+        started = time.perf_counter()
+        runner(tx, rows)
+        elapsed = time.perf_counter() - started
+        batch_metrics[batch_name] = {
+            "rows": len(rows),
+            "duration_seconds": elapsed,
+        }
+        telemetry.record_graph_write_batch(
+            batch_type=batch_name,
+            label=None,
+            rows=len(rows),
+            duration_seconds=elapsed,
+        )
+        if callable(info_logger_fn):
+            info_logger_fn(
+                f"Graph write batch type={batch_name} rows={len(rows)} duration={elapsed:.2f}s"
+            )
+    return batch_metrics
+
+
+def summarize_entity_source_files(
+    rows: list[dict[str, Any]],
+    *,
+    repo_root: str | Path | None = None,
+    limit: int = 3,
+) -> dict[str, Any]:
+    """Return repo-relative top-file counts for one prepared entity label."""
+
+    file_counts: Counter[str] = Counter()
+    resolved_repo_root = Path(repo_root).resolve() if repo_root is not None else None
+
+    for row in rows:
+        file_path_value = row.get("file_path")
+        if not isinstance(file_path_value, str) or not file_path_value:
+            continue
+        file_path = Path(file_path_value).resolve()
+        display_path: str
+        if resolved_repo_root is not None:
+            try:
+                display_path = file_path.relative_to(resolved_repo_root).as_posix()
+            except ValueError:
+                display_path = file_path.name
+        else:
+            display_path = file_path.name
+        file_counts[display_path] += 1
+
+    return {
+        "file_count": len(file_counts),
+        "top_files": file_counts.most_common(limit),
+    }
+
+
+def _flush_entity_label_batches(
+    tx: Any,
+    label: str,
+    rows: list[dict[str, Any]],
+    *,
+    info_logger_fn: Any | None = None,
+) -> dict[str, float | int]:
+    """Flush one entity label, chunking only where the label needs it."""
+
+    if not rows:
+        return {
+            "total_rows": 0,
+            "uid_rows": 0,
+            "name_rows": 0,
+            "duration_seconds": 0.0,
+            "chunk_count": 0,
+            "max_chunk_rows": 0,
+        }
+
+    chunk_size = _ENTITY_BATCH_SIZE_BY_LABEL.get(label, _DEFAULT_ENTITY_BATCH_SIZE)
+    total_rows = 0
+    uid_rows = 0
+    name_rows = 0
+    duration_seconds = 0.0
+    chunk_count = 0
+    max_chunk_rows = 0
+
+    total_chunks = max(1, (len(rows) + chunk_size - 1) // chunk_size)
+    for start in range(0, len(rows), chunk_size):
+        chunk = rows[start : start + chunk_size]
+        chunk_number = chunk_count + 1
+        if callable(info_logger_fn):
+            info_logger_fn(
+                f"Graph write batch entity start "
+                f"label={label} chunk={chunk_number}/{total_chunks} rows={len(chunk)}"
+            )
+        chunk_summary = run_entity_unwind(tx, label, chunk)
+        total_rows += int(chunk_summary["total_rows"])
+        uid_rows += int(chunk_summary["uid_rows"])
+        name_rows += int(chunk_summary["name_rows"])
+        duration_seconds += float(chunk_summary["duration_seconds"])
+        chunk_count += 1
+        max_chunk_rows = max(max_chunk_rows, len(chunk))
+        if callable(info_logger_fn):
+            info_logger_fn(
+                f"Graph write batch entity done "
+                f"label={label} chunk={chunk_number}/{total_chunks} "
+                f"rows={len(chunk)} duration={float(chunk_summary['duration_seconds']):.2f}s"
+            )
+
+    return {
+        "total_rows": total_rows,
+        "uid_rows": uid_rows,
+        "name_rows": name_rows,
+        "duration_seconds": duration_seconds,
+        "chunk_count": chunk_count,
+        "max_chunk_rows": max_chunk_rows,
+    }
 
 
 def merge_batches(
@@ -210,4 +368,5 @@ __all__ = [
     "empty_accumulator",
     "flush_write_batches",
     "merge_batches",
+    "summarize_entity_source_files",
 ]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from platform_context_graph.core.watcher import (
     CodeWatcher,
@@ -151,8 +152,16 @@ def test_repository_event_handlers_keep_workspace_repo_updates_partitioned(
     file_b.write_text("print('b')\n", encoding="utf-8")
 
     update_calls: list[tuple[Path, Path]] = []
+    def _collect_supported_files(path: Path) -> list[Path]:
+        return sorted(
+            candidate
+            for candidate in path.rglob("*")
+            if candidate.is_file() and candidate.suffix == ".py"
+        )
+
     graph_builder = SimpleNamespace(
         parsers={".py": object()},
+        _collect_supported_files=_collect_supported_files,
         _pre_scan_for_imports=lambda _files: {},
         update_file_in_graph=lambda path, repo_path, imports_map: (
             update_calls.append((repo_path.resolve(), path.resolve())),
@@ -262,3 +271,120 @@ def test_code_watcher_stop_clears_repo_partition_state(
     assert watcher._handlers == {}
     assert watcher._plans == {}
     assert watcher._watch_configs == {}
+
+
+def test_repository_event_handler_initial_scan_skips_gitignored_files(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Initial watcher scans should honor repo-local .gitignore rules."""
+
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    visible = repo / "visible.py"
+    ignored = repo / "ignored.py"
+    visible.write_text("print('visible')\n", encoding="utf-8")
+    ignored.write_text("print('ignored')\n", encoding="utf-8")
+    (repo / ".gitignore").write_text("ignored.py\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value",
+        lambda key: "true" if key == "PCG_HONOR_GITIGNORE" else None,
+    )
+
+    parse_calls: list[Path] = []
+    def _collect_supported_files(path: Path) -> list[Path]:
+        return sorted(
+            candidate
+            for candidate in path.rglob("*")
+            if candidate.is_file() and candidate.suffix == ".py"
+        )
+
+    graph_builder = SimpleNamespace(
+        parsers={".py": object()},
+        _collect_supported_files=_collect_supported_files,
+        _pre_scan_for_imports=lambda files: {
+            "visible": [str(path.resolve()) for path in files]
+        },
+        parse_file=lambda repo_path, file_path, is_dependency=False: (
+            parse_calls.append(file_path.resolve()),
+            {"path": str(file_path.resolve()), "functions": [], "classes": []},
+        )[1],
+        update_file_in_graph=lambda *_args, **_kwargs: None,
+        delete_file_from_graph=lambda *_args, **_kwargs: None,
+        _create_all_function_calls=lambda *_args, **_kwargs: None,
+        _create_all_inheritance_links=lambda *_args, **_kwargs: None,
+        _create_all_infra_links=lambda *_args, **_kwargs: None,
+    )
+
+    handler = RepositoryEventHandler(
+        graph_builder,
+        repo,
+        debounce_interval=0.1,
+        perform_initial_scan=True,
+    )
+
+    assert parse_calls == [visible.resolve()]
+    assert sorted(handler.file_data_by_path) == [str(visible.resolve())]
+
+
+def test_repository_event_handler_gitignore_change_removes_newly_ignored_files(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Changing .gitignore should trigger a full rescan and stale graph cleanup."""
+
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    tracked = repo / "app.py"
+    tracked.write_text("print('tracked')\n", encoding="utf-8")
+    (repo / ".gitignore").write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value",
+        lambda key: "true" if key == "PCG_HONOR_GITIGNORE" else None,
+    )
+
+    delete_file_from_graph = MagicMock()
+    def _collect_supported_files(path: Path) -> list[Path]:
+        return sorted(
+            candidate
+            for candidate in path.rglob("*")
+            if candidate.is_file() and candidate.suffix == ".py"
+        )
+
+    graph_builder = SimpleNamespace(
+        parsers={".py": object()},
+        _collect_supported_files=_collect_supported_files,
+        _pre_scan_for_imports=lambda files: {
+            "app": [str(path.resolve()) for path in files]
+        },
+        parse_file=lambda repo_path, file_path, is_dependency=False: {
+            "path": str(file_path.resolve()),
+            "functions": [],
+            "classes": [],
+        },
+        update_file_in_graph=lambda path, repo_path, imports_map: {
+            "path": str(path.resolve()),
+            "imports_map": imports_map,
+        },
+        delete_file_from_graph=delete_file_from_graph,
+        _create_all_function_calls=lambda *_args, **_kwargs: None,
+        _create_all_inheritance_links=lambda *_args, **_kwargs: None,
+        _create_all_infra_links=lambda *_args, **_kwargs: None,
+    )
+
+    handler = RepositoryEventHandler(
+        graph_builder,
+        repo,
+        debounce_interval=0.1,
+        perform_initial_scan=True,
+    )
+    assert str(tracked.resolve()) in handler.file_data_by_path
+
+    (repo / ".gitignore").write_text("app.py\n", encoding="utf-8")
+    handler._queue_event(str((repo / ".gitignore").resolve()))
+    handler._process_pending_changes()
+
+    delete_file_from_graph.assert_called_once_with(str(tracked.resolve()))
+    assert handler.file_data_by_path == {}

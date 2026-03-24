@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
+import threading
+import time
 from types import SimpleNamespace
 
 import pytest
 
 from platform_context_graph.tools.graph_builder_indexing_execution import (
     finalize_index_batch,
+    parse_repository_snapshot_async,
 )
 from platform_context_graph.tools.graph_builder_indexing_types import (
     RepositoryParseSnapshot,
@@ -108,3 +113,214 @@ def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
         "workloads",
     ]
     assert any("Finalization timings:" in message for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_parse_repository_snapshot_logs_prescan_progress_and_slow_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Repo parsing should emit useful telemetry while preserving parse output."""
+
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    file_paths = [
+        repo_path / "alpha.py",
+        repo_path / "beta.py",
+        repo_path / "gamma.py",
+    ]
+    for path in file_paths:
+        path.write_text("print('ok')\n", encoding="utf-8")
+
+    class _FakeClock:
+        def __init__(self) -> None:
+            self.current = 0.0
+
+        def monotonic(self) -> float:
+            return self.current
+
+        def advance(self, seconds: float) -> None:
+            self.current += seconds
+
+    clock = _FakeClock()
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_indexing_execution.time.monotonic",
+        clock.monotonic,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_indexing_execution._REPO_PARSE_PROGRESS_MIN_FILES",
+        1,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_indexing_execution._REPO_PARSE_PROGRESS_TARGET_STEPS",
+        2,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_indexing_execution._SLOW_PARSE_FILE_THRESHOLD_SECONDS",
+        1.0,
+    )
+
+    messages: list[str] = []
+    progress_files: list[str] = []
+    job_updates: list[dict[str, str]] = []
+    parse_durations = {
+        "alpha.py": 0.2,
+        "beta.py": 1.6,
+        "gamma.py": 0.3,
+    }
+
+    def _pre_scan_for_imports(repo_files: list[Path]) -> dict[str, list[str]]:
+        assert repo_files == file_paths
+        clock.advance(2.0)
+        return {"alpha": ["beta"]}
+
+    def _parse_file(
+        repo_root: Path, file_path: Path, is_dependency: bool
+    ) -> dict[str, object]:
+        assert repo_root == repo_path.resolve()
+        assert is_dependency is False
+        clock.advance(parse_durations[file_path.name])
+        return {"path": str(file_path), "functions": []}
+
+    builder = SimpleNamespace(
+        _pre_scan_for_imports=_pre_scan_for_imports,
+        parse_file=_parse_file,
+        job_manager=SimpleNamespace(
+            update_job=lambda _job_id, **kwargs: job_updates.append(kwargs)
+        ),
+    )
+
+    async def _sleep(_seconds: float) -> None:
+        return None
+
+    snapshot = await parse_repository_snapshot_async(
+        builder,
+        repo_path,
+        file_paths,
+        is_dependency=False,
+        job_id="job-123",
+        asyncio_module=SimpleNamespace(sleep=_sleep),
+        info_logger_fn=messages.append,
+        progress_callback=lambda **kwargs: progress_files.append(
+            kwargs["current_file"]
+        ),
+    )
+
+    assert snapshot.file_count == 3
+    assert len(snapshot.file_data) == 3
+    assert snapshot.imports_map == {"alpha": ["beta"]}
+    assert progress_files == [str(path.resolve()) for path in file_paths]
+    assert any(
+        "Pre-scanning repo repo (3 files) for imports map..." in message
+        for message in messages
+    )
+    assert any("Pre-scan repo repo done in 2.0s" in message for message in messages)
+    assert any("Repo repo parse progress: 1/3 files" in message for message in messages)
+    assert any(
+        "Slow parse file in repo repo: beta.py took 1.6s" in message
+        for message in messages
+    )
+    assert any(
+        "Slowest parse files in repo repo: beta.py(1.6s)" in message
+        for message in messages
+    )
+    assert any(
+        "Finished repo repo (3 parsed files) in 4.1s" in message for message in messages
+    )
+    assert job_updates == [
+        {"current_file": str(file_paths[0])},
+        {"current_file": str(file_paths[1])},
+        {"current_file": str(file_paths[2])},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_parse_repository_snapshot_does_not_sleep_away_large_repo_time(
+    tmp_path: Path,
+) -> None:
+    """Cooperative yielding should not inject positive delay per parsed file."""
+
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    file_paths = [repo_path / f"file_{index}.py" for index in range(3)]
+    for path in file_paths:
+        path.write_text("print('ok')\n", encoding="utf-8")
+
+    sleep_calls: list[float] = []
+
+    async def _sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+
+    builder = SimpleNamespace(
+        _pre_scan_for_imports=lambda _files: {},
+        parse_file=lambda *_args, **_kwargs: {"path": "ok", "functions": []},
+        job_manager=SimpleNamespace(update_job=lambda *_args, **_kwargs: None),
+    )
+
+    await parse_repository_snapshot_async(
+        builder,
+        repo_path,
+        file_paths,
+        is_dependency=False,
+        job_id=None,
+        asyncio_module=SimpleNamespace(sleep=_sleep),
+        info_logger_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert sleep_calls
+    assert max(sleep_calls) == 0.0
+
+
+@pytest.mark.asyncio
+async def test_parse_repository_snapshot_can_parse_repo_files_concurrently(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Repo parsing should support opt-in file concurrency while keeping order."""
+
+    monkeypatch.setenv("PCG_REPO_FILE_PARSE_CONCURRENCY", "2")
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    file_paths = [repo_path / f"file_{index}.py" for index in range(3)]
+    for path in file_paths:
+        path.write_text("print('ok')\n", encoding="utf-8")
+
+    inflight = 0
+    max_inflight = 0
+    inflight_lock = threading.Lock()
+    parse_durations = {
+        "file_0.py": 0.08,
+        "file_1.py": 0.01,
+        "file_2.py": 0.01,
+    }
+
+    def _parse_file(
+        _repo_root: Path, file_path: Path, _is_dependency: bool
+    ) -> dict[str, object]:
+        nonlocal inflight, max_inflight
+        with inflight_lock:
+            inflight += 1
+            max_inflight = max(max_inflight, inflight)
+        time.sleep(parse_durations[file_path.name])
+        with inflight_lock:
+            inflight -= 1
+        return {"path": str(file_path), "functions": []}
+
+    builder = SimpleNamespace(
+        _pre_scan_for_imports=lambda _files: {},
+        parse_file=_parse_file,
+        job_manager=SimpleNamespace(update_job=lambda *_args, **_kwargs: None),
+    )
+
+    snapshot = await parse_repository_snapshot_async(
+        builder,
+        repo_path,
+        file_paths,
+        is_dependency=False,
+        job_id=None,
+        asyncio_module=asyncio,
+        info_logger_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert max_inflight >= 2
+    assert [Path(item["path"]).name for item in snapshot.file_data] == [
+        path.name for path in file_paths
+    ]

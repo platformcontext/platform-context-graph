@@ -13,10 +13,12 @@ from ..content.ingest import (
 )
 from ..content.state import get_postgres_content_provider
 from .graph_builder_persistence_batch import (
+    _LARGE_LABEL_SUMMARY_THRESHOLD,
     collect_file_write_data,
     empty_accumulator,
     flush_write_batches,
     merge_batches,
+    summarize_entity_source_files,
 )
 from .graph_builder_persistence_unwind import resolve_max_entity_value_length
 
@@ -414,7 +416,37 @@ def commit_file_batch_to_graph(
                 )
                 merge_batches(accumulator, file_batches)
 
-            flush_write_batches(tx, accumulator)
+            entity_counts = {
+                label: len(rows)
+                for label, rows in sorted(accumulator["entities_by_label"].items())
+                if rows
+            }
+            if entity_counts:
+                entity_summary = ", ".join(
+                    f"{label}={count}" for label, count in entity_counts.items()
+                )
+                info_logger_fn(
+                    f"Prepared graph entity batches for {repo_path_str}: {entity_summary}"
+                )
+                for label, rows in sorted(accumulator["entities_by_label"].items()):
+                    if len(rows) < _LARGE_LABEL_SUMMARY_THRESHOLD:
+                        continue
+                    source_summary = summarize_entity_source_files(
+                        rows,
+                        repo_root=repo_path_str,
+                    )
+                    top_files = ", ".join(
+                        f"{path}({count})"
+                        for path, count in source_summary["top_files"]
+                    )
+                    if not top_files:
+                        continue
+                    info_logger_fn(
+                        f"Prepared graph entity batch detail for {repo_path_str}: "
+                        f"label={label} files={source_summary['file_count']} "
+                        f"top_files={top_files}"
+                    )
+            flush_write_batches(tx, accumulator, info_logger_fn=info_logger_fn)
             if is_explicit:
                 tx.commit()
         except Exception:

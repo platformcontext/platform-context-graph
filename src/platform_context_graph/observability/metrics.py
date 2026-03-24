@@ -35,6 +35,8 @@ class RuntimeMetricsMixin:
     index_lock_contention_skips_total: Any
     neo4j_query_duration: Any
     neo4j_query_errors_total: Any
+    graph_write_batch_duration: Any
+    graph_write_batch_rows: Any
     content_provider_requests_total: Any
     content_provider_duration: Any
     content_workspace_fallback_total: Any
@@ -343,6 +345,35 @@ class RuntimeMetricsMixin:
             self.content_provider_requests_total.add(1, attrs)
         if self.content_provider_duration is not None:
             self.content_provider_duration.record(duration_seconds, attrs)
+
+    def record_graph_write_batch(
+        self,
+        *,
+        batch_type: str,
+        label: str | None,
+        rows: int,
+        duration_seconds: float,
+    ) -> None:
+        """Record graph write batch size and duration telemetry.
+
+        Args:
+            batch_type: Logical batch category such as ``entity`` or ``parameters``.
+            label: Entity label for entity batches, otherwise ``None``.
+            rows: Number of rows written in the batch.
+            duration_seconds: Batch execution time in seconds.
+        """
+
+        if not self.enabled:
+            return
+        attrs = {
+            "pcg.component": current_component() or self.component,
+            "pcg.graph.batch_type": batch_type,
+            "pcg.graph.label": label or "none",
+        }
+        if self.graph_write_batch_duration is not None:
+            self.graph_write_batch_duration.record(duration_seconds, attrs)
+        if self.graph_write_batch_rows is not None:
+            self.graph_write_batch_rows.record(rows, attrs)
 
     def record_content_workspace_fallback(self, *, operation: str) -> None:
         """Record when a content request falls back from Postgres to workspace.

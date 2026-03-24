@@ -81,6 +81,8 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
     index_lock_contention_skips_total: Any = field(init=False, default=None)
     neo4j_query_duration: Any = field(init=False, default=None)
     neo4j_query_errors_total: Any = field(init=False, default=None)
+    graph_write_batch_duration: Any = field(init=False, default=None)
+    graph_write_batch_rows: Any = field(init=False, default=None)
     content_provider_requests_total: Any = field(init=False, default=None)
     content_provider_duration: Any = field(init=False, default=None)
     content_workspace_fallback_total: Any = field(init=False, default=None)
@@ -122,6 +124,8 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         self.index_lock_contention_skips_total = None
         self.neo4j_query_duration = None
         self.neo4j_query_errors_total = None
+        self.graph_write_batch_duration = None
+        self.graph_write_batch_rows = None
         self.content_provider_requests_total = None
         self.content_provider_duration = None
         self.content_workspace_fallback_total = None
@@ -185,6 +189,14 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         )
         self.neo4j_query_errors_total = self.meter.create_counter(
             "pcg_neo4j_query_errors_total"
+        )
+        self.graph_write_batch_duration = self.meter.create_histogram(
+            "pcg_graph_write_batch_duration_seconds",
+            unit="s",
+        )
+        self.graph_write_batch_rows = self.meter.create_histogram(
+            "pcg_graph_write_batch_rows",
+            unit="rows",
         )
         self.content_provider_requests_total = self.meter.create_counter(
             "pcg_content_provider_requests_total"

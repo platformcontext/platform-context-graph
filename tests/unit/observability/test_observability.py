@@ -309,6 +309,68 @@ def test_ingester_scan_request_metrics_and_service_name_use_ingester_identity(
     )
 
 
+def test_graph_write_batch_metrics_record_duration_and_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Graph write batches should emit duration and row metrics by batch type."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    observability = importlib.import_module("platform_context_graph.observability")
+    observability.reset_observability_for_tests()
+
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv(
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "http://otel-collector.monitoring.svc.cluster.local:4317",
+    )
+
+    metric_reader = InMemoryMetricReader()
+    runtime = observability.initialize_observability(
+        component="repository",
+        metric_reader=metric_reader,
+        span_exporter=InMemorySpanExporter(),
+    )
+
+    runtime.record_graph_write_batch(
+        batch_type="entity",
+        label="Variable",
+        rows=7244,
+        duration_seconds=0.25,
+    )
+    runtime.record_graph_write_batch(
+        batch_type="parameters",
+        label=None,
+        rows=260,
+        duration_seconds=0.13,
+    )
+
+    points = _metric_points(metric_reader)
+
+    assert _matching_values(
+        points,
+        "pcg_graph_write_batch_rows",
+        **{
+            "pcg.component": "repository",
+            "pcg.graph.batch_type": "entity",
+            "pcg.graph.label": "Variable",
+        },
+    )
+    assert _matching_values(
+        points,
+        "pcg_graph_write_batch_duration_seconds",
+        **{
+            "pcg.component": "repository",
+            "pcg.graph.batch_type": "parameters",
+            "pcg.graph.label": "none",
+        },
+    )
+
+
 def test_observability_public_api_has_docstrings() -> None:
     """Expose docstrings on the public observability module and API."""
 

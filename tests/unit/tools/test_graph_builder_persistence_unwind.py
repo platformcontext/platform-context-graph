@@ -82,3 +82,91 @@ def test_run_entity_unwind_rejects_invalid_extra_property_keys() -> None:
         )
 
     assert tx.calls == []
+
+
+def test_run_entity_unwind_returns_batch_summary(monkeypatch) -> None:
+    """Entity unwind should report row counts and elapsed time for diagnostics."""
+
+    class _Tx:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        def run(self, query: str, **kwargs) -> None:
+            self.calls.append((query, kwargs))
+
+    tx = _Tx()
+    perf_counter_values = iter([10.0, 12.5])
+    monkeypatch.setattr(
+        graph_builder_persistence_unwind.time,
+        "perf_counter",
+        lambda: next(perf_counter_values),
+    )
+
+    summary = graph_builder_persistence_unwind.run_entity_unwind(
+        tx,
+        "Variable",
+        [
+            {
+                "file_path": "/tmp/example.py",
+                "name": "uid-backed",
+                "line_number": 1,
+                "uid": "var-1",
+                "use_uid_identity": True,
+            },
+            {
+                "file_path": "/tmp/example.py",
+                "name": "name-backed",
+                "line_number": 2,
+            },
+        ],
+    )
+
+    assert summary == pytest.approx(
+        {
+            "total_rows": 2,
+            "uid_rows": 1,
+            "name_rows": 1,
+            "duration_seconds": 2.5,
+        }
+    )
+    assert len(tx.calls) == 2
+
+
+def test_run_entity_unwind_optimizes_single_file_chunks() -> None:
+    """Single-file chunks should match the containing File node once."""
+
+    class _Tx:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        def run(self, query: str, **kwargs) -> None:
+            self.calls.append((query, kwargs))
+
+    tx = _Tx()
+
+    graph_builder_persistence_unwind.run_entity_unwind(
+        tx,
+        "Variable",
+        [
+            {
+                "file_path": "/tmp/example.py",
+                "name": "first",
+                "line_number": 1,
+                "uid": "var-1",
+                "use_uid_identity": True,
+            },
+            {
+                "file_path": "/tmp/example.py",
+                "name": "second",
+                "line_number": 2,
+                "uid": "var-2",
+                "use_uid_identity": True,
+            },
+        ],
+    )
+
+    assert len(tx.calls) == 1
+    query, params = tx.calls[0]
+    assert "MATCH (f:File {path: $file_path})" in query
+    assert "row.file_path" not in query
+    assert params["file_path"] == "/tmp/example.py"
