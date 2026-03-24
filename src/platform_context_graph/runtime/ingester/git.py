@@ -16,6 +16,10 @@ from .git_sync_ops import (
     refreshed_origin_url as _refreshed_origin_url_impl,
     update_existing_repositories_detailed_impl,
 )
+from .repository_layout import (
+    discover_filesystem_repository_ids,
+    managed_repository_roots,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,9 +97,13 @@ def list_repo_identifiers(config: RepoSyncConfig, token: str | None) -> list[str
     if config.source_mode == "filesystem":
         if config.filesystem_root is None:
             raise ValueError("filesystem source mode requires PCG_FILESYSTEM_ROOT")
-        return sorted(
-            path.name for path in config.filesystem_root.iterdir() if path.is_dir()
-        )
+        if config.repositories:
+            return sorted(
+                "/".join(part for part in repo.strip().strip("/").split("/") if part)
+                for repo in config.repositories
+                if repo.strip()
+            )
+        return discover_filesystem_repository_ids(config.filesystem_root)
 
     if config.source_mode == "explicit":
         return sorted(config.repositories)
@@ -139,16 +147,14 @@ def list_repo_identifiers(config: RepoSyncConfig, token: str | None) -> list[str
 def count_stale_checkouts(config: RepoSyncConfig, discovered: list[str]) -> int:
     """Count managed git checkouts that no longer match current discovery rules."""
 
-    if not config.repos_dir.exists():
-        return 0
-
-    expected_checkout_names = {repo_checkout_name(repo_id) for repo_id in discovered}
+    expected_checkout_paths = {
+        (config.repos_dir / repo_checkout_name(repo_id)).resolve()
+        for repo_id in discovered
+    }
     return sum(
         1
-        for path in config.repos_dir.iterdir()
-        if path.is_dir()
-        and (path / ".git").exists()
-        and path.name not in expected_checkout_names
+        for path in managed_repository_roots(config.repos_dir)
+        if path.resolve() not in expected_checkout_paths
     )
 
 
@@ -157,16 +163,16 @@ def build_workspace_plan(config: RepoSyncConfig) -> dict[str, object]:
 
     token = git_token(config) if config.source_mode == "githubOrg" else None
     repository_ids = list_repo_identifiers(config, token)
-    checkout_names = {repo_checkout_name(repo_id) for repo_id in repository_ids}
+    checkout_paths = {
+        (config.repos_dir / repo_checkout_name(repo_id)).resolve()
+        for repo_id in repository_ids
+    }
     already_cloned = 0
-    if config.repos_dir.exists():
-        already_cloned = sum(
-            1
-            for path in config.repos_dir.iterdir()
-            if path.is_dir()
-            and (path / ".git").exists()
-            and path.name in checkout_names
-        )
+    already_cloned = sum(
+        1
+        for path in managed_repository_roots(config.repos_dir)
+        if path.resolve() in checkout_paths
+    )
 
     plan = asdict(
         WorkspacePlan(
@@ -232,12 +238,15 @@ def repo_checkout_name(repo_id: str) -> str:
         repo_id: Repository identifier, typically ``org/repo``.
 
     Returns:
-        Stable slug used as the local directory name.
+        Relative repository path used as the local checkout directory name.
     """
-    sanitized = repo_id.strip().strip("/")
+    sanitized = repo_id.replace("\\", "/").strip().strip("/")
     if not sanitized:
         return "repository"
-    return sanitized.replace("/", "--")
+    parts = [part for part in sanitized.split("/") if part]
+    if any(part in {".", ".."} for part in parts):
+        raise ValueError(f"Invalid repository identifier for checkout path: {repo_id}")
+    return "/".join(parts)
 
 
 def repo_remote_url(config: RepoSyncConfig, repo_id: str, token: str | None) -> str:
@@ -342,16 +351,23 @@ def filesystem_sync_all(config: RepoSyncConfig) -> list[str]:
 
 
 def update_existing_repositories(
-    config: RepoSyncConfig, token: str | None
+    config: RepoSyncConfig, token: str | None, *, force_default_branch_refresh: bool = False
 ) -> tuple[int, int]:
     """Fetch and hard-reset repositories that changed upstream."""
 
-    updated_paths, failed = update_existing_repositories_detailed(config, token)
+    updated_paths, failed = update_existing_repositories_detailed(
+        config,
+        token,
+        force_default_branch_refresh=force_default_branch_refresh,
+    )
     return len(updated_paths), failed
 
 
 def update_existing_repositories_detailed(
-    config: RepoSyncConfig, token: str | None
+    config: RepoSyncConfig,
+    token: str | None,
+    *,
+    force_default_branch_refresh: bool = False,
 ) -> tuple[list[Path], int]:
     """Fetch and hard-reset repositories that changed upstream.
 
@@ -366,6 +382,7 @@ def update_existing_repositories_detailed(
     return update_existing_repositories_detailed_impl(
         config,
         token,
+        force_default_branch_refresh=force_default_branch_refresh,
         git_env_fn=git_env,
         refresh_repository_origin_url_fn=_refresh_repository_origin_url,
         subprocess_run_fn=subprocess.run,

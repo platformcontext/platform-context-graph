@@ -11,6 +11,7 @@ from .graph_builder_gitignore import (
     filter_repo_gitignore_files,
     summarize_gitignored_paths,
 )
+from .repository_display import repository_display_name
 
 
 def estimate_processing_time(
@@ -359,7 +360,7 @@ def resolve_repository_file_sets(
                 get_config_value_fn=get_config_value,
             )
             info_logger(
-                f"Repository discovery {repo_path.name}: "
+                f"Repository discovery {repository_display_name(repo_path)}: "
                 f"supported={len(raw_files)} "
                 f"pcgignore_excluded={len(raw_files) - len(files)} "
                 f"gitignore_excluded={len(gitignore_result.ignored_files)} "
@@ -394,7 +395,7 @@ def resolve_repository_file_sets(
                 get_config_value_fn=get_config_value,
             )
             info_logger(
-                f"Repository discovery {repo_root.name}: "
+                f"Repository discovery {repository_display_name(repo_root)}: "
                 f"supported={len(raw_repo_files)} "
                 f"pcgignore_excluded={len(raw_repo_files) - len(repo_files)} "
                 f"gitignore_excluded={len(gitignore_result.ignored_files)} "
@@ -411,7 +412,7 @@ def resolve_repository_file_sets(
         get_config_value_fn=get_config_value,
     )
     info_logger(
-        f"Repository discovery {repo_root.name}: "
+        f"Repository discovery {repository_display_name(repo_root)}: "
         f"supported={len(raw_files)} "
         f"pcgignore_excluded={len(raw_files) - len(files)} "
         f"gitignore_excluded={len(gitignore_result.ignored_files)} "

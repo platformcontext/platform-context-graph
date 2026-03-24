@@ -6,11 +6,15 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from platform_context_graph.core import get_database_manager
+from platform_context_graph.repository_identity import (
+    git_remote_for_path,
+    repository_metadata,
+)
 from platform_context_graph.utils.debug_log import warning_logger
 
 
-def graph_missing_repository_paths(repository_paths: Iterable[Path]) -> list[Path]:
-    """Return discovered repo checkouts that do not currently exist in the graph."""
+def graph_recovery_repository_paths(repository_paths: Iterable[Path]) -> list[Path]:
+    """Return discovered repos whose graph state is missing or drifted."""
 
     repo_paths = sorted(
         path.resolve()
@@ -20,16 +24,52 @@ def graph_missing_repository_paths(repository_paths: Iterable[Path]) -> list[Pat
     if not repo_paths:
         return []
 
+    repo_probes = []
+    for path in repo_paths:
+        metadata = repository_metadata(
+            name=path.name,
+            local_path=path,
+            remote_url=git_remote_for_path(path),
+        )
+        repo_probes.append(
+            {
+                "repo_path": str(path),
+                "repo_id": metadata["id"],
+                **metadata,
+            }
+        )
+
     try:
         db_manager = get_database_manager()
         with db_manager.get_driver().session() as session:
             rows = session.run(
                 """
-                UNWIND $repo_paths AS repo_path
-                OPTIONAL MATCH (r:Repository {path: repo_path})
-                RETURN repo_path, count(r) AS repo_count
+                UNWIND $repo_probes AS probe
+                OPTIONAL MATCH (r:Repository {id: probe.repo_id})
+                WITH probe, r, coalesce(r.local_path, r.path) AS graph_path
+                RETURN probe.repo_path AS repo_path,
+                       probe.repo_id AS repo_id,
+                       probe.remote_url AS remote_url,
+                       probe.repo_slug AS repo_slug,
+                       graph_path AS graph_path,
+                       EXISTS {
+                           MATCH (r)-[:CONTAINS*]->(f:File)
+                           WHERE f.path IS NOT NULL
+                             AND NOT f.path STARTS WITH probe.repo_path + "/"
+                       } AS has_foreign_files,
+                       CASE
+                           WHEN r IS NULL THEN true
+                           WHEN graph_path IS NULL THEN true
+                           WHEN graph_path <> probe.repo_path THEN true
+                           WHEN EXISTS {
+                               MATCH (r)-[:CONTAINS*]->(f:File)
+                               WHERE f.path IS NOT NULL
+                                 AND NOT f.path STARTS WITH probe.repo_path + "/"
+                           } THEN true
+                           ELSE false
+                       END AS needs_recovery
                 """,
-                repo_paths=[str(path) for path in repo_paths],
+                repo_probes=repo_probes,
             ).data()
     except Exception as exc:
         warning_logger(
@@ -38,12 +78,21 @@ def graph_missing_repository_paths(repository_paths: Iterable[Path]) -> list[Pat
         )
         return []
 
-    missing_paths = [
+    recovery_paths = [
         Path(str(row["repo_path"])).resolve()
         for row in rows
-        if int(row.get("repo_count") or 0) == 0
+        if bool(row.get("needs_recovery"))
     ]
-    return sorted(missing_paths)
+    return sorted(recovery_paths)
 
 
-__all__ = ["graph_missing_repository_paths"]
+def graph_missing_repository_paths(repository_paths: Iterable[Path]) -> list[Path]:
+    """Backwards-compatible alias for the repo graph recovery probe."""
+
+    return graph_recovery_repository_paths(repository_paths)
+
+
+__all__ = [
+    "graph_missing_repository_paths",
+    "graph_recovery_repository_paths",
+]

@@ -46,9 +46,23 @@ def delete_file_from_graph(builder: Any, path: str, *, info_logger_fn: Any) -> N
             )
 
 
+def _repository_lookup_values(repo_identifier: str) -> tuple[str, ...]:
+    """Return lookup values for a canonical repository id or checkout path."""
+
+    candidate = repo_identifier.strip()
+    if not candidate:
+        return ()
+    if candidate.startswith("repository:"):
+        return (candidate,)
+    resolved_path = str(Path(candidate).resolve())
+    if resolved_path == candidate:
+        return (candidate,)
+    return (resolved_path, candidate)
+
+
 def delete_repository_from_graph(
     builder: Any,
-    repo_path: str,
+    repo_identifier: str,
     *,
     info_logger_fn: Any,
     warning_logger_fn: Any,
@@ -57,33 +71,52 @@ def delete_repository_from_graph(
 
     Args:
         builder: ``GraphBuilder`` facade instance.
-        repo_path: Repository path to delete.
+        repo_identifier: Canonical repository id or repository path.
         info_logger_fn: Info logger callable.
         warning_logger_fn: Warning logger callable.
 
     Returns:
         ``True`` if the repository existed and was deleted, otherwise ``False``.
     """
-    repo_path_str = str(Path(repo_path).resolve())
+    lookup_values = _repository_lookup_values(str(repo_identifier))
+    if not lookup_values:
+        warning_logger_fn("Attempted to delete repository with empty identifier")
+        return False
+    display_identifier = (
+        lookup_values[0]
+        if lookup_values and lookup_values[0].startswith("repository:")
+        else str(Path(repo_identifier).resolve())
+    )
     with builder.driver.session() as session:
         result = session.run(
-            "MATCH (r:Repository {path: $repo_path}) RETURN count(r) as cnt",
-            repo_path=repo_path_str,
+            """
+            MATCH (r:Repository)
+            WHERE r.id IN $lookup_values
+               OR r.path IN $lookup_values
+               OR r.local_path IN $lookup_values
+            RETURN count(r) as cnt
+            """,
+            lookup_values=lookup_values,
         ).single()
         if not result or result["cnt"] == 0:
             warning_logger_fn(
-                f"Attempted to delete non-existent repository: {repo_path_str}"
+                f"Attempted to delete non-existent repository: {display_identifier}"
             )
             return False
 
         session.run(
-            """MATCH (r:Repository {path: $repo_path})
-                      OPTIONAL MATCH (r)-[:CONTAINS*]->(e)
-                      DETACH DELETE r, e""",
-            repo_path=repo_path_str,
+            """
+            MATCH (r:Repository)
+            WHERE r.id IN $lookup_values
+               OR r.path IN $lookup_values
+               OR r.local_path IN $lookup_values
+            OPTIONAL MATCH (r)-[:CONTAINS*]->(e)
+            DETACH DELETE r, e
+            """,
+            lookup_values=lookup_values,
         )
         info_logger_fn(
-            f"Deleted repository and its contents from graph: {repo_path_str}"
+            f"Deleted repository and its contents from graph: {display_identifier}"
         )
         return True
 

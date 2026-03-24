@@ -144,7 +144,7 @@ def _commit_repository_snapshot(
         content_provider.delete_repository_content(metadata["id"])
 
     try:
-        graph_store.delete_repository(str(repo_path))
+        graph_store.delete_repository(metadata["id"])
     except Exception:
         pass
 

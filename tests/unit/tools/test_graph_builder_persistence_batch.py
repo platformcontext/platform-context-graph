@@ -9,7 +9,8 @@ def test_flush_write_batches_chunks_variable_rows(monkeypatch) -> None:
     """Variable rows should flush in smaller internal chunks."""
 
     observed_chunk_sizes: list[int] = []
-    log_lines: list[str] = []
+    info_lines: list[str] = []
+    debug_lines: list[str] = []
 
     def _fake_run_entity_unwind(_tx, label: str, rows: list[dict[str, object]]):
         observed_chunk_sizes.append(len(rows))
@@ -24,6 +25,12 @@ def test_flush_write_batches_chunks_variable_rows(monkeypatch) -> None:
         graph_builder_persistence_batch,
         "run_entity_unwind",
         _fake_run_entity_unwind,
+    )
+    monkeypatch.setattr(
+        graph_builder_persistence_batch,
+        "debug_logger",
+        debug_lines.append,
+        raising=False,
     )
 
     rows = [
@@ -49,7 +56,7 @@ def test_flush_write_batches_chunks_variable_rows(monkeypatch) -> None:
             "js_import_rows": [],
             "generic_import_rows": [],
         },
-        info_logger_fn=log_lines.append,
+        info_logger_fn=info_lines.append,
     )
 
     assert observed_chunk_sizes == [100, 100, 100, 100, 100, 1]
@@ -61,8 +68,23 @@ def test_flush_write_batches_chunks_variable_rows(monkeypatch) -> None:
         "chunk_count": 6,
         "max_chunk_rows": 100,
     }
-    assert "Graph write batch entity start label=Variable chunk=1/6 rows=100" in log_lines
-    assert "Graph write batch entity done label=Variable chunk=6/6 rows=1 duration=0.25s" in log_lines
+    assert debug_lines == [
+        "Graph write batch entity start label=Variable chunk=1/6 rows=100",
+        "Graph write batch entity done label=Variable chunk=1/6 rows=100 duration=0.25s",
+        "Graph write batch entity start label=Variable chunk=2/6 rows=100",
+        "Graph write batch entity done label=Variable chunk=2/6 rows=100 duration=0.25s",
+        "Graph write batch entity start label=Variable chunk=3/6 rows=100",
+        "Graph write batch entity done label=Variable chunk=3/6 rows=100 duration=0.25s",
+        "Graph write batch entity start label=Variable chunk=4/6 rows=100",
+        "Graph write batch entity done label=Variable chunk=4/6 rows=100 duration=0.25s",
+        "Graph write batch entity start label=Variable chunk=5/6 rows=100",
+        "Graph write batch entity done label=Variable chunk=5/6 rows=100 duration=0.25s",
+        "Graph write batch entity start label=Variable chunk=6/6 rows=1",
+        "Graph write batch entity done label=Variable chunk=6/6 rows=1 duration=0.25s",
+    ]
+    assert info_lines == [
+        "Graph write batch entity label=Variable rows=501 uid_rows=501 name_rows=0 chunks=6 max_chunk_rows=100 duration=1.50s"
+    ]
 
 
 def test_flush_write_batches_keeps_non_variable_rows_in_one_chunk(

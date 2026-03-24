@@ -9,10 +9,97 @@ Terraform module references, K8s label selector matching, etc.
 from typing import Any
 
 from ..core.database import DatabaseManager
+from ..repository_identity import normalize_remote_url, repo_slug_from_remote_url
 from ..utils.debug_log import (
     error_logger,
     info_logger,
 )
+
+
+def _clean_text(value: Any) -> str | None:
+    """Return a trimmed string for matching or ``None`` for empty values."""
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _repository_match_keys(repository: dict[str, Any]) -> list[str]:
+    """Return the lookup keys that should identify one repository node."""
+
+    keys: list[str] = []
+    for candidate in (
+        normalize_remote_url(repository.get("remote_url")),
+        repo_slug_from_remote_url(repository.get("remote_url")),
+        normalize_remote_url(repository.get("repo_slug")),
+        repo_slug_from_remote_url(repository.get("repo_slug")),
+        _clean_text(repository.get("name")),
+    ):
+        if candidate and candidate not in keys:
+            keys.append(candidate)
+    return keys
+
+
+def _reference_match_keys(reference: str | None) -> list[str]:
+    """Return ranked lookup keys for one remote repository reference."""
+
+    cleaned_reference = _clean_text(reference)
+    if cleaned_reference is None:
+        return []
+
+    keys: list[str] = []
+    for candidate in (
+        normalize_remote_url(cleaned_reference),
+        repo_slug_from_remote_url(cleaned_reference),
+        cleaned_reference,
+    ):
+        if candidate and candidate not in keys:
+            keys.append(candidate)
+    return keys
+
+
+def _repository_index(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Index repository rows by their normalized remote and slug keys."""
+
+    index: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        for key in _repository_match_keys(row):
+            index.setdefault(key, []).append(row)
+    return index
+
+
+def _first_matching_repositories(
+    reference: str | None,
+    repository_index: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Return the best matching repository rows for one source reference."""
+
+    for key in _reference_match_keys(reference):
+        rows = repository_index.get(key)
+        if rows:
+            seen: set[str] = set()
+            matches: list[dict[str, Any]] = []
+            for row in rows:
+                repo_id = _clean_text(row.get("id"))
+                if repo_id is None or repo_id in seen:
+                    continue
+                seen.add(repo_id)
+                matches.append(row)
+            return matches
+    return []
+
+
+def _split_references(raw_references: str | None) -> list[str]:
+    """Return normalized source references from a comma-separated field."""
+
+    if raw_references is None:
+        return []
+    return [
+        reference
+        for reference in (_clean_text(part) for part in raw_references.split(","))
+        if reference is not None
+    ]
 
 
 class CrossRepoLinker:
@@ -72,27 +159,96 @@ class CrossRepoLinker:
         nodes by comparing URL patterns.
         """
         with self.driver.session() as session:
-            application_result = session.run("""
+            repository_rows = session.run("""
+                MATCH (repo:Repository)
+                RETURN repo.id as id,
+                       repo.name as name,
+                       repo.remote_url as remote_url,
+                       repo.repo_slug as repo_slug
+            """).data()
+            repository_index = _repository_index(repository_rows)
+            links: list[dict[str, str]] = []
+            seen_links: set[tuple[str, str, str]] = set()
+
+            application_rows = session.run("""
                 MATCH (app:ArgoCDApplication)
                 WHERE app.source_repo IS NOT NULL
                   AND app.source_repo <> ''
-                MATCH (repo:Repository)
-                WHERE app.source_repo CONTAINS repo.name
-                MERGE (app)-[:SOURCES_FROM]->(repo)
-                RETURN count(*) as cnt
-            """)
-            appset_result = session.run("""
+                RETURN app.source_repo as source_repo
+            """).data()
+            for row in application_rows:
+                source_repo = _clean_text(row.get("source_repo"))
+                if source_repo is None:
+                    continue
+                for repo in _first_matching_repositories(source_repo, repository_index):
+                    repo_id = _clean_text(repo.get("id"))
+                    if repo_id is None:
+                        continue
+                    link_key = ("application", source_repo, repo_id)
+                    if link_key in seen_links:
+                        continue
+                    seen_links.add(link_key)
+                    links.append({"source_repo": source_repo, "repo_id": repo_id})
+
+            appset_rows = session.run("""
                 MATCH (app:ArgoCDApplicationSet)
                 WHERE app.source_repos IS NOT NULL
                   AND app.source_repos <> ''
-                MATCH (repo:Repository)
-                WHERE any(source_repo IN split(app.source_repos, ',')
-                    WHERE trim(source_repo) CONTAINS repo.name)
-                MERGE (app)-[:SOURCES_FROM]->(repo)
-                RETURN count(*) as cnt
-            """)
-            application_record = application_result.single()
-            appset_record = appset_result.single()
+                RETURN app.source_repos as source_repos
+            """).data()
+            for row in appset_rows:
+                source_repos = _clean_text(row.get("source_repos"))
+                if source_repos is None:
+                    continue
+                matched_repo_ids: set[str] = set()
+                for source_repo in _split_references(source_repos):
+                    for repo in _first_matching_repositories(
+                        source_repo, repository_index
+                    ):
+                        repo_id = _clean_text(repo.get("id"))
+                        if repo_id is None or repo_id in matched_repo_ids:
+                            continue
+                        matched_repo_ids.add(repo_id)
+                        link_key = ("appset", source_repos, repo_id)
+                        if link_key in seen_links:
+                            continue
+                        seen_links.add(link_key)
+                        links.append({"source_repos": source_repos, "repo_id": repo_id})
+
+            application_links = [link for link in links if "source_repo" in link]
+            appset_links = [link for link in links if "source_repos" in link]
+            if not application_links and not appset_links:
+                return 0
+
+            application_record = None
+            if application_links:
+                application_result = session.run(
+                    """
+                    UNWIND $links AS link
+                    MATCH (app:ArgoCDApplication)
+                    WHERE app.source_repo = link.source_repo
+                    MATCH (repo:Repository {id: link.repo_id})
+                    MERGE (app)-[:SOURCES_FROM]->(repo)
+                    RETURN count(*) as cnt
+                    """,
+                    links=application_links,
+                )
+                application_record = application_result.single()
+
+            appset_record = None
+            if appset_links:
+                appset_result = session.run(
+                    """
+                    UNWIND $links AS link
+                    MATCH (app:ArgoCDApplicationSet)
+                    WHERE app.source_repos = link.source_repos
+                    MATCH (repo:Repository {id: link.repo_id})
+                    MERGE (app)-[:SOURCES_FROM]->(repo)
+                    RETURN count(*) as cnt
+                    """,
+                    links=appset_links,
+                )
+                appset_record = appset_result.single()
             return (application_record["cnt"] if application_record else 0) + (
                 appset_record["cnt"] if appset_record else 0
             )
@@ -136,15 +292,51 @@ class CrossRepoLinker:
         Repository names or TerraformModule source paths.
         """
         with self.driver.session() as session:
-            result = session.run("""
+            repository_rows = session.run("""
+                MATCH (repo:Repository)
+                RETURN repo.id as id,
+                       repo.name as name,
+                       repo.remote_url as remote_url,
+                       repo.repo_slug as repo_slug
+            """).data()
+            repository_index = _repository_index(repository_rows)
+            links: list[dict[str, str]] = []
+            seen_links: set[tuple[str, str]] = set()
+
+            module_rows = session.run("""
                 MATCH (mod:TerraformModule)
                 WHERE mod.source IS NOT NULL
                   AND mod.source <> ''
-                MATCH (repo:Repository)
-                WHERE mod.source CONTAINS repo.name
+                RETURN mod.source as source
+            """).data()
+            for row in module_rows:
+                source = _clean_text(row.get("source"))
+                if source is None:
+                    continue
+                for repo in _first_matching_repositories(source, repository_index):
+                    repo_id = _clean_text(repo.get("id"))
+                    if repo_id is None:
+                        continue
+                    link_key = (source, repo_id)
+                    if link_key in seen_links:
+                        continue
+                    seen_links.add(link_key)
+                    links.append({"source": source, "repo_id": repo_id})
+
+            if not links:
+                return 0
+
+            result = session.run(
+                """
+                UNWIND $links AS link
+                MATCH (mod:TerraformModule)
+                WHERE mod.source = link.source
+                MATCH (repo:Repository {id: link.repo_id})
                 MERGE (mod)-[:USES_MODULE]->(repo)
                 RETURN count(*) as cnt
-            """)
+                """,
+                links=links,
+            )
             record = result.single()
             return record["cnt"] if record else 0
 

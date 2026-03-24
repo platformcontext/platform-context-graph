@@ -261,9 +261,9 @@ def test_repo_sync_cycle_indexes_only_changed_and_resumable_repositories(
     sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
 
     repos_dir = tmp_path / "workspace" / "repos"
-    repo_a = repos_dir / "platformcontext--payments-api"
-    repo_c = repos_dir / "platformcontext--inventory-api"
-    repo_d = repos_dir / "platformcontext--docs"
+    repo_a = repos_dir / "platformcontext" / "payments-api"
+    repo_c = repos_dir / "platformcontext" / "inventory-api"
+    repo_d = repos_dir / "platformcontext" / "docs"
     (repo_a / ".git").mkdir(parents=True)
     (repo_c / ".git").mkdir(parents=True)
     (repo_d / ".git").mkdir(parents=True)
@@ -281,7 +281,7 @@ def test_repo_sync_cycle_indexes_only_changed_and_resumable_repositories(
         component="repo-sync",
     )
 
-    repo_b = repos_dir / "platformcontext--orders-api"
+    repo_b = repos_dir / "platformcontext" / "orders-api"
     captured: dict[str, object] = {}
 
     @contextmanager
@@ -383,8 +383,8 @@ def test_repo_sync_cycle_repeated_syncs_keep_repo_batches_partitioned(
     sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
 
     repos_dir = tmp_path / "workspace" / "repos"
-    repo_a = repos_dir / "platformcontext--payments-api"
-    repo_b = repos_dir / "platformcontext--orders-api"
+    repo_a = repos_dir / "platformcontext" / "payments-api"
+    repo_b = repos_dir / "platformcontext" / "orders-api"
     (repo_a / ".git").mkdir(parents=True)
     (repo_b / ".git").mkdir(parents=True)
 
@@ -1041,6 +1041,39 @@ def test_repo_sync_loop_records_degraded_status_and_retries_transient_failures(
     assert recorded_statuses[-1]["last_error_kind"] == "network"
 
 
+def test_repo_sync_loop_logs_startup_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repo sync startup should emit one diagnostic line about persistence state."""
+
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
+    monkeypatch.setenv("PCG_REPO_SYNC_INITIAL_DELAY_SECONDS", "0")
+
+    captured_logs: list[str] = []
+    monkeypatch.setattr(sync, "log", lambda _component, message: captured_logs.append(message))
+    monkeypatch.setattr(sync, "content_store_dsn_resolution_active", lambda: True)
+    monkeypatch.setattr(sync, "runtime_status_persistence_active", lambda: False)
+    monkeypatch.setattr(
+        sync,
+        "claim_ingester_scan_request",
+        lambda **_kwargs: (_ for _ in ()).throw(StopIteration),
+    )
+    monkeypatch.setattr(
+        sync,
+        "run_repo_sync_cycle",
+        lambda *args, **kwargs: SimpleNamespace(discovered=0),
+    )
+
+    with pytest.raises(StopIteration):
+        sync.run_repo_sync_loop(interval_seconds=900)
+
+    assert captured_logs == [
+        "Repo sync startup diagnostics "
+        "content_store_dsn_resolution_active=True "
+        "runtime_status_persistence_active=False"
+    ]
+
+
 def test_persist_ingester_status_defaults_repository_counts_to_zero(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1349,7 +1382,7 @@ def test_update_existing_repositories_skips_repo_without_default_branch(
     repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     repos_dir = tmp_path / "workspace" / "repos"
-    repo_dir = repos_dir / "boatsgroup--Test-mobileapp"
+    repo_dir = repos_dir / "boatsgroup" / "Test-mobileapp"
     (repo_dir / ".git").mkdir(parents=True)
 
     config = repo_sync.RepoSyncConfig(
@@ -1388,7 +1421,8 @@ def test_update_existing_repositories_skips_repo_without_default_branch(
     assert (updated, failed) == (0, 0)
     assert all(command[3:4] != ["fetch"] for command in calls)
     assert warnings == [
-        "[repository] Skipping boatsgroup--Test-mobileapp: no discoverable default branch"
+        "[repository] Skipping 1 repository with no discoverable default branch: "
+        "boatsgroup/Test-mobileapp"
     ]
 
 
@@ -1402,7 +1436,7 @@ def test_update_existing_repositories_retries_after_stale_shallow_lock(
     repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     repos_dir = tmp_path / "workspace" / "repos"
-    repo_dir = repos_dir / "boatsgroup--automate-crm"
+    repo_dir = repos_dir / "boatsgroup" / "automate-crm"
     git_dir = repo_dir / ".git"
     git_dir.mkdir(parents=True)
     shallow_lock = git_dir / "shallow.lock"
@@ -1479,11 +1513,11 @@ def test_update_existing_repositories_retries_after_stale_shallow_lock(
     assert not shallow_lock.exists()
 
 
-def test_update_existing_repositories_skips_when_remote_default_branch_is_missing(
+def test_update_existing_repositories_caches_repositories_without_default_branches(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Missing remote default branches should be logged once and skipped."""
+    """Repositories without a discoverable default branch should be cached and skipped."""
 
     git_module = importlib.import_module("platform_context_graph.runtime.ingester.git")
     git_sync_ops = importlib.import_module(
@@ -1492,7 +1526,7 @@ def test_update_existing_repositories_skips_when_remote_default_branch_is_missin
     repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     repos_dir = tmp_path / "workspace" / "repos"
-    repo_dir = repos_dir / "boatsgroup--devops-captain"
+    repo_dir = repos_dir / "boatsgroup" / "devops-captain"
     (repo_dir / ".git").mkdir(parents=True)
 
     config = repo_sync.RepoSyncConfig(
@@ -1516,18 +1550,12 @@ def test_update_existing_repositories_skips_when_remote_default_branch_is_missin
         calls.append(command)
         if command[3:4] == ["symbolic-ref"]:
             return SimpleNamespace(
-                returncode=0,
-                stdout="refs/remotes/origin/main\n",
+                returncode=1,
+                stdout="",
                 stderr="",
             )
         if command[3:5] == ["ls-remote", "--symref"]:
             return SimpleNamespace(returncode=0, stdout="", stderr="")
-        if command[3:4] == ["fetch"]:
-            return SimpleNamespace(
-                returncode=128,
-                stdout="",
-                stderr="fatal: couldn't find remote ref main",
-            )
         raise AssertionError(f"unexpected command: {command}")
 
     monkeypatch.setattr(git_module.subprocess, "run", _run)
@@ -1538,12 +1566,25 @@ def test_update_existing_repositories_skips_when_remote_default_branch_is_missin
     assert (updated, failed) == (0, 0)
     assert [command[3:] for command in calls] == [
         ["symbolic-ref", "refs/remotes/origin/HEAD"],
-        ["fetch", "origin", "main", "--depth=1"],
         ["ls-remote", "--symref", "origin", "HEAD"],
     ]
     assert warnings == [
-        "[repository] Skipping boatsgroup--devops-captain: no discoverable default branch"
+        "[repository] Skipping 1 repository with no discoverable default branch: "
+        "boatsgroup/devops-captain"
     ]
+
+    retry_cache = repos_dir / ".pcg-default-branch-retry-cache.json"
+    assert retry_cache.exists()
+    assert "boatsgroup/devops-captain" in retry_cache.read_text(encoding="utf-8")
+
+    calls.clear()
+    warnings.clear()
+
+    updated, failed = git_module.update_existing_repositories(config, None)
+
+    assert (updated, failed) == (0, 0)
+    assert calls == []
+    assert warnings == []
 
 
 def test_update_existing_repositories_fails_when_remote_default_branch_lookup_errors(
@@ -1559,7 +1600,7 @@ def test_update_existing_repositories_fails_when_remote_default_branch_lookup_er
     repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     repos_dir = tmp_path / "workspace" / "repos"
-    repo_dir = repos_dir / "boatsgroup--private-service"
+    repo_dir = repos_dir / "boatsgroup" / "private-service"
     (repo_dir / ".git").mkdir(parents=True)
 
     config = repo_sync.RepoSyncConfig(
@@ -1601,7 +1642,7 @@ def test_update_existing_repositories_fails_when_remote_default_branch_lookup_er
     assert warnings == [
         (
             "[repository] Failed to resolve default branch for "
-            "boatsgroup--private-service: fatal: could not read Username for "
+            "boatsgroup/private-service: fatal: could not read Username for "
             "'https://github.com': terminal prompts disabled"
         )
     ]
@@ -1617,7 +1658,7 @@ def test_update_existing_repositories_retries_with_remote_default_branch_after_f
     repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
     repos_dir = tmp_path / "workspace" / "repos"
-    repo_dir = repos_dir / "boatsgroup--renamed-default"
+    repo_dir = repos_dir / "boatsgroup" / "renamed-default"
     (repo_dir / ".git").mkdir(parents=True)
 
     config = repo_sync.RepoSyncConfig(

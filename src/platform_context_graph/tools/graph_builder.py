@@ -209,18 +209,18 @@ class GraphBuilder:
         """
         _delete_file_from_graph(self, path, info_logger_fn=info_logger)
 
-    def delete_repository_from_graph(self, repo_path: str) -> bool:
+    def delete_repository_from_graph(self, repo_identifier: str) -> bool:
         """Delete one repository subtree from the graph.
 
         Args:
-            repo_path: Repository path to remove.
+            repo_identifier: Canonical repository id or repository path.
 
         Returns:
             ``True`` if the repository existed and was deleted.
         """
         return _delete_repository_from_graph(
             self,
-            repo_path,
+            repo_identifier,
             info_logger_fn=info_logger,
             warning_logger_fn=warning_logger,
         )

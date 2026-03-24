@@ -13,6 +13,7 @@ from .service import ContentService
 from .workspace import WorkspaceContentProvider
 
 __all__ = [
+    "content_store_dsn_resolution_active",
     "get_content_service",
     "get_postgres_content_provider",
     "reset_content_store_for_tests",
@@ -45,6 +46,12 @@ def _content_store_dsn() -> str | None:
         if value and value.strip():
             return value.strip()
     return None
+
+
+def content_store_dsn_resolution_active() -> bool:
+    """Return whether content-store DSN resolution is currently active."""
+
+    return _content_store_enabled() and _content_store_dsn() is not None
 
 
 def get_postgres_content_provider() -> PostgresContentProvider | None:
