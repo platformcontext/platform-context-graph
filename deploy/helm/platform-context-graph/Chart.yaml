@@ -3,4 +3,4 @@ name: platform-context-graph
 description: PlatformContextGraph API and repository ingester workloads with MCP, indexing, and repo sync.
 type: application
 version: 0.1.0
-appVersion: "0.0.22"
+appVersion: "0.0.23"
