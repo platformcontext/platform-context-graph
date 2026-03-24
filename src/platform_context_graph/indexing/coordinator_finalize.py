@@ -30,7 +30,7 @@ def finalize_repository_batch(
 ) -> None:
     """Finalize one successful repo batch or mark the run as partial failure."""
 
-    if run_state.failed_repositories() == 0:
+    if run_state.blocking_repositories() == 0:
         started_at = utc_now_fn()
         started = time.perf_counter()
         run_state.finalization_status = "running"

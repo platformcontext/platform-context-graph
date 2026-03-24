@@ -72,7 +72,14 @@ class IndexRunState:
         )
 
     def failed_repositories(self) -> int:
-        """Return the number of repositories left in a failed-like state."""
+        """Return the number of repositories currently marked as failed."""
+
+        return sum(
+            1 for state in self.repositories.values() if state.status == "failed"
+        )
+
+    def blocking_repositories(self) -> int:
+        """Return the number of repositories still blocking clean finalization."""
 
         return sum(
             1
