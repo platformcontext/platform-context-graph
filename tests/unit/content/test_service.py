@@ -50,6 +50,9 @@ class _FakePostgresProvider:
         pattern: str,
         repo_ids: list[str] | None = None,
         languages: list[str] | None = None,
+        artifact_types: list[str] | None = None,
+        template_dialects: list[str] | None = None,
+        iac_relevant: bool | None = None,
     ) -> dict:
         """Return the stubbed file-search result."""
 
@@ -57,6 +60,9 @@ class _FakePostgresProvider:
             "pattern": pattern,
             "repo_ids": repo_ids or [],
             "languages": languages or [],
+            "artifact_types": artifact_types or [],
+            "template_dialects": template_dialects or [],
+            "iac_relevant": iac_relevant,
             "matches": [],
         }
 
@@ -67,6 +73,9 @@ class _FakePostgresProvider:
         entity_types: list[str] | None = None,
         repo_ids: list[str] | None = None,
         languages: list[str] | None = None,
+        artifact_types: list[str] | None = None,
+        template_dialects: list[str] | None = None,
+        iac_relevant: bool | None = None,
     ) -> dict:
         """Return the stubbed entity-search result."""
 
@@ -75,6 +84,9 @@ class _FakePostgresProvider:
             "entity_types": entity_types or [],
             "repo_ids": repo_ids or [],
             "languages": languages or [],
+            "artifact_types": artifact_types or [],
+            "template_dialects": template_dialects or [],
+            "iac_relevant": iac_relevant,
             "matches": [],
         }
 
@@ -322,3 +334,33 @@ def test_search_routes_to_postgres_content_store() -> None:
 
     assert file_result["matches"][0]["source_backend"] == "postgres"
     assert entity_result["matches"][0]["entity_id"] == "content-entity:e_ab12cd34ef56"
+
+
+def test_search_passes_metadata_filters_through_to_postgres() -> None:
+    """Metadata filters should flow through the content service unchanged."""
+
+    postgres = _FakePostgresProvider()
+    service = ContentService(
+        postgres_provider=postgres,
+        workspace_provider=_FakeWorkspaceProvider(),
+    )
+
+    file_result = service.search_file_content(
+        pattern="python",
+        artifact_types=["dockerfile"],
+        template_dialects=["jinja"],
+        iac_relevant=True,
+    )
+    entity_result = service.search_entity_content(
+        pattern="service",
+        artifact_types=["terraform_hcl"],
+        template_dialects=["terraform_template"],
+        iac_relevant=True,
+    )
+
+    assert file_result["artifact_types"] == ["dockerfile"]
+    assert file_result["template_dialects"] == ["jinja"]
+    assert file_result["iac_relevant"] is True
+    assert entity_result["artifact_types"] == ["terraform_hcl"]
+    assert entity_result["template_dialects"] == ["terraform_template"]
+    assert entity_result["iac_relevant"] is True

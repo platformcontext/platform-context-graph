@@ -24,6 +24,9 @@ def _make_query_services() -> object:
                 "content": "print('payments')\n",
                 "line_count": 1,
                 "language": "python",
+                "artifact_type": "jinja_yaml",
+                "template_dialect": "jinja",
+                "iac_relevant": True,
                 "source_backend": "workspace",
             },
             get_file_lines=lambda *_args, **_kwargs: {
@@ -33,6 +36,9 @@ def _make_query_services() -> object:
                 "start_line": 1,
                 "end_line": 1,
                 "lines": [{"line_number": 1, "content": "print('payments')"}],
+                "artifact_type": "jinja_yaml",
+                "template_dialect": "jinja",
+                "iac_relevant": True,
                 "source_backend": "workspace",
             },
             get_entity_content=lambda *_args, **_kwargs: {
@@ -46,6 +52,9 @@ def _make_query_services() -> object:
                 "end_line": 3,
                 "content": "def process_payment():\n    return True\n",
                 "language": "python",
+                "artifact_type": "jinja_yaml",
+                "template_dialect": "jinja",
+                "iac_relevant": True,
                 "source_backend": "workspace",
             },
             search_file_content=lambda *_args, **_kwargs: {
@@ -55,6 +64,9 @@ def _make_query_services() -> object:
                         "repo_id": "repository:r_ab12cd34",
                         "relative_path": "src/payments.py",
                         "language": "python",
+                        "artifact_type": "jinja_yaml",
+                        "template_dialect": "jinja",
+                        "iac_relevant": True,
                         "snippet": "print('payments')",
                         "source_backend": "postgres",
                     }
@@ -70,6 +82,9 @@ def _make_query_services() -> object:
                         "entity_type": "Function",
                         "entity_name": "process_payment",
                         "language": "python",
+                        "artifact_type": "jinja_yaml",
+                        "template_dialect": "jinja",
+                        "iac_relevant": True,
                         "snippet": "def process_payment",
                         "source_backend": "postgres",
                     }
@@ -118,9 +133,43 @@ def test_content_routes_return_portable_repo_and_entity_identifiers() -> None:
     assert entity_response.status_code == 200
     assert file_response.json()["repo_id"] == "repository:r_ab12cd34"
     assert file_response.json()["relative_path"] == "src/payments.py"
+    assert file_response.json()["artifact_type"] == "jinja_yaml"
+    assert file_response.json()["template_dialect"] == "jinja"
+    assert file_response.json()["iac_relevant"] is True
     assert "local_path" not in file_response.json()
     assert lines_response.json()["lines"][0]["line_number"] == 1
+    assert lines_response.json()["artifact_type"] == "jinja_yaml"
     assert entity_response.json()["entity_id"] == "content-entity:e_ab12cd34ef56"
+    assert entity_response.json()["artifact_type"] == "jinja_yaml"
+
+
+def test_content_search_routes_accept_metadata_filters() -> None:
+    """File and entity search routes should accept metadata filter arguments."""
+
+    with _make_client() as client:
+        file_response = client.post(
+            "/api/v0/content/files/search",
+            json={
+                "pattern": "payments",
+                "artifact_types": ["jinja_yaml"],
+                "template_dialects": ["jinja"],
+                "iac_relevant": True,
+            },
+        )
+        entity_response = client.post(
+            "/api/v0/content/entities/search",
+            json={
+                "pattern": "process_payment",
+                "artifact_types": ["jinja_yaml"],
+                "template_dialects": ["jinja"],
+                "iac_relevant": True,
+            },
+        )
+
+    assert file_response.status_code == 200
+    assert entity_response.status_code == 200
+    assert file_response.json()["matches"][0]["artifact_type"] == "jinja_yaml"
+    assert entity_response.json()["matches"][0]["template_dialect"] == "jinja"
 
 
 def test_content_search_routes_are_exposed_in_openapi() -> None:

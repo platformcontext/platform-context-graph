@@ -62,6 +62,9 @@ class FileContentSearchRequest(BaseModel):
     pattern: str
     repo_ids: list[str] | None = None
     languages: list[str] | None = None
+    artifact_types: list[str] | None = None
+    template_dialects: list[str] | None = None
+    iac_relevant: bool | None = None
 
 
 class EntityContentSearchRequest(BaseModel):
@@ -73,6 +76,9 @@ class EntityContentSearchRequest(BaseModel):
     entity_types: list[str] | None = None
     repo_ids: list[str] | None = None
     languages: list[str] | None = None
+    artifact_types: list[str] | None = None
+    template_dialects: list[str] | None = None
+    iac_relevant: bool | None = None
 
 
 @router.post(
@@ -185,6 +191,9 @@ def search_file_content(
         pattern=payload.pattern,
         repo_ids=payload.repo_ids,
         languages=payload.languages,
+        artifact_types=payload.artifact_types,
+        template_dialects=payload.template_dialects,
+        iac_relevant=payload.iac_relevant,
     )
     if service_result_has_error(result):
         return service_error_response(
@@ -218,6 +227,9 @@ def search_entity_content(
         entity_types=payload.entity_types,
         repo_ids=payload.repo_ids,
         languages=payload.languages,
+        artifact_types=payload.artifact_types,
+        template_dialects=payload.template_dialects,
+        iac_relevant=payload.iac_relevant,
     )
     if service_result_has_error(result):
         return service_error_response(

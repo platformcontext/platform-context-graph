@@ -111,6 +111,95 @@ def test_prepare_content_entries_derives_infra_source_cache_from_file_text(
     assert entity_entries[0].source_cache != "terraform-aws-modules/vpc/aws"
 
 
+def test_prepare_content_entries_for_raw_text_file_only_writes_file_content(
+    tmp_path: Path,
+) -> None:
+    """Raw-text indexed files should dual-write searchable file content only."""
+
+    repo_path = tmp_path / "service"
+    repo_path.mkdir()
+    file_path = repo_path / "Dockerfile"
+    file_path.write_text(
+        "FROM python:3.12-slim\nRUN pip install -r requirements.txt\n",
+        encoding="utf-8",
+    )
+
+    repository = repository_metadata(
+        name="service",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/service.git",
+    )
+    file_data = {
+        "path": str(file_path),
+        "repo_path": str(repo_path),
+        "lang": "dockerfile",
+        "functions": [],
+        "classes": [],
+        "imports": [],
+        "variables": [],
+        "function_calls": [],
+    }
+
+    file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert file_entry is not None
+    assert file_entry.relative_path == "Dockerfile"
+    assert file_entry.language == "dockerfile"
+    assert entity_entries == []
+
+
+def test_prepare_content_entries_stamps_file_metadata_onto_entities(
+    tmp_path: Path,
+) -> None:
+    """File classification metadata should flow to the file row and all entities."""
+
+    repo_path = tmp_path / "infra-live"
+    repo_path.mkdir()
+    file_path = repo_path / "main.tf"
+    file_path.write_text(
+        'module "service" {\n'
+        '  source = "./modules/service"\n'
+        '  name   = "${var.environment}-api"\n'
+        "}\n",
+        encoding="utf-8",
+    )
+
+    repository = repository_metadata(
+        name="infra-live",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/infra-live.git",
+    )
+    file_data = {
+        "path": str(file_path),
+        "repo_path": str(repo_path),
+        "lang": "hcl",
+        "terraform_modules": [
+            {
+                "name": "service",
+                "line_number": 1,
+                "source": "./modules/service",
+            }
+        ],
+    }
+
+    file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert file_entry is not None
+    assert file_entry.artifact_type == "terraform_hcl"
+    assert file_entry.template_dialect == "terraform_template"
+    assert file_entry.iac_relevant is True
+    assert len(entity_entries) == 1
+    assert entity_entries[0].artifact_type == "terraform_hcl"
+    assert entity_entries[0].template_dialect == "terraform_template"
+    assert entity_entries[0].iac_relevant is True
+
+
 def test_repository_metadata_from_row_prefers_stored_remote_identity(
     tmp_path: Path,
 ) -> None:

@@ -5,11 +5,18 @@ from __future__ import annotations
 import threading
 from collections.abc import Sequence
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from typing import Any
 
-from ..utils.debug_log import warning_logger
 from .models import ContentEntityEntry, ContentFileEntry
+from .postgres_queries import (
+    get_entity_content as postgres_get_entity_content,
+    get_file_content as postgres_get_file_content,
+    search_entity_content as postgres_search_entity_content,
+    search_file_content as postgres_search_file_content,
+)
+from .postgres_support import (
+    FILE_SCHEMA,
+)
 
 try:
     import psycopg
@@ -21,50 +28,6 @@ except ImportError:  # pragma: no cover - exercised when optional dependency mis
 __all__ = [
     "PostgresContentProvider",
 ]
-
-_FILE_SCHEMA = """
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
-CREATE TABLE IF NOT EXISTS content_files (
-    repo_id TEXT NOT NULL,
-    relative_path TEXT NOT NULL,
-    commit_sha TEXT,
-    content TEXT NOT NULL,
-    content_hash TEXT NOT NULL,
-    line_count INTEGER NOT NULL,
-    language TEXT,
-    indexed_at TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (repo_id, relative_path)
-);
-
-CREATE TABLE IF NOT EXISTS content_entities (
-    entity_id TEXT PRIMARY KEY,
-    repo_id TEXT NOT NULL,
-    relative_path TEXT NOT NULL,
-    entity_type TEXT NOT NULL,
-    entity_name TEXT NOT NULL,
-    start_line INTEGER NOT NULL,
-    end_line INTEGER NOT NULL,
-    start_byte INTEGER,
-    end_byte INTEGER,
-    language TEXT,
-    source_cache TEXT NOT NULL,
-    indexed_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS content_files_repo_path_idx
-    ON content_files (repo_id, relative_path);
-CREATE INDEX IF NOT EXISTS content_entities_repo_idx
-    ON content_entities (repo_id);
-CREATE INDEX IF NOT EXISTS content_entities_type_idx
-    ON content_entities (entity_type);
-CREATE INDEX IF NOT EXISTS content_entities_path_idx
-    ON content_entities (relative_path);
-CREATE INDEX IF NOT EXISTS content_files_content_trgm_idx
-    ON content_files USING gin (content gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS content_entities_source_trgm_idx
-    ON content_entities USING gin (source_cache gin_trgm_ops);
-"""
 
 
 class PostgresContentProvider:
@@ -102,7 +65,7 @@ class PostgresContentProvider:
                 self._initialized = False
             if not self._initialized:
                 with self._conn.cursor() as cursor:
-                    cursor.execute(_FILE_SCHEMA)
+                    cursor.execute(FILE_SCHEMA)
                 self._initialized = True
             with self._conn.cursor() as cursor:
                 yield cursor
@@ -125,6 +88,9 @@ class PostgresContentProvider:
                     content_hash,
                     line_count,
                     language,
+                    artifact_type,
+                    template_dialect,
+                    iac_relevant,
                     indexed_at
                 ) VALUES (
                     %(repo_id)s,
@@ -134,6 +100,9 @@ class PostgresContentProvider:
                     %(content_hash)s,
                     %(line_count)s,
                     %(language)s,
+                    %(artifact_type)s,
+                    %(template_dialect)s,
+                    %(iac_relevant)s,
                     %(indexed_at)s
                 )
                 ON CONFLICT (repo_id, relative_path) DO UPDATE
@@ -142,6 +111,9 @@ class PostgresContentProvider:
                     content_hash = EXCLUDED.content_hash,
                     line_count = EXCLUDED.line_count,
                     language = EXCLUDED.language,
+                    artifact_type = EXCLUDED.artifact_type,
+                    template_dialect = EXCLUDED.template_dialect,
+                    iac_relevant = EXCLUDED.iac_relevant,
                     indexed_at = EXCLUDED.indexed_at
                 """,
                 {
@@ -152,6 +124,9 @@ class PostgresContentProvider:
                     "content_hash": entry.content_hash,
                     "line_count": entry.line_count,
                     "language": entry.language,
+                    "artifact_type": entry.artifact_type,
+                    "template_dialect": entry.template_dialect,
+                    "iac_relevant": entry.iac_relevant,
                     "indexed_at": entry.indexed_at,
                 },
             )
@@ -180,6 +155,9 @@ class PostgresContentProvider:
                     start_byte,
                     end_byte,
                     language,
+                    artifact_type,
+                    template_dialect,
+                    iac_relevant,
                     source_cache,
                     indexed_at
                 ) VALUES (
@@ -193,6 +171,9 @@ class PostgresContentProvider:
                     %(start_byte)s,
                     %(end_byte)s,
                     %(language)s,
+                    %(artifact_type)s,
+                    %(template_dialect)s,
+                    %(iac_relevant)s,
                     %(source_cache)s,
                     %(indexed_at)s
                 )
@@ -206,6 +187,9 @@ class PostgresContentProvider:
                     start_byte = EXCLUDED.start_byte,
                     end_byte = EXCLUDED.end_byte,
                     language = EXCLUDED.language,
+                    artifact_type = EXCLUDED.artifact_type,
+                    template_dialect = EXCLUDED.template_dialect,
+                    iac_relevant = EXCLUDED.iac_relevant,
                     source_cache = EXCLUDED.source_cache,
                     indexed_at = EXCLUDED.indexed_at
                 """,
@@ -221,6 +205,9 @@ class PostgresContentProvider:
                         "start_byte": entry.start_byte,
                         "end_byte": entry.end_byte,
                         "language": entry.language,
+                        "artifact_type": entry.artifact_type,
+                        "template_dialect": entry.template_dialect,
+                        "iac_relevant": entry.iac_relevant,
                         "source_cache": entry.source_cache,
                         "indexed_at": entry.indexed_at,
                     }
@@ -262,38 +249,11 @@ class PostgresContentProvider:
             Content response mapping when present, otherwise ``None``.
         """
 
-        with self._cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT repo_id,
-                       relative_path,
-                       commit_sha,
-                       content,
-                       content_hash,
-                       line_count,
-                       language
-                FROM content_files
-                WHERE repo_id = %(repo_id)s AND relative_path = %(relative_path)s
-                """,
-                {
-                    "repo_id": repo_id,
-                    "relative_path": relative_path,
-                },
-            )
-            row = cursor.fetchone()
-        if row is None:
-            return None
-        return {
-            "available": True,
-            "repo_id": row["repo_id"],
-            "relative_path": row["relative_path"],
-            "content": row["content"],
-            "line_count": row["line_count"],
-            "language": row["language"],
-            "commit_sha": row["commit_sha"],
-            "content_hash": row["content_hash"],
-            "source_backend": "postgres",
-        }
+        return postgres_get_file_content(
+            self,
+            repo_id=repo_id,
+            relative_path=relative_path,
+        )
 
     def get_entity_content(self, *, entity_id: str) -> dict[str, Any] | None:
         """Return source content for one content-bearing entity.
@@ -305,43 +265,7 @@ class PostgresContentProvider:
             Entity content response mapping when present, otherwise ``None``.
         """
 
-        with self._cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT entity_id,
-                       repo_id,
-                       relative_path,
-                       entity_type,
-                       entity_name,
-                       start_line,
-                       end_line,
-                       start_byte,
-                       end_byte,
-                       language,
-                       source_cache
-                FROM content_entities
-                WHERE entity_id = %(entity_id)s
-                """,
-                {"entity_id": entity_id},
-            )
-            row = cursor.fetchone()
-        if row is None:
-            return None
-        return {
-            "available": True,
-            "entity_id": row["entity_id"],
-            "repo_id": row["repo_id"],
-            "relative_path": row["relative_path"],
-            "entity_type": row["entity_type"],
-            "entity_name": row["entity_name"],
-            "start_line": row["start_line"],
-            "end_line": row["end_line"],
-            "start_byte": row["start_byte"],
-            "end_byte": row["end_byte"],
-            "language": row["language"],
-            "content": row["source_cache"],
-            "source_backend": "postgres",
-        }
+        return postgres_get_entity_content(self, entity_id=entity_id)
 
     def search_file_content(
         self,
@@ -349,44 +273,21 @@ class PostgresContentProvider:
         pattern: str,
         repo_ids: list[str] | None = None,
         languages: list[str] | None = None,
+        artifact_types: list[str] | None = None,
+        template_dialects: list[str] | None = None,
+        iac_relevant: bool | None = None,
     ) -> dict[str, Any]:
         """Search indexed file content with optional repository/language filters."""
 
-        filters = ["content ILIKE %(pattern)s"]
-        params: dict[str, Any] = {"pattern": f"%{pattern}%"}
-        if repo_ids:
-            filters.append("repo_id = ANY(%(repo_ids)s)")
-            params["repo_ids"] = repo_ids
-        if languages:
-            filters.append("language = ANY(%(languages)s)")
-            params["languages"] = languages
-
-        with self._cursor() as cursor:
-            cursor.execute(
-                f"""
-                SELECT repo_id, relative_path, language, content
-                FROM content_files
-                WHERE {' AND '.join(filters)}
-                ORDER BY repo_id, relative_path
-                LIMIT 50
-                """,
-                params,
-            )
-            rows = cursor.fetchall()
-
-        return {
-            "pattern": pattern,
-            "matches": [
-                {
-                    "repo_id": row["repo_id"],
-                    "relative_path": row["relative_path"],
-                    "language": row["language"],
-                    "snippet": _snippet_for_match(row["content"], pattern),
-                    "source_backend": "postgres",
-                }
-                for row in rows
-            ],
-        }
+        return postgres_search_file_content(
+            self,
+            pattern=pattern,
+            repo_ids=repo_ids,
+            languages=languages,
+            artifact_types=artifact_types,
+            template_dialects=template_dialects,
+            iac_relevant=iac_relevant,
+        )
 
     def search_entity_content(
         self,
@@ -395,56 +296,22 @@ class PostgresContentProvider:
         entity_types: list[str] | None = None,
         repo_ids: list[str] | None = None,
         languages: list[str] | None = None,
+        artifact_types: list[str] | None = None,
+        template_dialects: list[str] | None = None,
+        iac_relevant: bool | None = None,
     ) -> dict[str, Any]:
         """Search cached entity snippets with optional filters."""
 
-        filters = ["source_cache ILIKE %(pattern)s"]
-        params: dict[str, Any] = {"pattern": f"%{pattern}%"}
-        if entity_types:
-            filters.append("entity_type = ANY(%(entity_types)s)")
-            params["entity_types"] = entity_types
-        if repo_ids:
-            filters.append("repo_id = ANY(%(repo_ids)s)")
-            params["repo_ids"] = repo_ids
-        if languages:
-            filters.append("language = ANY(%(languages)s)")
-            params["languages"] = languages
-
-        with self._cursor() as cursor:
-            cursor.execute(
-                f"""
-                SELECT entity_id,
-                       repo_id,
-                       relative_path,
-                       entity_type,
-                       entity_name,
-                       language,
-                       source_cache
-                FROM content_entities
-                WHERE {' AND '.join(filters)}
-                ORDER BY repo_id, relative_path, start_line
-                LIMIT 50
-                """,
-                params,
-            )
-            rows = cursor.fetchall()
-
-        return {
-            "pattern": pattern,
-            "matches": [
-                {
-                    "entity_id": row["entity_id"],
-                    "repo_id": row["repo_id"],
-                    "relative_path": row["relative_path"],
-                    "entity_type": row["entity_type"],
-                    "entity_name": row["entity_name"],
-                    "language": row["language"],
-                    "snippet": _snippet_for_match(row["source_cache"], pattern),
-                    "source_backend": "postgres",
-                }
-                for row in rows
-            ],
-        }
+        return postgres_search_entity_content(
+            self,
+            pattern=pattern,
+            entity_types=entity_types,
+            repo_ids=repo_ids,
+            languages=languages,
+            artifact_types=artifact_types,
+            template_dialects=template_dialects,
+            iac_relevant=iac_relevant,
+        )
 
     def close(self) -> None:
         """Close the cached PostgreSQL connection when present."""
@@ -454,23 +321,3 @@ class PostgresContentProvider:
                 self._conn.close()
                 self._conn = None
                 self._initialized = False
-
-
-def _snippet_for_match(content: str, pattern: str) -> str:
-    """Return a small content snippet centered on the matched pattern.
-
-    Args:
-        content: Full content text.
-        pattern: Pattern used for matching.
-
-    Returns:
-        A bounded snippet for human-readable search results.
-    """
-
-    lowered = content.lower()
-    index = lowered.find(pattern.lower())
-    if index < 0:
-        return content[:200]
-    start = max(0, index - 80)
-    end = min(len(content), index + len(pattern) + 80)
-    return content[start:end]

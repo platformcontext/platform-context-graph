@@ -7,11 +7,9 @@ import logging
 from pathlib import Path
 import threading
 from typing import Any
-
 from tree_sitter import Language, Parser
-
+from .graph_builder_raw_text import parser_key_for_path, register_raw_text_parsers
 from ..utils.tree_sitter_manager import get_tree_sitter_manager
-
 logger = logging.getLogger(__name__)
 
 _LANGUAGE_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
@@ -206,6 +204,7 @@ def build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
         hcl_parser = HCLTerraformParser("hcl")
         parsers[".tf"] = hcl_parser
         parsers[".hcl"] = hcl_parser
+    register_raw_text_parsers(parsers)
 
     return parsers
 
@@ -456,12 +455,13 @@ def parse_file(
     Returns:
         Parsed file data or an error payload if parsing fails.
     """
-    parser = builder.parsers.get(path.suffix)
+    parser_key = parser_key_for_path(path, builder.parsers)
+    parser = builder.parsers.get(parser_key) if parser_key is not None else None
     if not parser:
         warning_logger_fn(
-            f"No parser found for file extension {path.suffix}. Skipping {path}"
+            f"No parser found for file {path}. Skipping"
         )
-        return {"path": str(path), "error": f"No parser for {path.suffix}"}
+        return {"path": str(path), "error": f"No parser for {path.name}"}
 
     debug_log_fn(
         f"[parse_file] Starting parsing for: {path} with {parser.language_name} parser"

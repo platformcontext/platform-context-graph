@@ -4,77 +4,22 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any
 
 from ..observability import get_observability
+from .service_protocols import PostgresProviderProtocol, WorkspaceProviderProtocol
 
 __all__ = [
     "ContentService",
 ]
 
 
-class _PostgresProvider(Protocol):
-    """Structural protocol for the PostgreSQL-backed content provider."""
-
-    @property
-    def enabled(self) -> bool:
-        """Return whether the provider is enabled."""
-
-    def delete_repository_content(self, repo_id: str) -> None:
-        """Delete cached content for one repository."""
-
-    def get_file_content(self, *, repo_id: str, relative_path: str) -> dict[str, Any] | None:
-        """Return cached file content when available."""
-
-    def get_entity_content(self, *, entity_id: str) -> dict[str, Any] | None:
-        """Return cached entity content when available."""
-
-    def search_file_content(
-        self,
-        *,
-        pattern: str,
-        repo_ids: list[str] | None = None,
-        languages: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Search cached file content."""
-
-    def search_entity_content(
-        self,
-        *,
-        pattern: str,
-        entity_types: list[str] | None = None,
-        repo_ids: list[str] | None = None,
-        languages: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Search cached entity snippets."""
-
-
-class _WorkspaceProvider(Protocol):
-    """Structural protocol for workspace-backed content retrieval."""
-
-    def get_file_content(self, *, repo_id: str, relative_path: str) -> dict[str, Any]:
-        """Read one file from the workspace."""
-
-    def get_file_lines(
-        self,
-        *,
-        repo_id: str,
-        relative_path: str,
-        start_line: int,
-        end_line: int,
-    ) -> dict[str, Any]:
-        """Read one file line range from the workspace."""
-
-    def get_entity_content(self, *, entity_id: str) -> dict[str, Any]:
-        """Read one entity snippet from the workspace or graph cache."""
-
-
 @dataclass(slots=True)
 class ContentService:
     """Orchestrate content retrieval across Postgres and workspace providers."""
 
-    postgres_provider: _PostgresProvider | None
-    workspace_provider: _WorkspaceProvider | None
+    postgres_provider: PostgresProviderProtocol | None
+    workspace_provider: WorkspaceProviderProtocol | None
 
     def delete_repository_content(self, repo_id: str) -> None:
         """Delete cached content for one repository.
@@ -191,6 +136,9 @@ class ContentService:
         pattern: str,
         repo_ids: list[str] | None = None,
         languages: list[str] | None = None,
+        artifact_types: list[str] | None = None,
+        template_dialects: list[str] | None = None,
+        iac_relevant: bool | None = None,
     ) -> dict[str, Any]:
         """Search file content through the PostgreSQL content store.
 
@@ -217,6 +165,9 @@ class ContentService:
             pattern=pattern,
             repo_ids=repo_ids,
             languages=languages,
+            artifact_types=artifact_types,
+            template_dialects=template_dialects,
+            iac_relevant=iac_relevant,
         )
 
     def search_entity_content(
@@ -226,6 +177,9 @@ class ContentService:
         entity_types: list[str] | None = None,
         repo_ids: list[str] | None = None,
         languages: list[str] | None = None,
+        artifact_types: list[str] | None = None,
+        template_dialects: list[str] | None = None,
+        iac_relevant: bool | None = None,
     ) -> dict[str, Any]:
         """Search entity snippets through the PostgreSQL content store.
 
@@ -254,6 +208,9 @@ class ContentService:
             entity_types=entity_types,
             repo_ids=repo_ids,
             languages=languages,
+            artifact_types=artifact_types,
+            template_dialects=template_dialects,
+            iac_relevant=iac_relevant,
         )
 
     def _from_postgres_file(
@@ -321,7 +278,6 @@ class ContentService:
             Provider response mapping, or ``None`` when the provider misses.
         """
 
-        runtime = get_observability()
         started = time.perf_counter()
         success = False
         hit = False
@@ -410,6 +366,9 @@ class ContentService:
             ],
             "source_backend": "postgres",
             "index_status": postgres_result.get("index_status"),
+            "artifact_type": postgres_result.get("artifact_type"),
+            "template_dialect": postgres_result.get("template_dialect"),
+            "iac_relevant": postgres_result.get("iac_relevant"),
         }
 
     def _unavailable_file_content(
