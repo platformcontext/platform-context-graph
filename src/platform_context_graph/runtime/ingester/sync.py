@@ -14,6 +14,7 @@ from platform_context_graph.observability import (
 
 from .bootstrap import _request_index
 from .config import RepoSyncConfig, RepoSyncResult
+from .graph_state import graph_missing_repository_paths
 from .git import (
     clone_missing_repositories,
     clone_missing_repositories_detailed,
@@ -195,6 +196,8 @@ def _run_sync_git(
         clone_missing_repositories_detailed_fn=clone_missing_repositories_detailed,
         update_existing_repositories_detailed_fn=update_existing_repositories_detailed,
         count_stale_checkouts_fn=count_stale_checkouts,
+        graph_missing_repository_paths_fn=graph_missing_repository_paths,
+        repo_checkout_name_fn=repo_checkout_name,
         resumable_repository_paths_fn=resumable_repository_paths,
         begin_index_cycle_fn=begin_index_cycle,
         record_phase_fn=record_phase,

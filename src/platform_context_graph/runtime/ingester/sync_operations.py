@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Callable
 
 from .config import RepoSyncConfig, RepoSyncResult
@@ -83,6 +84,8 @@ def _run_sync_git(
     clone_missing_repositories_detailed_fn: Callable[..., tuple],
     update_existing_repositories_detailed_fn: Callable[..., tuple],
     count_stale_checkouts_fn: Callable[..., int],
+    graph_missing_repository_paths_fn: Callable[..., list[Path]],
+    repo_checkout_name_fn: Callable[[str], str],
     resumable_repository_paths_fn: Callable[..., set],
     begin_index_cycle_fn: Callable[..., object],
     record_phase_fn: Callable[..., None],
@@ -102,10 +105,18 @@ def _run_sync_git(
     updated = len(updated_paths)
     stale = count_stale_checkouts_fn(config, discovered)
     failed = clone_failed + update_failed
+    discovered_repository_paths = [
+        (config.repos_dir / repo_checkout_name_fn(repo_id)).resolve()
+        for repo_id in discovered
+    ]
+    graph_missing_repositories = graph_missing_repository_paths_fn(
+        discovered_repository_paths
+    )
     selected_repositories = sorted(
         {
             *[repo_path.resolve() for repo_path in cloned_paths],
             *[repo_path.resolve() for repo_path in updated_paths],
+            *graph_missing_repositories,
             *resumable_repository_paths_fn(config.repos_dir),
         },
         key=str,
@@ -165,6 +176,15 @@ def _run_sync_git(
             if path.is_dir() and (path / ".git").exists()
         ]
     )
+    if graph_missing_repositories:
+        preview = ", ".join(path.name for path in graph_missing_repositories[:5])
+        if len(graph_missing_repositories) > 5:
+            preview = f"{preview}, ..."
+        log_fn(
+            config.component,
+            "Recovering repositories missing graph state: "
+            f"count={len(graph_missing_repositories)} repos={preview}",
+        )
     with begin_index_cycle_fn(config=config, mode="sync", repo_count=discovered_count):
         record_phase_fn(
             config=config,
