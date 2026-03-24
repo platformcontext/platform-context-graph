@@ -90,3 +90,92 @@ def test_repo_sync_cycle_indexes_repositories_missing_from_graph(
     assert captured["workspace"] == repos_dir
     assert captured["selected_repositories"] == [repo_a.resolve()]
     assert result.indexed == 1
+
+
+def test_repo_sync_cycle_ignores_resumable_paths_outside_current_discovery(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Resume should not pull stale legacy checkout names into a managed sync."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    canonical_repo = repos_dir / "boatsgroup--aquasolyachtsales"
+    legacy_repo = repos_dir / "aquasolyachtsales"
+    (canonical_repo / ".git").mkdir(parents=True)
+    (legacy_repo / ".git").mkdir(parents=True)
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=repos_dir,
+        source_mode="githubOrg",
+        git_auth_method="token",
+        github_org="boatsgroup",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=20,
+        sync_lock_dir=repos_dir / ".pcg-sync.lock",
+        component="repo-sync",
+    )
+
+    captured: dict[str, object] = {}
+
+    @contextmanager
+    def _workspace_lock(_config):
+        yield True
+
+    @contextmanager
+    def _index_cycle(**_kwargs):
+        yield
+
+    monkeypatch.setattr(sync, "initialize_observability", lambda **_kwargs: None)
+    monkeypatch.setattr(sync, "workspace_lock", _workspace_lock)
+    monkeypatch.setattr(sync, "begin_index_cycle", _index_cycle)
+    monkeypatch.setattr(sync, "record_phase", lambda **_kwargs: None)
+    monkeypatch.setattr(sync, "git_token", lambda _config: "token")
+    monkeypatch.setattr(
+        sync,
+        "clone_missing_repositories_detailed",
+        lambda _config, _token: (
+            ["boatsgroup/aquasolyachtsales"],
+            [],
+            1,
+            0,
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "update_existing_repositories_detailed",
+        lambda _config, _token: ([], 0),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "resumable_repository_paths",
+        lambda _workspace: [legacy_repo.resolve(), canonical_repo.resolve()],
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "graph_missing_repository_paths",
+        lambda _repo_paths: [],
+        raising=False,
+    )
+
+    def _index_workspace(
+        workspace: Path,
+        *,
+        selected_repositories: list[Path] | None = None,
+        **_kwargs,
+    ) -> None:
+        captured["workspace"] = workspace
+        captured["selected_repositories"] = selected_repositories
+
+    result = sync.run_repo_sync_cycle(config, index_workspace=_index_workspace)
+
+    assert captured["workspace"] == repos_dir
+    assert captured["selected_repositories"] == [canonical_repo.resolve()]
+    assert result.indexed == 1
