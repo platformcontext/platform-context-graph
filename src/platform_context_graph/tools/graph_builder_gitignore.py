@@ -15,6 +15,7 @@ class GitIgnoreFilterResult:
 
     kept_files: list[Path]
     ignored_files: list[Path]
+    external_files: list[Path]
 
 
 def honor_gitignore_enabled(*, get_config_value_fn: Any) -> bool:
@@ -47,6 +48,17 @@ def _ancestor_dirs(repo_root: Path, file_path: Path) -> list[Path]:
         current = current.parent
     dirs.reverse()
     return dirs
+
+
+def _resolves_within_repo(repo_root: Path, file_path: Path) -> bool:
+    """Return whether one path resolves to a location inside the repo root."""
+
+    resolved_repo_root = repo_root.resolve()
+    try:
+        file_path.resolve().relative_to(resolved_repo_root)
+    except ValueError:
+        return False
+    return True
 
 
 def _load_gitignore_spec(
@@ -85,6 +97,8 @@ def is_gitignored_in_repo(
     repo_root = repo_root.resolve()
     file_path = file_path.resolve()
     cache = spec_cache if spec_cache is not None else {}
+    if not _resolves_within_repo(repo_root, file_path):
+        return False
 
     matched: bool | None = None
     for directory in _ancestor_dirs(repo_root, file_path):
@@ -108,20 +122,36 @@ def filter_repo_gitignore_files(
     """Filter one repo's files through its own `.gitignore` rules only."""
 
     if not honor_gitignore_enabled(get_config_value_fn=get_config_value_fn):
+        kept_files: list[Path] = []
+        external_files: list[Path] = []
+        for file_path in sorted((Path(path) for path in files), key=lambda path: str(path)):
+            if not _resolves_within_repo(repo_root, file_path):
+                external_files.append(file_path.absolute())
+                continue
+            kept_files.append(file_path.resolve())
         return GitIgnoreFilterResult(
-            kept_files=sorted(path.resolve() for path in files),
+            kept_files=kept_files,
             ignored_files=[],
+            external_files=external_files,
         )
 
     cache: dict[Path, GitIgnoreSpec | None] = {}
     kept_files: list[Path] = []
     ignored_files: list[Path] = []
-    for file_path in sorted(path.resolve() for path in files):
+    external_files: list[Path] = []
+    for file_path in sorted((Path(path) for path in files), key=lambda path: str(path)):
+        if not _resolves_within_repo(repo_root, file_path):
+            external_files.append(file_path.absolute())
+            continue
         if is_gitignored_in_repo(repo_root, file_path, spec_cache=cache):
-            ignored_files.append(file_path)
+            ignored_files.append(file_path.resolve())
         else:
-            kept_files.append(file_path)
-    return GitIgnoreFilterResult(kept_files=kept_files, ignored_files=ignored_files)
+            kept_files.append(file_path.resolve())
+    return GitIgnoreFilterResult(
+        kept_files=kept_files,
+        ignored_files=ignored_files,
+        external_files=external_files,
+    )
 
 
 def summarize_gitignored_paths(

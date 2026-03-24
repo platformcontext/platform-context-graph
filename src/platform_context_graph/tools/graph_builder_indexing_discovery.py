@@ -363,6 +363,7 @@ def resolve_repository_file_sets(
                 f"supported={len(raw_files)} "
                 f"pcgignore_excluded={len(raw_files) - len(files)} "
                 f"gitignore_excluded={len(gitignore_result.ignored_files)} "
+                f"external_excluded={len(gitignore_result.external_files)} "
                 f"indexed={len(gitignore_result.kept_files)} "
                 f"gitignore_top={summarize_gitignored_paths(repo_path, gitignore_result.ignored_files)}"
             )
@@ -397,6 +398,7 @@ def resolve_repository_file_sets(
                 f"supported={len(raw_repo_files)} "
                 f"pcgignore_excluded={len(raw_repo_files) - len(repo_files)} "
                 f"gitignore_excluded={len(gitignore_result.ignored_files)} "
+                f"external_excluded={len(gitignore_result.external_files)} "
                 f"indexed={len(gitignore_result.kept_files)} "
                 f"gitignore_top={summarize_gitignored_paths(repo_root, gitignore_result.ignored_files)}"
             )
@@ -413,6 +415,7 @@ def resolve_repository_file_sets(
         f"supported={len(raw_files)} "
         f"pcgignore_excluded={len(raw_files) - len(files)} "
         f"gitignore_excluded={len(gitignore_result.ignored_files)} "
+        f"external_excluded={len(gitignore_result.external_files)} "
         f"indexed={len(gitignore_result.kept_files)} "
         f"gitignore_top={summarize_gitignored_paths(repo_root, gitignore_result.ignored_files)}"
     )

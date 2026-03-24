@@ -345,7 +345,6 @@ def test_repo_sync_cycle_indexes_only_changed_and_resumable_repositories(
         lambda _workspace: [repo_c.resolve()],
         raising=False,
     )
-
     def _index_workspace(
         workspace: Path,
         *,
@@ -449,7 +448,6 @@ def test_repo_sync_cycle_repeated_syncs_keep_repo_batches_partitioned(
         lambda _workspace: [],
         raising=False,
     )
-
     def _index_workspace(
         workspace: Path,
         *,
@@ -993,7 +991,6 @@ def test_repo_sync_cycle_reports_stale_unmanaged_checkouts(
         sync_module, "update_existing_repositories", lambda *_args: (0, 0)
     )
     monkeypatch.setattr(sync_module, "git_token", lambda _config: None)
-
     result = repo_sync.run_repo_sync_cycle(
         config, index_workspace=lambda _workspace: pytest.fail("index should not run")
     )
