@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -12,13 +13,19 @@ def managed_repository_roots(repos_dir: Path) -> list[Path]:
         return []
 
     roots: list[Path] = []
-    for git_path in sorted(repos_dir.rglob(".git")):
-        repo_root = git_path.parent.resolve()
-        if not git_path.exists() or not repo_root.is_dir():
+    for current_root, dirnames, filenames in os.walk(repos_dir, topdown=True):
+        marker_name = None
+        if ".git" in dirnames:
+            marker_name = ".git"
+        elif ".git" in filenames:
+            marker_name = ".git"
+        if marker_name is None:
             continue
-        if any(parent in roots for parent in repo_root.parents):
-            continue
-        roots.append(repo_root)
+
+        repo_root = Path(current_root).resolve()
+        if repo_root.is_dir():
+            roots.append(repo_root)
+        dirnames[:] = []
     return roots
 
 

@@ -79,6 +79,9 @@ def delete_repository_from_graph(
         ``True`` if the repository existed and was deleted, otherwise ``False``.
     """
     lookup_values = _repository_lookup_values(str(repo_identifier))
+    if not lookup_values:
+        warning_logger_fn("Attempted to delete repository with empty identifier")
+        return False
     display_identifier = (
         lookup_values[0]
         if lookup_values and lookup_values[0].startswith("repository:")

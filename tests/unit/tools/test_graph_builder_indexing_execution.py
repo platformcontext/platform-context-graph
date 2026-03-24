@@ -324,3 +324,68 @@ async def test_parse_repository_snapshot_can_parse_repo_files_concurrently(
     assert [Path(item["path"]).name for item in snapshot.file_data] == [
         path.name for path in file_paths
     ]
+
+
+@pytest.mark.asyncio
+async def test_build_graph_from_path_async_caches_repo_display_name_per_repo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Legacy indexing should compute each repo display name only once per repo."""
+
+    from platform_context_graph.tools.graph_builder_indexing_execution import (
+        build_graph_from_path_async,
+    )
+
+    repo_path = tmp_path / "boatsgroup" / "repo"
+    repo_path.mkdir(parents=True)
+    first_file = repo_path / "alpha.py"
+    second_file = repo_path / "beta.py"
+    first_file.write_text("print('a')\n", encoding="utf-8")
+    second_file.write_text("print('b')\n", encoding="utf-8")
+
+    display_calls: list[Path] = []
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_indexing_execution.repository_display_name",
+        lambda path: display_calls.append(path) or "boatsgroup/repo",
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_indexing_execution.resolve_repository_file_sets",
+        lambda *_args, **_kwargs: {repo_path.resolve(): [first_file, second_file]},
+    )
+
+    builder = SimpleNamespace(
+        driver=SimpleNamespace(),
+        job_manager=SimpleNamespace(update_job=lambda *_args, **_kwargs: None),
+        add_repository_to_graph=lambda *_args, **_kwargs: None,
+        _pre_scan_for_imports=lambda _files: {},
+        parse_file=lambda _repo, file_path, _dep: {
+            "path": str(file_path),
+            "functions": [],
+        },
+        add_file_to_graph=lambda *_args, **_kwargs: None,
+        _create_all_inheritance_links=lambda *_args, **_kwargs: None,
+        _create_all_function_calls=lambda *_args, **_kwargs: None,
+        _create_all_infra_links=lambda *_args, **_kwargs: None,
+        _materialize_workloads=lambda: None,
+    )
+
+    async def _sleep(_seconds: float) -> None:
+        return None
+
+    await build_graph_from_path_async(
+        builder,
+        repo_path,
+        is_dependency=False,
+        job_id=None,
+        asyncio_module=SimpleNamespace(sleep=_sleep),
+        datetime_cls=SimpleNamespace(now=lambda *_args, **_kwargs: None),
+        debug_log_fn=lambda *_args, **_kwargs: None,
+        error_logger_fn=lambda *_args, **_kwargs: None,
+        get_config_value_fn=lambda _key: None,
+        info_logger_fn=lambda *_args, **_kwargs: None,
+        pathspec_module=SimpleNamespace(),
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+        job_status_enum=SimpleNamespace(RUNNING="running"),
+    )
+
+    assert display_calls == [repo_path.resolve()]

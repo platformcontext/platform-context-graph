@@ -399,10 +399,9 @@ async def build_graph_from_path_async(
         index_start = time.monotonic()
 
         current_repo_name = None
-        repo_file_count = 0
-        repos_completed = 0
+        repo_file_count = repos_completed = processed_count = 0
         total_repos = len(git_repos) if git_repos else 1
-        processed_count = 0
+        repo_name_cache: dict[Path, str] = {}
 
         for file_path in files:
             if not file_path.is_file():
@@ -419,7 +418,9 @@ async def build_graph_from_path_async(
                     file_path.parent.resolve() if not path.is_dir() else path.resolve()
                 )
             )
-            repo_name = repository_display_name(repo_path)
+            repo_name = repo_name_cache.get(repo_path)
+            if repo_name is None:
+                repo_name_cache[repo_path] = repo_name = repository_display_name(repo_path)
 
             if repo_name != current_repo_name:
                 if current_repo_name is not None:

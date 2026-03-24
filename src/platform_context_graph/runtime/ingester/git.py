@@ -240,10 +240,13 @@ def repo_checkout_name(repo_id: str) -> str:
     Returns:
         Relative repository path used as the local checkout directory name.
     """
-    sanitized = repo_id.strip().strip("/")
+    sanitized = repo_id.replace("\\", "/").strip().strip("/")
     if not sanitized:
         return "repository"
-    return "/".join(part for part in sanitized.split("/") if part)
+    parts = [part for part in sanitized.split("/") if part]
+    if any(part in {".", ".."} for part in parts):
+        raise ValueError(f"Invalid repository identifier for checkout path: {repo_id}")
+    return "/".join(parts)
 
 
 def repo_remote_url(config: RepoSyncConfig, repo_id: str, token: str | None) -> str:
