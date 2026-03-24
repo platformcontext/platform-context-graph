@@ -125,35 +125,53 @@ class PostgresBackfillStore:
     def _apply_updates(self, *, table: str, updates: list[MetadataUpdate]) -> int:
         """Apply metadata updates to one table and return changed-row count."""
 
-        changed = 0
         if not updates:
-            return changed
+            return 0
+        if table not in {"content_files", "content_entities"}:
+            raise ValueError(f"unsupported metadata backfill table: {table}")
+
+        values_sql_parts: list[str] = []
+        params: dict[str, object] = {}
+        for index, update in enumerate(updates):
+            suffix = f"_{index}"
+            values_sql_parts.append(
+                f"(%(repo_id{suffix})s, %(relative_path{suffix})s, "
+                f"%(artifact_type{suffix})s, %(template_dialect{suffix})s, "
+                f"%(iac_relevant{suffix})s)"
+            )
+            params[f"repo_id{suffix}"] = update.repo_id
+            params[f"relative_path{suffix}"] = update.relative_path
+            params[f"artifact_type{suffix}"] = update.artifact_type
+            params[f"template_dialect{suffix}"] = update.template_dialect
+            params[f"iac_relevant{suffix}"] = update.iac_relevant
+
         with self._provider._cursor() as cursor:
-            for update in updates:
-                cursor.execute(
-                    f"""
-                    UPDATE {table}
-                    SET artifact_type = %(artifact_type)s,
-                        template_dialect = %(template_dialect)s,
-                        iac_relevant = %(iac_relevant)s
-                    WHERE repo_id = %(repo_id)s
-                      AND relative_path = %(relative_path)s
-                      AND (
-                        artifact_type IS DISTINCT FROM %(artifact_type)s
-                        OR template_dialect IS DISTINCT FROM %(template_dialect)s
-                        OR iac_relevant IS DISTINCT FROM %(iac_relevant)s
-                      )
-                    """,
-                    {
-                        "repo_id": update.repo_id,
-                        "relative_path": update.relative_path,
-                        "artifact_type": update.artifact_type,
-                        "template_dialect": update.template_dialect,
-                        "iac_relevant": update.iac_relevant,
-                    },
+            cursor.execute(
+                f"""
+                UPDATE {table} AS target
+                SET artifact_type = source.artifact_type,
+                    template_dialect = source.template_dialect,
+                    iac_relevant = source.iac_relevant
+                FROM (
+                    VALUES {", ".join(values_sql_parts)}
+                ) AS source(
+                    repo_id,
+                    relative_path,
+                    artifact_type,
+                    template_dialect,
+                    iac_relevant
                 )
-                changed += cursor.rowcount
-        return changed
+                WHERE target.repo_id = source.repo_id
+                  AND target.relative_path = source.relative_path
+                  AND (
+                    target.artifact_type IS DISTINCT FROM source.artifact_type
+                    OR target.template_dialect IS DISTINCT FROM source.template_dialect
+                    OR target.iac_relevant IS DISTINCT FROM source.iac_relevant
+                  )
+                """,
+                params,
+            )
+            return cursor.rowcount
 
 
 def run_backfill(

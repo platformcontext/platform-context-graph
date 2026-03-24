@@ -46,7 +46,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--root",
         action="append",
         default=[],
-        help="Repo root to scan. May be repeated. Defaults to the built-in repo families.",
+        help=(
+            "Repo root to scan. May be repeated. If omitted, the script uses "
+            "TEMPLATED_REPO_DEFAULT_ROOT_SPECS when it is set."
+        ),
     )
     parser.add_argument(
         "--family",
@@ -84,6 +87,12 @@ def main(
     stdout = stdout or sys.stdout
     stderr = stderr or sys.stderr
     scan_roots = build_scan_roots(args.root, family_override=args.family)
+    if not scan_roots:
+        stderr.write(
+            "No scan roots configured. Provide --root or set "
+            "TEMPLATED_REPO_DEFAULT_ROOT_SPECS.\n"
+        )
+        return 1
     missing_roots = [root for root in scan_roots if not root.path.is_dir()]
     if missing_roots:
         for root in missing_roots:

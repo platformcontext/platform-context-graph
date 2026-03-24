@@ -112,7 +112,7 @@ def test_get_file_content_returns_content_metadata(monkeypatch) -> None:
     assert result["iac_relevant"] is True
 
 
-def test_get_file_content_inferrs_metadata_for_legacy_rows(monkeypatch) -> None:
+def test_get_file_content_infers_metadata_for_legacy_rows(monkeypatch) -> None:
     """File reads should infer metadata when pre-backfill rows still contain nulls."""
 
     provider = PostgresContentProvider("postgresql://example")
@@ -221,6 +221,7 @@ def test_search_file_content_falls_back_to_inferred_metadata(monkeypatch) -> Non
     assert "artifact_type = ANY" not in query
     assert "template_dialect = ANY" not in query
     assert "iac_relevant =" not in query
+    assert "LIMIT %(limit)s OFFSET %(offset)s" in query
     assert result["matches"][0]["artifact_type"] == "terraform_template_text"
     assert result["matches"][0]["template_dialect"] == "terraform_template"
     assert result["matches"][0]["iac_relevant"] is True
@@ -292,7 +293,12 @@ def test_search_file_content_filters_on_metadata(monkeypatch) -> None:
     assert "artifact_type = ANY" not in query
     assert "template_dialect = ANY" not in query
     assert "iac_relevant =" not in query
-    assert params == {"pattern": "%python:3.12-slim%"}
+    assert "LIMIT %(limit)s OFFSET %(offset)s" in query
+    assert params == {
+        "pattern": "%python:3.12-slim%",
+        "limit": 500,
+        "offset": 0,
+    }
     assert result["matches"][0]["artifact_type"] == "dockerfile"
 
 
@@ -333,6 +339,10 @@ def test_search_entity_content_falls_back_to_inherited_metadata(monkeypatch) -> 
         iac_relevant=True,
     )
 
+    query, params = cursor.execute.call_args.args
+    assert "LIMIT %(limit)s OFFSET %(offset)s" in query
+    assert params["limit"] == 500
+    assert params["offset"] == 0
     assert result["matches"][0]["artifact_type"] == "terraform_hcl"
     assert result["matches"][0]["template_dialect"] == "terraform_template"
     assert result["matches"][0]["iac_relevant"] is True

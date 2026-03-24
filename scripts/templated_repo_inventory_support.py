@@ -16,14 +16,7 @@ from platform_context_graph.tools.languages.templated_detection import (
     is_candidate_text_file,
 )
 
-
-DEFAULT_ROOT_SPECS = (
-    ("helm_argo", "/Users/allen/repos/mobius/iac-eks*"),
-    ("helm_argo", "/Users/allen/repos/mobius/argocd-env-generator"),
-    ("ansible_jinja", "/Users/allen/repos/ansible-automate"),
-    ("dagster_jinja", "/Users/allen/repos/services/bg-dagster"),
-    ("terraform", "/Users/allen/repos/terraform-modules"),
-)
+DEFAULT_ROOT_SPECS_ENV_VAR = "TEMPLATED_REPO_DEFAULT_ROOT_SPECS"
 
 ALL_BUCKETS = (
     "plain_text",
@@ -43,6 +36,34 @@ EXAMPLE_BUCKETS = (
     "helm_helper_tpl",
     "unknown_templated",
 )
+
+
+def _load_default_root_specs() -> tuple[tuple[str, str], ...]:
+    """Load default root specs from an optional environment variable."""
+
+    raw_specs = os.getenv(DEFAULT_ROOT_SPECS_ENV_VAR)
+    if not raw_specs:
+        return ()
+    try:
+        parsed = json.loads(raw_specs)
+    except (TypeError, ValueError):
+        return ()
+
+    specs: list[tuple[str, str]] = []
+    for item in parsed:
+        if isinstance(item, dict):
+            family = item.get("family")
+            pattern = item.get("pattern")
+        elif isinstance(item, (list, tuple)) and len(item) == 2:
+            family, pattern = item
+        else:
+            continue
+        if family and pattern:
+            specs.append((str(family), str(pattern)))
+    return tuple(specs)
+
+
+DEFAULT_ROOT_SPECS = _load_default_root_specs()
 
 
 @dataclass(frozen=True, slots=True)

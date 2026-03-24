@@ -23,6 +23,7 @@ def _load_script_module(module_name: str) -> ModuleType:
 
     module = importlib.util.module_from_spec(spec)
     sys.modules.pop(module_name, None)
+    sys.modules.pop("scripts.templated_repo_inventory_support", None)
     sys.path.insert(0, str(REPO_ROOT))
     spec.loader.exec_module(module)
     return module
@@ -313,6 +314,39 @@ def test_main_returns_one_when_inventory_finds_ambiguity(tmp_path: Path) -> None
     assert exit_code == 1
     report = json.loads(json_path.read_text(encoding="utf-8"))
     assert report["roots"][0]["ambiguous_files"][0]["relative_path"] == "mixed.yaml"
+
+
+def test_main_returns_one_when_no_roots_are_configured(monkeypatch, capsys) -> None:
+    """The CLI should fail clearly when neither --root nor env defaults are set."""
+
+    monkeypatch.delenv("TEMPLATED_REPO_DEFAULT_ROOT_SPECS", raising=False)
+    module = _load_script_module("templated_repo_inventory_missing_roots")
+
+    exit_code = module.main([])
+
+    assert exit_code == 1
+    assert (
+        "No scan roots configured. Provide --root or set "
+        "TEMPLATED_REPO_DEFAULT_ROOT_SPECS."
+    ) in capsys.readouterr().err
+
+
+def test_build_scan_roots_honors_env_default_specs(monkeypatch, tmp_path: Path) -> None:
+    """Env-provided default root specs should seed scans without hard-coded paths."""
+
+    root = tmp_path / "iac-eks-pcg"
+    root.mkdir()
+    monkeypatch.setenv(
+        "TEMPLATED_REPO_DEFAULT_ROOT_SPECS",
+        json.dumps([["helm_argo", str(root)]]),
+    )
+    module = _load_script_module("templated_repo_inventory_env_roots")
+
+    scan_roots = module.build_scan_roots([], family_override=None)
+
+    assert [(item.family, item.path) for item in scan_roots] == [
+        ("helm_argo", root),
+    ]
 
 
 def test_scan_root_skips_read_errors_and_records_them(tmp_path: Path) -> None:

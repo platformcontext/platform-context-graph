@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
+from unittest.mock import MagicMock
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "backfill_content_metadata.py"
@@ -197,6 +199,53 @@ def test_run_backfill_is_idempotent_for_repeated_rows() -> None:
     assert first.updated_entities == 1
     assert second.updated_files == 0
     assert second.updated_entities == 0
+
+
+def test_postgres_backfill_store_batches_updates_into_one_statement() -> None:
+    """The Postgres store should update one batch with one SQL statement."""
+
+    support = _load_module(
+        SUPPORT_PATH,
+        "backfill_content_metadata_support_batch_test",
+    )
+    provider = MagicMock()
+    cursor = MagicMock()
+    cursor.rowcount = 3
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    provider._cursor = _cursor
+    store = support.PostgresBackfillStore(provider)
+
+    changed = store.update_file_metadata(
+        [
+            support.MetadataUpdate(
+                repo_id="repository:r_chart",
+                relative_path="chart/templates/_helpers.tpl",
+                artifact_type="helm_helper_tpl",
+                template_dialect="go_template",
+                iac_relevant=True,
+            ),
+            support.MetadataUpdate(
+                repo_id="repository:r_tf",
+                relative_path="templates/ecs/container.tpl",
+                artifact_type="terraform_template_text",
+                template_dialect="terraform_template",
+                iac_relevant=True,
+            ),
+        ]
+    )
+
+    assert changed == 3
+    assert cursor.execute.call_count == 1
+    query, params = cursor.execute.call_args.args
+    assert "UPDATE content_files AS target" in query
+    assert "FROM (" in query
+    assert "VALUES" in query
+    assert params["repo_id_0"] == "repository:r_chart"
+    assert params["relative_path_1"] == "templates/ecs/container.tpl"
 
 
 def test_cli_reports_summary_and_accepts_repo_id_filter(

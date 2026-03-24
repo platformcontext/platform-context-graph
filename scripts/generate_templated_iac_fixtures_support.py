@@ -187,7 +187,6 @@ def _sanitize_helm_values(content: str) -> str:
         ("platform_context_graph", "template_platform_service"),
         ("PCG_", "APP_"),
         ("githubOrg: exampleco", "githubOrg: demo-org"),
-        ("repoSync:\n  enabled: true", "repoSync:\n  enabled: true"),
     )
     updated = content
     for needle, replacement in replacements:

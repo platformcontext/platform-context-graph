@@ -15,6 +15,9 @@ __all__ = [
     "search_file_content",
 ]
 
+_SEARCH_PAGE_SIZE = 500
+_MAX_SEARCH_SCAN_ROWS = 5_000
+
 
 def _resolve_row_metadata(*, relative_path: str, content: str, row: dict[str, Any]) -> dict[str, Any]:
     """Resolve metadata values, inferring them when legacy rows are still null."""
@@ -218,52 +221,65 @@ def search_file_content(
         parameter_name="languages",
         values=languages,
     )
-    with provider._cursor() as cursor:
-        cursor.execute(
-            f"""
-            SELECT repo_id,
-                   relative_path,
-                   language,
-                   artifact_type,
-                   template_dialect,
-                   iac_relevant,
-                   content
-            FROM content_files
-            WHERE {' AND '.join(filters)}
-            ORDER BY repo_id, relative_path
-            """,
-            params,
-        )
-        rows = cursor.fetchall()
-
     matches = []
-    for row in rows:
-        metadata = _resolve_row_metadata(
-            relative_path=row["relative_path"],
-            content=row["content"],
-            row=row,
-        )
-        if not _matches_metadata_filters(
-            metadata=metadata,
-            artifact_types=artifact_types,
-            template_dialects=template_dialects,
-            iac_relevant=iac_relevant,
-        ):
-            continue
-        matches.append(
-            {
-                "repo_id": row["repo_id"],
-                "relative_path": row["relative_path"],
-                "language": row["language"],
-                "artifact_type": metadata["artifact_type"],
-                "template_dialect": metadata["template_dialect"],
-                "iac_relevant": metadata["iac_relevant"],
-                "snippet": snippet_for_match(row["content"], pattern),
-                "source_backend": "postgres",
-            }
-        )
-        if len(matches) >= 50:
-            break
+    scanned_rows = 0
+    offset = 0
+    with provider._cursor() as cursor:
+        while len(matches) < 50 and scanned_rows < _MAX_SEARCH_SCAN_ROWS:
+            cursor.execute(
+                f"""
+                SELECT repo_id,
+                       relative_path,
+                       language,
+                       artifact_type,
+                       template_dialect,
+                       iac_relevant,
+                       content
+                FROM content_files
+                WHERE {' AND '.join(filters)}
+                ORDER BY repo_id, relative_path
+                LIMIT %(limit)s OFFSET %(offset)s
+                """,
+                {
+                    **params,
+                    "limit": _SEARCH_PAGE_SIZE,
+                    "offset": offset,
+                },
+            )
+            rows = cursor.fetchall()
+            if not rows:
+                break
+            scanned_rows += len(rows)
+            for row in rows:
+                metadata = _resolve_row_metadata(
+                    relative_path=row["relative_path"],
+                    content=row["content"],
+                    row=row,
+                )
+                if not _matches_metadata_filters(
+                    metadata=metadata,
+                    artifact_types=artifact_types,
+                    template_dialects=template_dialects,
+                    iac_relevant=iac_relevant,
+                ):
+                    continue
+                matches.append(
+                    {
+                        "repo_id": row["repo_id"],
+                        "relative_path": row["relative_path"],
+                        "language": row["language"],
+                        "artifact_type": metadata["artifact_type"],
+                        "template_dialect": metadata["template_dialect"],
+                        "iac_relevant": metadata["iac_relevant"],
+                        "snippet": snippet_for_match(row["content"], pattern),
+                        "source_backend": "postgres",
+                    }
+                )
+                if len(matches) >= 50:
+                    break
+            if len(rows) < _SEARCH_PAGE_SIZE:
+                break
+            offset += len(rows)
 
     return {"pattern": pattern, "matches": matches}
 
@@ -304,60 +320,73 @@ def search_entity_content(
         parameter_name="languages",
         values=languages,
     )
-    with provider._cursor() as cursor:
-        cursor.execute(
-            f"""
-            SELECT entity_id,
-                   ce.repo_id,
-                   ce.relative_path,
-                   ce.entity_type,
-                   ce.entity_name,
-                   ce.language,
-                   ce.artifact_type,
-                   ce.template_dialect,
-                   ce.iac_relevant,
-                   ce.source_cache,
-                   cf.content AS file_content,
-                   cf.artifact_type AS file_artifact_type,
-                   cf.template_dialect AS file_template_dialect,
-                   cf.iac_relevant AS file_iac_relevant
-            FROM content_entities ce
-            LEFT JOIN content_files cf
-              ON cf.repo_id = ce.repo_id
-             AND cf.relative_path = ce.relative_path
-            WHERE {' AND '.join(filters)}
-            ORDER BY ce.repo_id, ce.relative_path, ce.start_line
-            """,
-            params,
-        )
-        rows = cursor.fetchall()
-
     matches = []
-    for row in rows:
-        metadata = _resolve_entity_row_metadata(row)
-        if not _matches_metadata_filters(
-            metadata=metadata,
-            artifact_types=artifact_types,
-            template_dialects=template_dialects,
-            iac_relevant=iac_relevant,
-        ):
-            continue
-        matches.append(
-            {
-                "entity_id": row["entity_id"],
-                "repo_id": row["repo_id"],
-                "relative_path": row["relative_path"],
-                "entity_type": row["entity_type"],
-                "entity_name": row["entity_name"],
-                "language": row["language"],
-                "artifact_type": metadata["artifact_type"],
-                "template_dialect": metadata["template_dialect"],
-                "iac_relevant": metadata["iac_relevant"],
-                "snippet": snippet_for_match(row["source_cache"], pattern),
-                "source_backend": "postgres",
-            }
-        )
-        if len(matches) >= 50:
-            break
+    scanned_rows = 0
+    offset = 0
+    with provider._cursor() as cursor:
+        while len(matches) < 50 and scanned_rows < _MAX_SEARCH_SCAN_ROWS:
+            cursor.execute(
+                f"""
+                SELECT entity_id,
+                       ce.repo_id,
+                       ce.relative_path,
+                       ce.entity_type,
+                       ce.entity_name,
+                       ce.language,
+                       ce.artifact_type,
+                       ce.template_dialect,
+                       ce.iac_relevant,
+                       ce.source_cache,
+                       cf.content AS file_content,
+                       cf.artifact_type AS file_artifact_type,
+                       cf.template_dialect AS file_template_dialect,
+                       cf.iac_relevant AS file_iac_relevant
+                FROM content_entities ce
+                LEFT JOIN content_files cf
+                  ON cf.repo_id = ce.repo_id
+                 AND cf.relative_path = ce.relative_path
+                WHERE {' AND '.join(filters)}
+                ORDER BY ce.repo_id, ce.relative_path, ce.start_line, ce.entity_id
+                LIMIT %(limit)s OFFSET %(offset)s
+                """,
+                {
+                    **params,
+                    "limit": _SEARCH_PAGE_SIZE,
+                    "offset": offset,
+                },
+            )
+            rows = cursor.fetchall()
+            if not rows:
+                break
+            scanned_rows += len(rows)
+            for row in rows:
+                metadata = _resolve_entity_row_metadata(row)
+                if not _matches_metadata_filters(
+                    metadata=metadata,
+                    artifact_types=artifact_types,
+                    template_dialects=template_dialects,
+                    iac_relevant=iac_relevant,
+                ):
+                    continue
+                matches.append(
+                    {
+                        "entity_id": row["entity_id"],
+                        "repo_id": row["repo_id"],
+                        "relative_path": row["relative_path"],
+                        "entity_type": row["entity_type"],
+                        "entity_name": row["entity_name"],
+                        "language": row["language"],
+                        "artifact_type": metadata["artifact_type"],
+                        "template_dialect": metadata["template_dialect"],
+                        "iac_relevant": metadata["iac_relevant"],
+                        "snippet": snippet_for_match(row["source_cache"], pattern),
+                        "source_backend": "postgres",
+                    }
+                )
+                if len(matches) >= 50:
+                    break
+            if len(rows) < _SEARCH_PAGE_SIZE:
+                break
+            offset += len(rows)
 
     return {"pattern": pattern, "matches": matches}
