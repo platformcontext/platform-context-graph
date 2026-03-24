@@ -28,6 +28,16 @@ _ENTITY_BATCH_SIZE_BY_LABEL = {
     "Variable": 100,
 }
 _LARGE_LABEL_SUMMARY_THRESHOLD = 1_000
+_WRITE_BATCH_FLUSH_ROW_THRESHOLD = 2_000
+_NON_ENTITY_BATCH_KEYS = (
+    "params_rows",
+    "module_rows",
+    "nested_fn_rows",
+    "class_fn_rows",
+    "module_inclusion_rows",
+    "js_import_rows",
+    "generic_import_rows",
+)
 
 
 def collect_file_write_data(
@@ -237,6 +247,68 @@ def flush_write_batches(
     return batch_metrics
 
 
+def has_pending_rows(batches: dict[str, Any]) -> bool:
+    """Return whether a write-batch accumulator still has rows to flush."""
+
+    if any(rows for rows in batches["entities_by_label"].values()):
+        return True
+    return any(batches[key] for key in _NON_ENTITY_BATCH_KEYS)
+
+
+def pending_row_count(batches: dict[str, Any]) -> int:
+    """Return the total number of buffered rows across all batch collections."""
+
+    entity_rows = sum(len(rows) for rows in batches["entities_by_label"].values())
+    other_rows = sum(len(batches[key]) for key in _NON_ENTITY_BATCH_KEYS)
+    return entity_rows + other_rows
+
+
+def should_flush_batches(batches: dict[str, Any]) -> bool:
+    """Return whether the in-memory write buffer should flush early."""
+
+    return pending_row_count(batches) >= _WRITE_BATCH_FLUSH_ROW_THRESHOLD
+
+
+def log_prepared_entity_batches(
+    batches: dict[str, Any],
+    *,
+    repo_path_str: str,
+    info_logger_fn: Any | None = None,
+) -> None:
+    """Emit pre-flush entity summaries for the current write accumulator."""
+
+    if not callable(info_logger_fn):
+        return
+    entity_counts = {
+        label: len(rows)
+        for label, rows in sorted(batches["entities_by_label"].items())
+        if rows
+    }
+    if not entity_counts:
+        return
+    entity_summary = ", ".join(
+        f"{label}={count}" for label, count in entity_counts.items()
+    )
+    info_logger_fn(f"Prepared graph entity batches for {repo_path_str}: {entity_summary}")
+    for label, rows in sorted(batches["entities_by_label"].items()):
+        if len(rows) < _LARGE_LABEL_SUMMARY_THRESHOLD:
+            continue
+        source_summary = summarize_entity_source_files(
+            rows,
+            repo_root=repo_path_str,
+        )
+        top_files = ", ".join(
+            f"{path}({count})" for path, count in source_summary["top_files"]
+        )
+        if not top_files:
+            continue
+        info_logger_fn(
+            f"Prepared graph entity batch detail for {repo_path_str}: "
+            f"label={label} files={source_summary['file_count']} "
+            f"top_files={top_files}"
+        )
+
+
 def summarize_entity_source_files(
     rows: list[dict[str, Any]],
     *,
@@ -366,6 +438,10 @@ __all__ = [
     "collect_file_write_data",
     "empty_accumulator",
     "flush_write_batches",
+    "has_pending_rows",
+    "log_prepared_entity_batches",
     "merge_batches",
+    "pending_row_count",
+    "should_flush_batches",
     "summarize_entity_source_files",
 ]
