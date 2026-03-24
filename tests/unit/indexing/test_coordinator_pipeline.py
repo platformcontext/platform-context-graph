@@ -666,3 +666,40 @@ def test_finalize_repository_batch_records_stage_timings(monkeypatch) -> None:
             },
         ),
     ]
+
+
+def test_finalize_repository_batch_treats_commit_incomplete_as_blocking() -> None:
+    """Finalization should not run while a repository remains commit-incomplete."""
+
+    repo_path = Path("/tmp/repo-a")
+    run_state = _make_run_state([repo_path])
+    run_state.repositories[str(repo_path.resolve())].status = "commit_incomplete"
+    persisted_statuses: list[tuple[str, str]] = []
+
+    def capture_persist(state) -> None:
+        persisted_statuses.append((state.status, state.finalization_status))
+
+    finalize_repository_batch(
+        builder=SimpleNamespace(),
+        root_path=repo_path,
+        run_state=run_state,
+        repo_paths=[repo_path],
+        snapshots=[],
+        merged_imports_map={},
+        component="test",
+        family="index",
+        source="manual",
+        info_logger_fn=lambda *_a, **_kw: None,
+        error_logger_fn=lambda *_a, **_kw: None,
+        finalize_index_batch_fn=lambda *_a, **_kw: (_ for _ in ()).throw(
+            AssertionError("finalization should not run")
+        ),
+        persist_run_state_fn=capture_persist,
+        delete_snapshots_fn=lambda *_a, **_kw: None,
+        telemetry=_telemetry(),
+        utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+    )
+
+    assert run_state.status == "partial_failure"
+    assert run_state.finalization_status == "pending"
+    assert persisted_statuses == [("partial_failure", "pending")]

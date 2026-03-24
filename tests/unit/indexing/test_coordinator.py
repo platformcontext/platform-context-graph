@@ -39,12 +39,16 @@ def test_publish_runtime_progress_reports_ingester_repo_counts(
             ),
             "/tmp/repos/repo-c": models.RepositoryRunState(
                 repo_path="/tmp/repos/repo-c",
-                status="running",
+                status="commit_incomplete",
                 phase="committing",
                 phase_started_at="2026-03-22T12:03:00+00:00",
                 current_file="/tmp/repos/repo-c/app.js",
                 last_progress_at="2026-03-22T12:04:00+00:00",
                 commit_started_at="2026-03-22T12:04:30+00:00",
+            ),
+            "/tmp/repos/repo-d": models.RepositoryRunState(
+                repo_path="/tmp/repos/repo-d",
+                status="running",
             ),
         },
     )
@@ -59,7 +63,7 @@ def test_publish_runtime_progress_reports_ingester_repo_counts(
         ingester="repository",
         source="githubOrg",
         run_state=run_state,
-        repository_count=3,
+        repository_count=4,
         status="indexing",
     )
 
@@ -71,10 +75,10 @@ def test_publish_runtime_progress_reports_ingester_repo_counts(
             "active_run_id": "run-123",
             "last_success_at": None,
             "last_error_message": None,
-            "repository_count": 3,
-            "pulled_repositories": 3,
+            "repository_count": 4,
+            "pulled_repositories": 4,
             "in_sync_repositories": 1,
-            "pending_repositories": 2,
+            "pending_repositories": 3,
             "completed_repositories": 1,
             "failed_repositories": 1,
             "active_repository_path": "/tmp/repos/repo-c",
