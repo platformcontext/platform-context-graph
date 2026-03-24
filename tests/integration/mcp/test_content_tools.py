@@ -118,3 +118,31 @@ def test_tools_call_does_not_trigger_repo_access_when_server_has_workspace_conte
         mock_server._client_request_handler.assert_not_awaited()
 
     asyncio.run(run_test())
+
+
+def test_search_file_content_wrapper_passes_metadata_filters(
+    mock_server: MCPServer,
+) -> None:
+    """Metadata filters should flow through the MCP file search wrapper."""
+
+    with patch(
+        "platform_context_graph.mcp.content_tools.content_queries.search_file_content"
+    ) as mock_search_file_content:
+        mock_search_file_content.return_value = {"pattern": "Dockerfile", "matches": []}
+
+        mock_server.search_file_content_tool(
+            pattern="Dockerfile",
+            artifact_types=["dockerfile"],
+            template_dialects=["jinja"],
+            iac_relevant=True,
+        )
+
+    mock_search_file_content.assert_called_once_with(
+        mock_server.db_manager,
+        pattern="Dockerfile",
+        repo_ids=None,
+        languages=None,
+        artifact_types=["dockerfile"],
+        template_dialects=["jinja"],
+        iac_relevant=True,
+    )

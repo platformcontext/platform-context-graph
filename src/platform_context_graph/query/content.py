@@ -86,6 +86,9 @@ def search_file_content(
     pattern: str,
     repo_ids: list[str] | None = None,
     languages: list[str] | None = None,
+    artifact_types: list[str] | None = None,
+    template_dialects: list[str] | None = None,
+    iac_relevant: bool | None = None,
 ) -> dict[str, Any]:
     """Search file content through the content store.
 
@@ -104,6 +107,9 @@ def search_file_content(
             pattern=pattern,
             repo_ids=repo_ids,
             languages=languages,
+            artifact_types=artifact_types,
+            template_dialects=template_dialects,
+            iac_relevant=iac_relevant,
         )
 
 
@@ -114,6 +120,9 @@ def search_entity_content(
     entity_types: list[str] | None = None,
     repo_ids: list[str] | None = None,
     languages: list[str] | None = None,
+    artifact_types: list[str] | None = None,
+    template_dialects: list[str] | None = None,
+    iac_relevant: bool | None = None,
 ) -> dict[str, Any]:
     """Search entity content through the content store.
 
@@ -134,4 +143,7 @@ def search_entity_content(
             entity_types=entity_types,
             repo_ids=repo_ids,
             languages=languages,
+            artifact_types=artifact_types,
+            template_dialects=template_dialects,
+            iac_relevant=iac_relevant,
         )

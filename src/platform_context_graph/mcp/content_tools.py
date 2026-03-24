@@ -93,6 +93,9 @@ class ContentToolMixin:
             pattern=pattern,
             repo_ids=args.get("repo_ids"),
             languages=args.get("languages"),
+            artifact_types=args.get("artifact_types"),
+            template_dialects=args.get("template_dialects"),
+            iac_relevant=args.get("iac_relevant"),
         )
 
     def search_entity_content_tool(
@@ -109,4 +112,7 @@ class ContentToolMixin:
             entity_types=args.get("entity_types"),
             repo_ids=args.get("repo_ids"),
             languages=args.get("languages"),
+            artifact_types=args.get("artifact_types"),
+            template_dialects=args.get("template_dialects"),
+            iac_relevant=args.get("iac_relevant"),
         )

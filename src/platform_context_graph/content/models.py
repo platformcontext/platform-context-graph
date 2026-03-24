@@ -20,6 +20,9 @@ class ContentFileEntry:
     relative_path: str
     content: str
     language: str | None = None
+    artifact_type: str | None = None
+    template_dialect: str | None = None
+    iac_relevant: bool = False
     commit_sha: str | None = None
     indexed_at: datetime = field(
         default_factory=lambda: datetime.now(tz=timezone.utc)
@@ -53,6 +56,9 @@ class ContentEntityEntry:
     end_line: int
     source_cache: str
     language: str | None = None
+    artifact_type: str | None = None
+    template_dialect: str | None = None
+    iac_relevant: bool = False
     start_byte: int | None = None
     end_byte: int | None = None
     indexed_at: datetime = field(

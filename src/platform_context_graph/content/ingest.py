@@ -12,6 +12,7 @@ from ..repository_identity import (
     relative_path_from_local,
     repository_metadata,
 )
+from ..tools.languages.templated_detection import infer_content_metadata
 from .identity import canonical_content_entity_id
 from .models import ContentEntityEntry, ContentFileEntry
 
@@ -133,12 +134,17 @@ def prepare_content_entries(
     relative_path = _portable_relative_path(file_path, repo_local_path)
     file_content = _read_text(file_path)
     file_lines = file_content.splitlines() if file_content is not None else []
+    metadata = infer_content_metadata(
+        relative_path=Path(relative_path),
+        content=file_content or "",
+    )
 
     entities = _build_entity_entries(
         file_data=file_data,
         repository=repository,
         relative_path=relative_path,
         file_lines=file_lines,
+        metadata=metadata,
     )
 
     file_entry = None
@@ -148,6 +154,9 @@ def prepare_content_entries(
             relative_path=relative_path,
             content=file_content,
             language=file_data.get("lang"),
+            artifact_type=metadata.artifact_type,
+            template_dialect=metadata.template_dialect,
+            iac_relevant=metadata.iac_relevant,
             commit_sha=_git_commit_sha(repo_local_path),
         )
 
@@ -160,6 +169,7 @@ def _build_entity_entries(
     repository: dict[str, Any],
     relative_path: str,
     file_lines: list[str],
+    metadata: Any,
 ) -> list[ContentEntityEntry]:
     """Build content-store entity rows and attach canonical UIDs to items."""
 
@@ -211,6 +221,9 @@ def _build_entity_entries(
                 start_byte=item.get("start_byte"),
                 end_byte=item.get("end_byte"),
                 language=item.get("lang") or file_data.get("lang"),
+                artifact_type=metadata.artifact_type,
+                template_dialect=metadata.template_dialect,
+                iac_relevant=metadata.iac_relevant,
                 source_cache=source_cache,
             )
         )

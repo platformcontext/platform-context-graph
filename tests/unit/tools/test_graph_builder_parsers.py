@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import logging
 from pathlib import Path
 import threading
+from types import SimpleNamespace
 
 from platform_context_graph.tools import graph_builder_parsers
 
@@ -102,3 +103,73 @@ def test_tree_sitter_parser_creates_distinct_parsers_per_thread(
         results = [first.result(timeout=1.0), second.result(timeout=1.0)]
 
     assert {result["parser_token"] for result in results} == {"parser-a", "parser-b"}
+
+
+def test_build_parser_registry_registers_raw_text_search_parsers() -> None:
+    """Registry should include raw-text search handlers for non-code IaC files."""
+
+    registry = graph_builder_parsers.build_parser_registry(lambda _key: "false")
+
+    assert ".j2" in registry
+    assert ".tpl" in registry
+    assert ".conf" in registry
+    assert "__dockerfile__" in registry
+
+
+def test_parse_file_uses_raw_text_parser_for_dockerfile(tmp_path: Path) -> None:
+    """Direct parsing should treat Dockerfiles as searchable raw text."""
+
+    repo_path = tmp_path / "service"
+    repo_path.mkdir()
+    dockerfile = repo_path / "Dockerfile"
+    dockerfile.write_text(
+        "FROM python:3.12-slim\nRUN pip install -r requirements.txt\n",
+        encoding="utf-8",
+    )
+    builder = SimpleNamespace(
+        parsers=graph_builder_parsers.build_parser_registry(lambda _key: "false")
+    )
+
+    result = graph_builder_parsers.parse_file(
+        builder,
+        repo_path,
+        dockerfile,
+        False,
+        get_config_value_fn=lambda _key: "false",
+        debug_log_fn=lambda *_args, **_kwargs: None,
+        error_logger_fn=lambda *_args, **_kwargs: None,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert result["path"] == str(dockerfile)
+    assert result["repo_path"] == str(repo_path)
+    assert result["lang"] == "dockerfile"
+    assert result["functions"] == []
+
+
+def test_parse_file_uses_raw_text_parser_for_conf_j2(tmp_path: Path) -> None:
+    """Templated config files should parse as searchable raw text, not error out."""
+
+    repo_path = tmp_path / "infra"
+    repo_path.mkdir()
+    file_path = repo_path / "templates" / "site.conf.j2"
+    file_path.parent.mkdir()
+    file_path.write_text("ServerName {{ host_name }}\n", encoding="utf-8")
+    builder = SimpleNamespace(
+        parsers=graph_builder_parsers.build_parser_registry(lambda _key: "false")
+    )
+
+    result = graph_builder_parsers.parse_file(
+        builder,
+        repo_path,
+        file_path,
+        False,
+        get_config_value_fn=lambda _key: "false",
+        debug_log_fn=lambda *_args, **_kwargs: None,
+        error_logger_fn=lambda *_args, **_kwargs: None,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert result["path"] == str(file_path)
+    assert result["lang"] == "config_template"
+    assert "error" not in result

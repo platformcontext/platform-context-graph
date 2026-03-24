@@ -79,9 +79,10 @@ def collect_supported_files(
     Returns:
         Supported file paths rooted at ``path``.
     """
-    supported_extensions = set(builder.parsers.keys())
+    from .graph_builder_raw_text import parser_key_for_path
+
     if path.is_file():
-        return [path] if path.suffix in supported_extensions else []
+        return [path] if parser_key_for_path(path, builder.parsers) else []
 
     ignore_dirs = get_ignored_dir_names(get_config_value_fn=get_config_value_fn)
     telemetry = get_observability_fn()
@@ -99,7 +100,7 @@ def collect_supported_files(
         dirs[:] = kept_dirs
         for filename in sorted(filenames):
             file_path = Path(root) / filename
-            if file_path.suffix in supported_extensions:
+            if parser_key_for_path(file_path, builder.parsers):
                 files.append(file_path)
     return files
 

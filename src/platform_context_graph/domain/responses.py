@@ -65,7 +65,17 @@ class ContentLine(BaseModel):
     content: str
 
 
-class FileContentResponse(BaseModel):
+class ContentMetadataFields(BaseModel):
+    """Metadata attached to indexed content rows and search matches."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_type: str | None = None
+    template_dialect: str | None = None
+    iac_relevant: bool | None = None
+
+
+class FileContentResponse(ContentMetadataFields):
     """Portable file-content response for HTTP and MCP consumers."""
 
     model_config = ConfigDict(extra="forbid")
@@ -83,7 +93,7 @@ class FileContentResponse(BaseModel):
     repo_access: RepoAccess | None = None
 
 
-class FileLinesResponse(BaseModel):
+class FileLinesResponse(ContentMetadataFields):
     """Portable file line-range response for HTTP and MCP consumers."""
 
     model_config = ConfigDict(extra="forbid")
@@ -99,7 +109,7 @@ class FileLinesResponse(BaseModel):
     repo_access: RepoAccess | None = None
 
 
-class EntityContentResponse(BaseModel):
+class EntityContentResponse(ContentMetadataFields):
     """Portable entity-content response for HTTP and MCP consumers."""
 
     model_config = ConfigDict(extra="forbid")
@@ -174,7 +184,7 @@ class IngesterScanRequestResponse(BaseModel):
     scan_requested_by: str | None = None
 
 
-class FileContentMatch(BaseModel):
+class FileContentMatch(ContentMetadataFields):
     """Search match returned for file-content queries."""
 
     model_config = ConfigDict(extra="forbid")
@@ -196,7 +206,7 @@ class FileContentSearchResponse(BaseModel):
     error: str | None = None
 
 
-class EntityContentMatch(BaseModel):
+class EntityContentMatch(ContentMetadataFields):
     """Search match returned for entity-content queries."""
 
     model_config = ConfigDict(extra="forbid")

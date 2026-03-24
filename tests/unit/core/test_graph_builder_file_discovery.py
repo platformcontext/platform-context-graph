@@ -459,6 +459,47 @@ def test_collect_supported_files_records_hidden_directory_skip_metrics(
     )
 
 
+def test_collect_supported_files_includes_raw_text_iac_candidates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Discovery should include searchable raw-text IaC files, not just parser suffixes."""
+
+    builder = _make_builder()
+    builder.parsers.update(
+        {
+            ".j2": object(),
+            ".tpl": object(),
+            ".conf": object(),
+            "__dockerfile__": object(),
+        }
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value", _config_value
+    )
+
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM python:3.12-slim\n", encoding="utf-8")
+    apache_template = tmp_path / "roles" / "apache" / "templates" / "site.conf.j2"
+    apache_template.parent.mkdir(parents=True)
+    apache_template.write_text("ServerName {{ host_name }}\n", encoding="utf-8")
+    terraform_template = tmp_path / "templates" / "dashboard.tpl"
+    terraform_template.parent.mkdir(parents=True)
+    terraform_template.write_text('{"region":"${aws_region}"}\n', encoding="utf-8")
+    python_file = tmp_path / "app.py"
+    python_file.write_text("print('ok')\n", encoding="utf-8")
+    ignored = tmp_path / "README.md"
+    ignored.write_text("# docs\n", encoding="utf-8")
+
+    files = builder._collect_supported_files(tmp_path)
+
+    assert files == [
+        dockerfile,
+        python_file,
+        apache_template,
+        terraform_template,
+    ]
+
+
 def test_add_repository_to_graph_persists_remote_first_repository_metadata(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
