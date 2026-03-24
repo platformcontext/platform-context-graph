@@ -1,5 +1,8 @@
 """Generic helpers for the handwritten YAML infrastructure parser."""
 
+from __future__ import annotations
+
+import re
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +34,16 @@ def _construct_unknown_tag(
 
 _PermissiveSafeLoader.add_multi_constructor("", _construct_unknown_tag)
 
+_JINJA_EXPR_PLACEHOLDER = "__PCG_JINJA_EXPR__"
+_JINJA_CONTROL_PREFIXES = ("{%", "{%-", "{#")
+_JINJA_CONTROL_SUFFIXES = ("%}", "-%}", "#}")
+_JINJA_MAPPING_EXPR_RE = re.compile(
+    r"(^\s*[^#\n][^:\n]*:\s*)(\{\{.*\}\})(\s*(?:#.*)?)$"
+)
+_JINJA_SEQUENCE_EXPR_RE = re.compile(
+    r"(^\s*-\s*)(\{\{.*\}\})(\s*(?:#.*)?)$"
+)
+
 
 def _load_all_yaml_documents(content: str) -> list[Any]:
     """Load YAML documents with permissive tag handling."""
@@ -42,6 +55,111 @@ def _load_yaml_document(content: str) -> Any:
     """Load a single YAML document with permissive tag handling."""
 
     return yaml.load(content, Loader=_PermissiveSafeLoader)
+
+
+def _is_jinja_control_line(line: str) -> bool:
+    """Return whether a line is a standalone Jinja control/comment line."""
+
+    stripped = line.strip()
+    return stripped.startswith(_JINJA_CONTROL_PREFIXES)
+
+
+def _sanitize_jinja_templated_yaml(content: str) -> str | None:
+    """Strip Jinja control blocks and normalize expression-only scalar values."""
+
+    if not any(marker in content for marker in ("{%", "{#", "{{")):
+        return None
+
+    sanitized_lines: list[str] = []
+    in_control_block = False
+    block_suffix = ""
+    changed = False
+    for line in content.splitlines():
+        stripped = line.strip()
+        if in_control_block:
+            changed = True
+            if block_suffix and block_suffix in stripped:
+                in_control_block = False
+                block_suffix = ""
+            continue
+        if _is_jinja_control_line(line):
+            changed = True
+            if not any(suffix in stripped for suffix in _JINJA_CONTROL_SUFFIXES):
+                block_suffix = "#}" if stripped.startswith("{#") else "%}"
+                in_control_block = True
+            continue
+        updated_line = _JINJA_MAPPING_EXPR_RE.sub(
+            lambda match: (
+                f'{match.group(1)}"{_JINJA_EXPR_PLACEHOLDER}"{match.group(3)}'
+            ),
+            line,
+        )
+        updated_line = _JINJA_SEQUENCE_EXPR_RE.sub(
+            lambda match: (
+                f'{match.group(1)}"{_JINJA_EXPR_PLACEHOLDER}"{match.group(3)}'
+            ),
+            updated_line,
+        )
+        if updated_line != line:
+            changed = True
+        sanitized_lines.append(updated_line)
+    if not changed:
+        return None
+    return "\n".join(sanitized_lines) + "\n"
+
+
+def _load_all_yaml_with_fallbacks(content: str) -> list[Any]:
+    """Load YAML documents while tolerating tabs and Jinja-templated control lines."""
+
+    tried_variants = [content]
+    if "\t" in content:
+        tried_variants.append(content.expandtabs(2))
+    sanitized = _sanitize_jinja_templated_yaml(content)
+    if sanitized is not None:
+        tried_variants.append(sanitized)
+        if "\t" in sanitized:
+            tried_variants.append(sanitized.expandtabs(2))
+
+    last_error: yaml.YAMLError | None = None
+    seen: set[str] = set()
+    for candidate in tried_variants:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            return _load_all_yaml_documents(candidate)
+        except yaml.YAMLError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    return []
+
+
+def _load_yaml_with_fallbacks(content: str) -> Any:
+    """Load a single YAML document while tolerating templated YAML patterns."""
+
+    tried_variants = [content]
+    if "\t" in content:
+        tried_variants.append(content.expandtabs(2))
+    sanitized = _sanitize_jinja_templated_yaml(content)
+    if sanitized is not None:
+        tried_variants.append(sanitized)
+        if "\t" in sanitized:
+            tried_variants.append(sanitized.expandtabs(2))
+
+    last_error: yaml.YAMLError | None = None
+    seen: set[str] = set()
+    for candidate in tried_variants:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            return _load_yaml_document(candidate)
+        except yaml.YAMLError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    return None
 
 
 def build_empty_result(
@@ -93,13 +211,8 @@ def safe_load_all(content: str) -> list[Any]:
         Parsed documents, or an empty list when parsing fails.
     """
     try:
-        return _load_all_yaml_documents(content)
+        return _load_all_yaml_with_fallbacks(content)
     except yaml.YAMLError as exc:
-        if "cannot start any token" in str(exc) and "\t" in content:
-            try:
-                return _load_all_yaml_documents(content.expandtabs(2))
-            except yaml.YAMLError:
-                pass
         warning_logger(f"YAML parse error: {exc}")
         return []
 
@@ -132,13 +245,7 @@ def load_yaml_dict(file_path: Path, context_name: str) -> dict[str, Any] | None:
     """
     try:
         content = file_path.read_text(encoding="utf-8")
-        try:
-            document = _load_yaml_document(content)
-        except yaml.YAMLError as exc:
-            if "cannot start any token" in str(exc) and "\t" in content:
-                document = _load_yaml_document(content.expandtabs(2))
-            else:
-                raise
+        document = _load_yaml_with_fallbacks(content)
     except (OSError, yaml.YAMLError) as exc:
         warning_logger(f"Cannot parse {context_name}: {exc}")
         return None
