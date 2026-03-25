@@ -220,7 +220,7 @@ def search_file_content(
     with trace_query(
         "content_postgres_file_search",
         attributes={
-            "pcg.content.pattern": pattern,
+            "pcg.content.pattern_length": len(pattern),
             "pcg.content.repo_count": len(repo_ids or []),
         },
     ):
@@ -319,7 +319,7 @@ def search_entity_content(
     with trace_query(
         "content_postgres_entity_search",
         attributes={
-            "pcg.content.pattern": pattern,
+            "pcg.content.pattern_length": len(pattern),
             "pcg.content.repo_count": len(repo_ids or []),
         },
     ):

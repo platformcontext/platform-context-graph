@@ -163,3 +163,45 @@ def test_request_context_without_ids_serializes_null_request_fields(
     record = records[0]
     assert record["request_id"] is None
     assert record["correlation_id"] is None
+
+
+def test_emit_log_call_falls_back_for_message_only_logger() -> None:
+    """Legacy message-only loggers should still be callable through the shim."""
+
+    debug_log = importlib.import_module("platform_context_graph.utils.debug_log")
+    captured: list[str] = []
+
+    def legacy_logger(message: str) -> None:
+        captured.append(message)
+
+    debug_log.emit_log_call(
+        legacy_logger,
+        "legacy message",
+        event_name="test.legacy",
+        extra_keys={"repo_id": "repository:r_123"},
+    )
+
+    assert captured == ["legacy message"]
+
+
+def test_emit_log_call_reraises_internal_type_errors() -> None:
+    """The compatibility shim must not swallow real logger implementation bugs."""
+
+    debug_log = importlib.import_module("platform_context_graph.utils.debug_log")
+
+    def broken_logger(
+        message: str,
+        *,
+        event_name: str | None = None,
+        extra_keys: dict[str, object] | None = None,
+        exc_info: object = None,
+    ) -> None:
+        del message, event_name, extra_keys, exc_info
+        raise TypeError("boom")
+
+    with pytest.raises(TypeError, match="boom"):
+        debug_log.emit_log_call(
+            broken_logger,
+            "broken message",
+            event_name="test.broken",
+        )

@@ -184,8 +184,10 @@ class TestMCPServer:
             assert (
                 request_records[-1]["extra_keys"]["jsonrpc_method"] == "tools/call"
             )
+            assert "transport" not in request_records[-1]["extra_keys"]
             assert tool_records[-1]["request_id"] == "rpc-42"
             assert tool_records[-1]["extra_keys"]["tool_name"] == "get_index_status"
+            assert "transport" not in tool_records[-1]["extra_keys"]
 
         asyncio.run(run_test())
 

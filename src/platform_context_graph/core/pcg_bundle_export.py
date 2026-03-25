@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
-import traceback
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -105,7 +104,6 @@ class _BundleExportMixin:
                 extra_keys={"output_path": str(output_path)},
                 exc_info=exc,
             )
-            traceback.print_exc()
             return False, error_msg
 
     def _extract_metadata(self, repo_path: Path | None) -> dict[str, Any]:

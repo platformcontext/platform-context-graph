@@ -143,6 +143,59 @@ def test_postgres_content_writes_emit_tracing_spans(monkeypatch) -> None:
     assert "pcg.content.postgres.upsert_entities" in span_names
 
 
+def test_postgres_search_spans_do_not_capture_raw_search_patterns(monkeypatch) -> None:
+    """Search traces should record safe pattern metadata instead of raw user input."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    observability = importlib.import_module("platform_context_graph.observability")
+    observability.reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv(
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "http://otel-collector.monitoring.svc.cluster.local:4317",
+    )
+    span_exporter = InMemorySpanExporter()
+    observability.initialize_observability(
+        component="api",
+        span_exporter=span_exporter,
+        metric_reader=InMemoryMetricReader(),
+    )
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = []
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    provider.search_file_content(pattern="secret-token", repo_ids=["repository:r_test"])
+    provider.search_entity_content(
+        pattern="secret-token",
+        repo_ids=["repository:r_test"],
+    )
+
+    spans_by_name = {span.name: span for span in span_exporter.get_finished_spans()}
+    file_search = spans_by_name["pcg.query.content_postgres_file_search"]
+    entity_search = spans_by_name["pcg.query.content_postgres_entity_search"]
+
+    assert file_search.attributes["pcg.content.pattern_length"] == len("secret-token")
+    assert file_search.attributes["pcg.content.repo_count"] == 1
+    assert "pcg.content.pattern" not in file_search.attributes
+    assert entity_search.attributes["pcg.content.pattern_length"] == len(
+        "secret-token"
+    )
+    assert entity_search.attributes["pcg.content.repo_count"] == 1
+    assert "pcg.content.pattern" not in entity_search.attributes
+
+
 def test_get_file_content_returns_content_metadata(monkeypatch) -> None:
     """File reads should surface persisted metadata fields."""
 

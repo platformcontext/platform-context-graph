@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Any
 
@@ -45,6 +46,9 @@ def emit_log_call(
 
     if not callable(logger_fn):
         return None
+    signature_supports_kwargs = _supports_structured_kwargs(logger_fn)
+    if signature_supports_kwargs is False:
+        return logger_fn(message)
     try:
         return logger_fn(
             message,
@@ -52,8 +56,45 @@ def emit_log_call(
             extra_keys=extra_keys,
             exc_info=exc_info,
         )
-    except TypeError:
+    except TypeError as exc:
+        if not _looks_like_unsupported_kwargs(exc):
+            raise
         return logger_fn(message)
+
+
+def _supports_structured_kwargs(logger_fn: Any) -> bool | None:
+    """Return whether a callable advertises support for structured log kwargs."""
+
+    try:
+        signature = inspect.signature(logger_fn)
+    except (TypeError, ValueError):
+        return None
+
+    parameters = signature.parameters.values()
+    if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters):
+        return True
+
+    supported = {
+        parameter.name
+        for parameter in signature.parameters.values()
+        if parameter.kind
+        in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+    }
+    return {"event_name", "extra_keys", "exc_info"}.issubset(supported)
+
+
+def _looks_like_unsupported_kwargs(exc: TypeError) -> bool:
+    """Return whether a ``TypeError`` came from incompatible call kwargs."""
+
+    message = str(exc)
+    return (
+        "unexpected keyword argument" in message
+        or "positional argument but" in message
+        or "positional arguments but" in message
+    )
 
 
 def debug_log(

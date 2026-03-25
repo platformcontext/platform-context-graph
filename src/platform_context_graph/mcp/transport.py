@@ -131,7 +131,6 @@ class ServerTransportMixin:
                             event_name="mcp.request.received",
                             extra_keys={
                                 "jsonrpc_method": method or "unknown",
-                                "transport": transport,
                                 "jsonrpc_request_id": request_id_value,
                             },
                         )
@@ -141,7 +140,6 @@ class ServerTransportMixin:
                             event_name="mcp.notification.received",
                             extra_keys={
                                 "jsonrpc_method": method or "unknown",
-                                "transport": transport,
                                 "jsonrpc_request_id": request_id_value,
                             },
                         )
@@ -181,7 +179,6 @@ class ServerTransportMixin:
                             event_name="mcp.tool.started",
                             extra_keys={
                                 "tool_name": str(tool_name or "unknown"),
-                                "transport": transport,
                                 "argument_keys": sorted(args.keys()),
                             },
                         )
@@ -247,7 +244,6 @@ class ServerTransportMixin:
                                     event_name="mcp.tool.completed",
                                     extra_keys={
                                         "tool_name": tool_metric_name,
-                                        "transport": transport,
                                         "success": tool_success,
                                         "duration_seconds": round(
                                             time.perf_counter() - tool_started, 6
@@ -283,7 +279,6 @@ class ServerTransportMixin:
                         event_name="mcp.request.completed",
                         extra_keys={
                             "jsonrpc_method": str(method or "unknown"),
-                            "transport": transport,
                             "success": request_success,
                             "duration_seconds": round(
                                 time.perf_counter() - request_started, 6

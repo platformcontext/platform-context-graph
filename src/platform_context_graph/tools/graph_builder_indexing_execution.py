@@ -530,8 +530,7 @@ async def build_graph_from_path_async(
             if detected_lang and is_scip_available(detected_lang):
                 emit_log_call(
                     info_logger_fn,
-                    f"SCIP_INDEXER=true — using SCIP for language: {detected_lang}"
-                    ,
+                    f"SCIP_INDEXER=true — using SCIP for language: {detected_lang}",
                     event_name="index.scip.started",
                     extra_keys={"path": str(path), "language": detected_lang},
                 )
@@ -542,16 +541,14 @@ async def build_graph_from_path_async(
             if detected_lang:
                 emit_log_call(
                     warning_logger_fn,
-                    f"SCIP_INDEXER=true but scip-{detected_lang} binary not found. Falling back to Tree-sitter. Install it first."
-                    ,
+                    f"SCIP_INDEXER=true but scip-{detected_lang} binary not found. Falling back to Tree-sitter. Install it first.",
                     event_name="index.scip.unavailable",
                     extra_keys={"path": str(path), "language": detected_lang},
                 )
             else:
                 emit_log_call(
                     info_logger_fn,
-                    "SCIP_INDEXER=true but no SCIP-supported language detected. Falling back to Tree-sitter."
-                    ,
+                    "SCIP_INDEXER=true but no SCIP-supported language detected. Falling back to Tree-sitter.",
                     event_name="index.scip.unsupported",
                     extra_keys={"path": str(path)},
                 )
