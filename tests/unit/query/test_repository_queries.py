@@ -95,6 +95,8 @@ def test_repository_graph_counts_excludes_class_methods_from_top_level_count() -
     assert counts["top_level_function_count"] == 17908
     assert counts["class_method_count"] == 22363
     assert counts["total_function_count"] == 40271
+    assert "CALL (r) {" in recorded_query["query"]
+    assert "WITH r" not in recorded_query["query"]
     assert "NOT EXISTS {" in recorded_query["query"]
     assert "(:Class)-[:CONTAINS]->(fn)" in recorded_query["query"]
 

@@ -34,46 +34,38 @@ def repository_graph_counts(session: Any, repo: dict[str, Any]) -> dict[str, int
         f"""
         MATCH (r:Repository)
         WHERE {repository_scope_predicate()}
-        CALL {{
-            WITH r
+        CALL (r) {{
             OPTIONAL MATCH (r)-[:CONTAINS]->(root_file:File)
             RETURN count(DISTINCT root_file) AS root_file_count
         }}
-        CALL {{
-            WITH r
+        CALL (r) {{
             OPTIONAL MATCH (r)-[:CONTAINS]->(root_directory:Directory)
             RETURN count(DISTINCT root_directory) AS root_directory_count
         }}
-        CALL {{
-            WITH r
+        CALL (r) {{
             OPTIONAL MATCH (r)-[:CONTAINS*]->(file:File)
             RETURN count(DISTINCT file) AS file_count
         }}
-        CALL {{
-            WITH r
+        CALL (r) {{
             OPTIONAL MATCH (r)-[:CONTAINS*]->(:File)-[:CONTAINS]->(fn:Function)
             WHERE NOT EXISTS {{
                 MATCH (:Class)-[:CONTAINS]->(fn)
             }}
             RETURN count(DISTINCT fn) AS top_level_function_count
         }}
-        CALL {{
-            WITH r
+        CALL (r) {{
             OPTIONAL MATCH (r)-[:CONTAINS*]->(:Class)-[:CONTAINS]->(fn:Function)
             RETURN count(DISTINCT fn) AS class_method_count
         }}
-        CALL {{
-            WITH r
+        CALL (r) {{
             OPTIONAL MATCH (r)-[:CONTAINS*]->(fn:Function)
             RETURN count(DISTINCT fn) AS total_function_count
         }}
-        CALL {{
-            WITH r
+        CALL (r) {{
             OPTIONAL MATCH (r)-[:CONTAINS*]->(cls:Class)
             RETURN count(DISTINCT cls) AS class_count
         }}
-        CALL {{
-            WITH r
+        CALL (r) {{
             OPTIONAL MATCH (r)-[:CONTAINS*]->(:File)-[:IMPORTS]->(module:Module)
             RETURN count(DISTINCT module) AS module_count
         }}

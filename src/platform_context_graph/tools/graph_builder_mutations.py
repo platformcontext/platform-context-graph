@@ -65,6 +65,7 @@ def delete_repository_from_graph(
     repo_identifier: str,
     *,
     info_logger_fn: Any,
+    debug_logger_fn: Any | None = None,
     warning_logger_fn: Any,
 ) -> bool:
     """Delete a repository subtree from the graph.
@@ -73,6 +74,7 @@ def delete_repository_from_graph(
         builder: ``GraphBuilder`` facade instance.
         repo_identifier: Canonical repository id or repository path.
         info_logger_fn: Info logger callable.
+        debug_logger_fn: Debug logger callable for expected no-op deletes.
         warning_logger_fn: Warning logger callable.
 
     Returns:
@@ -99,9 +101,11 @@ def delete_repository_from_graph(
             lookup_values=lookup_values,
         ).single()
         if not result or result["cnt"] == 0:
-            warning_logger_fn(
-                f"Attempted to delete non-existent repository: {display_identifier}"
-            )
+            if debug_logger_fn is not None:
+                debug_logger_fn(
+                    f"Repository already absent from graph; nothing to delete: "
+                    f"{display_identifier}"
+                )
             return False
 
         session.run(
