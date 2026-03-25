@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 from platform_context_graph.tools.graph_builder_mutations import (
     delete_repository_from_graph,
@@ -24,7 +25,7 @@ class _FakeSession:
     """Context-managed fake Neo4j session."""
 
     def __init__(self, *, repository_count: int = 1) -> None:
-        self.calls: list[tuple[str, dict[str, str]]] = []
+        self.calls: list[tuple[str, dict[str, Any]]] = []
         self._repository_count = repository_count
 
     def __enter__(self):
