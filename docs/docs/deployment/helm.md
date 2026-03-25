@@ -42,6 +42,34 @@ helm template platform-context-graph ./deploy/helm/platform-context-graph
 | `observability.otel.*` | OTLP settings for traces and metrics |
 | `env.PCG_LOG_FORMAT` | Shared log format. Keep this at `json` in deployed environments. |
 
+Typical OTEL collector override:
+
+```yaml
+env:
+  PCG_LOG_FORMAT: json
+
+observability:
+  environment: ops-qa
+  otel:
+    enabled: true
+    endpoint: http://otel-collector.monitoring.svc.cluster.local:4317
+    protocol: grpc
+    insecure: true
+    tracesExporter: otlp
+    metricsExporter: otlp
+    logsExporter: none
+```
+
+The chart renders the same OTEL environment contract into both runtime workloads:
+
+- the API `Deployment`
+- the ingester `StatefulSet`, including bootstrap and repo-sync containers where applicable
+
+It also sets a distinct `OTEL_SERVICE_NAME` per runtime so traces stay easy to split in Jaeger:
+
+- `platform-context-graph-api`
+- `platform-context-graph-ingester`
+
 Typical override for a small deployment:
 
 ```yaml

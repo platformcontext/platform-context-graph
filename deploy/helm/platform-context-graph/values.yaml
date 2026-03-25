@@ -58,6 +58,7 @@ ingester:
 env:
   DEFAULT_DATABASE: neo4j
   NEO4J_DATABASE: neo4j
+  PCG_LOG_FORMAT: json
   LIBRARY_LOG_LEVEL: WARNING
 
 contentStore:
@@ -71,6 +72,9 @@ observability:
     protocol: grpc
     insecure: true
     headers: {}
+    tracesExporter: otlp
+    metricsExporter: otlp
+    logsExporter: none
     resourceAttributes: {}
     excludedUrls:
       - /health

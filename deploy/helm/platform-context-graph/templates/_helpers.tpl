@@ -80,8 +80,11 @@ app.kubernetes.io/component: ingester
 
 {{- define "pcg.renderOtelEnv" -}}
 {{- if .Values.observability.otel.enabled }}
+{{- $component := default "api" .component -}}
 - name: PCG_DEPLOYMENT_ENVIRONMENT
   value: {{ .Values.observability.environment | quote }}
+- name: OTEL_SERVICE_NAME
+  value: {{ printf "platform-context-graph-%s" $component | quote }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: {{ .Values.observability.otel.endpoint | quote }}
 - name: OTEL_EXPORTER_OTLP_PROTOCOL
@@ -91,11 +94,11 @@ app.kubernetes.io/component: ingester
 - name: OTEL_EXPORTER_OTLP_HEADERS
   value: {{ include "pcg.joinStringMap" .Values.observability.otel.headers | quote }}
 - name: OTEL_TRACES_EXPORTER
-  value: "otlp"
+  value: {{ .Values.observability.otel.tracesExporter | quote }}
 - name: OTEL_METRICS_EXPORTER
-  value: "otlp"
+  value: {{ .Values.observability.otel.metricsExporter | quote }}
 - name: OTEL_LOGS_EXPORTER
-  value: "none"
+  value: {{ .Values.observability.otel.logsExporter | quote }}
 - name: OTEL_METRIC_EXPORT_INTERVAL
   value: {{ mul (int .Values.observability.otel.metricExportIntervalSeconds) 1000 | quote }}
 - name: OTEL_PYTHON_FASTAPI_EXCLUDED_URLS

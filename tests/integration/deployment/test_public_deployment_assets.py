@@ -16,6 +16,9 @@ ARGOCD_BASE_DIR = REPO_ROOT / "deploy" / "argocd" / "base"
 ARGOCD_AWS_DIR = REPO_ROOT / "deploy" / "argocd" / "overlays" / "aws"
 COMPOSE_FILE = REPO_ROOT / "docker-compose.yaml"
 COMPOSE_TEMPLATE_FILE = REPO_ROOT / "docker-compose.template.yml"
+OTEL_COLLECTOR_CONFIG_FILE = (
+    REPO_ROOT / "deploy" / "observability" / "otel-collector-config.yaml"
+)
 DASHBOARD_FILE = (
     REPO_ROOT
     / "deploy"
@@ -232,6 +235,51 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
         assert envs["PCG_REPOSITORY_RULES_JSON"] == "[]"
 
 
+@pytest.mark.parametrize("compose_file", [COMPOSE_FILE, COMPOSE_TEMPLATE_FILE])
+def test_compose_stack_includes_local_otel_collector_and_jaeger(
+    compose_file: Path,
+) -> None:
+    data = yaml.safe_load(compose_file.read_text())
+    services = data["services"]
+
+    assert "otel-collector" in services
+    assert "jaeger" in services
+
+    collector = services["otel-collector"]
+    jaeger = services["jaeger"]
+
+    assert any(
+        str(volume).endswith(
+            "deploy/observability/otel-collector-config.yaml:"
+            "/etc/otelcol-contrib/config.yaml:ro"
+        )
+        for volume in collector["volumes"]
+    )
+    assert jaeger["environment"]["COLLECTOR_OTLP_ENABLED"] == "true"
+
+    for service_name in [
+        "bootstrap-index",
+        "platform-context-graph",
+        "repo-sync",
+    ]:
+        envs = _compose_service_envs(services[service_name])
+        assert envs["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4317"
+        assert envs["OTEL_EXPORTER_OTLP_PROTOCOL"] == "grpc"
+        assert envs["OTEL_EXPORTER_OTLP_INSECURE"] == "true"
+        assert envs["OTEL_TRACES_EXPORTER"] == "otlp"
+        assert envs["OTEL_METRICS_EXPORTER"] == "otlp"
+        assert envs["OTEL_LOGS_EXPORTER"] == "none"
+
+    assert OTEL_COLLECTOR_CONFIG_FILE.exists()
+    collector_config = yaml.safe_load(OTEL_COLLECTOR_CONFIG_FILE.read_text())
+    assert collector_config["receivers"]["otlp"]["protocols"]["grpc"]["endpoint"] == (
+        "0.0.0.0:4317"
+    )
+    assert collector_config["exporters"]["otlp/jaeger"]["endpoint"] == (
+        "jaeger:4317"
+    )
+
+
 def test_compose_stack_includes_service_and_external_test_database() -> None:
     data = yaml.safe_load(COMPOSE_FILE.read_text())
     services = data["services"]
@@ -253,20 +301,37 @@ def test_chart_renders_otel_env_for_all_runtime_containers_when_enabled() -> Non
         "--set",
         "observability.environment=ops-qa",
     )
+    deployment = next(doc for doc in docs if doc["kind"] == "Deployment")
     statefulset = next(doc for doc in docs if doc["kind"] == "StatefulSet")
-    pod_spec = statefulset["spec"]["template"]["spec"]
+    pod_specs = [
+        deployment["spec"]["template"]["spec"],
+        statefulset["spec"]["template"]["spec"],
+    ]
 
-    for container in [
-        *pod_spec.get("initContainers", []),
-        *pod_spec.get("containers", []),
-    ]:
-        env_names = {env["name"] for env in container.get("env", [])}
-        assert "OTEL_EXPORTER_OTLP_ENDPOINT" in env_names
-        assert "OTEL_EXPORTER_OTLP_PROTOCOL" in env_names
-        assert "OTEL_TRACES_EXPORTER" in env_names
-        assert "OTEL_METRICS_EXPORTER" in env_names
-        assert "OTEL_LOGS_EXPORTER" in env_names
-        assert "OTEL_RESOURCE_ATTRIBUTES" in env_names
+    expected_service_names = [
+        "platform-context-graph-api",
+        "platform-context-graph-ingester",
+    ]
+
+    for pod_spec, expected_service_name in zip(pod_specs, expected_service_names, strict=True):
+        for container in [
+            *pod_spec.get("initContainers", []),
+            *pod_spec.get("containers", []),
+        ]:
+            env_by_name = {
+                env["name"]: env.get("value", "")
+                for env in container.get("env", [])
+                if "name" in env
+            }
+            assert env_by_name["OTEL_EXPORTER_OTLP_ENDPOINT"].startswith(
+                "otel-collector.monitoring.svc.cluster.local:4317"
+            )
+            assert env_by_name["OTEL_EXPORTER_OTLP_PROTOCOL"] == "grpc"
+            assert env_by_name["OTEL_TRACES_EXPORTER"] == "otlp"
+            assert env_by_name["OTEL_METRICS_EXPORTER"] == "otlp"
+            assert env_by_name["OTEL_LOGS_EXPORTER"] == "none"
+            assert env_by_name["OTEL_SERVICE_NAME"] == expected_service_name
+            assert "OTEL_RESOURCE_ATTRIBUTES" in env_by_name
 
 
 def test_chart_renders_content_store_envs_for_all_runtime_containers() -> None:
@@ -298,6 +363,12 @@ def test_argocd_base_values_include_external_content_store_and_repository_rules(
     assert values["neo4j"]["uri"].startswith("bolt://")
     assert values["repoSync"]["source"]["rules"] == []
     assert values["contentStore"]["dsn"].startswith("postgresql://")
+    assert values["env"]["PCG_LOG_FORMAT"] == "json"
+    assert values["observability"]["otel"]["enabled"] is False
+    assert values["observability"]["otel"]["protocol"] == "grpc"
+    assert values["observability"]["otel"]["tracesExporter"] == "otlp"
+    assert values["observability"]["otel"]["metricsExporter"] == "otlp"
+    assert values["observability"]["otel"]["logsExporter"] == "none"
 
 
 def test_product_dashboard_artifact_exists_and_is_valid_json() -> None:

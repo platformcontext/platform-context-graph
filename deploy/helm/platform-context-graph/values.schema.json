@@ -79,6 +79,9 @@
               "type": "object",
               "additionalProperties": { "type": "string" }
             },
+            "tracesExporter": { "type": "string" },
+            "metricsExporter": { "type": "string" },
+            "logsExporter": { "type": "string" },
             "resourceAttributes": {
               "type": "object",
               "additionalProperties": { "type": "string" }

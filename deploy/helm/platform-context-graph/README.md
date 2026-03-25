@@ -39,6 +39,20 @@ repoSync:
     rules:
       - exact: myorg/my-repo
       - regex: myorg/platform-.*
+
+env:
+  PCG_LOG_FORMAT: json
+
+observability:
+  environment: dev
+  otel:
+    enabled: true
+    endpoint: http://otel-collector.monitoring.svc.cluster.local:4317
+    protocol: grpc
+    insecure: true
+    tracesExporter: otlp
+    metricsExporter: otlp
+    logsExporter: none
 ```
 
 See [docs/docs/deployment/helm.md](../../../docs/docs/deployment/helm.md) for the full deployment guide.

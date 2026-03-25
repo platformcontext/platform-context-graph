@@ -74,7 +74,7 @@ spec:
             - name: NEO4J_URI
               value: {{ .Values.neo4j.uri | quote }}
             {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}
-            {{- include "pcg.renderOtelEnv" . | nindent 12 }}
+            {{- include "pcg.renderOtelEnv" (dict "Values" .Values "component" "ingester") | nindent 12 }}
             - name: NEO4J_USERNAME
               valueFrom:
                 secretKeyRef:
