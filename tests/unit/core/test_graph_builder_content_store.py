@@ -552,11 +552,12 @@ def test_commit_file_batch_logs_top_files_for_large_variable_batches(
     )
 
     info_logs: list[str] = []
+    debug_logs: list[str] = []
     commit_file_batch_to_graph(
         builder,
         files,
         Path(repo_path),
-        debug_log_fn=lambda *_a, **_kw: None,
+        debug_log_fn=debug_logs.append,
         info_logger_fn=info_logs.append,
         warning_logger_fn=lambda *_a, **_kw: None,
     )
@@ -570,8 +571,9 @@ def test_commit_file_batch_logs_top_files_for_large_variable_batches(
             and "src/medium.php(150)" in line
             and "src/small.php(50)" in line
         )
-        for line in info_logs
-    ), info_logs
+        for line in debug_logs
+    ), debug_logs
+    assert not any("Prepared graph entity batch detail" in line for line in info_logs)
 
 
 def test_begin_transaction_falls_back_when_driver_raises_runtime_error() -> None:

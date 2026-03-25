@@ -470,11 +470,13 @@ def commit_file_batch_to_graph(
                             accumulator,
                             repo_path_str=repo_path_str,
                             info_logger_fn=info_logger_fn,
+                            debug_logger_fn=debug_log_fn,
                         )
                         flush_write_batches(
                             tx,
                             accumulator,
                             info_logger_fn=info_logger_fn,
+                            debug_logger_fn=debug_log_fn,
                         )
                         accumulator = empty_accumulator()
 
@@ -483,8 +485,14 @@ def commit_file_batch_to_graph(
                         accumulator,
                         repo_path_str=repo_path_str,
                         info_logger_fn=info_logger_fn,
+                        debug_logger_fn=debug_log_fn,
                     )
-                    flush_write_batches(tx, accumulator, info_logger_fn=info_logger_fn)
+                    flush_write_batches(
+                        tx,
+                        accumulator,
+                        info_logger_fn=info_logger_fn,
+                        debug_logger_fn=debug_log_fn,
+                    )
                 if is_explicit:
                     tx.commit()
             except Exception:

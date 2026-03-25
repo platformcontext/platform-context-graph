@@ -58,9 +58,9 @@ sizes or database settings:
 
 - repository discovery summary logs:
   `supported=... pcgignore_excluded=... gitignore_excluded=... indexed=...`
-- graph entity batch preparation logs:
+- debug-only graph entity batch preparation logs:
   `Prepared graph entity batches for <repo>: Variable=..., Function=...`
-- per-batch write timing logs:
+- debug-only per-batch write timing logs:
   `Graph write batch entity label=Variable rows=... uid_rows=... name_rows=... duration=...s`
 
 The first benchmark repos for local tuning should remain:
