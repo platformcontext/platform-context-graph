@@ -10,7 +10,11 @@ from typing import Any
 from platform_context_graph.tools.graph_builder_indexing import merge_import_maps
 
 from .coordinator_finalize import finalize_repository_batch
-from .coordinator_models import ACTIVE_REPO_STATES, RepositorySnapshot
+from .memory_diagnostics import log_memory_usage
+from .coordinator_models import (
+    ACTIVE_REPO_STATES,
+    RepositorySnapshotMetadata,
+)
 
 
 def prepare_repository_snapshots(
@@ -18,32 +22,35 @@ def prepare_repository_snapshots(
     run_state: Any,
     repo_paths: list[Path],
     resumed: bool,
-    load_snapshot_fn: Any,
+    load_snapshot_metadata_fn: Any,
+    snapshot_file_data_exists_fn: Any,
     persist_run_state_fn: Any,
-) -> tuple[list[RepositorySnapshot], dict[str, list[str]], list[tuple[Path, bool]]]:
+) -> tuple[list[Path], dict[str, list[str]], list[tuple[Path, bool]]]:
     """Restore saved repository snapshots and identify repos that need parsing."""
 
-    snapshots: list[RepositorySnapshot] = []
+    committed_repo_paths: list[Path] = []
     merged_imports_map: dict[str, list[str]] = {}
     parse_targets: list[tuple[Path, bool]] = []
 
     for repo_path in repo_paths:
         repo_state = run_state.repositories[str(repo_path.resolve())]
         if repo_state.status == "completed":
-            snapshot = load_snapshot_fn(run_state.run_id, repo_path)
-            if snapshot is not None:
-                snapshots.append(snapshot)
-                merge_import_maps(merged_imports_map, snapshot.imports_map)
+            snapshot_metadata = load_snapshot_metadata_fn(run_state.run_id, repo_path)
+            if snapshot_metadata is not None and snapshot_file_data_exists_fn(
+                run_state.run_id, repo_path
+            ):
+                committed_repo_paths.append(repo_path.resolve())
+                merge_import_maps(merged_imports_map, snapshot_metadata.imports_map)
                 continue
             repo_state.status = "pending"
-            repo_state.error = "Completed repo snapshot missing; re-parsing repository"
+            repo_state.error = "Completed repo snapshot incomplete; re-parsing repository"
             persist_run_state_fn(run_state)
 
         parse_targets.append(
             (repo_path, resumed and repo_state.status in ACTIVE_REPO_STATES)
         )
 
-    return snapshots, merged_imports_map, parse_targets
+    return committed_repo_paths, merged_imports_map, parse_targets
 
 
 async def process_repository_snapshots(
@@ -65,22 +72,27 @@ async def process_repository_snapshots(
     index_queue_depth_fn: Any,
     parse_repository_snapshot_async_fn: Any,
     commit_repository_snapshot_fn: Any,
-    load_snapshot_fn: Any,
-    save_snapshot_fn: Any,
+    iter_snapshot_file_data_batches_fn: Any,
+    load_snapshot_metadata_fn: Any,
+    snapshot_file_data_exists_fn: Any,
+    save_snapshot_metadata_fn: Any,
+    save_snapshot_file_data_fn: Any,
     persist_run_state_fn: Any,
     record_checkpoint_metric_fn: Any,
     update_pending_repository_gauge_fn: Any,
     publish_runtime_progress_fn: Any,
+    publish_run_repository_coverage_fn: Any,
     utc_now_fn: Any,
     telemetry: Any,
-) -> tuple[list[RepositorySnapshot], dict[str, list[str]]]:
+) -> tuple[list[Path], dict[str, list[str]]]:
     """Parse repositories concurrently and commit them one at a time."""
 
-    snapshots, merged_imports_map, parse_targets = prepare_repository_snapshots(
+    committed_repo_paths, merged_imports_map, parse_targets = prepare_repository_snapshots(
         run_state=run_state,
         repo_paths=repo_paths,
         resumed=resumed,
-        load_snapshot_fn=load_snapshot_fn,
+        load_snapshot_metadata_fn=load_snapshot_metadata_fn,
+        snapshot_file_data_exists_fn=snapshot_file_data_exists_fn,
         persist_run_state_fn=persist_run_state_fn,
     )
     parse_workers = parse_worker_count_fn()
@@ -88,7 +100,7 @@ async def process_repository_snapshots(
     queue_sentinel = object()
     parse_semaphore = asyncio_module.Semaphore(parse_workers)
 
-    def _publish_indexing_state() -> None:
+    def _publish_runtime_state() -> None:
         """Publish the current pending-repo count and indexing progress snapshot."""
 
         update_pending_repository_gauge_fn(
@@ -142,7 +154,7 @@ async def process_repository_snapshots(
             repo_state.commit_duration_seconds = commit_duration_seconds
         if persist:
             persist_run_state_fn(run_state)
-            _publish_indexing_state()
+            _publish_runtime_state()
 
     async def _parse_repository(
         repo_path: Path,
@@ -173,7 +185,7 @@ async def process_repository_snapshots(
                 if force or now_monotonic - last_progress_publish >= 1.0:
                     last_progress_publish = now_monotonic
                     persist_run_state_fn(run_state)
-                    _publish_indexing_state()
+                    _publish_runtime_state()
 
             with telemetry.start_span(
                 "pcg.index.repository",
@@ -239,7 +251,20 @@ async def process_repository_snapshots(
                     phase="parsed",
                     persist=False,
                 )
-                save_snapshot_fn(run_state.run_id, snapshot)
+                save_snapshot_file_data_fn(
+                    run_state.run_id,
+                    Path(snapshot.repo_path),
+                    snapshot.file_data,
+                )
+                save_snapshot_metadata_fn(
+                    run_state.run_id,
+                    RepositorySnapshotMetadata(
+                        repo_path=snapshot.repo_path,
+                        file_count=snapshot.file_count,
+                        imports_map=snapshot.imports_map,
+                    ),
+                )
+                snapshot.file_data = []
                 record_checkpoint_metric_fn(
                     component=component,
                     mode=family,
@@ -248,7 +273,14 @@ async def process_repository_snapshots(
                     status="completed",
                 )
                 persist_run_state_fn(run_state)
-                _publish_indexing_state()
+                _publish_runtime_state()
+                publish_run_repository_coverage_fn(
+                    builder=builder,
+                    run_state=run_state,
+                    repo_paths=[repo_path],
+                    include_graph_counts=False,
+                    include_content_counts=False,
+                )
                 await snapshot_queue.put((repo_path, snapshot, started))
                 return
         except Exception as exc:
@@ -265,7 +297,14 @@ async def process_repository_snapshots(
                 )
             run_state.last_error = str(exc)
             persist_run_state_fn(run_state)
-            _publish_indexing_state()
+            _publish_runtime_state()
+            publish_run_repository_coverage_fn(
+                builder=builder,
+                run_state=run_state,
+                repo_paths=[Path(repo_key)],
+                include_graph_counts=True,
+                include_content_counts=True,
+            )
             telemetry.record_index_repositories(
                 component=component,
                 phase="failed",
@@ -289,7 +328,7 @@ async def process_repository_snapshots(
                 f"{''.join(tb)}"
             )
         finally:
-            _publish_indexing_state()
+            _publish_runtime_state()
 
     async def _commit_snapshots() -> None:
         """Commit parsed repository snapshots from the queue in arrival order."""
@@ -303,6 +342,8 @@ async def process_repository_snapshots(
             repo_path, snapshot, started = item
             repo_state = run_state.repositories[str(repo_path.resolve())]
             commit_started: float | None = None
+            last_commit_progress_publish = 0.0
+            last_commit_coverage_publish = 0.0
             try:
                 commit_started_at = utc_now_fn()
                 _update_repo_progress(
@@ -316,15 +357,75 @@ async def process_repository_snapshots(
                     commit_duration_seconds=None,
                 )
                 persist_run_state_fn(run_state)
-                _publish_indexing_state()
+                _publish_runtime_state()
+                publish_run_repository_coverage_fn(
+                    builder=builder,
+                    run_state=run_state,
+                    repo_paths=[repo_path],
+                    include_graph_counts=False,
+                    include_content_counts=False,
+                )
                 commit_started = time.perf_counter()
+
+                def _commit_progress_callback(
+                    *,
+                    processed_files: int,
+                    total_files: int,
+                    current_file: str | None = None,
+                    committed: bool = True,
+                ) -> None:
+                    """Persist commit heartbeats and partial coverage during batch writes."""
+
+                    nonlocal last_commit_progress_publish
+                    nonlocal last_commit_coverage_publish
+
+                    _update_repo_progress(
+                        repo_state,
+                        current_file=current_file,
+                        persist=False,
+                    )
+                    now_monotonic = time.monotonic()
+                    is_final_batch = committed and processed_files >= total_files
+
+                    if (
+                        committed
+                        or is_final_batch
+                        or now_monotonic - last_commit_progress_publish >= 1.0
+                    ):
+                        last_commit_progress_publish = now_monotonic
+                        persist_run_state_fn(run_state)
+                        _publish_runtime_state()
+
+                    if (
+                        committed
+                        and (
+                            is_final_batch
+                            or now_monotonic - last_commit_coverage_publish >= 15.0
+                        )
+                    ):
+                        last_commit_coverage_publish = now_monotonic
+                        publish_run_repository_coverage_fn(
+                            builder=builder,
+                            run_state=run_state,
+                            repo_paths=[repo_path],
+                            include_graph_counts=True,
+                            include_content_counts=True,
+                        )
+
                 commit_repository_snapshot_fn(
                     builder,
                     snapshot,
                     is_dependency=is_dependency,
+                    progress_callback=_commit_progress_callback,
+                    iter_snapshot_file_data_batches_fn=lambda repo_path, batch_size: iter_snapshot_file_data_batches_fn(
+                        run_state.run_id,
+                        repo_path,
+                        batch_size=batch_size,
+                    ),
                 )
-                snapshots.append(snapshot)
+                committed_repo_paths.append(repo_path.resolve())
                 merge_import_maps(merged_imports_map, snapshot.imports_map)
+                snapshot.file_data = []
                 commit_finished_at = utc_now_fn()
                 _update_repo_progress(
                     repo_state,
@@ -341,7 +442,21 @@ async def process_repository_snapshots(
                     ),
                 )
                 persist_run_state_fn(run_state)
-                _publish_indexing_state()
+                _publish_runtime_state()
+                publish_run_repository_coverage_fn(
+                    builder=builder,
+                    run_state=run_state,
+                    repo_paths=[repo_path],
+                    include_graph_counts=True,
+                    include_content_counts=True,
+                )
+                log_memory_usage(
+                    info_logger_fn,
+                    context=(
+                        "Repository commit memory "
+                        f"repo={repo_path.resolve()}"
+                    ),
+                )
                 telemetry.record_index_repositories(
                     component=component,
                     phase="completed",
@@ -375,7 +490,14 @@ async def process_repository_snapshots(
                 )
                 run_state.last_error = str(exc)
                 persist_run_state_fn(run_state)
-                _publish_indexing_state()
+                _publish_runtime_state()
+                publish_run_repository_coverage_fn(
+                    builder=builder,
+                    run_state=run_state,
+                    repo_paths=[repo_path],
+                    include_graph_counts=True,
+                    include_content_counts=True,
+                )
                 telemetry.record_index_repositories(
                     component=component,
                     phase="commit_incomplete",
@@ -397,7 +519,7 @@ async def process_repository_snapshots(
                 )
             finally:
                 snapshot_queue.task_done()
-                _publish_indexing_state()
+                _publish_runtime_state()
 
     commit_task = asyncio_module.create_task(_commit_snapshots())
     parse_tasks = [
@@ -425,7 +547,7 @@ async def process_repository_snapshots(
         await commit_task
     if escaped_parse_exception is not None:
         raise escaped_parse_exception
-    return snapshots, merged_imports_map
+    return committed_repo_paths, merged_imports_map
 
 
 __all__ = [

@@ -302,21 +302,21 @@ def search_entity_content(
     append_array_filter(
         filters=filters,
         params=params,
-        column="entity_type",
+        column="ce.entity_type",
         parameter_name="entity_types",
         values=entity_types,
     )
     append_array_filter(
         filters=filters,
         params=params,
-        column="repo_id",
+        column="ce.repo_id",
         parameter_name="repo_ids",
         values=repo_ids,
     )
     append_array_filter(
         filters=filters,
         params=params,
-        column="language",
+        column="ce.language",
         parameter_name="languages",
         values=languages,
     )

@@ -32,6 +32,8 @@ _READ_ONLY_TOOL_NAMES = {
     "analyze_infra_relationships",
     "get_repo_summary",
     "get_repo_context",
+    "get_repository_coverage",
+    "list_repository_coverage",
     "resolve_entity",
     "get_entity_context",
     "get_workload_context",

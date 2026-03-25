@@ -7,10 +7,15 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from platform_context_graph.core.database import GraphStoreCapabilities
-from platform_context_graph.indexing.coordinator_models import RepositorySnapshot
+from platform_context_graph.indexing.coordinator_models import (
+    RepositorySnapshot,
+    RepositorySnapshotMetadata,
+)
 from platform_context_graph.indexing.coordinator_storage import (
     _graph_store_adapter,
-    _load_snapshot,
+    _iter_snapshot_file_data_batches,
+    _load_snapshot_file_data,
+    _load_snapshot_metadata,
     _save_snapshot,
 )
 from platform_context_graph.tools.graph_builder_schema import (
@@ -18,8 +23,10 @@ from platform_context_graph.tools.graph_builder_schema import (
 )
 
 
-def test_save_snapshot_serializes_nested_path_values(tmp_path, monkeypatch) -> None:
-    """Snapshot persistence should normalize nested ``Path`` values to strings."""
+def test_save_snapshot_persists_metadata_and_file_data_separately(
+    tmp_path, monkeypatch
+) -> None:
+    """Snapshot persistence should normalize data and split heavy file payloads."""
 
     monkeypatch.setattr(
         "platform_context_graph.indexing.coordinator_storage.get_app_home",
@@ -43,11 +50,52 @@ def test_save_snapshot_serializes_nested_path_values(tmp_path, monkeypatch) -> N
 
     _save_snapshot("run-1234", snapshot)
 
-    loaded = _load_snapshot("run-1234", Path(snapshot.repo_path))
-    assert loaded is not None
-    assert (
-        loaded.file_data[0]["metadata"]["origin"] == "/tmp/example-repo/src/example.py"
+    metadata = _load_snapshot_metadata("run-1234", Path(snapshot.repo_path))
+    assert metadata == RepositorySnapshotMetadata(
+        repo_path="/tmp/example-repo",
+        file_count=1,
+        imports_map={"module": ["/tmp/example-repo/src/example.py"]},
     )
+    file_data = _load_snapshot_file_data("run-1234", Path(snapshot.repo_path))
+    assert file_data is not None
+    assert file_data[0]["metadata"]["origin"] == "/tmp/example-repo/src/example.py"
+
+
+def test_iter_snapshot_file_data_batches_streams_saved_rows(
+    tmp_path, monkeypatch
+) -> None:
+    """Saved file-data should be replayable from disk in bounded batches."""
+
+    monkeypatch.setattr(
+        "platform_context_graph.indexing.coordinator_storage.get_app_home",
+        lambda: tmp_path,
+    )
+
+    snapshot = RepositorySnapshot(
+        repo_path="/tmp/example-repo",
+        file_count=3,
+        imports_map={},
+        file_data=[
+            {"path": "/tmp/example-repo/src/a.py", "lang": "python"},
+            {"path": "/tmp/example-repo/src/b.py", "lang": "python"},
+            {"path": "/tmp/example-repo/src/c.py", "lang": "python"},
+        ],
+    )
+
+    _save_snapshot("run-1234", snapshot)
+
+    batches = list(
+        _iter_snapshot_file_data_batches(
+            "run-1234",
+            Path(snapshot.repo_path),
+            batch_size=2,
+        )
+    )
+
+    assert [[item["path"] for item in batch] for batch in batches] == [
+        ["/tmp/example-repo/src/a.py", "/tmp/example-repo/src/b.py"],
+        ["/tmp/example-repo/src/c.py"],
+    ]
 
 
 def test_graph_store_adapter_exposes_capabilities_and_builder_entrypoints() -> None:

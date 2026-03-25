@@ -14,38 +14,37 @@ from platform_context_graph.tools.graph_builder_indexing_execution import (
     finalize_index_batch,
     parse_repository_snapshot_async,
 )
-from platform_context_graph.tools.graph_builder_indexing_types import (
-    RepositoryParseSnapshot,
-)
 
 
-def test_finalize_index_batch_accepts_snapshot_objects() -> None:
-    """Finalize should accept repository snapshot objects without subscripting them."""
+def test_finalize_index_batch_streams_committed_repo_file_data() -> None:
+    """Finalize should stream file data from committed repo paths."""
     recorded: dict[str, object] = {}
+    load_calls: list[Path] = []
 
     def _record_inheritance(file_data: object, imports_map: object) -> None:
-        recorded["inheritance"] = (file_data, imports_map)
+        recorded["inheritance"] = (list(file_data), imports_map)
+
+    def _record_function_calls(file_data: object, imports_map: object) -> dict[str, float]:
+        recorded["function_calls"] = (list(file_data), imports_map)
+        return {"total_duration_seconds": 0.5}
+
+    def _record_infra_links(file_data: object) -> None:
+        recorded["infra_links"] = list(file_data)
 
     builder = SimpleNamespace(
         _create_all_inheritance_links=_record_inheritance,
-        _create_all_function_calls=lambda file_data, imports_map: recorded.setdefault(
-            "function_calls", (file_data, imports_map)
-        ),
-        _create_all_infra_links=lambda file_data: recorded.setdefault(
-            "infra_links", file_data
-        ),
+        _create_all_function_calls=_record_function_calls,
+        _create_all_infra_links=_record_infra_links,
         _materialize_workloads=lambda: recorded.setdefault("workloads", True),
-    )
-    snapshot = RepositoryParseSnapshot(
-        repo_path="/tmp/example",
-        file_count=1,
-        imports_map={"foo": ["bar"]},
-        file_data=[{"path": "/tmp/example/main.py", "functions": []}],
     )
 
     finalize_index_batch(
         builder,
-        snapshots=[snapshot],
+        committed_repo_paths=[Path("/tmp/example")],
+        iter_snapshot_file_data_fn=lambda repo_path: (
+            load_calls.append(repo_path)
+            or iter([{"path": "/tmp/example/main.py", "functions": []}])
+        ),
         merged_imports_map={"foo": ["bar"]},
         info_logger_fn=lambda *_args, **_kwargs: None,
     )
@@ -62,6 +61,7 @@ def test_finalize_index_batch_accepts_snapshot_objects() -> None:
         {"path": "/tmp/example/main.py", "functions": []}
     ]
     assert recorded["workloads"] is True
+    assert load_calls == [Path("/tmp/example"), Path("/tmp/example"), Path("/tmp/example")]
 
 
 def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
@@ -79,20 +79,19 @@ def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
 
     builder = SimpleNamespace(
         _create_all_inheritance_links=lambda *_args, **_kwargs: None,
-        _create_all_function_calls=lambda *_args, **_kwargs: None,
+        _create_all_function_calls=lambda *_args, **_kwargs: {
+            "total_duration_seconds": 0.0
+        },
         _create_all_infra_links=lambda *_args, **_kwargs: None,
         _materialize_workloads=lambda: None,
-    )
-    snapshot = RepositoryParseSnapshot(
-        repo_path="/tmp/example",
-        file_count=1,
-        imports_map={},
-        file_data=[{"path": "/tmp/example/main.py", "functions": []}],
     )
 
     stage_timings = finalize_index_batch(
         builder,
-        snapshots=[snapshot],
+        committed_repo_paths=[Path("/tmp/example")],
+        iter_snapshot_file_data_fn=lambda _repo_path: iter(
+            [{"path": "/tmp/example/main.py", "functions": []}]
+        ),
         merged_imports_map={},
         info_logger_fn=messages.append,
         stage_progress_callback=stages.append,
@@ -113,6 +112,26 @@ def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
         "workloads",
     ]
     assert any("Finalization timings:" in message for message in messages)
+
+
+def test_finalize_index_batch_raises_when_committed_repo_file_data_is_missing() -> None:
+    """Finalization should fail fast when committed repo file data cannot be loaded."""
+
+    builder = SimpleNamespace(
+        _create_all_inheritance_links=lambda *_args, **_kwargs: None,
+        _create_all_function_calls=lambda *_args, **_kwargs: {},
+        _create_all_infra_links=lambda *_args, **_kwargs: None,
+        _materialize_workloads=lambda: None,
+    )
+
+    with pytest.raises(FileNotFoundError, match="Missing file data snapshot"):
+        finalize_index_batch(
+            builder,
+            committed_repo_paths=[Path("/tmp/example")],
+            iter_snapshot_file_data_fn=lambda _repo_path: None,
+            merged_imports_map={},
+            info_logger_fn=lambda *_args, **_kwargs: None,
+        )
 
 
 @pytest.mark.asyncio

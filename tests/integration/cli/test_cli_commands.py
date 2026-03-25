@@ -1,5 +1,5 @@
 import os
-import pytest
+from pathlib import Path
 from typer.testing import CliRunner
 from unittest.mock import AsyncMock, MagicMock, patch
 from platform_context_graph.cli.main import app
@@ -306,6 +306,46 @@ class TestCLICommands:
         # Output might be empty in some test envs, checking exit code is enough integration test
         # assert "No such command" in result.stdout
 
+    @patch("platform_context_graph.cli.commands.bundle_registry.requests.post")
+    def test_bundle_upload_command_posts_bundle_to_remote_service(
+        self,
+        mock_post,
+        tmp_path: Path,
+    ):
+        """`pcg bundle upload` should post a bundle archive to the API service."""
+
+        bundle_path = tmp_path / "dependency.pcg"
+        bundle_path.write_bytes(b"bundle-bytes")
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": True, "message": "imported"}
+        mock_response.text = '{"success":true}'
+        mock_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_response
+
+        result = runner.invoke(
+            app,
+            [
+                "bundle",
+                "upload",
+                str(bundle_path),
+                "--service-url",
+                "http://pcg.local",
+                "--clear",
+                "--timeout-seconds",
+                "900",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "imported" in result.stdout
+        mock_post.assert_called_once()
+        _args, kwargs = mock_post.call_args
+        assert kwargs["data"] == {"clear_existing": "true"}
+        assert kwargs["timeout"] == 900
+        assert kwargs["files"]["bundle"][0] == "dependency.pcg"
+
 
 class TestNeo4jDatabaseNameCLI:
     """Integration tests for NEO4J_DATABASE display in CLI commands."""
@@ -331,7 +371,7 @@ class TestNeo4jDatabaseNameCLI:
         }
         with patch.dict(os.environ, env, clear=False):
             with patch("platform_context_graph.cli.main._load_credentials"):
-                result = runner.invoke(app, ["doctor"])
+                runner.invoke(app, ["doctor"])
 
         mock_test_conn.assert_called_once_with(
             "bolt://localhost:7687", "neo4j", "password", database="mydb"

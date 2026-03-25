@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
+from ...runtime.status_store import get_repository_coverage as get_runtime_repository_coverage
 from .common import canonical_repository_ref, resolve_repository
+from .coverage_data import coverage_summary_from_row
+from .graph_counts import repository_graph_counts
 
 
 def build_repository_stats(session: Any, repo_id: str | None) -> dict[str, Any]:
@@ -24,33 +26,25 @@ def build_repository_stats(session: Any, repo_id: str | None) -> dict[str, Any]:
         if not repo:
             return {"success": False, "error": f"Repository not found: {repo_id}"}
 
-        repo_path = str(Path((repo.get("local_path") or repo["path"])).resolve())
         repo_ref = canonical_repository_ref(repo)
+        counts = repository_graph_counts(session, repo)
+        coverage_summary = coverage_summary_from_row(
+            get_runtime_repository_coverage(repo_id=repo_ref["id"])
+        )
         return {
             "success": True,
             "repository": repo_ref,
             "stats": {
-                "files": _single_count(
-                    session,
-                    "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(f:File) RETURN count(f) as c",
-                    path=repo_path,
-                ),
-                "functions": _single_count(
-                    session,
-                    "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(func:Function) RETURN count(func) as c",
-                    path=repo_path,
-                ),
-                "classes": _single_count(
-                    session,
-                    "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(cls:Class) RETURN count(cls) as c",
-                    path=repo_path,
-                ),
-                "modules": _single_count(
-                    session,
-                    "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(f:File)-[:IMPORTS]->(m:Module) RETURN count(DISTINCT m) as c",
-                    path=repo_path,
-                ),
+                "files": counts["file_count"],
+                "root_files": counts["root_file_count"],
+                "root_directories": counts["root_directory_count"],
+                "functions": counts["total_function_count"],
+                "top_level_functions": counts["top_level_function_count"],
+                "class_methods": counts["class_method_count"],
+                "classes": counts["class_count"],
+                "modules": counts["module_count"],
             },
+            "coverage": coverage_summary,
         }
 
     repo_count = _single_count(session, "MATCH (r:Repository) RETURN count(r) as c")

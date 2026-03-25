@@ -354,13 +354,13 @@ CODEBASE_TOOLS = {
     },
     "get_repository_stats": {
         "name": "get_repository_stats",
-        "description": "Get statistics about indexed repositories, including counts of files, functions, classes, and modules. Can show overall database statistics or stats for a specific repository.",
+        "description": "Get graph-derived statistics about indexed repositories, including recursive files, root files/directories, total functions, top-level functions, class methods, classes, and modules. Use canonical repository IDs when scoping to one repository.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "repo_path": {
+                "repo_id": {
                     "type": "string",
-                    "description": "Optional: Path to a specific repository. If not provided, returns overall database statistics.",
+                    "description": "Optional canonical repository identifier. If not provided, returns overall database statistics.",
                 }
             },
         },

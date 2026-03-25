@@ -52,6 +52,25 @@ class TestMCPServer:
 
         asyncio.run(run_test())
 
+    def test_get_index_status_is_listed_and_callable(self, mock_server):
+        """Runtime status tools advertised by MCP must also dispatch through tools/call."""
+
+        async def run_test():
+            mock_server.get_index_status_tool = MagicMock(
+                return_value={"run_id": "run-123", "status": "running"}
+            )
+
+            result = await mock_server.handle_tool_call(
+                "get_index_status", {"target": "/tmp/repos"}
+            )
+
+            mock_server.get_index_status_tool.assert_called_once_with(
+                target="/tmp/repos"
+            )
+            assert result == {"run_id": "run-123", "status": "running"}
+
+        asyncio.run(run_test())
+
     def test_unknown_tool(self, mock_server):
         """Test unknown tool returns error."""
 
@@ -228,13 +247,15 @@ class TestMCPServer:
                 "results": {},
             }
 
-            repo_result = mock_server.get_repository_stats_tool(repo_path="/repo")
+            repo_result = mock_server.get_repository_stats_tool(
+                repo_id="repository:r_ab12cd34"
+            )
             infra_result = mock_server.find_infra_resources_tool(
                 query="rds", category="terraform"
             )
 
         mock_repo_stats.assert_called_once_with(
-            mock_server.code_finder, repo_id="/repo"
+            mock_server.code_finder, repo_id="repository:r_ab12cd34"
         )
         mock_search_infra.assert_called_once_with(
             mock_server.db_manager,
@@ -245,6 +266,79 @@ class TestMCPServer:
         )
         assert repo_result == {"success": True, "stats": {"files": 3}}
         assert infra_result == {"query": "rds", "category": "terraform", "results": {}}
+
+    def test_repository_wrappers_require_canonical_repo_ids(self, mock_server):
+        """Repository MCP tools should use canonical repo IDs, not repo names or paths."""
+
+        with (
+            patch(
+                "platform_context_graph.mcp.server.repository_queries.get_repository_context"
+            ) as mock_repo_context,
+            patch(
+                "platform_context_graph.mcp.server.repository_queries.get_repository_stats"
+            ) as mock_repo_stats,
+            patch(
+                "platform_context_graph.mcp.server.repository_queries.get_repository_coverage"
+            ) as mock_repo_coverage,
+            patch(
+                "platform_context_graph.mcp.server.repository_queries.list_repository_coverage"
+            ) as mock_list_repo_coverage,
+        ):
+            mock_repo_context.return_value = {
+                "repository": {"id": "repository:r_ab12cd34"}
+            }
+            mock_repo_stats.return_value = {"success": True, "stats": {"files": 3}}
+            mock_repo_coverage.return_value = {
+                "run_id": "run-123",
+                "repo_id": "repository:r_ab12cd34",
+                "status": "completed",
+            }
+            mock_list_repo_coverage.return_value = {
+                "run_id": "run-123",
+                "repositories": [],
+            }
+
+            context_result = mock_server.get_repo_context_tool(
+                repo_id="repository:r_ab12cd34"
+            )
+            stats_result = mock_server.get_repository_stats_tool(
+                repo_id="repository:r_ab12cd34"
+            )
+            coverage_result = mock_server.get_repository_coverage_tool(
+                repo_id="repository:r_ab12cd34",
+                run_id="run-123",
+            )
+            coverage_list_result = mock_server.list_repository_coverage_tool(
+                run_id="run-123",
+                only_incomplete=True,
+                statuses=["running"],
+                limit=25,
+            )
+
+        mock_repo_context.assert_called_once_with(
+            mock_server.db_manager,
+            repo_id="repository:r_ab12cd34",
+        )
+        mock_repo_stats.assert_called_once_with(
+            mock_server.code_finder,
+            repo_id="repository:r_ab12cd34",
+        )
+        mock_repo_coverage.assert_called_once_with(
+            mock_server.db_manager,
+            repo_id="repository:r_ab12cd34",
+            run_id="run-123",
+        )
+        mock_list_repo_coverage.assert_called_once_with(
+            mock_server.db_manager,
+            run_id="run-123",
+            only_incomplete=True,
+            statuses=["running"],
+            limit=25,
+        )
+        assert context_result == {"repository": {"id": "repository:r_ab12cd34"}}
+        assert stats_result == {"success": True, "stats": {"files": 3}}
+        assert coverage_result["status"] == "completed"
+        assert coverage_list_result == {"run_id": "run-123", "repositories": []}
 
     def test_context_wrappers_route_through_query_services(self, mock_server):
         with (

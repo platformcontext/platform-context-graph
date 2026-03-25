@@ -138,3 +138,97 @@ def test_commit_file_batch_to_graph_flushes_incrementally_when_buffer_grows(
 
     assert observed_flush_sizes == [4, 2]
     assert session.tx.committed is True
+
+
+def test_commit_file_batch_to_graph_consumes_write_results(monkeypatch) -> None:
+    """Explicit Neo4j batch transactions should consume every write result."""
+
+    repo_path = Path("/repo")
+    repo_row = {
+        "id": "repository:r_test",
+        "name": "repo",
+        "path": str(repo_path),
+        "local_path": str(repo_path),
+        "remote_url": "https://github.com/example/repo",
+        "repo_slug": "example/repo",
+        "has_remote": True,
+    }
+    files = [
+        {
+            "path": str(repo_path / "src" / "file.php"),
+            "repo_path": str(repo_path),
+            "lang": "php",
+            "functions": [
+                {"name": "work", "line_number": 1, "args": ["value"]},
+            ],
+            "imports": [{"name": "Vendor\\\\Package", "line_number": 2}],
+        }
+    ]
+
+    class _Result:
+        def __init__(self, row=None, *, on_consume=None) -> None:
+            self._row = row
+            self._on_consume = on_consume
+
+        def single(self):
+            if self._row is None:
+                return None
+            return SimpleNamespace(data=lambda: self._row)
+
+        def consume(self):
+            if callable(self._on_consume):
+                self._on_consume()
+
+    class _Tx:
+        def __init__(self) -> None:
+            self.run_calls = 0
+            self.consume_calls = 0
+
+        def run(self, _query, parameters=None, **kwargs):
+            _ = dict(parameters or {}, **kwargs)
+            self.run_calls += 1
+            return _Result(on_consume=lambda: setattr(self, "consume_calls", self.consume_calls + 1))
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+    class _Session:
+        def __init__(self) -> None:
+            self.tx = _Tx()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def run(self, _query, parameters=None, **kwargs):
+            _ = dict(parameters or {}, **kwargs)
+            return _Result(repo_row)
+
+        def begin_transaction(self):
+            return self.tx
+
+    session = _Session()
+    builder = SimpleNamespace(
+        driver=SimpleNamespace(session=MagicMock(return_value=session)),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
+        lambda: None,
+    )
+
+    commit_file_batch_to_graph(
+        builder,
+        files,
+        repo_path,
+        debug_log_fn=lambda *_a, **_kw: None,
+        info_logger_fn=lambda *_a, **_kw: None,
+        warning_logger_fn=lambda *_a, **_kw: None,
+    )
+
+    assert session.tx.run_calls > 0
+    assert session.tx.consume_calls == session.tx.run_calls

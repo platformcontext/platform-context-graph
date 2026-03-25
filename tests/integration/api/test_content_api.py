@@ -172,6 +172,29 @@ def test_content_search_routes_accept_metadata_filters() -> None:
     assert entity_response.json()["matches"][0]["template_dialect"] == "jinja"
 
 
+def test_content_search_routes_accept_repo_ids() -> None:
+    """File and entity search routes should accept canonical repo filters."""
+
+    with _make_client() as client:
+        file_response = client.post(
+            "/api/v0/content/files/search",
+            json={
+                "pattern": "payments",
+                "repo_ids": ["repository:r_ab12cd34"],
+            },
+        )
+        entity_response = client.post(
+            "/api/v0/content/entities/search",
+            json={
+                "pattern": "process_payment",
+                "repo_ids": ["repository:r_ab12cd34"],
+            },
+        )
+
+    assert file_response.status_code == 200
+    assert entity_response.status_code == 200
+
+
 def test_content_search_routes_are_exposed_in_openapi() -> None:
     """Document the file and entity content search surfaces."""
 

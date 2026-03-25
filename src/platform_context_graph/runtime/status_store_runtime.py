@@ -20,6 +20,20 @@ _COUNT_FIELDS = frozenset(
         "failed_repositories",
     }
 )
+_COVERAGE_COUNT_FIELDS = frozenset(
+    {
+        "discovered_file_count",
+        "graph_recursive_file_count",
+        "content_file_count",
+        "content_entity_count",
+        "root_file_count",
+        "root_directory_count",
+        "top_level_function_count",
+        "class_method_count",
+        "total_function_count",
+        "class_count",
+    }
+)
 
 
 def _content_store_enabled() -> bool:
@@ -88,6 +102,49 @@ def request_ingester_scan(
     if store is None or not store.enabled:
         return None
     return store.request_scan(ingester=ingester, requested_by=requested_by)
+
+
+def upsert_repository_coverage(**kwargs: Any) -> None:
+    """Persist one durable repository coverage row when configured."""
+
+    store = get_runtime_status_store()
+    if store is None or not store.enabled:
+        return
+    for key in _COVERAGE_COUNT_FIELDS:
+        if key in kwargs:
+            kwargs[key] = _normalize_count(kwargs[key])
+    store.upsert_repository_coverage(**kwargs)
+
+
+def get_repository_coverage(
+    *, repo_id: str, run_id: str | None = None
+) -> dict[str, Any] | None:
+    """Return one repository coverage row when the runtime store is configured."""
+
+    store = get_runtime_status_store()
+    if store is None or not store.enabled:
+        return None
+    return store.get_repository_coverage(repo_id=repo_id, run_id=run_id)
+
+
+def list_repository_coverage(
+    *,
+    run_id: str | None = None,
+    only_incomplete: bool = False,
+    statuses: list[str] | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Return durable repository coverage rows when the runtime store is configured."""
+
+    store = get_runtime_status_store()
+    if store is None or not store.enabled:
+        return []
+    return store.list_repository_coverage(
+        run_id=run_id,
+        only_incomplete=only_incomplete,
+        statuses=statuses,
+        limit=limit,
+    )
 
 
 def claim_ingester_scan_request(*, ingester: str) -> dict[str, Any] | None:

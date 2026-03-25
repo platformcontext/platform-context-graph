@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 from collections.abc import Sequence
 from contextlib import contextmanager
@@ -28,6 +29,8 @@ except ImportError:  # pragma: no cover - exercised when optional dependency mis
 __all__ = [
     "PostgresContentProvider",
 ]
+
+DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE = 500
 
 
 class PostgresContentProvider:
@@ -141,9 +144,20 @@ class PostgresContentProvider:
         if not entries:
             return
 
+        raw_batch_size = os.getenv("PCG_CONTENT_ENTITY_UPSERT_BATCH_SIZE")
+        try:
+            batch_size = max(
+                1,
+                min(
+                    int(raw_batch_size or DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE),
+                    len(entries),
+                ),
+            )
+        except ValueError:
+            batch_size = min(DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE, len(entries))
+
         with self._cursor() as cursor:
-            cursor.executemany(
-                """
+            query = """
                 INSERT INTO content_entities (
                     entity_id,
                     repo_id,
@@ -192,28 +206,29 @@ class PostgresContentProvider:
                     iac_relevant = EXCLUDED.iac_relevant,
                     source_cache = EXCLUDED.source_cache,
                     indexed_at = EXCLUDED.indexed_at
-                """,
-                [
-                    {
-                        "entity_id": entry.entity_id,
-                        "repo_id": entry.repo_id,
-                        "relative_path": entry.relative_path,
-                        "entity_type": entry.entity_type,
-                        "entity_name": entry.entity_name,
-                        "start_line": entry.start_line,
-                        "end_line": entry.end_line,
-                        "start_byte": entry.start_byte,
-                        "end_byte": entry.end_byte,
-                        "language": entry.language,
-                        "artifact_type": entry.artifact_type,
-                        "template_dialect": entry.template_dialect,
-                        "iac_relevant": entry.iac_relevant,
-                        "source_cache": entry.source_cache,
-                        "indexed_at": entry.indexed_at,
-                    }
-                    for entry in entries
-                ],
-            )
+                """
+            rows = [
+                {
+                    "entity_id": entry.entity_id,
+                    "repo_id": entry.repo_id,
+                    "relative_path": entry.relative_path,
+                    "entity_type": entry.entity_type,
+                    "entity_name": entry.entity_name,
+                    "start_line": entry.start_line,
+                    "end_line": entry.end_line,
+                    "start_byte": entry.start_byte,
+                    "end_byte": entry.end_byte,
+                    "language": entry.language,
+                    "artifact_type": entry.artifact_type,
+                    "template_dialect": entry.template_dialect,
+                    "iac_relevant": entry.iac_relevant,
+                    "source_cache": entry.source_cache,
+                    "indexed_at": entry.indexed_at,
+                }
+                for entry in entries
+            ]
+            for start in range(0, len(rows), batch_size):
+                cursor.executemany(query, rows[start : start + batch_size])
 
     def delete_repository_content(self, repo_id: str) -> None:
         """Delete all cached content rows for one repository.
@@ -237,6 +252,24 @@ class PostgresContentProvider:
                 """,
                 {"repo_id": repo_id},
             )
+
+    def get_repository_content_counts(self, *, repo_id: str) -> dict[str, int]:
+        """Return file/entity content row counts for one repository."""
+
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    (SELECT count(*) FROM content_files WHERE repo_id = %(repo_id)s) AS file_count,
+                    (SELECT count(*) FROM content_entities WHERE repo_id = %(repo_id)s) AS entity_count
+                """,
+                {"repo_id": repo_id},
+            )
+            row = cursor.fetchone() or {}
+        return {
+            "content_file_count": int(row.get("file_count") or 0),
+            "content_entity_count": int(row.get("entity_count") or 0),
+        }
 
     def get_file_content(self, *, repo_id: str, relative_path: str) -> dict[str, Any] | None:
         """Return file content for one repo-relative file path.

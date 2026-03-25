@@ -8,6 +8,7 @@ Adds a code repository to the graph database. This is the first step for any pro
 
 !!! info "Excluding Files (.pcgignore)"
     PCG already skips hidden and well-known cache directories such as `.git`, `.terraform`, `.terragrunt-cache`, `.pulumi`, `.crossplane`, `.serverless`, `.aws-sam`, and `cdk.out`.
+    It also excludes built-in dependency roots such as `vendor/`, `node_modules/`, `site-packages/`, and `deps/` before parse by default.
     Use `.pcgignore` for project-specific exclusions beyond those built-in defaults.
     **[📄 Read the .pcgignore Guide](pcgignore.md)**
 
@@ -104,6 +105,15 @@ Download and install a popular library bundle from our registry.
 
 ```bash
 pcg load flask
+```
+
+### `pcg bundle upload`
+Upload a local `.pcg` bundle to a running PCG HTTP service. This is the
+supported opt-in path when you want dependency internals on a remote instance
+without indexing vendored source trees by default.
+
+```bash
+pcg bundle upload vendor-lib.pcg --service-url http://localhost:8080 --clear
 ```
 
 ### `pcg registry`

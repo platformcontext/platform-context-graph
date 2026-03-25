@@ -348,6 +348,35 @@ def test_search_entity_content_falls_back_to_inherited_metadata(monkeypatch) -> 
     assert result["matches"][0]["iac_relevant"] is True
 
 
+def test_search_entity_content_qualifies_repo_filters(monkeypatch) -> None:
+    """Entity search should qualify joined columns when repo filters are used."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = []
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    provider.search_entity_content(
+        pattern="CKFinder",
+        repo_ids=["repository:r_test"],
+        languages=["php"],
+        entity_types=["Variable"],
+    )
+
+    query, params = cursor.execute.call_args.args
+    assert "ce.repo_id = ANY" in query
+    assert "ce.language = ANY" in query
+    assert "ce.entity_type = ANY" in query
+    assert params["repo_ids"] == ["repository:r_test"]
+    assert params["languages"] == ["php"]
+    assert params["entity_types"] == ["Variable"]
+
+
 def test_upsert_entities_persists_metadata(monkeypatch) -> None:
     """Entity upserts should persist inherited metadata columns."""
 
@@ -388,6 +417,43 @@ def test_upsert_entities_persists_metadata(monkeypatch) -> None:
     assert params["artifact_type"] == "terraform_hcl"
     assert params["template_dialect"] == "terraform_template"
     assert params["iac_relevant"] is True
+
+
+def test_upsert_entities_chunks_large_batches(monkeypatch) -> None:
+    """Entity upserts should split large batches into smaller executemany calls."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+    monkeypatch.setenv("PCG_CONTENT_ENTITY_UPSERT_BATCH_SIZE", "2")
+
+    provider.upsert_entities(
+        [
+            ContentEntityEntry(
+                entity_id=f"content-entity:e_{index}",
+                repo_id="repository:r_test",
+                relative_path="main.tf",
+                entity_type="TerraformModule",
+                entity_name=f"service_{index}",
+                start_line=index + 1,
+                end_line=index + 1,
+                source_cache=f"module service_{index}",
+                language="hcl",
+            )
+            for index in range(5)
+        ]
+    )
+
+    assert cursor.executemany.call_count == 3
+    first_chunk = cursor.executemany.call_args_list[0].args[1]
+    last_chunk = cursor.executemany.call_args_list[-1].args[1]
+    assert len(first_chunk) == 2
+    assert len(last_chunk) == 1
 
 
 def test_upsert_runtime_status_persists_ingester_status(monkeypatch) -> None:
@@ -517,6 +583,152 @@ def test_get_runtime_status_returns_persisted_row(monkeypatch) -> None:
     assert result["pulled_repositories"] == 200
     assert result["in_sync_repositories"] == 200
     assert result["scan_request_state"] == "idle"
+
+
+def test_upsert_repository_coverage_persists_durable_repo_counts(monkeypatch) -> None:
+    """Repository coverage writes should upsert durable graph/content counts."""
+
+    store = PostgresRuntimeStatusStore("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    store.upsert_repository_coverage(
+        run_id="run-123",
+        repo_id="repository:r_ab12cd34",
+        repo_name="boatgest-php-youboat",
+        repo_path="/repos/boatgest-php-youboat",
+        status="completed",
+        phase="completed",
+        finalization_status="running",
+        discovered_file_count=6356,
+        graph_recursive_file_count=6356,
+        content_file_count=6350,
+        content_entity_count=227015,
+        root_file_count=2,
+        root_directory_count=15,
+        top_level_function_count=40271,
+        class_method_count=22392,
+        total_function_count=62663,
+        class_count=3373,
+        graph_available=True,
+        server_content_available=True,
+        last_error=None,
+        commit_finished_at="2026-03-24T12:05:00+00:00",
+        finalization_finished_at=None,
+    )
+
+    query, params = cursor.execute.call_args.args
+    assert "INSERT INTO runtime_repository_coverage" in query
+    assert params["run_id"] == "run-123"
+    assert params["repo_id"] == "repository:r_ab12cd34"
+    assert params["graph_recursive_file_count"] == 6356
+    assert params["content_file_count"] == 6350
+    assert params["server_content_available"] is True
+
+
+def test_get_repository_coverage_returns_latest_run_row(monkeypatch) -> None:
+    """Coverage reads should return the latest matching repository coverage row."""
+
+    store = PostgresRuntimeStatusStore("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchone.return_value = {
+        "run_id": "run-123",
+        "repo_id": "repository:r_ab12cd34",
+        "repo_name": "boatgest-php-youboat",
+        "repo_path": "/repos/boatgest-php-youboat",
+        "status": "completed",
+        "phase": "completed",
+        "finalization_status": "completed",
+        "discovered_file_count": 6356,
+        "graph_recursive_file_count": 6356,
+        "content_file_count": 6350,
+        "content_entity_count": 227015,
+        "root_file_count": 2,
+        "root_directory_count": 15,
+        "top_level_function_count": 40271,
+        "class_method_count": 22392,
+        "total_function_count": 62663,
+        "class_count": 3373,
+        "graph_available": True,
+        "server_content_available": True,
+        "last_error": None,
+        "created_at": "2026-03-24T12:00:00+00:00",
+        "updated_at": "2026-03-24T12:10:00+00:00",
+        "commit_finished_at": "2026-03-24T12:05:00+00:00",
+        "finalization_finished_at": "2026-03-24T12:10:00+00:00",
+    }
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    result = store.get_repository_coverage(repo_id="repository:r_ab12cd34")
+
+    assert result is not None
+    assert result["run_id"] == "run-123"
+    assert result["repo_id"] == "repository:r_ab12cd34"
+    assert result["graph_available"] is True
+    assert result["server_content_available"] is True
+
+
+def test_list_repository_coverage_supports_incomplete_filter(monkeypatch) -> None:
+    """Coverage listings should support filtering to incomplete repositories."""
+
+    store = PostgresRuntimeStatusStore("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = [
+        {
+            "run_id": "run-123",
+            "repo_id": "repository:r_ab12cd34",
+            "repo_name": "boatgest-php-youboat",
+            "repo_path": "/repos/boatgest-php-youboat",
+            "status": "commit_incomplete",
+            "phase": "committing",
+            "finalization_status": "pending",
+            "discovered_file_count": 6356,
+            "graph_recursive_file_count": 6350,
+            "content_file_count": 6244,
+            "content_entity_count": 210000,
+            "root_file_count": 2,
+            "root_directory_count": 15,
+            "top_level_function_count": 40271,
+            "class_method_count": 22392,
+            "total_function_count": 62663,
+            "class_count": 3373,
+            "graph_available": True,
+            "server_content_available": True,
+            "last_error": None,
+            "created_at": "2026-03-24T12:00:00+00:00",
+            "updated_at": "2026-03-24T12:10:00+00:00",
+            "commit_finished_at": None,
+            "finalization_finished_at": None,
+        }
+    ]
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    result = store.list_repository_coverage(
+        run_id="run-123",
+        only_incomplete=True,
+        limit=25,
+    )
+
+    query, params = cursor.execute.call_args.args
+    assert "runtime_repository_coverage" in query
+    assert params["run_id"] == "run-123"
+    assert params["limit"] == 25
+    assert result[0]["status"] == "commit_incomplete"
 
 
 def test_request_scan_persists_pending_ingester_control(monkeypatch) -> None:

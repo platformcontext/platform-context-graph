@@ -205,3 +205,19 @@ Status responses are designed for remote operation and include:
 - failure counts and last error details
 
 Manual scan requests are persisted for the ingester runtime to claim asynchronously; the API does not perform the scan inline.
+
+## Bundle Import API
+
+Use this route when you want to load dependency or library internals explicitly
+without indexing vendored source trees as part of the normal repository scan.
+
+- `POST /api/v0/bundles/import`
+
+Request contract:
+
+- `multipart/form-data`
+- file field: `bundle`
+- optional form field: `clear_existing=true|false`
+
+The route imports the uploaded `.pcg` bundle into the active graph database and
+returns the same success/message shape as the CLI bundle import flow.

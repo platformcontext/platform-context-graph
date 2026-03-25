@@ -217,7 +217,7 @@ def test_add_file_to_graph_passes_reserved_parameter_names_as_mapping(
 def test_commit_file_batch_uses_single_transaction_with_unwind(
     tmp_path, monkeypatch
 ) -> None:
-    """Batching multiple files should use one begin_transaction/commit cycle with UNWIND."""
+    """Large tx limits should preserve the single-transaction fast path."""
 
     repo_path = tmp_path / "batch-repo"
     repo_path.mkdir()
@@ -300,6 +300,7 @@ def test_commit_file_batch_uses_single_transaction_with_unwind(
         "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
         lambda: None,
     )
+    monkeypatch.setenv("PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE", "100")
 
     commit_file_batch_to_graph(
         builder,
@@ -323,6 +324,109 @@ def test_commit_file_batch_uses_single_transaction_with_unwind(
     )
     assert any("Function" in q for q in unwind_queries)
     assert any("Parameter" in q or "HAS_PARAMETER" in q for q in unwind_queries)
+
+
+def test_commit_file_batch_splits_large_batches_into_multiple_transactions(
+    tmp_path, monkeypatch
+) -> None:
+    """Large coordinator batches should be broken into smaller write transactions."""
+
+    repo_path = tmp_path / "batch-repo"
+    repo_path.mkdir()
+    files = []
+    for i in range(4):
+        fp = repo_path / "src" / f"mod_{i}.py"
+        fp.parent.mkdir(exist_ok=True)
+        fp.write_text(f"def func_{i}(): pass\n", encoding="utf-8")
+        files.append(
+            {
+                "path": str(fp),
+                "repo_path": str(repo_path),
+                "lang": "python",
+                "functions": [{"name": f"func_{i}", "line_number": 1, "args": []}],
+                "imports": [],
+                "function_calls": [],
+            }
+        )
+
+    repo_row = {
+        "id": "repository:r_batch",
+        "name": "batch-repo",
+        "path": str(repo_path.resolve()),
+        "local_path": str(repo_path.resolve()),
+        "remote_url": "https://github.com/platformcontext/batch-repo",
+        "repo_slug": "platformcontext/batch-repo",
+        "has_remote": True,
+    }
+
+    class _Result:
+        def __init__(self, row=None) -> None:
+            self._row = row
+
+        def single(self):
+            if self._row is None:
+                return None
+            return SimpleNamespace(data=lambda: self._row)
+
+        def consume(self):
+            return None
+
+    class _Tx:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+            self.committed = False
+
+        def run(self, query, parameters=None, **kwargs):
+            merged = dict(parameters or {}, **kwargs)
+            self.calls.append((query, merged))
+            return _Result()
+
+        def commit(self):
+            self.committed = True
+
+        def rollback(self):
+            pass
+
+    class _Session:
+        def __init__(self) -> None:
+            self.transactions: list[_Tx] = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def run(self, query, parameters=None, **kwargs):
+            _ = dict(parameters or {}, **kwargs)
+            return _Result(repo_row)
+
+        def begin_transaction(self):
+            tx = _Tx()
+            self.transactions.append(tx)
+            return tx
+
+    session = _Session()
+    builder = SimpleNamespace(
+        driver=SimpleNamespace(session=MagicMock(return_value=session)),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
+        lambda: None,
+    )
+    monkeypatch.setenv("PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE", "2")
+
+    commit_file_batch_to_graph(
+        builder,
+        files,
+        Path(repo_path),
+        debug_log_fn=lambda *_a, **_kw: None,
+        info_logger_fn=lambda *_a, **_kw: None,
+        warning_logger_fn=lambda *_a, **_kw: None,
+    )
+
+    assert len(session.transactions) == 2
+    assert all(tx.committed for tx in session.transactions)
 
 
 def test_commit_file_batch_logs_top_files_for_large_variable_batches(

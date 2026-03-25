@@ -219,7 +219,7 @@ def test_classify_apache_conf_template_marks_raw_ingest_gap() -> None:
     )
 
     assert classification.bucket == "unknown_templated"
-    assert classification.artifact_type == "apache_config"
+    assert classification.artifact_type == "apache_config_template"
     assert classification.raw_ingest_candidate is True
     assert classification.iac_relevant is True
 
@@ -240,7 +240,28 @@ def test_infer_content_metadata_detects_nginx_template_from_content() -> None:
         ),
     )
 
-    assert metadata.artifact_type == "nginx_config"
+    assert metadata.artifact_type == "nginx_config_template"
+    assert metadata.template_dialect == "jinja"
+    assert metadata.iac_relevant is True
+
+
+def test_infer_content_metadata_detects_repo_root_nginx_template() -> None:
+    """Repo-root-relative config templates should still keep templated Nginx metadata."""
+
+    metadata = templated_detection.infer_content_metadata(
+        relative_path=Path("site.conf.j2"),
+        content=(
+            "{% if enabled -%}\n"
+            "server {\n"
+            "    location / {\n"
+            "        proxy_pass http://backend;\n"
+            "    }\n"
+            "}\n"
+            "{% endif -%}\n"
+        ),
+    )
+
+    assert metadata.artifact_type == "nginx_config_template"
     assert metadata.template_dialect == "jinja"
     assert metadata.iac_relevant is True
 
@@ -302,6 +323,19 @@ def test_infer_content_metadata_for_helm_helper_tpl() -> None:
 
     metadata = templated_detection.infer_content_metadata(
         relative_path=Path("chart/templates/_helpers.tpl"),
+        content='{{- define "pcg.fullname" -}}pcg{{- end -}}\n',
+    )
+
+    assert metadata.artifact_type == "helm_helper_tpl"
+    assert metadata.template_dialect == "go_template"
+    assert metadata.iac_relevant is True
+
+
+def test_infer_content_metadata_for_repo_root_helm_helper_tpl() -> None:
+    """Repo-root-relative Helm helpers should infer Helm metadata without `chart/`."""
+
+    metadata = templated_detection.infer_content_metadata(
+        relative_path=Path("templates/_helpers.tpl"),
         content='{{- define "pcg.fullname" -}}pcg{{- end -}}\n',
     )
 

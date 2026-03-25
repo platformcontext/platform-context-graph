@@ -91,6 +91,68 @@ def test_publish_runtime_progress_reports_ingester_repo_counts(
     ]
 
 
+def test_publish_runtime_progress_surfaces_active_finalization(
+    monkeypatch,
+) -> None:
+    """Runtime status should treat finalization as active work when no repo is active."""
+
+    coordinator = importlib.import_module(
+        "platform_context_graph.indexing.coordinator_runtime_status"
+    )
+    models = importlib.import_module(
+        "platform_context_graph.indexing.coordinator_models"
+    )
+
+    run_state = models.IndexRunState(
+        run_id="run-456",
+        root_path="/tmp/repos",
+        family="index",
+        source="filesystem",
+        discovery_signature="abc123",
+        is_dependency=False,
+        status="running",
+        finalization_status="running",
+        created_at="2026-03-25T12:00:00+00:00",
+        updated_at="2026-03-25T12:10:00+00:00",
+        finalization_started_at="2026-03-25T12:05:00+00:00",
+        finalization_current_stage="function_calls",
+        finalization_stage_started_at="2026-03-25T12:05:30+00:00",
+        finalization_stage_details={
+            "function_calls": {
+                "current_file": "/tmp/repos/repo-a/lib/security.php",
+                "processed_files": 32,
+                "total_files": 100,
+            }
+        },
+        repositories={
+            "/tmp/repos/repo-a": models.RepositoryRunState(
+                repo_path="/tmp/repos/repo-a",
+                status="completed",
+            )
+        },
+    )
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        coordinator,
+        "update_runtime_ingester_status",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    coordinator.publish_runtime_progress(
+        ingester="repository",
+        source="filesystem",
+        run_state=run_state,
+        repository_count=1,
+        status="indexing",
+    )
+
+    assert calls[0]["active_repository_path"] is None
+    assert calls[0]["active_phase"] == "finalizing:function_calls"
+    assert calls[0]["active_phase_started_at"] == "2026-03-25T12:05:30+00:00"
+    assert calls[0]["active_current_file"] == "/tmp/repos/repo-a/lib/security.php"
+    assert calls[0]["active_last_progress_at"] == "2026-03-25T12:10:00+00:00"
+
+
 def test_describe_run_state_includes_finalization_diagnostics() -> None:
     """Checkpoint summaries should expose persisted finalization timings."""
 

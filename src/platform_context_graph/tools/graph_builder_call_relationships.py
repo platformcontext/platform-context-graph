@@ -8,6 +8,74 @@ from pathlib import Path
 from typing import Any
 
 _CALL_RELATIONSHIP_BATCH_SIZE = 250
+_CALL_RELATIONSHIP_BUFFER_FLUSH_ROWS = 2000
+_LOW_SIGNAL_JS_FALLBACK_NAMES = frozenset(
+    {
+        "$",
+        "apply",
+        "appendChild",
+        "attr",
+        "call",
+        "createElement",
+        "css",
+        "data",
+        "each",
+        "exec",
+        "extend",
+        "find",
+        "get",
+        "getElementsByTagName",
+        "indexOf",
+        "insertBefore",
+        "join",
+        "load",
+        "match",
+        "on",
+        "pop",
+        "push",
+        "RegExp",
+        "removeChild",
+        "replace",
+        "set",
+        "split",
+        "splice",
+        "substr",
+        "test",
+    }
+)
+_KNOWN_PHP_BUILTINS = frozenset(
+    {
+        "array_merge",
+        "count",
+        "empty",
+        "explode",
+        "implode",
+        "in_array",
+        "is_array",
+        "is_bool",
+        "is_callable",
+        "is_float",
+        "is_int",
+        "is_null",
+        "is_numeric",
+        "is_object",
+        "is_string",
+        "isset",
+        "json_decode",
+        "json_encode",
+        "method_exists",
+        "preg_match",
+        "preg_replace",
+        "sprintf",
+        "str_replace",
+        "strlen",
+        "strpos",
+        "strtolower",
+        "strtoupper",
+        "substr",
+        "trim",
+    }
+)
 
 
 def safe_run_create(session: Any, query: str, params: dict[str, Any]) -> bool:
@@ -52,43 +120,99 @@ def create_function_calls(
 
 def create_all_function_calls(
     builder: Any,
-    all_file_data: list[dict[str, Any]],
+    all_file_data: list[dict[str, Any]] | Any,
     imports_map: dict[str, Any],
     *,
     debug_log_fn: Any,
     get_config_value_fn: Any | None = None,
     warning_logger_fn: Any | None = None,
+    progress_callback: Any | None = None,
 ) -> dict[str, float | int]:
     """Create ``CALLS`` relationships after all files are indexed."""
-    debug_log_fn(f"_create_all_function_calls called with {len(all_file_data)} files")
+    file_count = len(all_file_data) if hasattr(all_file_data, "__len__") else None
+    if file_count is None:
+        debug_log_fn("_create_all_function_calls called with streamed file data")
+    else:
+        debug_log_fn(f"_create_all_function_calls called with {file_count} files")
     resolved_get_config_value_fn = get_config_value_fn or (lambda _key: None)
     resolved_warning_logger_fn = warning_logger_fn or (lambda *_args, **_kwargs: None)
-    contextual_rows: list[dict[str, Any]] = []
-    file_level_rows: list[dict[str, Any]] = []
     next_row_id = 0
-    for index, file_data in enumerate(all_file_data):
-        debug_log_fn(
-            f"Processing file {index + 1}/{len(all_file_data)}: {file_data.get('path', 'unknown')}"
+    processed_files = 0
+    contextual_metrics = _call_resolution_metrics(
+        rows=[],
+        fallback_rows=0,
+        unresolved_rows=[],
+        exact_duration=0.0,
+        fallback_duration=0.0,
+    )
+    file_level_metrics = _call_resolution_metrics(
+        rows=[],
+        fallback_rows=0,
+        unresolved_rows=[],
+        exact_duration=0.0,
+        fallback_duration=0.0,
+    )
+    contextual_buffer: list[dict[str, Any]] = []
+    file_level_buffer: list[dict[str, Any]] = []
+
+    def _flush_contextual(session: Any) -> None:
+        nonlocal contextual_buffer
+        if not contextual_buffer:
+            return
+        _accumulate_resolution_metrics(
+            contextual_metrics,
+            _create_contextual_call_relationships_batched(session, contextual_buffer),
         )
-        caller_file_path = str(Path(file_data["path"]).resolve())
-        file_contextual_rows, file_level_batch_rows, next_row_id = _prepare_call_rows(
-            file_data,
-            imports_map,
-            caller_file_path=caller_file_path,
-            get_config_value_fn=resolved_get_config_value_fn,
-            warning_logger_fn=resolved_warning_logger_fn,
-            start_row_id=next_row_id,
+        contextual_buffer = []
+
+    def _flush_file_level(session: Any) -> None:
+        nonlocal file_level_buffer
+        if not file_level_buffer:
+            return
+        _accumulate_resolution_metrics(
+            file_level_metrics,
+            _create_file_level_call_relationships_batched(session, file_level_buffer),
         )
-        contextual_rows.extend(file_contextual_rows)
-        file_level_rows.extend(file_level_batch_rows)
+        file_level_buffer = []
 
     with builder.driver.session() as session:
-        contextual_metrics = _create_contextual_call_relationships_batched(
-            session, contextual_rows
-        )
-        file_level_metrics = _create_file_level_call_relationships_batched(
-            session, file_level_rows
-        )
+        for file_data in all_file_data:
+            processed_files += 1
+            if file_count is None:
+                debug_log_fn(
+                    "Processing streamed file "
+                    f"{processed_files}: {file_data.get('path', 'unknown')}"
+                )
+            else:
+                debug_log_fn(
+                    f"Processing file {processed_files}/{file_count}: "
+                    f"{file_data.get('path', 'unknown')}"
+                )
+            caller_file_path = str(Path(file_data["path"]).resolve())
+            file_contextual_rows, file_level_batch_rows, next_row_id = _prepare_call_rows(
+                file_data,
+                imports_map,
+                caller_file_path=caller_file_path,
+                get_config_value_fn=resolved_get_config_value_fn,
+                warning_logger_fn=resolved_warning_logger_fn,
+                start_row_id=next_row_id,
+            )
+            if file_contextual_rows:
+                contextual_buffer.extend(file_contextual_rows)
+                if len(contextual_buffer) >= _CALL_RELATIONSHIP_BUFFER_FLUSH_ROWS:
+                    _flush_contextual(session)
+            if file_level_batch_rows:
+                file_level_buffer.extend(file_level_batch_rows)
+                if len(file_level_buffer) >= _CALL_RELATIONSHIP_BUFFER_FLUSH_ROWS:
+                    _flush_file_level(session)
+            if callable(progress_callback):
+                progress_callback(
+                    current_file=caller_file_path,
+                    processed_files=processed_files,
+                    total_files=file_count,
+                )
+        _flush_contextual(session)
+        _flush_file_level(session)
     metrics = _combine_call_relationship_metrics(contextual_metrics, file_level_metrics)
     setattr(builder, "_last_call_relationship_metrics", metrics)
     debug_log_fn(
@@ -100,6 +224,17 @@ def create_all_function_calls(
         f"total={metrics['total_duration_seconds']:.1f}s"
     )
     return metrics
+
+
+def _accumulate_resolution_metrics(
+    totals: dict[str, float | int],
+    current: dict[str, float | int],
+) -> None:
+    """Add one call-resolution metric payload into a mutable aggregate."""
+
+    for key, value in current.items():
+        if isinstance(value, (int, float)):
+            totals[key] = totals.get(key, 0) + value
 
 
 def _prepare_call_rows(
@@ -278,6 +413,7 @@ def _build_call_params(
         "line_number": call["line_number"],
         "args": call.get("args", []),
         "full_call_name": call.get("full_name", called_name),
+        "lang": call.get("lang"),
     }
 
 
@@ -331,9 +467,20 @@ def _create_call_relationships_batched(
                 fallback_duration=0.0,
             )
     exact_duration = time.monotonic() - exact_started
-    fallback_rows = len(remaining_rows)
+    fallback_candidates = _filter_fallback_candidate_rows(remaining_rows)
+    fallback_rows = len(fallback_candidates)
+    if not fallback_candidates:
+        return _call_resolution_metrics(
+            rows=rows,
+            fallback_rows=0,
+            unresolved_rows=[],
+            exact_duration=exact_duration,
+            fallback_duration=0.0,
+        )
     fallback_started = time.monotonic()
-    unresolved_rows = _run_call_batch_query(session, fallback_query, remaining_rows)
+    unresolved_rows = _run_call_batch_query(
+        session, fallback_query, fallback_candidates
+    )
     return _call_resolution_metrics(
         rows=rows,
         fallback_rows=fallback_rows,
@@ -341,6 +488,32 @@ def _create_call_relationships_batched(
         exact_duration=exact_duration,
         fallback_duration=time.monotonic() - fallback_started,
     )
+
+
+def _filter_fallback_candidate_rows(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Drop low-signal fallback rows that are unlikely to resolve meaningfully."""
+
+    return [row for row in rows if not _should_skip_global_fallback(row)]
+
+def _should_skip_global_fallback(row: dict[str, Any]) -> bool:
+    """Return whether a global name-only lookup should be skipped for one call."""
+
+    called_name = str(row.get("called_name") or "").strip()
+    if not called_name:
+        return True
+    normalized_name = called_name.lower()
+    language = str(row.get("lang") or "").strip().lower()
+    if language == "javascript":
+        if len(called_name) <= 2:
+            return True
+        return called_name in _LOW_SIGNAL_JS_FALLBACK_NAMES
+    if language == "php":
+        return normalized_name in _KNOWN_PHP_BUILTINS
+    return False
+
+
 
 
 def _call_resolution_metrics(

@@ -109,6 +109,55 @@ def test_get_file_lines_rejects_paths_outside_repository(temp_test_dir: Path) ->
     }
 
 
+def test_get_file_content_blocks_dependency_paths_by_default(
+    temp_test_dir: Path, monkeypatch
+) -> None:
+    """Workspace fallback should not expose files inside built-in dependency roots."""
+
+    monkeypatch.delenv("PCG_IGNORE_DEPENDENCY_DIRS", raising=False)
+    repo_root = temp_test_dir / "repo"
+    vendored_file = repo_root / "js" / "plugins" / "vendor" / "autoload.php"
+    vendored_file.parent.mkdir(parents=True)
+    vendored_file.write_text("<?php\n", encoding="utf-8")
+    provider = _provider_for_repo(repo_root)
+
+    result = provider.get_file_content(
+        repo_id="repository:r_ab12cd34",
+        relative_path="js/plugins/vendor/autoload.php",
+    )
+
+    assert result == {
+        "available": False,
+        "repo_id": "repository:r_ab12cd34",
+        "relative_path": "js/plugins/vendor/autoload.php",
+        "content": None,
+        "source_backend": "unavailable",
+    }
+
+
+def test_get_file_content_allows_dependency_paths_when_disabled(
+    temp_test_dir: Path, monkeypatch
+) -> None:
+    """Workspace fallback should honor the explicit dependency-ignore override."""
+
+    monkeypatch.setenv("PCG_IGNORE_DEPENDENCY_DIRS", "false")
+    repo_root = temp_test_dir / "repo"
+    vendored_file = repo_root / "js" / "plugins" / "vendor" / "autoload.php"
+    vendored_file.parent.mkdir(parents=True)
+    vendored_file.write_text("<?php\n", encoding="utf-8")
+    provider = _provider_for_repo(repo_root)
+
+    result = provider.get_file_content(
+        repo_id="repository:r_ab12cd34",
+        relative_path="js/plugins/vendor/autoload.php",
+    )
+
+    assert result["available"] is True
+    assert result["relative_path"] == "js/plugins/vendor/autoload.php"
+    assert result["content"] == "<?php\n"
+    assert result["source_backend"] == "workspace"
+
+
 def test_resolve_repository_accepts_materialized_row_wrappers() -> None:
     """Repository resolution should accept `.data()` row wrappers directly."""
 

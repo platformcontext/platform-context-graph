@@ -45,6 +45,8 @@ def build_sync_tool_map(server: Any) -> dict[str, SyncToolHandler]:
         "analyze_infra_relationships": server.analyze_infra_relationships_tool,
         "get_repo_summary": server.get_repo_summary_tool,
         "get_repo_context": server.get_repo_context_tool,
+        "get_repository_coverage": server.get_repository_coverage_tool,
+        "list_repository_coverage": server.list_repository_coverage_tool,
         "resolve_entity": server.resolve_entity_tool,
         "get_entity_context": server.get_entity_context_tool,
         "get_workload_context": server.get_workload_context_tool,
@@ -61,6 +63,7 @@ def build_sync_tool_map(server: Any) -> dict[str, SyncToolHandler]:
         "link_ecosystem": server.link_ecosystem_tool,
         "list_ingesters": server.list_ingesters_tool,
         "get_ingester_status": server.get_ingester_status_tool,
+        "get_index_status": server.get_index_status_tool,
     }
 
 

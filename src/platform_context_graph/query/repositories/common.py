@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from ...repository_identity import canonical_repository_id, repository_metadata
@@ -115,16 +114,19 @@ def canonical_repository_ref(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def resolve_repository(session: Any, repo_id: str) -> dict[str, Any] | None:
-    """Resolve a repository identifier against the indexed graph.
+    """Resolve one canonical repository identifier against the indexed graph.
 
     Args:
         session: Database session used for lookup.
-        repo_id: Canonical identifier, repo slug, URL, path, or name fragment.
+        repo_id: Canonical repository identifier.
 
     Returns:
         Repository row enriched with canonical metadata, or ``None`` when no
         repository matches.
     """
+
+    if not repo_id.startswith("repository:"):
+        return None
 
     repos = session.run(
         f"""
@@ -134,37 +136,9 @@ def resolve_repository(session: Any, repo_id: str) -> dict[str, Any] | None:
             """
     ).data()
 
-    if repo_id.startswith("repository:"):
-        for repo in repos:
-            metadata = repository_metadata_from_row(repo)
-            stored_id = repo.get("id") or metadata["id"]
-            if stored_id == repo_id:
-                return {**repo, **metadata, "id": stored_id}
-        return None
-
-    path_candidate = Path(repo_id).expanduser()
-    if path_candidate.is_absolute():
-        resolved_path = str(path_candidate.resolve())
-        for repo in repos:
-            if (
-                repo.get("local_path") == resolved_path
-                or repo.get("path") == resolved_path
-            ):
-                return {**repo, **repository_metadata_from_row(repo)}
-
-    lowered_identifier = repo_id.lower()
     for repo in repos:
         metadata = repository_metadata_from_row(repo)
-        candidates = [
-            repo.get("name"),
-            metadata.get("repo_slug"),
-            metadata.get("remote_url"),
-            repo.get("path"),
-            metadata.get("local_path"),
-        ]
-        if any(
-            candidate and lowered_identifier in str(candidate).lower()
-            for candidate in candidates
-        ):
+        stored_id = repo.get("id") or metadata["id"]
+        if stored_id == repo_id:
             return {**repo, **metadata, "id": repo.get("id") or metadata["id"]}
     return None

@@ -50,6 +50,20 @@ DEFAULT_MAX_ENTITY_VALUE_LENGTH = 200
 CYPHER_PROPERTY_KEY_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
+def _consume_write_result(result: Any) -> None:
+    """Eagerly consume Neo4j write results to release transaction buffers."""
+
+    consume = getattr(result, "consume", None)
+    if callable(consume):
+        consume()
+
+
+def _run_write_query(tx: Any, query: str, /, **parameters: Any) -> None:
+    """Execute one write query and eagerly consume its result when supported."""
+
+    _consume_write_result(tx.run(query, **parameters))
+
+
 def resolve_max_entity_value_length(raw_value: str | None = None) -> int:
     """Return the configured entity value preview length."""
 
@@ -196,7 +210,8 @@ def run_entity_unwind(
 
     if uid_rows:
         if single_file_path:
-            tx.run(
+            _run_write_query(
+                tx,
                 f"""
                 MATCH (f:File {{path: $file_path}})
                 UNWIND $rows AS row
@@ -208,7 +223,8 @@ def run_entity_unwind(
                 file_path=single_file_path,
             )
         else:
-            tx.run(
+            _run_write_query(
+                tx,
                 f"""
                 UNWIND $rows AS row
                 MATCH (f:File {{path: row.file_path}})
@@ -221,7 +237,8 @@ def run_entity_unwind(
 
     if name_rows:
         if single_file_path:
-            tx.run(
+            _run_write_query(
+                tx,
                 f"""
                 MATCH (f:File {{path: $file_path}})
                 UNWIND $rows AS row
@@ -233,7 +250,8 @@ def run_entity_unwind(
                 file_path=single_file_path,
             )
         else:
-            tx.run(
+            _run_write_query(
+                tx,
                 f"""
                 UNWIND $rows AS row
                 MATCH (f:File {{path: row.file_path}})
@@ -262,7 +280,8 @@ def run_parameter_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
     """
     if not rows:
         return
-    tx.run(
+    _run_write_query(
+        tx,
         """
         UNWIND $rows AS row
         MATCH (fn:Function {name: row.func_name, path: row.file_path, line_number: row.line_number})
@@ -282,7 +301,8 @@ def run_module_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
     """
     if not rows:
         return
-    tx.run(
+    _run_write_query(
+        tx,
         """
         UNWIND $rows AS row
         MERGE (mod:Module {name: row.name})
@@ -303,7 +323,8 @@ def run_nested_function_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
     """
     if not rows:
         return
-    tx.run(
+    _run_write_query(
+        tx,
         """
         UNWIND $rows AS row
         MATCH (outer:Function {name: row.context, path: row.file_path})
@@ -324,7 +345,8 @@ def run_class_function_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
     """
     if not rows:
         return
-    tx.run(
+    _run_write_query(
+        tx,
         """
         UNWIND $rows AS row
         MATCH (c:Class {name: row.class_name, path: row.file_path})
@@ -345,7 +367,8 @@ def run_module_inclusion_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
     """
     if not rows:
         return
-    tx.run(
+    _run_write_query(
+        tx,
         """
         UNWIND $rows AS row
         MATCH (c:Class {name: row.class_name, path: row.file_path})
@@ -366,7 +389,8 @@ def run_js_import_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
     """
     if not rows:
         return
-    tx.run(
+    _run_write_query(
+        tx,
         """
         UNWIND $rows AS row
         MATCH (f:File {path: row.file_path})
@@ -391,7 +415,8 @@ def run_generic_import_unwind(tx: Any, rows: list[dict[str, Any]]) -> None:
     """
     if not rows:
         return
-    tx.run(
+    _run_write_query(
+        tx,
         """
         UNWIND $rows AS row
         MATCH (f:File {path: row.file_path})

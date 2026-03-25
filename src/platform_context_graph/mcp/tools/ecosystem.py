@@ -217,16 +217,62 @@ ECOSYSTEM_TOOLS = {
     },
     "get_repo_context": {
         "name": "get_repo_context",
-        "description": "Get complete context for a repository in a single call: files, code entities, all infrastructure resources, intra-repo relationships, and ecosystem info. Use as the FIRST call for any repo documentation or analysis task.",
+        "description": "Get complete context for a repository in a single call: recursive file counts, code entities, infrastructure resources, intra-repo relationships, ecosystem info, and a concise coverage summary. Use canonical repository IDs only.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "repo_name": {
+                "repo_id": {
                     "type": "string",
-                    "description": "Name of the repository.",
+                    "description": "Canonical repository identifier.",
                 }
             },
-            "required": ["repo_name"],
+            "required": ["repo_id"],
+        },
+    },
+    "get_repository_coverage": {
+        "name": "get_repository_coverage",
+        "description": "Get durable per-run coverage and completeness data for one canonical repository identifier.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "repo_id": {
+                    "type": "string",
+                    "description": "Canonical repository identifier.",
+                },
+                "run_id": {
+                    "type": "string",
+                    "description": "Optional checkpoint run identifier. Defaults to the latest row for the repository.",
+                },
+            },
+            "required": ["repo_id"],
+        },
+    },
+    "list_repository_coverage": {
+        "name": "list_repository_coverage",
+        "description": "List durable repository coverage rows for one run or across runs, including incomplete repositories.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": {
+                    "type": "string",
+                    "description": "Optional checkpoint run identifier to scope the listing.",
+                },
+                "only_incomplete": {
+                    "type": "boolean",
+                    "description": "If true, only return repositories that are not fully completed.",
+                    "default": False,
+                },
+                "statuses": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional explicit repository-status filter.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of rows to return.",
+                    "default": 100,
+                },
+            },
         },
     },
 }

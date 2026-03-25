@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...repository_identity import build_repo_access
+from ...runtime.status_store import get_repository_coverage as get_runtime_repository_coverage
 from .common import canonical_repository_ref, resolve_repository
+from .coverage_data import coverage_summary_from_row
+from .graph_counts import repository_graph_counts, repository_scope, repository_scope_predicate
 
 LANGUAGE_BY_EXTENSION = {
     "py": "python",
@@ -40,12 +42,12 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
     if not repo:
         return {"error": f"Repository '{repo_id}' not found"}
 
-    scope = _repository_scope(repo)
+    scope = repository_scope(repo)
     repo_ref = canonical_repository_ref(repo)
     file_stats = session.run(
         f"""
         MATCH (r:Repository)-[:CONTAINS*]->(f:File)
-        WHERE {_repository_scope_predicate()}
+        WHERE {repository_scope_predicate()}
         RETURN f.name as file,
                split(f.name, '.')[-1] as ext
         """,
@@ -57,17 +59,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         ext = file_row.get("ext", "")
         ext_counts[ext] = ext_counts.get(ext, 0) + 1
 
-    code_stats = session.run(
-        f"""
-        MATCH (r:Repository)-[:CONTAINS*]->(f:File)
-        WHERE {_repository_scope_predicate()}
-        OPTIONAL MATCH (f)-[:CONTAINS]->(fn:Function)
-        OPTIONAL MATCH (f)-[:CONTAINS]->(cls:Class)
-        RETURN count(DISTINCT fn) as functions,
-               count(DISTINCT cls) as classes
-        """,
-        **scope,
-    ).single()
+    counts = repository_graph_counts(session, repo)
     languages = sorted(
         {
             LANGUAGE_BY_EXTENSION[ext]
@@ -80,7 +72,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         f"""
         MATCH (r:Repository)-[:CONTAINS*]->(f:File)
               -[:CONTAINS]->(fn:Function)
-        WHERE {_repository_scope_predicate()}
+        WHERE {repository_scope_predicate()}
           AND (fn.name IN ['main', 'handler', 'lambda_handler',
                            'app', 'run', 'cli', 'entrypoint']
                OR fn.name STARTS WITH 'main')
@@ -97,7 +89,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         f"""
         MATCH (r:Repository)-[:CONTAINS*]->(f1:File)-[:CONTAINS]->(n1)
               -[rel]->(n2)<-[:CONTAINS]-(f2:File)<-[:CONTAINS*]-(r)
-        WHERE {_repository_scope_predicate()}
+        WHERE {repository_scope_predicate()}
           AND type(rel) IN [
             'SELECTS', 'CONFIGURES', 'PATCHES', 'ROUTES_TO',
             'SATISFIED_BY', 'IMPLEMENTED_BY', 'RUNS_IMAGE',
@@ -113,41 +105,44 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         **scope,
     ).data()
     ecosystem = _fetch_ecosystem(session, repo)
+    coverage_summary = coverage_summary_from_row(
+        get_runtime_repository_coverage(repo_id=repo_ref["id"])
+    )
     return {
         "repository": {
             **repo_ref,
-            "file_count": len(file_stats),
+            "file_count": counts["file_count"],
+            "root_file_count": counts["root_file_count"],
+            "root_directory_count": counts["root_directory_count"],
             "files_by_extension": ext_counts,
-            "repo_access": build_repo_access(repo_ref),
+            "graph_available": counts["file_count"] > 0,
+            "server_content_available": (
+                bool(coverage_summary["server_content_available"])
+                if coverage_summary is not None
+                else False
+            ),
+            "active_run_id": (
+                coverage_summary["run_id"] if coverage_summary is not None else None
+            ),
+            "index_status": (
+                coverage_summary["index_status"]
+                if coverage_summary is not None
+                else None
+            ),
         },
         "code": {
-            "functions": code_stats["functions"] if code_stats else 0,
-            "classes": code_stats["classes"] if code_stats else 0,
+            "functions": counts["total_function_count"],
+            "top_level_functions": counts["top_level_function_count"],
+            "class_methods": counts["class_method_count"],
+            "classes": counts["class_count"],
             "languages": languages,
             "entry_points": entry_points,
         },
+        "coverage": coverage_summary,
         "infrastructure": infrastructure,
         "relationships": relationships,
         "ecosystem": ecosystem,
     }
-
-
-def _repository_scope(repo: dict[str, Any]) -> dict[str, Any]:
-    """Build parameters that scope follow-up queries to one repository node."""
-
-    return {
-        "repo_id": repo.get("id"),
-        "repo_path": repo.get("local_path") or repo.get("path"),
-    }
-
-
-def _repository_scope_predicate() -> str:
-    """Return the shared Cypher predicate for scoping one repository."""
-
-    return (
-        "(($repo_id IS NOT NULL AND r.id = $repo_id) "
-        "OR ($repo_path IS NOT NULL AND coalesce(r.local_path, r.path) = $repo_path))"
-    )
 
 
 def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
@@ -276,10 +271,10 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
             f"""
             MATCH (r:Repository)-[:CONTAINS*]->(f:File)
                   -[:CONTAINS]->(n:{label})
-            WHERE {_repository_scope_predicate()}
+            WHERE {repository_scope_predicate()}
             {projection}
             """,
-            **_repository_scope(repo),
+            **repository_scope(repo),
         ).data()
         if result:
             infrastructure[key] = result
@@ -297,11 +292,11 @@ def _fetch_ecosystem(session: Any, repo: dict[str, Any]) -> dict[str, Any] | Non
         Ecosystem context dictionary when available, otherwise ``None``.
     """
 
-    scope = _repository_scope(repo)
+    scope = repository_scope(repo)
     tier = session.run(
         f"""
         MATCH (t:Tier)-[:CONTAINS]->(r:Repository)
-        WHERE {_repository_scope_predicate()}
+        WHERE {repository_scope_predicate()}
         RETURN t.name as tier, t.risk_level as risk_level
         LIMIT 1
         """,
@@ -310,7 +305,7 @@ def _fetch_ecosystem(session: Any, repo: dict[str, Any]) -> dict[str, Any] | Non
     deps = session.run(
         f"""
         MATCH (r:Repository)-[:DEPENDS_ON]->(dep:Repository)
-        WHERE {_repository_scope_predicate()}
+        WHERE {repository_scope_predicate()}
         RETURN collect(dep.name) as dependencies
         """,
         **scope,
@@ -318,7 +313,7 @@ def _fetch_ecosystem(session: Any, repo: dict[str, Any]) -> dict[str, Any] | Non
     dependents = session.run(
         f"""
         MATCH (r:Repository)<-[:DEPENDS_ON]-(dep:Repository)
-        WHERE {_repository_scope_predicate()}
+        WHERE {repository_scope_predicate()}
         RETURN collect(dep.name) as dependents
         """,
         **scope,

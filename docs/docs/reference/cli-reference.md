@@ -49,4 +49,5 @@ All available PlatformContextGraph CLI commands.
 | **`pcg config`** | View or modify settings. | [details](configuration.md) |
 | **`pcg bundle export`** | Save graph to `.pcg` file. | [details](cli-indexing.md#pcg-bundle-commands) |
 | **`pcg bundle load`** | Load graph from file/registry. | [details](cli-indexing.md#pcg-bundle-commands) |
+| **`pcg bundle upload`** | Upload a `.pcg` bundle to a remote HTTP service. | [details](cli-indexing.md#pcg-bundle-commands) |
 | **`pcg registry`** | Browse cloud bundles. | [details](cli-indexing.md#pcg-registry) |

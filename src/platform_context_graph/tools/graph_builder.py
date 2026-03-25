@@ -125,18 +125,24 @@ class GraphBuilder:
         )
 
     def commit_file_batch_to_graph(
-        self, file_data_list: list[dict[str, Any]], repo_path: Path
+        self,
+        file_data_list: list[dict[str, Any]],
+        repo_path: Path,
+        *,
+        progress_callback: Any | None = None,
     ) -> None:
         """Persist a batch of parsed files in a single Neo4j transaction.
 
         Args:
             file_data_list: List of parsed file payloads.
             repo_path: Repository root path for the batch.
+            progress_callback: Optional heartbeat callback invoked per file.
         """
         _commit_file_batch_to_graph(
             self,
             file_data_list,
             repo_path,
+            progress_callback=progress_callback,
             debug_log_fn=debug_log,
             info_logger_fn=info_logger,
             warning_logger_fn=warning_logger,
@@ -163,7 +169,11 @@ class GraphBuilder:
         )
 
     def _create_all_function_calls(
-        self, all_file_data: list[dict[str, Any]], imports_map: dict[str, Any]
+        self,
+        all_file_data: Any,
+        imports_map: dict[str, Any],
+        *,
+        progress_callback: Any | None = None,
     ) -> dict[str, float | int]:
         """Create ``CALLS`` relationships after all files are indexed."""
         return _create_all_function_calls(
@@ -173,9 +183,10 @@ class GraphBuilder:
             debug_log_fn=debug_log,
             get_config_value_fn=get_config_value,
             warning_logger_fn=warning_logger,
+            progress_callback=progress_callback,
         )
 
-    def _create_all_infra_links(self, all_file_data: list[dict[str, Any]]) -> None:
+    def _create_all_infra_links(self, all_file_data: Any) -> None:
         """Create infrastructure relationships after indexing completes."""
         _create_all_infra_links(self, all_file_data, info_logger_fn=info_logger)
 
@@ -196,7 +207,7 @@ class GraphBuilder:
         _create_csharp_inheritance_and_interfaces(session, file_data, imports_map)
 
     def _create_all_inheritance_links(
-        self, all_file_data: list[dict[str, Any]], imports_map: dict[str, Any]
+        self, all_file_data: Any, imports_map: dict[str, Any]
     ) -> None:
         """Create inheritance-style relationships after all files are indexed."""
         _create_all_inheritance_links(self, all_file_data, imports_map)

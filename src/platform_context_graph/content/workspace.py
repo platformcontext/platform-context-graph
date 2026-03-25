@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from ..repository_identity import (
     relative_path_from_local,
     repository_metadata,
 )
+from ..tools.dependency_catalog import dependency_ignore_enabled, is_dependency_path
 
 __all__ = [
     "WorkspaceContentProvider",
@@ -62,6 +64,14 @@ class WorkspaceContentProvider:
                 "content": None,
                 "source_backend": "unavailable",
                 "repo_access": build_repo_access(repository),
+            }
+        if _dependency_path_blocked(relative_path):
+            return {
+                "available": False,
+                "repo_id": repository["id"],
+                "relative_path": relative_path,
+                "content": None,
+                "source_backend": "unavailable",
             }
 
         file_path = _resolve_repo_relative_path(
@@ -165,6 +175,19 @@ class WorkspaceContentProvider:
             entity_row.get("path"),
             repository.get("local_path") if repository else None,
         )
+        if relative_path and _dependency_path_blocked(relative_path):
+            return {
+                "available": False,
+                "entity_id": entity_id,
+                "repo_id": repository["id"] if repository else None,
+                "relative_path": relative_path,
+                "entity_type": entity_row["label"],
+                "entity_name": entity_row["name"],
+                "start_line": entity_row.get("line_number"),
+                "end_line": entity_row.get("end_line") or entity_row.get("line_number"),
+                "content": None,
+                "source_backend": "unavailable",
+            }
 
         source_cache = entity_row.get("source")
         file_path = entity_row.get("path")
@@ -303,6 +326,14 @@ class WorkspaceContentProvider:
                 if record:
                     return record
         return None
+
+
+def _dependency_path_blocked(relative_path: str) -> bool:
+    """Return whether workspace fallback should reject one repo-relative path."""
+
+    return dependency_ignore_enabled(get_config_value_fn=os.getenv) and is_dependency_path(
+        relative_path
+    )
 
 
 def _slice_file_lines(path: Path, *, start_line: int, end_line: int) -> str:

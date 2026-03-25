@@ -10,7 +10,13 @@ Start with a repository or mono-folder you actually care about:
 pcg index .
 ```
 
-PCG already skips hidden and well-known cache trees such as `.git`, `.terraform`, `.terragrunt-cache`, `.pulumi`, `.crossplane`, `.serverless`, `.aws-sam`, and `cdk.out`. If you also need to exclude generated files, vendor trees, local state, or repo-specific paths, add a `.pcgignore` file and see the [.pcgignore guide](../reference/pcgignore.md).
+PCG already skips hidden and well-known cache trees such as `.git`,
+`.terraform`, `.terragrunt-cache`, `.pulumi`, `.crossplane`, `.serverless`,
+`.aws-sam`, and `cdk.out`. It also excludes built-in dependency roots such as
+`vendor/`, `node_modules/`, `site-packages/`, and `deps/` before parse by
+default. If you also need to exclude generated files, local state, or other
+repo-specific paths, add a `.pcgignore` file and see the
+[.pcgignore guide](../reference/pcgignore.md).
 
 ## 2. Confirm what is indexed
 

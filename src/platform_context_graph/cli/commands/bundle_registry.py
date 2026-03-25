@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import requests
 import typer
 
 
@@ -176,6 +177,74 @@ def register_bundle_registry_commands(main_module: Any, app: typer.Typer) -> Non
                 "[dim]Use 'pcg registry list' to see available bundles[/dim]"
             )
             raise typer.Exit(code=1)
+
+    @bundle_app.command("upload")
+    def bundle_upload(
+        bundle_file: str = typer.Argument(
+            ..., help="Path to the .pcg bundle file to upload"
+        ),
+        service_url: str = typer.Option(
+            ...,
+            "--service-url",
+            help="Base URL of the PlatformContextGraph HTTP service",
+        ),
+        clear: bool = typer.Option(
+            False,
+            "--clear",
+            help="Clear existing graph data before importing the uploaded bundle",
+        ),
+        timeout_seconds: int = typer.Option(
+            1800,
+            "--timeout-seconds",
+            min=1,
+            help="HTTP read timeout for the remote bundle import request.",
+        ),
+    ) -> None:
+        """Upload a ``.pcg`` bundle to a remote PlatformContextGraph service."""
+
+        bundle_path = Path(bundle_file)
+        if not bundle_path.exists():
+            main_module.console.print(
+                f"[bold red]Bundle file not found: {bundle_path}[/bold red]"
+            )
+            raise typer.Exit(code=1)
+
+        url = f"{service_url.rstrip('/')}/api/v0/bundles/import"
+        main_module.console.print(f"[cyan]Uploading bundle to {url}...[/cyan]")
+
+        try:
+            with bundle_path.open("rb") as handle:
+                response = requests.post(
+                    url,
+                    files={
+                        "bundle": (
+                            bundle_path.name,
+                            handle,
+                            "application/octet-stream",
+                        )
+                    },
+                    data={"clear_existing": "true" if clear else "false"},
+                    timeout=timeout_seconds,
+                )
+            response.raise_for_status()
+            payload = response.json()
+        except requests.RequestException as exc:
+            message = getattr(getattr(exc, "response", None), "text", str(exc))
+            main_module.console.print(f"[bold red]Upload failed: {message}[/bold red]")
+            raise typer.Exit(code=1) from exc
+        except ValueError as exc:
+            main_module.console.print(
+                f"[bold red]Upload returned invalid JSON: {exc}[/bold red]"
+            )
+            raise typer.Exit(code=1) from exc
+
+        if not payload.get("success"):
+            main_module.console.print(
+                f"[bold red]Import failed: {payload.get('message', 'unknown error')}[/bold red]"
+            )
+            raise typer.Exit(code=1)
+
+        typer.echo(payload.get("message", "Bundle imported"))
 
     @app.command("export", rich_help_panel="Bundle Shortcuts")
     def export_shortcut(

@@ -13,6 +13,10 @@ from .common import (
     repository_projection as _repository_projection,
     resolve_repository as _resolve_repository,
 )
+from .coverage_data import (
+    get_repository_coverage_payload,
+    list_repository_coverage_payload,
+)
 from .context_data import build_repository_context
 from .listing import list_repositories_rows
 from .stats_data import build_repository_stats
@@ -22,6 +26,8 @@ __all__ = [
     "list_repositories",
     "get_repository_context",
     "get_repository_stats",
+    "get_repository_coverage",
+    "list_repository_coverage",
 ]
 
 _get_db_manager = get_db_manager
@@ -42,11 +48,11 @@ def list_repositories(database: Any) -> dict[str, Any]:
 
 
 def get_repository_context(database: Any, *, repo_id: str) -> dict[str, Any]:
-    """Return repository context for a canonical or fuzzy repository identifier.
+    """Return repository context for a canonical repository identifier.
 
     Args:
         database: Query-layer database dependency.
-        repo_id: Repository identifier, slug, URL, path, or canonical ID.
+        repo_id: Canonical repository identifier.
 
     Returns:
         Repository context payload or an error dictionary.
@@ -73,3 +79,33 @@ def get_repository_stats(
     with trace_query("repository_stats"):
         with get_db_manager(database).get_driver().session() as session:
             return build_repository_stats(session, repo_id)
+
+
+def get_repository_coverage(
+    database: Any, *, repo_id: str, run_id: str | None = None
+) -> dict[str, Any]:
+    """Return durable repository coverage for one canonical repository ID."""
+
+    del database
+    with trace_query("repository_coverage"):
+        return get_repository_coverage_payload(repo_id=repo_id, run_id=run_id)
+
+
+def list_repository_coverage(
+    database: Any,
+    *,
+    run_id: str | None = None,
+    only_incomplete: bool = False,
+    statuses: list[str] | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Return durable repository coverage rows for one run or across runs."""
+
+    del database
+    with trace_query("repository_coverage_list"):
+        return list_repository_coverage_payload(
+            run_id=run_id,
+            only_incomplete=only_incomplete,
+            statuses=statuses,
+            limit=limit,
+        )

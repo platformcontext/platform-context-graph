@@ -20,7 +20,12 @@ from platform_context_graph.core.database import (
 from platform_context_graph.observability import get_observability
 from platform_context_graph.paths import get_app_home
 
-from .coordinator_models import IndexRunState, RepositoryRunState, RepositorySnapshot
+from .coordinator_models import (
+    IndexRunState,
+    RepositoryRunState,
+    RepositorySnapshot,
+    RepositorySnapshotMetadata,
+)
 
 RUNS_DIRNAME = "index-runs"
 RUN_STATE_FILENAME = "run.json"
@@ -123,11 +128,34 @@ def _snapshot_dir(run_id: str) -> Path:
     return path
 
 
-def _snapshot_path(run_id: str, repo_path: Path) -> Path:
-    """Return the staged snapshot file path for one repository."""
+def _snapshot_key(repo_path: Path) -> str:
+    """Return the stable storage key for one repository snapshot."""
 
-    repo_key = sha256(str(repo_path.resolve()).encode("utf-8")).hexdigest()[:16]
-    return _snapshot_dir(run_id) / f"{repo_key}.json"
+    return sha256(str(repo_path.resolve()).encode("utf-8")).hexdigest()[:16]
+
+
+def _snapshot_path(run_id: str, repo_path: Path) -> Path:
+    """Return the legacy staged snapshot file path for one repository."""
+
+    return _snapshot_dir(run_id) / f"{_snapshot_key(repo_path)}.json"
+
+
+def _snapshot_metadata_path(run_id: str, repo_path: Path) -> Path:
+    """Return the staged metadata file path for one repository."""
+
+    return _snapshot_dir(run_id) / f"{_snapshot_key(repo_path)}.meta.json"
+
+
+def _snapshot_file_data_path(run_id: str, repo_path: Path) -> Path:
+    """Return the staged file-data file path for one repository."""
+
+    return _snapshot_dir(run_id) / f"{_snapshot_key(repo_path)}.files.ndjson"
+
+
+def _legacy_snapshot_file_data_path(run_id: str, repo_path: Path) -> Path:
+    """Return the legacy JSON file-data path for one repository."""
+
+    return _snapshot_dir(run_id) / f"{_snapshot_key(repo_path)}.files.json"
 
 
 def _serialize_run_state(state: IndexRunState) -> dict[str, Any]:
@@ -333,19 +361,154 @@ def _load_or_create_run(
 def _save_snapshot(run_id: str, snapshot: RepositorySnapshot) -> None:
     """Persist one parsed repository snapshot to disk."""
 
+    repo_path = Path(snapshot.repo_path)
+    _save_snapshot_file_data(run_id, repo_path, snapshot.file_data)
+    _save_snapshot_metadata(
+        run_id,
+        RepositorySnapshotMetadata(
+            repo_path=snapshot.repo_path,
+            file_count=snapshot.file_count,
+            imports_map=snapshot.imports_map,
+        ),
+    )
+
+
+def _save_snapshot_metadata(
+    run_id: str, snapshot_metadata: RepositorySnapshotMetadata
+) -> None:
+    """Persist one repository's lightweight snapshot metadata."""
+
     _write_json_atomic(
-        _snapshot_path(run_id, Path(snapshot.repo_path)),
-        _normalize_json_value(asdict(snapshot)),
+        _snapshot_metadata_path(run_id, Path(snapshot_metadata.repo_path)),
+        _normalize_json_value(asdict(snapshot_metadata)),
+    )
+
+
+def _save_snapshot_file_data(
+    run_id: str, repo_path: Path, file_data: list[dict[str, Any]]
+) -> None:
+    """Persist one repository's heavyweight file-data payload."""
+
+    path = _snapshot_file_data_path(run_id, repo_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+    with tmp_path.open("w", encoding="utf-8") as handle:
+        for item in file_data:
+            handle.write(json.dumps(_normalize_json_value(item), sort_keys=True))
+            handle.write("\n")
+    os.replace(tmp_path, path)
+
+
+def _load_snapshot_metadata(
+    run_id: str, repo_path: Path
+) -> RepositorySnapshotMetadata | None:
+    """Load one staged snapshot metadata payload when present."""
+
+    metadata_path = _snapshot_metadata_path(run_id, repo_path)
+    if metadata_path.exists():
+        return RepositorySnapshotMetadata(
+            **json.loads(metadata_path.read_text(encoding="utf-8"))
+        )
+
+    legacy_path = _snapshot_path(run_id, repo_path)
+    if not legacy_path.exists():
+        return None
+    payload = json.loads(legacy_path.read_text(encoding="utf-8"))
+    return RepositorySnapshotMetadata(
+        repo_path=payload["repo_path"],
+        file_count=payload["file_count"],
+        imports_map=dict(payload.get("imports_map", {})),
+    )
+
+
+def _load_snapshot_file_data(
+    run_id: str, repo_path: Path
+) -> list[dict[str, Any]] | None:
+    """Load one staged snapshot file-data payload when present."""
+
+    file_data_path = _snapshot_file_data_path(run_id, repo_path)
+    if file_data_path.exists():
+        with file_data_path.open(encoding="utf-8") as handle:
+            return [json.loads(line) for line in handle if line.strip()]
+
+    legacy_file_data_path = _legacy_snapshot_file_data_path(run_id, repo_path)
+    if legacy_file_data_path.exists():
+        payload = json.loads(legacy_file_data_path.read_text(encoding="utf-8"))
+        return list(payload.get("file_data", []))
+
+    legacy_path = _snapshot_path(run_id, repo_path)
+    if not legacy_path.exists():
+        return None
+    payload = json.loads(legacy_path.read_text(encoding="utf-8"))
+    return list(payload.get("file_data", []))
+
+
+def _iter_snapshot_file_data_batches(
+    run_id: str,
+    repo_path: Path,
+    *,
+    batch_size: int,
+):
+    """Yield one repository snapshot's file-data in bounded batches."""
+
+    file_data_path = _snapshot_file_data_path(run_id, repo_path)
+    if file_data_path.exists():
+        batch: list[dict[str, Any]] = []
+        with file_data_path.open(encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                batch.append(json.loads(line))
+                if len(batch) >= batch_size:
+                    yield batch
+                    batch = []
+        if batch:
+            yield batch
+        return
+
+    file_data = _load_snapshot_file_data(run_id, repo_path)
+    if file_data is None:
+        raise FileNotFoundError(
+            f"Missing file data snapshot for committed repository {repo_path.resolve()}"
+        )
+    for start in range(0, len(file_data), batch_size):
+        yield file_data[start : start + batch_size]
+
+
+def _iter_snapshot_file_data(run_id: str, repo_path: Path):
+    """Yield one repository snapshot's file-data one payload at a time."""
+
+    for batch in _iter_snapshot_file_data_batches(
+        run_id,
+        repo_path,
+        batch_size=128,
+    ):
+        yield from batch
+
+
+def _snapshot_file_data_exists(run_id: str, repo_path: Path) -> bool:
+    """Return whether heavyweight file-data exists for one snapshot."""
+
+    return (
+        _snapshot_file_data_path(run_id, repo_path).exists()
+        or _legacy_snapshot_file_data_path(run_id, repo_path).exists()
+        or _snapshot_path(run_id, repo_path).exists()
     )
 
 
 def _load_snapshot(run_id: str, repo_path: Path) -> RepositorySnapshot | None:
     """Load one staged snapshot when present."""
 
-    path = _snapshot_path(run_id, repo_path)
-    if not path.exists():
+    metadata = _load_snapshot_metadata(run_id, repo_path)
+    file_data = _load_snapshot_file_data(run_id, repo_path)
+    if metadata is None or file_data is None:
         return None
-    return RepositorySnapshot(**json.loads(path.read_text(encoding="utf-8")))
+    return RepositorySnapshot(
+        repo_path=metadata.repo_path,
+        file_count=metadata.file_count,
+        imports_map=metadata.imports_map,
+        file_data=file_data,
+    )
 
 
 def _delete_snapshots(run_id: str) -> None:
