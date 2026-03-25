@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from platform_context_graph.tools.languages.yaml_infra import InfraYAMLParser
+from platform_context_graph.tools.languages import yaml_infra_support
 
 
 class TestInfraYAMLParser:
@@ -220,6 +221,51 @@ spec:
 
         val = values[0]
         assert val["name"] == "values"
+
+    def test_parse_helm_template_manifest_skips_yaml_semantics_without_warning(
+        self, parser, tmp_path, monkeypatch
+    ):
+        """Helm template manifests should be skipped quietly instead of warning."""
+
+        warnings: list[str] = []
+        monkeypatch.setattr(
+            yaml_infra_support,
+            "warning_logger",
+            lambda message: warnings.append(message),
+        )
+
+        chart_root = tmp_path / "chart"
+        (chart_root / "templates").mkdir(parents=True)
+        (chart_root / "Chart.yaml").write_text(
+            """\
+name: platform-context-graph
+version: 0.1.0
+""",
+            encoding="utf-8",
+        )
+        template_file = chart_root / "templates" / "configmap-pcgignore.yaml"
+        template_file.write_text(
+            """\
+{{- if .Values.pcgignore.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pcg.fullname" . }}-pcgignore
+data:
+  .pcgignore: |-
+    vendor/
+{{- end }}
+""",
+            encoding="utf-8",
+        )
+
+        result = parser.parse(str(template_file))
+
+        assert warnings == []
+        assert result["path"] == str(template_file)
+        assert result["k8s_resources"] == []
+        assert result["helm_charts"] == []
+        assert result["helm_values"] == []
 
     # --- Edge Cases ---
 

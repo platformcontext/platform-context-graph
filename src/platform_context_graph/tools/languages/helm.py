@@ -31,6 +31,33 @@ def is_helm_values(filename: str) -> bool:
     return lower.startswith("values") and lower.endswith((".yaml", ".yml"))
 
 
+def is_helm_template_manifest(file_path: Path) -> bool:
+    """Return whether a YAML file lives under a Helm chart ``templates/`` tree.
+
+    Args:
+        file_path: Candidate file path.
+
+    Returns:
+        ``True`` when the file is a YAML manifest beneath a chart templates
+        directory with a neighboring ``Chart.yaml``/``Chart.yml`` descriptor.
+    """
+
+    if file_path.suffix.lower() not in {".yaml", ".yml"}:
+        return False
+
+    filename = file_path.name
+    if is_helm_chart(filename) or is_helm_values(filename):
+        return False
+
+    for parent in file_path.parents:
+        if parent.name != "templates":
+            continue
+        chart_root = parent.parent
+        if (chart_root / "Chart.yaml").exists() or (chart_root / "Chart.yml").exists():
+            return True
+    return False
+
+
 def parse_helm_chart(file_path: Path, language_name: str) -> dict[str, Any] | None:
     """Parse a Helm ``Chart.yaml`` file.
 
