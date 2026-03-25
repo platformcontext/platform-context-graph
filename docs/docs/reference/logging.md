@@ -114,7 +114,7 @@ The message can change. `event_name` should not drift casually.
   "logger_name": "platform_context_graph.observability.runtime",
   "service_name": "platform-context-graph-api",
   "service_namespace": "platformcontext",
-  "service_version": "0.0.30",
+  "service_version": "0.0.31",
   "deployment_environment": "qa",
   "component": "api",
   "transport": "http",
