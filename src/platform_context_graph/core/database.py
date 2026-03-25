@@ -13,10 +13,8 @@ from neo4j import GraphDatabase, Driver
 
 from platform_context_graph.observability import get_observability
 from platform_context_graph.utils.debug_log import (
-    debug_log,
-    info_logger,
     error_logger,
-    warning_logger,
+    info_logger,
 )
 
 
@@ -199,11 +197,17 @@ class DatabaseManager:
 
                     if not is_valid:
                         error_logger(
-                            f"Configuration validation failed: {validation_error}"
+                            f"Configuration validation failed: {validation_error}",
+                            event_name="neo4j.config.invalid",
+                            extra_keys={"neo4j_uri": self.neo4j_uri},
                         )
                         raise ValueError(validation_error)
 
-                    info_logger(f"Creating Neo4j driver connection to {self.neo4j_uri}")
+                    info_logger(
+                        f"Creating Neo4j driver connection to {self.neo4j_uri}",
+                        event_name="neo4j.connection.creating",
+                        extra_keys={"neo4j_uri": self.neo4j_uri},
+                    )
                     self._driver = GraphDatabase.driver(
                         self.neo4j_uri, auth=(self.neo4j_username, self.neo4j_password)
                     )
@@ -211,13 +215,25 @@ class DatabaseManager:
                     try:
                         with self._driver.session() as session:
                             session.run("RETURN 1").consume()
-                        info_logger("Neo4j connection established successfully")
+                        info_logger(
+                            "Neo4j connection established successfully",
+                            event_name="neo4j.connection.ready",
+                            extra_keys={"neo4j_uri": self.neo4j_uri},
+                        )
                     except Exception as e:
                         # Use detailed error messages from test_connection
                         _, detailed_error = self.test_connection(
                             self.neo4j_uri, self.neo4j_username, self.neo4j_password
                         )
-                        error_logger(f"Failed to connect to Neo4j: {e}")
+                        error_logger(
+                            f"Failed to connect to Neo4j: {e}",
+                            event_name="neo4j.connection.failed",
+                            extra_keys={
+                                "neo4j_uri": self.neo4j_uri,
+                                "error_detail": detailed_error,
+                            },
+                            exc_info=e,
+                        )
                         if self._driver:
                             self._driver.close()
                         self._driver = None
@@ -229,7 +245,11 @@ class DatabaseManager:
         if self._driver is not None:
             with self._lock:
                 if self._driver is not None:
-                    info_logger("Closing Neo4j driver")
+                    info_logger(
+                        "Closing Neo4j driver",
+                        event_name="neo4j.connection.closing",
+                        extra_keys={"neo4j_uri": self.neo4j_uri},
+                    )
                     self._driver.close()
                     self._driver = None
 

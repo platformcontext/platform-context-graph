@@ -8,6 +8,7 @@ import os
 from collections.abc import Iterator
 from importlib.metadata import PackageNotFoundError, version as pkg_version
 from typing import Any
+from uuid import uuid4
 
 try:
     from fastapi import FastAPI
@@ -67,6 +68,15 @@ _CURRENT_TRANSPORT: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "pcg_current_transport",
     default=None,
 )
+_CURRENT_REQUEST_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "pcg_current_request_id",
+    default=None,
+)
+_CURRENT_CORRELATION_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "pcg_current_correlation_id",
+    default=None,
+)
+REQUEST_CONTEXT_UNSET = object()
 
 
 def package_version() -> str:
@@ -201,13 +211,19 @@ def status_class(status_code: int) -> str:
 
 @contextlib.contextmanager
 def request_context_scope(
-    *, component: str, transport: str | None = None
+    *,
+    component: str,
+    transport: str | None = None,
+    request_id: str | None | object = REQUEST_CONTEXT_UNSET,
+    correlation_id: str | None | object = REQUEST_CONTEXT_UNSET,
 ) -> Iterator[None]:
     """Set the current observability request context for a code block.
 
     Args:
         component: The logical component handling the request.
         transport: The transport label to record for the request, if any.
+        request_id: The active request identifier, when one exists.
+        correlation_id: The parent or local correlation identifier.
 
     Yields:
         ``None`` while the request context is active.
@@ -215,9 +231,19 @@ def request_context_scope(
 
     token_component = _CURRENT_COMPONENT.set(component)
     token_transport = _CURRENT_TRANSPORT.set(transport)
+    token_request = None
+    token_correlation = None
+    if request_id is not REQUEST_CONTEXT_UNSET:
+        token_request = _CURRENT_REQUEST_ID.set(request_id)
+    if correlation_id is not REQUEST_CONTEXT_UNSET:
+        token_correlation = _CURRENT_CORRELATION_ID.set(correlation_id)
     try:
         yield
     finally:
+        if token_correlation is not None:
+            _CURRENT_CORRELATION_ID.reset(token_correlation)
+        if token_request is not None:
+            _CURRENT_REQUEST_ID.reset(token_request)
         _CURRENT_COMPONENT.reset(token_component)
         _CURRENT_TRANSPORT.reset(token_transport)
 
@@ -240,3 +266,27 @@ def current_transport() -> str | None:
     """
 
     return _CURRENT_TRANSPORT.get()
+
+
+def current_request_id() -> str | None:
+    """Return the active request identifier."""
+
+    value = _CURRENT_REQUEST_ID.get()
+    if value is REQUEST_CONTEXT_UNSET:
+        return None
+    return value
+
+
+def current_correlation_id() -> str | None:
+    """Return the active correlation identifier."""
+
+    value = _CURRENT_CORRELATION_ID.get()
+    if value is REQUEST_CONTEXT_UNSET:
+        return None
+    return value
+
+
+def new_request_id() -> str:
+    """Return a fresh request identifier."""
+
+    return uuid4().hex

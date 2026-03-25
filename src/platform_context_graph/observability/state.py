@@ -27,6 +27,7 @@ from .otel import (
     service_name_for_component,
 )
 from .runtime import ObservabilityRuntime
+from .structured_logging import configure_logging
 
 _STATE_LOCK = threading.Lock()
 _STATE: ObservabilityRuntime | None = None
@@ -55,6 +56,8 @@ def initialize_observability(
 
     global _STATE, _TEST_SPAN_EXPORTER, _TEST_METRIC_READER
 
+    configure_logging(component=component, runtime_role=component)
+
     with _STATE_LOCK:
         if _STATE is not None:
             if app is not None:
@@ -78,6 +81,8 @@ def initialize_observability(
                 service_name=service_name_for_component(component),
                 component=component,
             )
+            if app is not None:
+                _STATE.instrument_fastapi_app(app)
             return _STATE
 
         selected_span_exporter = (

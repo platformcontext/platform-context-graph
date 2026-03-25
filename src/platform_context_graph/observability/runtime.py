@@ -5,25 +5,28 @@ from __future__ import annotations
 import contextlib
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from .http_middleware import install_http_middleware
 from .metrics import RuntimeMetricsMixin
 from .otel import (
     DEFAULT_EXCLUDED_URLS,
     ActiveStateKey,
     FastAPI,
     FastAPIInstrumentor,
+    REQUEST_CONTEXT_UNSET,
     MeterProvider,
     MetricReader,
     SpanExporter,
     TracerProvider,
     current_component,
+    current_correlation_id,
+    current_request_id,
     current_transport,
     request_context_scope,
 )
-
 
 @dataclass(slots=True)
 class ObservabilityRuntime(RuntimeMetricsMixin):
@@ -242,19 +245,18 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
             app: The FastAPI application to instrument.
         """
 
-        if not self.enabled or FastAPIInstrumentor is None:
-            return
         app_id = id(app)
         if app_id in self._instrumented_apps:
             return
 
-        FastAPIInstrumentor.instrument_app(
-            app,
-            tracer_provider=self.tracer_provider,
-            meter_provider=self.meter_provider,
-            excluded_urls=",".join(self.excluded_urls),
-        )
-        _install_http_middleware(app, self)
+        if self.enabled and FastAPIInstrumentor is not None:
+            FastAPIInstrumentor.instrument_app(
+                app,
+                tracer_provider=self.tracer_provider,
+                meter_provider=self.meter_provider,
+                excluded_urls=",".join(self.excluded_urls),
+            )
+        install_http_middleware(app, self)
         self._instrumented_apps.add(app_id)
 
     @contextlib.contextmanager
@@ -263,18 +265,27 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         *,
         component: str,
         transport: str | None = None,
+        request_id: str | None | object = REQUEST_CONTEXT_UNSET,
+        correlation_id: str | None | object = REQUEST_CONTEXT_UNSET,
     ) -> Iterator[None]:
         """Set the active component and transport while handling a request.
 
         Args:
             component: The logical component handling the request.
             transport: The transport label for the request, if any.
+            request_id: The request identifier, when one exists.
+            correlation_id: The correlation identifier, when one exists.
 
         Yields:
             ``None`` while the request context is active.
         """
 
-        with request_context_scope(component=component, transport=transport):
+        with request_context_scope(
+            component=component,
+            transport=transport,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        ):
             yield
 
     @contextlib.contextmanager
@@ -307,6 +318,12 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         transport = current_transport()
         if transport:
             final_attributes.setdefault("pcg.transport", transport)
+        request_id = current_request_id()
+        if request_id:
+            final_attributes.setdefault("pcg.request_id", request_id)
+        correlation_id = current_correlation_id()
+        if correlation_id:
+            final_attributes.setdefault("pcg.correlation_id", correlation_id)
         with self.tracer.start_as_current_span(
             name,
             attributes=final_attributes,
@@ -426,49 +443,3 @@ class _IndexRunScope:
 
     status: str
     finalization_status: str
-
-
-def _install_http_middleware(app: FastAPI, runtime: ObservabilityRuntime) -> None:
-    """Install HTTP request metrics middleware on a FastAPI app.
-
-    Args:
-        app: The FastAPI application to instrument.
-        runtime: The observability runtime that records HTTP metrics.
-    """
-
-    if getattr(app.state, "_pcg_http_metrics_installed", False):
-        return
-
-    @app.middleware("http")
-    async def _pcg_http_metrics(request: Any, call_next: Callable[..., Any]) -> Any:
-        """Record HTTP metrics around a single FastAPI request."""
-        path = request.url.path
-        if path in runtime.excluded_urls:
-            return await call_next(request)
-
-        start = time.perf_counter()
-        with runtime.request_context(component="api", transport="http"):
-            try:
-                response = await call_next(request)
-                status_code = response.status_code
-            except Exception:
-                status_code = 500
-                route = getattr(request.scope.get("route"), "path", path)
-                runtime.record_http_request(
-                    method=request.method,
-                    route=route,
-                    status_code=status_code,
-                    duration_seconds=time.perf_counter() - start,
-                )
-                raise
-
-        route = getattr(request.scope.get("route"), "path", path)
-        runtime.record_http_request(
-            method=request.method,
-            route=route,
-            status_code=status_code,
-            duration_seconds=time.perf_counter() - start,
-        )
-        return response
-
-    app.state._pcg_http_metrics_installed = True

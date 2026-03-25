@@ -1,6 +1,8 @@
 import pytest
 import asyncio
 import json
+import io
+import importlib
 from unittest.mock import MagicMock, AsyncMock, patch
 from platform_context_graph.mcp import MCPServer
 from platform_context_graph.query.context import ServiceAliasError
@@ -23,7 +25,7 @@ class TestMCPServer:
             mock_get_db.return_value = mock_db
 
             with (
-                patch("platform_context_graph.mcp.server.JobManager") as mock_job_cls,
+                patch("platform_context_graph.mcp.server.JobManager"),
                 patch("platform_context_graph.mcp.server.GraphBuilder"),
                 patch("platform_context_graph.mcp.server.CodeFinder"),
                 patch("platform_context_graph.mcp.server.CodeWatcher"),
@@ -101,6 +103,89 @@ class TestMCPServer:
                 # We can't strictly assert called_once because arguments are complex (bound methods)
                 # But we can check result
                 assert result == {"job_id": "123"}
+
+        asyncio.run(run_test())
+
+    def test_jsonrpc_transport_logs_structured_request_and_tool_context(
+        self, mock_server, monkeypatch
+    ):
+        """JSON-RPC transport logs should include stable event names and IDs."""
+
+        async def run_test():
+            observability = importlib.import_module(
+                "platform_context_graph.observability"
+            )
+            observability.reset_observability_for_tests()
+            monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+            monkeypatch.setenv(
+                "OTEL_EXPORTER_OTLP_ENDPOINT",
+                "http://otel-collector.monitoring.svc.cluster.local:4317",
+            )
+            monkeypatch.setenv("ENABLE_APP_LOGS", "INFO")
+            monkeypatch.setenv("PCG_LOG_FORMAT", "json")
+
+            from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+            from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+                InMemorySpanExporter,
+            )
+
+            observability.configure_test_exporters(
+                span_exporter=InMemorySpanExporter(),
+                metric_reader=InMemoryMetricReader(),
+            )
+            buffer = io.StringIO()
+            observability.configure_logging(
+                component="mcp",
+                runtime_role="mcp",
+                stream=buffer,
+            )
+
+            mock_server.handle_tool_call = AsyncMock(return_value={"ok": True})
+            mock_server._apply_repo_access_handoff = AsyncMock(
+                side_effect=lambda payload, **_kwargs: payload
+            )
+
+            response, status_code = await mock_server._handle_jsonrpc_request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "rpc-42",
+                    "method": "tools/call",
+                    "params": {
+                        "name": "get_index_status",
+                        "arguments": {},
+                    },
+                },
+                transport="jsonrpc-stdio",
+            )
+
+            assert status_code == 200
+            assert response is not None
+
+            records = [
+                json.loads(line)
+                for line in buffer.getvalue().splitlines()
+                if line.strip()
+            ]
+            request_records = [
+                record
+                for record in records
+                if record.get("event_name") == "mcp.request.received"
+            ]
+            tool_records = [
+                record
+                for record in records
+                if record.get("event_name") == "mcp.tool.completed"
+            ]
+            assert request_records
+            assert tool_records
+            assert request_records[-1]["request_id"] == "rpc-42"
+            assert request_records[-1]["correlation_id"] == "rpc-42"
+            assert request_records[-1]["transport"] == "jsonrpc-stdio"
+            assert (
+                request_records[-1]["extra_keys"]["jsonrpc_method"] == "tools/call"
+            )
+            assert tool_records[-1]["request_id"] == "rpc-42"
+            assert tool_records[-1]["extra_keys"]["tool_name"] == "get_index_status"
 
         asyncio.run(run_test())
 
@@ -814,7 +899,7 @@ class TestSSETransport:
         """Build a FastAPI TestClient around the SSE app without starting uvicorn."""
         pytest.importorskip("httpx")
         from fastapi import FastAPI, Request
-        from fastapi.responses import JSONResponse, StreamingResponse
+        from fastapi.responses import JSONResponse
         from starlette.responses import Response
         from starlette.testclient import TestClient
         import json

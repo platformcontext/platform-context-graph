@@ -13,14 +13,15 @@ import typer
 from dotenv import find_dotenv
 from rich.console import Console
 
-from platform_context_graph.core.database import DatabaseManager
+from platform_context_graph.core.database import DatabaseManager  # noqa: F401
 from platform_context_graph.runtime.ingester import (
-    RepoSyncConfig,
-    run_bootstrap_index,
-    run_repo_sync_cycle,
-    run_repo_sync_loop,
+    RepoSyncConfig,  # noqa: F401
+    run_bootstrap_index,  # noqa: F401
+    run_repo_sync_cycle,  # noqa: F401
+    run_repo_sync_loop,  # noqa: F401
 )
 from platform_context_graph.mcp import MCPServer
+from platform_context_graph.observability import configure_logging
 
 from ..paths import get_app_env_file
 from . import config_manager
@@ -34,28 +35,28 @@ from .commands.find_primary import register_find_primary_commands
 from .commands.find_secondary import register_find_secondary_commands
 from .commands.runtime import register_runtime_commands
 from .cli_helpers import (
-    _initialize_services,
-    add_package_helper,
-    clean_helper,
-    cypher_helper,
-    cypher_helper_visual,
-    delete_helper,
-    index_helper,
-    index_status_helper,
-    list_repos_helper,
-    list_watching_helper,
-    reindex_helper,
-    stats_helper,
-    unwatch_helper,
-    visualize_helper,
-    watch_helper,
-    workspace_index_helper,
-    workspace_plan_helper,
-    workspace_status_helper,
-    workspace_sync_helper,
-    workspace_watch_helper,
+    _initialize_services,  # noqa: F401
+    add_package_helper,  # noqa: F401
+    clean_helper,  # noqa: F401
+    cypher_helper,  # noqa: F401
+    cypher_helper_visual,  # noqa: F401
+    delete_helper,  # noqa: F401
+    index_helper,  # noqa: F401
+    index_status_helper,  # noqa: F401
+    list_repos_helper,  # noqa: F401
+    list_watching_helper,  # noqa: F401
+    reindex_helper,  # noqa: F401
+    stats_helper,  # noqa: F401
+    unwatch_helper,  # noqa: F401
+    visualize_helper,  # noqa: F401
+    watch_helper,  # noqa: F401
+    workspace_index_helper,  # noqa: F401
+    workspace_plan_helper,  # noqa: F401
+    workspace_status_helper,  # noqa: F401
+    workspace_sync_helper,  # noqa: F401
+    workspace_watch_helper,  # noqa: F401
 )
-from .setup_wizard import configure_mcp_client, run_neo4j_setup_wizard
+from .setup_wizard import configure_mcp_client, run_neo4j_setup_wizard  # noqa: F401
 
 console = Console(stderr=True)
 
@@ -65,9 +66,25 @@ app = typer.Typer(
     add_completion=True,
 )
 
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-)
+configure_logging(component="cli", runtime_role="cli")
+
+
+def _structured_json_logs_enabled() -> bool:
+    """Report whether the runtime is in JSON-log mode."""
+
+    configured = os.environ.get("PCG_LOG_FORMAT")
+    if configured is None:
+        try:
+            configured = str(config_manager.get_config_value("PCG_LOG_FORMAT") or "json")
+        except Exception:
+            configured = "json"
+    return configured.strip().lower() == "json"
+
+
+def _console_output_enabled() -> bool:
+    """Report whether human-oriented console banners should be emitted."""
+
+    return not _structured_json_logs_enabled()
 
 
 def _configure_library_loggers() -> None:
@@ -111,6 +128,8 @@ def start_http_api(
         port=port,
         reload=reload,
         factory=True,
+        log_config=None,
+        access_log=False,
     )
 
 
@@ -130,7 +149,14 @@ def start_service(
 
     mcp_server = MCPServer()
     service_app = create_service_app(mcp_server_dependency=lambda: mcp_server)
-    uvicorn.run(service_app, host=host, port=port, reload=reload)
+    uvicorn.run(
+        service_app,
+        host=host,
+        port=port,
+        reload=reload,
+        log_config=None,
+        access_log=False,
+    )
 
 
 def _load_credentials() -> None:
@@ -152,9 +178,10 @@ def _load_credentials() -> None:
             config_sources.append(dotenv_values(str(global_env_path)))
             config_source_names.append(str(global_env_path))
         except Exception as exc:
-            console.print(
-                f"[yellow]Warning: Could not load global .env: {exc}[/yellow]"
-            )
+            if _console_output_enabled():
+                console.print(
+                    f"[yellow]Warning: Could not load global .env: {exc}[/yellow]"
+                )
 
     try:
         dotenv_path = find_dotenv(usecwd=True, raise_error_if_not_found=False)
@@ -162,9 +189,10 @@ def _load_credentials() -> None:
             config_sources.append(dotenv_values(dotenv_path))
             config_source_names.append(str(dotenv_path))
     except Exception as exc:
-        console.print(
-            f"[yellow]Warning: Could not load .env from current directory: {exc}[/yellow]"
-        )
+        if _console_output_enabled():
+            console.print(
+                f"[yellow]Warning: Could not load .env from current directory: {exc}[/yellow]"
+            )
 
     mcp_file_path = Path.cwd() / "mcp.json"
     if mcp_file_path.exists():
@@ -180,7 +208,8 @@ def _load_credentials() -> None:
                 config_sources.append(server_env)
                 config_source_names.append("mcp.json")
         except Exception as exc:
-            console.print(f"[yellow]Warning: Could not load mcp.json: {exc}[/yellow]")
+            if _console_output_enabled():
+                console.print(f"[yellow]Warning: Could not load mcp.json: {exc}[/yellow]")
 
     merged_config: dict[str, str | None] = {}
     for config in config_sources:
@@ -195,16 +224,17 @@ def _load_credentials() -> None:
         os.environ[key] = str(value)
 
     if config_source_names:
-        if len(config_source_names) == 1:
-            console.print(
-                f"[dim]Loaded configuration from: {config_source_names[-1]}[/dim]"
-            )
-        else:
-            console.print(
-                "[dim]Loaded configuration from: "
-                f"{', '.join(config_source_names)} (highest priority: {config_source_names[-1]})[/dim]"
-            )
-    else:
+        if _console_output_enabled():
+            if len(config_source_names) == 1:
+                console.print(
+                    f"[dim]Loaded configuration from: {config_source_names[-1]}[/dim]"
+                )
+            else:
+                console.print(
+                    "[dim]Loaded configuration from: "
+                    f"{', '.join(config_source_names)} (highest priority: {config_source_names[-1]})[/dim]"
+                )
+    elif _console_output_enabled():
         console.print("[yellow]No configuration file found. Using defaults.[/yellow]")
 
     runtime_db = os.environ.get("PCG_RUNTIME_DB_TYPE")
@@ -237,32 +267,34 @@ def _load_credentials() -> None:
         )
         if has_neo4j_creds:
             neo4j_db = os.environ.get("NEO4J_DATABASE")
-            if neo4j_db:
-                console.print(
-                    f"[cyan]Using database: Neo4j (database: {neo4j_db})[/cyan]"
-                )
-            else:
-                console.print("[cyan]Using database: Neo4j[/cyan]")
-        else:
+            if _console_output_enabled():
+                if neo4j_db:
+                    console.print(
+                        f"[cyan]Using database: Neo4j (database: {neo4j_db})[/cyan]"
+                    )
+                else:
+                    console.print("[cyan]Using database: Neo4j[/cyan]")
+        elif _console_output_enabled():
             console.print(
                 "[yellow]⚠ DEFAULT_DATABASE=neo4j but credentials not found. Falling back to default.[/yellow]"
             )
     elif default_db == "falkordb-remote":
         host = os.environ.get("FALKORDB_HOST")
-        if host:
+        if host and _console_output_enabled():
             console.print(f"[cyan]Using database: FalkorDB Remote ({host})[/cyan]")
-        else:
+        elif _console_output_enabled():
             console.print(
                 "[yellow]⚠ DATABASE_TYPE=falkordb-remote but FALKORDB_HOST not set.[/yellow]"
             )
     elif default_db == "falkordb":
         if os.environ.get("FALKORDB_HOST"):
-            console.print(
-                f"[cyan]Using database: FalkorDB Remote ({os.environ.get('FALKORDB_HOST')})[/cyan]"
-            )
-        else:
+            if _console_output_enabled():
+                console.print(
+                    f"[cyan]Using database: FalkorDB Remote ({os.environ.get('FALKORDB_HOST')})[/cyan]"
+                )
+        elif _console_output_enabled():
             console.print("[cyan]Using database: FalkorDB[/cyan]")
-    else:
+    elif _console_output_enabled():
         console.print(f"[cyan]Using database: {default_db}[/cyan]")
 
 

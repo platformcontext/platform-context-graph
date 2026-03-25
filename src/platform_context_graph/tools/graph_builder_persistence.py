@@ -12,6 +12,8 @@ from ..content.ingest import (
     prepare_content_entries,
     repository_metadata_from_row,
 )
+from ..observability import get_observability
+from ..utils.debug_log import emit_log_call
 from ..content.state import get_postgres_content_provider
 from .graph_builder_persistence_batch import (
     collect_file_write_data,
@@ -217,17 +219,34 @@ def _content_dual_write(
     content_provider = get_postgres_content_provider()
     if content_provider is None or not content_provider.enabled:
         return
+    telemetry = get_observability()
     try:
-        file_entry, entity_entries = prepare_content_entries(
-            file_data=file_data,
-            repository=repository,
-        )
-        if file_entry is not None:
-            content_provider.upsert_file(file_entry)
-        if entity_entries:
-            content_provider.upsert_entities(entity_entries)
+        with telemetry.start_span(
+            "pcg.content.dual_write",
+            attributes={
+                "pcg.content.repo_id": repository.get("id"),
+                "pcg.content.relative_path": str(file_data.get("path", file_name)),
+            },
+        ):
+            file_entry, entity_entries = prepare_content_entries(
+                file_data=file_data,
+                repository=repository,
+            )
+            if file_entry is not None:
+                content_provider.upsert_file(file_entry)
+            if entity_entries:
+                content_provider.upsert_entities(entity_entries)
     except Exception as exc:
-        warning_logger_fn(f"Content store dual-write failed for {file_name}: {exc}")
+        emit_log_call(
+            warning_logger_fn,
+            f"Content store dual-write failed for {file_name}: {exc}",
+            event_name="content.dual_write.failed",
+            extra_keys={
+                "file_name": file_name,
+                "repo_id": repository.get("id"),
+            },
+            exc_info=exc,
+        )
 
 
 def _begin_transaction(session: Any) -> tuple[Any, bool]:
@@ -274,8 +293,14 @@ def add_file_to_graph(
     """
     _ = (repo_name, imports_map, info_logger_fn)
     calls_count = len(file_data.get("function_calls", []))
-    debug_log_fn(
-        f"Executing add_file_to_graph for {file_data.get('path', 'unknown')} - Calls found: {calls_count}"
+    emit_log_call(
+        debug_log_fn,
+        f"Executing add_file_to_graph for {file_data.get('path', 'unknown')} - Calls found: {calls_count}",
+        event_name="graph.file.write.started",
+        extra_keys={
+            "file_path": str(file_data.get("path", "unknown")),
+            "function_call_count": calls_count,
+        },
     )
 
     file_path_str = str(Path(file_data["path"]).resolve())
@@ -321,29 +346,36 @@ def add_file_to_graph(
         # the backend supports it; otherwise fall back to auto-commit.
         tx, is_explicit = _begin_transaction(session)
         try:
-            _run_write_query(
-                tx,
-                """
-                MERGE (f:File {path: $file_path})
-                SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
-                """,
-                file_path=file_path_str,
-                name=file_name,
-                relative_path=relative_path,
-                is_dependency=is_dependency,
-            )
+            with get_observability().start_span(
+                "pcg.graph.file_commit",
+                attributes={
+                    "pcg.graph.file_path": file_path_str,
+                    "pcg.graph.repo_path": str(repo_path_obj),
+                },
+            ):
+                _run_write_query(
+                    tx,
+                    """
+                    MERGE (f:File {path: $file_path})
+                    SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
+                    """,
+                    file_path=file_path_str,
+                    name=file_name,
+                    relative_path=relative_path,
+                    is_dependency=is_dependency,
+                )
 
-            _merge_directory_chain(tx, file_path_obj, repo_path_obj, file_path_str)
+                _merge_directory_chain(tx, file_path_obj, repo_path_obj, file_path_str)
 
-            write_data = collect_file_write_data(
-                file_data,
-                file_path_str,
-                max_entity_value_length=max_entity_value_length,
-            )
-            flush_write_batches(tx, write_data)
+                write_data = collect_file_write_data(
+                    file_data,
+                    file_path_str,
+                    max_entity_value_length=max_entity_value_length,
+                )
+                flush_write_batches(tx, write_data)
 
-            if is_explicit:
-                tx.commit()
+                if is_explicit:
+                    tx.commit()
         except Exception:
             if is_explicit:
                 tx.rollback()
@@ -381,8 +413,14 @@ def commit_file_batch_to_graph(
     repo_path_obj = repo_path.resolve()
     repo_path_str = str(repo_path_obj)
 
-    debug_log_fn(
-        f"commit_file_batch_to_graph: {len(file_data_list)} files for {repo_path_str}"
+    emit_log_call(
+        debug_log_fn,
+        f"commit_file_batch_to_graph: {len(file_data_list)} files for {repo_path_str}",
+        event_name="graph.batch.commit.started",
+        extra_keys={
+            "repo_path": repo_path_str,
+            "file_count": len(file_data_list),
+        },
     )
     max_entity_value_length = resolve_max_entity_value_length(
         get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH")
@@ -425,47 +463,69 @@ def commit_file_batch_to_graph(
 
             tx, is_explicit = _begin_transaction(session)
             try:
-                accumulator = empty_accumulator()
+                with get_observability().start_span(
+                    "pcg.graph.commit_chunk",
+                    attributes={
+                        "pcg.graph.repo_path": repo_path_str,
+                        "pcg.graph.chunk_file_count": len(tx_chunk),
+                    },
+                ):
+                    accumulator = empty_accumulator()
 
-                for chunk_index, file_data in enumerate(tx_chunk, start=1):
-                    file_path_str = str(Path(file_data["path"]).resolve())
-                    file_path_obj = Path(file_path_str)
-                    file_name = Path(file_path_str).name
-                    is_dependency = file_data.get("is_dependency", False)
+                    for chunk_index, file_data in enumerate(tx_chunk, start=1):
+                        file_path_str = str(Path(file_data["path"]).resolve())
+                        file_path_obj = Path(file_path_str)
+                        file_name = Path(file_path_str).name
+                        is_dependency = file_data.get("is_dependency", False)
 
-                    try:
-                        relative_path = file_path_obj.relative_to(repo_path_obj).as_posix()
-                    except ValueError:
-                        relative_path = file_name
+                        try:
+                            relative_path = file_path_obj.relative_to(repo_path_obj).as_posix()
+                        except ValueError:
+                            relative_path = file_name
 
-                    _run_write_query(
-                        tx,
-                        """
-                        MERGE (f:File {path: $file_path})
-                        SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
-                        """,
-                        file_path=file_path_str,
-                        name=file_name,
-                        relative_path=relative_path,
-                        is_dependency=is_dependency,
-                    )
-
-                    _merge_directory_chain(tx, file_path_obj, repo_path_obj, file_path_str)
-
-                    file_batches = collect_file_write_data(
-                        file_data,
-                        file_path_str,
-                        max_entity_value_length=max_entity_value_length,
-                    )
-                    merge_batches(accumulator, file_batches)
-                    if callable(progress_callback):
-                        progress_callback(
-                            processed_files=committed_files + chunk_index,
-                            total_files=total_files,
-                            current_file=file_path_str,
-                            committed=False,
+                        _run_write_query(
+                            tx,
+                            """
+                            MERGE (f:File {path: $file_path})
+                            SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
+                            """,
+                            file_path=file_path_str,
+                            name=file_name,
+                            relative_path=relative_path,
+                            is_dependency=is_dependency,
                         )
-                    if should_flush_batches(accumulator):
+
+                        _merge_directory_chain(tx, file_path_obj, repo_path_obj, file_path_str)
+
+                        file_batches = collect_file_write_data(
+                            file_data,
+                            file_path_str,
+                            max_entity_value_length=max_entity_value_length,
+                        )
+                        merge_batches(accumulator, file_batches)
+                        if callable(progress_callback):
+                            progress_callback(
+                                processed_files=committed_files + chunk_index,
+                                total_files=total_files,
+                                current_file=file_path_str,
+                                committed=False,
+                            )
+                        if should_flush_batches(accumulator):
+                            log_prepared_entity_batches(
+                                accumulator,
+                                repo_path_str=repo_path_str,
+                                info_logger_fn=info_logger_fn,
+                                debug_logger_fn=debug_log_fn,
+                            )
+                            flush_write_batches(
+                                tx,
+                                accumulator,
+                                info_logger_fn=info_logger_fn,
+                                debug_logger_fn=debug_log_fn,
+                            )
+                            accumulator = empty_accumulator()
+
+                    if has_pending_rows(accumulator):
                         log_prepared_entity_batches(
                             accumulator,
                             repo_path_str=repo_path_str,
@@ -478,23 +538,8 @@ def commit_file_batch_to_graph(
                             info_logger_fn=info_logger_fn,
                             debug_logger_fn=debug_log_fn,
                         )
-                        accumulator = empty_accumulator()
-
-                if has_pending_rows(accumulator):
-                    log_prepared_entity_batches(
-                        accumulator,
-                        repo_path_str=repo_path_str,
-                        info_logger_fn=info_logger_fn,
-                        debug_logger_fn=debug_log_fn,
-                    )
-                    flush_write_batches(
-                        tx,
-                        accumulator,
-                        info_logger_fn=info_logger_fn,
-                        debug_logger_fn=debug_log_fn,
-                    )
-                if is_explicit:
-                    tx.commit()
+                    if is_explicit:
+                        tx.commit()
             except Exception:
                 if is_explicit:
                     tx.rollback()

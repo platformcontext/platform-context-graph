@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import importlib
 from unittest.mock import MagicMock
+
+import pytest
 
 from platform_context_graph.content.models import ContentEntityEntry, ContentFileEntry
 from platform_context_graph.content.postgres import PostgresContentProvider
@@ -75,6 +78,69 @@ def test_upsert_file_persists_content_metadata(monkeypatch) -> None:
     assert params["artifact_type"] == "helm_helper_tpl"
     assert params["template_dialect"] == "go_template"
     assert params["iac_relevant"] is True
+
+
+def test_postgres_content_writes_emit_tracing_spans(monkeypatch) -> None:
+    """Hot content writes should emit the expected OTEL spans."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    observability = importlib.import_module("platform_context_graph.observability")
+    observability.reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv(
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "http://otel-collector.monitoring.svc.cluster.local:4317",
+    )
+    span_exporter = InMemorySpanExporter()
+    observability.initialize_observability(
+        component="api",
+        span_exporter=span_exporter,
+        metric_reader=InMemoryMetricReader(),
+    )
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    provider.upsert_file(
+        ContentFileEntry(
+            repo_id="repository:r_test",
+            relative_path="src/example.py",
+            content="print('hello')\n",
+            language="python",
+            indexed_at=datetime.now(tz=timezone.utc),
+        )
+    )
+    provider.upsert_entities(
+        [
+            ContentEntityEntry(
+                entity_id="content-entity:e_test",
+                repo_id="repository:r_test",
+                relative_path="src/example.py",
+                entity_type="Function",
+                entity_name="hello",
+                start_line=1,
+                end_line=1,
+                language="python",
+                source_cache="def hello():\n    return 'hi'\n",
+                indexed_at=datetime.now(tz=timezone.utc),
+            )
+        ]
+    )
+
+    span_names = {span.name for span in span_exporter.get_finished_spans()}
+    assert "pcg.content.postgres.upsert_file" in span_names
+    assert "pcg.content.postgres.upsert_entities" in span_names
 
 
 def test_get_file_content_returns_content_metadata(monkeypatch) -> None:

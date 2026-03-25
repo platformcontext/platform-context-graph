@@ -9,7 +9,7 @@ from typing import Any
 
 from ..content.ingest import CONTENT_ENTITY_LABELS
 from ..observability import get_observability
-from ..utils.debug_log import debug_logger
+from ..utils.debug_log import debug_logger, emit_log_call
 from .graph_builder_persistence_unwind import (
     ITEM_MAPPINGS_KEYS,
     entity_props_for_unwind,
@@ -199,14 +199,27 @@ def flush_write_batches(
             duration_seconds=float(summary["duration_seconds"]),
         )
         if callable(debug_logger_fn):
-            debug_logger_fn(
+            emit_log_call(
+                debug_logger_fn,
                 f"Graph write batch entity label={label} "
                 f"rows={summary['total_rows']} "
                 f"uid_rows={summary['uid_rows']} "
                 f"name_rows={summary['name_rows']} "
                 f"chunks={summary['chunk_count']} "
                 f"max_chunk_rows={summary['max_chunk_rows']} "
-                f"duration={summary['duration_seconds']:.2f}s"
+                f"duration={summary['duration_seconds']:.2f}s",
+                event_name="graph.batch.entity.flush",
+                extra_keys={
+                    "label": label,
+                    "rows": summary["total_rows"],
+                    "uid_rows": summary["uid_rows"],
+                    "name_rows": summary["name_rows"],
+                    "chunk_count": summary["chunk_count"],
+                    "max_chunk_rows": summary["max_chunk_rows"],
+                    "duration_seconds": round(
+                        float(summary["duration_seconds"]), 6
+                    ),
+                },
             )
 
     for batch_name, rows, runner in (
@@ -242,8 +255,15 @@ def flush_write_batches(
             duration_seconds=elapsed,
         )
         if callable(debug_logger_fn):
-            debug_logger_fn(
-                f"Graph write batch type={batch_name} rows={len(rows)} duration={elapsed:.2f}s"
+            emit_log_call(
+                debug_logger_fn,
+                f"Graph write batch type={batch_name} rows={len(rows)} duration={elapsed:.2f}s",
+                event_name="graph.batch.flush",
+                extra_keys={
+                    "batch_type": batch_name,
+                    "rows": len(rows),
+                    "duration_seconds": round(elapsed, 6),
+                },
             )
     return batch_metrics
 
@@ -292,7 +312,15 @@ def log_prepared_entity_batches(
     entity_summary = ", ".join(
         f"{label}={count}" for label, count in entity_counts.items()
     )
-    debug_logger_fn(f"Prepared graph entity batches for {repo_path_str}: {entity_summary}")
+    emit_log_call(
+        debug_logger_fn,
+        f"Prepared graph entity batches for {repo_path_str}: {entity_summary}",
+        event_name="graph.batch.prepared",
+        extra_keys={
+            "repo_path": repo_path_str,
+            "entity_counts": entity_counts,
+        },
+    )
     for label, rows in sorted(batches["entities_by_label"].items()):
         if len(rows) < _LARGE_LABEL_SUMMARY_THRESHOLD:
             continue
@@ -305,10 +333,21 @@ def log_prepared_entity_batches(
         )
         if not top_files:
             continue
-        debug_logger_fn(
+        emit_log_call(
+            debug_logger_fn,
             f"Prepared graph entity batch detail for {repo_path_str}: "
             f"label={label} files={source_summary['file_count']} "
-            f"top_files={top_files}"
+            f"top_files={top_files}",
+            event_name="graph.batch.prepared_detail",
+            extra_keys={
+                "repo_path": repo_path_str,
+                "label": label,
+                "file_count": source_summary["file_count"],
+                "top_files": [
+                    {"path": path, "count": count}
+                    for path, count in source_summary["top_files"]
+                ],
+            },
         )
 
 
@@ -375,9 +414,17 @@ def _flush_entity_label_batches(
     for start in range(0, len(rows), chunk_size):
         chunk = rows[start : start + chunk_size]
         chunk_number = chunk_count + 1
-        debug_logger(
+        emit_log_call(
+            debug_logger,
             f"Graph write batch entity start "
-            f"label={label} chunk={chunk_number}/{total_chunks} rows={len(chunk)}"
+            f"label={label} chunk={chunk_number}/{total_chunks} rows={len(chunk)}",
+            event_name="graph.batch.chunk.started",
+            extra_keys={
+                "label": label,
+                "chunk_number": chunk_number,
+                "total_chunks": total_chunks,
+                "rows": len(chunk),
+            },
         )
         chunk_summary = run_entity_unwind(tx, label, chunk)
         total_rows += int(chunk_summary["total_rows"])
@@ -386,10 +433,21 @@ def _flush_entity_label_batches(
         duration_seconds += float(chunk_summary["duration_seconds"])
         chunk_count += 1
         max_chunk_rows = max(max_chunk_rows, len(chunk))
-        debug_logger(
+        emit_log_call(
+            debug_logger,
             f"Graph write batch entity done "
             f"label={label} chunk={chunk_number}/{total_chunks} "
-            f"rows={len(chunk)} duration={float(chunk_summary['duration_seconds']):.2f}s"
+            f"rows={len(chunk)} duration={float(chunk_summary['duration_seconds']):.2f}s",
+            event_name="graph.batch.chunk.completed",
+            extra_keys={
+                "label": label,
+                "chunk_number": chunk_number,
+                "total_chunks": total_chunks,
+                "rows": len(chunk),
+                "duration_seconds": round(
+                    float(chunk_summary["duration_seconds"]), 6
+                ),
+            },
         )
 
     return {
