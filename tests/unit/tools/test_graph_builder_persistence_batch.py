@@ -57,6 +57,7 @@ def test_flush_write_batches_chunks_variable_rows(monkeypatch) -> None:
             "generic_import_rows": [],
         },
         info_logger_fn=info_lines.append,
+        debug_logger_fn=debug_lines.append,
     )
 
     assert observed_chunk_sizes == [100, 100, 100, 100, 100, 1]
@@ -81,10 +82,9 @@ def test_flush_write_batches_chunks_variable_rows(monkeypatch) -> None:
         "Graph write batch entity done label=Variable chunk=5/6 rows=100 duration=0.25s",
         "Graph write batch entity start label=Variable chunk=6/6 rows=1",
         "Graph write batch entity done label=Variable chunk=6/6 rows=1 duration=0.25s",
+        "Graph write batch entity label=Variable rows=501 uid_rows=501 name_rows=0 chunks=6 max_chunk_rows=100 duration=1.50s",
     ]
-    assert info_lines == [
-        "Graph write batch entity label=Variable rows=501 uid_rows=501 name_rows=0 chunks=6 max_chunk_rows=100 duration=1.50s"
-    ]
+    assert info_lines == []
 
 
 def test_flush_write_batches_keeps_non_variable_rows_in_one_chunk(
@@ -141,6 +141,41 @@ def test_flush_write_batches_keeps_non_variable_rows_in_one_chunk(
         "chunk_count": 1,
         "max_chunk_rows": 600,
     }
+
+
+def test_flush_write_batches_logs_non_entity_summaries_at_debug_only(
+    monkeypatch,
+) -> None:
+    """Non-entity batch summaries should not emit through the info logger."""
+
+    debug_lines: list[str] = []
+    info_lines: list[str] = []
+
+    monkeypatch.setattr(
+        graph_builder_persistence_batch,
+        "run_parameter_unwind",
+        lambda *_args, **_kwargs: None,
+    )
+
+    metrics = graph_builder_persistence_batch.flush_write_batches(
+        object(),
+        {
+            "entities_by_label": {},
+            "params_rows": [{"name": "foo"} for _ in range(4)],
+            "module_rows": [],
+            "nested_fn_rows": [],
+            "class_fn_rows": [],
+            "module_inclusion_rows": [],
+            "js_import_rows": [],
+            "generic_import_rows": [],
+        },
+        info_logger_fn=info_lines.append,
+        debug_logger_fn=debug_lines.append,
+    )
+
+    assert metrics["parameters"]["rows"] == 4
+    assert info_lines == []
+    assert debug_lines == ["Graph write batch type=parameters rows=4 duration=0.00s"]
 
 
 def test_summarize_entity_source_files_uses_repo_relative_top_files() -> None:

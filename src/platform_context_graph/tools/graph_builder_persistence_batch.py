@@ -172,6 +172,7 @@ def flush_write_batches(
     batches: dict[str, Any],
     *,
     info_logger_fn: Any | None = None,
+    debug_logger_fn: Any | None = None,
 ) -> dict[str, dict[str, float | int]]:
     """Flush all accumulated write batches through UNWIND queries.
 
@@ -197,8 +198,8 @@ def flush_write_batches(
             rows=int(summary["total_rows"]),
             duration_seconds=float(summary["duration_seconds"]),
         )
-        if callable(info_logger_fn):
-            info_logger_fn(
+        if callable(debug_logger_fn):
+            debug_logger_fn(
                 f"Graph write batch entity label={label} "
                 f"rows={summary['total_rows']} "
                 f"uid_rows={summary['uid_rows']} "
@@ -240,8 +241,8 @@ def flush_write_batches(
             rows=len(rows),
             duration_seconds=elapsed,
         )
-        if callable(info_logger_fn):
-            info_logger_fn(
+        if callable(debug_logger_fn):
+            debug_logger_fn(
                 f"Graph write batch type={batch_name} rows={len(rows)} duration={elapsed:.2f}s"
             )
     return batch_metrics
@@ -274,10 +275,12 @@ def log_prepared_entity_batches(
     *,
     repo_path_str: str,
     info_logger_fn: Any | None = None,
+    debug_logger_fn: Any | None = None,
 ) -> None:
     """Emit pre-flush entity summaries for the current write accumulator."""
 
-    if not callable(info_logger_fn):
+    _ = info_logger_fn
+    if not callable(debug_logger_fn):
         return
     entity_counts = {
         label: len(rows)
@@ -289,7 +292,7 @@ def log_prepared_entity_batches(
     entity_summary = ", ".join(
         f"{label}={count}" for label, count in entity_counts.items()
     )
-    info_logger_fn(f"Prepared graph entity batches for {repo_path_str}: {entity_summary}")
+    debug_logger_fn(f"Prepared graph entity batches for {repo_path_str}: {entity_summary}")
     for label, rows in sorted(batches["entities_by_label"].items()):
         if len(rows) < _LARGE_LABEL_SUMMARY_THRESHOLD:
             continue
@@ -302,7 +305,7 @@ def log_prepared_entity_batches(
         )
         if not top_files:
             continue
-        info_logger_fn(
+        debug_logger_fn(
             f"Prepared graph entity batch detail for {repo_path_str}: "
             f"label={label} files={source_summary['file_count']} "
             f"top_files={top_files}"

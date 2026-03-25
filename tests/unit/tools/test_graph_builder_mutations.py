@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 from platform_context_graph.tools.graph_builder_mutations import (
     delete_repository_from_graph,
@@ -23,8 +24,9 @@ class _FakeResult:
 class _FakeSession:
     """Context-managed fake Neo4j session."""
 
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, dict[str, str]]] = []
+    def __init__(self, *, repository_count: int = 1) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self._repository_count = repository_count
 
     def __enter__(self):
         return self
@@ -35,7 +37,7 @@ class _FakeSession:
     def run(self, query: str, **params):
         self.calls.append((query, params))
         if "RETURN count(r) as cnt" in query:
-            return _FakeResult({"cnt": 1})
+            return _FakeResult({"cnt": self._repository_count})
         return _FakeResult()
 
 
@@ -110,3 +112,32 @@ def test_delete_repository_rejects_empty_identifier() -> None:
     assert info_logs == []
     assert warning_logs == ["Attempted to delete repository with empty identifier"]
     assert session.calls == []
+
+
+def test_delete_repository_logs_missing_repository_at_debug_only(tmp_path: Path) -> None:
+    """Missing repositories should be treated as a debug-only no-op."""
+
+    repo_path = tmp_path / "orders-api"
+    session = _FakeSession(repository_count=0)
+    builder = SimpleNamespace(
+        driver=SimpleNamespace(session=lambda: session),
+    )
+    info_logs: list[str] = []
+    debug_logs: list[str] = []
+    warning_logs: list[str] = []
+
+    deleted = delete_repository_from_graph(
+        builder,
+        str(repo_path),
+        info_logger_fn=info_logs.append,
+        debug_logger_fn=debug_logs.append,
+        warning_logger_fn=warning_logs.append,
+    )
+
+    assert deleted is False
+    assert info_logs == []
+    assert warning_logs == []
+    assert debug_logs == [
+        f"Repository already absent from graph; nothing to delete: "
+        f"{repo_path.resolve()}"
+    ]

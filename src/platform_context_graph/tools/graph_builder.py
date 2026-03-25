@@ -17,6 +17,7 @@ from ..indexing import execute_index_run, raise_for_failed_index_run
 from ..observability import get_observability
 from ..repository_identity import git_remote_for_path, repository_metadata
 from ..utils.debug_log import debug_log, error_logger, info_logger, warning_logger
+from ..utils.debug_log import debug_logger
 from .graph_builder_indexing import (
     build_graph_from_path_async as _build_graph_from_path_async,
     collect_supported_files as _collect_supported_files,
@@ -233,6 +234,7 @@ class GraphBuilder:
             self,
             repo_identifier,
             info_logger_fn=info_logger,
+            debug_logger_fn=debug_logger,
             warning_logger_fn=warning_logger,
         )
 
