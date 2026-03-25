@@ -412,6 +412,116 @@ def test_create_app_exposes_index_status_route(monkeypatch: pytest.MonkeyPatch) 
     assert response.json()["run_id"] == "run-123"
 
 
+def test_index_status_route_defaults_to_checkpoint_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Index-status should default to the configured checkpoint root."""
+
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+    captured_target = {}
+
+    monkeypatch.setattr(
+        api_app.status_queries,
+        "default_index_status_target",
+        lambda _ingester="repository": "/srv/repos",
+    )
+    def fake_describe_index_run(target=None):
+        captured_target["value"] = target
+        return {
+            "run_id": "run-456",
+            "root_path": "/srv/repos",
+            "status": "indexing",
+            "finalization_status": "pending",
+            "repository_count": 1,
+            "completed_repositories": 0,
+            "failed_repositories": 0,
+            "pending_repositories": 1,
+        }
+
+    monkeypatch.setattr(
+        api_app,
+        "describe_index_run",
+        fake_describe_index_run,
+    )
+
+    app = api_app.create_app(
+        query_services_dependency=lambda: SimpleNamespace(database=object())
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/api/v0/index-status")
+
+    assert response.status_code == 200
+    assert captured_target["value"] == "/srv/repos"
+
+
 def test_service_app_factory_is_exported() -> None:
     api_app = importlib.import_module("platform_context_graph.api.app")
     assert hasattr(api_app, "create_service_app")
+
+
+def test_create_app_exposes_bundle_import_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+    captured: dict[str, object] = {}
+    fake_database = object()
+
+    def fake_import(database, bundle_path, clear_existing=False):
+        captured["database"] = database
+        captured["bundle_path"] = str(bundle_path)
+        captured["clear_existing"] = clear_existing
+        return {"success": True, "message": "imported"}
+
+    monkeypatch.setattr(api_app, "_import_uploaded_bundle", fake_import, raising=False)
+
+    app = api_app.create_app(database_dependency=lambda: fake_database)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v0/bundles/import",
+            files={
+                "bundle": ("sample.pcg", b"bundle-bytes", "application/octet-stream")
+            },
+            data={"clear_existing": "true"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"success": True, "message": "imported"}
+    assert captured["database"] is fake_database
+    assert str(captured["bundle_path"]).endswith(".pcg")
+    assert captured["clear_existing"] is True
+
+
+def test_bundle_import_route_returns_bad_request_for_invalid_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    monkeypatch.setattr(
+        api_app,
+        "_import_uploaded_bundle",
+        lambda _database, _bundle_path, clear_existing=False: {
+            "success": False,
+            "message": "corrupt bundle",
+        },
+        raising=False,
+    )
+
+    app = api_app.create_app(database_dependency=lambda: object())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v0/bundles/import",
+            files={"bundle": ("broken.pcg", b"not-a-zip", "application/octet-stream")},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "corrupt bundle"

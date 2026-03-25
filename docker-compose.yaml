@@ -74,17 +74,20 @@ services:
       PCG_CONTENT_STORE_DSN: postgresql://pcg:testpassword@postgres:5432/platform_context_graph
       PCG_POSTGRES_DSN: postgresql://pcg:testpassword@postgres:5432/platform_context_graph
       PCG_HOME: /data/.platform-context-graph
+      PCG_REPOS_DIR: /data/repos
+      PCG_REPO_SOURCE_MODE: filesystem
+      PCG_FILESYSTEM_ROOT: /fixtures
+      PCG_GIT_AUTH_METHOD: none
       PCG_REPOSITORY_RULES_JSON: "[]"
     volumes:
       - pcg_data:/data
       - ./:/app-src
+      - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
     depends_on:
       neo4j:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      bootstrap-index:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
       interval: 15s

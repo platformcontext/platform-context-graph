@@ -91,14 +91,46 @@ class QueryToolMixin:
         return ecosystem.get_repo_summary(self.db_manager, repo_name)
 
     def get_repo_context_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
-        """Return repository context anchored by repository name."""
+        """Return repository context anchored by canonical repository ID."""
 
-        repo_name = require_str_argument(args, "repo_name")
-        if repo_name is None:
-            return {"error": "The 'repo_name' argument is required."}
+        repo_id = require_str_argument(args, "repo_id")
+        if repo_id is None:
+            return {"error": "The 'repo_id' argument is required."}
         return repository_queries.get_repository_context(
             self.db_manager,
-            repo_id=repo_name,
+            repo_id=repo_id,
+        )
+
+    def get_repository_coverage_tool(
+        self: _QueryRuntime, **args: Any
+    ) -> dict[str, Any]:
+        """Return durable repository coverage for one canonical repository ID."""
+
+        repo_id = require_str_argument(args, "repo_id")
+        if repo_id is None:
+            return {"error": "The 'repo_id' argument is required."}
+        run_id = require_str_argument(args, "run_id")
+        return repository_queries.get_repository_coverage(
+            self.db_manager,
+            repo_id=repo_id,
+            run_id=run_id,
+        )
+
+    def list_repository_coverage_tool(
+        self: _QueryRuntime, **args: Any
+    ) -> dict[str, Any]:
+        """List durable repository coverage rows for one run or across runs."""
+
+        run_id = require_str_argument(args, "run_id")
+        statuses = args.get("statuses")
+        if statuses is not None and not isinstance(statuses, list):
+            return {"error": "The 'statuses' argument must be an array of strings."}
+        return repository_queries.list_repository_coverage(
+            self.db_manager,
+            run_id=run_id,
+            only_incomplete=bool(args.get("only_incomplete", False)),
+            statuses=statuses,
+            limit=int(args.get("limit", 100)),
         )
 
     def resolve_entity_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:

@@ -7,6 +7,7 @@ from typing import Any
 
 from ..cli.config_manager import get_config_value
 from ..utils.debug_log import info_logger
+from .dependency_catalog import dependency_ignore_enabled, is_dependency_path
 from .graph_builder_gitignore import (
     filter_repo_gitignore_files,
     summarize_gitignored_paths,
@@ -81,15 +82,30 @@ def collect_supported_files(
     """
     from .graph_builder_raw_text import parser_key_for_path
 
+    dependency_exclusion_enabled = dependency_ignore_enabled(
+        get_config_value_fn=get_config_value_fn
+    )
+
     if path.is_file():
+        if dependency_exclusion_enabled and _is_dependency_relative_to(
+            path, root=path.parent
+        ):
+            return []
         return [path] if parser_key_for_path(path, builder.parsers) else []
 
     ignore_dirs = get_ignored_dir_names(get_config_value_fn=get_config_value_fn)
     telemetry = get_observability_fn()
     files: list[Path] = []
     for root, dirs, filenames in os_module.walk(path):
+        root_path = Path(root)
         kept_dirs = []
         for directory in sorted(dirs):
+            candidate_dir = root_path / directory
+            if dependency_exclusion_enabled and _is_dependency_relative_to(
+                candidate_dir, root=path
+            ):
+                telemetry.record_hidden_directory_skip(directory.lower())
+                continue
             if directory.lower() in ignore_dirs:
                 telemetry.record_hidden_directory_skip(directory.lower())
                 continue
@@ -99,10 +115,26 @@ def collect_supported_files(
             kept_dirs.append(directory)
         dirs[:] = kept_dirs
         for filename in sorted(filenames):
-            file_path = Path(root) / filename
+            file_path = root_path / filename
+            if dependency_exclusion_enabled and _is_dependency_relative_to(
+                file_path, root=path
+            ):
+                continue
             if parser_key_for_path(file_path, builder.parsers):
                 files.append(file_path)
     return files
+
+
+def _is_dependency_relative_to(candidate: Path, *, root: Path) -> bool:
+    """Return whether a candidate is under a dependency root relative to ``root``."""
+
+    try:
+        relative_path = candidate.relative_to(root)
+    except ValueError:
+        return is_dependency_path(candidate)
+    if relative_path == Path("."):
+        return False
+    return is_dependency_path(relative_path)
 
 
 def _find_pcgignore(

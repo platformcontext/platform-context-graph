@@ -74,7 +74,8 @@ Notes:
 | **`MAX_FILE_SIZE_MB`** | `5` | Files larger than this (in MB) are skipped. |
 | **`IGNORE_TESTS`** | `false` | If `true`, skips folders named `tests` or `spec`. |
 | **`IGNORE_HIDDEN`** | `true` | Skips hidden files (`.git`, `.vscode`). |
-| **`IGNORE_DIRS`** | built-in list | Comma-separated directory names that PCG always skips before descent. Defaults include `.git`, `.terraform`, `.terragrunt-cache`, `.terramate-cache`, `.pulumi`, `.crossplane`, `.serverless`, `.aws-sam`, `cdk.out`, `node_modules`, and common build caches. |
+| **`IGNORE_DIRS`** | built-in list | Comma-separated directory names that PCG always skips before descent. Defaults include `.git`, common virtualenv roots, and generic build caches. |
+| **`PCG_IGNORE_DEPENDENCY_DIRS`** | `true` | Excludes built-in dependency and tool-managed cache roots such as `vendor/`, `node_modules/`, `site-packages/`, `deps/`, `.terraform/`, and `.terragrunt-cache/` before parse and storage. |
 | **`INDEX_VARIABLES`** | `true` | Creates nodes for variables. Set to `false` for a smaller graph. |
 
 ### Database Connection (Neo4j)
@@ -137,7 +138,10 @@ PlatformContextGraph uses the following hierarchy:
 2.  **User Level:** `~/.platform-context-graph/.env` (global settings).
 3.  **Defaults:** Built-in application defaults.
 
-Use `.pcgignore` for project-specific exclusions. Use `IGNORE_DIRS` if you want to change the built-in always-ignore directory list globally.
+Use `.pcgignore` for project-specific exclusions. Use
+`PCG_IGNORE_DEPENDENCY_DIRS` to control the built-in dependency-root policy, and
+use `IGNORE_DIRS` only if you want to change the generic always-ignore
+directory list globally.
 
 To reset everything to defaults:
 ```bash

@@ -20,7 +20,10 @@ def _make_builder() -> GraphBuilder:
     builder = GraphBuilder.__new__(GraphBuilder)
     builder.parsers = {
         ".py": object(),
+        ".js": object(),
+        ".php": object(),
         ".tf": object(),
+        ".yaml": object(),
     }
     builder.add_repository_to_graph = MagicMock()
     builder.add_file_to_graph = MagicMock()
@@ -44,7 +47,9 @@ def _make_builder() -> GraphBuilder:
 
 def _config_value(key: str) -> str | None:
     if key == "IGNORE_DIRS":
-        return ".terraform,.terragrunt-cache,.pulumi,.crossplane,.serverless,.aws-sam,cdk.out,.terramate-cache,node_modules"
+        return "venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__"
+    if key == "PCG_IGNORE_DEPENDENCY_DIRS":
+        return "true"
     if key == "PCG_HONOR_GITIGNORE":
         return "true"
     if key == "SCIP_INDEXER":
@@ -235,6 +240,140 @@ def test_resolve_repository_file_sets_honors_nested_gitignore_negation(
         outside.resolve(),
         kept.resolve(),
     }
+
+
+def test_resolve_repository_file_sets_excludes_dependency_roots_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Built-in dependency roots should be excluded before parse and storage."""
+
+    builder = _make_builder()
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value", _config_value
+    )
+
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+
+    app_file = repo / "src" / "app.py"
+    vendor_file = repo / "vendor" / "pkg" / "client.php"
+    node_modules_file = repo / "node_modules" / "react" / "index.js"
+    bundle_file = repo / "vendor" / "bundle" / "ruby" / "lib.rb"
+    for path in (app_file, vendor_file, node_modules_file, bundle_file):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("print('x')\n", encoding="utf-8")
+
+    repo_file_sets = resolve_repository_file_sets(
+        builder,
+        repo,
+        selected_repositories=None,
+        pathspec_module=__import__("pathspec"),
+    )
+
+    assert repo_file_sets == {repo.resolve(): [app_file.resolve()]}
+
+
+def test_resolve_repository_file_sets_can_include_dependency_roots_when_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The dependency-root exclusion policy should be deploy-configurable."""
+
+    builder = _make_builder()
+
+    def config_value(key: str) -> str | None:
+        if key == "PCG_IGNORE_DEPENDENCY_DIRS":
+            return "false"
+        return _config_value(key)
+
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value",
+        config_value,
+    )
+
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+
+    app_file = repo / "src" / "app.py"
+    vendor_file = repo / "vendor" / "pkg" / "client.php"
+    node_modules_file = repo / "node_modules" / "react" / "index.js"
+    for path in (app_file, vendor_file, node_modules_file):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("print('x')\n", encoding="utf-8")
+
+    repo_file_sets = resolve_repository_file_sets(
+        builder,
+        repo,
+        selected_repositories=None,
+        pathspec_module=__import__("pathspec"),
+    )
+
+    assert set(repo_file_sets[repo.resolve()]) == {
+        app_file.resolve(),
+        node_modules_file.resolve(),
+        vendor_file.resolve(),
+    }
+
+
+def test_resolve_repository_file_sets_keeps_helm_charts_indexed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Helm charts should remain indexed because they can be first-party."""
+
+    builder = _make_builder()
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value", _config_value
+    )
+
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+
+    app_file = repo / "app.py"
+    chart_file = repo / "charts" / "payments" / "templates" / "deployment.yaml"
+    vendor_file = repo / "vendor" / "pkg" / "client.php"
+    for path in (app_file, chart_file, vendor_file):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("kind: ConfigMap\n", encoding="utf-8")
+
+    repo_file_sets = resolve_repository_file_sets(
+        builder,
+        repo,
+        selected_repositories=None,
+        pathspec_module=__import__("pathspec"),
+    )
+
+    assert set(repo_file_sets[repo.resolve()]) == {
+        app_file.resolve(),
+        chart_file.resolve(),
+    }
+
+
+def test_resolve_repository_file_sets_ignores_dependency_roots_relative_to_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Parent path segments should not make an entire repo look vendored."""
+
+    builder = _make_builder()
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value", _config_value
+    )
+
+    repo = tmp_path / "vendor" / "repo"
+    (repo / ".git").mkdir(parents=True)
+
+    app_file = repo / "src" / "app.py"
+    nested_vendor_file = repo / "vendor" / "pkg" / "client.php"
+    for path in (app_file, nested_vendor_file):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("print('x')\n", encoding="utf-8")
+
+    repo_file_sets = resolve_repository_file_sets(
+        builder,
+        repo,
+        selected_repositories=None,
+        pathspec_module=__import__("pathspec"),
+    )
+
+    assert repo_file_sets == {repo.resolve(): [app_file.resolve()]}
 
 
 def test_build_graph_from_path_async_explicit_file_bypasses_gitignore(
@@ -525,7 +664,7 @@ def test_add_repository_to_graph_persists_remote_first_repository_metadata(
     builder.add_repository_to_graph(repo_path)
 
     query = session.run.call_args_list[-1].args[0]
-    params = session.run.call_args_list[-1].kwargs
+    params = session.run.call_args_list[-1].kwargs["parameters"]
 
     assert "CREATE (r:Repository {path: $repo_path})" in query
     assert "SET r.id = $repo_id" in query
@@ -566,7 +705,7 @@ def test_add_repository_to_graph_adopts_existing_path_only_repository(
     assert session.run.call_count == 2
     lookup_query = session.run.call_args_list[0].args[0]
     update_query = session.run.call_args_list[1].args[0]
-    params = session.run.call_args_list[1].kwargs
+    params = session.run.call_args_list[1].kwargs["parameters"]
 
     assert "MATCH (r:Repository {path: $repo_path})" in lookup_query
     assert "WHERE r.path = $repo_path OR r.id = $repo_id" in update_query

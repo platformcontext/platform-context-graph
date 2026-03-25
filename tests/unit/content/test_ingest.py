@@ -151,6 +151,39 @@ def test_prepare_content_entries_for_raw_text_file_only_writes_file_content(
     assert entity_entries == []
 
 
+def test_prepare_content_entries_reads_cp1252_source_text(
+    tmp_path: Path,
+) -> None:
+    """Legacy Windows-1252 files should still populate file and entity content."""
+
+    repo_path = tmp_path / "legacy-service"
+    repo_path.mkdir()
+    file_path = repo_path / "security.php"
+    file_path.write_bytes("<?php\n$price = '£9';\n".encode("cp1252"))
+
+    repository = repository_metadata(
+        name="legacy-service",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/legacy-service.git",
+    )
+    file_data = {
+        "path": str(file_path),
+        "repo_path": str(repo_path),
+        "lang": "php",
+        "variables": [{"name": "$price", "line_number": 2}],
+    }
+
+    file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert file_entry is not None
+    assert file_entry.content == "<?php\n$price = '£9';\n"
+    assert len(entity_entries) == 1
+    assert entity_entries[0].source_cache == "$price = '£9';\n"
+
+
 def test_prepare_content_entries_stamps_file_metadata_onto_entities(
     tmp_path: Path,
 ) -> None:

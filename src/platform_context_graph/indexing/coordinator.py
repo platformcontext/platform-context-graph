@@ -20,6 +20,7 @@ from .coordinator_pipeline import (
     finalize_repository_batch,
     process_repository_snapshots,
 )
+from .coordinator_coverage import publish_run_repository_coverage
 
 from .coordinator_models import (
     IndexExecutionResult,
@@ -32,13 +33,17 @@ from .coordinator_storage import (
     _archive_run,
     _delete_snapshots,
     _graph_store_adapter,
+    _iter_snapshot_file_data,
+    _iter_snapshot_file_data_batches,
     _load_or_create_run,
     _load_run_state_by_id,
-    _load_snapshot,
+    _load_snapshot_metadata,
     _matching_run_states,
     _persist_run_state,
     _record_checkpoint_metric,
-    _save_snapshot,
+    _snapshot_file_data_exists,
+    _save_snapshot_file_data,
+    _save_snapshot_metadata,
     _update_pending_repository_gauge,
     _utc_now,
 )
@@ -123,6 +128,8 @@ def _commit_repository_snapshot(
     snapshot: RepositorySnapshot,
     *,
     is_dependency: bool,
+    progress_callback: Any | None = None,
+    iter_snapshot_file_data_batches_fn: Any | None = None,
 ) -> None:
     """Replace one repository's persisted graph/content state from a snapshot."""
 
@@ -150,9 +157,88 @@ def _commit_repository_snapshot(
 
     builder.add_repository_to_graph(repo_path, is_dependency=is_dependency)
     batch_size = _positive_int_env("PCG_FILE_BATCH_SIZE", 50, maximum=512)
-    for i in range(0, len(snapshot.file_data), batch_size):
-        batch = snapshot.file_data[i : i + batch_size]
-        builder.commit_file_batch_to_graph(batch, repo_path)
+    total_files = snapshot.file_count or len(snapshot.file_data)
+    committed_files = 0
+
+    def _relay_batch_progress(
+        *,
+        committed_offset: int,
+        batch_processed_files: int,
+        current_file: str | None = None,
+        committed: bool,
+    ) -> None:
+        """Translate per-batch heartbeats into repo-level progress updates."""
+
+        if not callable(progress_callback):
+            return
+        progress_callback(
+            processed_files=min(committed_offset + batch_processed_files, total_files),
+            total_files=total_files,
+            current_file=current_file,
+            committed=committed,
+        )
+
+    if snapshot.file_data:
+        while snapshot.file_data:
+            batch = snapshot.file_data[:batch_size]
+            del snapshot.file_data[:batch_size]
+            committed_offset = committed_files
+            commit_kwargs: dict[str, Any] = {}
+            if callable(progress_callback):
+                commit_kwargs["progress_callback"] = (
+                    lambda *,
+                    processed_files,
+                    total_files,
+                    current_file=None,
+                    committed=False: _relay_batch_progress(
+                        committed_offset=committed_offset,
+                        batch_processed_files=processed_files,
+                        current_file=current_file,
+                        committed=committed,
+                    )
+                )
+            builder.commit_file_batch_to_graph(batch, repo_path, **commit_kwargs)
+            committed_files += len(batch)
+            if batch:
+                _relay_batch_progress(
+                    committed_offset=committed_offset,
+                    batch_processed_files=len(batch),
+                    current_file=str(Path(batch[-1]["path"]).resolve()),
+                    committed=True,
+                )
+        return
+
+    if not callable(iter_snapshot_file_data_batches_fn):
+        raise FileNotFoundError(
+            f"Missing file data batches for repository {repo_path.resolve()}"
+        )
+
+    for batch in iter_snapshot_file_data_batches_fn(repo_path, batch_size):
+        if not batch:
+            continue
+        committed_offset = committed_files
+        commit_kwargs = {}
+        if callable(progress_callback):
+            commit_kwargs["progress_callback"] = (
+                lambda *,
+                processed_files,
+                total_files,
+                current_file=None,
+                committed=False: _relay_batch_progress(
+                    committed_offset=committed_offset,
+                    batch_processed_files=processed_files,
+                    current_file=current_file,
+                    committed=committed,
+                )
+            )
+        builder.commit_file_batch_to_graph(batch, repo_path, **commit_kwargs)
+        committed_files += len(batch)
+        _relay_batch_progress(
+            committed_offset=committed_offset,
+            batch_processed_files=len(batch),
+            current_file=str(Path(batch[-1]["path"]).resolve()),
+            committed=True,
+        )
 
 
 async def execute_index_run(
@@ -259,6 +345,13 @@ async def execute_index_run(
         repository_count=len(repo_paths),
         status="indexing",
     )
+    publish_run_repository_coverage(
+        builder=builder,
+        run_state=run_state,
+        repo_paths=repo_paths,
+        include_graph_counts=False,
+        include_content_counts=False,
+    )
     with telemetry.index_run(
         component=component,
         mode=family,
@@ -267,7 +360,7 @@ async def execute_index_run(
         run_id=run_state.run_id,
         resume=resumed,
     ) as run_scope:
-        snapshots, merged_imports_map = await process_repository_snapshots(
+        committed_repo_paths, merged_imports_map = await process_repository_snapshots(
             builder=builder,
             run_state=run_state,
             repo_paths=repo_paths,
@@ -285,12 +378,16 @@ async def execute_index_run(
             index_queue_depth_fn=_index_queue_depth,
             parse_repository_snapshot_async_fn=parse_repository_snapshot_async,
             commit_repository_snapshot_fn=_commit_repository_snapshot,
-            load_snapshot_fn=_load_snapshot,
-            save_snapshot_fn=_save_snapshot,
+            iter_snapshot_file_data_batches_fn=_iter_snapshot_file_data_batches,
+            load_snapshot_metadata_fn=_load_snapshot_metadata,
+            snapshot_file_data_exists_fn=_snapshot_file_data_exists,
+            save_snapshot_metadata_fn=_save_snapshot_metadata,
+            save_snapshot_file_data_fn=_save_snapshot_file_data,
             persist_run_state_fn=_persist_run_state,
             record_checkpoint_metric_fn=_record_checkpoint_metric,
             update_pending_repository_gauge_fn=_update_pending_repository_gauge,
             publish_runtime_progress_fn=_publish_runtime_progress,
+            publish_run_repository_coverage_fn=publish_run_repository_coverage,
             utc_now_fn=_utc_now,
             telemetry=telemetry,
         )
@@ -299,7 +396,10 @@ async def execute_index_run(
             root_path=root_path,
             run_state=run_state,
             repo_paths=repo_paths,
-            snapshots=snapshots,
+            committed_repo_paths=committed_repo_paths,
+            iter_snapshot_file_data_fn=lambda repo_path: _iter_snapshot_file_data(
+                run_state.run_id, repo_path
+            ),
             merged_imports_map=merged_imports_map,
             component=component,
             family=family,
@@ -311,6 +411,8 @@ async def execute_index_run(
             delete_snapshots_fn=_delete_snapshots,
             telemetry=telemetry,
             utc_now_fn=_utc_now,
+            publish_run_repository_coverage_fn=publish_run_repository_coverage,
+            publish_runtime_progress_fn=_publish_runtime_progress,
         )
 
         run_scope.status = run_state.status

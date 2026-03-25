@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import platform_context_graph.tools.graph_builder_call_relationships as call_relationships
@@ -141,7 +142,7 @@ def test_create_function_calls_batches_contextual_exact_matches() -> None:
 
 
 def test_create_all_function_calls_batches_across_files() -> None:
-    """Cross-file finalization should batch rows across the whole run."""
+    """Cross-file finalization should buffer rows across files before flushing."""
 
     session = _FakeSession()
     builder = SimpleNamespace(driver=_FakeDriver(session))
@@ -185,9 +186,8 @@ def test_create_all_function_calls_batches_across_files() -> None:
     )
 
     assert len(session.calls) == 1
-    query, params = session.calls[0]
-    assert "UNWIND $rows AS row" in query
-    assert len(params["rows"]) == 2
+    assert all("UNWIND $rows AS row" in query for query, _params in session.calls)
+    assert [len(params["rows"]) for _query, params in session.calls] == [2]
 
 
 def test_create_all_function_calls_returns_resolution_metrics(
@@ -274,6 +274,50 @@ def test_create_all_function_calls_returns_resolution_metrics(
     assert builder._last_call_relationship_metrics == metrics
 
 
+def test_create_all_function_calls_reports_per_file_progress() -> None:
+    """Cross-file call linking should heartbeat once per processed file."""
+
+    session = _FakeSession()
+    builder = SimpleNamespace(driver=_FakeDriver(session))
+    progress_updates: list[dict[str, object]] = []
+
+    create_all_function_calls(
+        builder,
+        [
+            {
+                "path": "/tmp/repo/a.php",
+                "functions": [],
+                "classes": [],
+                "imports": [],
+                "function_calls": [],
+            },
+            {
+                "path": "/tmp/repo/b.php",
+                "functions": [],
+                "classes": [],
+                "imports": [],
+                "function_calls": [],
+            },
+        ],
+        {},
+        debug_log_fn=lambda *_args, **_kwargs: None,
+        progress_callback=lambda **kwargs: progress_updates.append(kwargs),
+    )
+
+    assert progress_updates == [
+        {
+            "current_file": str(Path("/tmp/repo/a.php").resolve()),
+            "processed_files": 1,
+            "total_files": 2,
+        },
+        {
+            "current_file": str(Path("/tmp/repo/b.php").resolve()),
+            "processed_files": 2,
+            "total_files": 2,
+        },
+    ]
+
+
 def test_run_call_batch_query_chunks_large_row_sets(monkeypatch) -> None:
     """Large row sets should be split into multiple Neo4j batch queries."""
 
@@ -311,6 +355,147 @@ def test_run_call_batch_query_chunks_large_row_sets(monkeypatch) -> None:
 
     assert remaining_rows == []
     assert len(session.calls) == 2
+
+
+def test_filter_fallback_candidate_rows_skips_low_signal_javascript_calls() -> None:
+    """Global fallback should skip ambiguous minified JavaScript names."""
+
+    rows = [
+        {
+            "row_id": 1,
+            "called_name": "S",
+            "full_call_name": 'S("token")',
+            "lang": "javascript",
+            "caller_file_path": "/tmp/repo/vendor.min.js",
+        },
+        {
+            "row_id": 2,
+            "called_name": "createElement",
+            "full_call_name": 'document.createElement("div")',
+            "lang": "javascript",
+            "caller_file_path": "/tmp/repo/vendor.min.js",
+        },
+        {
+            "row_id": 3,
+            "called_name": "registerStreamLogger",
+            "full_call_name": "registerStreamLogger",
+            "lang": "php",
+            "caller_file_path": "/tmp/repo/CKFinder.php",
+        },
+    ]
+
+    filtered = call_relationships._filter_fallback_candidate_rows(rows)
+
+    assert [row["row_id"] for row in filtered] == [3]
+
+
+def test_filter_fallback_candidate_rows_skips_known_php_builtins() -> None:
+    """Global fallback should skip PHP builtins that can never resolve in graph."""
+
+    rows = [
+        {
+            "row_id": 1,
+            "called_name": "isset",
+            "full_call_name": "isset",
+            "lang": "php",
+            "caller_file_path": "/tmp/repo/file.php",
+        },
+        {
+            "row_id": 2,
+            "called_name": "array_merge",
+            "full_call_name": "array_merge",
+            "lang": "php",
+            "caller_file_path": "/tmp/repo/file.php",
+        },
+        {
+            "row_id": 3,
+            "called_name": "hydrateOrder",
+            "full_call_name": "hydrateOrder",
+            "lang": "php",
+            "caller_file_path": "/tmp/repo/file.php",
+        },
+    ]
+
+    filtered = call_relationships._filter_fallback_candidate_rows(rows)
+
+    assert [row["row_id"] for row in filtered] == [3]
+
+
+def test_create_all_function_calls_does_not_special_case_vendored_files() -> None:
+    """CALLS finalization should assume discovery already excluded vendored files."""
+
+    session = _FakeSession()
+    builder = SimpleNamespace(driver=_FakeDriver(session))
+
+    create_all_function_calls(
+        builder,
+        [
+            {
+                "path": "/tmp/repo/static/vendor/jquery-ui-1.10.4.min.js",
+                "lang": "javascript",
+                "functions": [{"name": "a"}],
+                "classes": [],
+                "imports": [],
+                "function_calls": [{"name": "call", "line_number": 10, "args": []}],
+            },
+            {
+                "path": "/tmp/repo/app.js",
+                "lang": "javascript",
+                "functions": [],
+                "classes": [],
+                "imports": [],
+                "function_calls": [
+                    {"name": "renderDashboard", "line_number": 20, "args": []}
+                ],
+            },
+        ],
+        {"renderDashboard": ["/tmp/repo/helpers.js"]},
+        debug_log_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert len(session.calls) == 1
+    _query, params = session.calls[0]
+    assert [row["caller_file_path"] for row in params["rows"]] == [
+        str(Path("/tmp/repo/static/vendor/jquery-ui-1.10.4.min.js").resolve()),
+        str(Path("/tmp/repo/app.js").resolve()),
+    ]
+
+
+def test_create_all_function_calls_does_not_report_vendored_skip_metrics() -> None:
+    """Vendored skip metrics should disappear once exclusion moves to discovery."""
+
+    session = _FakeSession()
+    builder = SimpleNamespace(driver=_FakeDriver(session))
+
+    metrics = create_all_function_calls(
+        builder,
+        [
+            {
+                "path": "/tmp/repo/vendor/pkg/file.php",
+                "lang": "php",
+                "functions": [{"name": "vendoredFn"}],
+                "classes": [],
+                "imports": [],
+                "function_calls": [{"name": "dependencyCall", "line_number": 5, "args": []}],
+            },
+            {
+                "path": "/tmp/repo/app.js",
+                "lang": "javascript",
+                "functions": [],
+                "classes": [],
+                "imports": [],
+                "function_calls": [
+                    {"name": "renderDashboard", "line_number": 20, "args": []}
+                ],
+            },
+        ],
+        {"renderDashboard": ["/tmp/repo/helpers.js"]},
+        debug_log_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert "skipped_vendored_files" not in metrics
+    assert "skipped_vendored_calls" not in metrics
+    assert "skipped_vendored_files" not in builder._last_call_relationship_metrics
 
 
 def test_contextual_exact_query_preserves_rows_without_constructor_match() -> None:

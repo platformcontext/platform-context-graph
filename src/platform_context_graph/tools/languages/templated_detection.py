@@ -118,6 +118,7 @@ def _infer_root_family(relative_path: Path, content: str) -> str:
     parts = {part.lower() for part in relative_path.parts}
     name = relative_path.name.lower()
     suffixes = _suffixes(relative_path)
+    go_expression_match = GO_EXPRESSION_RE.search(content)
     has_tf_markers = bool(
         TF_INTERPOLATION_RE.search(content)
         or TF_DIRECTIVE_RE.search(content)
@@ -128,8 +129,30 @@ def _infer_root_family(relative_path: Path, content: str) -> str:
     if has_tf_markers and any(
         suffix in TERRAFORM_TEMPLATE_SUFFIXES | JINJA_TEMPLATE_SUFFIXES
         for suffix in suffixes
-    ) and not (GO_EXPRESSION_RE.search(content) or JINJA_STATEMENT_RE.search(content)):
+    ) and not (go_expression_match or JINJA_STATEMENT_RE.search(content)):
         return "terraform"
+    if (
+        suffixes
+        and suffixes[-1] == ".tpl"
+        and "templates" in parts
+        and go_expression_match
+        and (
+            name == "_helpers.tpl"
+            or any(
+                marker in content
+                for marker in (
+                    ".Chart",
+                    ".Release",
+                    ".Values",
+                    '{{ include "',
+                    '{{- include "',
+                    '{{ define "',
+                    '{{- define "',
+                )
+            )
+        )
+    ):
+        return "helm_argo"
     if (
         name == "chart.yaml"
         or name.startswith("values.")
@@ -165,6 +188,10 @@ def _artifact_type(root_family: str, relative_path: Path) -> str:
     name = relative_path.name.lower()
     parts = {part.lower() for part in relative_path.parts}
     suffixes = _suffixes(relative_path)
+    is_template_suffix = bool(
+        suffixes
+        and suffixes[-1] in JINJA_TEMPLATE_SUFFIXES | TERRAFORM_TEMPLATE_SUFFIXES
+    )
 
     if ".github" in parts and "workflows" in parts:
         return "github_actions_workflow"
@@ -174,10 +201,10 @@ def _artifact_type(root_family: str, relative_path: Path) -> str:
         return "docker_compose"
     if RAW_CONFIG_SUFFIXES.intersection(suffixes):
         if "apache" in parts or "httpd" in parts or "mods-available" in parts:
-            return "apache_config"
+            return "apache_config_template" if is_template_suffix else "apache_config"
         if "nginx" in parts:
-            return "nginx_config"
-        return "generic_config"
+            return "nginx_config_template" if is_template_suffix else "nginx_config"
+        return "generic_config_template" if is_template_suffix else "generic_config"
     if any(suffix in YAML_SUFFIXES for suffix in suffixes) and any(
         suffix in JINJA_TEMPLATE_SUFFIXES for suffix in suffixes
     ):
@@ -231,10 +258,13 @@ def _is_raw_ingest_candidate(*, artifact_type: str, bucket: str) -> bool:
 
     return artifact_type in {
         "apache_config",
+        "apache_config_template",
         "dockerfile",
+        "generic_config_template",
         "generic_config",
         "jinja_text_template",
         "nginx_config",
+        "nginx_config_template",
         "terraform_template_text",
         "text_template",
     } or bucket == "plain_text"
@@ -255,11 +285,14 @@ def _is_iac_relevant(
         return True
     if artifact_type in {
         "apache_config",
+        "apache_config_template",
         "docker_compose",
         "dockerfile",
         "nginx_config",
+        "nginx_config_template",
         "terraform_template_text",
         "yaml_template",
+        "generic_config_template",
     }:
         return True
     if bucket in {
@@ -284,11 +317,27 @@ def classify_file(
     suffixes = _suffixes(relative_path)
     artifact_type = _artifact_type(root_family, relative_path)
     lowered_content = content.lower()
-    if artifact_type == "generic_config":
-        if any(token in lowered_content for token in ("server {", "fastcgi_pass", "proxy_pass", "location /")):
-            artifact_type = "nginx_config"
-        elif any(token in lowered_content for token in ("<virtualhost", "rewriterule", "documentroot", "servername ")):
-            artifact_type = "apache_config"
+    if artifact_type in {"generic_config", "generic_config_template"}:
+        is_template_config = artifact_type.endswith("_template")
+        if any(
+            token in lowered_content
+            for token in ("server {", "fastcgi_pass", "proxy_pass", "location /")
+        ):
+            artifact_type = (
+                "nginx_config_template" if is_template_config else "nginx_config"
+            )
+        elif any(
+            token in lowered_content
+            for token in (
+                "<virtualhost",
+                "rewriterule",
+                "documentroot",
+                "servername ",
+            )
+        ):
+            artifact_type = (
+                "apache_config_template" if is_template_config else "apache_config"
+            )
     yaml_template = (
         len(suffixes) >= 2
         and suffixes[-1] in JINJA_TEMPLATE_SUFFIXES

@@ -47,13 +47,13 @@ class _BundleExportMixin:
                 temp_path = Path(temp_dir)
                 metadata = self._extract_metadata(repo_path)
                 (temp_path / "metadata.json").write_text(
-                    json.dumps(metadata, indent=2),
+                    json.dumps(_json_ready(metadata), indent=2),
                     encoding="utf-8",
                 )
 
                 schema = self._extract_schema()
                 (temp_path / "schema.json").write_text(
-                    json.dumps(schema, indent=2),
+                    json.dumps(_json_ready(schema), indent=2),
                     encoding="utf-8",
                 )
 
@@ -64,7 +64,7 @@ class _BundleExportMixin:
                 if include_stats:
                     stats = self._generate_stats(repo_path, node_count, edge_count)
                     (temp_path / "stats.json").write_text(
-                        json.dumps(stats, indent=2),
+                        json.dumps(_json_ready(stats), indent=2),
                         encoding="utf-8",
                     )
 
@@ -278,7 +278,7 @@ class _BundleExportMixin:
                     elif hasattr(node, "id"):
                         node_dict["_id"] = str(node.id)
 
-                    handle.write(json.dumps(node_dict) + "\n")
+                    handle.write(json.dumps(_json_ready(node_dict)) + "\n")
                     count += 1
         return count
 
@@ -349,7 +349,7 @@ class _BundleExportMixin:
                         "type": rel_type,
                         "properties": rel_props,
                     }
-                    handle.write(json.dumps(edge_dict) + "\n")
+                    handle.write(json.dumps(_json_ready(edge_dict)) + "\n")
                     count += 1
         return count
 
@@ -479,3 +479,23 @@ pcg import <bundle-file>.pcg
             for path in source_dir.rglob("*"):
                 if path.is_file():
                     bundle_zip.write(path, path.relative_to(source_dir))
+
+
+def _json_ready(value: Any) -> Any:
+    """Recursively normalize bundle payloads into JSON-serializable values."""
+
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_ready(item) for key, item in value.items()}
+    if isinstance(value, list | tuple | set):
+        return [_json_ready(item) for item in value]
+    if isinstance(value, Path):
+        return str(value)
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
+        try:
+            return isoformat()
+        except TypeError:
+            pass
+    return str(value)

@@ -42,7 +42,10 @@ class RuntimeStatusToolMixin:
         """Return checkpointed index-run status for a path or run ID."""
 
         target = args.get("target")
-        summary = describe_index_run(target or ".")
+        resolved_target = target or status_queries.default_index_status_target(
+            "repository"
+        )
+        summary = describe_index_run(resolved_target or ".")
         if summary is None:
             return {"error": "Index status not found"}
         return summary

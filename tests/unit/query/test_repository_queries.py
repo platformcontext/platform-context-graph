@@ -9,6 +9,7 @@ from platform_context_graph.query.repositories import (
     get_repository_stats,
 )
 from platform_context_graph.query.repositories.context_data import _fetch_infrastructure
+from platform_context_graph.query.repositories.graph_counts import repository_graph_counts
 
 
 class MockRecord:
@@ -58,19 +59,47 @@ class FinderLike:
         self.db_manager = db_manager
 
 
-def test_get_repository_context_returns_current_context_shape():
-    repo_record = MockRecord(
+def test_repository_graph_counts_excludes_class_methods_from_top_level_count() -> None:
+    """Top-level function counts must exclude functions also contained by classes."""
+
+    recorded_query: dict[str, str] = {}
+
+    class RecordingSession:
+        def run(self, query, **kwargs):
+            del kwargs
+            recorded_query["query"] = query
+            return MockResult(
+                single_record=MockRecord(
+                    {
+                        "root_file_count": 2,
+                        "root_directory_count": 8,
+                        "file_count": 6356,
+                        "top_level_function_count": 17908,
+                        "class_method_count": 22363,
+                        "total_function_count": 40271,
+                        "class_count": 3373,
+                        "module_count": 0,
+                    }
+                )
+            )
+
+    counts = repository_graph_counts(
+        RecordingSession(),
         {
-            "id": "repository:r_ab12cd34",
-            "name": "my-api",
-            "path": "/repos/my-api",
-            "local_path": "/repos/my-api",
-            "remote_url": "https://github.com/platformcontext/my-api",
-            "repo_slug": "platformcontext/my-api",
-            "has_remote": True,
-        }
+            "id": "repository:r_221a72af",
+            "path": "/repos/boatgest-php-youboat",
+            "local_path": "/repos/boatgest-php-youboat",
+        },
     )
-    code_record = MockRecord({"functions": 10, "classes": 3})
+
+    assert counts["top_level_function_count"] == 17908
+    assert counts["class_method_count"] == 22363
+    assert counts["total_function_count"] == 40271
+    assert "NOT EXISTS {" in recorded_query["query"]
+    assert "(:Class)-[:CONTAINS]->(fn)" in recorded_query["query"]
+
+
+def test_get_repository_context_returns_current_context_shape():
     deps_record = MockRecord({"dependencies": []})
     dependents_record = MockRecord({"dependents": []})
     canonical_repo_id = _canonical_repository_id(
@@ -100,7 +129,20 @@ def test_get_repository_context_returns_current_context_shape():
                     {"file": "deploy.yaml", "ext": "yaml"},
                 ]
             ),
-            "count(DISTINCT fn)": MockResult(single_record=code_record),
+            "RETURN root_file_count,": MockResult(
+                single_record=MockRecord(
+                    {
+                        "root_file_count": 1,
+                        "root_directory_count": 2,
+                        "file_count": 3,
+                        "top_level_function_count": 7,
+                        "class_method_count": 3,
+                        "total_function_count": 10,
+                        "class_count": 3,
+                        "module_count": 2,
+                    }
+                )
+            ),
             "fn.name IN": MockResult(records=[]),
             "K8sResource": MockResult(records=[]),
             "TerraformResource": MockResult(records=[]),
@@ -134,9 +176,18 @@ def test_get_repository_context_returns_current_context_shape():
         == "https://github.com/platformcontext/my-api"
     )
     assert result["repository"]["file_count"] == 3
+    assert result["repository"]["root_file_count"] == 1
+    assert result["repository"]["root_directory_count"] == 2
+    assert result["repository"]["graph_available"] is True
+    assert result["repository"]["server_content_available"] is False
+    assert result["repository"]["active_run_id"] is None
+    assert result["repository"]["index_status"] is None
     assert result["code"]["functions"] == 10
+    assert result["code"]["top_level_functions"] == 7
+    assert result["code"]["class_methods"] == 3
     assert result["code"]["classes"] == 3
     assert "python" in result["code"]["languages"]
+    assert result["coverage"] is None
     assert result["infrastructure"] == {}
     assert result["relationships"] == []
     assert result["ecosystem"] is None
@@ -162,17 +213,19 @@ def test_get_repository_stats_supports_repo_and_overall_modes():
                     }
                 ]
             ),
-            "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(f:File) RETURN count(f) as c": MockResult(
-                single_record=MockRecord({"c": 3})
-            ),
-            "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(func:Function) RETURN count(func) as c": MockResult(
-                single_record=MockRecord({"c": 7})
-            ),
-            "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(cls:Class) RETURN count(cls) as c": MockResult(
-                single_record=MockRecord({"c": 2})
-            ),
-            "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(f:File)-[:IMPORTS]->(m:Module) RETURN count(DISTINCT m) as c": MockResult(
-                single_record=MockRecord({"c": 5})
+            "RETURN root_file_count,": MockResult(
+                single_record=MockRecord(
+                    {
+                        "root_file_count": 2,
+                        "root_directory_count": 4,
+                        "file_count": 3,
+                        "top_level_function_count": 5,
+                        "class_method_count": 2,
+                        "total_function_count": 7,
+                        "class_count": 2,
+                        "module_count": 5,
+                    }
+                )
             ),
             "MATCH (r:Repository) RETURN count(r) as c": MockResult(
                 single_record=MockRecord({"c": 4})
@@ -199,7 +252,17 @@ def test_get_repository_stats_supports_repo_and_overall_modes():
     assert scoped["success"] is True
     assert scoped["repository"]["id"] == canonical_repo_id
     assert scoped["repository"]["local_path"] == "/repos/my-api"
-    assert scoped["stats"] == {"files": 3, "functions": 7, "classes": 2, "modules": 5}
+    assert scoped["stats"] == {
+        "files": 3,
+        "root_files": 2,
+        "root_directories": 4,
+        "functions": 7,
+        "top_level_functions": 5,
+        "class_methods": 2,
+        "classes": 2,
+        "modules": 5,
+    }
+    assert scoped["coverage"] is None
     assert overall["success"] is True
     assert overall["stats"]["repositories"] == 4
     assert overall["stats"]["files"] == 20
@@ -273,13 +336,35 @@ def test_get_repository_context_scopes_follow_up_queries_to_the_resolved_reposit
                         {"file": "worker.py", "ext": "py"},
                     ]
                 )
-            if "count(DISTINCT fn)" in query:
+            if "RETURN root_file_count," in query:
                 if "r.id = $repo_id" in query:
                     return MockResult(
-                        single_record=MockRecord({"functions": 1, "classes": 0})
+                        single_record=MockRecord(
+                            {
+                                "root_file_count": 1,
+                                "root_directory_count": 1,
+                                "file_count": 1,
+                                "top_level_function_count": 1,
+                                "class_method_count": 0,
+                                "total_function_count": 1,
+                                "class_count": 0,
+                                "module_count": 0,
+                            }
+                        )
                     )
                 return MockResult(
-                    single_record=MockRecord({"functions": 2, "classes": 0})
+                    single_record=MockRecord(
+                        {
+                            "root_file_count": 2,
+                            "root_directory_count": 2,
+                            "file_count": 2,
+                            "top_level_function_count": 2,
+                            "class_method_count": 0,
+                            "total_function_count": 2,
+                            "class_count": 0,
+                            "module_count": 0,
+                        }
+                    )
                 )
             if "fn.name IN" in query:
                 if "r.id = $repo_id" in query:
@@ -363,7 +448,11 @@ def test_get_repository_context_scopes_follow_up_queries_to_the_resolved_reposit
 
     assert result["repository"]["name"] == "payments-api"
     assert result["repository"]["file_count"] == 1
+    assert result["repository"]["root_file_count"] == 1
+    assert result["repository"]["root_directory_count"] == 1
     assert result["code"]["functions"] == 1
+    assert result["code"]["top_level_functions"] == 1
+    assert result["code"]["class_methods"] == 0
     assert result["code"]["entry_points"] == [
         {"name": "main", "file": "payments.py", "line": 1}
     ]

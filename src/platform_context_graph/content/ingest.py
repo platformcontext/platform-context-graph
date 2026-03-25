@@ -13,6 +13,7 @@ from ..repository_identity import (
     repository_metadata,
 )
 from ..tools.languages.templated_detection import infer_content_metadata
+from ..utils.source_text import read_source_text
 from .identity import canonical_content_entity_id
 from .models import ContentEntityEntry, ContentFileEntry
 
@@ -244,11 +245,11 @@ def _portable_relative_path(file_path: Path, repo_local_path: str | None) -> str
 
 
 def _read_text(file_path: Path) -> str | None:
-    """Read a UTF-8 text file for content-store ingestion."""
+    """Read a source file for content-store ingestion with legacy fallbacks."""
 
     try:
-        return file_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+        return read_source_text(file_path)
+    except OSError:
         return None
 
 

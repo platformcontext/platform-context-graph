@@ -6,16 +6,19 @@ from contextlib import asynccontextmanager
 from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError, version as pkg_version
 from pathlib import Path
+import tempfile
 from typing import Any
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.responses import Response
 
+from ..core.pcg_bundle import PCGBundle
 from ..observability import initialize_observability
 from ..domain.responses import IngesterScanRequestResponse, IngesterStatusResponse
 from ..indexing.coordinator import describe_index_run
+from ..query import status as status_queries
 from .dependencies import get_database, get_query_services
 from .routers import (
     code_router,
@@ -177,6 +180,25 @@ def _build_openapi(app: FastAPI) -> dict[str, Any]:
     return app.openapi_schema
 
 
+def _import_uploaded_bundle(
+    database: Any,
+    bundle_path: Path,
+    *,
+    clear_existing: bool = False,
+) -> dict[str, Any]:
+    """Import one uploaded ``.pcg`` bundle into the configured database."""
+
+    bundle = PCGBundle(database)
+    success, message = bundle.import_from_bundle(
+        bundle_path,
+        clear_existing=clear_existing,
+    )
+    return {
+        "success": success,
+        "message": message,
+    }
+
+
 def create_app(
     *,
     database_dependency: Callable[..., Any] | None = None,
@@ -224,10 +246,63 @@ def create_app(
     def index_status(target: str | None = None) -> dict[str, Any]:
         """Return the latest checkpointed index status for a path or run ID."""
 
-        summary = describe_index_run(target or Path.cwd())
+        summary = describe_index_run(
+            target
+            or status_queries.default_index_status_target("repository")
+            or Path.cwd()
+        )
         if summary is None:
             raise HTTPException(status_code=404, detail="Index status not found")
         return summary
+
+    @router.get("/index-runs/{run_id}/coverage", tags=["system"])
+    def index_run_coverage(
+        run_id: str,
+        only_incomplete: bool = False,
+        limit: int = 100,
+        services: Any = Depends(get_query_services),
+    ) -> dict[str, Any]:
+        """Return durable repository coverage rows for one checkpointed run."""
+
+        return services.repositories.list_repository_coverage(
+            services.database,
+            run_id=run_id,
+            only_incomplete=only_incomplete,
+            limit=limit,
+        )
+
+    @router.post("/bundles/import", tags=["system"])
+    async def import_bundle(
+        bundle: UploadFile = File(...),
+        clear_existing: bool = Form(False),
+        database: Any = Depends(get_database),
+    ) -> dict[str, Any]:
+        """Import an uploaded ``.pcg`` bundle into the active graph database."""
+
+        temp_path: Path | None = None
+        try:
+            suffix = Path(bundle.filename or "uploaded-bundle.pcg").suffix or ".pcg"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as handle:
+                temp_path = Path(handle.name)
+                while chunk := await bundle.read(1024 * 1024):
+                    handle.write(chunk)
+
+            result = _import_uploaded_bundle(
+                database,
+                temp_path,
+                clear_existing=clear_existing,
+            )
+        finally:
+            await bundle.close()
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=400,
+                detail=str(result.get("message") or "Bundle import failed"),
+            )
+        return result
 
     @router.get(
         "/ingesters",

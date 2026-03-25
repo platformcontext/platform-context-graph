@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from platform_context_graph.query import status as status_queries
 
@@ -76,3 +77,178 @@ def test_request_ingester_scan_control_normalizes_datetime_fields(
     )
 
     assert result["scan_requested_at"] == "2026-03-22T12:05:00+00:00"
+
+
+def test_get_ingester_status_falls_back_to_checkpointed_bootstrap_run(
+    monkeypatch,
+) -> None:
+    """Active bootstrap runs should surface from checkpoint state when no row exists."""
+
+    monkeypatch.setattr(status_queries, "get_runtime_status_store", lambda: None)
+    monkeypatch.setattr(
+        status_queries,
+        "_describe_index_run",
+        lambda target: {
+            "run_id": "run-123",
+            "status": "running",
+            "created_at": "2026-03-24T12:00:00Z",
+            "updated_at": "2026-03-24T12:02:00Z",
+            "last_error": None,
+            "repository_count": 10,
+            "completed_repositories": 4,
+            "failed_repositories": 1,
+            "pending_repositories": 5,
+            "repositories": [
+                {
+                    "repo_path": "/tmp/repos/payments-api",
+                    "status": "running",
+                    "phase": "committing",
+                    "phase_started_at": "2026-03-24T12:01:30Z",
+                    "current_file": "src/app.py",
+                    "last_progress_at": "2026-03-24T12:01:59Z",
+                    "commit_started_at": "2026-03-24T12:01:31Z",
+                    "updated_at": "2026-03-24T12:01:59Z",
+                }
+            ],
+        },
+    )
+    monkeypatch.setenv("PCG_REPO_SOURCE_MODE", "filesystem")
+    monkeypatch.setenv("PCG_REPOS_DIR", "/tmp/repos")
+    monkeypatch.setenv("PCG_FILESYSTEM_ROOT", "/tmp/source-root")
+
+    result = status_queries.get_ingester_status(object(), ingester="repository")
+
+    assert result["status"] == "indexing"
+    assert result["active_run_id"] == "run-123"
+    assert result["active_repository_path"] == "/tmp/repos/payments-api"
+    assert result["active_phase"] == "committing"
+    assert result["repository_count"] == 10
+    assert result["completed_repositories"] == 4
+    assert result["pending_repositories"] == 5
+
+
+def test_checkpoint_target_prefers_working_checkout_root(monkeypatch) -> None:
+    """Checkpoint lookups should use the working checkout root when configured."""
+
+    monkeypatch.setenv("PCG_REPO_SOURCE_MODE", "filesystem")
+    monkeypatch.setenv("PCG_REPOS_DIR", "/tmp/repos")
+    monkeypatch.setenv("PCG_FILESYSTEM_ROOT", "/tmp/source-root")
+
+    target = status_queries._checkpoint_target_for_ingester("repository")
+
+    assert target is not None
+    assert target == Path("/tmp/repos").resolve()
+
+
+def test_get_ingester_status_prefers_checkpoint_when_store_is_bootstrap_pending(
+    monkeypatch,
+) -> None:
+    """Bootstrap-pending runtime rows should be replaced by active checkpoint state."""
+
+    store = _Store(
+        {
+            "repository": {
+                "runtime_family": "ingester",
+                "ingester": "repository",
+                "provider": "repository",
+                "status": "bootstrap_pending",
+                "updated_at": datetime(2026, 3, 24, 12, 0, tzinfo=timezone.utc),
+            }
+        }
+    )
+    monkeypatch.setattr(status_queries, "get_runtime_status_store", lambda: store)
+    monkeypatch.setattr(
+        status_queries,
+        "_describe_index_run",
+        lambda target: {
+            "run_id": "run-456",
+            "status": "partial_failure",
+            "created_at": "2026-03-24T12:00:00Z",
+            "updated_at": "2026-03-24T12:05:00Z",
+            "last_error": "repo failed",
+            "repository_count": 3,
+            "completed_repositories": 2,
+            "failed_repositories": 1,
+            "pending_repositories": 0,
+            "repositories": [],
+        },
+    )
+    monkeypatch.setenv("PCG_REPO_SOURCE_MODE", "githubOrg")
+    monkeypatch.setenv("PCG_REPOS_DIR", "/tmp/repos")
+
+    result = status_queries.get_ingester_status(object(), ingester="repository")
+
+    assert result["status"] == "partial_failure"
+    assert result["active_run_id"] == "run-456"
+    assert result["last_error_message"] == "repo failed"
+
+
+def test_get_ingester_status_uses_bootstrap_provider_row_for_repository_view(
+    monkeypatch,
+) -> None:
+    """The public repository ingester view should reflect active bootstrap work."""
+
+    store = _Store(
+        {
+            "bootstrap-index": {
+                "runtime_family": "ingester",
+                "ingester": "bootstrap-index",
+                "provider": "bootstrap-index",
+                "status": "indexing",
+                "active_run_id": "run-789",
+                "active_repository_path": "/tmp/repos/payments-api",
+                "active_phase": "parsing",
+                "updated_at": datetime(2026, 3, 25, 12, 3, tzinfo=timezone.utc),
+            }
+        }
+    )
+    monkeypatch.setattr(status_queries, "get_runtime_status_store", lambda: store)
+
+    result = status_queries.get_ingester_status(object(), ingester="repository")
+
+    assert result["ingester"] == "repository"
+    assert result["provider"] == "bootstrap-index"
+    assert result["status"] == "indexing"
+    assert result["active_run_id"] == "run-789"
+
+
+def test_get_ingester_status_falls_back_to_checkpointed_finalization_progress(
+    monkeypatch,
+) -> None:
+    """Checkpoint fallback should expose active finalization when no repo is active."""
+
+    monkeypatch.setattr(status_queries, "get_runtime_status_store", lambda: None)
+    monkeypatch.setattr(
+        status_queries,
+        "_describe_index_run",
+        lambda target: {
+            "run_id": "run-999",
+            "status": "running",
+            "finalization_status": "running",
+            "finalization_current_stage": "function_calls",
+            "finalization_started_at": "2026-03-25T12:00:00Z",
+            "finalization_stage_started_at": "2026-03-25T12:01:00Z",
+            "finalization_stage_details": {
+                "function_calls": {
+                    "current_file": "/tmp/repos/repo-a/lib/security.php",
+                }
+            },
+            "created_at": "2026-03-25T11:00:00Z",
+            "updated_at": "2026-03-25T12:02:00Z",
+            "last_error": None,
+            "repository_count": 1,
+            "completed_repositories": 1,
+            "failed_repositories": 0,
+            "pending_repositories": 0,
+            "repositories": [],
+        },
+    )
+    monkeypatch.setenv("PCG_REPOS_DIR", "/tmp/repos")
+
+    result = status_queries.get_ingester_status(object(), ingester="repository")
+
+    assert result["status"] == "indexing"
+    assert result["active_phase"] == "finalizing:function_calls"
+    assert result["active_phase_started_at"] == "2026-03-25T12:01:00Z"
+    assert result["active_current_file"] == "/tmp/repos/repo-a/lib/security.php"
+    assert result["active_last_progress_at"] == "2026-03-25T12:02:00Z"

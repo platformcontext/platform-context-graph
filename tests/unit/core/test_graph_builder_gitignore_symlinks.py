@@ -24,10 +24,9 @@ def _make_builder() -> GraphBuilder:
 
 def _config_value(key: str) -> str | None:
     if key == "IGNORE_DIRS":
-        return (
-            ".terraform,.terragrunt-cache,.pulumi,.crossplane,"
-            ".serverless,.aws-sam,cdk.out,.terramate-cache,node_modules"
-        )
+        return "venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__"
+    if key == "PCG_IGNORE_DEPENDENCY_DIRS":
+        return "true"
     if key == "PCG_HONOR_GITIGNORE":
         return "true"
     return None
@@ -36,6 +35,8 @@ def _config_value(key: str) -> str | None:
 def _config_value_gitignore_disabled(key: str) -> str | None:
     if key == "IGNORE_DIRS":
         return _config_value(key)
+    if key == "PCG_IGNORE_DEPENDENCY_DIRS":
+        return "true"
     if key == "PCG_HONOR_GITIGNORE":
         return "false"
     return None

@@ -90,6 +90,7 @@ MODELS, PIPELINE = _load_pipeline_modules()
 IndexRunState = MODELS.IndexRunState
 RepositoryRunState = MODELS.RepositoryRunState
 RepositorySnapshot = MODELS.RepositorySnapshot
+RepositorySnapshotMetadata = MODELS.RepositorySnapshotMetadata
 process_repository_snapshots = PIPELINE.process_repository_snapshots
 finalize_repository_batch = PIPELINE.finalize_repository_batch
 
@@ -123,6 +124,10 @@ def _noop(**_kwargs):
     pass
 
 
+def _publish_coverage(**_kwargs):
+    pass
+
+
 def _telemetry():
     return SimpleNamespace(
         start_span=_span_scope,
@@ -148,7 +153,7 @@ async def _run_pipeline(
     def _capture_warning(msg):
         warnings.append(msg)
 
-    snapshots, merged = await process_repository_snapshots(
+    committed_repo_paths, merged = await process_repository_snapshots(
         builder=SimpleNamespace(),
         run_state=run_state,
         repo_paths=repo_paths,
@@ -166,16 +171,20 @@ async def _run_pipeline(
         index_queue_depth_fn=lambda _w: 8,
         parse_repository_snapshot_async_fn=parse_fn,
         commit_repository_snapshot_fn=commit_fn or (lambda *_a, **_kw: None),
-        load_snapshot_fn=lambda *_a: None,
-        save_snapshot_fn=lambda *_a: None,
+        iter_snapshot_file_data_batches_fn=lambda *_a, **_kw: iter(()),
+        load_snapshot_metadata_fn=lambda *_a: None,
+        snapshot_file_data_exists_fn=lambda *_a: False,
+        save_snapshot_metadata_fn=lambda *_a: None,
+        save_snapshot_file_data_fn=lambda *_a: None,
         persist_run_state_fn=lambda _s: None,
         record_checkpoint_metric_fn=_noop,
         update_pending_repository_gauge_fn=_noop,
         publish_runtime_progress_fn=_noop,
+        publish_run_repository_coverage_fn=_publish_coverage,
         utc_now_fn=lambda: "2026-01-01T00:00:00Z",
         telemetry=telemetry or _telemetry(),
     )
-    return snapshots, merged, run_state, warnings
+    return committed_repo_paths, merged, run_state, warnings
 
 
 def test_pipeline_completes_when_single_repo_fails(tmp_path: Path) -> None:
@@ -189,13 +198,13 @@ def test_pipeline_completes_when_single_repo_fails(tmp_path: Path) -> None:
     async def failing_parse(*_a, **_kw):
         raise RuntimeError("corrupt file")
 
-    snapshots, _, run_state, _ = asyncio.run(
+    committed_repo_paths, _, run_state, _ = asyncio.run(
         _run_pipeline(repo_paths, repo_file_sets, failing_parse)
     )
     repo_state = run_state.repositories[str(repo.resolve())]
     assert repo_state.status == "failed"
     assert "corrupt file" in repo_state.error
-    assert snapshots == []
+    assert committed_repo_paths == []
 
 
 def test_pipeline_continues_after_one_repo_fails(tmp_path: Path) -> None:
@@ -227,7 +236,7 @@ def test_pipeline_continues_after_one_repo_fails(tmp_path: Path) -> None:
     def track_commit(_builder, snapshot, **_kw):
         committed.append(snapshot.repo_path)
 
-    snapshots, _, run_state, _ = asyncio.run(
+    committed_repo_paths, _, run_state, _ = asyncio.run(
         _run_pipeline(repo_paths, repo_file_sets, mixed_parse, commit_fn=track_commit)
     )
 
@@ -235,8 +244,7 @@ def test_pipeline_continues_after_one_repo_fails(tmp_path: Path) -> None:
     bad_state = run_state.repositories[str(bad_repo.resolve())]
     assert good_state.status == "completed"
     assert bad_state.status == "failed"
-    assert len(snapshots) == 1
-    assert snapshots[0].repo_path == str(good_repo.resolve())
+    assert committed_repo_paths == [good_repo.resolve()]
     assert committed == [str(good_repo.resolve())]
 
 
@@ -292,12 +300,16 @@ def test_pipeline_does_not_set_running_before_semaphore(tmp_path: Path) -> None:
             index_queue_depth_fn=lambda _w: 8,
             parse_repository_snapshot_async_fn=simple_parse,
             commit_repository_snapshot_fn=lambda *_a, **_kw: None,
-            load_snapshot_fn=lambda *_a: None,
-            save_snapshot_fn=lambda *_a: None,
+            iter_snapshot_file_data_batches_fn=lambda *_a, **_kw: iter(()),
+            load_snapshot_metadata_fn=lambda *_a: None,
+            snapshot_file_data_exists_fn=lambda *_a: False,
+            save_snapshot_metadata_fn=lambda *_a: None,
+            save_snapshot_file_data_fn=lambda *_a: None,
             persist_run_state_fn=capture_persist,
             record_checkpoint_metric_fn=_noop,
             update_pending_repository_gauge_fn=_noop,
             publish_runtime_progress_fn=_noop,
+            publish_run_repository_coverage_fn=_publish_coverage,
             utc_now_fn=lambda: "2026-01-01T00:00:00Z",
             telemetry=_telemetry(),
         )
@@ -333,7 +345,7 @@ def test_pipeline_marks_repo_failed_when_span_setup_raises(tmp_path: Path) -> No
     async def should_not_parse(*_a, **_kw):
         raise AssertionError("parse should not run when span setup fails")
 
-    snapshots, _, run_state, warnings = asyncio.run(
+    committed_repo_paths, _, run_state, warnings = asyncio.run(
         _run_pipeline(
             [repo],
             {repo: [repo / "main.py"]},
@@ -343,7 +355,7 @@ def test_pipeline_marks_repo_failed_when_span_setup_raises(tmp_path: Path) -> No
     )
 
     repo_state = run_state.repositories[str(repo.resolve())]
-    assert snapshots == []
+    assert committed_repo_paths == []
     assert repo_state.status == "failed"
     assert repo_state.error == "span enter failed"
     assert run_state.failed_repositories() == 1
@@ -440,11 +452,11 @@ def test_pipeline_sentinel_delivered_on_all_tasks_failing(tmp_path: Path) -> Non
     async def all_fail(*_a, **_kw):
         raise RuntimeError("boom")
 
-    snapshots, _, run_state, _ = asyncio.run(
+    committed_repo_paths, _, run_state, _ = asyncio.run(
         _run_pipeline(repos, repo_file_sets, all_fail)
     )
 
-    assert snapshots == []
+    assert committed_repo_paths == []
     assert run_state.failed_repositories() == 3
     assert run_state.completed_repositories() == 0
 
@@ -502,12 +514,16 @@ def test_pipeline_tracks_repository_phase_transitions(tmp_path: Path) -> None:
             index_queue_depth_fn=lambda _w: 8,
             parse_repository_snapshot_async_fn=parse_snapshot,
             commit_repository_snapshot_fn=lambda *_a, **_kw: None,
-            load_snapshot_fn=lambda *_a: None,
-            save_snapshot_fn=lambda *_a: None,
+            iter_snapshot_file_data_batches_fn=lambda *_a, **_kw: iter(()),
+            load_snapshot_metadata_fn=lambda *_a: None,
+            snapshot_file_data_exists_fn=lambda *_a: False,
+            save_snapshot_metadata_fn=lambda *_a: None,
+            save_snapshot_file_data_fn=lambda *_a: None,
             persist_run_state_fn=capture_persist,
             record_checkpoint_metric_fn=_noop,
             update_pending_repository_gauge_fn=_noop,
             publish_runtime_progress_fn=_noop,
+            publish_run_repository_coverage_fn=_publish_coverage,
             utc_now_fn=lambda: "2026-01-01T00:00:00Z",
             telemetry=_telemetry(),
         )
@@ -531,6 +547,201 @@ def test_pipeline_tracks_repository_phase_transitions(tmp_path: Path) -> None:
     assert repo_state.phase == "completed"
     assert repo_state.current_file is None
     assert repo_state.last_progress_at == "2026-01-01T00:00:00Z"
+
+
+def test_pipeline_tracks_commit_current_file_during_batch_heartbeats(
+    tmp_path: Path
+) -> None:
+    """Long commit batches should refresh current-file progress before commit ends."""
+
+    repo = tmp_path / "repo-a"
+    repo.mkdir()
+    file_path = repo / "main.py"
+    file_path.write_text("print('a')\n", encoding="utf-8")
+    run_state = _make_run_state([repo])
+    phase_snapshots: list[tuple[str | None, str | None, str | None]] = []
+
+    def capture_persist(_state) -> None:
+        repo_state = run_state.repositories[str(repo.resolve())]
+        phase_snapshots.append(
+            (
+                repo_state.status,
+                repo_state.phase,
+                repo_state.current_file,
+            )
+        )
+
+    async def parse_snapshot(_builder, repo_path, repo_files, **_kw):
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={},
+            file_data=[
+                {"path": str((repo_path / "a.py").resolve())},
+                {"path": str((repo_path / "b.py").resolve())},
+            ],
+        )
+
+    def commit_snapshot(_builder, _snapshot, **kwargs) -> None:
+        progress_callback = kwargs["progress_callback"]
+        progress_callback(
+            processed_files=1,
+            total_files=2,
+            current_file=str((repo / "a.py").resolve()),
+            committed=False,
+        )
+        progress_callback(
+            processed_files=2,
+            total_files=2,
+            current_file=str((repo / "b.py").resolve()),
+            committed=True,
+        )
+
+    asyncio.run(
+        process_repository_snapshots(
+            builder=SimpleNamespace(),
+            run_state=run_state,
+            repo_paths=[repo],
+            repo_file_sets={repo: [file_path]},
+            resumed=False,
+            is_dependency=False,
+            job_id=None,
+            component="test",
+            family="index",
+            source="manual",
+            asyncio_module=asyncio,
+            info_logger_fn=lambda *_a, **_kw: None,
+            warning_logger_fn=lambda *_a, **_kw: None,
+            parse_worker_count_fn=lambda: 1,
+            index_queue_depth_fn=lambda _w: 8,
+            parse_repository_snapshot_async_fn=parse_snapshot,
+            commit_repository_snapshot_fn=commit_snapshot,
+            iter_snapshot_file_data_batches_fn=lambda *_a, **_kw: iter(()),
+            load_snapshot_metadata_fn=lambda *_a: None,
+            snapshot_file_data_exists_fn=lambda *_a: False,
+            save_snapshot_metadata_fn=lambda *_a: None,
+            save_snapshot_file_data_fn=lambda *_a: None,
+            persist_run_state_fn=capture_persist,
+            record_checkpoint_metric_fn=_noop,
+            update_pending_repository_gauge_fn=_noop,
+            publish_runtime_progress_fn=_noop,
+            publish_run_repository_coverage_fn=_publish_coverage,
+            utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+            telemetry=_telemetry(),
+        )
+    )
+
+    assert (
+        "commit_incomplete",
+        "committing",
+        str((repo / "a.py").resolve()),
+    ) in phase_snapshots
+    assert (
+        "commit_incomplete",
+        "committing",
+        str((repo / "b.py").resolve()),
+    ) in phase_snapshots
+
+
+def test_pipeline_progress_heartbeats_do_not_overwrite_partial_coverage(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Frequent runtime heartbeats must not publish zero-count coverage rows."""
+
+    repo = tmp_path / "repo-a"
+    repo.mkdir()
+    file_path = repo / "main.py"
+    file_path.write_text("print('a')\n", encoding="utf-8")
+    run_state = _make_run_state([repo])
+
+    runtime_statuses: list[str] = []
+    coverage_calls: list[tuple[tuple[str, ...], bool, bool]] = []
+
+    async def parse_snapshot(_builder, repo_path, _repo_files, **kwargs):
+        progress_callback = kwargs["progress_callback"]
+        progress_callback(current_file=str((repo_path / "main.py").resolve()))
+        progress_callback(
+            current_file=str((repo_path / "main.py").resolve()),
+            force=True,
+        )
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=2,
+            imports_map={},
+            file_data=[
+                {"path": str((repo_path / "a.py").resolve())},
+                {"path": str((repo_path / "b.py").resolve())},
+            ],
+        )
+
+    def commit_snapshot(_builder, _snapshot, **kwargs) -> None:
+        progress_callback = kwargs["progress_callback"]
+        progress_callback(
+            processed_files=1,
+            total_files=2,
+            current_file=str((repo / "a.py").resolve()),
+            committed=False,
+        )
+        progress_callback(
+            processed_files=2,
+            total_files=2,
+            current_file=str((repo / "b.py").resolve()),
+            committed=True,
+        )
+
+    asyncio.run(
+        process_repository_snapshots(
+            builder=SimpleNamespace(),
+            run_state=run_state,
+            repo_paths=[repo],
+            repo_file_sets={repo: [file_path]},
+            resumed=False,
+            is_dependency=False,
+            job_id=None,
+            component="test",
+            family="index",
+            source="manual",
+            asyncio_module=asyncio,
+            info_logger_fn=lambda *_a, **_kw: None,
+            warning_logger_fn=lambda *_a, **_kw: None,
+            parse_worker_count_fn=lambda: 1,
+            index_queue_depth_fn=lambda _w: 8,
+            parse_repository_snapshot_async_fn=parse_snapshot,
+            commit_repository_snapshot_fn=commit_snapshot,
+            iter_snapshot_file_data_batches_fn=lambda *_a, **_kw: iter(()),
+            load_snapshot_metadata_fn=lambda *_a: None,
+            snapshot_file_data_exists_fn=lambda *_a: False,
+            save_snapshot_metadata_fn=lambda *_a, **_kw: None,
+            save_snapshot_file_data_fn=lambda *_a, **_kw: None,
+            persist_run_state_fn=lambda _state: None,
+            record_checkpoint_metric_fn=_noop,
+            update_pending_repository_gauge_fn=_noop,
+            publish_runtime_progress_fn=lambda **kwargs: runtime_statuses.append(
+                kwargs["status"]
+            ),
+            publish_run_repository_coverage_fn=lambda **kwargs: coverage_calls.append(
+                (
+                    tuple(
+                        str(path.resolve()) for path in kwargs["repo_paths"]
+                    ),
+                    kwargs["include_graph_counts"],
+                    kwargs["include_content_counts"],
+                )
+            ),
+            utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+            telemetry=_telemetry(),
+        )
+    )
+
+    assert len(runtime_statuses) > len(coverage_calls)
+    assert coverage_calls[:2] == [
+        ((str(repo.resolve()),), False, False),
+        ((str(repo.resolve()),), False, False),
+    ]
+    assert coverage_calls[2:] == [
+        ((str(repo.resolve()),), True, True),
+        ((str(repo.resolve()),), True, True),
+    ]
 
 
 def test_pipeline_commit_duration_tracks_commit_only(
@@ -624,7 +835,8 @@ def test_finalize_repository_batch_records_stage_timings(monkeypatch) -> None:
         root_path=repo_path,
         run_state=run_state,
         repo_paths=[repo_path],
-        snapshots=[],
+        committed_repo_paths=[],
+        iter_snapshot_file_data_fn=lambda _repo_path: iter(()),
         merged_imports_map={},
         component="test",
         family="index",
@@ -636,6 +848,8 @@ def test_finalize_repository_batch_records_stage_timings(monkeypatch) -> None:
         delete_snapshots_fn=lambda *_a, **_kw: None,
         telemetry=_telemetry(),
         utc_now_fn=lambda: next(timestamps),
+        publish_run_repository_coverage_fn=_publish_coverage,
+        publish_runtime_progress_fn=_noop,
     )
 
     assert run_state.finalization_status == "completed"
@@ -684,7 +898,8 @@ def test_finalize_repository_batch_treats_commit_incomplete_as_blocking() -> Non
         root_path=repo_path,
         run_state=run_state,
         repo_paths=[repo_path],
-        snapshots=[],
+        committed_repo_paths=[],
+        iter_snapshot_file_data_fn=lambda _repo_path: iter(()),
         merged_imports_map={},
         component="test",
         family="index",
@@ -698,8 +913,242 @@ def test_finalize_repository_batch_treats_commit_incomplete_as_blocking() -> Non
         delete_snapshots_fn=lambda *_a, **_kw: None,
         telemetry=_telemetry(),
         utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+        publish_run_repository_coverage_fn=_publish_coverage,
+        publish_runtime_progress_fn=_noop,
     )
 
     assert run_state.status == "partial_failure"
     assert run_state.finalization_status == "pending"
     assert persisted_statuses == [("partial_failure", "pending")]
+
+
+def test_finalize_repository_batch_persists_function_call_heartbeats() -> None:
+    """Finalization heartbeats should keep the checkpoint state moving mid-stage."""
+
+    repo_path = Path("/tmp/repo-a")
+    run_state = _make_run_state([repo_path])
+    run_state.repositories[str(repo_path.resolve())].status = "completed"
+    persisted_states: list[tuple[str | None, dict[str, object]]] = []
+
+    def capture_persist(state) -> None:
+        details = dict(state.finalization_stage_details.get("function_calls", {}))
+        persisted_states.append((state.finalization_current_stage, details))
+
+    def finalize_index_batch_fn(*_args, stage_progress_callback, **_kwargs):
+        stage_progress_callback("function_calls")
+        stage_progress_callback(
+            "function_calls",
+            current_file="/tmp/repo-a/src/bootstrap.php",
+            processed_files=1,
+            total_files=2,
+        )
+        return {"function_calls": 3.0}
+
+    finalize_repository_batch(
+        builder=SimpleNamespace(),
+        root_path=repo_path,
+        run_state=run_state,
+        repo_paths=[repo_path],
+        committed_repo_paths=[],
+        iter_snapshot_file_data_fn=lambda _repo_path: iter(()),
+        merged_imports_map={},
+        component="test",
+        family="index",
+        source="manual",
+        info_logger_fn=lambda *_a, **_kw: None,
+        error_logger_fn=lambda *_a, **_kw: None,
+        finalize_index_batch_fn=finalize_index_batch_fn,
+        persist_run_state_fn=capture_persist,
+        delete_snapshots_fn=lambda *_a, **_kw: None,
+        telemetry=_telemetry(),
+        utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+        publish_run_repository_coverage_fn=_publish_coverage,
+        publish_runtime_progress_fn=_noop,
+    )
+
+    assert persisted_states[2] == (
+        "function_calls",
+        {
+            "current_file": "/tmp/repo-a/src/bootstrap.php",
+            "processed_files": 1,
+            "total_files": 2,
+        },
+    )
+
+
+def test_finalize_repository_batch_publishes_lightweight_coverage_heartbeats() -> None:
+    """Finalization heartbeats should refresh coverage without recounting graph/content."""
+
+    repo_path = Path("/tmp/repo-a")
+    run_state = _make_run_state([repo_path])
+    run_state.repositories[str(repo_path.resolve())].status = "completed"
+    coverage_calls: list[tuple[bool, bool, str | None]] = []
+
+    def publish_coverage(**kwargs) -> None:
+        coverage_calls.append(
+            (
+                kwargs["include_graph_counts"],
+                kwargs["include_content_counts"],
+                kwargs["run_state"].finalization_current_stage,
+            )
+        )
+
+    def finalize_index_batch_fn(*_args, stage_progress_callback, **_kwargs):
+        stage_progress_callback("function_calls")
+        stage_progress_callback(
+            "function_calls",
+            current_file="/tmp/repo-a/src/bootstrap.php",
+            processed_files=1,
+            total_files=2,
+        )
+        return {"function_calls": 3.0}
+
+    finalize_repository_batch(
+        builder=SimpleNamespace(),
+        root_path=repo_path,
+        run_state=run_state,
+        repo_paths=[repo_path],
+        committed_repo_paths=[],
+        iter_snapshot_file_data_fn=lambda _repo_path: iter(()),
+        merged_imports_map={},
+        component="test",
+        family="index",
+        source="manual",
+        info_logger_fn=lambda *_a, **_kw: None,
+        error_logger_fn=lambda *_a, **_kw: None,
+        finalize_index_batch_fn=finalize_index_batch_fn,
+        persist_run_state_fn=lambda _state: None,
+        delete_snapshots_fn=lambda *_a, **_kw: None,
+        telemetry=_telemetry(),
+        utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+        publish_run_repository_coverage_fn=publish_coverage,
+        publish_runtime_progress_fn=_noop,
+    )
+
+    assert (True, True, None) in coverage_calls
+    assert (False, False, "function_calls") in coverage_calls
+
+
+def test_pipeline_resumes_completed_repo_from_metadata_without_reloading_file_data(
+    tmp_path: Path,
+) -> None:
+    """Completed repos should restore imports without loading heavyweight file data."""
+
+    repo = tmp_path / "repo-a"
+    repo.mkdir()
+    file_path = repo / "main.py"
+    file_path.write_text("print('a')\n", encoding="utf-8")
+    run_state = _make_run_state([repo])
+    run_state.repositories[str(repo.resolve())].status = "completed"
+
+    async def should_not_parse(*_args, **_kwargs):
+        raise AssertionError("completed repos should not be reparsed")
+
+    committed_repo_paths, merged_imports_map = asyncio.run(
+        process_repository_snapshots(
+            builder=SimpleNamespace(),
+            run_state=run_state,
+            repo_paths=[repo],
+            repo_file_sets={repo: [file_path]},
+            resumed=True,
+            is_dependency=False,
+            job_id=None,
+            component="test",
+            family="index",
+            source="manual",
+            asyncio_module=asyncio,
+            info_logger_fn=lambda *_a, **_kw: None,
+            warning_logger_fn=lambda *_a, **_kw: None,
+            parse_worker_count_fn=lambda: 1,
+            index_queue_depth_fn=lambda _w: 8,
+            parse_repository_snapshot_async_fn=should_not_parse,
+            commit_repository_snapshot_fn=lambda *_a, **_kw: None,
+            iter_snapshot_file_data_batches_fn=lambda *_a, **_kw: iter(()),
+            load_snapshot_metadata_fn=lambda *_a, **_kw: RepositorySnapshotMetadata(
+                repo_path=str(repo.resolve()),
+                file_count=1,
+                imports_map={"module": [str(file_path.resolve())]},
+            ),
+            snapshot_file_data_exists_fn=lambda *_a, **_kw: True,
+            save_snapshot_metadata_fn=lambda *_a, **_kw: None,
+            save_snapshot_file_data_fn=lambda *_a, **_kw: None,
+            persist_run_state_fn=lambda _state: None,
+            record_checkpoint_metric_fn=_noop,
+            update_pending_repository_gauge_fn=_noop,
+            publish_runtime_progress_fn=_noop,
+            publish_run_repository_coverage_fn=_publish_coverage,
+            utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+            telemetry=_telemetry(),
+        )
+    )
+
+    assert committed_repo_paths == [repo.resolve()]
+    assert merged_imports_map == {"module": [str(file_path.resolve())]}
+
+
+def test_pipeline_reparses_completed_repo_when_file_data_snapshot_is_missing(
+    tmp_path: Path,
+) -> None:
+    """Resume should reparse completed repos when only lightweight metadata remains."""
+
+    repo = tmp_path / "repo-a"
+    repo.mkdir()
+    file_path = repo / "main.py"
+    file_path.write_text("print('a')\n", encoding="utf-8")
+    run_state = _make_run_state([repo])
+    repo_state = run_state.repositories[str(repo.resolve())]
+    repo_state.status = "completed"
+
+    parse_calls: list[Path] = []
+
+    async def reparse_snapshot(_builder, repo_path, repo_files, **_kwargs):
+        parse_calls.append(repo_path)
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={"module": [str(repo_files[0].resolve())]},
+            file_data=[{"path": str(repo_files[0].resolve()), "functions": []}],
+        )
+
+    committed_repo_paths, merged_imports_map = asyncio.run(
+        process_repository_snapshots(
+            builder=SimpleNamespace(),
+            run_state=run_state,
+            repo_paths=[repo],
+            repo_file_sets={repo: [file_path]},
+            resumed=True,
+            is_dependency=False,
+            job_id=None,
+            component="test",
+            family="index",
+            source="manual",
+            asyncio_module=asyncio,
+            info_logger_fn=lambda *_a, **_kw: None,
+            warning_logger_fn=lambda *_a, **_kw: None,
+            parse_worker_count_fn=lambda: 1,
+            index_queue_depth_fn=lambda _w: 8,
+            parse_repository_snapshot_async_fn=reparse_snapshot,
+            commit_repository_snapshot_fn=lambda *_a, **_kw: None,
+            iter_snapshot_file_data_batches_fn=lambda *_a, **_kw: iter(()),
+            load_snapshot_metadata_fn=lambda *_a, **_kw: RepositorySnapshotMetadata(
+                repo_path=str(repo.resolve()),
+                file_count=1,
+                imports_map={"stale": ["/tmp/stale.py"]},
+            ),
+            snapshot_file_data_exists_fn=lambda *_a, **_kw: False,
+            save_snapshot_metadata_fn=lambda *_a, **_kw: None,
+            save_snapshot_file_data_fn=lambda *_a, **_kw: None,
+            persist_run_state_fn=lambda _state: None,
+            record_checkpoint_metric_fn=_noop,
+            update_pending_repository_gauge_fn=_noop,
+            publish_runtime_progress_fn=_noop,
+            publish_run_repository_coverage_fn=_publish_coverage,
+            utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+            telemetry=_telemetry(),
+        )
+    )
+
+    assert parse_calls == [repo]
+    assert repo_state.status == "completed"
+    assert committed_repo_paths == [repo.resolve()]
+    assert merged_imports_map == {"module": [str(file_path.resolve())]}

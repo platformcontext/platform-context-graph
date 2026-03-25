@@ -302,7 +302,7 @@ class MCPServer(
         """Return summary statistics for one repository."""
         return repository_queries.get_repository_stats(
             self.code_finder,
-            repo_id=args.get("repo_path"),
+            repo_id=args.get("repo_id"),
         )
 
     async def index_ecosystem_tool(self, **args: Any) -> dict[str, Any]:

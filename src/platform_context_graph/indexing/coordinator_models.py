@@ -132,3 +132,12 @@ class RepositorySnapshot:
     file_count: int
     imports_map: dict[str, list[str]]
     file_data: list[dict[str, Any]]
+
+
+@dataclass(slots=True)
+class RepositorySnapshotMetadata:
+    """Lightweight staged metadata for one repository snapshot."""
+
+    repo_path: str
+    file_count: int
+    imports_map: dict[str, list[str]]

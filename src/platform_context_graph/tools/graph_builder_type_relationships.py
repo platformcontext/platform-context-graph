@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 
 def create_all_infra_links(
-    builder: Any, all_file_data: list[dict[str, Any]], *, info_logger_fn: Any
+    builder: Any, all_file_data: Iterable[dict[str, Any]], *, info_logger_fn: Any
 ) -> None:
     """Link infrastructure nodes after indexing completes.
 
@@ -167,7 +167,7 @@ def create_csharp_inheritance_and_interfaces(
 
 
 def create_all_inheritance_links(
-    builder: Any, all_file_data: list[dict[str, Any]], imports_map: dict[str, Any]
+    builder: Any, all_file_data: Iterable[dict[str, Any]], imports_map: dict[str, Any]
 ) -> None:
     """Create inheritance-style links after all files are indexed.
 

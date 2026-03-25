@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover - exercised when optional dependency mis
 
 from .status_store_support import (
     CONTROL_SCHEMA,
+    COVERAGE_SCHEMA,
     STATUS_SCHEMA,
     idle_scan_control,
     utc_now,
@@ -62,6 +63,7 @@ class PostgresRuntimeStatusStore:
                 with self._conn.cursor() as cursor:
                     cursor.execute(STATUS_SCHEMA)
                     cursor.execute(CONTROL_SCHEMA)
+                    cursor.execute(COVERAGE_SCHEMA)
                 self._initialized = True
             with self._conn.cursor() as cursor:
                 yield cursor
@@ -286,6 +288,214 @@ class PostgresRuntimeStatusStore:
             }
             merged.update(control_row)
             return merged
+
+    def upsert_repository_coverage(
+        self,
+        *,
+        run_id: str,
+        repo_id: str,
+        repo_name: str,
+        repo_path: str,
+        status: str,
+        phase: str | None = None,
+        finalization_status: str | None = None,
+        discovered_file_count: int | None = 0,
+        graph_recursive_file_count: int | None = 0,
+        content_file_count: int | None = 0,
+        content_entity_count: int | None = 0,
+        root_file_count: int | None = 0,
+        root_directory_count: int | None = 0,
+        top_level_function_count: int | None = 0,
+        class_method_count: int | None = 0,
+        total_function_count: int | None = 0,
+        class_count: int | None = 0,
+        graph_available: bool = False,
+        server_content_available: bool = False,
+        last_error: str | None = None,
+        created_at: str | datetime | None = None,
+        updated_at: str | datetime | None = None,
+        commit_finished_at: str | datetime | None = None,
+        finalization_finished_at: str | datetime | None = None,
+    ) -> None:
+        """Insert or update one durable per-run repository coverage row."""
+
+        now = utc_now()
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO runtime_repository_coverage (
+                    run_id,
+                    repo_id,
+                    repo_name,
+                    repo_path,
+                    status,
+                    phase,
+                    finalization_status,
+                    discovered_file_count,
+                    graph_recursive_file_count,
+                    content_file_count,
+                    content_entity_count,
+                    root_file_count,
+                    root_directory_count,
+                    top_level_function_count,
+                    class_method_count,
+                    total_function_count,
+                    class_count,
+                    graph_available,
+                    server_content_available,
+                    last_error,
+                    created_at,
+                    updated_at,
+                    commit_finished_at,
+                    finalization_finished_at
+                ) VALUES (
+                    %(run_id)s,
+                    %(repo_id)s,
+                    %(repo_name)s,
+                    %(repo_path)s,
+                    %(status)s,
+                    %(phase)s,
+                    %(finalization_status)s,
+                    %(discovered_file_count)s,
+                    %(graph_recursive_file_count)s,
+                    %(content_file_count)s,
+                    %(content_entity_count)s,
+                    %(root_file_count)s,
+                    %(root_directory_count)s,
+                    %(top_level_function_count)s,
+                    %(class_method_count)s,
+                    %(total_function_count)s,
+                    %(class_count)s,
+                    %(graph_available)s,
+                    %(server_content_available)s,
+                    %(last_error)s,
+                    %(created_at)s,
+                    %(updated_at)s,
+                    %(commit_finished_at)s,
+                    %(finalization_finished_at)s
+                )
+                ON CONFLICT (run_id, repo_id) DO UPDATE
+                SET repo_name = EXCLUDED.repo_name,
+                    repo_path = EXCLUDED.repo_path,
+                    status = EXCLUDED.status,
+                    phase = EXCLUDED.phase,
+                    finalization_status = EXCLUDED.finalization_status,
+                    discovered_file_count = EXCLUDED.discovered_file_count,
+                    graph_recursive_file_count = EXCLUDED.graph_recursive_file_count,
+                    content_file_count = EXCLUDED.content_file_count,
+                    content_entity_count = EXCLUDED.content_entity_count,
+                    root_file_count = EXCLUDED.root_file_count,
+                    root_directory_count = EXCLUDED.root_directory_count,
+                    top_level_function_count = EXCLUDED.top_level_function_count,
+                    class_method_count = EXCLUDED.class_method_count,
+                    total_function_count = EXCLUDED.total_function_count,
+                    class_count = EXCLUDED.class_count,
+                    graph_available = EXCLUDED.graph_available,
+                    server_content_available = EXCLUDED.server_content_available,
+                    last_error = EXCLUDED.last_error,
+                    updated_at = EXCLUDED.updated_at,
+                    commit_finished_at = EXCLUDED.commit_finished_at,
+                    finalization_finished_at = EXCLUDED.finalization_finished_at
+                """,
+                {
+                    "run_id": run_id,
+                    "repo_id": repo_id,
+                    "repo_name": repo_name,
+                    "repo_path": repo_path,
+                    "status": status,
+                    "phase": phase,
+                    "finalization_status": finalization_status,
+                    "discovered_file_count": _normalize_count(discovered_file_count),
+                    "graph_recursive_file_count": _normalize_count(
+                        graph_recursive_file_count
+                    ),
+                    "content_file_count": _normalize_count(content_file_count),
+                    "content_entity_count": _normalize_count(content_entity_count),
+                    "root_file_count": _normalize_count(root_file_count),
+                    "root_directory_count": _normalize_count(root_directory_count),
+                    "top_level_function_count": _normalize_count(
+                        top_level_function_count
+                    ),
+                    "class_method_count": _normalize_count(class_method_count),
+                    "total_function_count": _normalize_count(total_function_count),
+                    "class_count": _normalize_count(class_count),
+                    "graph_available": bool(graph_available),
+                    "server_content_available": bool(server_content_available),
+                    "last_error": last_error,
+                    "created_at": created_at or now,
+                    "updated_at": updated_at or now,
+                    "commit_finished_at": commit_finished_at,
+                    "finalization_finished_at": finalization_finished_at,
+                },
+            )
+
+    def get_repository_coverage(
+        self, *, repo_id: str, run_id: str | None = None
+    ) -> dict[str, Any] | None:
+        """Return the latest durable coverage row for one repository."""
+
+        with self._cursor() as cursor:
+            if run_id is not None:
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM runtime_repository_coverage
+                    WHERE repo_id = %(repo_id)s
+                      AND run_id = %(run_id)s
+                    """,
+                    {"repo_id": repo_id, "run_id": run_id},
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM runtime_repository_coverage
+                    WHERE repo_id = %(repo_id)s
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """,
+                    {"repo_id": repo_id},
+                )
+            return cursor.fetchone()
+
+    def list_repository_coverage(
+        self,
+        *,
+        run_id: str | None = None,
+        only_incomplete: bool = False,
+        statuses: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return durable repository coverage rows for one run or across runs."""
+
+        predicates: list[str] = []
+        params: dict[str, Any] = {"limit": max(1, int(limit))}
+        if run_id is not None:
+            predicates.append("run_id = %(run_id)s")
+            params["run_id"] = run_id
+        if statuses:
+            predicates.append("status = ANY(%(statuses)s)")
+            params["statuses"] = statuses
+        if only_incomplete:
+            predicates.append(
+                "(status NOT IN ('completed', 'skipped') "
+                "OR coalesce(finalization_status, 'pending') <> 'completed')"
+            )
+        where_clause = ""
+        if predicates:
+            where_clause = "WHERE " + " AND ".join(predicates)
+        with self._cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT *
+                FROM runtime_repository_coverage
+                {where_clause}
+                ORDER BY updated_at DESC, repo_id
+                LIMIT %(limit)s
+                """,
+                params,
+            )
+            return list(cursor.fetchall())
 
     def request_scan(
         self,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,34 @@ from .graph_builder_persistence_batch import (
     should_flush_batches,
 )
 from .graph_builder_persistence_unwind import resolve_max_entity_value_length
+
+
+def _consume_write_result(result: Any) -> None:
+    """Eagerly consume Neo4j write results to release transaction buffers."""
+
+    consume = getattr(result, "consume", None)
+    if callable(consume):
+        consume()
+
+
+def _run_write_query(tx_or_session: Any, query: str, /, **parameters: Any) -> None:
+    """Execute one write query and eagerly consume its result when supported."""
+
+    _consume_write_result(tx_or_session.run(query, parameters=parameters))
+
+
+def _bounded_positive_int_config(name: str, default: int, *, maximum: int) -> int:
+    """Return a bounded positive integer from config with a safe fallback."""
+
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        raw_value = get_config_value(name)
+    if raw_value is None or not str(raw_value).strip():
+        return default
+    try:
+        return max(1, min(int(raw_value), maximum))
+    except ValueError:
+        return default
 
 
 def add_repository_to_graph(
@@ -69,7 +98,8 @@ def add_repository_to_graph(
             ).single()
 
         if existing is None:
-            session.run(
+            _run_write_query(
+                session,
                 """
                 CREATE (r:Repository {path: $repo_path})
                 SET r.id = $repo_id,
@@ -91,7 +121,8 @@ def add_repository_to_graph(
             )
             return
 
-        session.run(
+        _run_write_query(
+            session,
             """
             MATCH (r:Repository)
             WHERE r.path = $repo_path OR r.id = $repo_id
@@ -141,7 +172,8 @@ def _merge_directory_chain(
         current_path = Path(parent_path) / part
         current_path_str = str(current_path)
 
-        tx.run(
+        _run_write_query(
+            tx,
             f"""
             MATCH (p:{parent_label} {{path: $parent_path}})
             MERGE (d:Directory {{path: $current_path}})
@@ -156,7 +188,8 @@ def _merge_directory_chain(
         parent_path = current_path_str
         parent_label = "Directory"
 
-    tx.run(
+    _run_write_query(
+        tx,
         f"""
         MATCH (p:{parent_label} {{path: $parent_path}})
         MATCH (f:File {{path: $file_path}})
@@ -288,7 +321,8 @@ def add_file_to_graph(
         # the backend supports it; otherwise fall back to auto-commit.
         tx, is_explicit = _begin_transaction(session)
         try:
-            tx.run(
+            _run_write_query(
+                tx,
                 """
                 MERGE (f:File {path: $file_path})
                 SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
@@ -321,16 +355,17 @@ def commit_file_batch_to_graph(
     file_data_list: list[dict[str, Any]],
     repo_path: Path,
     *,
+    progress_callback: Any | None = None,
     debug_log_fn: Any,
     info_logger_fn: Any,
     warning_logger_fn: Any,
 ) -> None:
-    """Persist a batch of parsed files in a single Neo4j transaction.
+    """Persist a batch of parsed files using bounded Neo4j write transactions.
 
-    Opens one session, reads repository metadata once, then writes all files,
-    directory chains, entities, imports, and edges via UNWIND queries in one
-    explicit transaction.  Postgres content writes are handled per-file outside
-    the Neo4j transaction.
+    Opens one session, reads repository metadata once, then writes the batch in
+    smaller transaction-sized file chunks so large repositories do not retain
+    one giant in-flight transaction. Postgres content writes are handled
+    per-file outside the Neo4j transaction.
 
     Args:
         builder: ``GraphBuilder`` facade instance.
@@ -351,6 +386,11 @@ def commit_file_batch_to_graph(
     )
     max_entity_value_length = resolve_max_entity_value_length(
         get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH")
+    )
+    tx_file_limit = _bounded_positive_int_config(
+        "PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE",
+        5,
+        maximum=max(1, len(file_data_list)),
     )
 
     with builder.driver.session() as session:
@@ -374,70 +414,92 @@ def commit_file_batch_to_graph(
 
         repo_row = record_to_dict(repo_result) if repo_result is not None else None
         repository = repository_metadata_from_row(row=repo_row, repo_path=repo_path_obj)
+        total_files = len(file_data_list)
+        committed_files = 0
 
-        # Postgres dual-writes are per-file and happen before the Neo4j tx.
-        for file_data in file_data_list:
-            file_name = Path(file_data["path"]).name
-            _content_dual_write(file_data, file_name, repository, warning_logger_fn)
+        for start in range(0, total_files, tx_file_limit):
+            tx_chunk = file_data_list[start : start + tx_file_limit]
+            for file_data in tx_chunk:
+                file_name = Path(file_data["path"]).name
+                _content_dual_write(file_data, file_name, repository, warning_logger_fn)
 
-        # One explicit Neo4j transaction for the entire batch when the
-        # backend supports it; otherwise fall back to auto-commit.
-        tx, is_explicit = _begin_transaction(session)
-        try:
-            accumulator = empty_accumulator()
+            tx, is_explicit = _begin_transaction(session)
+            try:
+                accumulator = empty_accumulator()
 
-            for file_data in file_data_list:
-                file_path_str = str(Path(file_data["path"]).resolve())
-                file_path_obj = Path(file_path_str)
-                file_name = Path(file_path_str).name
-                is_dependency = file_data.get("is_dependency", False)
+                for chunk_index, file_data in enumerate(tx_chunk, start=1):
+                    file_path_str = str(Path(file_data["path"]).resolve())
+                    file_path_obj = Path(file_path_str)
+                    file_name = Path(file_path_str).name
+                    is_dependency = file_data.get("is_dependency", False)
 
-                try:
-                    relative_path = file_path_obj.relative_to(repo_path_obj).as_posix()
-                except ValueError:
-                    relative_path = file_name
+                    try:
+                        relative_path = file_path_obj.relative_to(repo_path_obj).as_posix()
+                    except ValueError:
+                        relative_path = file_name
 
-                tx.run(
-                    """
-                    MERGE (f:File {path: $file_path})
-                    SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
-                    """,
-                    file_path=file_path_str,
-                    name=file_name,
-                    relative_path=relative_path,
-                    is_dependency=is_dependency,
-                )
+                    _run_write_query(
+                        tx,
+                        """
+                        MERGE (f:File {path: $file_path})
+                        SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
+                        """,
+                        file_path=file_path_str,
+                        name=file_name,
+                        relative_path=relative_path,
+                        is_dependency=is_dependency,
+                    )
 
-                _merge_directory_chain(tx, file_path_obj, repo_path_obj, file_path_str)
+                    _merge_directory_chain(tx, file_path_obj, repo_path_obj, file_path_str)
 
-                file_batches = collect_file_write_data(
-                    file_data,
-                    file_path_str,
-                    max_entity_value_length=max_entity_value_length,
-                )
-                merge_batches(accumulator, file_batches)
-                if should_flush_batches(accumulator):
+                    file_batches = collect_file_write_data(
+                        file_data,
+                        file_path_str,
+                        max_entity_value_length=max_entity_value_length,
+                    )
+                    merge_batches(accumulator, file_batches)
+                    if callable(progress_callback):
+                        progress_callback(
+                            processed_files=committed_files + chunk_index,
+                            total_files=total_files,
+                            current_file=file_path_str,
+                            committed=False,
+                        )
+                    if should_flush_batches(accumulator):
+                        log_prepared_entity_batches(
+                            accumulator,
+                            repo_path_str=repo_path_str,
+                            info_logger_fn=info_logger_fn,
+                        )
+                        flush_write_batches(
+                            tx,
+                            accumulator,
+                            info_logger_fn=info_logger_fn,
+                        )
+                        accumulator = empty_accumulator()
+
+                if has_pending_rows(accumulator):
                     log_prepared_entity_batches(
                         accumulator,
                         repo_path_str=repo_path_str,
                         info_logger_fn=info_logger_fn,
                     )
                     flush_write_batches(tx, accumulator, info_logger_fn=info_logger_fn)
-                    accumulator = empty_accumulator()
+                if is_explicit:
+                    tx.commit()
+            except Exception:
+                if is_explicit:
+                    tx.rollback()
+                raise
 
-            if has_pending_rows(accumulator):
-                log_prepared_entity_batches(
-                    accumulator,
-                    repo_path_str=repo_path_str,
-                    info_logger_fn=info_logger_fn,
+            committed_files += len(tx_chunk)
+            if callable(progress_callback) and tx_chunk:
+                progress_callback(
+                    processed_files=committed_files,
+                    total_files=total_files,
+                    current_file=str(Path(tx_chunk[-1]["path"]).resolve()),
+                    committed=True,
                 )
-                flush_write_batches(tx, accumulator, info_logger_fn=info_logger_fn)
-            if is_explicit:
-                tx.commit()
-        except Exception:
-            if is_explicit:
-                tx.rollback()
-            raise
 
 
 __all__ = [
