@@ -61,7 +61,7 @@ def _consume_write_result(result: Any) -> None:
 def _run_write_query(tx: Any, query: str, /, **parameters: Any) -> None:
     """Execute one write query and eagerly consume its result when supported."""
 
-    _consume_write_result(tx.run(query, **parameters))
+    _consume_write_result(tx.run(query, parameters=parameters))
 
 
 def resolve_max_entity_value_length(raw_value: str | None = None) -> int:

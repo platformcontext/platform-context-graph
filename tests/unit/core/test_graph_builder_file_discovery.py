@@ -347,6 +347,35 @@ def test_resolve_repository_file_sets_keeps_helm_charts_indexed(
     }
 
 
+def test_resolve_repository_file_sets_ignores_dependency_roots_relative_to_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Parent path segments should not make an entire repo look vendored."""
+
+    builder = _make_builder()
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value", _config_value
+    )
+
+    repo = tmp_path / "vendor" / "repo"
+    (repo / ".git").mkdir(parents=True)
+
+    app_file = repo / "src" / "app.py"
+    nested_vendor_file = repo / "vendor" / "pkg" / "client.php"
+    for path in (app_file, nested_vendor_file):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("print('x')\n", encoding="utf-8")
+
+    repo_file_sets = resolve_repository_file_sets(
+        builder,
+        repo,
+        selected_repositories=None,
+        pathspec_module=__import__("pathspec"),
+    )
+
+    assert repo_file_sets == {repo.resolve(): [app_file.resolve()]}
+
+
 def test_build_graph_from_path_async_explicit_file_bypasses_gitignore(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -635,7 +664,7 @@ def test_add_repository_to_graph_persists_remote_first_repository_metadata(
     builder.add_repository_to_graph(repo_path)
 
     query = session.run.call_args_list[-1].args[0]
-    params = session.run.call_args_list[-1].kwargs
+    params = session.run.call_args_list[-1].kwargs["parameters"]
 
     assert "CREATE (r:Repository {path: $repo_path})" in query
     assert "SET r.id = $repo_id" in query
@@ -676,7 +705,7 @@ def test_add_repository_to_graph_adopts_existing_path_only_repository(
     assert session.run.call_count == 2
     lookup_query = session.run.call_args_list[0].args[0]
     update_query = session.run.call_args_list[1].args[0]
-    params = session.run.call_args_list[1].kwargs
+    params = session.run.call_args_list[1].kwargs["parameters"]
 
     assert "MATCH (r:Repository {path: $repo_path})" in lookup_query
     assert "WHERE r.path = $repo_path OR r.id = $repo_id" in update_query

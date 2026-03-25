@@ -87,12 +87,11 @@ def collect_supported_files(
     )
 
     if path.is_file():
-        if dependency_exclusion_enabled and is_dependency_path(path):
+        if dependency_exclusion_enabled and _is_dependency_relative_to(
+            path, root=path.parent
+        ):
             return []
         return [path] if parser_key_for_path(path, builder.parsers) else []
-
-    if dependency_exclusion_enabled and is_dependency_path(path):
-        return []
 
     ignore_dirs = get_ignored_dir_names(get_config_value_fn=get_config_value_fn)
     telemetry = get_observability_fn()
@@ -102,7 +101,9 @@ def collect_supported_files(
         kept_dirs = []
         for directory in sorted(dirs):
             candidate_dir = root_path / directory
-            if dependency_exclusion_enabled and is_dependency_path(candidate_dir):
+            if dependency_exclusion_enabled and _is_dependency_relative_to(
+                candidate_dir, root=path
+            ):
                 telemetry.record_hidden_directory_skip(directory.lower())
                 continue
             if directory.lower() in ignore_dirs:
@@ -115,11 +116,25 @@ def collect_supported_files(
         dirs[:] = kept_dirs
         for filename in sorted(filenames):
             file_path = root_path / filename
-            if dependency_exclusion_enabled and is_dependency_path(file_path):
+            if dependency_exclusion_enabled and _is_dependency_relative_to(
+                file_path, root=path
+            ):
                 continue
             if parser_key_for_path(file_path, builder.parsers):
                 files.append(file_path)
     return files
+
+
+def _is_dependency_relative_to(candidate: Path, *, root: Path) -> bool:
+    """Return whether a candidate is under a dependency root relative to ``root``."""
+
+    try:
+        relative_path = candidate.relative_to(root)
+    except ValueError:
+        return is_dependency_path(candidate)
+    if relative_path == Path("."):
+        return False
+    return is_dependency_path(relative_path)
 
 
 def _find_pcgignore(

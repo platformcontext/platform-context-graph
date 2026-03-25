@@ -86,7 +86,7 @@ def repository_graph_counts(session: Any, repo: dict[str, Any]) -> dict[str, int
                class_count,
                module_count
         """,
-        **repository_scope(repo),
+        parameters=repository_scope(repo),
     ).single()
     if row is None:
         return {

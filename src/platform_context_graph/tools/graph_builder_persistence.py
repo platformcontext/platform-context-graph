@@ -36,7 +36,7 @@ def _consume_write_result(result: Any) -> None:
 def _run_write_query(tx_or_session: Any, query: str, /, **parameters: Any) -> None:
     """Execute one write query and eagerly consume its result when supported."""
 
-    _consume_write_result(tx_or_session.run(query, **parameters))
+    _consume_write_result(tx_or_session.run(query, parameters=parameters))
 
 
 def _bounded_positive_int_config(name: str, default: int, *, maximum: int) -> int:
