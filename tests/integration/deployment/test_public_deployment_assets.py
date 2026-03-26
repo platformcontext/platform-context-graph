@@ -256,6 +256,7 @@ def test_compose_stack_includes_local_otel_collector_and_jaeger(
         for volume in collector["volumes"]
     )
     assert jaeger["environment"]["COLLECTOR_OTLP_ENABLED"] == "true"
+    assert "${OTEL_COLLECTOR_PROMETHEUS_PORT:-9464}:9464" in collector["ports"]
 
     for service_name in [
         "bootstrap-index",
@@ -278,6 +279,11 @@ def test_compose_stack_includes_local_otel_collector_and_jaeger(
     assert collector_config["exporters"]["otlp/jaeger"]["endpoint"] == (
         "jaeger:4317"
     )
+    assert collector_config["exporters"]["prometheus"]["endpoint"] == "0.0.0.0:9464"
+    assert collector_config["service"]["pipelines"]["metrics"]["receivers"] == ["otlp"]
+    assert collector_config["service"]["pipelines"]["metrics"]["exporters"] == [
+        "prometheus"
+    ]
 
 
 def test_compose_stack_includes_service_and_external_test_database() -> None:

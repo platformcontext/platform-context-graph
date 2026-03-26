@@ -25,7 +25,9 @@ By default, the bootstrap and repo-sync services mount the fixture ecosystems tr
 
 The runtime services export OTLP traces and metrics to the local collector by default, and the
 collector forwards traces into Jaeger. Open `http://localhost:16686` after the stack starts to
-inspect spans.
+inspect spans. The collector also exposes Prometheus-format metrics on
+`http://localhost:9464/metrics` by default, so local OTLP metric export has a real sink instead of
+failing with `UNIMPLEMENTED`.
 
 For a real local end-to-end run against a host directory, override the host-side source root with
 an absolute path:
@@ -47,6 +49,7 @@ NEO4J_BOLT_PORT=17687 \
 PCG_HTTP_PORT=18080 \
 JAEGER_UI_PORT=26686 \
 OTEL_COLLECTOR_OTLP_GRPC_PORT=24317 \
+OTEL_COLLECTOR_PROMETHEUS_PORT=29464 \
 docker compose up --build
 ```
 
@@ -55,6 +58,7 @@ This stack is intended for:
 - API and MCP smoke testing
 - validating fixture-driven indexing flows
 - live trace inspection through the bundled Jaeger UI
+- live OTEL metric inspection through the collector Prometheus endpoint
 
 It also exercises the content-store contract:
 
