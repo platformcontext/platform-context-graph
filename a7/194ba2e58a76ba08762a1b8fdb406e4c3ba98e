@@ -1,0 +1,27 @@
+src/platform_context_graph/cli/commands/ecosystem_relationships.py
+  d002aefb9eccc1a0 1-9,11-15,17-33,48-59,61-65,71,74-76,87-92,94-101,113,116,118-119,122-125,127-129,133-137,139-141,143,152,168-185,190-198,200,212-233,238-246,248,260-263
+src/platform_context_graph/cli/commands/ecosystem.py
+  d002aefb9eccc1a0 15,57
+src/platform_context_graph/relationships/postgres_generation.py
+  d002aefb9eccc1a0 1-298
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.19",
+  "base_commit_sha": "a7194ba2e58a76ba08762a1b8fdb406e4c3ba98e",
+  "prompts": {
+    "d002aefb9eccc1a0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d27d5-7523-7f61-ad52-ae15956921ee",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 477,
+      "total_deletions": 163,
+      "accepted_lines": 451,
+      "overriden_lines": 14
+    }
+  }
+}
