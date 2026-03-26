@@ -1,0 +1,45 @@
+src/platform_context_graph/query/repositories/stats_data.py
+  4ede86d737135cdf 9,30,43-50,52
+tests/unit/relationships/test_file_evidence.py
+  4ede86d737135cdf 487-583
+tests/unit/relationships/test_resolver.py
+  4ede86d737135cdf 227,230,258,260-271,273,275-291
+src/platform_context_graph/query/repositories/relationship_summary.py
+  4ede86d737135cdf 1-108,111-119,122-151,154-178,181-206,209-242,245-283,286-325,328-364,367-432,435-460,463-482
+src/platform_context_graph/query/repositories/coverage_data.py
+  4ede86d737135cdf 16,87,92-122,155
+tests/unit/query/test_repository_coverage_data.py
+  4ede86d737135cdf 188-190,194-225
+src/platform_context_graph/relationships/resolver.py
+  4ede86d737135cdf 63,65
+src/platform_context_graph/query/repositories/context_data.py
+  4ede86d737135cdf 9-14,112-113,152,180-191
+tests/unit/query/test_repository_queries.py
+  4ede86d737135cdf 13-15,47-57,59-63,119-121,183-186,206,213-241,299-389,407-420,426,440-441,443,518-614,627-628,631,636-660,706-732,734-796,816-819,821,867-868,888-913
+tests/unit/query/test_repository_runtime_context.py
+  4ede86d737135cdf 1-309
+tests/unit/relationships/test_entities.py
+  4ede86d737135cdf 127
+src/platform_context_graph/relationships/entities.py
+  4ede86d737135cdf 194,197,207-216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "d360e66d928a45e9c229173efcab20a2f920f964",
+  "prompts": {
+    "4ede86d737135cdf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2b3f-1d31-7602-a933-abb5faeee30d",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 1591,
+      "total_deletions": 94,
+      "accepted_lines": 1489,
+      "overriden_lines": 1
+    }
+  }
+}
