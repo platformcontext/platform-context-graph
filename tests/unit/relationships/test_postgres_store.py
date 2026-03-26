@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 from platform_context_graph.relationships.models import (
     Platform,
+    RelationshipAssertion,
     RelationshipCandidate,
     RelationshipEvidenceFact,
     ResolvedRelationship,
@@ -87,9 +88,7 @@ def test_replace_generation_persists_relationship_entities(monkeypatch) -> None:
 
     entity_insert, entity_rows = cursor.executemany.call_args_list[0].args
     assert "INSERT INTO relationship_entities" in entity_insert
-    assert (
-        entity_rows[0]["entity_id"] == "platform:ecs:aws:cluster/node10:prod:us-east-1"
-    )
+    assert entity_rows[0]["entity_id"] == "platform:ecs:aws:cluster/node10:prod:us-east-1"
     assert entity_rows[0]["entity_type"] == "Platform"
     assert entity_rows[0]["repository_id"] is None
     assert entity_rows[0]["subject_type"] is None
@@ -159,3 +158,38 @@ def test_backfill_populates_entity_ids_for_existing_repo_backed_rows() -> None:
 
     assert entity_or_repo_identity(row, "source") == "repository:r_source"
     assert entity_or_repo_identity(row, "target") == "repository:r_target"
+
+
+def test_upsert_relationship_assertion_persists_entity_ids(monkeypatch) -> None:
+    """Assertion writes should persist explicit entity ids for future mixed-entity review."""
+
+    store = PostgresRelationshipStore("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    store.upsert_relationship_assertion(
+        RelationshipAssertion(
+            source_repo_id="repository:r_argocd",
+            target_repo_id="repository:r_helm",
+            source_entity_id="workload-subject:repository:r_argocd:applicationset:external-search:bg-qa:argocd/external-search/overlays/bg-qa",
+            target_entity_id="repository:r_helm",
+            relationship_type="DEPLOYS_FROM",
+            decision="assert",
+            reason="ArgoCD application deploys manifests from the helm repo",
+            actor="tester",
+        )
+    )
+
+    sql, params = cursor.execute.call_args.args
+    assert "source_entity_id" in sql
+    assert "target_entity_id" in sql
+    assert (
+        params["source_entity_id"]
+        == "workload-subject:repository:r_argocd:applicationset:external-search:bg-qa:argocd/external-search/overlays/bg-qa"
+    )
+    assert params["target_entity_id"] == "repository:r_helm"

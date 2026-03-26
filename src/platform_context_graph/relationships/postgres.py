@@ -128,6 +128,7 @@ class PostgresRelationshipStore:
                 "pcg.relationships.run_id": run_id or "adhoc",
                 "pcg.relationships.generation_id": generation.generation_id,
                 "pcg.relationships.checkout_count": len(checkouts),
+                "pcg.relationships.entity_count": len(entities),
                 "pcg.relationships.evidence_count": len(evidence_facts),
                 "pcg.relationships.candidate_count": len(candidates),
                 "pcg.relationships.resolved_count": len(resolved),
@@ -287,7 +288,9 @@ class PostgresRelationshipStore:
                         %(updated_at)s
                     )
                     ON CONFLICT (assertion_id) DO UPDATE
-                    SET decision = EXCLUDED.decision,
+                    SET source_entity_id = EXCLUDED.source_entity_id,
+                        target_entity_id = EXCLUDED.target_entity_id,
+                        decision = EXCLUDED.decision,
                         reason = EXCLUDED.reason,
                         actor = EXCLUDED.actor,
                         updated_at = EXCLUDED.updated_at

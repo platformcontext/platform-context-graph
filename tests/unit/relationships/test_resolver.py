@@ -688,6 +688,103 @@ def test_resolve_repository_relationships_for_committed_repositories_deduplicate
     assert stats["resolved_relationships"] == 1
 
 
+def test_resolve_repository_relationships_for_committed_repositories_preserves_last_known_good_active_generation_on_projection_failure(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Projection failure should not displace the last active generation."""
+
+    repo_path = tmp_path / "payments-api"
+    repo_path.mkdir()
+    activations: list[tuple[str, str]] = []
+
+    class FakeStore:
+        enabled = True
+
+        def __init__(self) -> None:
+            self.active_generation = ResolutionGeneration(
+                generation_id="generation_active",
+                scope="repo_dependencies",
+                run_id="run-active",
+                status="active",
+            )
+
+        def list_relationship_assertions(self, *, relationship_type: str | None = None):
+            assert relationship_type is None
+            return []
+
+        def replace_generation(self, **_kwargs):
+            return ResolutionGeneration(
+                generation_id="generation_pending",
+                scope="repo_dependencies",
+                run_id="run-123",
+                status="pending",
+            )
+
+        def activate_generation(self, *, scope: str, generation_id: str) -> None:
+            activations.append((scope, generation_id))
+            self.active_generation = ResolutionGeneration(
+                generation_id=generation_id,
+                scope=scope,
+                run_id="run-123",
+                status="active",
+            )
+
+        def get_active_generation(self, *, scope: str) -> ResolutionGeneration | None:
+            assert scope == "repo_dependencies"
+            return self.active_generation
+
+    store = FakeStore()
+    monkeypatch.setattr(
+        "platform_context_graph.relationships.resolver.get_relationship_store",
+        lambda: store,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.relationships.resolver.build_repository_checkouts",
+        lambda repo_paths: [
+            RepositoryCheckout(
+                checkout_id="checkout_123",
+                logical_repo_id="repository:r_payments",
+                repo_name=Path(next(iter(repo_paths))).name,
+                checkout_path=str(repo_path),
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.relationships.resolver.discover_repository_dependency_evidence",
+        lambda _driver, *, checkouts=(): [
+            RelationshipEvidenceFact(
+                evidence_kind="WORKLOAD_DEPENDS_ON",
+                relationship_type="DEPENDS_ON",
+                source_repo_id="repository:r_payments",
+                target_repo_id="repository:r_orders",
+                confidence=0.9,
+                rationale="Workload dependency implies repository dependency",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.relationships.resolver.project_resolved_relationships",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("missing Platform node")),
+    )
+
+    with pytest.raises(RuntimeError, match="missing Platform node"):
+        resolve_repository_relationships_for_committed_repositories(
+            builder=SimpleNamespace(driver=object(), db_manager=object()),
+            committed_repo_paths=[repo_path],
+            run_id="run-123",
+            info_logger_fn=MagicMock(),
+        )
+
+    assert activations == []
+    assert store.get_active_generation(scope="repo_dependencies") == ResolutionGeneration(
+        generation_id="generation_active",
+        scope="repo_dependencies",
+        run_id="run-active",
+        status="active",
+    )
+
+
 def test_project_resolved_relationships_emits_generation_trace_attributes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
