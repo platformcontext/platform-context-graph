@@ -6,6 +6,10 @@ from pathlib import Path
 import re
 from typing import Any, Iterable
 
+from .graph_builder_platforms import (
+    materialize_infrastructure_platforms,
+    materialize_runtime_platform,
+)
 from .languages.runtime_dependencies import extract_runtime_service_dependencies
 
 _OVERLAY_ENVIRONMENT_RE = re.compile(r"(?:^|/)overlays/([^/]+)/")
@@ -229,12 +233,22 @@ def materialize_workloads(
                         seen_deployment_sources.add(deployment_signature)
                         stats["deployment_sources"] += 1
 
+                materialize_runtime_platform(
+                    session,
+                    instance_id=instance_id,
+                    environment=environment,
+                    workload_name=repo_name,
+                    resource_kinds=row.get("resource_kinds", []),
+                )
+
             _materialize_runtime_dependencies(
                 session,
                 repo_id=repo_id,
                 repo_name=repo_name,
                 workload_id=workload_id,
             )
+
+        materialize_infrastructure_platforms(session)
 
     if stats["workloads"] > 0:
         info_logger_fn(
@@ -329,6 +343,4 @@ def _materialize_runtime_dependencies(
             target_workload_id=f"workload:{dependency_name}",
             workload_id=workload_id,
         )
-
-
 __all__ = ["materialize_workloads"]

@@ -40,6 +40,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/reference/mcp-cookbook.md` | MCP examples | active |
 | `docs/docs/reference/mcp-reference.md` | MCP reference | active |
 | `docs/docs/reference/pcgignore.md` | `.pcgignore` reference | active |
+| `docs/docs/reference/relationship-mapping.md` | Relationship mapping and typed edge semantics | active |
 | `docs/docs/reference/source-layout.md` | Source layout map | active |
 | `docs/docs/reference/troubleshooting.md` | Troubleshooting guide | active |
 | `docs/docs/roadmap.md` | Public roadmap | active |

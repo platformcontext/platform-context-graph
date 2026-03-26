@@ -233,6 +233,8 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
         assert envs["PCG_CONTENT_STORE_DSN"].startswith("postgresql://")
         assert envs["PCG_POSTGRES_DSN"].startswith("postgresql://")
         assert envs["PCG_REPOSITORY_RULES_JSON"] == "[]"
+        assert envs["PCG_PARSE_WORKERS"] == "${PCG_PARSE_WORKERS:-4}"
+        assert envs["PCG_INDEX_QUEUE_DEPTH"] == "${PCG_INDEX_QUEUE_DEPTH:-8}"
 
 
 @pytest.mark.parametrize("compose_file", [COMPOSE_FILE, COMPOSE_TEMPLATE_FILE])
@@ -257,6 +259,19 @@ def test_compose_stack_includes_local_otel_collector_and_jaeger(
     )
     assert jaeger["environment"]["COLLECTOR_OTLP_ENABLED"] == "true"
     assert "${OTEL_COLLECTOR_PROMETHEUS_PORT:-9464}:9464" in collector["ports"]
+
+
+@pytest.mark.parametrize("compose_file", [COMPOSE_FILE, COMPOSE_TEMPLATE_FILE])
+def test_compose_stack_propagates_worker_tuning_envs(
+    compose_file: Path,
+) -> None:
+    data = yaml.safe_load(compose_file.read_text())
+    services = data["services"]
+
+    for service_name in ["bootstrap-index", "platform-context-graph", "repo-sync"]:
+        envs = _compose_service_envs(services[service_name])
+        assert "PCG_PARSE_WORKERS" in envs
+        assert "PCG_INDEX_QUEUE_DEPTH" in envs
 
     for service_name in [
         "bootstrap-index",

@@ -276,6 +276,108 @@ def test_get_repository_context_returns_current_context_shape():
     assert result["ecosystem"] is None
 
 
+def test_get_repository_context_surfaces_partial_coverage_gaps(monkeypatch) -> None:
+    """Repo context should surface recursive coverage gaps instead of implying absence."""
+
+    canonical_repo_id = _canonical_repository_id(
+        remote_url="https://github.com/platformcontext/api-node-boats",
+        local_path="/repos/api-node-boats",
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data.get_runtime_repository_coverage",
+        lambda repo_id: {
+            "run_id": "run-graph-partial",
+            "repo_id": repo_id,
+            "repo_name": "api-node-boats",
+            "repo_path": "/repos/api-node-boats",
+            "status": "completed",
+            "phase": "completed",
+            "finalization_status": "completed",
+            "graph_available": True,
+            "server_content_available": False,
+            "discovered_file_count": 196,
+            "graph_recursive_file_count": 12,
+            "content_file_count": 0,
+            "content_entity_count": 0,
+            "root_file_count": 12,
+            "root_directory_count": 5,
+            "top_level_function_count": 0,
+            "class_method_count": 0,
+            "total_function_count": 0,
+            "class_count": 0,
+            "last_error": None,
+            "updated_at": None,
+        },
+    )
+
+    db = make_mock_db(
+        {
+            "RETURN r.id as id, r.name as name, r.path as path": MockResult(
+                records=[
+                    {
+                        "id": canonical_repo_id,
+                        "name": "api-node-boats",
+                        "path": "/repos/api-node-boats",
+                        "local_path": "/repos/api-node-boats",
+                        "remote_url": "https://github.com/platformcontext/api-node-boats",
+                        "repo_slug": "platformcontext/api-node-boats",
+                        "has_remote": True,
+                    }
+                ]
+            ),
+            "split(f.name": MockResult(
+                records=[
+                    {"file": "tsconfig.json", "ext": "json"},
+                    {"file": "specs/index.yaml", "ext": "yaml"},
+                ]
+            ),
+            "RETURN root_file_count,": MockResult(
+                single_record=MockRecord(
+                    {
+                        "root_file_count": 12,
+                        "root_directory_count": 5,
+                        "file_count": 12,
+                        "top_level_function_count": 0,
+                        "class_method_count": 0,
+                        "total_function_count": 0,
+                        "class_count": 0,
+                        "module_count": 0,
+                    }
+                )
+            ),
+            "fn.name IN": MockResult(records=[]),
+            "K8sResource": MockResult(records=[]),
+            "TerraformResource": MockResult(records=[]),
+            "TerraformModule": MockResult(records=[]),
+            "TerraformVariable": MockResult(records=[]),
+            "TerraformOutput": MockResult(records=[]),
+            "ArgoCDApplication": MockResult(records=[]),
+            "ArgoCDApplicationSet": MockResult(records=[]),
+            "CrossplaneXRD": MockResult(records=[]),
+            "CrossplaneComposition": MockResult(records=[]),
+            "CrossplaneClaim": MockResult(records=[]),
+            "HelmChart": MockResult(records=[]),
+            "HelmValues": MockResult(records=[]),
+            "KustomizeOverlay": MockResult(records=[]),
+            "TerragruntConfig": MockResult(records=[]),
+            "type(rel) IN": MockResult(records=[]),
+            "Tier": MockResult(single_record=None),
+            "DEPENDS_ON]->(dep": MockResult(single_record=MockRecord({"dependencies": []})),
+            "DEPENDS_ON]-(dep": MockResult(single_record=MockRecord({"dependents": []})),
+        }
+    )
+
+    result = get_repository_context(db, repo_id=canonical_repo_id)
+
+    assert result["coverage"]["completeness_state"] == "graph_partial"
+    assert result["coverage"]["graph_gap_count"] == 184
+    assert result["coverage"]["content_gap_count"] == 12
+    assert result["repository"]["discovered_file_count"] == 196
+    assert result["repository"]["graph_recursive_file_count"] == 12
+    assert result["repository"]["content_file_count"] == 0
+    assert result["repository"]["completeness_state"] == "graph_partial"
+
+
 def test_get_repository_stats_supports_repo_and_overall_modes():
     canonical_repo_id = _canonical_repository_id(
         remote_url="https://github.com/platformcontext/my-api",
@@ -375,7 +477,12 @@ def test_fetch_infrastructure_queries_reuse_matched_node_alias():
     )
     assert session.queries
 
-    for query in session.queries:
+    infra_label_queries = [
+        query for query in session.queries if "-[:CONTAINS]->(" in query
+    ]
+    assert infra_label_queries
+
+    for query in infra_label_queries:
         alias_match = re.search(r"-\[:CONTAINS\]->\((\w+):", query)
         assert alias_match is not None
 

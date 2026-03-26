@@ -174,25 +174,37 @@ class PostgresRelationshipStore:
     def list_relationship_assertions(
         self,
         *,
-        relationship_type: str,
+        relationship_type: str | None = None,
     ) -> list[RelationshipAssertion]:
         """Return stored assertions for a relationship type."""
 
         with self._cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT source_repo_id,
-                       target_repo_id,
-                       relationship_type,
-                       decision,
-                       reason,
-                       actor
-                FROM relationship_assertions
-                WHERE relationship_type = %(relationship_type)s
-                ORDER BY updated_at ASC, created_at ASC
-                """,
-                {"relationship_type": relationship_type},
-            )
+            if relationship_type is None:
+                cursor.execute("""
+                    SELECT source_repo_id,
+                           target_repo_id,
+                           relationship_type,
+                           decision,
+                           reason,
+                           actor
+                    FROM relationship_assertions
+                    ORDER BY updated_at ASC, created_at ASC
+                    """)
+            else:
+                cursor.execute(
+                    """
+                    SELECT source_repo_id,
+                           target_repo_id,
+                           relationship_type,
+                           decision,
+                           reason,
+                           actor
+                    FROM relationship_assertions
+                    WHERE relationship_type = %(relationship_type)s
+                    ORDER BY updated_at ASC, created_at ASC
+                    """,
+                    {"relationship_type": relationship_type},
+                )
             rows = cursor.fetchall() or []
         return [
             RelationshipAssertion(

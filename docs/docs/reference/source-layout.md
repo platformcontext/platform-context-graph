@@ -14,6 +14,7 @@ PlatformContextGraph keeps the importable Python package under `src/platform_con
 | `mcp/` | MCP server, transport, tool registry, and handler wiring |
 | `observability/` | OTEL bootstrap, runtime state, metrics, and instrumentation helpers |
 | `query/` | shared read/query services used by CLI, MCP, and HTTP |
+| `relationships/` | evidence-backed repo relationship discovery, resolution, persistence, and projection |
 | `runtime/` | repo sync, bootstrap indexing, and long-running runtime helpers |
 | `tools/` | graph builder, parsers, analysis utilities, and language/infrastructure helpers |
 | `utils/` | reusable helper utilities that do not belong to a higher-level subsystem |
@@ -54,6 +55,19 @@ The observability package is a real subsystem rather than a flat file:
 - `observability/state.py`: global runtime lifecycle and test-exporter hooks
 
 This keeps API, MCP, and indexing telemetry consistent.
+
+## Relationships Package Layout
+
+The relationships package owns the post-index repo-correlation pipeline:
+
+- `relationships/models.py`: typed evidence, candidate, assertion, and resolved-relationship models
+- `relationships/file_evidence.py`: raw file-based extractors for Terraform, Helm, Kustomize, and ArgoCD
+- `relationships/execution.py`: checkout discovery, graph-derived evidence, and Neo4j projection
+- `relationships/resolver.py`: evidence dedupe, resolution, and assertion handling
+- `relationships/postgres.py`: canonical Postgres store reads and writes
+- `relationships/postgres_generation.py`: generation persistence helpers
+- `relationships/postgres_support.py`: relationship table schema bootstrap
+- `relationships/state.py`: shared store lifecycle
 
 ## Content Package Layout
 

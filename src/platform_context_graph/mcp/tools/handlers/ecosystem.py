@@ -10,6 +10,8 @@ from typing import Any
 from ....core.database import DatabaseManager
 from ....query import infra as infra_queries
 from ....query import repositories as repository_queries
+from ....query.repositories.coverage_data import coverage_summary_from_row
+from ....runtime.status_store import get_repository_coverage as get_runtime_repository_coverage
 
 
 def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -342,7 +344,7 @@ def get_repo_summary(
         repo = session.run(
             "MATCH (r:Repository) "
             "WHERE r.name CONTAINS $name "
-            "RETURN r.name as name, r.path as path "
+            "RETURN r.id as id, r.name as name, r.path as path "
             "LIMIT 1",
             name=repo_name,
         ).single()
@@ -429,16 +431,29 @@ def get_repo_summary(
             risk_level_key="risk_level",
         ).single()
 
+    coverage = coverage_summary_from_row(
+        get_runtime_repository_coverage(repo_id=str(repo["id"]))
+    )
+    file_count = len(file_stats)
+    if coverage is not None:
+        file_count = int(coverage.get("discovered_file_count") or file_count)
+
     summary: dict[str, Any] = {
         "name": repo["name"],
         "path": repo["path"],
-        "file_count": len(file_stats),
+        "file_count": file_count,
         "files_by_extension": ext_counts,
         "code": dict(code_stats) if code_stats else {},
         "infrastructure": infra,
         "dependencies": deps["dependencies"] if deps else [],
         "dependents": dependents["dependents"] if dependents else [],
     }
+    if coverage is not None:
+        summary["coverage"] = coverage
+        if coverage.get("completeness_state") != "complete":
+            summary["note"] = (
+                "Repository coverage is partial; graph/content counts may be incomplete."
+            )
     if tier:
         summary["tier"] = dict(tier)
     return summary

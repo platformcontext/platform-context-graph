@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..observability import get_observability
 from ..content.state import get_postgres_content_provider
 from ..query.repositories.graph_counts import repository_graph_counts
 from ..repository_identity import git_remote_for_path, repository_metadata
 from ..runtime.status_store import get_repository_coverage, upsert_repository_coverage
-from ..utils.debug_log import warning_logger
+from ..utils.debug_log import emit_log_call, info_logger, warning_logger
 
 __all__ = [
     "publish_repository_coverage",
@@ -98,6 +99,7 @@ def publish_repository_coverage(
     """Persist one repository coverage row for the current checkpoint state."""
 
     metadata = _coverage_metadata(repo_path)
+    observability = get_observability()
     existing_counts = (
         _existing_coverage_counts(run_state.run_id, metadata["id"])
         if not include_graph_counts or not include_content_counts
@@ -123,40 +125,77 @@ def publish_repository_coverage(
     }
     if include_content_counts:
         content_counts = _content_counts(builder, metadata["id"])
-
-    upsert_repository_coverage(
-        run_id=run_state.run_id,
-        repo_id=metadata["id"],
-        repo_name=metadata["name"],
-        repo_path=metadata["local_path"],
-        status=repo_state.status,
-        phase=repo_state.phase,
-        finalization_status=run_state.finalization_status,
-        discovered_file_count=repo_state.file_count,
-        graph_recursive_file_count=graph_counts["file_count"],
-        content_file_count=content_counts["content_file_count"],
-        content_entity_count=content_counts["content_entity_count"],
-        root_file_count=graph_counts["root_file_count"],
-        root_directory_count=graph_counts["root_directory_count"],
-        top_level_function_count=graph_counts["top_level_function_count"],
-        class_method_count=graph_counts["class_method_count"],
-        total_function_count=graph_counts["total_function_count"],
-        class_count=graph_counts["class_count"],
-        graph_available=(
-            graph_counts["file_count"] > 0
-            or graph_counts["root_file_count"] > 0
-            or graph_counts["root_directory_count"] > 0
-        ),
-        server_content_available=(
-            content_counts["content_file_count"] > 0
-            or content_counts["content_entity_count"] > 0
-        ),
-        last_error=repo_state.error or run_state.last_error,
-        created_at=run_state.created_at,
-        updated_at=run_state.updated_at,
-        commit_finished_at=repo_state.commit_finished_at,
-        finalization_finished_at=run_state.finalization_finished_at,
+    graph_gap_count = max(int(repo_state.file_count or 0) - graph_counts["file_count"], 0)
+    content_gap_count = max(
+        graph_counts["file_count"] - content_counts["content_file_count"],
+        0,
     )
+    with observability.start_span(
+        "pcg.indexing.publish_repository_coverage",
+        component=observability.component,
+        attributes={
+            "pcg.run_id": run_state.run_id,
+            "pcg.repo_id": metadata["id"],
+            "pcg.repo_name": metadata["name"],
+            "pcg.coverage.discovered_file_count": int(repo_state.file_count or 0),
+            "pcg.coverage.graph_recursive_file_count": graph_counts["file_count"],
+            "pcg.coverage.content_file_count": content_counts["content_file_count"],
+            "pcg.coverage.graph_gap_count": graph_gap_count,
+            "pcg.coverage.content_gap_count": content_gap_count,
+        },
+    ):
+        upsert_repository_coverage(
+            run_id=run_state.run_id,
+            repo_id=metadata["id"],
+            repo_name=metadata["name"],
+            repo_path=metadata["local_path"],
+            status=repo_state.status,
+            phase=repo_state.phase,
+            finalization_status=run_state.finalization_status,
+            discovered_file_count=repo_state.file_count,
+            graph_recursive_file_count=graph_counts["file_count"],
+            content_file_count=content_counts["content_file_count"],
+            content_entity_count=content_counts["content_entity_count"],
+            root_file_count=graph_counts["root_file_count"],
+            root_directory_count=graph_counts["root_directory_count"],
+            top_level_function_count=graph_counts["top_level_function_count"],
+            class_method_count=graph_counts["class_method_count"],
+            total_function_count=graph_counts["total_function_count"],
+            class_count=graph_counts["class_count"],
+            graph_available=(
+                graph_counts["file_count"] > 0
+                or graph_counts["root_file_count"] > 0
+                or graph_counts["root_directory_count"] > 0
+            ),
+            server_content_available=(
+                content_counts["content_file_count"] > 0
+                or content_counts["content_entity_count"] > 0
+            ),
+            last_error=repo_state.error or run_state.last_error,
+            created_at=run_state.created_at,
+            updated_at=run_state.updated_at,
+            commit_finished_at=repo_state.commit_finished_at,
+            finalization_finished_at=run_state.finalization_finished_at,
+        )
+        emit_log_call(
+            info_logger,
+            "Published durable repository coverage",
+            event_name="indexing.repository_coverage.published",
+            extra_keys={
+                "run_id": run_state.run_id,
+                "repo_id": metadata["id"],
+                "repo_name": metadata["name"],
+                "discovered_file_count": int(repo_state.file_count or 0),
+                "graph_recursive_file_count": graph_counts["file_count"],
+                "content_file_count": content_counts["content_file_count"],
+                "content_entity_count": content_counts["content_entity_count"],
+                "graph_gap_count": graph_gap_count,
+                "content_gap_count": content_gap_count,
+                "phase": repo_state.phase,
+                "status": repo_state.status,
+                "finalization_status": run_state.finalization_status,
+            },
+        )
 
 
 def publish_run_repository_coverage(

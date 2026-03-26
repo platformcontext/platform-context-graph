@@ -354,7 +354,7 @@ CODEBASE_TOOLS = {
     },
     "get_repository_stats": {
         "name": "get_repository_stats",
-        "description": "Get graph-derived statistics about indexed repositories, including recursive files, root files/directories, total functions, top-level functions, class methods, classes, and modules. Use canonical repository IDs when scoping to one repository.",
+        "description": "Get graph-derived statistics about indexed repositories, including recursive files, root files/directories, total functions, top-level functions, class methods, classes, and modules. Use canonical repository IDs when scoping to one repository. When coverage indicates graph_partial or content_partial, report the coverage gap and do not present graph-only counts as complete repository coverage.",
         "inputSchema": {
             "type": "object",
             "properties": {

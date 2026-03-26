@@ -502,7 +502,7 @@ class TestCLICommands:
         assert "0.83" in result.stdout
         mock_store.list_relationship_candidates.assert_called_once_with(
             scope="repo_dependencies",
-            relationship_type="DEPENDS_ON",
+            relationship_type=None,
         )
 
     @patch(

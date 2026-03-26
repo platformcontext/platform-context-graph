@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...runtime.status_store import get_repository_coverage as get_runtime_repository_coverage
+from ...utils.debug_log import emit_log_call, warning_logger
 from .common import canonical_repository_ref, resolve_repository
 from .coverage_data import coverage_summary_from_row
 from .graph_counts import repository_graph_counts, repository_scope, repository_scope_predicate
@@ -108,28 +109,65 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
     coverage_summary = coverage_summary_from_row(
         get_runtime_repository_coverage(repo_id=repo_ref["id"])
     )
+    if (
+        coverage_summary is not None
+        and coverage_summary.get("completeness_state") != "complete"
+    ):
+        emit_log_call(
+            warning_logger,
+            "Repository context assembled from partial repository coverage",
+            event_name="repository.context.partial_coverage",
+            extra_keys={
+                "repo_id": repo_ref["id"],
+                "repo_name": repo_ref["name"],
+                "run_id": coverage_summary.get("run_id"),
+                "completeness_state": coverage_summary.get("completeness_state"),
+                "discovered_file_count": coverage_summary.get("discovered_file_count"),
+                "graph_recursive_file_count": coverage_summary.get(
+                    "graph_recursive_file_count"
+                ),
+                "content_file_count": coverage_summary.get("content_file_count"),
+                "graph_gap_count": coverage_summary.get("graph_gap_count"),
+                "content_gap_count": coverage_summary.get("content_gap_count"),
+            },
+        )
+    repository_payload = {
+        **repo_ref,
+        "file_count": counts["file_count"],
+        "root_file_count": counts["root_file_count"],
+        "root_directory_count": counts["root_directory_count"],
+        "files_by_extension": ext_counts,
+        "graph_available": counts["file_count"] > 0,
+        "server_content_available": (
+            bool(coverage_summary["server_content_available"])
+            if coverage_summary is not None
+            else False
+        ),
+        "active_run_id": (
+            coverage_summary["run_id"] if coverage_summary is not None else None
+        ),
+        "index_status": (
+            coverage_summary["index_status"]
+            if coverage_summary is not None
+            else None
+        ),
+    }
+    if coverage_summary is not None:
+        repository_payload.update(
+            {
+                "discovered_file_count": coverage_summary["discovered_file_count"],
+                "graph_recursive_file_count": coverage_summary[
+                    "graph_recursive_file_count"
+                ],
+                "content_file_count": coverage_summary["content_file_count"],
+                "content_entity_count": coverage_summary["content_entity_count"],
+                "completeness_state": coverage_summary["completeness_state"],
+                "graph_gap_count": coverage_summary["graph_gap_count"],
+                "content_gap_count": coverage_summary["content_gap_count"],
+            }
+        )
     return {
-        "repository": {
-            **repo_ref,
-            "file_count": counts["file_count"],
-            "root_file_count": counts["root_file_count"],
-            "root_directory_count": counts["root_directory_count"],
-            "files_by_extension": ext_counts,
-            "graph_available": counts["file_count"] > 0,
-            "server_content_available": (
-                bool(coverage_summary["server_content_available"])
-                if coverage_summary is not None
-                else False
-            ),
-            "active_run_id": (
-                coverage_summary["run_id"] if coverage_summary is not None else None
-            ),
-            "index_status": (
-                coverage_summary["index_status"]
-                if coverage_summary is not None
-                else None
-            ),
-        },
+        "repository": repository_payload,
         "code": {
             "functions": counts["total_function_count"],
             "top_level_functions": counts["top_level_function_count"],
@@ -288,6 +326,39 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
         ).data()
         if result:
             infrastructure[key] = result
+    runtime_platforms = session.run(
+        f"""
+        MATCH (r:Repository)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[:RUNS_ON]->(p:Platform)
+        WHERE {repository_scope_predicate()}
+        RETURN DISTINCT p.id as id,
+               p.name as name,
+               p.kind as kind,
+               p.provider as provider,
+               p.environment as environment,
+               i.id as workload_instance_id,
+               i.environment as workload_environment
+        ORDER BY p.kind, p.name
+        """,
+        **repository_scope(repo),
+    ).data()
+    if runtime_platforms:
+        infrastructure["runtime_platforms"] = runtime_platforms
+
+    provisioned_platforms = session.run(
+        f"""
+        MATCH (r:Repository)-[:PROVISIONS_PLATFORM]->(p:Platform)
+        WHERE {repository_scope_predicate()}
+        RETURN DISTINCT p.id as id,
+               p.name as name,
+               p.kind as kind,
+               p.provider as provider,
+               p.environment as environment
+        ORDER BY p.kind, p.name
+        """,
+        **repository_scope(repo),
+    ).data()
+    if provisioned_platforms:
+        infrastructure["provisioned_platforms"] = provisioned_platforms
     return infrastructure
 
 

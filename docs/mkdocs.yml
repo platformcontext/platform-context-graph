@@ -50,6 +50,7 @@ nav:
     - MCP Cookbook: reference/mcp-cookbook.md
   - Reference:
     - Architecture: architecture.md
+    - Relationship Mapping: reference/relationship-mapping.md
     - How It Works: concepts/how-it-works.md
     - Graph Model: concepts/graph-model.md
     - Modes: concepts/modes.md

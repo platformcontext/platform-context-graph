@@ -1114,7 +1114,7 @@ wheels = [
 
 [[package]]
 name = "platform-context-graph"
-version = "0.0.29"
+version = "0.0.31"
 source = { virtual = "." }
 dependencies = [
     { name = "falkordb" },

@@ -3,27 +3,21 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any, Iterable, Sequence
 
 from ..observability import get_observability
 from ..repository_identity import git_remote_for_path, repository_metadata
+from ..utils.debug_log import emit_log_call, info_logger
+from .file_evidence import discover_checkout_file_evidence
 from .identity import canonical_checkout_id
 from .models import RelationshipEvidenceFact, RepositoryCheckout, ResolvedRelationship
 
 REPOSITORY_DEPENDENCY_SCOPE = "repo_dependencies"
-_CROSS_REPO_RELATIONSHIP_TYPES = (
-    "CONFIGURES",
-    "DEPLOYS",
-    "IMPLEMENTED_BY",
-    "PATCHES",
-    "ROUTES_TO",
-    "RUNS_IMAGE",
-    "SATISFIED_BY",
-    "SELECTS",
-    "SOURCES_FROM",
-    "USES_IAM",
-    "USES_MODULE",
-)
+_CROSS_REPO_RELATIONSHIP_TYPE_MAP = {
+    "USES_MODULE": "PROVISIONS_DEPENDENCY_FOR",
+}
+_RELATIONSHIP_TYPE_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 def build_repository_checkouts(repo_paths: Iterable[Path]) -> list[RepositoryCheckout]:
@@ -54,10 +48,13 @@ def build_repository_checkouts(repo_paths: Iterable[Path]) -> list[RepositoryChe
 
 def discover_repository_dependency_evidence(
     driver: Any,
+    *,
+    checkouts: Sequence[RepositoryCheckout] = (),
 ) -> list[RelationshipEvidenceFact]:
     """Discover repository dependency evidence from the current graph state."""
 
     evidence: list[RelationshipEvidenceFact] = []
+    file_evidence: list[RelationshipEvidenceFact] = []
     observability = get_observability()
     with observability.start_span(
         "pcg.relationships.discover_evidence",
@@ -106,32 +103,38 @@ def discover_repository_dependency_evidence(
                 component=observability.component,
                 attributes={
                     "pcg.relationships.relationship_type_count": len(
-                        _CROSS_REPO_RELATIONSHIP_TYPES
+                        _CROSS_REPO_RELATIONSHIP_TYPE_MAP
                     ),
                 },
             ):
-                cross_repo_rows = session.run(
-                    """
-                    MATCH (source_repo:Repository)-[:CONTAINS*]->(source_node)-[rel]->(target_node)<-[:CONTAINS*]-(target_repo:Repository)
-                    WHERE source_repo.id <> target_repo.id
-                      AND type(rel) IN $relationship_types
-                    RETURN source_repo.id AS source_repo_id,
-                           target_repo.id AS target_repo_id,
-                           type(rel) AS evidence_kind,
-                           coalesce(rel.confidence, 0.85) AS confidence,
-                           coalesce(rel.reason, type(rel) + ' implies repository dependency') AS rationale,
-                           labels(source_node) AS source_labels,
-                           coalesce(source_node.id, source_node.name, '') AS source_identity,
-                           labels(target_node) AS target_labels,
-                           coalesce(target_node.id, target_node.name, '') AS target_identity
-                    """,
-                    relationship_types=list(_CROSS_REPO_RELATIONSHIP_TYPES),
-                ).data()
+                if _CROSS_REPO_RELATIONSHIP_TYPE_MAP:
+                    cross_repo_rows = session.run(
+                        """
+                        MATCH (source_repo:Repository)-[:CONTAINS*]->(source_node)-[rel]->(target_node)<-[:CONTAINS*]-(target_repo:Repository)
+                        WHERE source_repo.id <> target_repo.id
+                          AND type(rel) IN $relationship_types
+                        RETURN source_repo.id AS source_repo_id,
+                               target_repo.id AS target_repo_id,
+                               type(rel) AS evidence_kind,
+                               coalesce(rel.confidence, 0.85) AS confidence,
+                               coalesce(rel.reason, type(rel) + ' implies repository dependency') AS rationale,
+                               labels(source_node) AS source_labels,
+                               coalesce(source_node.id, source_node.name, '') AS source_identity,
+                               labels(target_node) AS target_labels,
+                               coalesce(target_node.id, target_node.name, '') AS target_identity
+                        """,
+                        relationship_types=list(_CROSS_REPO_RELATIONSHIP_TYPE_MAP),
+                    ).data()
+                else:
+                    cross_repo_rows = []
             for row in cross_repo_rows:
+                evidence_kind = str(row["evidence_kind"])
                 evidence.append(
                     RelationshipEvidenceFact(
-                        evidence_kind=str(row["evidence_kind"]),
-                        relationship_type="DEPENDS_ON",
+                        evidence_kind=evidence_kind,
+                        relationship_type=_CROSS_REPO_RELATIONSHIP_TYPE_MAP[
+                            evidence_kind
+                        ],
                         source_repo_id=row["source_repo_id"],
                         target_repo_id=row["target_repo_id"],
                         confidence=float(row["confidence"]),
@@ -149,10 +152,31 @@ def discover_repository_dependency_evidence(
                     "pcg.relationships.cross_repo_evidence_count",
                     len(cross_repo_rows),
                 )
+            file_evidence = discover_checkout_file_evidence(checkouts)
+            evidence.extend(file_evidence)
+            if discovery_span is not None:
                 discovery_span.set_attribute(
                     "pcg.relationships.evidence_count",
                     len(evidence),
                 )
+                discovery_span.set_attribute(
+                    "pcg.relationships.file_evidence_count",
+                    len(file_evidence),
+                )
+                discovery_span.set_attribute(
+                    "pcg.relationships.graph_evidence_count",
+                    len(evidence) - len(file_evidence),
+                )
+        emit_log_call(
+            info_logger,
+            "Discovered repository dependency evidence",
+            event_name="relationships.discover_evidence.completed",
+            extra_keys={
+                "graph_evidence_count": len(evidence) - len(file_evidence),
+                "file_evidence_count": len(file_evidence),
+                "evidence_count": len(evidence),
+            },
+        )
     return evidence
 
 
@@ -205,29 +229,17 @@ def project_resolved_relationships(
                             + ", ".join(sorted(missing_repo_ids))
                         )
                 tx.run("""
-                    MATCH (:Repository)-[rel:DEPENDS_ON]->(:Repository)
+                    MATCH (:Repository)-[rel]->(:Repository)
                     WHERE rel.evidence_source = 'resolver'
                     DELETE rel
                     """)
                 if not resolved:
                     return
-                tx.run(
-                    """
-                    UNWIND $rows AS row
-                    MATCH (source:Repository {id: row.source_repo_id})
-                    MATCH (target:Repository {id: row.target_repo_id})
-                    MERGE (source)-[rel:DEPENDS_ON]->(target)
-                    SET rel.confidence = row.confidence,
-                        rel.reason = row.rationale,
-                        rel.evidence_source = 'resolver',
-                        rel.evidence_generation_id = $generation_id,
-                        rel.evidence_scope = $scope,
-                        rel.evidence_count = row.evidence_count,
-                        rel.resolution_source = row.resolution_source
-                    """,
-                    generation_id=generation_id,
-                    scope=REPOSITORY_DEPENDENCY_SCOPE,
-                    rows=[
+                for relationship_type in sorted(
+                    {item.relationship_type for item in resolved}
+                ):
+                    _validate_relationship_type(relationship_type)
+                    rows = [
                         {
                             "source_repo_id": item.source_repo_id,
                             "target_repo_id": item.target_repo_id,
@@ -237,8 +249,26 @@ def project_resolved_relationships(
                             "resolution_source": item.resolution_source,
                         }
                         for item in resolved
-                    ],
-                )
+                        if item.relationship_type == relationship_type
+                    ]
+                    tx.run(
+                        f"""
+                        UNWIND $rows AS row
+                        MATCH (source:Repository {{id: row.source_repo_id}})
+                        MATCH (target:Repository {{id: row.target_repo_id}})
+                        MERGE (source)-[rel:{relationship_type}]->(target)
+                        SET rel.confidence = row.confidence,
+                            rel.reason = row.rationale,
+                            rel.evidence_source = 'resolver',
+                            rel.evidence_generation_id = $generation_id,
+                            rel.evidence_scope = $scope,
+                            rel.evidence_count = row.evidence_count,
+                            rel.resolution_source = row.resolution_source
+                        """,
+                        generation_id=generation_id,
+                        scope=REPOSITORY_DEPENDENCY_SCOPE,
+                        rows=rows,
+                    )
 
             execute_write = getattr(session, "execute_write", None)
             if callable(execute_write):
@@ -249,3 +279,12 @@ def project_resolved_relationships(
                 write_transaction(_write_projection)
                 return
             _write_projection(session)
+
+
+def _validate_relationship_type(relationship_type: str) -> None:
+    """Ensure dynamic graph projection uses a safe relationship type token."""
+
+    if not _RELATIONSHIP_TYPE_RE.fullmatch(relationship_type):
+        raise ValueError(
+            f"invalid relationship type for projection: {relationship_type}"
+        )

@@ -132,14 +132,20 @@ def register_ecosystem_relationship_commands(
                 )
 
     @ecosystem_app.command("candidates")
-    def ecosystem_candidates() -> None:
+    def ecosystem_candidates(
+        relationship_type: str | None = typer.Option(
+            None,
+            "--relationship-type",
+            help="Optional relationship type to filter candidates.",
+        ),
+    ) -> None:
         """List active relationship candidates before assertion/rejection review."""
 
         with _start_cli_span("candidates"):
             store = _require_relationship_store()
             candidates = store.list_relationship_candidates(
                 scope=REPOSITORY_DEPENDENCY_SCOPE,
-                relationship_type="DEPENDS_ON",
+                relationship_type=relationship_type,
             )
             emit_log_call(
                 info_logger,
@@ -148,6 +154,7 @@ def register_ecosystem_relationship_commands(
                 extra_keys={
                     "scope": REPOSITORY_DEPENDENCY_SCOPE,
                     "candidate_count": len(candidates),
+                    "relationship_type": relationship_type or "all",
                 },
             )
             if not candidates:
@@ -180,6 +187,11 @@ def register_ecosystem_relationship_commands(
         actor: str = typer.Option(
             "cli", "--actor", help="Actor recording the assertion."
         ),
+        relationship_type: str = typer.Option(
+            "DEPENDS_ON",
+            "--relationship-type",
+            help="Relationship type to assert.",
+        ),
     ) -> None:
         """Persist an explicit repository dependency assertion."""
 
@@ -192,7 +204,7 @@ def register_ecosystem_relationship_commands(
                 RelationshipAssertion(
                     source_repo_id=source_repo_id,
                     target_repo_id=target_repo_id,
-                    relationship_type="DEPENDS_ON",
+                    relationship_type=relationship_type,
                     decision="assert",
                     reason=reason,
                     actor=actor,
@@ -205,13 +217,14 @@ def register_ecosystem_relationship_commands(
                 extra_keys={
                     "scope": REPOSITORY_DEPENDENCY_SCOPE,
                     "decision": "assert",
+                    "relationship_type": relationship_type,
                     "actor": actor,
                     "source_repo_id": source_repo_id,
                     "target_repo_id": target_repo_id,
                 },
             )
             typer.echo(
-                f"Stored assert relationship for {source_repo_id} -> {target_repo_id}"
+                f"Stored assert {relationship_type} for {source_repo_id} -> {target_repo_id}"
             )
 
     @ecosystem_app.command("reject-relationship")
@@ -228,6 +241,11 @@ def register_ecosystem_relationship_commands(
         actor: str = typer.Option(
             "cli", "--actor", help="Actor recording the rejection."
         ),
+        relationship_type: str = typer.Option(
+            "DEPENDS_ON",
+            "--relationship-type",
+            help="Relationship type to reject.",
+        ),
     ) -> None:
         """Persist an explicit repository dependency rejection."""
 
@@ -240,7 +258,7 @@ def register_ecosystem_relationship_commands(
                 RelationshipAssertion(
                     source_repo_id=source_repo_id,
                     target_repo_id=target_repo_id,
-                    relationship_type="DEPENDS_ON",
+                    relationship_type=relationship_type,
                     decision="reject",
                     reason=reason,
                     actor=actor,
@@ -253,11 +271,12 @@ def register_ecosystem_relationship_commands(
                 extra_keys={
                     "scope": REPOSITORY_DEPENDENCY_SCOPE,
                     "decision": "reject",
+                    "relationship_type": relationship_type,
                     "actor": actor,
                     "source_repo_id": source_repo_id,
                     "target_repo_id": target_repo_id,
                 },
             )
             typer.echo(
-                f"Stored reject relationship for {source_repo_id} -> {target_repo_id}"
+                f"Stored reject {relationship_type} for {source_repo_id} -> {target_repo_id}"
             )

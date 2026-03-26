@@ -229,11 +229,17 @@ class TestGracefulDegradation:
         assert result["ecosystem"]["name"] == "my-platform"
         assert "mode" not in result
 
-    def test_repo_summary_omits_tier_when_null(self):
-        repo_record = MockRecord({"name": "my-repo", "path": "/repos/my-repo"})
+    def test_repo_summary_omits_tier_when_null(self, monkeypatch):
+        repo_record = MockRecord(
+            {"id": "repository:r_summary123", "name": "my-repo", "path": "/repos/my-repo"}
+        )
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.get_runtime_repository_coverage",
+            lambda **_kwargs: None,
+        )
         db = make_mock_db(
             {
-                "RETURN r.name as name, r.path as path": MockResult(
+                "RETURN r.id as id, r.name as name, r.path as path": MockResult(
                     single_record=repo_record
                 ),
                 "split(f.name": MockResult(records=[]),
@@ -252,6 +258,66 @@ class TestGracefulDegradation:
         )
         result = get_repo_summary(db, "my-repo")
         assert "tier" not in result
+
+    def test_repo_summary_surfaces_partial_coverage_note(self, monkeypatch):
+        repo_record = MockRecord(
+            {
+                "id": "repository:r_partial123",
+                "name": "api-node-boats",
+                "path": "/repos/api-node-boats",
+            }
+        )
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.get_runtime_repository_coverage",
+            lambda **_kwargs: {
+                "run_id": "run-123",
+                "status": "completed",
+                "phase": "completed",
+                "finalization_status": "completed",
+                "graph_available": True,
+                "server_content_available": False,
+                "discovered_file_count": 196,
+                "graph_recursive_file_count": 12,
+                "content_file_count": 12,
+                "content_entity_count": 24,
+                "root_file_count": 12,
+                "root_directory_count": 2,
+                "top_file_count": 12,
+                "top_level_function_count": 0,
+                "class_method_count": 0,
+                "total_function_count": 0,
+                "class_count": 0,
+                "updated_at": None,
+            },
+        )
+        db = make_mock_db(
+            {
+                "RETURN r.id as id, r.name as name, r.path as path": MockResult(
+                    single_record=repo_record
+                ),
+                "split(f.name": MockResult(
+                    records=[{"file": "tsconfig.json", "ext": "json"} for _ in range(12)]
+                ),
+                "count(DISTINCT fn)": MockResult(
+                    single_record=MockRecord({"functions": 0, "classes": 0})
+                ),
+                "labels(n)": MockResult(records=[]),
+                "DEPENDS_ON]->(dep": MockResult(
+                    single_record=MockRecord({"dependencies": []})
+                ),
+                "DEPENDS_ON]-(dep": MockResult(
+                    single_record=MockRecord({"dependents": []})
+                ),
+                "Tier": MockResult(single_record=None),
+            }
+        )
+
+        result = get_repo_summary(db, "api-node-boats")
+
+        assert result["file_count"] == 196
+        assert result["coverage"]["completeness_state"] == "graph_partial"
+        assert result["coverage"]["graph_gap_count"] == 184
+        assert "partial" in result["note"].lower()
 
     def test_blast_radius_adds_note_when_tier_null(self):
         db = make_mock_db(
