@@ -67,6 +67,18 @@ def _source_repo_name_hints(
     return sorted(names)
 
 
+def _service_name_tokens(service_name: str) -> list[str]:
+    """Return stable service-name tokens for cross-tool matching."""
+
+    canonical = service_name.lower().strip()
+    variants = {
+        canonical,
+        canonical.replace("-", "_"),
+        canonical.replace("_", "-"),
+    }
+    return sorted(token for token in variants if token)
+
+
 def repo_summary_note(
     *, limitations: list[str], coverage: dict[str, Any] | None
 ) -> str:
@@ -105,6 +117,7 @@ def trace_deployment_chain(
     source_repo_names = [
         str(row["name"]) for row in source_repositories if row.get("name")
     ]
+    service_name_tokens = _service_name_tokens(canonical_name)
     provisioned_by = list(context.get("provisioned_by") or [])
     provisioned_repo_ids = [
         str(row["id"]) for row in provisioned_by if row.get("id")
@@ -132,8 +145,6 @@ def trace_deployment_chain(
             MATCH (app:ArgoCDApplication)
             WHERE app.name CONTAINS $name
                OR coalesce(app[$source_path_key], '') CONTAINS $name
-               OR any(source_repo_name IN $source_repo_names
-                      WHERE coalesce(app[$source_repo_key], '') CONTAINS source_repo_name)
             RETURN app.name as app_name,
                    app[$project_key] as project,
                    app[$dest_namespace_key] as namespace,
@@ -143,8 +154,6 @@ def trace_deployment_chain(
             project_key="project",
             dest_namespace_key="dest_namespace",
             source_path_key="source_path",
-            source_repo_key="source_repo",
-            source_repo_names=source_repo_names,
         ).data()
 
         argocd_appsets = session.run(
@@ -153,8 +162,6 @@ def trace_deployment_chain(
             WHERE app.name CONTAINS $name
                OR coalesce(app[$source_paths_key], '') CONTAINS $name
                OR coalesce(app[$source_roots_key], '') CONTAINS $name
-               OR any(source_repo_name IN $source_repo_names
-                      WHERE coalesce(app[$source_repos_key], '') CONTAINS source_repo_name)
             RETURN app.name as app_name,
                    app[$project_key] as project,
                    app.namespace as namespace,
@@ -169,7 +176,6 @@ def trace_deployment_chain(
             source_repos_key="source_repos",
             source_paths_key="source_paths",
             source_roots_key="source_roots",
-            source_repo_names=source_repo_names,
         ).data()
         resolved_source_repo_names = _source_repo_name_hints(
             source_repositories=source_repositories,
@@ -227,7 +233,15 @@ def trace_deployment_chain(
         terraform = session.run(
             """
             MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)
-            WHERE r.name CONTAINS $name OR r.id IN $provisioned_repo_ids
+            WHERE r.name CONTAINS $name
+               OR (
+                    r.id IN $provisioned_repo_ids
+                    AND any(
+                        token IN $service_name_tokens
+                        WHERE toLower(coalesce(tf.name, '')) CONTAINS token
+                           OR toLower(coalesce(f.relative_path, '')) CONTAINS token
+                    )
+               )
             RETURN tf.name as name,
                    tf.resource_type as resource_type,
                    f.relative_path as file,
@@ -237,12 +251,21 @@ def trace_deployment_chain(
         """,
             name=canonical_name,
             provisioned_repo_ids=provisioned_repo_ids,
+            service_name_tokens=service_name_tokens,
         ).data()
 
         tf_modules = session.run(
             """
             MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)
-            WHERE r.name CONTAINS $name OR r.id IN $provisioned_repo_ids
+            WHERE r.name CONTAINS $name
+               OR (
+                    r.id IN $provisioned_repo_ids
+                    AND any(
+                        token IN $service_name_tokens
+                        WHERE toLower(coalesce(mod.name, '')) CONTAINS token
+                           OR toLower(coalesce(f.relative_path, '')) CONTAINS token
+                    )
+               )
             RETURN mod.name as name,
                    mod.source as source,
                    mod.version as version,
@@ -252,6 +275,7 @@ def trace_deployment_chain(
         """,
             name=canonical_name,
             provisioned_repo_ids=provisioned_repo_ids,
+            service_name_tokens=service_name_tokens,
         ).data()
 
     k8s_resources = _dedupe_rows(repo_k8s_resources + deployed_k8s_resources)
