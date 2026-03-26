@@ -8,7 +8,7 @@ from typing import Any, Iterable, Sequence
 
 from ..observability import get_observability
 from ..repository_identity import git_remote_for_path, repository_metadata
-from ..utils.debug_log import emit_log_call
+from ..utils.debug_log import emit_log_call, error_logger
 from .identity import canonical_checkout_id
 from .models import (
     RelationshipAssertion,
@@ -184,15 +184,17 @@ def resolve_repository_relationships(
             )
         )
 
+    latest_decisions: dict[tuple[str, str, str], RelationshipAssertion] = {}
+    for item in assertions:
+        latest_decisions[
+            (item.source_repo_id, item.target_repo_id, item.relationship_type)
+        ] = item
+
     rejections = {
-        (item.source_repo_id, item.target_repo_id, item.relationship_type)
-        for item in assertions
-        if item.decision == "reject"
+        key for key, item in latest_decisions.items() if item.decision == "reject"
     }
     explicit_assertions = {
-        (item.source_repo_id, item.target_repo_id, item.relationship_type): item
-        for item in assertions
-        if item.decision == "assert"
+        key: item for key, item in latest_decisions.items() if item.decision == "assert"
     }
 
     resolved: list[ResolvedRelationship] = []
@@ -290,6 +292,30 @@ def project_resolved_relationships(
         with driver.session() as session:
 
             def _write_projection(tx: Any) -> None:
+                repo_ids = sorted(
+                    {item.source_repo_id for item in resolved}
+                    | {item.target_repo_id for item in resolved}
+                )
+                if repo_ids:
+                    repo_rows = tx.run(
+                        """
+                        UNWIND $repo_ids AS repo_id
+                        OPTIONAL MATCH (repo:Repository {id: repo_id})
+                        RETURN repo_id, count(repo) AS repo_count
+                        """,
+                        repo_ids=repo_ids,
+                    ).data()
+                    missing_repo_ids = [
+                        row["repo_id"]
+                        for row in repo_rows
+                        if int(row.get("repo_count", 0)) == 0
+                    ]
+                    if missing_repo_ids:
+                        raise RuntimeError(
+                            "Cannot project resolved repository relationships; "
+                            "missing Repository nodes: "
+                            + ", ".join(sorted(missing_repo_ids))
+                        )
                 tx.run("""
                     MATCH (:Repository)-[rel:DEPENDS_ON]->(:Repository)
                     WHERE rel.evidence_source = 'resolver'
@@ -381,47 +407,86 @@ def resolve_repository_relationships_for_committed_repositories(
                 "repo_count": len(committed_repo_paths),
             },
         )
-        checkouts = build_repository_checkouts(committed_repo_paths)
-        evidence_facts = discover_repository_dependency_evidence(builder.driver)
-        assertions = store.list_relationship_assertions(relationship_type="DEPENDS_ON")
-        candidates, resolved = resolve_repository_relationships(
-            evidence_facts,
-            assertions,
-        )
-        generation = store.replace_generation(
-            scope=REPOSITORY_DEPENDENCY_SCOPE,
-            run_id=run_id,
-            checkouts=checkouts,
-            evidence_facts=evidence_facts,
-            candidates=candidates,
-            resolved=resolved,
-        )
-        project_resolved_relationships(
-            db_manager=builder.db_manager,
-            generation_id=generation.generation_id,
-            resolved=resolved,
-        )
-        store.activate_generation(
-            scope=REPOSITORY_DEPENDENCY_SCOPE,
-            generation_id=generation.generation_id,
-        )
-        emit_log_call(
-            info_logger_fn,
-            "Repository dependency resolution complete",
-            event_name="relationships.resolve.completed",
-            extra_keys={
-                "scope": REPOSITORY_DEPENDENCY_SCOPE,
-                "run_id": run_id or "adhoc",
-                "generation_id": generation.generation_id,
-                "checkout_count": len(checkouts),
-                "evidence_count": len(evidence_facts),
-                "candidate_count": len(candidates),
-                "resolved_count": len(resolved),
-            },
-        )
-        return {
-            "checkouts": len(checkouts),
-            "evidence_facts": len(evidence_facts),
-            "candidates": len(candidates),
-            "resolved_relationships": len(resolved),
-        }
+        try:
+            checkouts = build_repository_checkouts(committed_repo_paths)
+            evidence_facts = discover_repository_dependency_evidence(builder.driver)
+            assertions = store.list_relationship_assertions(
+                relationship_type="DEPENDS_ON"
+            )
+            candidates, resolved = resolve_repository_relationships(
+                evidence_facts,
+                assertions,
+            )
+            generation = store.replace_generation(
+                scope=REPOSITORY_DEPENDENCY_SCOPE,
+                run_id=run_id,
+                checkouts=checkouts,
+                evidence_facts=evidence_facts,
+                candidates=candidates,
+                resolved=resolved,
+            )
+            emit_log_call(
+                info_logger_fn,
+                "Persisted pending repository relationship generation",
+                event_name="relationships.persist_generation.completed",
+                extra_keys={
+                    "scope": REPOSITORY_DEPENDENCY_SCOPE,
+                    "run_id": run_id or "adhoc",
+                    "generation_id": generation.generation_id,
+                    "candidate_count": len(candidates),
+                    "resolved_count": len(resolved),
+                },
+            )
+            project_resolved_relationships(
+                db_manager=builder.db_manager,
+                generation_id=generation.generation_id,
+                resolved=resolved,
+            )
+            emit_log_call(
+                info_logger_fn,
+                "Projected resolved repository relationships into the graph",
+                event_name="relationships.project.completed",
+                extra_keys={
+                    "scope": REPOSITORY_DEPENDENCY_SCOPE,
+                    "run_id": run_id or "adhoc",
+                    "generation_id": generation.generation_id,
+                    "resolved_count": len(resolved),
+                },
+            )
+            store.activate_generation(
+                scope=REPOSITORY_DEPENDENCY_SCOPE,
+                generation_id=generation.generation_id,
+            )
+            emit_log_call(
+                info_logger_fn,
+                "Repository dependency resolution complete",
+                event_name="relationships.resolve.completed",
+                extra_keys={
+                    "scope": REPOSITORY_DEPENDENCY_SCOPE,
+                    "run_id": run_id or "adhoc",
+                    "generation_id": generation.generation_id,
+                    "checkout_count": len(checkouts),
+                    "evidence_count": len(evidence_facts),
+                    "candidate_count": len(candidates),
+                    "resolved_count": len(resolved),
+                },
+            )
+            return {
+                "checkouts": len(checkouts),
+                "evidence_facts": len(evidence_facts),
+                "candidates": len(candidates),
+                "resolved_relationships": len(resolved),
+            }
+        except Exception as exc:
+            emit_log_call(
+                error_logger,
+                "Repository dependency resolution failed",
+                event_name="relationships.resolve.failed",
+                extra_keys={
+                    "scope": REPOSITORY_DEPENDENCY_SCOPE,
+                    "run_id": run_id or "adhoc",
+                    "repo_count": len(committed_repo_paths),
+                },
+                exc_info=exc,
+            )
+            raise

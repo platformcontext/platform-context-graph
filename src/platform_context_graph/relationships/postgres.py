@@ -91,7 +91,7 @@ class PostgresRelationshipStore:
         created_at = _now()
 
         with get_observability().start_span(
-            "pcg.relationships.postgres.replace_generation",
+            "pcg.relationships.persist_generation",
             attributes={
                 "pcg.relationships.scope": scope,
                 "pcg.relationships.evidence_count": len(evidence_facts),
@@ -385,7 +385,7 @@ class PostgresRelationshipStore:
                        actor
                 FROM relationship_assertions
                 WHERE relationship_type = %(relationship_type)s
-                ORDER BY created_at ASC
+                ORDER BY updated_at ASC, created_at ASC
                 """,
                 {"relationship_type": relationship_type},
             )
@@ -411,7 +411,6 @@ class PostgresRelationshipStore:
             assertion.relationship_type,
             assertion.source_repo_id,
             assertion.target_repo_id,
-            assertion.actor,
         )
         with self._cursor() as cursor:
             cursor.execute(
@@ -440,6 +439,7 @@ class PostgresRelationshipStore:
                 ON CONFLICT (assertion_id) DO UPDATE
                 SET decision = EXCLUDED.decision,
                     reason = EXCLUDED.reason,
+                    actor = EXCLUDED.actor,
                     updated_at = EXCLUDED.updated_at
                 """,
                 {

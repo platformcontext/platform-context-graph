@@ -6,13 +6,17 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from platform_context_graph.relationships.models import (
     RelationshipAssertion,
     RelationshipEvidenceFact,
     RepositoryCheckout,
+    ResolvedRelationship,
     ResolutionGeneration,
 )
 from platform_context_graph.relationships.resolver import (
+    project_resolved_relationships,
     resolve_repository_relationships_for_committed_repositories,
     resolve_repository_relationships,
 )
@@ -110,6 +114,102 @@ def test_resolve_repository_relationships_assertion_creates_edge_without_evidenc
     assert resolved[0].confidence == 1.0
     assert resolved[0].resolution_source == "assertion"
     assert resolved[0].evidence_count == 0
+
+
+def test_resolve_repository_relationships_latest_decision_wins_for_conflicts() -> None:
+    """Conflicting review actions should honor the most recent decision for an edge."""
+
+    assertions = [
+        RelationshipAssertion(
+            source_repo_id="repository:r_deployments",
+            target_repo_id="repository:r_payments",
+            relationship_type="DEPENDS_ON",
+            decision="reject",
+            reason="Older false-positive review",
+            actor="alice",
+        ),
+        RelationshipAssertion(
+            source_repo_id="repository:r_deployments",
+            target_repo_id="repository:r_payments",
+            relationship_type="DEPENDS_ON",
+            decision="assert",
+            reason="Later validated dependency",
+            actor="bob",
+        ),
+    ]
+
+    candidates, resolved = resolve_repository_relationships([], assertions)
+
+    assert candidates == []
+    assert len(resolved) == 1
+    assert resolved[0].source_repo_id == "repository:r_deployments"
+    assert resolved[0].target_repo_id == "repository:r_payments"
+    assert resolved[0].resolution_source == "assertion"
+    assert resolved[0].rationale == "Later validated dependency"
+
+
+def test_project_resolved_relationships_raises_when_repository_nodes_are_missing() -> (
+    None
+):
+    """Projection must fail before activation when graph repository nodes are absent."""
+
+    class FakeResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def data(self):
+            return self._rows
+
+    class FakeTx:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        def run(self, query: str, **params: object):
+            self.calls.append((query, params))
+            if "UNWIND $repo_ids AS repo_id" in query:
+                return FakeResult(
+                    [
+                        {"repo_id": "repository:r_missing", "repo_count": 0},
+                    ]
+                )
+            return FakeResult([])
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.tx = FakeTx()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute_write(self, callback):
+            return callback(self.tx)
+
+    class FakeDriver:
+        def session(self):
+            return FakeSession()
+
+    db_manager = SimpleNamespace(get_driver=lambda: FakeDriver())
+    resolved = [
+        ResolvedRelationship(
+            source_repo_id="repository:r_missing",
+            target_repo_id="repository:r_present",
+            relationship_type="DEPENDS_ON",
+            confidence=1.0,
+            evidence_count=0,
+            rationale="Manual assertion",
+            resolution_source="assertion",
+        )
+    ]
+
+    with pytest.raises(RuntimeError, match="missing Repository nodes"):
+        project_resolved_relationships(
+            db_manager=db_manager,
+            generation_id="generation_123",
+            resolved=resolved,
+        )
 
 
 def test_resolve_repository_relationships_for_committed_repositories_activates_after_projection(

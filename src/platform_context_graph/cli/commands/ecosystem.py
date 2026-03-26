@@ -291,101 +291,80 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
     def ecosystem_generation() -> None:
         """Show the active relationship resolution generation."""
 
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, _, _ = services
-        try:
-            store = _require_relationship_store()
-            generation = store.get_active_generation(scope=REPOSITORY_DEPENDENCY_SCOPE)
-            if generation is None:
-                typer.echo("No active relationship generation.")
-                return
-            typer.echo(
-                json.dumps(
-                    {
-                        "generation_id": generation.generation_id,
-                        "scope": generation.scope,
-                        "run_id": generation.run_id,
-                        "status": generation.status,
-                    },
-                    sort_keys=True,
-                )
+        store = _require_relationship_store()
+        generation = store.get_active_generation(scope=REPOSITORY_DEPENDENCY_SCOPE)
+        if generation is None:
+            typer.echo("No active relationship generation.")
+            return
+        typer.echo(
+            json.dumps(
+                {
+                    "generation_id": generation.generation_id,
+                    "scope": generation.scope,
+                    "run_id": generation.run_id,
+                    "status": generation.status,
+                },
+                sort_keys=True,
             )
-        finally:
-            db_manager.close_driver()
+        )
 
     @ecosystem_app.command("relationships")
     def ecosystem_relationships() -> None:
         """List resolved repository relationships from the active generation."""
 
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, _, _ = services
-        try:
-            store = _require_relationship_store()
-            generation = store.get_active_generation(scope=REPOSITORY_DEPENDENCY_SCOPE)
-            relationships = store.list_resolved_relationships(
-                scope=REPOSITORY_DEPENDENCY_SCOPE
-            )
-            if generation is None:
-                typer.echo("No active relationship generation.")
-                return
+        store = _require_relationship_store()
+        generation = store.get_active_generation(scope=REPOSITORY_DEPENDENCY_SCOPE)
+        relationships = store.list_resolved_relationships(
+            scope=REPOSITORY_DEPENDENCY_SCOPE
+        )
+        if generation is None:
+            typer.echo("No active relationship generation.")
+            return
+        typer.echo(
+            f"Active generation: {generation.generation_id} "
+            f"(scope={generation.scope}, run_id={generation.run_id or 'adhoc'})"
+        )
+        if not relationships:
+            typer.echo("No resolved relationships.")
+            return
+        for relationship in relationships:
             typer.echo(
-                f"Active generation: {generation.generation_id} "
-                f"(scope={generation.scope}, run_id={generation.run_id or 'adhoc'})"
-            )
-            if not relationships:
-                typer.echo("No resolved relationships.")
-                return
-            for relationship in relationships:
-                typer.echo(
-                    "\t".join(
-                        [
-                            relationship.source_repo_id,
-                            relationship.relationship_type,
-                            relationship.target_repo_id,
-                            f"{relationship.confidence:.2f}",
-                            str(relationship.evidence_count),
-                            relationship.resolution_source,
-                        ]
-                    )
+                "\t".join(
+                    [
+                        relationship.source_repo_id,
+                        relationship.relationship_type,
+                        relationship.target_repo_id,
+                        f"{relationship.confidence:.2f}",
+                        str(relationship.evidence_count),
+                        relationship.resolution_source,
+                    ]
                 )
-        finally:
-            db_manager.close_driver()
+            )
 
     @ecosystem_app.command("candidates")
     def ecosystem_candidates() -> None:
         """List active relationship candidates before assertion/rejection review."""
 
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, _, _ = services
-        try:
-            store = _require_relationship_store()
-            candidates = store.list_relationship_candidates(
-                scope=REPOSITORY_DEPENDENCY_SCOPE,
-                relationship_type="DEPENDS_ON",
-            )
-            if not candidates:
-                typer.echo("No active relationship candidates.")
-                return
-            for candidate in candidates:
-                typer.echo(
-                    "\t".join(
-                        [
-                            candidate.source_repo_id,
-                            candidate.relationship_type,
-                            candidate.target_repo_id,
-                            f"{candidate.confidence:.2f}",
-                            str(candidate.evidence_count),
-                        ]
-                    )
+        store = _require_relationship_store()
+        candidates = store.list_relationship_candidates(
+            scope=REPOSITORY_DEPENDENCY_SCOPE,
+            relationship_type="DEPENDS_ON",
+        )
+        if not candidates:
+            typer.echo("No active relationship candidates.")
+            return
+        for candidate in candidates:
+            typer.echo(
+                "\t".join(
+                    [
+                        candidate.source_repo_id,
+                        candidate.relationship_type,
+                        candidate.target_repo_id,
+                        f"{candidate.confidence:.2f}",
+                        str(candidate.evidence_count),
+                    ]
                 )
-        finally:
-            db_manager.close_driver()
+            )
 
     @ecosystem_app.command("assert-relationship")
     def ecosystem_assert_relationship(
@@ -404,27 +383,20 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
     ) -> None:
         """Persist an explicit repository dependency assertion."""
 
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, _, _ = services
-        try:
-            store = _require_relationship_store()
-            store.upsert_relationship_assertion(
-                RelationshipAssertion(
-                    source_repo_id=source_repo_id,
-                    target_repo_id=target_repo_id,
-                    relationship_type="DEPENDS_ON",
-                    decision="assert",
-                    reason=reason,
-                    actor=actor,
-                )
+        store = _require_relationship_store()
+        store.upsert_relationship_assertion(
+            RelationshipAssertion(
+                source_repo_id=source_repo_id,
+                target_repo_id=target_repo_id,
+                relationship_type="DEPENDS_ON",
+                decision="assert",
+                reason=reason,
+                actor=actor,
             )
-            typer.echo(
-                f"Stored assert relationship for {source_repo_id} -> {target_repo_id}"
-            )
-        finally:
-            db_manager.close_driver()
+        )
+        typer.echo(
+            f"Stored assert relationship for {source_repo_id} -> {target_repo_id}"
+        )
 
     @ecosystem_app.command("reject-relationship")
     def ecosystem_reject_relationship(
@@ -443,27 +415,20 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
     ) -> None:
         """Persist an explicit repository dependency rejection."""
 
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, _, _ = services
-        try:
-            store = _require_relationship_store()
-            store.upsert_relationship_assertion(
-                RelationshipAssertion(
-                    source_repo_id=source_repo_id,
-                    target_repo_id=target_repo_id,
-                    relationship_type="DEPENDS_ON",
-                    decision="reject",
-                    reason=reason,
-                    actor=actor,
-                )
+        store = _require_relationship_store()
+        store.upsert_relationship_assertion(
+            RelationshipAssertion(
+                source_repo_id=source_repo_id,
+                target_repo_id=target_repo_id,
+                relationship_type="DEPENDS_ON",
+                decision="reject",
+                reason=reason,
+                actor=actor,
             )
-            typer.echo(
-                f"Stored reject relationship for {source_repo_id} -> {target_repo_id}"
-            )
-        finally:
-            db_manager.close_driver()
+        )
+        typer.echo(
+            f"Stored reject relationship for {source_repo_id} -> {target_repo_id}"
+        )
 
     @ecosystem_app.command("overview")
     def ecosystem_overview() -> None:

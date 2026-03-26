@@ -399,21 +399,13 @@ class TestCLICommands:
         assert "resolved_relationships" in result.stdout
         db_manager.close_driver.assert_called_once()
 
-    @patch("platform_context_graph.cli.main._initialize_services")
     @patch("platform_context_graph.cli.commands.ecosystem.get_relationship_store")
     def test_ecosystem_relationships_lists_active_resolved_edges(
         self,
         mock_get_relationship_store,
-        mock_initialize_services,
     ):
         """`pcg ecosystem relationships` should render active resolved edges."""
 
-        db_manager = SimpleNamespace(close_driver=MagicMock())
-        mock_initialize_services.return_value = (
-            db_manager,
-            MagicMock(),
-            MagicMock(),
-        )
         mock_store = MagicMock()
         mock_store.get_active_generation.return_value = ResolutionGeneration(
             generation_id="generation_123",
@@ -445,23 +437,42 @@ class TestCLICommands:
         mock_store.list_resolved_relationships.assert_called_once_with(
             scope="repo_dependencies"
         )
-        db_manager.close_driver.assert_called_once()
 
-    @patch("platform_context_graph.cli.main._initialize_services")
+    @patch(
+        "platform_context_graph.cli.main._initialize_services",
+        side_effect=AssertionError("graph bootstrap should not run"),
+    )
     @patch("platform_context_graph.cli.commands.ecosystem.get_relationship_store")
-    def test_ecosystem_candidates_lists_active_candidates(
+    def test_ecosystem_relationships_reads_store_without_graph_bootstrap(
         self,
         mock_get_relationship_store,
         mock_initialize_services,
     ):
+        """Store-backed review commands should not depend on graph service startup."""
+
+        mock_store = MagicMock()
+        mock_store.get_active_generation.return_value = ResolutionGeneration(
+            generation_id="generation_123",
+            scope="repo_dependencies",
+            run_id="run_123",
+            status="active",
+        )
+        mock_store.list_resolved_relationships.return_value = []
+        mock_get_relationship_store.return_value = mock_store
+
+        result = runner.invoke(app, ["ecosystem", "relationships"])
+
+        assert result.exit_code == 0
+        assert "generation_123" in result.stdout
+        mock_initialize_services.assert_not_called()
+
+    @patch("platform_context_graph.cli.commands.ecosystem.get_relationship_store")
+    def test_ecosystem_candidates_lists_active_candidates(
+        self,
+        mock_get_relationship_store,
+    ):
         """`pcg ecosystem candidates` should list active relationship candidates."""
 
-        db_manager = SimpleNamespace(close_driver=MagicMock())
-        mock_initialize_services.return_value = (
-            db_manager,
-            MagicMock(),
-            MagicMock(),
-        )
         mock_store = MagicMock()
         mock_store.list_relationship_candidates.return_value = [
             RelationshipCandidate(
@@ -484,23 +495,14 @@ class TestCLICommands:
             scope="repo_dependencies",
             relationship_type="DEPENDS_ON",
         )
-        db_manager.close_driver.assert_called_once()
 
-    @patch("platform_context_graph.cli.main._initialize_services")
     @patch("platform_context_graph.cli.commands.ecosystem.get_relationship_store")
     def test_ecosystem_assert_relationship_persists_assertion(
         self,
         mock_get_relationship_store,
-        mock_initialize_services,
     ):
         """`pcg ecosystem assert-relationship` should persist an explicit assertion."""
 
-        db_manager = SimpleNamespace(close_driver=MagicMock())
-        mock_initialize_services.return_value = (
-            db_manager,
-            MagicMock(),
-            MagicMock(),
-        )
         mock_store = MagicMock()
         mock_get_relationship_store.return_value = mock_store
 
@@ -529,23 +531,14 @@ class TestCLICommands:
                 actor="cli-user",
             )
         )
-        db_manager.close_driver.assert_called_once()
 
-    @patch("platform_context_graph.cli.main._initialize_services")
     @patch("platform_context_graph.cli.commands.ecosystem.get_relationship_store")
     def test_ecosystem_reject_relationship_persists_rejection(
         self,
         mock_get_relationship_store,
-        mock_initialize_services,
     ):
         """`pcg ecosystem reject-relationship` should persist an explicit rejection."""
 
-        db_manager = SimpleNamespace(close_driver=MagicMock())
-        mock_initialize_services.return_value = (
-            db_manager,
-            MagicMock(),
-            MagicMock(),
-        )
         mock_store = MagicMock()
         mock_get_relationship_store.return_value = mock_store
 
@@ -574,7 +567,6 @@ class TestCLICommands:
                 actor="cli-user",
             )
         )
-        db_manager.close_driver.assert_called_once()
 
 
 class TestNeo4jDatabaseNameCLI:
