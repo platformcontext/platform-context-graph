@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from platform_context_graph.query.repositories.content_enrichment import (
+    enrich_repository_context,
+)
+
+
+class _DummySession:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        del exc_type, exc, tb
+        return False
+
+
+class _DummyDriver:
+    def session(self):
+        return _DummySession()
+
+
+class _DummyDB:
+    def get_driver(self):
+        return _DummyDriver()
+
+
+def test_enrich_repository_context_extracts_api_surface_and_hostnames(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    helm_repo = tmp_path / "helm-charts"
+    values_path = (
+        helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "values.yaml"
+    )
+    values_path.parent.mkdir(parents=True)
+    values_path.write_text(
+        "ingress:\n  hostnames:\n    - api-node-boats.qa.svc.bgrp.io\n",
+        encoding="utf-8",
+    )
+
+    file_contents = {
+        "server/init/plugins/spec.js": (
+            "specPath: path.join(__dirname, '../../../specs/index.yaml'),\n"
+            "route: { path: '/_specs' }\n"
+        ),
+        "redocly.yaml": "apis:\n  main:\n    root: ./specs/index.yaml\n",
+        "versioning.config.ts": "export default { defaultApiVersion: 'v3' };\n",
+        "config/qa.json": '{"server":{"hostname":"api-node-boats.qa.bgrp.io"}}',
+        "config/production.json": (
+            '{"server":{"hostname":"api-node-boats.prod.bgrp.io"}}'
+        ),
+        "cypress.config.ts": (
+            "baseUrl: 'https://api-node-boats.qa.bgrp.io'\n"
+            "baseUrl: 'https://api-node-boats.prod.bgrp.io'\n"
+        ),
+    }
+
+    def _fake_get_file_content(_database, *, repo_id: str, relative_path: str):
+        del repo_id
+        content = file_contents.get(relative_path)
+        if content is None:
+            return {"available": False, "content": None}
+        return {"available": True, "content": content}
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
+        _fake_get_file_content,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.resolve_repository",
+        lambda _session, candidate: {
+            "id": "repository:r_helm123",
+            "name": "helm-charts",
+            "path": str(helm_repo),
+            "local_path": str(helm_repo),
+        }
+        if candidate in {"https://github.com/boatsgroup/helm-charts", "helm-charts"}
+        else None,
+    )
+
+    context = {
+        "repository": {
+            "id": "repository:r_api_node_boats",
+            "name": "api-node-boats",
+            "path": "/repos/api-node-boats",
+        },
+        "discovers_config_in": [
+            {
+                "source_repos": "https://github.com/boatsgroup/helm-charts",
+                "source_paths": "argocd/api-node-boats/overlays/bg-qa/config.yaml",
+            }
+        ],
+    }
+
+    result = enrich_repository_context(_DummyDB(), context)
+
+    assert result["api_surface"]["spec_files"] == [
+        {
+            "relative_path": "specs/index.yaml",
+            "discovered_from": "server/init/plugins/spec.js",
+        }
+    ]
+    assert result["api_surface"]["docs_routes"] == ["/_specs"]
+    assert result["api_surface"]["api_versions"] == ["v3"]
+    assert result["hostnames"] == [
+        {
+            "hostname": "api-node-boats.qa.bgrp.io",
+            "environment": "qa",
+            "source_repo": "api-node-boats",
+            "relative_path": "config/qa.json",
+            "visibility": "public",
+        },
+        {
+            "hostname": "api-node-boats.prod.bgrp.io",
+            "environment": "production",
+            "source_repo": "api-node-boats",
+            "relative_path": "config/production.json",
+            "visibility": "public",
+        },
+        {
+            "hostname": "api-node-boats.qa.bgrp.io",
+            "environment": None,
+            "source_repo": "api-node-boats",
+            "relative_path": "cypress.config.ts",
+            "visibility": "public",
+        },
+        {
+            "hostname": "api-node-boats.prod.bgrp.io",
+            "environment": None,
+            "source_repo": "api-node-boats",
+            "relative_path": "cypress.config.ts",
+            "visibility": "public",
+        },
+        {
+            "hostname": "api-node-boats.qa.svc.bgrp.io",
+            "environment": "bg-qa",
+            "source_repo": "helm-charts",
+            "service_repo": "api-node-boats",
+            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+            "visibility": "internal",
+        },
+    ]

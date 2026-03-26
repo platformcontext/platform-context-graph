@@ -417,7 +417,7 @@ def test_get_repository_context_returns_current_context_shape(monkeypatch):
     assert result["environments"] == ["prod"]
     assert result["summary"]["platform_count"] == 1
     assert result["summary"]["environment_count"] == 1
-    assert result["limitations"] == []
+    assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]
     assert result["code"]["functions"] == 10
     assert result["code"]["top_level_functions"] == 7
     assert result["code"]["class_methods"] == 3

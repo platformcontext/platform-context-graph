@@ -50,6 +50,15 @@ def trace_deployment_chain(
     Returns:
         Structured chain from source to infrastructure.
     """
+    context = repository_queries.get_repository_context(
+        db_manager,
+        repo_id=service_name,
+    )
+    if "error" in context:
+        return context
+
+    canonical_repository = context.get("repository") or {}
+    canonical_name = str(canonical_repository.get("name") or service_name)
     driver = db_manager.get_driver()
 
     with driver.session() as session:
@@ -59,11 +68,15 @@ def trace_deployment_chain(
             "WHERE r.name CONTAINS $name "
             "RETURN r.name as name, r.path as path "
             "LIMIT 1",
-            name=service_name,
+            name=canonical_name,
         ).single()
 
         if not repo:
-            return {"error": f"Repository '{service_name}' not found"}
+            repo = {
+                "name": canonical_name,
+                "path": canonical_repository.get("local_path")
+                or canonical_repository.get("path"),
+            }
 
         # ArgoCD applications sourcing from this repo
         argocd_apps = session.run(
@@ -75,7 +88,7 @@ def trace_deployment_chain(
                    app[$dest_namespace_key] as namespace,
                    app[$source_path_key] as source_path
         """,
-            name=service_name,
+            name=canonical_name,
             project_key="project",
             dest_namespace_key="dest_namespace",
             source_path_key="source_path",
@@ -97,7 +110,7 @@ def trace_deployment_chain(
                    app[$source_paths_key] as source_paths,
                    app[$source_roots_key] as source_roots
         """,
-            name=service_name,
+            name=canonical_name,
             project_key="project",
             dest_namespace_key="dest_namespace",
             source_repos_key="source_repos",
@@ -114,7 +127,7 @@ def trace_deployment_chain(
                    k.namespace as namespace,
                    f.relative_path as file
         """,
-            name=service_name,
+            name=canonical_name,
         ).data()
 
         deployed_k8s_resources = session.run(
@@ -141,7 +154,7 @@ def trace_deployment_chain(
                    repo.name as repository,
                    app.name as deployed_by
         """,
-            name=service_name,
+            name=canonical_name,
         ).data()
 
         # Crossplane claims in the repo
@@ -157,7 +170,7 @@ def trace_deployment_chain(
                    xrd.group as xrd_group,
                    comp.name as composition_name
         """,
-            name=service_name,
+            name=canonical_name,
         ).data()
 
         # Terraform resources in the repo
@@ -169,7 +182,7 @@ def trace_deployment_chain(
                    tf.resource_type as resource_type,
                    f.relative_path as file
         """,
-            name=service_name,
+            name=canonical_name,
         ).data()
 
         # Terraform modules used
@@ -181,12 +194,13 @@ def trace_deployment_chain(
                    mod.source as source,
                    mod.version as version
         """,
-            name=service_name,
+            name=canonical_name,
         ).data()
 
     k8s_resources = _dedupe_rows(repo_k8s_resources + deployed_k8s_resources)
 
-    return {
+    limitations = list(context.get("limitations") or [])
+    result = {
         "repository": dict(repo),
         "argocd_applications": argocd_apps,
         "argocd_applicationsets": argocd_appsets,
@@ -194,7 +208,37 @@ def trace_deployment_chain(
         "crossplane_claims": claims,
         "terraform_resources": terraform,
         "terraform_modules": tf_modules,
+        "coverage": context.get("coverage"),
+        "platforms": context.get("platforms", []),
+        "deploys_from": context.get("deploys_from", []),
+        "discovers_config_in": context.get("discovers_config_in", []),
+        "provisioned_by": context.get("provisioned_by", []),
+        "provisions_dependencies_for": context.get(
+            "provisions_dependencies_for", []
+        ),
+        "deployment_chain": context.get("deployment_chain", []),
+        "environments": context.get("environments", []),
+        "api_surface": context.get("api_surface", {}),
+        "hostnames": context.get("hostnames", []),
+        "limitations": limitations,
     }
+    if limitations:
+        result["note"] = _repo_summary_note(
+            limitations=limitations,
+            coverage=context.get("coverage"),
+        )
+        emit_log_call(
+            warning_logger,
+            "Deployment chain assembled with known limitations",
+            event_name="deployment.chain.limitations",
+            extra_keys={
+                "repo_name": canonical_name,
+                "limitations": limitations,
+                "platform_count": len(result["platforms"]),
+                "deployment_chain_length": len(result["deployment_chain"]),
+            },
+        )
+    return result
 
 
 def find_blast_radius(
@@ -367,6 +411,8 @@ def get_repo_summary(
             "provisions_dependencies_for", []
         ),
         "environments": context.get("environments", []),
+        "api_surface": context.get("api_surface", {}),
+        "hostnames": context.get("hostnames", []),
         "limitations": limitations,
     }
     if limitations:

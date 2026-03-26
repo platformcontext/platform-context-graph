@@ -314,7 +314,7 @@ def _fetch_provisions_dependencies_for(
             "platform_kind": row.get("platform_kind"),
             "platform_provider": row.get("platform_provider"),
             "platform_environment": row.get("platform_environment"),
-            "relationship_type": "PROVISIONS_DEPENDENCIES_FOR",
+            "relationship_type": "PROVISIONS_DEPENDENCY_FOR",
         }
         for row in rows
     ]
@@ -464,7 +464,7 @@ def _build_limitations(
     del provisioned_by, provisions_dependencies_for, iac_relationships
     del deployment_chain, environments
     if coverage is None:
-        return ["coverage unavailable for this repository"]
+        return ["graph_partial", "content_partial"]
     return list(coverage.get("limitations") or [])
 
 

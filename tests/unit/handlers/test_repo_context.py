@@ -364,6 +364,14 @@ class TestGracefulDegradation:
                 ],
                 "provisions_dependencies_for": [],
                 "environments": ["prod"],
+                "api_surface": {
+                    "spec_files": [{"relative_path": "specs/index.yaml"}],
+                    "docs_routes": ["/_specs"],
+                    "api_versions": ["v3"],
+                },
+                "hostnames": [
+                    {"hostname": "api-node-boats.qa.bgrp.io", "visibility": "public"}
+                ],
                 "limitations": ["dns_unknown", "entrypoint_unknown"],
                 "relationships": [],
             },
@@ -375,6 +383,8 @@ class TestGracefulDegradation:
         assert result["platforms"][0]["kind"] == "ecs"
         assert result["deploys_from"][0]["name"] == "helm-charts"
         assert result["dependencies"] == ["terraform-stack-ecs"]
+        assert result["api_surface"]["docs_routes"] == ["/_specs"]
+        assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
         assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]
 
     def test_blast_radius_adds_note_when_tier_null(self):
@@ -395,7 +405,26 @@ class TestGracefulDegradation:
 class TestTraceDeploymentChain:
     """Test deployment traces for repository and ApplicationSet-backed services."""
 
-    def test_returns_applicationset_backed_chain(self):
+    def test_returns_applicationset_backed_chain(self, monkeypatch):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_search123",
+                    "name": "api-node-search",
+                    "path": "/repos/api-node-search",
+                },
+                "coverage": None,
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "deployment_chain": [],
+                "environments": [],
+                "limitations": [],
+            },
+        )
         repo_record = MockRecord({"name": "api-node-search", "path": "/repos/api-node-search"})
 
         db = make_mock_db(
@@ -471,3 +500,97 @@ class TestTraceDeploymentChain:
                 "deployed_by": "api-node-search",
             }
         ]
+
+    def test_trace_deployment_chain_surfaces_runtime_context_and_limitations(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                },
+                "coverage": {
+                    "completeness_state": "complete",
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                },
+                "platforms": [
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": "prod",
+                        "relationship_type": "RUNS_ON",
+                    }
+                ],
+                "deploys_from": [
+                    {
+                        "id": "repository:r_helm123",
+                        "name": "helm-charts",
+                        "relationship_type": "DEPLOYS_FROM",
+                    }
+                ],
+                "discovers_config_in": [],
+                "provisioned_by": [
+                    {
+                        "id": "repository:r_tf123",
+                        "name": "terraform-stack-ecs",
+                        "relationship_type": "PROVISIONED_BY",
+                    }
+                ],
+                "provisions_dependencies_for": [],
+                "deployment_chain": [
+                    {
+                        "relationship_type": "RUNS_ON",
+                        "target_name": "node10",
+                        "target_kind": "Platform",
+                    }
+                ],
+                "environments": ["prod"],
+                "api_surface": {"docs_routes": ["/_specs"], "api_versions": ["v3"]},
+                "hostnames": [
+                    {"hostname": "api-node-boats.qa.bgrp.io", "visibility": "public"}
+                ],
+                "limitations": ["dns_unknown", "entrypoint_unknown"],
+            },
+        )
+        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        db = make_mock_db(
+            {
+                "RETURN r.name as name, r.path as path": MockResult(
+                    single_record=repo_record
+                ),
+                "MATCH (app:ArgoCDApplication)-[:SOURCES_FROM]->(r:Repository)": MockResult(
+                    records=[]
+                ),
+                "MATCH (app:ArgoCDApplicationSet)": MockResult(records=[]),
+                "MATCH (app)-[:DEPLOYS]->(k:K8sResource)": MockResult(records=[]),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
+                    records=[]
+                ),
+            }
+        )
+
+        result = trace_deployment_chain(db, "api-node-boats")
+
+        assert result["repository"]["name"] == "api-node-boats"
+        assert result["platforms"][0]["kind"] == "ecs"
+        assert result["deploys_from"][0]["name"] == "helm-charts"
+        assert result["provisioned_by"][0]["name"] == "terraform-stack-ecs"
+        assert result["environments"] == ["prod"]
+        assert result["api_surface"]["api_versions"] == ["v3"]
+        assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
+        assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]

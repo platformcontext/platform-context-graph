@@ -6,6 +6,7 @@ from typing import Any
 
 from ...utils.debug_log import emit_log_call, warning_logger
 from .common import canonical_repository_ref, resolve_repository
+from .context_limitations import build_context_limitations
 from .graph_counts import (
     repository_graph_counts,
     repository_scope,
@@ -149,23 +150,39 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
             coverage_summary["run_id"] if coverage_summary is not None else None
         ),
         "index_status": (
-            coverage_summary["index_status"] if coverage_summary is not None else None
+            coverage_summary.get("index_status")
+            if coverage_summary is not None
+            else None
         ),
     }
     if coverage_summary is not None:
         repository_payload.update(
             {
-                "discovered_file_count": coverage_summary["discovered_file_count"],
-                "graph_recursive_file_count": coverage_summary[
-                    "graph_recursive_file_count"
-                ],
-                "content_file_count": coverage_summary["content_file_count"],
-                "content_entity_count": coverage_summary["content_entity_count"],
-                "completeness_state": coverage_summary["completeness_state"],
-                "graph_gap_count": coverage_summary["graph_gap_count"],
-                "content_gap_count": coverage_summary["content_gap_count"],
+                "discovered_file_count": coverage_summary.get(
+                    "discovered_file_count", 0
+                ),
+                "graph_recursive_file_count": coverage_summary.get(
+                    "graph_recursive_file_count", 0
+                ),
+                "content_file_count": coverage_summary.get("content_file_count", 0),
+                "content_entity_count": coverage_summary.get(
+                    "content_entity_count", 0
+                ),
+                "completeness_state": coverage_summary.get(
+                    "completeness_state", "failed"
+                ),
+                "graph_gap_count": coverage_summary.get("graph_gap_count", 0),
+                "content_gap_count": coverage_summary.get("content_gap_count", 0),
             }
         )
+    limitations = build_context_limitations(
+        base_limitations=relationship_summary["limitations"],
+        coverage=coverage_summary,
+        entry_points=entry_points,
+        infrastructure=infrastructure,
+        deployment_chain=relationship_summary["deployment_chain"],
+        platforms=relationship_summary["platforms"],
+    )
     return {
         "repository": repository_payload,
         "code": {
@@ -188,7 +205,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         "deployment_chain": relationship_summary["deployment_chain"],
         "environments": relationship_summary["environments"],
         "summary": relationship_summary["summary"],
-        "limitations": relationship_summary["limitations"],
+        "limitations": limitations,
         "infrastructure": infrastructure,
         "relationships": relationships,
         "ecosystem": ecosystem,

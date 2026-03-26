@@ -226,6 +226,22 @@ def test_build_relationship_summary_returns_platforms_deployment_chain_and_limit
     assert result["limitations"] == []
 
 
+def test_build_relationship_summary_uses_canonical_provisioning_relationship_name(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.relationship_summary.get_runtime_repository_coverage",
+        lambda **_kwargs: _coverage_row(),
+    )
+    session = _make_session()
+
+    result = build_relationship_summary(session, _repo_row())
+
+    assert result["provisions_dependencies_for"][0]["relationship_type"] == (
+        "PROVISIONS_DEPENDENCY_FOR"
+    )
+
+
 def test_build_repository_context_returns_platforms_deployment_chain_and_limitations(
     monkeypatch,
 ) -> None:
@@ -273,7 +289,75 @@ def test_build_repository_context_returns_platforms_deployment_chain_and_limitat
         "DISCOVERS_CONFIG_IN",
         "RUNS_ON",
     }
-    assert result["limitations"] == []
+    assert result["limitations"] == ["dns_unknown"]
+
+
+def test_build_repository_context_extends_limitations_for_dns_and_entrypoints(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data.resolve_repository",
+        lambda _session, _repo_id: _repo_row(),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data.repository_graph_counts",
+        lambda _session, _repo: {
+            "root_file_count": 1,
+            "root_directory_count": 2,
+            "file_count": 8,
+            "top_level_function_count": 0,
+            "class_method_count": 0,
+            "total_function_count": 0,
+            "class_count": 0,
+            "module_count": 0,
+        },
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data._fetch_infrastructure",
+        lambda _session, _repo: {},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data._fetch_ecosystem",
+        lambda _session, _repo: None,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data.build_relationship_summary",
+        lambda _session, _repo_ref: {
+            "coverage": {
+                **_coverage_row(),
+                "completeness_state": "complete",
+                "limitations": [],
+            },
+            "platforms": [],
+            "deploys_from": [],
+            "discovers_config_in": [],
+            "provisioned_by": [],
+            "provisions_dependencies_for": [],
+            "iac_relationships": [],
+            "deployment_chain": [],
+            "environments": [],
+            "summary": {},
+            "limitations": [
+                "runtime_platform_unknown",
+                "deployment_chain_incomplete",
+            ],
+        },
+    )
+    session = MockSession(
+        {
+            "MATCH (r:Repository)-[:CONTAINS*]->(f:File)": MockResult(records=[]),
+            "fn.name IN": MockResult(records=[]),
+        }
+    )
+
+    result = build_repository_context(session, "api-node-boats")
+
+    assert result["limitations"] == [
+        "runtime_platform_unknown",
+        "deployment_chain_incomplete",
+        "dns_unknown",
+        "entrypoint_unknown",
+    ]
 
 
 def test_build_repository_stats_surfaces_platform_and_deployment_counts(
