@@ -361,8 +361,10 @@ class TestCLICommands:
         assert kwargs["files"]["bundle"][0] == "dependency.pcg"
 
     @patch("platform_context_graph.cli.main._initialize_services")
+    @patch("platform_context_graph.cli.commands.ecosystem.new_request_id")
     def test_ecosystem_resolve_uses_indexed_repositories_by_default(
         self,
+        mock_new_request_id,
         mock_initialize_services,
         tmp_path: Path,
     ):
@@ -387,6 +389,7 @@ class TestCLICommands:
                 {"name": "payments-api", "path": str(repo_a)},
             ]
         )
+        mock_new_request_id.return_value = "resolve123"
         mock_initialize_services.return_value = (db_manager, graph_builder, code_finder)
 
         result = runner.invoke(app, ["ecosystem", "resolve"])
@@ -394,12 +397,14 @@ class TestCLICommands:
         assert result.exit_code == 0
         graph_builder._resolve_repository_relationships.assert_called_once_with(
             [repo_b.resolve(), repo_a.resolve()],
-            run_id=None,
+            run_id="adhoc_resolve123",
         )
         assert "resolved_relationships" in result.stdout
         db_manager.close_driver.assert_called_once()
 
-    @patch("platform_context_graph.cli.commands.ecosystem.get_relationship_store")
+    @patch(
+        "platform_context_graph.cli.commands.ecosystem_relationships.get_relationship_store"
+    )
     def test_ecosystem_relationships_lists_active_resolved_edges(
         self,
         mock_get_relationship_store,
@@ -442,7 +447,9 @@ class TestCLICommands:
         "platform_context_graph.cli.main._initialize_services",
         side_effect=AssertionError("graph bootstrap should not run"),
     )
-    @patch("platform_context_graph.cli.commands.ecosystem.get_relationship_store")
+    @patch(
+        "platform_context_graph.cli.commands.ecosystem_relationships.get_relationship_store"
+    )
     def test_ecosystem_relationships_reads_store_without_graph_bootstrap(
         self,
         mock_get_relationship_store,
@@ -466,7 +473,9 @@ class TestCLICommands:
         assert "generation_123" in result.stdout
         mock_initialize_services.assert_not_called()
 
-    @patch("platform_context_graph.cli.commands.ecosystem.get_relationship_store")
+    @patch(
+        "platform_context_graph.cli.commands.ecosystem_relationships.get_relationship_store"
+    )
     def test_ecosystem_candidates_lists_active_candidates(
         self,
         mock_get_relationship_store,
@@ -496,7 +505,9 @@ class TestCLICommands:
             relationship_type="DEPENDS_ON",
         )
 
-    @patch("platform_context_graph.cli.commands.ecosystem.get_relationship_store")
+    @patch(
+        "platform_context_graph.cli.commands.ecosystem_relationships.get_relationship_store"
+    )
     def test_ecosystem_assert_relationship_persists_assertion(
         self,
         mock_get_relationship_store,
@@ -532,7 +543,9 @@ class TestCLICommands:
             )
         )
 
-    @patch("platform_context_graph.cli.commands.ecosystem.get_relationship_store")
+    @patch(
+        "platform_context_graph.cli.commands.ecosystem_relationships.get_relationship_store"
+    )
     def test_ecosystem_reject_relationship_persists_rejection(
         self,
         mock_get_relationship_store,

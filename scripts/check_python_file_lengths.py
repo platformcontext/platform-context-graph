@@ -13,9 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-
 DEFAULT_MAX_LINES = 500
 DEFAULT_SCAN_ROOT = Path("src")
+DEFAULT_EXEMPTIONS_FILE = Path("scripts/python_file_length_exemptions.txt")
 DEFAULT_EXEMPT_PATHS = (
     Path("src/platform_context_graph/tools/scip_pb2.py"),
     Path("src/platform_context_graph.egg-info"),
@@ -151,8 +151,21 @@ def build_exemptions(extra_exemptions: Iterable[str]) -> tuple[Path, ...]:
         Tuple of repository-relative exemption paths.
     """
 
+    configured_file_exemptions = _load_file_exemptions(DEFAULT_EXEMPTIONS_FILE)
     configured = tuple(Path(value) for value in extra_exemptions)
-    return DEFAULT_EXEMPT_PATHS + configured
+    return DEFAULT_EXEMPT_PATHS + configured_file_exemptions + configured
+
+
+def _load_file_exemptions(path: Path) -> tuple[Path, ...]:
+    """Load repository-relative exemptions from a newline-delimited file."""
+
+    if not path.exists():
+        return ()
+    return tuple(
+        Path(line.strip())
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

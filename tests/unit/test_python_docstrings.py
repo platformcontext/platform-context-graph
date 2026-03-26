@@ -100,3 +100,18 @@ def test_main_returns_zero_when_all_files_have_docstrings(
     result = check_python_docstrings.main([])
 
     assert result == 0
+
+
+def test_build_exemptions_loads_baseline_file(tmp_path: Path, monkeypatch) -> None:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    exemptions_file = scripts_dir / "python_docstring_exemptions.txt"
+    exemptions_file.write_text(
+        "# baseline exemptions\nsrc/platform_context_graph/legacy.py\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    exemptions = check_python_docstrings.build_exemptions([])
+
+    assert Path("src/platform_context_graph/legacy.py") in exemptions

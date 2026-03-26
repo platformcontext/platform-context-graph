@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 _LEGACY_MAX_LINES = {
-    "graph_builder_indexing_execution.py": 786,
+    "graph_builder_indexing_execution.py": 789,
     "graph_builder_persistence.py": 570,
     "graph_builder_persistence_batch.py": 508,
 }

@@ -5,11 +5,11 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import UTC, datetime
 import hashlib
-import json
 import threading
 from typing import Any, Sequence
 
 from ..observability import get_observability
+from ..utils.debug_log import emit_log_call, info_logger
 from .models import (
     MetadataAssertion,
     RelationshipAssertion,
@@ -18,6 +18,11 @@ from .models import (
     RepositoryCheckout,
     ResolvedRelationship,
     ResolutionGeneration,
+)
+from .postgres_generation import (
+    activate_generation_record,
+    fetch_active_generation,
+    persist_generation_records,
 )
 from .postgres_support import RELATIONSHIP_SCHEMA
 
@@ -30,10 +35,14 @@ except ImportError:  # pragma: no cover
 
 
 def _now() -> datetime:
+    """Return the current UTC timestamp for persistence records."""
+
     return datetime.now(tz=UTC)
 
 
 def _digest(prefix: str, *parts: str) -> str:
+    """Build a stable short identifier from one or more input parts."""
+
     digest = hashlib.sha1("\n".join(parts).encode("utf-8")).hexdigest()[:16]
     return f"{prefix}_{digest}"
 
@@ -42,6 +51,8 @@ class PostgresRelationshipStore:
     """Persist repository relationship evidence, assertions, and resolutions."""
 
     def __init__(self, dsn: str) -> None:
+        """Initialize the store with a DSN and lazy connection state."""
+
         self._dsn = dsn
         self._lock = threading.Lock()
         self._conn: Any | None = None
@@ -49,10 +60,14 @@ class PostgresRelationshipStore:
 
     @property
     def enabled(self) -> bool:
+        """Return whether the store can create live PostgreSQL connections."""
+
         return psycopg is not None and bool(self._dsn)
 
     @contextmanager
     def _cursor(self) -> Any:
+        """Yield an initialized autocommit cursor for relationship operations."""
+
         if not self.enabled:
             raise RuntimeError("relationship store requires psycopg and a DSN")
 
@@ -89,283 +104,72 @@ class PostgresRelationshipStore:
             status="pending",
         )
         created_at = _now()
+        observability = get_observability()
 
-        with get_observability().start_span(
+        with observability.start_span(
             "pcg.relationships.persist_generation",
+            component=observability.component,
             attributes={
                 "pcg.relationships.scope": scope,
+                "pcg.relationships.run_id": run_id or "adhoc",
+                "pcg.relationships.generation_id": generation.generation_id,
+                "pcg.relationships.checkout_count": len(checkouts),
                 "pcg.relationships.evidence_count": len(evidence_facts),
                 "pcg.relationships.candidate_count": len(candidates),
                 "pcg.relationships.resolved_count": len(resolved),
             },
         ):
             with self._cursor() as cursor:
-                if checkouts:
-                    cursor.executemany(
-                        """
-                        INSERT INTO relationship_checkouts (
-                            checkout_id,
-                            logical_repo_id,
-                            repo_name,
-                            repo_slug,
-                            remote_url,
-                            checkout_path,
-                            last_seen_at
-                        ) VALUES (
-                            %(checkout_id)s,
-                            %(logical_repo_id)s,
-                            %(repo_name)s,
-                            %(repo_slug)s,
-                            %(remote_url)s,
-                            %(checkout_path)s,
-                            %(last_seen_at)s
-                        )
-                        ON CONFLICT (checkout_id) DO UPDATE
-                        SET logical_repo_id = EXCLUDED.logical_repo_id,
-                            repo_name = EXCLUDED.repo_name,
-                            repo_slug = EXCLUDED.repo_slug,
-                            remote_url = EXCLUDED.remote_url,
-                            checkout_path = EXCLUDED.checkout_path,
-                            last_seen_at = EXCLUDED.last_seen_at
-                        """,
-                        [
-                            {
-                                "checkout_id": checkout.checkout_id,
-                                "logical_repo_id": checkout.logical_repo_id,
-                                "repo_name": checkout.repo_name,
-                                "repo_slug": checkout.repo_slug,
-                                "remote_url": checkout.remote_url,
-                                "checkout_path": checkout.checkout_path,
-                                "last_seen_at": created_at,
-                            }
-                            for checkout in checkouts
-                        ],
-                    )
-
-                cursor.execute(
-                    """
-                    INSERT INTO relationship_generations (
-                        generation_id,
-                        scope,
-                        run_id,
-                        status,
-                        created_at,
-                        activated_at
-                    ) VALUES (
-                        %(generation_id)s,
-                        %(scope)s,
-                        %(run_id)s,
-                        'pending',
-                        %(created_at)s,
-                        NULL
-                    )
-                    """,
-                    {
-                        "generation_id": generation.generation_id,
-                        "scope": scope,
-                        "run_id": run_id,
-                        "created_at": created_at,
-                    },
+                persist_generation_records(
+                    cursor=cursor,
+                    generation=generation,
+                    created_at=created_at,
+                    digest_fn=_digest,
+                    checkouts=checkouts,
+                    evidence_facts=evidence_facts,
+                    candidates=candidates,
+                    resolved=resolved,
                 )
-
-                if evidence_facts:
-                    cursor.executemany(
-                        """
-                        INSERT INTO relationship_evidence_facts (
-                            evidence_id,
-                            generation_id,
-                            evidence_kind,
-                            relationship_type,
-                            source_repo_id,
-                            target_repo_id,
-                            confidence,
-                            rationale,
-                            details,
-                            observed_at
-                        ) VALUES (
-                            %(evidence_id)s,
-                            %(generation_id)s,
-                            %(evidence_kind)s,
-                            %(relationship_type)s,
-                            %(source_repo_id)s,
-                            %(target_repo_id)s,
-                            %(confidence)s,
-                            %(rationale)s,
-                            %(details)s::jsonb,
-                            %(observed_at)s
-                        )
-                        """,
-                        [
-                            {
-                                "evidence_id": _digest(
-                                    "evidence",
-                                    generation.generation_id,
-                                    fact.relationship_type,
-                                    fact.evidence_kind,
-                                    fact.source_repo_id,
-                                    fact.target_repo_id,
-                                    json.dumps(fact.details, sort_keys=True),
-                                ),
-                                "generation_id": generation.generation_id,
-                                "evidence_kind": fact.evidence_kind,
-                                "relationship_type": fact.relationship_type,
-                                "source_repo_id": fact.source_repo_id,
-                                "target_repo_id": fact.target_repo_id,
-                                "confidence": fact.confidence,
-                                "rationale": fact.rationale,
-                                "details": json.dumps(fact.details, sort_keys=True),
-                                "observed_at": created_at,
-                            }
-                            for fact in evidence_facts
-                        ],
-                    )
-
-                if candidates:
-                    cursor.executemany(
-                        """
-                        INSERT INTO relationship_candidates (
-                            candidate_id,
-                            generation_id,
-                            source_repo_id,
-                            target_repo_id,
-                            relationship_type,
-                            confidence,
-                            evidence_count,
-                            rationale,
-                            details
-                        ) VALUES (
-                            %(candidate_id)s,
-                            %(generation_id)s,
-                            %(source_repo_id)s,
-                            %(target_repo_id)s,
-                            %(relationship_type)s,
-                            %(confidence)s,
-                            %(evidence_count)s,
-                            %(rationale)s,
-                            %(details)s::jsonb
-                        )
-                        """,
-                        [
-                            {
-                                "candidate_id": _digest(
-                                    "candidate",
-                                    generation.generation_id,
-                                    candidate.relationship_type,
-                                    candidate.source_repo_id,
-                                    candidate.target_repo_id,
-                                ),
-                                "generation_id": generation.generation_id,
-                                "source_repo_id": candidate.source_repo_id,
-                                "target_repo_id": candidate.target_repo_id,
-                                "relationship_type": candidate.relationship_type,
-                                "confidence": candidate.confidence,
-                                "evidence_count": candidate.evidence_count,
-                                "rationale": candidate.rationale,
-                                "details": json.dumps(
-                                    candidate.details, sort_keys=True
-                                ),
-                            }
-                            for candidate in candidates
-                        ],
-                    )
-
-                if resolved:
-                    cursor.executemany(
-                        """
-                        INSERT INTO resolved_relationships (
-                            generation_id,
-                            source_repo_id,
-                            target_repo_id,
-                            relationship_type,
-                            confidence,
-                            evidence_count,
-                            rationale,
-                            resolution_source,
-                            details
-                        ) VALUES (
-                            %(generation_id)s,
-                            %(source_repo_id)s,
-                            %(target_repo_id)s,
-                            %(relationship_type)s,
-                            %(confidence)s,
-                            %(evidence_count)s,
-                            %(rationale)s,
-                            %(resolution_source)s,
-                            %(details)s::jsonb
-                        )
-                        """,
-                        [
-                            {
-                                "generation_id": generation.generation_id,
-                                "source_repo_id": item.source_repo_id,
-                                "target_repo_id": item.target_repo_id,
-                                "relationship_type": item.relationship_type,
-                                "confidence": item.confidence,
-                                "evidence_count": item.evidence_count,
-                                "rationale": item.rationale,
-                                "resolution_source": item.resolution_source,
-                                "details": json.dumps(item.details, sort_keys=True),
-                            }
-                            for item in resolved
-                        ],
-                    )
         return generation
 
     def activate_generation(self, *, scope: str, generation_id: str) -> None:
         """Promote one pending generation to the active generation for a scope."""
 
         activated_at = _now()
-        with self._cursor() as cursor:
-            cursor.execute(
-                """
-                UPDATE relationship_generations
-                SET status = 'inactive'
-                WHERE scope = %(scope)s
-                  AND status = 'active'
-                  AND generation_id <> %(generation_id)s
-                """,
-                {"scope": scope, "generation_id": generation_id},
-            )
-            cursor.execute(
-                """
-                UPDATE relationship_generations
-                SET status = 'active',
-                    activated_at = %(activated_at)s
-                WHERE generation_id = %(generation_id)s
-                """,
-                {
-                    "generation_id": generation_id,
-                    "activated_at": activated_at,
-                },
-            )
+        observability = get_observability()
+        with observability.start_span(
+            "pcg.relationships.activate_generation",
+            component=observability.component,
+            attributes={
+                "pcg.relationships.scope": scope,
+                "pcg.relationships.generation_id": generation_id,
+            },
+        ):
+            with self._cursor() as cursor:
+                activate_generation_record(
+                    cursor=cursor,
+                    scope=scope,
+                    generation_id=generation_id,
+                    activated_at=activated_at,
+                )
+        emit_log_call(
+            info_logger,
+            "Activated relationship generation",
+            event_name="relationships.generation.activated",
+            extra_keys={
+                "scope": scope,
+                "generation_id": generation_id,
+            },
+        )
 
     def get_active_generation(self, *, scope: str) -> ResolutionGeneration | None:
         """Return the active generation for one scope when present."""
 
         with self._cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT generation_id,
-                       scope,
-                       run_id,
-                       status
-                FROM relationship_generations
-                WHERE scope = %(scope)s
-                  AND status = 'active'
-                ORDER BY created_at DESC
-                LIMIT 1
-                """,
-                {"scope": scope},
+            return fetch_active_generation(
+                cursor=cursor,
+                scope=scope,
             )
-            row = cursor.fetchone()
-        if not row:
-            return None
-        return ResolutionGeneration(
-            generation_id=row["generation_id"],
-            scope=row["scope"],
-            run_id=row["run_id"],
-            status=row["status"],
-        )
 
     def list_relationship_assertions(
         self,
@@ -412,48 +216,69 @@ class PostgresRelationshipStore:
             assertion.source_repo_id,
             assertion.target_repo_id,
         )
-        with self._cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO relationship_assertions (
-                    assertion_id,
-                    source_repo_id,
-                    target_repo_id,
-                    relationship_type,
-                    decision,
-                    reason,
-                    actor,
-                    created_at,
-                    updated_at
-                ) VALUES (
-                    %(assertion_id)s,
-                    %(source_repo_id)s,
-                    %(target_repo_id)s,
-                    %(relationship_type)s,
-                    %(decision)s,
-                    %(reason)s,
-                    %(actor)s,
-                    %(created_at)s,
-                    %(updated_at)s
+        observability = get_observability()
+        with observability.start_span(
+            "pcg.relationships.upsert_assertion",
+            component=observability.component,
+            attributes={
+                "pcg.relationships.relationship_type": assertion.relationship_type,
+                "pcg.relationships.decision": assertion.decision,
+            },
+        ):
+            with self._cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO relationship_assertions (
+                        assertion_id,
+                        source_repo_id,
+                        target_repo_id,
+                        relationship_type,
+                        decision,
+                        reason,
+                        actor,
+                        created_at,
+                        updated_at
+                    ) VALUES (
+                        %(assertion_id)s,
+                        %(source_repo_id)s,
+                        %(target_repo_id)s,
+                        %(relationship_type)s,
+                        %(decision)s,
+                        %(reason)s,
+                        %(actor)s,
+                        %(created_at)s,
+                        %(updated_at)s
+                    )
+                    ON CONFLICT (assertion_id) DO UPDATE
+                    SET decision = EXCLUDED.decision,
+                        reason = EXCLUDED.reason,
+                        actor = EXCLUDED.actor,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    {
+                        "assertion_id": assertion_id,
+                        "source_repo_id": assertion.source_repo_id,
+                        "target_repo_id": assertion.target_repo_id,
+                        "relationship_type": assertion.relationship_type,
+                        "decision": assertion.decision,
+                        "reason": assertion.reason,
+                        "actor": assertion.actor,
+                        "created_at": now,
+                        "updated_at": now,
+                    },
                 )
-                ON CONFLICT (assertion_id) DO UPDATE
-                SET decision = EXCLUDED.decision,
-                    reason = EXCLUDED.reason,
-                    actor = EXCLUDED.actor,
-                    updated_at = EXCLUDED.updated_at
-                """,
-                {
-                    "assertion_id": assertion_id,
-                    "source_repo_id": assertion.source_repo_id,
-                    "target_repo_id": assertion.target_repo_id,
-                    "relationship_type": assertion.relationship_type,
-                    "decision": assertion.decision,
-                    "reason": assertion.reason,
-                    "actor": assertion.actor,
-                    "created_at": now,
-                    "updated_at": now,
-                },
-            )
+        emit_log_call(
+            info_logger,
+            "Upserted relationship assertion",
+            event_name="relationships.assertion.upserted",
+            extra_keys={
+                "relationship_type": assertion.relationship_type,
+                "decision": assertion.decision,
+                "actor": assertion.actor,
+                "source_repo_id": assertion.source_repo_id,
+                "target_repo_id": assertion.target_repo_id,
+            },
+        )
 
     def upsert_metadata_assertion(self, assertion: MetadataAssertion) -> None:
         """Create or replace one metadata assertion."""
@@ -466,43 +291,63 @@ class PostgresRelationshipStore:
             assertion.key,
             assertion.actor,
         )
-        with self._cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO metadata_assertions (
-                    assertion_id,
-                    subject_type,
-                    subject_id,
-                    key,
-                    value,
-                    actor,
-                    created_at,
-                    updated_at
-                ) VALUES (
-                    %(assertion_id)s,
-                    %(subject_type)s,
-                    %(subject_id)s,
-                    %(key)s,
-                    %(value)s,
-                    %(actor)s,
-                    %(created_at)s,
-                    %(updated_at)s
+        observability = get_observability()
+        with observability.start_span(
+            "pcg.relationships.upsert_metadata_assertion",
+            component=observability.component,
+            attributes={
+                "pcg.relationships.subject_type": assertion.subject_type,
+                "pcg.relationships.key": assertion.key,
+            },
+        ):
+            with self._cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO metadata_assertions (
+                        assertion_id,
+                        subject_type,
+                        subject_id,
+                        key,
+                        value,
+                        actor,
+                        created_at,
+                        updated_at
+                    ) VALUES (
+                        %(assertion_id)s,
+                        %(subject_type)s,
+                        %(subject_id)s,
+                        %(key)s,
+                        %(value)s,
+                        %(actor)s,
+                        %(created_at)s,
+                        %(updated_at)s
+                    )
+                    ON CONFLICT (assertion_id) DO UPDATE
+                    SET value = EXCLUDED.value,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    {
+                        "assertion_id": assertion_id,
+                        "subject_type": assertion.subject_type,
+                        "subject_id": assertion.subject_id,
+                        "key": assertion.key,
+                        "value": assertion.value,
+                        "actor": assertion.actor,
+                        "created_at": now,
+                        "updated_at": now,
+                    },
                 )
-                ON CONFLICT (assertion_id) DO UPDATE
-                SET value = EXCLUDED.value,
-                    updated_at = EXCLUDED.updated_at
-                """,
-                {
-                    "assertion_id": assertion_id,
-                    "subject_type": assertion.subject_type,
-                    "subject_id": assertion.subject_id,
-                    "key": assertion.key,
-                    "value": assertion.value,
-                    "actor": assertion.actor,
-                    "created_at": now,
-                    "updated_at": now,
-                },
-            )
+        emit_log_call(
+            info_logger,
+            "Upserted metadata assertion",
+            event_name="relationships.metadata_assertion.upserted",
+            extra_keys={
+                "subject_type": assertion.subject_type,
+                "subject_id": assertion.subject_id,
+                "key": assertion.key,
+                "actor": assertion.actor,
+            },
+        )
 
     def list_resolved_relationships(self, *, scope: str) -> list[ResolvedRelationship]:
         """Return resolved relationships for the active generation in a scope."""
@@ -591,5 +436,7 @@ class PostgresRelationshipStore:
         ]
 
     def close(self) -> None:
+        """Close the cached PostgreSQL connection when one is open."""
+
         if self._conn is not None and not self._conn.closed:
             self._conn.close()
