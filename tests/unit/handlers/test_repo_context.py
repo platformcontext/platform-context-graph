@@ -432,10 +432,10 @@ class TestTraceDeploymentChain:
                 "RETURN r.name as name, r.path as path": MockResult(
                     single_record=repo_record
                 ),
-                "MATCH (app:ArgoCDApplication)-[:SOURCES_FROM]->(r:Repository)": MockResult(
+                "coalesce(app[$source_repo_key], '') CONTAINS source_repo_name": MockResult(
                     records=[]
                 ),
-                "MATCH (app:ArgoCDApplicationSet)": MockResult(
+                "coalesce(app[$source_repos_key], '') CONTAINS source_repo_name": MockResult(
                     records=[
                         {
                             "app_name": "api-node-search",
@@ -448,7 +448,7 @@ class TestTraceDeploymentChain:
                         }
                     ]
                 ),
-                "MATCH (app)-[:DEPLOYS]->(k:K8sResource)": MockResult(
+                "repo.id IN $source_repo_ids OR repo.name IN $source_repo_names": MockResult(
                     records=[
                         {
                             "name": "api-node-search",
@@ -594,3 +594,122 @@ class TestTraceDeploymentChain:
         assert result["api_surface"]["api_versions"] == ["v3"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
         assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]
+
+    def test_trace_deployment_chain_uses_canonical_source_repositories(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                },
+                "coverage": {
+                    "completeness_state": "complete",
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                },
+                "platforms": [
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:none:none",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "relationship_type": "RUNS_ON",
+                    }
+                ],
+                "deploys_from": [
+                    {
+                        "id": "repository:r_helm123",
+                        "name": "helm-charts",
+                        "relationship_type": "DEPLOYS_FROM",
+                    }
+                ],
+                "discovers_config_in": [],
+                "provisioned_by": [
+                    {
+                        "id": "repository:r_tf123",
+                        "name": "terraform-stack-node10",
+                        "relationship_type": "PROVISIONED_BY",
+                    }
+                ],
+                "provisions_dependencies_for": [],
+                "deployment_chain": [],
+                "environments": ["bg-qa"],
+                "api_surface": {"api_versions": ["v3"]},
+                "hostnames": [],
+                "limitations": [],
+            },
+        )
+        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        db = make_mock_db(
+            {
+                "RETURN r.name as name, r.path as path": MockResult(
+                    single_record=repo_record
+                ),
+                "coalesce(app[$source_repo_key], '') CONTAINS source_repo_name": MockResult(
+                    records=[]
+                ),
+                "coalesce(app[$source_repos_key], '') CONTAINS source_repo_name": MockResult(
+                    records=[
+                        {
+                            "app_name": "api-node-boats",
+                            "project": "{{.argocd.project}}",
+                            "namespace": "argocd",
+                            "dest_namespace": "{{.helm.namespace}}",
+                            "source_repos": "https://github.com/boatsgroup/helm-charts",
+                            "source_paths": "argocd/api-node-boats/overlays/*/config.yaml",
+                            "source_roots": "argocd/api-node-boats/",
+                        }
+                    ]
+                ),
+                "repo.id IN $source_repo_ids OR repo.name IN $source_repo_names": MockResult(
+                    records=[
+                        {
+                            "name": "api-node-boats",
+                            "kind": "XIRSARole",
+                            "namespace": "",
+                            "file": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "repository": "helm-charts",
+                            "deployed_by": "api-node-boats",
+                        }
+                    ]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
+                    records=[]
+                ),
+            }
+        )
+
+        result = trace_deployment_chain(db, "api-node-boats")
+
+        assert result["argocd_applications"] == []
+        assert result["argocd_applicationsets"] == [
+            {
+                "app_name": "api-node-boats",
+                "project": "{{.argocd.project}}",
+                "namespace": "argocd",
+                "dest_namespace": "{{.helm.namespace}}",
+                "source_repos": "https://github.com/boatsgroup/helm-charts",
+                "source_paths": "argocd/api-node-boats/overlays/*/config.yaml",
+                "source_roots": "argocd/api-node-boats/",
+            }
+        ]
+        assert result["k8s_resources"] == [
+            {
+                "name": "api-node-boats",
+                "kind": "XIRSARole",
+                "namespace": "",
+                "file": "argocd/api-node-boats/base/xirsarole.yaml",
+                "repository": "helm-charts",
+                "deployed_by": "api-node-boats",
+            }
+        ]

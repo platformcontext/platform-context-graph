@@ -552,6 +552,68 @@ def test_build_repository_context_extends_limitations_for_dns_and_entrypoints(
     ]
 
 
+def test_build_relationship_summary_skips_legacy_runtime_query_when_instance_of_missing(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.relationship_summary.get_runtime_repository_coverage",
+        lambda **_kwargs: _coverage_row(),
+    )
+    session = MockSession(
+        {
+            "CALL db.relationshipTypes()": MockResult(
+                records=[{"relationshipType": "RUNS_ON"}]
+            ),
+            "MATCH (r:Repository)-[:RUNS_ON]->(p:Platform)": MockResult(
+                records=[
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:none:none",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": None,
+                        "workload_instance_id": None,
+                        "workload_environment": None,
+                    }
+                ]
+            ),
+            "MATCH (r:Repository)-[:PROVISIONS_PLATFORM]->(p:Platform)": MockResult(
+                records=[]
+            ),
+            "MATCH (r:Repository)-[:DEPLOYS_FROM]->(dep:Repository)": MockResult(
+                records=[]
+            ),
+            "MATCH (r:Repository)-[:DISCOVERS_CONFIG_IN]->(cfg:Repository)": MockResult(
+                records=[]
+            ),
+            "MATCH (prov:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(r:Repository)": MockResult(
+                records=[]
+            ),
+            "MATCH (r:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(dep:Repository)": MockResult(
+                records=[]
+            ),
+            "type(rel) IN": MockResult(records=[]),
+        }
+    )
+
+    result = build_relationship_summary(session, _repo_row())
+
+    assert result["platforms"] == [
+        {
+            "id": "platform:ecs:aws:cluster/node10:none:none",
+            "name": "node10",
+            "kind": "ecs",
+            "provider": "aws",
+            "environment": None,
+            "workload_instance_id": None,
+            "workload_environment": None,
+            "relationship_type": "RUNS_ON",
+            "source": "runtime",
+        }
+    ]
+    assert not any("INSTANCE_OF" in query for query in session.queries)
+
+
 def test_build_repository_stats_surfaces_platform_and_deployment_counts(
     monkeypatch,
 ) -> None:

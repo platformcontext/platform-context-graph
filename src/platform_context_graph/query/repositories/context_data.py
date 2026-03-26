@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...utils.debug_log import emit_log_call, warning_logger
-from .common import canonical_repository_ref, resolve_repository
+from .common import canonical_repository_ref, graph_relationship_types, resolve_repository
 from .context_limitations import build_context_limitations
 from .graph_counts import (
     repository_graph_counts,
@@ -370,21 +370,23 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
         """,
         **repository_scope(repo),
     ).data()
-    runtime_platforms = session.run(
-        f"""
-        MATCH (r:Repository)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[:RUNS_ON]->(p:Platform)
-        WHERE {repository_scope_predicate()}
-        RETURN DISTINCT p.id as id,
-               p.name as name,
-               p.kind as kind,
-               p.provider as provider,
-               p.environment as environment,
-               i.id as workload_instance_id,
-               i.environment as workload_environment
-        ORDER BY p.kind, p.name
-        """,
-        **repository_scope(repo),
-    ).data()
+    runtime_platforms: list[dict[str, Any]] = []
+    if "INSTANCE_OF" in graph_relationship_types(session):
+        runtime_platforms = session.run(
+            f"""
+            MATCH (r:Repository)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[:RUNS_ON]->(p:Platform)
+            WHERE {repository_scope_predicate()}
+            RETURN DISTINCT p.id as id,
+                   p.name as name,
+                   p.kind as kind,
+                   p.provider as provider,
+                   p.environment as environment,
+                   i.id as workload_instance_id,
+                   i.environment as workload_environment
+            ORDER BY p.kind, p.name
+            """,
+            **repository_scope(repo),
+        ).data()
     merged_runtime_platforms = _dedupe_rows(
         [*direct_runtime_platforms, *runtime_platforms]
     )

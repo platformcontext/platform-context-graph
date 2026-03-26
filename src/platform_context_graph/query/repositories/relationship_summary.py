@@ -7,7 +7,7 @@ from typing import Any
 from ...runtime.status_store import (
     get_repository_coverage as get_runtime_repository_coverage,
 )
-from .common import canonical_repository_ref
+from .common import canonical_repository_ref, graph_relationship_types
 from .coverage_data import coverage_summary_from_row
 from .graph_counts import repository_scope, repository_scope_predicate
 
@@ -119,6 +119,7 @@ def _fetch_runtime_platforms(
 ) -> list[dict[str, Any]]:
     """Return runtime platforms reached through workload instances."""
 
+    available_relationship_types = graph_relationship_types(session)
     direct_rows = session.run(
         f"""
         MATCH (r:Repository)-[:RUNS_ON]->(p:Platform)
@@ -134,23 +135,25 @@ def _fetch_runtime_platforms(
         """,
         **_query_params(repo_ref),
     ).data()
-    instance_rows = session.run(
-        f"""
-        MATCH (r:Repository)
-        WHERE {repository_scope_predicate()}
-        MATCH (r)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)
-              -[:RUNS_ON]->(p:Platform)
-        RETURN DISTINCT p.id as id,
-               p.name as name,
-               p.kind as kind,
-               p.provider as provider,
-               p.environment as environment,
-               i.id as workload_instance_id,
-               i.environment as workload_environment
-        ORDER BY p.kind, p.name
-        """,
-        **_query_params(repo_ref),
-    ).data()
+    instance_rows: list[dict[str, Any]] = []
+    if "INSTANCE_OF" in available_relationship_types:
+        instance_rows = session.run(
+            f"""
+            MATCH (r:Repository)
+            WHERE {repository_scope_predicate()}
+            MATCH (r)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)
+                  -[:RUNS_ON]->(p:Platform)
+            RETURN DISTINCT p.id as id,
+                   p.name as name,
+                   p.kind as kind,
+                   p.provider as provider,
+                   p.environment as environment,
+                   i.id as workload_instance_id,
+                   i.environment as workload_environment
+            ORDER BY p.kind, p.name
+            """,
+            **_query_params(repo_ref),
+        ).data()
     return _dedupe_rows(
         [
             {
