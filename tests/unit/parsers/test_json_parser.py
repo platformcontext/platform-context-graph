@@ -136,3 +136,47 @@ class TestJSONConfigParser:
 
         assert result["cloudformation_resources"][0]["name"] == "AppBucket"
         assert result["cloudformation_resources"][0]["lang"] == "json"
+
+    def test_parse_empty_json_file_as_metadata_only(self, temp_test_dir: Path) -> None:
+        """Empty JSON files should not fail indexing or emit noisy entities."""
+
+        file_path = temp_test_dir / "empty.json"
+        file_path.write_text("", encoding="utf-8")
+
+        parser = JSONConfigTreeSitterParser("json")
+        result = parser.parse(file_path)
+
+        assert result["functions"] == []
+        assert result["variables"] == []
+        assert result["json_metadata"]["top_level_keys"] == []
+
+    def test_parse_helm_templated_json_with_leading_directives(
+        self, temp_test_dir: Path
+    ) -> None:
+        """Helm-templated JSON should parse after stripping directive preamble."""
+
+        file_path = temp_test_dir / "base.json"
+        file_path.write_text(
+            '\n'.join(
+                [
+                    '{{- $env := required "env is required" .Values.env | trim -}}',
+                    '{{- $accountId := required "accountId is required" .Values.accountId | trim -}}',
+                    "{",
+                    '  "api-node-boats": {',
+                    '    "client": {',
+                    '      "hostname": "api-node-boats.{{ $env }}.bgrp.io",',
+                    '      "port": 3081',
+                    "    }",
+                    "  }",
+                    "}",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        parser = JSONConfigTreeSitterParser("json")
+        result = parser.parse(file_path)
+
+        assert result["functions"] == []
+        assert result["variables"] == []
+        assert result["json_metadata"]["top_level_keys"] == ["api-node-boats"]

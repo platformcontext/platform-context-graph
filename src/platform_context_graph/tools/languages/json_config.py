@@ -7,7 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from ...utils.tree_sitter_manager import get_tree_sitter_manager
-from .json_config_support import apply_json_document, build_empty_result
+from .json_config_support import (
+    apply_json_document,
+    build_empty_result,
+    normalize_json_source,
+)
 
 
 class JSONConfigTreeSitterParser:
@@ -40,8 +44,14 @@ class JSONConfigTreeSitterParser:
 
         file_path = Path(path)
         source_text = file_path.read_text(encoding="utf-8")
-        document = json.loads(source_text)
         result = build_empty_result(str(file_path), self.language_name, is_dependency)
+        normalized_source = normalize_json_source(source_text)
+        if not normalized_source:
+            if index_source:
+                result["source"] = source_text
+            return result
+
+        document = json.loads(normalized_source)
         apply_json_document(
             result,
             document,

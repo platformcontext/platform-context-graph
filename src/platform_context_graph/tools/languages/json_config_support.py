@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .cloudformation import is_cloudformation_template, parse_cloudformation_template
@@ -12,6 +13,8 @@ _NOISY_JSON_FILENAMES = frozenset(
         "composer.lock",
     }
 )
+
+_HELM_DIRECTIVE_LINE = re.compile(r"^\s*\{\{[-#]?(?:.|\n)*?[-#]?\}\}\s*$")
 
 
 def build_empty_result(
@@ -42,6 +45,26 @@ def should_skip_json_entities(filename: str) -> bool:
 
     lowered = filename.lower()
     return lowered in _NOISY_JSON_FILENAMES or lowered.endswith(".min.json")
+
+
+def normalize_json_source(source_text: str) -> str:
+    """Normalize JSON text for known real-world config preambles.
+
+    The targeted JSON parser stays strict for document content, but some repos
+    legitimately store JSON documents behind a small Helm-templated preamble.
+    We strip only leading full-line Helm directives and otherwise leave the
+    document untouched. Empty or whitespace-only files normalize to ``""``.
+    """
+
+    stripped = source_text.lstrip("\ufeff")
+    if not stripped.strip():
+        return ""
+
+    lines = stripped.splitlines()
+    start_index = 0
+    while start_index < len(lines) and _HELM_DIRECTIVE_LINE.match(lines[start_index]):
+        start_index += 1
+    return "\n".join(lines[start_index:]).lstrip()
 
 
 def apply_json_document(
@@ -231,5 +254,6 @@ def _tsconfig_variables(
 __all__ = [
     "apply_json_document",
     "build_empty_result",
+    "normalize_json_source",
     "should_skip_json_entities",
 ]
