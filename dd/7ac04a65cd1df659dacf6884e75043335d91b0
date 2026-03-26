@@ -1,0 +1,23 @@
+docs/superpowers/specs/2026-03-26-canonical-platform-entities-design.md
+  8427a4fce24a9d1c 198-200,204-234,267-298,305,308-320,324-325,401-422,424-434,460-470,486-519,521-561,583-664,681-690,707-719,777,781-787,790-804
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "dd7ac04a65cd1df659dacf6884e75043335d91b0",
+  "prompts": {
+    "8427a4fce24a9d1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d27c7-96de-7561-8583-7b71b0f3ac84",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 345,
+      "total_deletions": 25,
+      "accepted_lines": 334,
+      "overriden_lines": 0
+    }
+  }
+}
