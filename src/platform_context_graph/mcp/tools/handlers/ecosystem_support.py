@@ -79,22 +79,100 @@ def _service_name_tokens(service_name: str) -> list[str]:
     return sorted(token for token in variants if token)
 
 
-def repo_summary_note(
-    *, limitations: list[str], coverage: dict[str, Any] | None
-) -> str:
-    """Return a short human-readable note for limitation codes."""
+def _normalized_environment_names(values: list[str] | None) -> list[str]:
+    """Return ordered unique environment names."""
 
+    if not values:
+        return []
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = str(value).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+    return ordered
+
+
+def _environment_truthfulness_note(
+    *,
+    environments: list[str] | None,
+    observed_config_environments: list[str] | None,
+) -> str:
+    """Return a note that distinguishes runtime-confirmed and config-only envs."""
+
+    runtime = _normalized_environment_names(environments)
+    observed = _normalized_environment_names(observed_config_environments)
+    if not observed:
+        return ""
+    if not runtime:
+        observed_phrase = ", ".join(observed)
+        return (
+            f"Configuration references environments {observed_phrase}, "
+            "but runtime evidence has not confirmed deployed environments."
+        )
+
+    runtime_set = set(runtime)
+    extra_config = [name for name in observed if name not in runtime_set]
+    if not extra_config:
+        return ""
+
+    runtime_phrase = ", ".join(runtime)
+    extra_phrase = ", ".join(extra_config)
+    return (
+        f"Confirmed runtime environments: {runtime_phrase}. "
+        f"Configuration also references: {extra_phrase}."
+    )
+
+
+def repo_summary_note(
+    *,
+    limitations: list[str],
+    coverage: dict[str, Any] | None,
+    environments: list[str] | None = None,
+    observed_config_environments: list[str] | None = None,
+) -> str:
+    """Return a short human-readable note for coverage and environment gaps."""
+
+    base_note = ""
     if "graph_partial" in limitations or "content_partial" in limitations:
-        return "Repository coverage is partial; graph/content counts may be incomplete."
-    if "dns_unknown" in limitations and "entrypoint_unknown" in limitations:
-        return "DNS and entrypoint evidence are currently unavailable for this repository."
-    if "dns_unknown" in limitations:
-        return "DNS evidence is currently unavailable for this repository."
-    if "entrypoint_unknown" in limitations:
-        return "Entrypoint evidence is currently unavailable for this repository."
-    if coverage and coverage.get("completeness_state") == "failed":
-        return "Repository coverage failed; runtime and deployment summaries may be incomplete."
-    return "Repository context has known limitations."
+        base_note = (
+            "Repository coverage is partial; graph/content counts may be incomplete."
+        )
+    elif "dns_unknown" in limitations and "entrypoint_unknown" in limitations:
+        base_note = (
+            "DNS and entrypoint evidence are currently unavailable for this repository."
+        )
+    elif "dns_unknown" in limitations:
+        base_note = "DNS evidence is currently unavailable for this repository."
+    elif "entrypoint_unknown" in limitations:
+        base_note = (
+            "Entrypoint evidence is currently unavailable for this repository."
+        )
+    elif "finalization_incomplete" in limitations:
+        finalization_status = str(
+            (coverage or {}).get("finalization_status") or ""
+        ).strip()
+        status_phrase = finalization_status or "pending"
+        base_note = (
+            f"Repository finalization is {status_phrase}; deployment and relationship "
+            "summaries may still be incomplete."
+        )
+    elif coverage and coverage.get("completeness_state") == "failed":
+        base_note = (
+            "Repository coverage failed; runtime and deployment summaries may be incomplete."
+        )
+    elif limitations:
+        base_note = "Repository context has known limitations."
+
+    env_note = _environment_truthfulness_note(
+        environments=environments,
+        observed_config_environments=observed_config_environments,
+    )
+    if base_note and env_note:
+        return f"{base_note} {env_note}"
+    return base_note or env_note
 
 
 def trace_deployment_chain(
@@ -310,6 +388,8 @@ def trace_deployment_chain(
         result["note"] = repo_summary_note(
             limitations=limitations,
             coverage=context.get("coverage"),
+            environments=result["environments"],
+            observed_config_environments=result["observed_config_environments"],
         )
         emit_log_call(
             warning_logger,
@@ -322,4 +402,13 @@ def trace_deployment_chain(
                 "deployment_chain_length": len(result["deployment_chain"]),
             },
         )
+    else:
+        note = repo_summary_note(
+            limitations=[],
+            coverage=context.get("coverage"),
+            environments=result["environments"],
+            observed_config_environments=result["observed_config_environments"],
+        )
+        if note:
+            result["note"] = note
     return result

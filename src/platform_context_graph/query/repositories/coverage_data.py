@@ -97,12 +97,15 @@ def coverage_limitations_from_row(row: dict[str, Any] | None) -> list[str]:
 
     limitations: list[str] = []
     gaps = coverage_gaps_from_row(row)
+    finalization_status = str(row.get("finalization_status") or "").lower()
     if int(gaps["graph_gap_count"]) > 0 or not bool(row.get("graph_available")):
         limitations.append("graph_partial")
     if int(gaps["content_gap_count"]) > 0 or not bool(
         row.get("server_content_available")
     ):
         limitations.append("content_partial")
+    if finalization_status not in {"", "completed", "failed"}:
+        limitations.append("finalization_incomplete")
 
     return limitations
 

@@ -222,3 +222,34 @@ def test_coverage_summary_reports_limitations_for_partial_rows() -> None:
     assert summary is not None
     assert summary["completeness_state"] == "graph_partial"
     assert summary["limitations"] == ["graph_partial", "content_partial"]
+
+
+def test_coverage_summary_reports_finalization_incomplete_limitation() -> None:
+    """Completed counts should still surface pending finalization truthfully."""
+
+    summary = coverage_data.coverage_summary_from_row(
+        {
+            "run_id": "run-finalization-pending",
+            "status": "completed",
+            "phase": "completed",
+            "finalization_status": "pending",
+            "graph_available": True,
+            "server_content_available": True,
+            "discovered_file_count": 199,
+            "graph_recursive_file_count": 199,
+            "content_file_count": 199,
+            "content_entity_count": 3106,
+            "root_file_count": 12,
+            "root_directory_count": 6,
+            "top_level_function_count": 347,
+            "class_method_count": 0,
+            "total_function_count": 347,
+            "class_count": 0,
+            "last_error": None,
+            "updated_at": None,
+        }
+    )
+
+    assert summary is not None
+    assert summary["completeness_state"] == "complete"
+    assert summary["limitations"] == ["finalization_incomplete"]

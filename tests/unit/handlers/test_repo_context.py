@@ -287,6 +287,11 @@ def test_trace_deployment_chain_uses_repo_contains_for_repo_to_file_lookups(
         for q in recorded_queries
     )
 
+
+
+class TestRepoSummary:
+    """Test repo summary shaping and truthfulness notes."""
+
     def test_repo_summary_omits_tier_when_null(self, monkeypatch):
         monkeypatch.setattr(
             "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
@@ -444,6 +449,174 @@ def test_trace_deployment_chain_uses_repo_contains_for_repo_to_file_lookups(
         assert result["api_surface"]["docs_routes"] == ["/_specs"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
         assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]
+
+    def test_repo_summary_notes_config_environments_when_runtime_unknown(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 196,
+                    "discovered_file_count": 196,
+                    "files_by_extension": {"json": 12, "js": 77},
+                },
+                "code": {"functions": 12, "classes": 1},
+                "infrastructure": {},
+                "ecosystem": {"dependencies": [], "dependents": []},
+                "coverage": {
+                    "completeness_state": "complete",
+                    "discovered_file_count": 196,
+                    "graph_recursive_file_count": 196,
+                    "content_file_count": 196,
+                    "content_entity_count": 240,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "environments": [],
+                "observed_config_environments": ["bg-qa", "prod"],
+                "api_surface": {},
+                "hostnames": [
+                    {
+                        "hostname": "api-node-boats.qa.bgrp.io",
+                        "environment": "bg-qa",
+                        "visibility": "public",
+                    }
+                ],
+                "limitations": [],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+
+        assert "note" in result
+        assert "bg-qa, prod" in result["note"]
+        assert "runtime evidence" in result["note"].lower()
+
+    def test_repo_summary_notes_config_environments_beyond_runtime(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 196,
+                    "discovered_file_count": 196,
+                    "files_by_extension": {"json": 12, "js": 77},
+                },
+                "code": {"functions": 12, "classes": 1},
+                "infrastructure": {},
+                "ecosystem": {"dependencies": [], "dependents": []},
+                "coverage": {
+                    "completeness_state": "complete",
+                    "discovered_file_count": 196,
+                    "graph_recursive_file_count": 196,
+                    "content_file_count": 196,
+                    "content_entity_count": 240,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [
+                    {
+                        "id": "platform:eks:aws:cluster/bg-qa",
+                        "name": "bg-qa",
+                        "kind": "eks",
+                        "provider": "aws",
+                        "environment": "bg-qa",
+                        "relationship_type": "RUNS_ON",
+                    }
+                ],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "environments": ["bg-qa"],
+                "observed_config_environments": ["bg-qa", "prod"],
+                "api_surface": {},
+                "hostnames": [
+                    {
+                        "hostname": "api-node-boats.qa.bgrp.io",
+                        "environment": "bg-qa",
+                        "visibility": "public",
+                    },
+                    {
+                        "hostname": "api-node-boats.prod.bgrp.io",
+                        "environment": "prod",
+                        "visibility": "public",
+                    },
+                ],
+                "limitations": [],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+
+        assert "note" in result
+        assert "confirmed runtime environments: bg-qa" in result["note"].lower()
+        assert "configuration also references: prod" in result["note"].lower()
+
+    def test_repo_summary_notes_pending_finalization_truthfully(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 199,
+                    "discovered_file_count": 199,
+                    "files_by_extension": {"yaml": 84, "js": 251},
+                },
+                "code": {"functions": 347, "classes": 0},
+                "infrastructure": {},
+                "ecosystem": {"dependencies": [], "dependents": []},
+                "coverage": {
+                    "completeness_state": "complete",
+                    "finalization_status": "pending",
+                    "discovered_file_count": 199,
+                    "graph_recursive_file_count": 199,
+                    "content_file_count": 199,
+                    "content_entity_count": 3106,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "environments": [],
+                "observed_config_environments": [],
+                "api_surface": {},
+                "hostnames": [],
+                "limitations": ["finalization_incomplete"],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+
+        assert "note" in result
+        assert "finalization" in result["note"].lower()
+        assert "incomplete" in result["note"].lower()
 
     def test_blast_radius_adds_note_when_tier_null(self):
         db = make_mock_db(

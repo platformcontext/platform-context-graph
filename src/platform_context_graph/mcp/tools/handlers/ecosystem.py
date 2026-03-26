@@ -193,8 +193,15 @@ def get_repo_summary(
         "hostnames": context.get("hostnames", []),
         "limitations": limitations,
     }
+    note = repo_summary_note(
+        limitations=limitations,
+        coverage=coverage,
+        environments=summary["environments"],
+        observed_config_environments=summary["observed_config_environments"],
+    )
+    if note:
+        summary["note"] = note
     if limitations:
-        summary["note"] = repo_summary_note(limitations=limitations, coverage=coverage)
         emit_log_call(
             warning_logger,
             "Repository summary assembled with known limitations",
