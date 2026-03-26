@@ -1,0 +1,38 @@
+tests/unit/relationships/test_postgres_store.py
+  44cbd467ae0945e5 91
+tests/unit/relationships/test_resolver.py
+  8144653bcbb9dd28 691-787
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "c4decc829bd46ba333552f743aa86e62aeaee68a",
+  "prompts": {
+    "44cbd467ae0945e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2b12-4029-7ad2-bc64-5363b2a83bf9",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 14,
+      "total_deletions": 16,
+      "accepted_lines": 14,
+      "overriden_lines": 0
+    },
+    "8144653bcbb9dd28": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2b11-2005-7892-a7dd-81b2ee9d6c4e",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 113,
+      "total_deletions": 16,
+      "accepted_lines": 97,
+      "overriden_lines": 0
+    }
+  }
+}
