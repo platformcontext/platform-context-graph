@@ -1,9 +1,21 @@
-"""Dataclasses for evidence-backed repository relationship resolution."""
+"""Dataclasses for evidence-backed relationship resolution and canonical entities."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+
+from .entities import (
+    CanonicalEntity,
+    Platform,
+    PlatformEntity,
+    Repository,
+    RepositoryEntity,
+    WorkloadSubject,
+    WorkloadSubjectEntity,
+    canonical_platform_id,
+    canonical_workload_subject_id,
+)  # noqa: F401
 
 
 @dataclass(slots=True)
