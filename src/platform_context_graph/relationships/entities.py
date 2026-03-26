@@ -74,7 +74,9 @@ class Repository(CanonicalEntity):
         """Build a canonical repository entity from portable repository metadata."""
 
         normalized_local_path = (
-            str(Path(local_path).expanduser().resolve()) if local_path is not None else None
+            str(Path(local_path).expanduser().resolve())
+            if local_path is not None
+            else None
         )
         normalized_remote_url = normalize_remote_url(remote_url)
         normalized_repo_slug = repo_slug or repo_slug_from_remote_url(

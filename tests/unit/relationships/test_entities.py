@@ -7,9 +7,8 @@ from platform_context_graph.repository_identity import (
     repo_slug_from_remote_url,
 )
 from platform_context_graph.relationships.entities import (
-    CanonicalEntity,
-    RepositoryEntity,
     PlatformEntity,
+    RepositoryEntity,
     WorkloadSubjectEntity,
     canonical_platform_id,
 )
