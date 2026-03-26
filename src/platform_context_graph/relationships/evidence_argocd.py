@@ -8,8 +8,9 @@ from typing import Sequence
 from ..observability import get_observability
 from ..tools.graph_builder_platforms import infer_gitops_platform_id
 from .entities import WorkloadSubjectEntity
-from .file_evidence_argocd import (
+from .file_evidence_argocd_support import (
     extract_argocd_subject_name,
+    infer_environment_from_path,
     iter_argocd_applicationset_source_repo_urls,
     iter_argocd_deployed_repo_identifiers,
     iter_argocd_deploy_repo_urls,
@@ -21,7 +22,6 @@ from .file_evidence_support import (
     CatalogEntry,
     append_evidence_for_candidate,
     append_relationship_evidence,
-    infer_environment_from_path,
     iter_checkout_files,
     load_yaml_documents_from_text,
     match_catalog,
