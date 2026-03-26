@@ -36,6 +36,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/reference/cli-system.md` | CLI system reference | active |
 | `docs/docs/reference/configuration.md` | Configuration reference | active |
 | `docs/docs/reference/http-api.md` | HTTP API reference | active |
+| `docs/docs/reference/logging.md` | Logging and telemetry reference | active |
 | `docs/docs/reference/mcp-cookbook.md` | MCP examples | active |
 | `docs/docs/reference/mcp-reference.md` | MCP reference | active |
 | `docs/docs/reference/pcgignore.md` | `.pcgignore` reference | active |

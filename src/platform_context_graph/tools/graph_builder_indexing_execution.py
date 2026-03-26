@@ -327,6 +327,7 @@ def finalize_index_batch(
     merged_imports_map: dict[str, list[str]],
     info_logger_fn: Any,
     stage_progress_callback: Any | None = None,
+    run_id: str | None = None,
 ) -> dict[str, float]:
     """Create cross-file and cross-repo relationships after repo commits finish."""
 
@@ -406,6 +407,13 @@ def finalize_index_batch(
         ("function_calls", _run_function_call_stage),
         ("infra_links", _run_infra_stage),
         ("workloads", builder._materialize_workloads),
+        (
+            "relationship_resolution",
+            lambda: builder._resolve_repository_relationships(
+                committed_repo_paths,
+                run_id=run_id,
+            ),
+        ),
     ):
         _notify_stage_progress(stage_name)
         log_memory_usage(
@@ -434,6 +442,7 @@ def finalize_index_batch(
         f"function_calls={stage_timings['function_calls']:.1f}s, "
         f"infra_links={stage_timings['infra_links']:.1f}s, "
         f"workloads={stage_timings['workloads']:.1f}s, "
+        f"relationship_resolution={stage_timings['relationship_resolution']:.1f}s, "
         f"total={total_elapsed:.1f}s",
         event_name="index.finalization.completed",
         extra_keys={
@@ -441,6 +450,9 @@ def finalize_index_batch(
             "function_calls_seconds": round(stage_timings["function_calls"], 3),
             "infra_links_seconds": round(stage_timings["infra_links"], 3),
             "workloads_seconds": round(stage_timings["workloads"], 3),
+            "relationship_resolution_seconds": round(
+                stage_timings["relationship_resolution"], 3
+            ),
             "total_seconds": round(total_elapsed, 3),
         },
     )
@@ -732,6 +744,8 @@ async def build_graph_from_path_async(
         builder._create_all_function_calls(all_file_data, imports_map)
         builder._create_all_infra_links(all_file_data)
         builder._materialize_workloads()
+        committed_repo_paths = sorted(git_repos) if git_repos else [repo_root]
+        builder._resolve_repository_relationships(committed_repo_paths)
         link_elapsed = time.monotonic() - link_start
         emit_log_call(
             info_logger_fn,

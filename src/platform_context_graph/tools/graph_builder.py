@@ -15,6 +15,9 @@ from ..core.database import DatabaseManager
 from ..core.jobs import JobManager, JobStatus
 from ..indexing import execute_index_run, raise_for_failed_index_run
 from ..observability import get_observability
+from ..relationships import (
+    resolve_repository_relationships_for_committed_repositories as _resolve_repository_relationships_for_committed_repositories,
+)
 from ..repository_identity import git_remote_for_path, repository_metadata
 from ..utils.debug_log import debug_log, error_logger, info_logger, warning_logger
 from ..utils.debug_log import debug_logger
@@ -194,6 +197,21 @@ class GraphBuilder:
     def _materialize_workloads(self) -> dict[str, int]:
         """Materialize canonical workloads after cross-repo links are in place."""
         return _materialize_workloads(self, info_logger_fn=info_logger)
+
+    def _resolve_repository_relationships(
+        self,
+        committed_repo_paths: list[Path],
+        *,
+        run_id: str | None = None,
+    ) -> dict[str, int]:
+        """Resolve repository dependencies from graph evidence into Postgres and Neo4j."""
+
+        return _resolve_repository_relationships_for_committed_repositories(
+            builder=self,
+            committed_repo_paths=committed_repo_paths,
+            run_id=run_id,
+            info_logger_fn=info_logger,
+        )
 
     def _create_inheritance_links(
         self, session: Any, file_data: dict[str, Any], imports_map: dict[str, Any]

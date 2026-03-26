@@ -117,6 +117,7 @@ def finalize_repository_batch(
                     merged_imports_map=merged_imports_map,
                     info_logger_fn=info_logger_fn,
                     stage_progress_callback=_stage_progress_callback,
+                    run_id=run_state.run_id,
                 )
                 run_state.finalization_finished_at = utc_now_fn()
                 run_state.finalization_duration_seconds = time.perf_counter() - started

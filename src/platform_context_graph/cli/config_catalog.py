@@ -42,7 +42,7 @@ DEFAULT_CONFIG = {
     "PCG_HONOR_GITIGNORE": "true",
     "PCG_WATCH_DEBOUNCE_SECONDS": "2.0",
     "CACHE_ENABLED": "true",
-    "IGNORE_DIRS": "venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__",
+    "IGNORE_DIRS": "venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__,.terraform,.terragrunt-cache,.terramate-cache,.pulumi,.crossplane,.serverless,.aws-sam,cdk.out",
     "INDEX_SOURCE": "true",
     "SCIP_INDEXER": "false",
     "SCIP_LANGUAGES": "python,typescript,go,rust,java",
