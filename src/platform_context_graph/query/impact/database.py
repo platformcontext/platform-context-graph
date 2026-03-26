@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...domain import EntityType
 from .common import edge_from_record, entity_from_record, record_to_dict
 
 
@@ -159,13 +158,19 @@ def db_fetch_argocd_source_repo_edges(
         "           WHEN app:ArgoCDApplicationSet THEN 'applicationset' "
         "           ELSE 'application' "
         "       END as app_kind, "
-        "       coalesce(app.source_path, app.source_paths, '') as source_paths, "
-        "       coalesce(app.source_roots, '') as source_roots, "
+        "       coalesce(app[$source_path_key], app[$source_paths_key], '') as source_paths, "
+        "       coalesce(app[$source_roots_key], '') as source_roots, "
         "       source_repo.id as target_repo_id, "
         "       source_repo.name as target_repo_name"
     )
     with driver.session() as session:
-        rows = session.run(query, repo_name=repo_name).data()
+        rows = session.run(
+            query,
+            repo_name=repo_name,
+            source_path_key="source_path",
+            source_paths_key="source_paths",
+            source_roots_key="source_roots",
+        ).data()
 
     edges: list[dict[str, Any]] = []
     for row in rows:

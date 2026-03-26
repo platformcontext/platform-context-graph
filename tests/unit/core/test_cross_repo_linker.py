@@ -48,7 +48,7 @@ class _Session:
                     }
                 ]
             )
-        if "RETURN app.source_repo as source_repo" in query:
+        if "RETURN app[$source_repo_key] as source_repo" in query:
             return MockResult(
                 rows=[
                     {
@@ -56,7 +56,7 @@ class _Session:
                     }
                 ]
             )
-        if "RETURN app.source_repos as source_repos" in query:
+        if "RETURN app[$source_repos_key] as source_repos" in query:
             return MockResult(
                 rows=[
                     {
@@ -82,10 +82,13 @@ def test_link_argocd_sources_maps_applicationsets() -> None:
     count = linker._link_argocd_sources()
 
     assert count == 2
-    assert any(
-        "MATCH (app:ArgoCDApplicationSet)" in query and "source_repos" in query
+    appset_query = next(
+        query
         for query in queries
+        if "MATCH (app:ArgoCDApplicationSet)" in query and "source_repos" in query
     )
+    assert "app[$source_repos_key] as source_repos" in appset_query
+    assert "app.source_repos as source_repos" not in appset_query
 
 
 def test_link_argocd_deploys_maps_applicationsets() -> None:

@@ -95,7 +95,12 @@ def materialize_workloads(
                  namespaces,
                  collect(DISTINCT deployment_repo.id) as deployment_repo_ids,
                  collect(DISTINCT deployment_repo.name) as deployment_repo_names,
-                 collect(DISTINCT coalesce(app.source_roots, coalesce(app.source_path, app.source_paths, ''))) as source_roots
+                 collect(
+                     DISTINCT coalesce(
+                         app[$source_roots_key],
+                         coalesce(app[$source_path_key], app[$source_paths_key], '')
+                     )
+                 ) as source_roots
             WHERE size(resource_kinds) > 0 OR size(deployment_repo_ids) > 0
             RETURN repo.id as repo_id,
                    repo.name as repo_name,
@@ -113,7 +118,11 @@ def materialize_workloads(
                    namespaces,
                    source_roots
             ORDER BY repo.name
-            """).data()
+            """,
+            source_roots_key="source_roots",
+            source_path_key="source_path",
+            source_paths_key="source_paths",
+            ).data()
 
         for row in candidate_rows:
             repo_id = row.get("repo_id")

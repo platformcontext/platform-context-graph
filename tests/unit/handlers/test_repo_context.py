@@ -1,7 +1,6 @@
 """Tests for get_repo_context handler and degradation behavior."""
 
-import pytest
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 from platform_context_graph.mcp.tools.handlers.ecosystem import (
     find_blast_radius,
@@ -84,13 +83,25 @@ class TestGetRepoContext:
 
     def test_returns_structured_response(self):
         code_record = MockRecord({"functions": 10, "classes": 3})
+        graph_counts_record = MockRecord(
+            {
+                "root_file_count": 0,
+                "root_directory_count": 0,
+                "file_count": 3,
+                "top_level_function_count": 10,
+                "class_method_count": 0,
+                "total_function_count": 10,
+                "class_count": 3,
+                "module_count": 0,
+            }
+        )
         tier_record = None
         deps_record = MockRecord({"dependencies": []})
         dependents_record = MockRecord({"dependents": []})
 
         db = make_mock_db(
             {
-                "RETURN r.id as id, r.name as name, r.path as path": MockResult(
+                "coalesce(r[$local_path_key], r.path) as local_path": MockResult(
                     records=[
                         {
                             "id": "repository:r_ab12cd34",
@@ -110,6 +121,7 @@ class TestGetRepoContext:
                         {"file": "deploy.yaml", "ext": "yaml"},
                     ]
                 ),
+                "root_file_count": MockResult(single_record=graph_counts_record),
                 "count(DISTINCT fn)": MockResult(single_record=code_record),
                 "fn.name IN": MockResult(records=[]),
                 "K8sResource": MockResult(records=[]),
@@ -128,8 +140,8 @@ class TestGetRepoContext:
                 "TerragruntConfig": MockResult(records=[]),
                 "type(rel) IN": MockResult(records=[]),
                 "Tier": MockResult(single_record=tier_record),
-                "DEPENDS_ON]->(dep": MockResult(single_record=deps_record),
-                "DEPENDS_ON]-(dep": MockResult(single_record=dependents_record),
+                "MATCH (r:Repository)-[rel]->(dep:Repository)": MockResult(single_record=deps_record),
+                "<-[rel]-(dep:Repository)": MockResult(single_record=dependents_record),
             }
         )
 

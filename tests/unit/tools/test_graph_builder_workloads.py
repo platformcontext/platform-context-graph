@@ -108,6 +108,10 @@ def test_materialize_workloads_creates_workload_instance_and_deployment_source()
     )
     assert "type(source_rel) = 'SOURCES_FROM'" in candidate_query
     assert "[:SOURCES_FROM]" not in candidate_query
+    assert "app[$source_roots_key]" in candidate_query
+    assert "app.source_roots" not in candidate_query
+    assert "app.source_path" not in candidate_query
+    assert "app.source_paths" not in candidate_query
     assert stats == {"workloads": 1, "instances": 1, "deployment_sources": 1}
 
 

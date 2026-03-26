@@ -32,24 +32,31 @@ class CodeFinderRelationshipsMixin:
                     MATCH (f:Function)-[:HAS_PARAMETER]->(p:Parameter)
                     WHERE p.name = $argument_name AND f.path = $path {repo_filter}
                     RETURN f.name AS function_name, f.path AS path, f.line_number AS line_number,
-                           f.docstring AS docstring, f.is_dependency AS is_dependency
-                    ORDER BY f.is_dependency ASC, f.path, f.line_number
+                           f.docstring AS docstring, f[$is_dependency_key] AS is_dependency
+                    ORDER BY is_dependency ASC, f.path, f.line_number
                     LIMIT 20
                 """
                 result = session.run(
-                    query, argument_name=argument_name, path=path, repo_path=repo_path
+                    query,
+                    argument_name=argument_name,
+                    path=path,
+                    repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
             else:
                 query = f"""
                     MATCH (f:Function)-[:HAS_PARAMETER]->(p:Parameter)
                     WHERE p.name = $argument_name {repo_filter}
                     RETURN f.name AS function_name, f.path AS path, f.line_number AS line_number,
-                           f.docstring AS docstring, f.is_dependency AS is_dependency
-                    ORDER BY f.is_dependency ASC, f.path, f.line_number
+                           f.docstring AS docstring, f[$is_dependency_key] AS is_dependency
+                    ORDER BY is_dependency ASC, f.path, f.line_number
                     LIMIT 20
                 """
                 result = session.run(
-                    query, argument_name=argument_name, repo_path=repo_path
+                    query,
+                    argument_name=argument_name,
+                    repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
             return result.data()
 
@@ -76,24 +83,31 @@ class CodeFinderRelationshipsMixin:
                     MATCH (f:Function)
                     WHERE f.path = $path AND $decorator_name IN f.decorators {repo_filter}
                     RETURN f.name AS function_name, f.path AS path, f.line_number AS line_number,
-                           f.docstring AS docstring, f.is_dependency AS is_dependency, f.decorators AS decorators
-                    ORDER BY f.is_dependency ASC, f.path, f.line_number
+                           f.docstring AS docstring, f[$is_dependency_key] AS is_dependency, f.decorators AS decorators
+                    ORDER BY is_dependency ASC, f.path, f.line_number
                     LIMIT 20
                 """
                 result = session.run(
-                    query, decorator_name=decorator_name, path=path, repo_path=repo_path
+                    query,
+                    decorator_name=decorator_name,
+                    path=path,
+                    repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
             else:
                 query = f"""
                     MATCH (f:Function)
                     WHERE $decorator_name IN f.decorators {repo_filter}
                     RETURN f.name AS function_name, f.path AS path, f.line_number AS line_number,
-                           f.docstring AS docstring, f.is_dependency AS is_dependency, f.decorators AS decorators
-                    ORDER BY f.is_dependency ASC, f.path, f.line_number
+                           f.docstring AS docstring, f[$is_dependency_key] AS is_dependency, f.decorators AS decorators
+                    ORDER BY is_dependency ASC, f.path, f.line_number
                     LIMIT 20
                 """
                 result = session.run(
-                    query, decorator_name=decorator_name, repo_path=repo_path
+                    query,
+                    decorator_name=decorator_name,
+                    repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
             return result.data()
 
@@ -126,7 +140,7 @@ class CodeFinderRelationshipsMixin:
                         COALESCE(caller.path, caller_file.path) as caller_file_path,
                         caller.line_number as caller_line_number,
                         caller.docstring as caller_docstring,
-                        caller.is_dependency as caller_is_dependency,
+                        caller[$is_dependency_key] as caller_is_dependency,
                         call.line_number as call_line_number,
                         call.args as call_args,
                         call.full_call_name as full_call_name,
@@ -137,6 +151,7 @@ class CodeFinderRelationshipsMixin:
                     function_name=function_name,
                     path=path,
                     repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
 
                 results = result.data()
@@ -151,7 +166,7 @@ class CodeFinderRelationshipsMixin:
                             COALESCE(caller.path, caller_file.path) as caller_file_path,
                             caller.line_number as caller_line_number,
                             caller.docstring as caller_docstring,
-                            caller.is_dependency as caller_is_dependency,
+                            caller[$is_dependency_key] as caller_is_dependency,
                             call.line_number as call_line_number,
                             call.args as call_args,
                             call.full_call_name as full_call_name,
@@ -161,6 +176,7 @@ class CodeFinderRelationshipsMixin:
                     """,
                         function_name=function_name,
                         repo_path=repo_path,
+                        is_dependency_key="is_dependency",
                     )
                     results = result.data()
             else:
@@ -174,7 +190,7 @@ class CodeFinderRelationshipsMixin:
                         caller.path as caller_file_path,
                         caller.line_number as caller_line_number,
                         caller.docstring as caller_docstring,
-                        caller.is_dependency as caller_is_dependency,
+                        caller[$is_dependency_key] as caller_is_dependency,
                         call.line_number as call_line_number,
                         call.args as call_args,
                         call.full_call_name as full_call_name,
@@ -184,6 +200,7 @@ class CodeFinderRelationshipsMixin:
                 """,
                     function_name=function_name,
                     repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
                 results = result.data()
 
@@ -209,7 +226,7 @@ class CodeFinderRelationshipsMixin:
             if path:
                 absolute_file_path = str(Path(path).resolve())
                 result = session.run(
-                    f"""
+                    """
                     MATCH (caller:Function {{name: $function_name, path: $absolute_file_path}})
                     MATCH (caller)-[call:CALLS]->(called:Function)
                     WHERE called.path STARTS WITH $repo_path OR $repo_path IS NULL
@@ -219,7 +236,7 @@ class CodeFinderRelationshipsMixin:
                         called.path as called_file_path,
                         called.line_number as called_line_number,
                         called.docstring as called_docstring,
-                        called.is_dependency as called_is_dependency,
+                        called[$is_dependency_key] as called_is_dependency,
                         call.line_number as call_line_number,
                         call.args as call_args,
                         call.full_call_name as full_call_name
@@ -229,10 +246,11 @@ class CodeFinderRelationshipsMixin:
                     function_name=function_name,
                     absolute_file_path=absolute_file_path,
                     repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
             else:
                 result = session.run(
-                    f"""
+                    """
                     MATCH (caller:Function {{name: $function_name}})-[call:CALLS]->(called:Function)
                     WHERE called.path STARTS WITH $repo_path OR $repo_path IS NULL
                     OPTIONAL MATCH (called_file:File)-[:CONTAINS]->(called)
@@ -241,7 +259,7 @@ class CodeFinderRelationshipsMixin:
                         called.path as called_file_path,
                         called.line_number as called_line_number,
                         called.docstring as called_docstring,
-                        called.is_dependency as called_is_dependency,
+                        called[$is_dependency_key] as called_is_dependency,
                         call.line_number as call_line_number,
                         call.args as call_args,
                         call.full_call_name as full_call_name
@@ -250,6 +268,7 @@ class CodeFinderRelationshipsMixin:
                 """,
                     function_name=function_name,
                     repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
 
             return result.data()
@@ -270,8 +289,9 @@ class CodeFinderRelationshipsMixin:
             repo_filter = "AND file.path STARTS WITH $repo_path" if repo_path else ""
             result = session.run(
                 f"""
-                MATCH (file:File)-[imp:IMPORTS]->(module:Module)
-                WHERE (module.name = $module_name OR module.full_import_name CONTAINS $module_name) {repo_filter}
+                MATCH (file:File)-[imp]->(module:Module)
+                WHERE type(imp) = 'IMPORTS'
+                  AND (module.name = $module_name OR module.full_import_name CONTAINS $module_name) {repo_filter}
                 OPTIONAL MATCH (repo:Repository)-[:CONTAINS]->(file)
                 WITH file, repo, COLLECT({{
                     imported_module: module.name,
@@ -282,14 +302,15 @@ class CodeFinderRelationshipsMixin:
                     file.name AS file_name,
                     file.path AS path,
                     file.relative_path AS file_relative_path,
-                    file.is_dependency AS file_is_dependency,
+                    file[$is_dependency_key] AS file_is_dependency,
                     repo.name AS repository_name,
                     imports
-                ORDER BY file.is_dependency ASC, file.path
+                ORDER BY file_is_dependency ASC, file.path
                 LIMIT 20
             """,
                 module_name=module_name,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
 
             return result.data()
@@ -332,12 +353,13 @@ class CodeFinderRelationshipsMixin:
                     var.line_number as variable_line_number,
                     var.value as variable_value,
                     var.context as variable_context,
-                    COALESCE(container.is_dependency, file.is_dependency, false) as is_dependency
+                    COALESCE(container[$is_dependency_key], file[$is_dependency_key], false) as is_dependency
                 ORDER BY is_dependency ASC, path, variable_line_number
                 LIMIT 20
             """,
                 variable_name=variable_name,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
 
             return result.data()
@@ -377,12 +399,13 @@ class CodeFinderRelationshipsMixin:
                     parent.path as parent_file_path,
                     parent.line_number as parent_line_number,
                     parent.docstring as parent_docstring,
-                    parent.is_dependency as parent_is_dependency
+                    parent[$is_dependency_key] as parent_is_dependency
                 ORDER BY parent_is_dependency ASC, parent_class
             """,
                 class_name=class_name,
                 path=path,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
 
             repo_filter_child = (
@@ -399,12 +422,13 @@ class CodeFinderRelationshipsMixin:
                     grandchild.path as child_file_path,
                     grandchild.line_number as child_line_number,
                     grandchild.docstring as child_docstring,
-                    grandchild.is_dependency as child_is_dependency
+                    grandchild[$is_dependency_key] as child_is_dependency
                 ORDER BY child_is_dependency ASC, child_class
             """,
                 class_name=class_name,
                 path=path,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
 
             repo_filter_method = (
@@ -421,12 +445,13 @@ class CodeFinderRelationshipsMixin:
                     method.line_number as method_line_number,
                     method.args as method_args,
                     method.docstring as method_docstring,
-                    method.is_dependency as method_is_dependency
+                    method[$is_dependency_key] as method_is_dependency
                 ORDER BY method_is_dependency ASC, method_line_number
             """,
                 class_name=class_name,
                 path=path,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
 
             return {
@@ -462,13 +487,14 @@ class CodeFinderRelationshipsMixin:
                     func.line_number as function_line_number,
                     func.args as function_args,
                     func.docstring as function_docstring,
-                    func.is_dependency as is_dependency,
+                    func[$is_dependency_key] as is_dependency,
                     file.name as file_name
                 ORDER BY is_dependency ASC, class_name
                 LIMIT 20
             """,
                 function_name=function_name,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
 
             return result.data()

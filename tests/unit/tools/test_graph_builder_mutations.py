@@ -141,3 +141,26 @@ def test_delete_repository_logs_missing_repository_at_debug_only(tmp_path: Path)
         f"Repository already absent from graph; nothing to delete: "
         f"{repo_path.resolve()}"
     ]
+
+
+def test_delete_repository_uses_dynamic_local_path_lookup() -> None:
+    """Delete queries should avoid sparse-graph warnings for missing local_path."""
+
+    session = _FakeSession()
+    builder = SimpleNamespace(
+        driver=SimpleNamespace(session=lambda: session),
+    )
+
+    delete_repository_from_graph(
+        builder,
+        "repository:r_12345678",
+        info_logger_fn=lambda *_args, **_kwargs: None,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+    )
+
+    lookup_query = session.calls[0][0]
+    delete_query = session.calls[1][0]
+    assert "r[$local_path_key] IN $lookup_values" in lookup_query
+    assert "r.local_path IN $lookup_values" not in lookup_query
+    assert "r[$local_path_key] IN $lookup_values" in delete_query
+    assert "r.local_path IN $lookup_values" not in delete_query

@@ -70,12 +70,15 @@ def search_infra_resources(
                 MATCH (a:ArgoCDApplication)
                 WHERE a.name CONTAINS $search
                 RETURN a.name as name,
-                       a.project as project,
-                       a.dest_namespace as namespace,
-                       a.source_repo as source_repo
+                       a[$project_key] as project,
+                       a[$dest_namespace_key] as namespace,
+                       a[$source_repo_key] as source_repo
                 LIMIT 50
             """,
                     search=query,
+                    project_key="project",
+                    dest_namespace_key="dest_namespace",
+                    source_repo_key="source_repo",
                 ).data()[:limit]
 
             if enabled("crossplane"):
@@ -86,10 +89,11 @@ def search_infra_resources(
                    OR x.kind CONTAINS $search
                 RETURN x.name as name, x.kind as kind,
                        x.group as api_group,
-                       x.claim_kind as claim_kind
+                       x[$claim_kind_key] as claim_kind
                 LIMIT 50
             """,
                     search=query,
+                    claim_kind_key="claim_kind",
                 ).data()[:limit]
                 results["crossplane_claims"] = session.run(
                     """
@@ -219,27 +223,28 @@ def get_ecosystem_overview(database: Any) -> dict[str, Any]:
             MATCH (t:Tier)
             OPTIONAL MATCH (t)-[:CONTAINS]->(r:Repository)
             RETURN t.name as tier,
-                   t.risk_level as risk,
+                   t[$risk_level_key] as risk,
                    collect(r.name) as repos
-            ORDER BY CASE t.risk_level
+            ORDER BY CASE t[$risk_level_key]
                          WHEN 'critical' THEN 4
                          WHEN 'high' THEN 3
                          WHEN 'medium' THEN 2
                          WHEN 'low' THEN 1
                          ELSE 0
                      END DESC
-        """).data()
+        """, risk_level_key="risk_level").data()
 
             repo_stats = session.run("""
             MATCH (r:Repository)
             OPTIONAL MATCH (r)-[:CONTAINS*]->(f:File)
-            OPTIONAL MATCH (r)-[:DEPENDS_ON]->(dep:Repository)
+            OPTIONAL MATCH (r)-[rel]->(dep:Repository)
+            WHERE dep IS NULL OR type(rel) = $depends_on_type
             RETURN r.name as name,
                    r.path as path,
                    count(DISTINCT f) as files,
                    collect(DISTINCT dep.name) as depends_on
             ORDER BY r.name
-        """).data()
+        """, depends_on_type="DEPENDS_ON").data()
 
             infra_counts = session.run("""
             OPTIONAL MATCH (k:K8sResource) WITH count(k) as k8s
@@ -254,9 +259,11 @@ def get_ecosystem_overview(database: Any) -> dict[str, Any]:
             OPTIONAL MATCH ()-[s:SOURCES_FROM]->() WITH count(s) as sources_from
             OPTIONAL MATCH ()-[d:DEPLOYS]->() WITH sources_from, count(d) as deploys
             OPTIONAL MATCH ()-[sat:SATISFIED_BY]->() WITH sources_from, deploys, count(sat) as satisfied_by
-            OPTIONAL MATCH ()-[dep:DEPENDS_ON]->() WITH sources_from, deploys, satisfied_by, count(dep) as depends_on
+            OPTIONAL MATCH ()-[dep]->()
+            WHERE type(dep) = $depends_on_type
+            WITH sources_from, deploys, satisfied_by, count(dep) as depends_on
             RETURN sources_from, deploys, satisfied_by, depends_on
-        """).single()
+        """, depends_on_type="DEPENDS_ON").single()
 
         eco_name = eco_result["name"] if eco_result else None
         eco_org = eco_result["org"] if eco_result else None

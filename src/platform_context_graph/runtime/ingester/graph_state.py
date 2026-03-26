@@ -46,7 +46,7 @@ def graph_recovery_repository_paths(repository_paths: Iterable[Path]) -> list[Pa
                 """
                 UNWIND $repo_probes AS probe
                 OPTIONAL MATCH (r:Repository {id: probe.repo_id})
-                WITH probe, r, coalesce(r.local_path, r.path) AS graph_path
+                WITH probe, r, coalesce(r[$local_path_key], r.path) AS graph_path
                 RETURN probe.repo_path AS repo_path,
                        probe.repo_id AS repo_id,
                        probe.remote_url AS remote_url,
@@ -70,6 +70,7 @@ def graph_recovery_repository_paths(repository_paths: Iterable[Path]) -> list[Pa
                        END AS needs_recovery
                 """,
                 repo_probes=repo_probes,
+                local_path_key="local_path",
             ).data()
     except Exception as exc:
         warning_logger(

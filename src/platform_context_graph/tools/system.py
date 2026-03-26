@@ -2,14 +2,13 @@
 
 import logging
 from dataclasses import asdict
+from datetime import datetime
 from typing import Any, Dict
-from datetime import datetime, timedelta
 
 from neo4j.exceptions import CypherSyntaxError
 
 from ..core.database import DatabaseManager
 from ..core.jobs import JobManager, JobStatus
-from ..utils.debug_log import debug_log
 
 logger = logging.getLogger(__name__)
 
@@ -125,17 +124,17 @@ class SystemTools:
             with self.db_manager.get_driver().session() as session:
                 result = session.run("""
                     MATCH (func:Function)
-                    WHERE func.is_dependency = false
+                    WHERE coalesce(func[$is_dependency_key], false) = false
                       AND NOT func.name STARTS WITH '_'
                       AND NOT func.name IN ['main', 'setup', 'run']
                     OPTIONAL MATCH (caller:Function)-[:CALLS]->(func)
-                    WHERE caller.is_dependency = false
+                    WHERE coalesce(caller[$is_dependency_key], false) = false
                     WITH func, count(caller) as caller_count
                     WHERE caller_count = 0
                     RETURN func.name as function_name, func.path as path, func.line_number as line_number
                     ORDER BY func.path, func.line_number
                     LIMIT 50
-                """)
+                """, is_dependency_key="is_dependency")
                 return {
                     "success": True,
                     "results": {

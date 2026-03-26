@@ -27,9 +27,14 @@ def list_repositories_rows(database: Any) -> list[dict[str, Any]]:
             f"""
                 MATCH (r:Repository)
                 RETURN {repository_projection()},
-                       coalesce(r.is_dependency, false) as is_dependency
+                       coalesce(r[$is_dependency_key], false) as is_dependency
                 ORDER BY r.name
-                """
+                """,
+            local_path_key="local_path",
+            remote_url_key="remote_url",
+            repo_slug_key="repo_slug",
+            has_remote_key="has_remote",
+            is_dependency_key="is_dependency",
         ).data()
 
     repositories: list[dict[str, Any]] = []

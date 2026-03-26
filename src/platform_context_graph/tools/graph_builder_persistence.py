@@ -318,12 +318,16 @@ def add_file_to_graph(
                 RETURN r.id as id,
                        r.name as name,
                        r.path as path,
-                       coalesce(r.local_path, r.path) as local_path,
-                       r.remote_url as remote_url,
-                       r.repo_slug as repo_slug,
-                       coalesce(r.has_remote, false) as has_remote
+                       coalesce(r[$local_path_key], r.path) as local_path,
+                       r[$remote_url_key] as remote_url,
+                       r[$repo_slug_key] as repo_slug,
+                       coalesce(r[$has_remote_key], false) as has_remote
                 """,
                 repo_path=str(repo_path_obj),
+                local_path_key="local_path",
+                remote_url_key="remote_url",
+                repo_slug_key="repo_slug",
+                has_remote_key="has_remote",
             ).single()
         except ValueError:
             repo_result = None
@@ -440,12 +444,16 @@ def commit_file_batch_to_graph(
                 RETURN r.id as id,
                        r.name as name,
                        r.path as path,
-                       coalesce(r.local_path, r.path) as local_path,
-                       r.remote_url as remote_url,
-                       r.repo_slug as repo_slug,
-                       coalesce(r.has_remote, false) as has_remote
+                       coalesce(r[$local_path_key], r.path) as local_path,
+                       r[$remote_url_key] as remote_url,
+                       r[$repo_slug_key] as repo_slug,
+                       coalesce(r[$has_remote_key], false) as has_remote
                 """,
                 repo_path=repo_path_str,
+                local_path_key="local_path",
+                remote_url_key="remote_url",
+                repo_slug_key="repo_slug",
+                has_remote_key="has_remote",
             ).single()
         except ValueError:
             repo_result = None

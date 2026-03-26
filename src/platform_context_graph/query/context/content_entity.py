@@ -34,6 +34,10 @@ def _lookup_repository_ref(database: Any, repo_id: str) -> dict[str, Any] | None
             LIMIT 1
             """,
             repo_id=repo_id,
+            local_path_key="local_path",
+            remote_url_key="remote_url",
+            repo_slug_key="repo_slug",
+            has_remote_key="has_remote",
         ).single()
 
     repo = record_to_dict(row)

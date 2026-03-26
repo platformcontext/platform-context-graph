@@ -274,11 +274,20 @@ class WorkspaceContentProvider:
             return None
         file_path_obj = Path(file_path)
         with self._database.get_driver().session() as session:
-            rows = [_record_to_dict(record) for record in session.run(f"""
+            rows = [
+                _record_to_dict(record)
+                for record in session.run(
+                    f"""
                     MATCH (r:Repository)
                     RETURN {_repository_projection()}
                     ORDER BY r.name
-                    """).data()]
+                    """,
+                    local_path_key="local_path",
+                    remote_url_key="remote_url",
+                    repo_slug_key="repo_slug",
+                    has_remote_key="has_remote",
+                ).data()
+            ]
         candidates: list[dict[str, Any]] = []
         for row in rows:
             metadata = {**row, **_repository_metadata_from_row(row)}
@@ -380,7 +389,14 @@ def _resolve_repo_relative_path(repo_root: Path, relative_path: str) -> Path | N
     return resolved_path
 
 
-def _repository_projection(alias: str = "r") -> str:
+def _repository_projection(
+    alias: str = "r",
+    *,
+    local_path_param: str = "local_path_key",
+    remote_url_param: str = "remote_url_key",
+    repo_slug_param: str = "repo_slug_key",
+    has_remote_param: str = "has_remote_key",
+) -> str:
     """Return the shared repository projection used by workspace queries.
 
     Args:
@@ -394,10 +410,10 @@ def _repository_projection(alias: str = "r") -> str:
         f"{alias}.id as id, "
         f"{alias}.name as name, "
         f"{alias}.path as path, "
-        f"coalesce({alias}.local_path, {alias}.path) as local_path, "
-        f"{alias}.remote_url as remote_url, "
-        f"{alias}.repo_slug as repo_slug, "
-        f"coalesce({alias}.has_remote, false) as has_remote"
+        f"coalesce({alias}[${local_path_param}], {alias}.path) as local_path, "
+        f"{alias}[${remote_url_param}] as remote_url, "
+        f"{alias}[${repo_slug_param}] as repo_slug, "
+        f"coalesce({alias}[${has_remote_param}], false) as has_remote"
     )
 
 
@@ -432,11 +448,20 @@ def _resolve_repository(session: Any, repo_id: str) -> dict[str, Any] | None:
         Enriched repository metadata row when found.
     """
 
-    repos = [_record_to_dict(record) for record in session.run(f"""
+    repos = [
+        _record_to_dict(record)
+        for record in session.run(
+            f"""
             MATCH (r:Repository)
             RETURN {_repository_projection()}
             ORDER BY r.name
-            """).data()]
+            """,
+            local_path_key="local_path",
+            remote_url_key="remote_url",
+            repo_slug_key="repo_slug",
+            has_remote_key="has_remote",
+        ).data()
+    ]
 
     if repo_id.startswith("repository:"):
         for repo in repos:

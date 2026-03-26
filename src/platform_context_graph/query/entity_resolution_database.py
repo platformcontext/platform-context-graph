@@ -54,11 +54,13 @@ def db_workload_entities(database: Any, *, query: str, repo_id: str | None) -> l
                    w.kind as kind,
                    w.repo_id as repo_id,
                    repo.name as repo_name,
-                   coalesce(repo.repo_slug, '') as repo_slug,
-                   coalesce(repo.remote_url, '') as remote_url
+                   coalesce(repo[$repo_slug_key], '') as repo_slug,
+                   coalesce(repo[$remote_url_key], '') as remote_url
             """,
             terms=terms,
             repo_id=repo_id,
+            repo_slug_key="repo_slug",
+            remote_url_key="remote_url",
         ).data()
         instance_rows = session.run(
             f"""
@@ -73,11 +75,13 @@ def db_workload_entities(database: Any, *, query: str, repo_id: str | None) -> l
                    i.workload_id as workload_id,
                    i.repo_id as repo_id,
                    repo.name as repo_name,
-                   coalesce(repo.repo_slug, '') as repo_slug,
-                   coalesce(repo.remote_url, '') as remote_url
+                   coalesce(repo[$repo_slug_key], '') as repo_slug,
+                   coalesce(repo[$remote_url_key], '') as remote_url
             """,
             terms=terms,
             repo_id=repo_id,
+            repo_slug_key="repo_slug",
+            remote_url_key="remote_url",
         ).data()
 
     entities: list[dict[str, Any]] = []
@@ -135,11 +139,13 @@ def db_workload_entities(database: Any, *, query: str, repo_id: str | None) -> l
                    collect(DISTINCT coalesce(k.namespace, '')) as namespaces,
                    collect(DISTINCT repo.id) as repo_ids,
                    collect(DISTINCT repo.name) as repo_names,
-                   collect(DISTINCT coalesce(repo.repo_slug, '')) as repo_slugs,
-                   collect(DISTINCT coalesce(repo.remote_url, '')) as remote_urls
+                   collect(DISTINCT coalesce(repo[$repo_slug_key], '')) as repo_slugs,
+                   collect(DISTINCT coalesce(repo[$remote_url_key], '')) as remote_urls
             """,
             terms=terms,
             repo_id=repo_id,
+            repo_slug_key="repo_slug",
+            remote_url_key="remote_url",
         ).data()
         argocd_rows = session.run(
             f"""
@@ -153,13 +159,15 @@ def db_workload_entities(database: Any, *, query: str, repo_id: str | None) -> l
                  END) as app_kinds,
                  collect(DISTINCT repo.id) as repo_ids,
                  collect(DISTINCT repo.name) as repo_names,
-                 collect(DISTINCT coalesce(repo.repo_slug, '')) as repo_slugs,
-                 collect(DISTINCT coalesce(repo.remote_url, '')) as remote_urls
+                 collect(DISTINCT coalesce(repo[$repo_slug_key], '')) as repo_slugs,
+                 collect(DISTINCT coalesce(repo[$remote_url_key], '')) as remote_urls
             WHERE $repo_id IS NULL OR $repo_id IN repo_ids
             RETURN name, app_kinds, repo_ids, repo_names, repo_slugs, remote_urls
             """,
             terms=terms,
             repo_id=repo_id,
+            repo_slug_key="repo_slug",
+            remote_url_key="remote_url",
         ).data()
 
     aggregated: dict[str, dict[str, set[str]]] = {}

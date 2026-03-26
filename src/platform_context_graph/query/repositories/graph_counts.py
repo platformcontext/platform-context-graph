@@ -6,7 +6,7 @@ from typing import Any
 
 _SCOPE_PREDICATE = (
     "(($repo_id IS NOT NULL AND r.id = $repo_id) "
-    "OR ($repo_path IS NOT NULL AND coalesce(r.local_path, r.path) = $repo_path))"
+    "OR ($repo_path IS NOT NULL AND coalesce(r[$local_path_key], r.path) = $repo_path))"
 )
 
 __all__ = ["repository_graph_counts", "repository_scope", "repository_scope_predicate"]
@@ -18,6 +18,8 @@ def repository_scope(repo: dict[str, Any]) -> dict[str, Any]:
     return {
         "repo_id": repo.get("id"),
         "repo_path": repo.get("local_path") or repo.get("path"),
+        "local_path_key": "local_path",
+        "imports_rel_type": "IMPORTS",
     }
 
 
@@ -66,7 +68,8 @@ def repository_graph_counts(session: Any, repo: dict[str, Any]) -> dict[str, int
             RETURN count(DISTINCT cls) AS class_count
         }}
         CALL (r) {{
-            OPTIONAL MATCH (r)-[:CONTAINS*]->(:File)-[:IMPORTS]->(module:Module)
+            OPTIONAL MATCH (r)-[:CONTAINS*]->(:File)-[rel]->(module:Module)
+            WHERE type(rel) = $imports_rel_type
             RETURN count(DISTINCT module) AS module_count
         }}
         RETURN root_file_count,

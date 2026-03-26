@@ -165,7 +165,12 @@ def _repository_root_candidates(
             MATCH (r:Repository)
             RETURN {_repository_projection()}
             ORDER BY r.name
-            """).data()
+            """,
+            local_path_key="local_path",
+            remote_url_key="remote_url",
+            repo_slug_key="repo_slug",
+            has_remote_key="has_remote",
+        ).data()
 
     candidates: list[tuple[Path, dict[str, Any]]] = []
     for repo in repositories:

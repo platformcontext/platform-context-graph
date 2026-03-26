@@ -95,10 +95,11 @@ def delete_repository_from_graph(
             MATCH (r:Repository)
             WHERE r.id IN $lookup_values
                OR r.path IN $lookup_values
-               OR r.local_path IN $lookup_values
+               OR r[$local_path_key] IN $lookup_values
             RETURN count(r) as cnt
             """,
             lookup_values=lookup_values,
+            local_path_key="local_path",
         ).single()
         if not result or result["cnt"] == 0:
             if debug_logger_fn is not None:
@@ -113,11 +114,12 @@ def delete_repository_from_graph(
             MATCH (r:Repository)
             WHERE r.id IN $lookup_values
                OR r.path IN $lookup_values
-               OR r.local_path IN $lookup_values
+               OR r[$local_path_key] IN $lookup_values
             OPTIONAL MATCH (r)-[:CONTAINS*]->(e)
             DETACH DELETE r, e
             """,
             lookup_values=lookup_values,
+            local_path_key="local_path",
         )
         info_logger_fn(
             f"Deleted repository and its contents from graph: {display_identifier}"

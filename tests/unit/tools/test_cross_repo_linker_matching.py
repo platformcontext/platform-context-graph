@@ -47,9 +47,9 @@ class _FakeSession:
     def run(self, query: str, **params):
         if "RETURN repo.id as id" in query:
             return _FakeResult(self.repository_rows)
-        if "RETURN app.source_repo as source_repo" in query:
+        if "RETURN app[$source_repo_key] as source_repo" in query:
             return _FakeResult(self.application_rows)
-        if "RETURN app.source_repos as source_repos" in query:
+        if "RETURN app[$source_repos_key] as source_repos" in query:
             return _FakeResult(self.appset_rows)
         if "RETURN mod.source as source" in query:
             return _FakeResult(self.module_rows)
