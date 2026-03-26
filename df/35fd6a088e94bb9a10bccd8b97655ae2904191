@@ -1,0 +1,51 @@
+src/platform_context_graph/relationships/evidence_gitops.py
+  b81f5ad6d7408e6d 1-463
+src/platform_context_graph/relationships/evidence_terraform.py
+  b81f5ad6d7408e6d 1-278
+tests/unit/relationships/test_file_evidence.py
+  b81f5ad6d7408e6d 369-486
+src/platform_context_graph/relationships/file_evidence.py
+  b81f5ad6d7408e6d 9-11,18,30-32,38,49
+src/platform_context_graph/relationships/execution.py
+  b81f5ad6d7408e6d 157-173,185-195,207-209
+  67e9e13ffd282a49 12,241-249,272,278-322,324-325,331-335,339-340,366-424
+tests/unit/relationships/test_platform_resolution.py
+  b81f5ad6d7408e6d 77-124
+src/platform_context_graph/tools/graph_builder_platforms.py
+  b81f5ad6d7408e6d 5,35-51,53-56,172-209,212-274,368-371
+src/platform_context_graph/relationships/file_evidence_support.py
+  b81f5ad6d7408e6d 257-284,381-423,425,473,475,477
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "df35fd6a088e94bb9a10bccd8b97655ae2904191",
+  "prompts": {
+    "67e9e13ffd282a49": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2b31-cb67-7283-8634-b9d2bfe31a51",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 126,
+      "total_deletions": 15,
+      "accepted_lines": 126,
+      "overriden_lines": 0
+    },
+    "b81f5ad6d7408e6d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2b1f-8460-7240-a336-c1ed60ef9728",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 1158,
+      "total_deletions": 446,
+      "accepted_lines": 1158,
+      "overriden_lines": 0
+    }
+  }
+}
