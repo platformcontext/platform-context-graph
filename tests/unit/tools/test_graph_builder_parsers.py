@@ -117,6 +117,17 @@ def test_build_parser_registry_registers_raw_text_search_parsers() -> None:
     assert registry["__dockerfile__"].language_name == "dockerfile"
 
 
+def test_build_parser_registry_uses_tree_sitter_for_hcl() -> None:
+    """Terraform files should be registered through the tree-sitter wrapper."""
+
+    registry = graph_builder_parsers.build_parser_registry(lambda _key: "true")
+
+    assert ".tf" in registry
+    assert ".hcl" in registry
+    assert registry[".tf"].__class__.__name__ == "TreeSitterParser"
+    assert registry[".tf"].language_name == "hcl"
+
+
 def test_parse_file_uses_structured_parser_for_dockerfile(tmp_path: Path) -> None:
     """Direct parsing should extract Dockerfile structure and keep dockerfile language."""
 

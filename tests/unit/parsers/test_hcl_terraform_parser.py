@@ -109,6 +109,20 @@ class TestHCLTerraformParser:
         assert ds["data_type"] == "aws_iam_policy_document"
         assert ds["data_name"] == "trust"
 
+    def test_parse_terraform_providers(self, parser, tf_fixtures):
+        """Parse provider blocks and required provider metadata."""
+        result = parser.parse(str(tf_fixtures / "main.tf"))
+
+        assert "terraform_providers" in result
+        providers = result["terraform_providers"]
+        assert len(providers) == 1
+
+        provider = providers[0]
+        assert provider["name"] == "aws"
+        assert provider["source"] == "hashicorp/aws"
+        assert provider["version"] == "~> 5.0"
+        assert provider["region"] == "var.aws_region"
+
     # --- Result structure ---
 
     def test_result_structure(self, parser, tf_fixtures):
@@ -162,6 +176,28 @@ class TestHCLTerraformParser:
         config = configs[0]
         assert config["name"] == "terragrunt"
         assert "terraform_source" in config
+        assert config["includes"] == "root"
+        assert config["inputs"] == "bucket_name"
+        assert config["locals"] == ""
+
+    def test_parse_terraform_locals(self, parser, temp_test_dir):
+        """Parse locals blocks into individual local definitions."""
+        f = temp_test_dir / "locals.tf"
+        f.write_text(
+            'locals {\n'
+            '  service_name = "payments-api"\n'
+            "  replica_count = 3\n"
+            "}\n"
+        )
+
+        result = parser.parse(str(f))
+
+        assert "terraform_locals" in result
+        locals_ = result["terraform_locals"]
+        assert len(locals_) == 2
+        by_name = {item["name"]: item for item in locals_}
+        assert by_name["service_name"]["value"] == "payments-api"
+        assert by_name["replica_count"]["value"] == "3"
 
     def test_line_numbers_are_accurate(self, parser, tf_fixtures):
         """Verify line numbers point to the right location."""

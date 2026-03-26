@@ -35,6 +35,7 @@ _LANGUAGE_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
     "dart": (".languages.dart", "DartTreeSitterParser"),
     "perl": (".languages.perl", "PerlTreeSitterParser"),
     "elixir": (".languages.elixir", "ElixirTreeSitterParser"),
+    "hcl": (".languages.hcl_terraform", "HCLTerraformParser"),
     "dockerfile": (".languages.dockerfile", "DockerfileTreeSitterParser"),
 }
 _EXTENSION_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
@@ -171,7 +172,6 @@ def build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
     Returns:
         A mapping of file extensions to parser instances.
     """
-    from .languages.hcl_terraform import HCLTerraformParser
     from .languages.yaml_infra import InfraYAMLParser
 
     parsers: dict[str, Any] = {}
@@ -184,13 +184,17 @@ def build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
         parsers[".yml"] = yaml_parser
 
     if (get_config_value_fn("INDEX_HCL") or "true").lower() == "true":
-        hcl_parser = HCLTerraformParser("hcl")
-        parsers[".tf"] = hcl_parser
-        parsers[".hcl"] = hcl_parser
+        _add_tree_sitter_parser(parsers, ".tf", "hcl")
+        _add_tree_sitter_parser(parsers, ".hcl", "hcl")
     try:
         parsers[DOCKERFILE_PARSER_KEY] = TreeSitterParser("dockerfile")
     except ValueError as exc:
-        logger.warning("Skipping parser for special filename %s because language dockerfile is unavailable: %s", DOCKERFILE_PARSER_KEY, exc)
+        logger.warning(
+            "Skipping parser for special filename %s because language dockerfile "
+            "is unavailable: %s",
+            DOCKERFILE_PARSER_KEY,
+            exc,
+        )
     register_raw_text_parsers(parsers)
     return parsers
 def pre_scan_for_imports(builder: Any, files: list[Path]) -> dict[str, Any]:

@@ -36,5 +36,5 @@ This file is auto-generated. Do not edit manually.
 | Helm | `InfraYAMLParser` | Y | - | - | Y | 5/5 | 5/5 | `tests/fixtures/ecosystems/helm_comprehensive/` |
 | Kubernetes | `InfraYAMLParser` | Y | - | - | - | 7/7 | 7/7 | `tests/fixtures/ecosystems/kubernetes_comprehensive/` |
 | Kustomize | `InfraYAMLParser` | Y | - | - | - | 5/5 | 5/5 | `tests/fixtures/ecosystems/kustomize_comprehensive/` |
-| Terraform | `HCLTerraformParser` | Y | - | Y | Y | 6/6 | 6/6 | `tests/fixtures/ecosystems/terraform_comprehensive/` |
+| Terraform | `HCLTerraformParser` | Y | Y | Y | Y | 8/8 | 8/8 | `tests/fixtures/ecosystems/terraform_comprehensive/` |
 | Terragrunt | `HCLTerraformParser` | Y | - | - | - | 3/3 | 3/3 | `tests/fixtures/ecosystems/terragrunt_comprehensive/` |

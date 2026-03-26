@@ -39,6 +39,8 @@ ITEM_MAPPINGS_KEYS: list[tuple[str, str]] = [
     ("terraform_outputs", "TerraformOutput"),
     ("terraform_modules", "TerraformModule"),
     ("terraform_data_sources", "TerraformDataSource"),
+    ("terraform_providers", "TerraformProvider"),
+    ("terraform_locals", "TerraformLocal"),
     ("terragrunt_configs", "TerragruntConfig"),
     ("cloudformation_resources", "CloudFormationResource"),
     ("cloudformation_parameters", "CloudFormationParameter"),

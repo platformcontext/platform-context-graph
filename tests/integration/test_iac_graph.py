@@ -84,6 +84,26 @@ class TestTerraformGraph:
             ).single()
             assert result["cnt"] >= 1
 
+    def test_terraform_providers_created(self, indexed_ecosystems):
+        driver = indexed_ecosystems.get_driver()
+        with driver.session() as s:
+            result = s.run(
+                "MATCH (p:TerraformProvider) "
+                "WHERE p.path CONTAINS 'terraform_comprehensive' "
+                "RETURN count(p) as cnt"
+            ).single()
+            assert result["cnt"] >= 1
+
+    def test_terraform_locals_created(self, indexed_ecosystems):
+        driver = indexed_ecosystems.get_driver()
+        with driver.session() as s:
+            result = s.run(
+                "MATCH (l:TerraformLocal) "
+                "WHERE l.path CONTAINS 'terraform_comprehensive' "
+                "RETURN count(l) as cnt"
+            ).single()
+            assert result["cnt"] >= 2
+
 
 class TestTerragruntGraph:
     """Verify terragrunt_comprehensive repo produces correct graph."""
@@ -108,6 +128,18 @@ class TestTerragruntGraph:
                 "RETURN tg.terraform_source as source"
             ).data()
             assert len(results) >= 1
+
+    def test_terragrunt_persists_inputs_metadata(self, indexed_ecosystems):
+        driver = indexed_ecosystems.get_driver()
+        with driver.session() as s:
+            result = s.run(
+                "MATCH (tg:TerragruntConfig) "
+                "WHERE tg.path CONTAINS 'terragrunt_comprehensive/modules/eks' "
+                "RETURN tg.inputs as inputs, tg.includes as includes"
+            ).single()
+            assert result is not None
+            assert "cluster_name" in result["inputs"]
+            assert "root" in result["includes"]
 
 
 class TestHelmGraph:

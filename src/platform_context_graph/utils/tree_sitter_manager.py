@@ -56,6 +56,7 @@ LANGUAGE_ALIASES = {
     "elixir": "elixir",
     "ex": "elixir",
     "exs": "elixir",
+    "hcl": "hcl",
     "dockerfile": "dockerfile",
 }
 
