@@ -1,0 +1,31 @@
+src/platform_context_graph/query/repositories/relationship_summary.py
+  b81f5ad6d7408e6d 196,200,202-209,215,225,229,231-238,244,254,258,283,287,360-361,371-372,393-394
+tests/unit/query/test_repository_queries.py
+  b81f5ad6d7408e6d 362,365-388,438
+src/platform_context_graph/query/repositories/content_enrichment.py
+  b81f5ad6d7408e6d 36-37,54,61,98,128,139,146,148-152,178-184
+tests/unit/query/test_repository_content_enrichment.py
+  b81f5ad6d7408e6d 49,89,95,108
+tests/unit/query/test_repository_runtime_context.py
+  b81f5ad6d7408e6d 112-129,142-149,151-153,252-281,291-374,376-377
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "31ddb8359f02a6a589b94fe479418553c20b059d",
+  "prompts": {
+    "b81f5ad6d7408e6d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2b1f-8460-7240-a336-c1ed60ef9728",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 240,
+      "total_deletions": 88,
+      "accepted_lines": 235,
+      "overriden_lines": 0
+    }
+  }
+}
