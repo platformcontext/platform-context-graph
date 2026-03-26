@@ -1,0 +1,165 @@
+docs/superpowers/plans/2026-03-26-canonical-platform-entities-implementation.md
+  ea2135648c575158 26,58-61,70-71,76-77,204,232-264,269,298,308-321,325,335-336,428-429,454-474,481,495-500,502-504,506-507,509-515,540-541,549-561,564-565,585-588,601,619-622,626-657,683,741,760,782,802-803,805-812,816,828
+  8427a4fce24a9d1c 1-25,27-57,62-69,72-75,78-203,205-231,265-268,270-297,299-307,322-324,326-334,337-427,430-453,475-480,482-494,501,505,508,516-539,542-548,562-563,566-584,589-600,602-618,623-625,658-682,684-740,742-759,761-781,783-801,804,813-815,817-827,829-914
+docs/superpowers/specs/2026-03-26-canonical-platform-entities-design.md
+  8427a4fce24a9d1c 198-200,204-234,267-298,305,308-320,324-325,401-422,424-434,460-470,486-519,521-561,583-664,681-690,707-719,777,781-787,790-804
+tests/unit/relationships/test_file_evidence.py
+  fd72a0d751f06c26 193-198,200-201,203-233,237-243,298-299
+  6882d3d2eec12f97 31,66,73,111,155-192,300-346,362
+  bdd10350fac00a5c 40-41,81-84,122-124,128-152
+  ea2135648c575158 85-86,126-127,199,202,234-236,244-297
+  be93830d8c96bbfb 119-121,125
+  ed13f379856156ed 1-30,32-39,42-65,67-72,74-80,87-110,112-118,153-154,347-361,363-368
+src/platform_context_graph/cli/config_catalog.py
+  8e8258835a482019 45
+src/platform_context_graph/tools/graph_builder.py
+  8e8258835a482019 18-20,201-214
+src/platform_context_graph/tools/graph_builder_call_relationships.py
+  8e8258835a482019 9-17,20-21,370,372-373,375-379
+src/platform_context_graph/tools/graph_builder_persistence_unwind.py
+  8e8258835a482019 64
+docs/internal/docs-inventory.md
+  8e8258835a482019 39
+src/platform_context_graph/tools/graph_builder_call_batches.py
+  8e8258835a482019 1-322
+tests/unit/tools/test_graph_builder_indexing_execution.py
+  8e8258835a482019 39-42,68,78,92-94,114,122,135
+tests/unit/core/test_graph_builder_module_sizes.py
+  8e8258835a482019 5,7-9,23-24
+tests/integration/cli/test_cli_commands.py
+  8e8258835a482019 606,630,633-639,673,679-685
+src/platform_context_graph/relationships/postgres_generation.py
+  d002aefb9eccc1a0 1-298
+src/platform_context_graph/cli/commands/ecosystem.py
+  d002aefb9eccc1a0 15,57
+src/platform_context_graph/cli/commands/ecosystem_relationships.py
+  d002aefb9eccc1a0 1-9,11-15,17-33,48-59,61-65,71,74-76,87-92,94-101,113,116,118-119,122-125,127-129,133-134,136-137,139-141,143,152,168-185,190-194,196-198,200,212-213,215-229,231-233,238-242,244-246,248,260-261,263
+src/platform_context_graph/indexing/coordinator_finalize.py
+  8e8258835a482019 122
+src/platform_context_graph/tools/graph_builder_indexing_execution.py
+  8e8258835a482019 328,393-396,404-410,443,452-454,750-751
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "8df5f5c6229cb33c63777db650777663cdb68601",
+  "prompts": {
+    "6882d3d2eec12f97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2691-3500-7b53-9c25-c8cceb54b51a",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 90,
+      "total_deletions": 10,
+      "accepted_lines": 90,
+      "overriden_lines": 0
+    },
+    "8427a4fce24a9d1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d27c7-96de-7561-8583-7b71b0f3ac84",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 747,
+      "total_deletions": 0,
+      "accepted_lines": 1065,
+      "overriden_lines": 0
+    },
+    "8e8258835a482019": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d27b6-d45d-7db1-9ea4-c167b305a49b",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 416,
+      "total_deletions": 314,
+      "accepted_lines": 415,
+      "overriden_lines": 0
+    },
+    "bdd10350fac00a5c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2a95-71ea-76a3-94e2-0311612eb38b",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 36,
+      "total_deletions": 11,
+      "accepted_lines": 34,
+      "overriden_lines": 0
+    },
+    "be93830d8c96bbfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2aad-4dc3-7723-83f3-dbc6f990b0eb",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 2,
+      "accepted_lines": 4,
+      "overriden_lines": 0
+    },
+    "d002aefb9eccc1a0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d27d5-7523-7f61-ad52-ae15956921ee",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 477,
+      "total_deletions": 163,
+      "accepted_lines": 445,
+      "overriden_lines": 0
+    },
+    "ea2135648c575158": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2aad-4ab7-7020-a82e-728fce2f2d18",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 178,
+      "total_deletions": 11,
+      "accepted_lines": 241,
+      "overriden_lines": 0
+    },
+    "ed13f379856156ed": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d281a-b578-7070-9ea4-cef8f2ba6433",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 154,
+      "total_deletions": 0,
+      "accepted_lines": 129,
+      "overriden_lines": 0
+    },
+    "fd72a0d751f06c26": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d284c-f75a-7940-852c-059395ba41a9",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 51,
+      "total_deletions": 0,
+      "accepted_lines": 48,
+      "overriden_lines": 0
+    }
+  }
+}
