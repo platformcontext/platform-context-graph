@@ -1,0 +1,39 @@
+src/platform_context_graph/mcp/tools/handlers/ecosystem.py
+  7b6b91781c3275b5 13,339-341,343-344,346-349,351-370,372-389,393-408
+src/platform_context_graph/query/repositories/coverage_data.py
+  7b6b91781c3275b5 93,96,100-105
+tests/unit/query/test_repository_queries.py
+  7b6b91781c3275b5 627
+tests/unit/query/test_repository_coverage_data.py
+  7b6b91781c3275b5 224
+src/platform_context_graph/prompts.py
+  7b6b91781c3275b5 21
+tests/integration/mcp/test_repository_runtime_context.py
+  7b6b91781c3275b5 1-28
+tests/integration/api/test_repositories_api.py
+  7b6b91781c3275b5 72-106
+tests/unit/handlers/test_repo_context.py
+  7b6b91781c3275b5 234-260,262,267-298,302,309-378
+src/platform_context_graph/mcp/tools/ecosystem.py
+  7b6b91781c3275b5 206,220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "8a95328e5cc70016f3e02004806d47c97040a7ed",
+  "prompts": {
+    "7b6b91781c3275b5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2be1-11d9-7481-9f08-0acc08f9e323",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 275,
+      "total_deletions": 219,
+      "accepted_lines": 275,
+      "overriden_lines": 0
+    }
+  }
+}
