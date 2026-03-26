@@ -1,0 +1,37 @@
+docs/superpowers/plans/2026-03-26-canonical-platform-entities-implementation.md
+  ea2135648c575158 26,58-61,70-71,76-77,204,232-264,269,298,308-321,325,335-336,428-429,454-474,481,495-500,502-504,506-507,509-515,540-541,549-561,564-565,585-588,601,619-622,626-657,683,741,760,782,802-803,805-812,816,828
+  8427a4fce24a9d1c 1-25,27-57,62-69,72-75,78-203,205-231,265-268,270-297,299-307,322-324,326-334,337-427,430-453,475-480,482-494,501,505,508,516-539,542-548,562-563,566-584,589-600,602-618,623-625,658-682,684-740,742-759,761-781,783-801,804,813-815,817-827,829-914
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "19424e5b573d57b14c0f1fafab9dc714e13eaf7c",
+  "prompts": {
+    "8427a4fce24a9d1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d27c7-96de-7561-8583-7b71b0f3ac84",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 747,
+      "total_deletions": 0,
+      "accepted_lines": 736,
+      "overriden_lines": 0
+    },
+    "ea2135648c575158": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2aad-4ab7-7020-a82e-728fce2f2d18",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 178,
+      "total_deletions": 11,
+      "accepted_lines": 178,
+      "overriden_lines": 0
+    }
+  }
+}
