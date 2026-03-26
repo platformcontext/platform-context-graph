@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...runtime.status_store import get_repository_coverage as get_runtime_repository_coverage
 from .common import canonical_repository_ref, resolve_repository
-from .coverage_data import coverage_summary_from_row
 from .graph_counts import repository_graph_counts
+from .relationship_summary import build_relationship_summary
 
 
 def build_repository_stats(session: Any, repo_id: str | None) -> dict[str, Any]:
@@ -28,9 +27,7 @@ def build_repository_stats(session: Any, repo_id: str | None) -> dict[str, Any]:
 
         repo_ref = canonical_repository_ref(repo)
         counts = repository_graph_counts(session, repo)
-        coverage_summary = coverage_summary_from_row(
-            get_runtime_repository_coverage(repo_id=repo_ref["id"])
-        )
+        relationship_summary = build_relationship_summary(session, repo_ref)
         return {
             "success": True,
             "repository": repo_ref,
@@ -43,8 +40,16 @@ def build_repository_stats(session: Any, repo_id: str | None) -> dict[str, Any]:
                 "class_methods": counts["class_method_count"],
                 "classes": counts["class_count"],
                 "modules": counts["module_count"],
+                "platform_count": relationship_summary["summary"]["platform_count"],
+                "deployment_source_count": relationship_summary["summary"][
+                    "deployment_source_count"
+                ],
+                "environment_count": relationship_summary["summary"][
+                    "environment_count"
+                ],
+                "limitations": relationship_summary["limitations"],
             },
-            "coverage": coverage_summary,
+            "coverage": relationship_summary["coverage"],
         }
 
     repo_count = _single_count(session, "MATCH (r:Repository) RETURN count(r) as c")

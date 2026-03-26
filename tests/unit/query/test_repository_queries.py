@@ -10,7 +10,9 @@ from platform_context_graph.query.repositories import (
 )
 from platform_context_graph.query.repositories.common import resolve_repository
 from platform_context_graph.query.repositories.context_data import _fetch_infrastructure
-from platform_context_graph.query.repositories.graph_counts import repository_graph_counts
+from platform_context_graph.query.repositories.graph_counts import (
+    repository_graph_counts,
+)
 
 
 class MockRecord:
@@ -42,9 +44,23 @@ def make_mock_db(query_results):
     session = MagicMock()
 
     def mock_run(query, *args, **kwargs):
+        for token in ("dep:Repository", "prov:Repository", "SOURCES_FROM"):
+            if token in query:
+                token_matches = [
+                    (substr, result)
+                    for substr, result in query_results.items()
+                    if substr in query and token in substr
+                ]
+                if token_matches:
+                    return max(token_matches, key=lambda item: len(item[0]))[1]
+        best_match = None
+        best_length = -1
         for substr, result in query_results.items():
-            if substr in query:
-                return result
+            if substr in query and len(substr) > best_length:
+                best_match = result
+                best_length = len(substr)
+        if best_match is not None:
+            return best_match
         return MockResult()
 
     session.run = mock_run
@@ -100,7 +116,9 @@ def test_repository_graph_counts_excludes_class_methods_from_top_level_count() -
     assert "WITH r" not in recorded_query["query"]
     assert "NOT EXISTS {" in recorded_query["query"]
     assert "(:Class)-[:CONTAINS]->(fn)" in recorded_query["query"]
-    assert "coalesce(r[$local_path_key], r.path) = $repo_path" in recorded_query["query"]
+    assert (
+        "coalesce(r[$local_path_key], r.path) = $repo_path" in recorded_query["query"]
+    )
     assert "[:IMPORTS]->(module:Module)" not in recorded_query["query"]
     assert "type(rel) = $imports_rel_type" in recorded_query["query"]
 
@@ -162,7 +180,10 @@ def test_fetch_infrastructure_uses_dynamic_optional_property_keys() -> None:
     )
 
     terraform_variable_query = next(
-        query for query, _ in recorded_queries if "MATCH (r:Repository)-[:CONTAINS*]->(f:File)" in query and "TerraformVariable" in query
+        query
+        for query, _ in recorded_queries
+        if "MATCH (r:Repository)-[:CONTAINS*]->(f:File)" in query
+        and "TerraformVariable" in query
     )
     argocd_application_query = next(
         query for query, _ in recorded_queries if "ArgoCDApplication" in query
@@ -182,12 +203,42 @@ def test_fetch_infrastructure_uses_dynamic_optional_property_keys() -> None:
     assert shared_kwargs["generators_key"] == "generators"
 
 
-def test_get_repository_context_returns_current_context_shape():
+def test_get_repository_context_returns_current_context_shape(monkeypatch):
     deps_record = MockRecord({"dependencies": []})
     dependents_record = MockRecord({"dependents": []})
     canonical_repo_id = _canonical_repository_id(
         remote_url="https://github.com/platformcontext/my-api",
         local_path="/repos/my-api",
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.relationship_summary.get_runtime_repository_coverage",
+        lambda **_kwargs: {
+            "run_id": "run-complete",
+            "repo_id": canonical_repo_id,
+            "repo_name": "my-api",
+            "repo_path": "/repos/my-api",
+            "status": "completed",
+            "phase": "completed",
+            "finalization_status": "completed",
+            "graph_available": True,
+            "server_content_available": True,
+            "discovered_file_count": 3,
+            "graph_recursive_file_count": 3,
+            "content_file_count": 3,
+            "content_entity_count": 0,
+            "root_file_count": 1,
+            "root_directory_count": 2,
+            "top_level_function_count": 7,
+            "class_method_count": 3,
+            "total_function_count": 10,
+            "class_count": 3,
+            "last_error": None,
+            "updated_at": None,
+        },
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data._fetch_infrastructure",
+        lambda _session, _repo: {},
     )
 
     db = make_mock_db(
@@ -245,6 +296,97 @@ def test_get_repository_context_returns_current_context_shape():
             "Tier": MockResult(single_record=None),
             "DEPENDS_ON]->(dep": MockResult(single_record=deps_record),
             "DEPENDS_ON]-(dep": MockResult(single_record=dependents_record),
+            "RUNS_ON]->(p:Platform)": MockResult(
+                records=[
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": "prod",
+                        "workload_instance_id": "workload-instance:r_primary123",
+                        "workload_environment": "prod",
+                        "relationship_type": "RUNS_ON",
+                    }
+                ]
+            ),
+            "<-[:PROVISIONS_PLATFORM]-(prov:Repository)": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_infra123",
+                        "name": "infra-stack",
+                        "path": "/repos/infra-stack",
+                        "local_path": "/repos/infra-stack",
+                        "remote_url": "https://github.com/platformcontext/infra-stack",
+                        "repo_slug": "platformcontext/infra-stack",
+                        "has_remote": True,
+                        "platform_id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    }
+                ]
+            ),
+            "PROVISIONS_PLATFORM]->(p:Platform)": MockResult(
+                records=[
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": "prod",
+                        "relationship_type": "PROVISIONS_PLATFORM",
+                    }
+                ]
+            ),
+            "SOURCES_FROM": MockResult(
+                records=[
+                    {
+                        "app_name": "payments-api",
+                        "project": "platformcontext",
+                        "namespace": "argocd",
+                        "source_path": "argocd/payments-api/overlays/prod",
+                        "relationship_type": "DEPLOYS_FROM",
+                    }
+                ]
+            ),
+            "ArgoCDApplicationSet": MockResult(
+                records=[
+                    {
+                        "app_name": "payments-api",
+                        "project": "platformcontext",
+                        "namespace": "argocd",
+                        "source_repos": "https://github.com/platformcontext/helm-charts",
+                        "source_paths": "argocd/payments-api/overlays/prod",
+                        "relationship_type": "DISCOVERS_CONFIG_IN",
+                    }
+                ]
+            ),
+            "dep:Repository": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_app123",
+                        "name": "payments-api-worker",
+                        "path": "/repos/payments-api-worker",
+                        "local_path": "/repos/payments-api-worker",
+                        "remote_url": "https://github.com/platformcontext/payments-api-worker",
+                        "repo_slug": "platformcontext/payments-api-worker",
+                        "has_remote": True,
+                        "platform_id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    }
+                ]
+            ),
+            "<-[:RUNS_ON]-(i:WorkloadInstance)": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_app123",
+                        "name": "payments-api-worker",
+                        "path": "/repos/payments-api-worker",
+                        "local_path": "/repos/payments-api-worker",
+                        "remote_url": "https://github.com/platformcontext/payments-api-worker",
+                        "repo_slug": "platformcontext/payments-api-worker",
+                        "has_remote": True,
+                        "platform_id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    }
+                ]
+            ),
         }
     )
 
@@ -262,15 +404,26 @@ def test_get_repository_context_returns_current_context_shape():
     assert result["repository"]["root_file_count"] == 1
     assert result["repository"]["root_directory_count"] == 2
     assert result["repository"]["graph_available"] is True
-    assert result["repository"]["server_content_available"] is False
-    assert result["repository"]["active_run_id"] is None
-    assert result["repository"]["index_status"] is None
+    assert result["repository"]["server_content_available"] is True
+    assert result["repository"]["active_run_id"] == "run-complete"
+    assert result["repository"]["index_status"] == "completed"
+    assert result["platforms"]
+    assert result["deploys_from"]
+    assert result["discovers_config_in"]
+    assert result["provisioned_by"]
+    assert result["provisions_dependencies_for"]
+    assert result["iac_relationships"] == []
+    assert result["deployment_chain"]
+    assert result["environments"] == ["prod"]
+    assert result["summary"]["platform_count"] == 1
+    assert result["summary"]["environment_count"] == 1
+    assert result["limitations"] == []
     assert result["code"]["functions"] == 10
     assert result["code"]["top_level_functions"] == 7
     assert result["code"]["class_methods"] == 3
     assert result["code"]["classes"] == 3
     assert "python" in result["code"]["languages"]
-    assert result["coverage"] is None
+    assert result["coverage"]["completeness_state"] == "complete"
     assert result["infrastructure"] == {}
     assert result["relationships"] == []
     assert result["ecosystem"] is None
@@ -284,10 +437,10 @@ def test_get_repository_context_surfaces_partial_coverage_gaps(monkeypatch) -> N
         local_path="/repos/api-node-boats",
     )
     monkeypatch.setattr(
-        "platform_context_graph.query.repositories.context_data.get_runtime_repository_coverage",
-        lambda repo_id: {
+        "platform_context_graph.query.repositories.relationship_summary.get_runtime_repository_coverage",
+        lambda **_kwargs: {
             "run_id": "run-graph-partial",
-            "repo_id": repo_id,
+            "repo_id": canonical_repo_id,
             "repo_name": "api-node-boats",
             "repo_path": "/repos/api-node-boats",
             "status": "completed",
@@ -362,8 +515,103 @@ def test_get_repository_context_surfaces_partial_coverage_gaps(monkeypatch) -> N
             "TerragruntConfig": MockResult(records=[]),
             "type(rel) IN": MockResult(records=[]),
             "Tier": MockResult(single_record=None),
-            "DEPENDS_ON]->(dep": MockResult(single_record=MockRecord({"dependencies": []})),
-            "DEPENDS_ON]-(dep": MockResult(single_record=MockRecord({"dependents": []})),
+            "DEPENDS_ON]->(dep": MockResult(
+                single_record=MockRecord({"dependencies": []})
+            ),
+            "DEPENDS_ON]-(dep": MockResult(
+                single_record=MockRecord({"dependents": []})
+            ),
+            "RUNS_ON]->(p:Platform)": MockResult(
+                records=[
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": "prod",
+                        "workload_instance_id": "workload-instance:r_primary123",
+                        "workload_environment": "prod",
+                        "relationship_type": "RUNS_ON",
+                    }
+                ]
+            ),
+            "PROVISIONS_PLATFORM]->(p:Platform)": MockResult(
+                records=[
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": "prod",
+                        "relationship_type": "PROVISIONS_PLATFORM",
+                    }
+                ]
+            ),
+            "SOURCES_FROM": MockResult(
+                records=[
+                    {
+                        "app_name": "api-node-boats",
+                        "project": "platformcontext",
+                        "namespace": "argocd",
+                        "source_path": "argocd/api-node-boats/overlays/prod",
+                        "relationship_type": "DEPLOYS_FROM",
+                    }
+                ]
+            ),
+            "ArgoCDApplicationSet": MockResult(
+                records=[
+                    {
+                        "app_name": "api-node-boats",
+                        "project": "platformcontext",
+                        "namespace": "argocd",
+                        "source_repos": "https://github.com/platformcontext/helm-charts",
+                        "source_paths": "argocd/api-node-boats/overlays/prod",
+                        "relationship_type": "DISCOVERS_CONFIG_IN",
+                    }
+                ]
+            ),
+            "dep:Repository": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_app123",
+                        "name": "api-node-boats-worker",
+                        "path": "/repos/api-node-boats-worker",
+                        "local_path": "/repos/api-node-boats-worker",
+                        "remote_url": "https://github.com/platformcontext/api-node-boats-worker",
+                        "repo_slug": "platformcontext/api-node-boats-worker",
+                        "has_remote": True,
+                        "platform_id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    }
+                ]
+            ),
+            "<-[:PROVISIONS_PLATFORM]-(prov:Repository)": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_infra123",
+                        "name": "infra-stack",
+                        "path": "/repos/infra-stack",
+                        "local_path": "/repos/infra-stack",
+                        "remote_url": "https://github.com/platformcontext/infra-stack",
+                        "repo_slug": "platformcontext/infra-stack",
+                        "has_remote": True,
+                        "platform_id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    }
+                ]
+            ),
+            "<-[:RUNS_ON]-(i:WorkloadInstance)": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_app123",
+                        "name": "api-node-boats-worker",
+                        "path": "/repos/api-node-boats-worker",
+                        "local_path": "/repos/api-node-boats-worker",
+                        "remote_url": "https://github.com/platformcontext/api-node-boats-worker",
+                        "repo_slug": "platformcontext/api-node-boats-worker",
+                        "has_remote": True,
+                        "platform_id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    }
+                ]
+            ),
         }
     )
 
@@ -376,12 +624,40 @@ def test_get_repository_context_surfaces_partial_coverage_gaps(monkeypatch) -> N
     assert result["repository"]["graph_recursive_file_count"] == 12
     assert result["repository"]["content_file_count"] == 0
     assert result["repository"]["completeness_state"] == "graph_partial"
+    assert result["limitations"]
+    assert "partial" in result["limitations"][0].lower()
 
 
-def test_get_repository_stats_supports_repo_and_overall_modes():
+def test_get_repository_stats_supports_repo_and_overall_modes(monkeypatch):
     canonical_repo_id = _canonical_repository_id(
         remote_url="https://github.com/platformcontext/my-api",
         local_path="/repos/my-api",
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.relationship_summary.get_runtime_repository_coverage",
+        lambda **_kwargs: {
+            "run_id": "run-complete",
+            "repo_id": canonical_repo_id,
+            "repo_name": "my-api",
+            "repo_path": "/repos/my-api",
+            "status": "completed",
+            "phase": "completed",
+            "finalization_status": "completed",
+            "graph_available": True,
+            "server_content_available": True,
+            "discovered_file_count": 3,
+            "graph_recursive_file_count": 3,
+            "content_file_count": 3,
+            "content_entity_count": 0,
+            "root_file_count": 2,
+            "root_directory_count": 4,
+            "top_level_function_count": 5,
+            "class_method_count": 2,
+            "total_function_count": 7,
+            "class_count": 2,
+            "last_error": None,
+            "updated_at": None,
+        },
     )
     db = make_mock_db(
         {
@@ -427,6 +703,97 @@ def test_get_repository_stats_supports_repo_and_overall_modes():
             "MATCH (m:Module) RETURN count(m) as c": MockResult(
                 single_record=MockRecord({"c": 12})
             ),
+            "RUNS_ON]->(p:Platform)": MockResult(
+                records=[
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": "prod",
+                        "workload_instance_id": "workload-instance:r_primary123",
+                        "workload_environment": "prod",
+                        "relationship_type": "RUNS_ON",
+                    }
+                ]
+            ),
+            "<-[:PROVISIONS_PLATFORM]-(prov:Repository)": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_infra123",
+                        "name": "infra-stack",
+                        "path": "/repos/infra-stack",
+                        "local_path": "/repos/infra-stack",
+                        "remote_url": "https://github.com/platformcontext/infra-stack",
+                        "repo_slug": "platformcontext/infra-stack",
+                        "has_remote": True,
+                        "platform_id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    }
+                ]
+            ),
+            "PROVISIONS_PLATFORM]->(p:Platform)": MockResult(
+                records=[
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": "prod",
+                        "relationship_type": "PROVISIONS_PLATFORM",
+                    }
+                ]
+            ),
+            "SOURCES_FROM": MockResult(
+                records=[
+                    {
+                        "app_name": "my-api",
+                        "project": "platformcontext",
+                        "namespace": "argocd",
+                        "source_path": "argocd/my-api/overlays/prod",
+                        "relationship_type": "DEPLOYS_FROM",
+                    }
+                ]
+            ),
+            "ArgoCDApplicationSet": MockResult(
+                records=[
+                    {
+                        "app_name": "my-api",
+                        "project": "platformcontext",
+                        "namespace": "argocd",
+                        "source_repos": "https://github.com/platformcontext/helm-charts",
+                        "source_paths": "argocd/my-api/overlays/prod",
+                        "relationship_type": "DISCOVERS_CONFIG_IN",
+                    }
+                ]
+            ),
+            "dep:Repository": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_app123",
+                        "name": "my-api-worker",
+                        "path": "/repos/my-api-worker",
+                        "local_path": "/repos/my-api-worker",
+                        "remote_url": "https://github.com/platformcontext/my-api-worker",
+                        "repo_slug": "platformcontext/my-api-worker",
+                        "has_remote": True,
+                        "platform_id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    }
+                ]
+            ),
+            "<-[:RUNS_ON]-(i:WorkloadInstance)": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_app123",
+                        "name": "my-api-worker",
+                        "path": "/repos/my-api-worker",
+                        "local_path": "/repos/my-api-worker",
+                        "remote_url": "https://github.com/platformcontext/my-api-worker",
+                        "repo_slug": "platformcontext/my-api-worker",
+                        "has_remote": True,
+                        "platform_id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    }
+                ]
+            ),
         }
     )
     finder = FinderLike(db)
@@ -446,8 +813,12 @@ def test_get_repository_stats_supports_repo_and_overall_modes():
         "class_methods": 2,
         "classes": 2,
         "modules": 5,
+        "platform_count": 1,
+        "deployment_source_count": 1,
+        "environment_count": 1,
+        "limitations": [],
     }
-    assert scoped["coverage"] is None
+    assert scoped["coverage"]["completeness_state"] == "complete"
     assert overall["success"] is True
     assert overall["stats"]["repositories"] == 4
     assert overall["stats"]["files"] == 20
@@ -493,7 +864,9 @@ def test_fetch_infrastructure_queries_reuse_matched_node_alias():
         assert return_aliases <= {node_alias, "f"}
 
 
-def test_get_repository_context_scopes_follow_up_queries_to_the_resolved_repository():
+def test_get_repository_context_scopes_follow_up_queries_to_the_resolved_repository(
+    monkeypatch,
+):
     primary_repo = {
         "id": "repository:r_primary123",
         "name": "payments-api",
@@ -512,6 +885,32 @@ def test_get_repository_context_scopes_follow_up_queries_to_the_resolved_reposit
         "repo_slug": "platformcontext/payments-api-worker",
         "has_remote": True,
     }
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.relationship_summary.get_runtime_repository_coverage",
+        lambda **_kwargs: {
+            "run_id": "run-complete",
+            "repo_id": "repository:r_primary123",
+            "repo_name": "payments-api",
+            "repo_path": "/repos/payments-api",
+            "status": "completed",
+            "phase": "completed",
+            "finalization_status": "completed",
+            "graph_available": True,
+            "server_content_available": True,
+            "discovered_file_count": 2,
+            "graph_recursive_file_count": 2,
+            "content_file_count": 2,
+            "content_entity_count": 0,
+            "root_file_count": 1,
+            "root_directory_count": 1,
+            "top_level_function_count": 1,
+            "class_method_count": 0,
+            "total_function_count": 1,
+            "class_count": 0,
+            "last_error": None,
+            "updated_at": None,
+        },
+    )
 
     class ContextSession:
         def run(self, query, **kwargs):

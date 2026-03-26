@@ -185,7 +185,41 @@ def test_coverage_summary_reports_failed_state(monkeypatch) -> None:
         },
     )
 
-    result = coverage_data.get_repository_coverage_payload(repo_id="repository:r_failed")
+    result = coverage_data.get_repository_coverage_payload(
+        repo_id="repository:r_failed"
+    )
 
     assert result["summary"]["completeness_state"] == "failed"
     assert result["completeness_state"] == "failed"
+
+
+def test_coverage_summary_reports_limitations_for_partial_rows() -> None:
+    """Partial coverage should keep the limitations list truthful."""
+
+    summary = coverage_data.coverage_summary_from_row(
+        {
+            "run_id": "run-partial",
+            "status": "completed",
+            "phase": "completed",
+            "finalization_status": "completed",
+            "graph_available": True,
+            "server_content_available": False,
+            "discovered_file_count": 12,
+            "graph_recursive_file_count": 4,
+            "content_file_count": 2,
+            "content_entity_count": 0,
+            "root_file_count": 1,
+            "root_directory_count": 1,
+            "top_level_function_count": 0,
+            "class_method_count": 0,
+            "total_function_count": 0,
+            "class_count": 0,
+            "last_error": None,
+            "updated_at": None,
+        }
+    )
+
+    assert summary is not None
+    assert summary["completeness_state"] == "graph_partial"
+    assert summary["limitations"]
+    assert "partial" in summary["limitations"][0].lower()

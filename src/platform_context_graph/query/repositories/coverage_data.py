@@ -13,6 +13,7 @@ from ...runtime.status_store import (
 __all__ = [
     "coverage_summary_from_row",
     "coverage_gaps_from_row",
+    "coverage_limitations_from_row",
     "get_repository_coverage_payload",
     "list_repository_coverage_payload",
 ]
@@ -83,8 +84,40 @@ def coverage_summary_from_row(row: dict[str, Any] | None) -> dict[str, Any] | No
         "classes": int(row.get("class_count") or 0),
         "last_error": _normalize_value(row.get("last_error")),
         "updated_at": _normalize_value(row.get("updated_at")),
+        "limitations": coverage_limitations_from_row(row),
         **gaps,
     }
+
+
+def coverage_limitations_from_row(row: dict[str, Any] | None) -> list[str]:
+    """Return truthful coverage limitations for a persisted row."""
+
+    if row is None:
+        return ["coverage unavailable for this repository"]
+
+    limitations: list[str] = []
+    gaps = coverage_gaps_from_row(row)
+    completeness_state = str(gaps["completeness_state"])
+
+    if completeness_state == "failed":
+        limitations.append(
+            "coverage run failed; runtime and deployment summaries may be incomplete"
+        )
+    elif completeness_state != "complete":
+        limitations.append(
+            "coverage is partial; runtime and deployment summaries may be incomplete"
+        )
+
+    if not bool(row.get("graph_available")):
+        limitations.append(
+            "graph coverage is unavailable; graph-derived relationships may be incomplete"
+        )
+    if not bool(row.get("server_content_available")):
+        limitations.append(
+            "server content coverage is unavailable; deployment-source discovery may be incomplete"
+        )
+
+    return limitations
 
 
 def _normalize_coverage_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -119,6 +152,7 @@ def _normalize_coverage_row(row: dict[str, Any]) -> dict[str, Any]:
         "finalization_finished_at": _normalize_value(
             row.get("finalization_finished_at")
         ),
+        "limitations": summary.get("limitations", []),
         **gaps,
         "summary": summary,
     }

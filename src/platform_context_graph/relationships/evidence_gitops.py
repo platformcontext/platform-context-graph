@@ -6,28 +6,18 @@ from pathlib import Path
 from typing import Sequence
 
 from ..observability import get_observability
-from ..tools.graph_builder_platforms import infer_gitops_platform_id
 from ..utils.debug_log import emit_log_call, info_logger
+from .evidence_argocd import discover_argocd_evidence
 from .file_evidence_support import (
     CatalogEntry,
-    append_evidence_for_candidate,
-    append_relationship_evidence,
     build_catalog,
-    infer_environment_from_path,
-    iter_argocd_deploy_repo_urls,
-    iter_argocd_deployed_repo_identifiers,
-    iter_argocd_destination_cluster_names,
-    iter_argocd_discovered_config_files,
-    iter_argocd_discovery_targets,
     iter_checkout_files,
     iter_kustomize_helm_strings,
     iter_kustomize_image_strings,
     iter_kustomize_resource_strings,
     iter_yaml_strings,
     load_yaml_documents,
-    load_yaml_documents_from_text,
     match_catalog,
-    read_text,
 )
 from .models import RelationshipEvidenceFact, RepositoryCheckout
 
@@ -56,7 +46,10 @@ def discover_gitops_evidence(
     ) as gitops_span:
         helm = _discover_helm_evidence(checkouts, resolved_catalog)
         kustomize = _discover_kustomize_evidence(checkouts, resolved_catalog)
-        argocd = _discover_argocd_evidence(checkouts, resolved_catalog)
+        argocd, argocd_counts = discover_argocd_evidence(
+            checkouts=checkouts,
+            catalog=resolved_catalog,
+        )
         evidence.extend(helm)
         evidence.extend(kustomize)
         evidence.extend(argocd)
@@ -70,6 +63,18 @@ def discover_gitops_evidence(
                 "pcg.relationships.argocd_evidence_count",
                 len(argocd),
             )
+            gitops_span.set_attribute(
+                "pcg.relationships.discovery_evidence_count",
+                argocd_counts["discovery"],
+            )
+            gitops_span.set_attribute(
+                "pcg.relationships.deploy_source_evidence_count",
+                argocd_counts["deploy_source"],
+            )
+            gitops_span.set_attribute(
+                "pcg.relationships.runtime_evidence_count",
+                argocd_counts["runtime"],
+            )
             gitops_span.set_attribute("pcg.relationships.evidence_count", len(evidence))
     emit_log_call(
         info_logger,
@@ -79,6 +84,9 @@ def discover_gitops_evidence(
             "helm_evidence_count": len(helm),
             "kustomize_evidence_count": len(kustomize),
             "argocd_evidence_count": len(argocd),
+            "argocd_discovery_evidence_count": argocd_counts["discovery"],
+            "argocd_deploy_source_evidence_count": argocd_counts["deploy_source"],
+            "argocd_runtime_evidence_count": argocd_counts["runtime"],
             "evidence_count": len(evidence),
         },
     )
@@ -195,187 +203,6 @@ def _discover_kustomize_evidence(
     return evidence
 
 
-def _discover_argocd_evidence(
-    checkouts: Sequence[RepositoryCheckout],
-    catalog: Sequence[CatalogEntry],
-) -> list[RelationshipEvidenceFact]:
-    """Extract config discovery, deploy-source, and runtime evidence from ArgoCD."""
-
-    observability = get_observability()
-    evidence: list[RelationshipEvidenceFact] = []
-    seen: set[tuple[str, str, str, str]] = set()
-    checkout_roots = {
-        checkout.logical_repo_id: Path(checkout.checkout_path)
-        for checkout in checkouts
-        if checkout.checkout_path
-    }
-    with observability.start_span(
-        "pcg.relationships.discover_evidence.argocd",
-        component=observability.component,
-        attributes={"pcg.relationships.checkout_count": len(checkouts)},
-    ) as argocd_span:
-        discovery_count = 0
-        deploy_source_count = 0
-        runtime_count = 0
-        for checkout in checkouts:
-            for file_path in iter_checkout_files(checkout):
-                if file_path.suffix.lower() not in _YAML_SUFFIXES:
-                    continue
-                content = read_text(file_path)
-                if content is None or "applicationset" not in content.lower():
-                    continue
-                for document in load_yaml_documents_from_text(content):
-                    for repo_url, discovery_path in iter_argocd_discovery_targets(document):
-                        before_discovery = len(evidence)
-                        append_evidence_for_candidate(
-                            evidence=evidence,
-                            seen=seen,
-                            catalog=catalog,
-                            source_repo_id=checkout.logical_repo_id,
-                            candidate=repo_url,
-                            evidence_kind="ARGOCD_APPLICATIONSET_DISCOVERY",
-                            relationship_type="DISCOVERS_CONFIG_IN",
-                            confidence=0.99,
-                            rationale=(
-                                "ArgoCD ApplicationSet discovers config in the target repository"
-                            ),
-                            path=file_path,
-                            extractor="argocd",
-                            extra_details={
-                                "repo_url": repo_url,
-                                "discovery_path": discovery_path,
-                            },
-                        )
-                        discovery_count += len(evidence) - before_discovery
-                        for entry, _matched_alias in match_catalog(repo_url, catalog):
-                            if entry.repo_id == checkout.logical_repo_id:
-                                continue
-                            target_root = checkout_roots.get(entry.repo_id)
-                            if target_root is None:
-                                continue
-                            for config_path in iter_argocd_discovered_config_files(
-                                target_root,
-                                discovery_path,
-                            ):
-                                source_matches = []
-                                for candidate in iter_argocd_deployed_repo_identifiers(
-                                    config_path,
-                                    target_root,
-                                ):
-                                    source_matches.extend(match_catalog(candidate, catalog))
-                                if not source_matches:
-                                    source_matches = [(entry, "config-repo-fallback")]
-                                for deploy_repo_url in iter_argocd_deploy_repo_urls(
-                                    config_path
-                                ):
-                                    target_matches = match_catalog(
-                                        deploy_repo_url,
-                                        catalog,
-                                    )
-                                    for source_entry, source_alias in source_matches:
-                                        for target_entry, target_alias in target_matches:
-                                            if source_entry.repo_id == entry.repo_id:
-                                                continue
-                                            before_deploy = len(evidence)
-                                            _append_matched_evidence(
-                                                evidence=evidence,
-                                                seen=seen,
-                                                source_repo_id=source_entry.repo_id,
-                                                target_repo_id=target_entry.repo_id,
-                                                evidence_kind="ARGOCD_APPLICATIONSET_DEPLOY_SOURCE",
-                                                relationship_type="DEPLOYS_FROM",
-                                                confidence=0.99,
-                                                rationale=(
-                                                    "The deployed repository sources manifests "
-                                                    "or overlays from the config repository"
-                                                ),
-                                                path=file_path,
-                                                extractor="argocd",
-                                                matched_value=deploy_repo_url,
-                                                matched_alias=target_alias,
-                                                extra_details={
-                                                    "control_plane_repo_id": checkout.logical_repo_id,
-                                                    "config_repo_id": entry.repo_id,
-                                                    "config_path": str(
-                                                        _config_relative_path(
-                                                            config_path, target_root
-                                                        )
-                                                    ),
-                                                    "deployed_repo_id": source_entry.repo_id,
-                                                    "deployed_repo_match": source_alias,
-                                                    "repo_url": repo_url,
-                                                    "discovery_path": discovery_path,
-                                                    "deploy_repo_url": deploy_repo_url,
-                                                },
-                                            )
-                                            deploy_source_count += len(evidence) - before_deploy
-                                for cluster_name in iter_argocd_destination_cluster_names(
-                                    config_path
-                                ):
-                                    environment = infer_environment_from_path(
-                                        _config_relative_path(config_path, target_root)
-                                    )
-                                    platform_id = infer_gitops_platform_id(
-                                        repo_name=checkout.repo_name,
-                                        repo_slug=checkout.repo_slug,
-                                        content=content,
-                                        platform_name=cluster_name,
-                                        environment=environment,
-                                        locator=f"cluster/{cluster_name}",
-                                    )
-                                    if platform_id is None:
-                                        continue
-                                    for source_entry, source_alias in source_matches:
-                                        before_runtime = len(evidence)
-                                        append_relationship_evidence(
-                                            evidence=evidence,
-                                            seen=seen,
-                                            source_repo_id=source_entry.repo_id,
-                                            target_repo_id=None,
-                                            source_entity_id=source_entry.repo_id,
-                                            target_entity_id=platform_id,
-                                            evidence_kind="ARGOCD_DESTINATION_PLATFORM",
-                                            relationship_type="RUNS_ON",
-                                            confidence=0.98,
-                                            rationale=(
-                                                "ArgoCD ApplicationSet targets the runtime platform"
-                                            ),
-                                            path=file_path,
-                                            extractor="argocd",
-                                            extra_details={
-                                                "control_plane_repo_id": checkout.logical_repo_id,
-                                                "config_repo_id": entry.repo_id,
-                                                "config_path": str(
-                                                    _config_relative_path(
-                                                        config_path, target_root
-                                                    )
-                                                ),
-                                                "deployed_repo_id": source_entry.repo_id,
-                                                "deployed_repo_match": source_alias,
-                                                "repo_url": repo_url,
-                                                "discovery_path": discovery_path,
-                                                "cluster_name": cluster_name,
-                                                "environment": environment,
-                                            },
-                                        )
-                                        runtime_count += len(evidence) - before_runtime
-        if argocd_span is not None:
-            argocd_span.set_attribute("pcg.relationships.evidence_count", len(evidence))
-            argocd_span.set_attribute(
-                "pcg.relationships.discovery_evidence_count",
-                discovery_count,
-            )
-            argocd_span.set_attribute(
-                "pcg.relationships.deploy_source_evidence_count",
-                deploy_source_count,
-            )
-            argocd_span.set_attribute(
-                "pcg.relationships.runtime_evidence_count",
-                runtime_count,
-            )
-    return evidence
-
-
 def _append_repo_deploy_source_evidence(
     *,
     evidence: list[RelationshipEvidenceFact],
@@ -422,14 +249,11 @@ def _append_matched_evidence(
     extractor: str,
     matched_value: str,
     matched_alias: str,
-    extra_details: dict[str, object] | None = None,
 ) -> None:
-    """Append one evidence fact for a concrete repo pair."""
+    """Append one evidence fact for a concrete repository pair."""
 
-    if source_repo_id == target_repo_id:
-        return
     key = (evidence_kind, source_repo_id, target_repo_id, str(path))
-    if key in seen:
+    if key in seen or source_repo_id == target_repo_id:
         return
     seen.add(key)
     evidence.append(
@@ -445,19 +269,9 @@ def _append_matched_evidence(
                 "matched_alias": matched_alias,
                 "matched_value": matched_value,
                 "extractor": extractor,
-                **(extra_details or {}),
             },
         )
     )
-
-
-def _config_relative_path(config_path: Path, target_root: Path) -> Path:
-    """Return the repo-relative path when possible."""
-
-    try:
-        return config_path.relative_to(target_root)
-    except ValueError:
-        return config_path
 
 
 __all__ = ["discover_gitops_evidence"]

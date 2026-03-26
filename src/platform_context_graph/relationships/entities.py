@@ -191,9 +191,10 @@ def platform_from_entity_id(entity_id: str) -> Platform | None:
     except ValueError:
         return None
     normalized_discriminator = None if discriminator == "none" else discriminator
+    display_name = _platform_display_name(normalized_discriminator)
     return Platform(
         entity_id=entity_id,
-        name=normalized_discriminator,
+        name=display_name,
         details={},
         kind=kind if kind != "none" else "",
         provider=None if provider == "none" else provider,
@@ -201,6 +202,18 @@ def platform_from_entity_id(entity_id: str) -> Platform | None:
         region=None if region == "none" else region,
         locator=normalized_discriminator,
     )
+
+
+def _platform_display_name(locator_or_name: str | None) -> str | None:
+    """Return a human-readable platform name from a stored discriminator."""
+
+    if locator_or_name is None:
+        return None
+    if "/" in locator_or_name:
+        return locator_or_name.rsplit("/", 1)[-1] or locator_or_name
+    if ":" in locator_or_name:
+        return locator_or_name.rsplit(":", 1)[-1] or locator_or_name
+    return locator_or_name
 
 
 def canonical_workload_subject_id(

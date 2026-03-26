@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...runtime.status_store import get_repository_coverage as get_runtime_repository_coverage
 from ...utils.debug_log import emit_log_call, warning_logger
 from .common import canonical_repository_ref, resolve_repository
-from .coverage_data import coverage_summary_from_row
-from .graph_counts import repository_graph_counts, repository_scope, repository_scope_predicate
+from .graph_counts import (
+    repository_graph_counts,
+    repository_scope,
+    repository_scope_predicate,
+)
+from .relationship_summary import build_relationship_summary
 
 LANGUAGE_BY_EXTENSION = {
     "py": "python",
@@ -106,9 +109,8 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         **scope,
     ).data()
     ecosystem = _fetch_ecosystem(session, repo)
-    coverage_summary = coverage_summary_from_row(
-        get_runtime_repository_coverage(repo_id=repo_ref["id"])
-    )
+    relationship_summary = build_relationship_summary(session, repo_ref)
+    coverage_summary = relationship_summary["coverage"]
     if (
         coverage_summary is not None
         and coverage_summary.get("completeness_state") != "complete"
@@ -147,9 +149,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
             coverage_summary["run_id"] if coverage_summary is not None else None
         ),
         "index_status": (
-            coverage_summary["index_status"]
-            if coverage_summary is not None
-            else None
+            coverage_summary["index_status"] if coverage_summary is not None else None
         ),
     }
     if coverage_summary is not None:
@@ -177,6 +177,18 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
             "entry_points": entry_points,
         },
         "coverage": coverage_summary,
+        "platforms": relationship_summary["platforms"],
+        "deploys_from": relationship_summary["deploys_from"],
+        "discovers_config_in": relationship_summary["discovers_config_in"],
+        "provisioned_by": relationship_summary["provisioned_by"],
+        "provisions_dependencies_for": relationship_summary[
+            "provisions_dependencies_for"
+        ],
+        "iac_relationships": relationship_summary["iac_relationships"],
+        "deployment_chain": relationship_summary["deployment_chain"],
+        "environments": relationship_summary["environments"],
+        "summary": relationship_summary["summary"],
+        "limitations": relationship_summary["limitations"],
         "infrastructure": infrastructure,
         "relationships": relationships,
         "ecosystem": ecosystem,

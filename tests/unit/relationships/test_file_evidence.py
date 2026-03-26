@@ -484,3 +484,100 @@ destinationClusterName: bg-qa
     pairs = {(item.evidence_kind, item.relationship_type) for item in evidence}
     assert ("ARGOCD_APPLICATIONSET_DISCOVERY", "DISCOVERS_CONFIG_IN") in pairs
     assert ("ARGOCD_DESTINATION_PLATFORM", "RUNS_ON") in pairs
+
+
+def test_discover_checkout_file_evidence_materializes_workload_subject_for_non_repo_argocd_deployable(
+    tmp_path: Path,
+) -> None:
+    """Non-repo ArgoCD deployables should use workload-subject entities."""
+
+    argocd_repo = tmp_path / "iac-eks-argocd"
+    config_repo = tmp_path / "iac-eks-observability"
+    helm_repo = tmp_path / "helm-charts"
+    (argocd_repo / "applicationsets").mkdir(parents=True)
+    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa").mkdir(parents=True)
+    helm_repo.mkdir()
+    (argocd_repo / "applicationsets" / "grafana.yaml").write_text(
+        """
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/boatsgroup/iac-eks-observability
+              revision: main
+              files:
+                - path: "argocd/grafana/overlays/*/config.yaml"
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa" / "config.yaml").write_text(
+        """
+addon: grafana
+helm:
+  repoURL: https://github.com/boatsgroup/helm-charts
+destinationClusterName: bg-qa
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+
+    checkouts = build_repository_checkouts([argocd_repo, config_repo, helm_repo])
+
+    evidence = discover_checkout_file_evidence(checkouts)
+
+    deploy = next(item for item in evidence if item.relationship_type == "DEPLOYS_FROM")
+    runtime = next(item for item in evidence if item.relationship_type == "RUNS_ON")
+
+    assert deploy.source_entity_id is not None
+    assert deploy.source_entity_id.startswith("workload-subject:")
+    assert deploy.source_repo_id == checkouts[1].logical_repo_id
+    assert deploy.target_repo_id == checkouts[2].logical_repo_id
+    assert runtime.source_entity_id == deploy.source_entity_id
+    assert runtime.target_entity_id == "platform:eks:aws:cluster/bg-qa:ops-qa:none"
+
+
+def test_discover_checkout_file_evidence_reads_argocd_applicationset_source_repo_urls(
+    tmp_path: Path,
+) -> None:
+    """ApplicationSet template source repo URLs should also emit DEPLOYS_FROM."""
+
+    argocd_repo = tmp_path / "iac-eks-argocd"
+    config_repo = tmp_path / "iac-eks-observability"
+    helm_repo = tmp_path / "helm-charts"
+    (argocd_repo / "applicationsets").mkdir(parents=True)
+    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa").mkdir(parents=True)
+    helm_repo.mkdir()
+    (argocd_repo / "applicationsets" / "grafana.yaml").write_text(
+        """
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/boatsgroup/iac-eks-observability
+              revision: main
+              files:
+                - path: "argocd/grafana/overlays/*/config.yaml"
+  template:
+    spec:
+      source:
+        repoURL: https://github.com/boatsgroup/helm-charts
+        path: charts/grafana
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa" / "config.yaml").write_text(
+        "addon: grafana\n",
+        encoding="utf-8",
+    )
+
+    checkouts = build_repository_checkouts([argocd_repo, config_repo, helm_repo])
+
+    evidence = discover_checkout_file_evidence(checkouts)
+
+    deploy = next(item for item in evidence if item.relationship_type == "DEPLOYS_FROM")
+    assert deploy.target_repo_id == checkouts[2].logical_repo_id

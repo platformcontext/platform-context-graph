@@ -124,6 +124,7 @@ def test_platform_from_entity_id_round_trips_canonical_platforms() -> None:
     assert entity is not None
     assert entity.kind == "ecs"
     assert entity.provider == "aws"
+    assert entity.name == "node10"
     assert entity.environment == "prod"
     assert entity.region == "us-east-1"
     assert entity.locator == "arn:aws:ecs:us-east-1:123456789012:cluster/node10"

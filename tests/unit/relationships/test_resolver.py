@@ -224,10 +224,10 @@ def test_resolve_repository_relationships_derives_generic_dependency_from_provis
     ]
 
 
-def test_resolve_repository_relationships_filters_non_repo_edges_from_repo_pipeline() -> (
+def test_resolve_repository_relationships_preserves_mixed_entity_edges_in_repo_pipeline() -> (
     None
 ):
-    """The repo pipeline should not emit platform-only edges before projection widens."""
+    """The resolver pipeline should retain canonical platform/runtime edges."""
 
     evidence = [
         RelationshipEvidenceFact(
@@ -255,13 +255,40 @@ def test_resolve_repository_relationships_filters_non_repo_edges_from_repo_pipel
     candidates, resolved = resolve_repository_relationships(evidence, assertions=[])
 
     assert [
-        (item.source_repo_id, item.target_repo_id, item.relationship_type)
+        (item.source_entity_id, item.target_entity_id, item.relationship_type)
         for item in candidates
-    ] == []
+    ] == [
+        (
+            "repository:r_app",
+            "platform:ecs:aws:cluster/node10:prod:us-east-1",
+            "RUNS_ON",
+        ),
+        (
+            "repository:r_terraform",
+            "platform:ecs:aws:cluster/node10:prod:us-east-1",
+            "PROVISIONS_PLATFORM",
+        ),
+    ]
     assert [
-        (item.source_repo_id, item.target_repo_id, item.relationship_type)
+        (item.source_entity_id, item.target_entity_id, item.relationship_type)
         for item in resolved
-    ] == []
+    ] == [
+        (
+            "repository:r_app",
+            "platform:ecs:aws:cluster/node10:prod:us-east-1",
+            "RUNS_ON",
+        ),
+        (
+            "repository:r_app",
+            "repository:r_terraform",
+            "DEPENDS_ON",
+        ),
+        (
+            "repository:r_terraform",
+            "platform:ecs:aws:cluster/node10:prod:us-east-1",
+            "PROVISIONS_PLATFORM",
+        ),
+    ]
 
 
 def test_resolve_repository_relationships_rejection_blocks_inferred_edge() -> None:

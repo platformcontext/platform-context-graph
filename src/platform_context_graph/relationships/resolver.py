@@ -60,22 +60,12 @@ def resolve_repository_relationships(
     *,
     inferred_confidence_threshold: float = _INFERRED_CONFIDENCE_THRESHOLD,
 ) -> tuple[list[RelationshipCandidate], list[ResolvedRelationship]]:
-    """Resolve raw evidence plus assertions into repo-backed canonical relationships."""
+    """Resolve raw evidence plus assertions into canonical mixed-entity relationships."""
 
-    candidates, resolved = resolve_entity_relationships(
+    return resolve_entity_relationships(
         evidence_facts,
         assertions,
         inferred_confidence_threshold=inferred_confidence_threshold,
-    )
-    return (
-        [item for item in candidates if item.source_repo_id and item.target_repo_id],
-        [
-            item
-            for item in resolved
-            if item.source_repo_id
-            and item.target_repo_id
-            and "platform_entity_id" not in item.details
-        ],
     )
 
 
