@@ -94,7 +94,9 @@ def test_resolve_repository_relationships_prefers_typed_edges_over_depends_on() 
         ("DEPENDS_ON", 0.99),
         ("DISCOVERS_CONFIG_IN", 0.99),
     ]
-    derived_edge = next(item for item in resolved if item.relationship_type == "DEPENDS_ON")
+    derived_edge = next(
+        item for item in resolved if item.relationship_type == "DEPENDS_ON"
+    )
     assert derived_edge.resolution_source == "derived"
     assert derived_edge.details["derived_from_relationship_types"] == [
         "DISCOVERS_CONFIG_IN"
@@ -127,7 +129,9 @@ def test_resolve_repository_relationships_keeps_multiple_typed_edges_for_same_pa
 
     candidates, resolved = resolve_repository_relationships(evidence, assertions=[])
 
-    assert [(candidate.relationship_type, candidate.confidence) for candidate in candidates] == [
+    assert [
+        (candidate.relationship_type, candidate.confidence) for candidate in candidates
+    ] == [
         ("DEPLOYS_FROM", 0.99),
         ("DISCOVERS_CONFIG_IN", 0.99),
     ]
@@ -136,7 +140,9 @@ def test_resolve_repository_relationships_keeps_multiple_typed_edges_for_same_pa
         ("DEPLOYS_FROM", 0.99),
         ("DISCOVERS_CONFIG_IN", 0.99),
     ]
-    derived_edge = next(item for item in resolved if item.relationship_type == "DEPENDS_ON")
+    derived_edge = next(
+        item for item in resolved if item.relationship_type == "DEPENDS_ON"
+    )
     assert derived_edge.resolution_source == "derived"
     assert derived_edge.details["derived_from_relationship_types"] == [
         "DEPLOYS_FROM",
@@ -170,7 +176,9 @@ def test_resolve_repository_relationships_generic_rejection_blocks_derived_compa
         )
     ]
 
-    _candidates, resolved = resolve_repository_relationships(evidence, assertions=assertions)
+    _candidates, resolved = resolve_repository_relationships(
+        evidence, assertions=assertions
+    )
 
     assert [(item.relationship_type, item.resolution_source) for item in resolved] == [
         ("DEPLOYS_FROM", "inferred")
@@ -195,14 +203,21 @@ def test_resolve_repository_relationships_derives_generic_dependency_from_provis
 
     candidates, resolved = resolve_repository_relationships(evidence, assertions=[])
 
-    assert [(candidate.relationship_type, candidate.confidence) for candidate in candidates] == [
+    assert [
+        (candidate.relationship_type, candidate.confidence) for candidate in candidates
+    ] == [
         ("PROVISIONS_DEPENDENCY_FOR", 0.99),
     ]
-    assert [(item.source_repo_id, item.target_repo_id, item.relationship_type) for item in resolved] == [
+    assert [
+        (item.source_repo_id, item.target_repo_id, item.relationship_type)
+        for item in resolved
+    ] == [
         ("repository:r_app", "repository:r_terraform", "DEPENDS_ON"),
         ("repository:r_terraform", "repository:r_app", "PROVISIONS_DEPENDENCY_FOR"),
     ]
-    derived_edge = next(item for item in resolved if item.relationship_type == "DEPENDS_ON")
+    derived_edge = next(
+        item for item in resolved if item.relationship_type == "DEPENDS_ON"
+    )
     assert derived_edge.resolution_source == "derived"
     assert derived_edge.details["derived_from_relationship_types"] == [
         "PROVISIONS_DEPENDENCY_FOR"

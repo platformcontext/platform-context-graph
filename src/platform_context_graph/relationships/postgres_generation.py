@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from typing import Any, Sequence
 
+from .entities import CanonicalEntity, Platform, Repository, WorkloadSubject
 from .models import (
     RelationshipCandidate,
     RelationshipEvidenceFact,
@@ -22,6 +23,7 @@ def persist_generation_records(
     created_at: datetime,
     digest_fn: Any,
     checkouts: Sequence[RepositoryCheckout],
+    entities: Sequence[CanonicalEntity],
     evidence_facts: Sequence[RelationshipEvidenceFact],
     candidates: Sequence[RelationshipCandidate],
     resolved: Sequence[ResolvedRelationship],
@@ -96,6 +98,57 @@ def persist_generation_records(
         },
     )
 
+    if entities:
+        cursor.executemany(
+            """
+            INSERT INTO relationship_entities (
+                entity_id,
+                entity_type,
+                repository_id,
+                subject_type,
+                kind,
+                provider,
+                name,
+                environment,
+                path,
+                region,
+                locator,
+                details,
+                created_at,
+                updated_at
+            ) VALUES (
+                %(entity_id)s,
+                %(entity_type)s,
+                %(repository_id)s,
+                %(subject_type)s,
+                %(kind)s,
+                %(provider)s,
+                %(name)s,
+                %(environment)s,
+                %(path)s,
+                %(region)s,
+                %(locator)s,
+                %(details)s::jsonb,
+                %(created_at)s,
+                %(updated_at)s
+            )
+            ON CONFLICT (entity_id) DO UPDATE
+            SET entity_type = EXCLUDED.entity_type,
+                repository_id = EXCLUDED.repository_id,
+                subject_type = EXCLUDED.subject_type,
+                kind = EXCLUDED.kind,
+                provider = EXCLUDED.provider,
+                name = EXCLUDED.name,
+                environment = EXCLUDED.environment,
+                path = EXCLUDED.path,
+                region = EXCLUDED.region,
+                locator = EXCLUDED.locator,
+                details = EXCLUDED.details,
+                updated_at = EXCLUDED.updated_at
+            """,
+            [_entity_row(entity=entity, created_at=created_at) for entity in entities],
+        )
+
     if evidence_facts:
         cursor.executemany(
             """
@@ -106,6 +159,8 @@ def persist_generation_records(
                 relationship_type,
                 source_repo_id,
                 target_repo_id,
+                source_entity_id,
+                target_entity_id,
                 confidence,
                 rationale,
                 details,
@@ -117,6 +172,8 @@ def persist_generation_records(
                 %(relationship_type)s,
                 %(source_repo_id)s,
                 %(target_repo_id)s,
+                %(source_entity_id)s,
+                %(target_entity_id)s,
                 %(confidence)s,
                 %(rationale)s,
                 %(details)s::jsonb,
@@ -139,6 +196,8 @@ def persist_generation_records(
                     "relationship_type": fact.relationship_type,
                     "source_repo_id": fact.source_repo_id,
                     "target_repo_id": fact.target_repo_id,
+                    "source_entity_id": fact.source_entity_id or fact.source_repo_id,
+                    "target_entity_id": fact.target_entity_id or fact.target_repo_id,
                     "confidence": fact.confidence,
                     "rationale": fact.rationale,
                     "details": json.dumps(fact.details, sort_keys=True),
@@ -156,6 +215,8 @@ def persist_generation_records(
                 generation_id,
                 source_repo_id,
                 target_repo_id,
+                source_entity_id,
+                target_entity_id,
                 relationship_type,
                 confidence,
                 evidence_count,
@@ -166,6 +227,8 @@ def persist_generation_records(
                 %(generation_id)s,
                 %(source_repo_id)s,
                 %(target_repo_id)s,
+                %(source_entity_id)s,
+                %(target_entity_id)s,
                 %(relationship_type)s,
                 %(confidence)s,
                 %(evidence_count)s,
@@ -185,6 +248,10 @@ def persist_generation_records(
                     "generation_id": generation.generation_id,
                     "source_repo_id": candidate.source_repo_id,
                     "target_repo_id": candidate.target_repo_id,
+                    "source_entity_id": candidate.source_entity_id
+                    or candidate.source_repo_id,
+                    "target_entity_id": candidate.target_entity_id
+                    or candidate.target_repo_id,
                     "relationship_type": candidate.relationship_type,
                     "confidence": candidate.confidence,
                     "evidence_count": candidate.evidence_count,
@@ -202,6 +269,8 @@ def persist_generation_records(
                 generation_id,
                 source_repo_id,
                 target_repo_id,
+                source_entity_id,
+                target_entity_id,
                 relationship_type,
                 confidence,
                 evidence_count,
@@ -212,6 +281,8 @@ def persist_generation_records(
                 %(generation_id)s,
                 %(source_repo_id)s,
                 %(target_repo_id)s,
+                %(source_entity_id)s,
+                %(target_entity_id)s,
                 %(relationship_type)s,
                 %(confidence)s,
                 %(evidence_count)s,
@@ -225,6 +296,8 @@ def persist_generation_records(
                     "generation_id": generation.generation_id,
                     "source_repo_id": item.source_repo_id,
                     "target_repo_id": item.target_repo_id,
+                    "source_entity_id": item.source_entity_id or item.source_repo_id,
+                    "target_entity_id": item.target_entity_id or item.target_repo_id,
                     "relationship_type": item.relationship_type,
                     "confidence": item.confidence,
                     "evidence_count": item.evidence_count,
@@ -248,22 +321,35 @@ def activate_generation_record(
 
     cursor.execute(
         """
+        WITH target AS (
+            SELECT generation_id
+            FROM relationship_generations
+            WHERE generation_id = %(generation_id)s
+              AND scope = %(scope)s
+        )
         UPDATE relationship_generations
-        SET status = 'inactive'
-        WHERE scope = %(scope)s
-          AND status = 'active'
-          AND generation_id <> %(generation_id)s
-        """,
-        {"scope": scope, "generation_id": generation_id},
-    )
-    cursor.execute(
-        """
-        UPDATE relationship_generations
-        SET status = 'active',
-            activated_at = %(activated_at)s
-        WHERE generation_id = %(generation_id)s
+        SET status = CASE
+                WHEN relationship_generations.generation_id = %(generation_id)s
+                    THEN 'active'
+                ELSE 'inactive'
+            END,
+            activated_at = CASE
+                WHEN relationship_generations.generation_id = %(generation_id)s
+                    THEN %(activated_at)s
+                ELSE relationship_generations.activated_at
+            END
+        WHERE EXISTS (SELECT 1 FROM target)
+          AND (
+              relationship_generations.generation_id = %(generation_id)s
+              OR (
+                  relationship_generations.scope = %(scope)s
+                  AND relationship_generations.status = 'active'
+                  AND relationship_generations.generation_id <> %(generation_id)s
+              )
+          )
         """,
         {
+            "scope": scope,
             "generation_id": generation_id,
             "activated_at": activated_at,
         },
@@ -296,3 +382,38 @@ def fetch_active_generation(*, cursor: Any, scope: str) -> ResolutionGeneration 
         run_id=row["run_id"],
         status=row["status"],
     )
+
+
+def _entity_row(*, entity: CanonicalEntity, created_at: datetime) -> dict[str, Any]:
+    """Build one additive entity-registry row for persistence."""
+
+    row: dict[str, Any] = {
+        "entity_id": entity.entity_id,
+        "entity_type": type(entity).__name__,
+        "repository_id": None,
+        "subject_type": None,
+        "kind": None,
+        "provider": None,
+        "name": entity.name or entity.entity_id,
+        "environment": None,
+        "path": None,
+        "region": None,
+        "locator": None,
+        "details": json.dumps(entity.details, sort_keys=True),
+        "created_at": created_at,
+        "updated_at": created_at,
+    }
+    if isinstance(entity, Repository):
+        row["repository_id"] = entity.entity_id
+    elif isinstance(entity, Platform):
+        row["kind"] = entity.kind
+        row["provider"] = entity.provider
+        row["environment"] = entity.environment
+        row["region"] = entity.region
+        row["locator"] = entity.locator
+    elif isinstance(entity, WorkloadSubject):
+        row["repository_id"] = entity.repository_id
+        row["subject_type"] = entity.subject_type
+        row["environment"] = entity.environment
+        row["path"] = entity.path
+    return row

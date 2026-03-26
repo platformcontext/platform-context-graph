@@ -6,10 +6,11 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 import hashlib
 import threading
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from ..observability import get_observability
 from ..utils.debug_log import emit_log_call, info_logger
+from .entities import CanonicalEntity
 from .models import (
     MetadataAssertion,
     RelationshipAssertion,
@@ -45,6 +46,18 @@ def _digest(prefix: str, *parts: str) -> str:
 
     digest = hashlib.sha1("\n".join(parts).encode("utf-8")).hexdigest()[:16]
     return f"{prefix}_{digest}"
+
+
+def repository_entity_id(repo_id: str) -> str:
+    """Return the canonical entity identifier for one repository row."""
+
+    return repo_id
+
+
+def entity_or_repo_identity(row: Mapping[str, Any], side: str) -> str:
+    """Return an explicit entity id or fall back to the repo-backed entity id."""
+
+    return row.get(f"{side}_entity_id") or repository_entity_id(row[f"{side}_repo_id"])
 
 
 class PostgresRelationshipStore:
@@ -89,6 +102,7 @@ class PostgresRelationshipStore:
         scope: str,
         run_id: str | None,
         checkouts: Sequence[RepositoryCheckout],
+        entities: Sequence[CanonicalEntity] = (),
         evidence_facts: Sequence[RelationshipEvidenceFact],
         candidates: Sequence[RelationshipCandidate],
         resolved: Sequence[ResolvedRelationship],
@@ -126,6 +140,7 @@ class PostgresRelationshipStore:
                     created_at=created_at,
                     digest_fn=_digest,
                     checkouts=checkouts,
+                    entities=entities,
                     evidence_facts=evidence_facts,
                     candidates=candidates,
                     resolved=resolved,
@@ -183,6 +198,8 @@ class PostgresRelationshipStore:
                 cursor.execute("""
                     SELECT source_repo_id,
                            target_repo_id,
+                           source_entity_id,
+                           target_entity_id,
                            relationship_type,
                            decision,
                            reason,
@@ -195,6 +212,8 @@ class PostgresRelationshipStore:
                     """
                     SELECT source_repo_id,
                            target_repo_id,
+                           source_entity_id,
+                           target_entity_id,
                            relationship_type,
                            decision,
                            reason,
@@ -210,6 +229,8 @@ class PostgresRelationshipStore:
             RelationshipAssertion(
                 source_repo_id=row["source_repo_id"],
                 target_repo_id=row["target_repo_id"],
+                source_entity_id=entity_or_repo_identity(row, "source"),
+                target_entity_id=entity_or_repo_identity(row, "target"),
                 relationship_type=row["relationship_type"],
                 decision=row["decision"],
                 reason=row["reason"],
@@ -244,6 +265,8 @@ class PostgresRelationshipStore:
                         assertion_id,
                         source_repo_id,
                         target_repo_id,
+                        source_entity_id,
+                        target_entity_id,
                         relationship_type,
                         decision,
                         reason,
@@ -254,6 +277,8 @@ class PostgresRelationshipStore:
                         %(assertion_id)s,
                         %(source_repo_id)s,
                         %(target_repo_id)s,
+                        %(source_entity_id)s,
+                        %(target_entity_id)s,
                         %(relationship_type)s,
                         %(decision)s,
                         %(reason)s,
@@ -271,6 +296,10 @@ class PostgresRelationshipStore:
                         "assertion_id": assertion_id,
                         "source_repo_id": assertion.source_repo_id,
                         "target_repo_id": assertion.target_repo_id,
+                        "source_entity_id": assertion.source_entity_id
+                        or repository_entity_id(assertion.source_repo_id),
+                        "target_entity_id": assertion.target_entity_id
+                        or repository_entity_id(assertion.target_repo_id),
                         "relationship_type": assertion.relationship_type,
                         "decision": assertion.decision,
                         "reason": assertion.reason,
@@ -369,6 +398,8 @@ class PostgresRelationshipStore:
                 """
                 SELECT resolved.source_repo_id,
                        resolved.target_repo_id,
+                       resolved.source_entity_id,
+                       resolved.target_entity_id,
                        resolved.relationship_type,
                        resolved.confidence,
                        resolved.evidence_count,
@@ -389,6 +420,8 @@ class PostgresRelationshipStore:
             ResolvedRelationship(
                 source_repo_id=row["source_repo_id"],
                 target_repo_id=row["target_repo_id"],
+                source_entity_id=entity_or_repo_identity(row, "source"),
+                target_entity_id=entity_or_repo_identity(row, "target"),
                 relationship_type=row["relationship_type"],
                 confidence=row["confidence"],
                 evidence_count=row["evidence_count"],
@@ -420,6 +453,8 @@ class PostgresRelationshipStore:
                 f"""
                 SELECT candidates.source_repo_id,
                        candidates.target_repo_id,
+                       candidates.source_entity_id,
+                       candidates.target_entity_id,
                        candidates.relationship_type,
                        candidates.confidence,
                        candidates.evidence_count,
@@ -438,6 +473,8 @@ class PostgresRelationshipStore:
             RelationshipCandidate(
                 source_repo_id=row["source_repo_id"],
                 target_repo_id=row["target_repo_id"],
+                source_entity_id=entity_or_repo_identity(row, "source"),
+                target_entity_id=entity_or_repo_identity(row, "target"),
                 relationship_type=row["relationship_type"],
                 confidence=row["confidence"],
                 evidence_count=row["evidence_count"],

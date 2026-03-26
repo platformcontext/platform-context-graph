@@ -16,6 +16,23 @@ CREATE TABLE IF NOT EXISTS relationship_checkouts (
 CREATE INDEX IF NOT EXISTS relationship_checkouts_repo_idx
     ON relationship_checkouts (logical_repo_id);
 
+CREATE TABLE IF NOT EXISTS relationship_entities (
+    entity_id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    repository_id TEXT,
+    subject_type TEXT,
+    kind TEXT,
+    provider TEXT,
+    name TEXT NOT NULL,
+    environment TEXT,
+    path TEXT,
+    region TEXT,
+    locator TEXT,
+    details JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS relationship_assertions (
     assertion_id TEXT PRIMARY KEY,
     source_repo_id TEXT NOT NULL,
@@ -30,6 +47,10 @@ CREATE TABLE IF NOT EXISTS relationship_assertions (
 
 CREATE INDEX IF NOT EXISTS relationship_assertions_lookup_idx
     ON relationship_assertions (relationship_type, source_repo_id, target_repo_id);
+
+ALTER TABLE relationship_assertions
+    ADD COLUMN IF NOT EXISTS source_entity_id TEXT,
+    ADD COLUMN IF NOT EXISTS target_entity_id TEXT;
 
 CREATE TABLE IF NOT EXISTS metadata_assertions (
     assertion_id TEXT PRIMARY KEY,
@@ -73,6 +94,10 @@ CREATE TABLE IF NOT EXISTS relationship_evidence_facts (
 CREATE INDEX IF NOT EXISTS relationship_evidence_generation_idx
     ON relationship_evidence_facts (generation_id, relationship_type);
 
+ALTER TABLE relationship_evidence_facts
+    ADD COLUMN IF NOT EXISTS source_entity_id TEXT,
+    ADD COLUMN IF NOT EXISTS target_entity_id TEXT;
+
 CREATE TABLE IF NOT EXISTS relationship_candidates (
     candidate_id TEXT PRIMARY KEY,
     generation_id TEXT NOT NULL,
@@ -87,6 +112,10 @@ CREATE TABLE IF NOT EXISTS relationship_candidates (
 
 CREATE INDEX IF NOT EXISTS relationship_candidates_generation_idx
     ON relationship_candidates (generation_id, relationship_type);
+
+ALTER TABLE relationship_candidates
+    ADD COLUMN IF NOT EXISTS source_entity_id TEXT,
+    ADD COLUMN IF NOT EXISTS target_entity_id TEXT;
 
 CREATE TABLE IF NOT EXISTS resolved_relationships (
     generation_id TEXT NOT NULL,
@@ -103,6 +132,10 @@ CREATE TABLE IF NOT EXISTS resolved_relationships (
 
 CREATE INDEX IF NOT EXISTS resolved_relationships_generation_idx
     ON resolved_relationships (generation_id, relationship_type);
+
+ALTER TABLE resolved_relationships
+    ADD COLUMN IF NOT EXISTS source_entity_id TEXT,
+    ADD COLUMN IF NOT EXISTS target_entity_id TEXT;
 """
 
 __all__ = ["RELATIONSHIP_SCHEMA"]

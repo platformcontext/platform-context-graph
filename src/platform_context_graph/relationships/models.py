@@ -40,6 +40,8 @@ class RelationshipEvidenceFact:
     target_repo_id: str
     confidence: float
     rationale: str
+    source_entity_id: str | None = None
+    target_entity_id: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
 
 
@@ -52,6 +54,8 @@ class RelationshipAssertion:
     relationship_type: str
     decision: str
     reason: str
+    source_entity_id: str | None = None
+    target_entity_id: str | None = None
     actor: str = "system"
 
 
@@ -76,6 +80,8 @@ class RelationshipCandidate:
     confidence: float
     evidence_count: int
     rationale: str
+    source_entity_id: str | None = None
+    target_entity_id: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
 
 
@@ -90,6 +96,8 @@ class ResolvedRelationship:
     evidence_count: int
     rationale: str
     resolution_source: str
+    source_entity_id: str | None = None
+    target_entity_id: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
 
 
