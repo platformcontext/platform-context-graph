@@ -72,7 +72,16 @@ def materialize_runtime_platform(
     if platform_kind is None:
         return
     platform_name = environment.strip()
-    platform_id = f"platform:{platform_kind}:{platform_name}"
+    platform_id = canonical_platform_id(
+        kind=platform_kind,
+        provider=None,
+        name=platform_name,
+        environment=environment,
+        region=None,
+        locator=None,
+    )
+    if platform_id is None:
+        return
     session.run(
         """
         MATCH (i:WorkloadInstance {id: $instance_id})
@@ -81,7 +90,9 @@ def materialize_runtime_platform(
             p.name = $platform_name,
             p.kind = $platform_kind,
             p.provider = $platform_provider,
-            p.environment = $environment
+            p.environment = $environment,
+            p.region = $platform_region,
+            p.locator = $platform_locator
         MERGE (i)-[rel:RUNS_ON]->(p)
         SET rel.confidence = 1.0,
             rel.reason = 'Workload instance runs on inferred platform'
@@ -90,8 +101,10 @@ def materialize_runtime_platform(
         instance_id=instance_id,
         platform_id=platform_id,
         platform_kind=platform_kind,
+        platform_locator=None,
         platform_name=platform_name,
         platform_provider=None,
+        platform_region=None,
     )
 
 
@@ -145,15 +158,21 @@ def materialize_infrastructure_platforms(session: Any) -> None:
             SET p.type = 'platform',
                 p.name = $platform_name,
                 p.kind = $platform_kind,
-                p.provider = $platform_provider
+                p.provider = $platform_provider,
+                p.environment = $platform_environment,
+                p.region = $platform_region,
+                p.locator = $platform_locator
             MERGE (repo)-[rel:PROVISIONS_PLATFORM]->(p)
             SET rel.confidence = 0.98,
                 rel.reason = 'Terraform cluster and module data declare platform provisioning'
             """,
+            platform_environment=descriptor["platform_environment"],
             platform_id=descriptor["platform_id"],
             platform_kind=descriptor["platform_kind"],
+            platform_locator=descriptor["platform_locator"],
             platform_name=descriptor["platform_name"],
             platform_provider=descriptor["platform_provider"],
+            platform_region=descriptor["platform_region"],
             repo_id=row.get("repo_id"),
         )
 
@@ -230,7 +249,7 @@ def infer_gitops_platform_id(
     )
     if platform_kind is None:
         return None
-    return _canonical_platform_id(
+    return canonical_platform_id(
         kind=platform_kind,
         provider="aws" if platform_kind in {"ecs", "eks"} else None,
         name=platform_name,
@@ -240,7 +259,7 @@ def infer_gitops_platform_id(
     )
 
 
-def _canonical_platform_id(
+def canonical_platform_id(
     *,
     kind: str,
     provider: str | None,
@@ -330,12 +349,25 @@ def infer_infrastructure_platform_descriptor(
     )
     if platform_name is None:
         return None
-    platform_id = f"platform:{platform_provider or 'unknown'}:{platform_kind}:{platform_name}"
+    platform_locator = f"cluster/{platform_name}"
+    platform_id = canonical_platform_id(
+        kind=platform_kind,
+        provider=platform_provider,
+        name=platform_name,
+        environment=None,
+        region=None,
+        locator=platform_locator,
+    )
+    if platform_id is None:
+        return None
     return {
         "platform_id": platform_id,
         "platform_kind": platform_kind,
+        "platform_environment": None,
+        "platform_locator": platform_locator,
         "platform_name": platform_name,
         "platform_provider": platform_provider,
+        "platform_region": None,
     }
 
 

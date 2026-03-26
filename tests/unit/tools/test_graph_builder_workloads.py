@@ -173,15 +173,17 @@ def test_materialize_workloads_creates_runtime_platform_relationships() -> None:
 
     assert platform_merge == {
         "environment": "bg-qa",
-        "platform_id": "platform:kubernetes:bg-qa",
+        "platform_id": "platform:kubernetes:none:bg-qa:bg-qa:none",
         "platform_kind": "kubernetes",
+        "platform_locator": None,
         "platform_name": "bg-qa",
         "platform_provider": None,
+        "platform_region": None,
         "instance_id": "workload-instance:api-node-search:bg-qa",
     }
     assert runs_on_edge["environment"] == "bg-qa"
     assert runs_on_edge["instance_id"] == "workload-instance:api-node-search:bg-qa"
-    assert runs_on_edge["platform_id"] == "platform:kubernetes:bg-qa"
+    assert runs_on_edge["platform_id"] == "platform:kubernetes:none:bg-qa:bg-qa:none"
 
 
 def test_materialize_workloads_creates_infrastructure_platform_relationships(
@@ -251,14 +253,43 @@ def test_materialize_workloads_creates_infrastructure_platform_relationships(
     )
 
     assert platform_merge == {
-        "platform_id": "platform:aws:ecs:node10",
+        "platform_environment": None,
+        "platform_id": "platform:ecs:aws:cluster/node10:none:none",
+        "platform_kind": "ecs",
+        "platform_locator": "cluster/node10",
+        "platform_name": "node10",
+        "platform_provider": "aws",
+        "platform_region": None,
+        "repo_id": "repository:r_9a1b2c3d",
+    }
+    assert provisions_edge["platform_id"] == "platform:ecs:aws:cluster/node10:none:none"
+    assert provisions_edge["repo_id"] == "repository:r_9a1b2c3d"
+
+
+def test_infer_infrastructure_platform_descriptor_returns_canonical_cluster_locator() -> (
+    None
+):
+    """Explicit cluster resources should yield canonical platform ids."""
+
+    descriptor = infer_infrastructure_platform_descriptor(
+        data_types=[],
+        data_names=[],
+        module_sources=[],
+        module_names=[],
+        resource_types=["aws_ecs_cluster"],
+        resource_names=["node10"],
+        repo_name="terraform-stack-ecs",
+    )
+
+    assert descriptor == {
+        "platform_id": "platform:ecs:aws:cluster/node10:none:none",
         "platform_kind": "ecs",
         "platform_name": "node10",
         "platform_provider": "aws",
-        "repo_id": "repository:r_9a1b2c3d",
+        "platform_locator": "cluster/node10",
+        "platform_environment": None,
+        "platform_region": None,
     }
-    assert provisions_edge["platform_id"] == "platform:aws:ecs:node10"
-    assert provisions_edge["repo_id"] == "repository:r_9a1b2c3d"
 
 
 def test_infer_infrastructure_platform_descriptor_ignores_service_stack_cluster_refs() -> (
