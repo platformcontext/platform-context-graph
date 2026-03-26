@@ -58,6 +58,9 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
         context["api_surface"] = api_surface
     if hostnames:
         context["hostnames"] = hostnames
+        observed_environments = _observed_config_environments(hostnames)
+        if observed_environments:
+            context["observed_config_environments"] = observed_environments
         _remove_limitation(context, "dns_unknown")
     return context
 
@@ -129,7 +132,7 @@ def _extract_hostnames(
             discovers_config_in=discovers_config_in,
         )
     )
-    return _dedupe_dict_rows(hostnames)
+    return _dedupe_hostname_rows(hostnames)
 
 
 def _extract_related_config_hostnames(
@@ -379,6 +382,57 @@ def _dedupe_dict_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen.add(key)
         deduped.append(row)
     return deduped
+
+
+def _dedupe_hostname_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return one preferred hostname record per hostname in input order."""
+
+    preferred: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for row in rows:
+        hostname = str(row.get("hostname") or "").strip()
+        if not hostname:
+            continue
+        if hostname not in preferred:
+            order.append(hostname)
+            preferred[hostname] = row
+            continue
+        if _hostname_priority(row) > _hostname_priority(preferred[hostname]):
+            preferred[hostname] = row
+    return [preferred[hostname] for hostname in order]
+
+
+def _hostname_priority(row: dict[str, Any]) -> int:
+    """Return the preference score for one hostname record."""
+
+    score = 0
+    if row.get("environment"):
+        score += 100
+    if row.get("service_repo"):
+        score += 20
+    if row.get("visibility") == "internal":
+        score += 10
+    relative_path = str(row.get("relative_path") or "")
+    if relative_path.endswith((".json", ".yaml", ".yml")):
+        score += 5
+    return score
+
+
+def _observed_config_environments(rows: list[dict[str, Any]]) -> list[str]:
+    """Return unique environment names observed in hostname-bearing config."""
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for row in rows:
+        environment = row.get("environment")
+        if not isinstance(environment, str) or not environment.strip():
+            continue
+        normalized = environment.strip()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+    return ordered
 
 
 def _dedupe_spec_files(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

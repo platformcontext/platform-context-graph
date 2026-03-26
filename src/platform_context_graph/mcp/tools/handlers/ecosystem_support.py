@@ -299,6 +299,9 @@ def trace_deployment_chain(
         ),
         "deployment_chain": context.get("deployment_chain", []),
         "environments": context.get("environments", []),
+        "observed_config_environments": context.get(
+            "observed_config_environments", []
+        ),
         "api_surface": context.get("api_surface", {}),
         "hostnames": context.get("hostnames", []),
         "limitations": limitations,

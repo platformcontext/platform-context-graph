@@ -54,6 +54,7 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         "cypress.config.ts": (
             "baseUrl: 'https://api-node-boats.qa.bgrp.io'\n"
             "baseUrl: 'https://api-node-boats.prod.bgrp.io'\n"
+            "baseUrl: 'https://api-node-boats.preview.bgrp.io'\n"
         ),
     }
 
@@ -122,14 +123,7 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             "visibility": "public",
         },
         {
-            "hostname": "api-node-boats.qa.bgrp.io",
-            "environment": None,
-            "source_repo": "api-node-boats",
-            "relative_path": "cypress.config.ts",
-            "visibility": "public",
-        },
-        {
-            "hostname": "api-node-boats.prod.bgrp.io",
+            "hostname": "api-node-boats.preview.bgrp.io",
             "environment": None,
             "source_repo": "api-node-boats",
             "relative_path": "cypress.config.ts",
@@ -144,3 +138,4 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             "visibility": "internal",
         },
     ]
+    assert result["observed_config_environments"] == ["qa", "production", "bg-qa"]

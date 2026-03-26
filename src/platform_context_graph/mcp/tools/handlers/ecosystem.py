@@ -186,6 +186,9 @@ def get_repo_summary(
             "provisions_dependencies_for", []
         ),
         "environments": context.get("environments", []),
+        "observed_config_environments": context.get(
+            "observed_config_environments", []
+        ),
         "api_surface": context.get("api_surface", {}),
         "hostnames": context.get("hostnames", []),
         "limitations": limitations,
