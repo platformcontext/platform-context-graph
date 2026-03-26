@@ -47,6 +47,7 @@ DEFAULT_CONFIG = {
     "SCIP_INDEXER": "false",
     "SCIP_LANGUAGES": "python,typescript,go,rust,java",
     "SKIP_EXTERNAL_RESOLUTION": "false",
+    "INDEX_JSON": "true",
     "INDEX_YAML": "true",
     "INDEX_HCL": "true",
     "PCG_IGNORE_DEPENDENCY_DIRS": "true",
@@ -87,6 +88,7 @@ CONFIG_DESCRIPTIONS = {
     "SCIP_INDEXER": "Use SCIP-based indexing for higher accuracy call/inheritance resolution (requires scip-<lang> tools installed)",
     "SCIP_LANGUAGES": "Comma-separated languages to index via SCIP when SCIP_INDEXER=true (python,typescript,go,rust,java)",
     "SKIP_EXTERNAL_RESOLUTION": "Skip resolution attempts for external library method calls (recommended for enterprise large Java/Spring codebases)",
+    "INDEX_JSON": "Index targeted JSON config files (package.json, composer.json, tsconfig.json, and JSON CloudFormation templates)",
     "INDEX_YAML": "Index YAML infrastructure files (K8s, ArgoCD, Crossplane, Helm, Kustomize)",
     "INDEX_HCL": "Index HCL/Terraform infrastructure files (.tf, .hcl)",
     "ECOSYSTEM_MANIFEST_PATH": "Path to ecosystem dependency-graph.yaml manifest",
@@ -111,6 +113,7 @@ CONFIG_VALIDATORS = {
     "SKIP_EXTERNAL_RESOLUTION": ["true", "false"],
     "PCG_HONOR_GITIGNORE": ["true", "false"],
     "PCG_IGNORE_DEPENDENCY_DIRS": ["true", "false"],
+    "INDEX_JSON": ["true", "false"],
     "INDEX_YAML": ["true", "false"],
     "INDEX_HCL": ["true", "false"],
 }

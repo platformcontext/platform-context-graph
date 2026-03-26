@@ -36,6 +36,7 @@ _LANGUAGE_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
     "perl": (".languages.perl", "PerlTreeSitterParser"),
     "elixir": (".languages.elixir", "ElixirTreeSitterParser"),
     "hcl": (".languages.hcl_terraform", "HCLTerraformParser"),
+    "json": (".languages.json_config", "JSONConfigTreeSitterParser"),
     "dockerfile": (".languages.dockerfile", "DockerfileTreeSitterParser"),
 }
 _EXTENSION_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
@@ -186,6 +187,8 @@ def build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
     if (get_config_value_fn("INDEX_HCL") or "true").lower() == "true":
         _add_tree_sitter_parser(parsers, ".tf", "hcl")
         _add_tree_sitter_parser(parsers, ".hcl", "hcl")
+    if (get_config_value_fn("INDEX_JSON") or "true").lower() == "true":
+        _add_tree_sitter_parser(parsers, ".json", "json")
     try:
         parsers[DOCKERFILE_PARSER_KEY] = TreeSitterParser("dockerfile")
     except ValueError as exc:

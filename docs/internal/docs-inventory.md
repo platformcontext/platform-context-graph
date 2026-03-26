@@ -74,6 +74,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/languages/crossplane.md` | Crossplane parser spec | active |
 | `docs/docs/languages/kubernetes.md` | Kubernetes parser spec | active |
 | `docs/docs/languages/cloudformation.md` | CloudFormation parser spec | active |
+| `docs/docs/languages/json.md` | JSON config parser spec | active |
 
 ## Internal docs
 

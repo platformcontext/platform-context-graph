@@ -128,6 +128,16 @@ def test_build_parser_registry_uses_tree_sitter_for_hcl() -> None:
     assert registry[".tf"].language_name == "hcl"
 
 
+def test_build_parser_registry_uses_tree_sitter_for_json() -> None:
+    """JSON config files should be registered through the tree-sitter wrapper."""
+
+    registry = graph_builder_parsers.build_parser_registry(lambda key: "true")
+
+    assert ".json" in registry
+    assert registry[".json"].__class__.__name__ == "TreeSitterParser"
+    assert registry[".json"].language_name == "json"
+
+
 def test_parse_file_uses_structured_parser_for_dockerfile(tmp_path: Path) -> None:
     """Direct parsing should extract Dockerfile structure and keep dockerfile language."""
 

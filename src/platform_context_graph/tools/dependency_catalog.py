@@ -20,6 +20,7 @@ _DEPENDENCY_ROOTS_BY_ECOSYSTEM: Final[dict[str, tuple[str, ...]]] = {
     "helm": (),
     "java": (),
     "javascript": ("node_modules", "bower_components", "jspm_packages"),
+    "json": ("node_modules", "bower_components", "jspm_packages", "vendor"),
     "kotlin": (),
     "kubernetes": (),
     "kustomize": (),
