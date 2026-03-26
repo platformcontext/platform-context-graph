@@ -62,6 +62,7 @@ nav:
     - ".pcgignore": reference/pcgignore.md
     - Troubleshooting: reference/troubleshooting.md
   - Project:
+    - Why PCG: why-pcg.md
     - Use Cases: use-cases.md
     - Roadmap: roadmap.md
     - Contributing: contributing.md

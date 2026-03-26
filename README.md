@@ -18,6 +18,29 @@
   <img src="https://img.shields.io/badge/helm-OCI-0F1689?style=flat-square&logo=helm&logoColor=white" alt="Helm OCI Chart">
 </p>
 
+## Why Teams Use PCG
+
+Your AI assistant can read your code. It cannot see the Terraform that provisions your database, the ArgoCD application that deploys your service, the three other repos whose workloads share that RDS instance, or the queue consumer that breaks when you change an API contract. Engineers fill that gap by hand — switching between repos, cloud consoles, IaC files, and the person who set it all up two years ago.
+
+PlatformContextGraph builds one queryable graph across source code, Terraform, Helm, Kubernetes, ArgoCD, Crossplane, CloudFormation, and running workloads. Then it exposes that graph through CLI, MCP, and HTTP API so both engineers and AI assistants can trace dependencies, assess blast radius, and compare environments before they ship.
+
+**What you can ask:**
+
+- _"What infrastructure does this service depend on?"_ → `trace_deployment_chain` walks ArgoCD apps, K8s resources, and Terraform modules.
+- _"What breaks if I change this?"_ → `find_blast_radius` returns transitive impacts across repos and infrastructure.
+- _"How does prod differ from staging for this workload?"_ → `compare_environments` surfaces resource and config drift.
+- _"Trace this RDS instance back to the code that defines it."_ → `trace_resource_to_code` follows the graph from cloud resource to repo.
+
+**Who uses it:**
+
+- **Backend engineers** — trace callers, dependencies, workloads, and change surface before modifying a service.
+- **Platform / DevOps / SRE** — trace workloads to infrastructure, find shared resources, compare environments with real context.
+- **New engineers** — get repo walkthroughs, deployment context, and infrastructure relationships without starting from zero.
+
+Open source. MIT licensed. Self-hosted. No telemetry. [30+ language parsers](docs/docs/contributing-language-support.md), first-class IaC support, extensible by design.
+
+[Why PCG →](docs/docs/why-pcg.md) · [Quickstart →](docs/docs/getting-started/quickstart.md) · [MCP Guide →](docs/docs/guides/mcp-guide.md)
+
 ## What is this
 
 PlatformContextGraph started as a fork of [CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext), which builds a graph of source code relationships for AI-assisted development. That was a good starting point, but we needed more. PlatformContextGraph is a **Code-to-cloud context graph** for teams that need to connect source code, infrastructure, and running workloads in one place.
