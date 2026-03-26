@@ -1,0 +1,23 @@
+src/platform_context_graph/relationships/models.py
+  63028f0eefe76a85 39-40,52-53,77-78,92-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "17bb29e2c6421e0c564ec1140f84c6569bfac256",
+  "prompts": {
+    "63028f0eefe76a85": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2b14-8b9c-7f83-be1f-e6dff3c7f19d",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 8,
+      "total_deletions": 8,
+      "accepted_lines": 8,
+      "overriden_lines": 0
+    }
+  }
+}
