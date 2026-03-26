@@ -26,16 +26,33 @@ PlatformContextGraph builds one queryable graph across source code, Terraform, H
 
 **What you can ask:**
 
-- _"What infrastructure does this service depend on?"_ → `trace_deployment_chain` walks ArgoCD apps, K8s resources, and Terraform modules.
-- _"What breaks if I change this?"_ → `find_blast_radius` returns transitive impacts across repos and infrastructure.
-- _"How does prod differ from staging for this workload?"_ → `compare_environments` surfaces resource and config drift.
-- _"Trace this RDS instance back to the code that defines it."_ → `trace_resource_to_code` follows the graph from cloud resource to repo.
+_Code understanding & search:_
+
+- _"Who calls `process_payment` across all indexed repos?"_ → `analyze_code_relationships`
+- _"What implements this interface?"_ → `find_code`
+- _"Show me the most complex functions in this repo"_ → `find_most_complex_functions`
+- _"What code is dead — defined but never called?"_ → `find_dead_code`
+
+_Change impact & safety:_
+
+- _"What breaks if I change this service?"_ → `find_blast_radius`
+- _"What's the blast radius of modifying this Terraform module?"_ → `find_change_surface`
+- _"Explain how these two repos are connected"_ → `explain_dependency_path`
+
+_Infrastructure & deployment tracing:_
+
+- _"What infrastructure does this service depend on?"_ → `trace_deployment_chain`
+- _"Trace this RDS instance back to the code that defines it"_ → `trace_resource_to_code`
+- _"How does prod differ from staging for this workload?"_ → `compare_environments`
+- _"What workloads share this database?"_ → `find_infra_resources` / `analyze_infra_relationships`
 
 **Who uses it:**
 
-- **Backend engineers** — trace callers, dependencies, workloads, and change surface before modifying a service.
-- **Platform / DevOps / SRE** — trace workloads to infrastructure, find shared resources, compare environments with real context.
-- **New engineers** — get repo walkthroughs, deployment context, and infrastructure relationships without starting from zero.
+- **Software engineers** — callers, callees, dead code, complexity hotspots, and blast radius before you merge.
+- **Platform / DevOps / SRE** — deployment chains, shared infrastructure, environment comparison, incident tracing.
+- **Security & compliance** — trace dependencies across repos, find what services access a shared resource, audit infrastructure relationships.
+- **Architects & tech leads** — ecosystem overview, cross-repo dependency health, complexity hotspots, change surface analysis.
+- **New engineers** — repo and service context, dependency explanations, deployment topology without tribal knowledge.
 
 Open source. MIT licensed. Self-hosted. No telemetry. [30+ language parsers](docs/docs/contributing-language-support.md), first-class IaC support, extensible by design.
 

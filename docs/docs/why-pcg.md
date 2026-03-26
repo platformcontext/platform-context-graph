@@ -36,17 +36,25 @@ Key capabilities no other open source tool combines:
 
 ## Who It's For
 
-### Backend engineers
+### Software engineers
 
-Before modifying a service, you need to understand callers, dependencies, workloads, downstream consumers, and likely blast radius. PCG answers these questions from the graph instead of requiring manual investigation across repos and IaC.
+Before modifying a service, you need to understand callers, callees, dependencies, downstream consumers, and likely blast radius. PCG answers these questions from the graph instead of requiring manual investigation across repos and IaC. `analyze_code_relationships` traces who calls what. `find_code` locates implementations across indexed repos. `find_dead_code` flags definitions with no callers. `find_most_complex_functions` surfaces complexity hotspots before they become incidents. `find_blast_radius` shows transitive impacts across repos and infrastructure boundaries.
 
 ### Platform / DevOps / SRE
 
-Platform teams are constantly asked how workloads connect to infrastructure, what is shared, and what differs between environments. PCG gives you — and the AI assistants your developers use — a real answer instead of tribal knowledge.
+Platform teams are constantly asked how workloads connect to infrastructure, what is shared, and what differs between environments. PCG gives you — and the AI assistants your developers use — a real answer instead of tribal knowledge. `trace_deployment_chain` walks from ArgoCD apps through K8s resources to the repos and code that define them. `compare_environments` diffs the dependency surface between prod and staging. `find_infra_resources` and `analyze_infra_relationships` show what workloads share a database, queue, or secret — before someone changes it.
+
+### Security & compliance
+
+When you need to audit what services access a shared database, trace dependencies across repo boundaries, or understand infrastructure exposure, PCG gives you evidence from the graph instead of asking around. `trace_resource_to_code` follows a cloud resource back to the Terraform module and repository that owns it. `find_infra_resources` shows what workloads touch a shared resource. `search_file_content` finds references across indexed repos. `analyze_infra_relationships` maps infrastructure dependencies for audit and review.
+
+### Architects & tech leads
+
+Large refactors and platform migrations need an ecosystem-level view — not a repo-at-a-time investigation. `get_ecosystem_overview` shows how repos connect across the org. `find_most_complex_functions` identifies complexity hotspots worth addressing. `find_change_surface` scopes the impact of a proposed change before it ships. `explain_dependency_path` answers "why are these two things connected?" with evidence for each hop.
 
 ### New engineers
 
-Onboarding into a complex system usually means interrupting senior engineers for context about deployment topology, shared infrastructure, and cross-service dependencies. PCG lets new team members query that context directly and get grounded answers from AI assistants on day one.
+Onboarding into a complex system usually means interrupting senior engineers for context about deployment topology, shared infrastructure, and cross-service dependencies. PCG lets new team members query that context directly and get grounded answers from AI assistants on day one. `get_repo_context` and `get_service_context` provide structured overviews of what a repo or service does, what it depends on, and how it deploys.
 
 ## Why MCP Matters
 
@@ -59,6 +67,9 @@ The difference: your AI assistant stops guessing from a single file and starts q
 Questions that work today:
 
 - "Who calls this function across all indexed repos?"
+- "What implements this interface?"
+- "Show me the most complex functions in this service"
+- "What code is dead in this repo?"
 - "What workload uses this queue in prod?"
 - "Trace this RDS instance back to the Terraform module and the repos that reference it."
 - "What changes if I modify this service?"
