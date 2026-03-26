@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable
 
 _NON_PLATFORM_IDENTIFIERS = {
@@ -31,6 +32,28 @@ _NON_CLUSTER_MODULE_PATTERNS = (
     "ecs-application/aws",
     "iam-role-for-service-accounts-eks",
 )
+_TERRAFORM_PLATFORM_KIND_PATTERNS = {
+    "ecs": (_ECS_CLUSTER_MODULE_PATTERNS, ("aws_ecs_cluster",)),
+    "eks": (_EKS_CLUSTER_MODULE_PATTERNS, ("aws_eks_cluster",)),
+}
+_TERRAFORM_CLUSTER_NAME_RE = re.compile(r'\bcluster_name\b\s*=\s*"([^"]+)"', re.IGNORECASE)
+_TERRAFORM_NAME_RE = re.compile(r'\bname\b\s*=\s*"([^"]+)"', re.IGNORECASE)
+_GITOPS_EXPLICIT_PLATFORM_KEYS = {
+    "destinationClusterName",
+    "destinationCluster",
+    "clusterName",
+    "cluster",
+    "cluster_name",
+}
+
+
+def _normalize_token(value: str | None) -> str | None:
+    """Return a lower-cased trimmed token or ``None`` when empty."""
+
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    return normalized or None
 
 
 def materialize_runtime_platform(
@@ -146,6 +169,111 @@ def infer_runtime_platform_kind(resource_kinds: Iterable[str]) -> str | None:
     return None
 
 
+def infer_terraform_platform_kind(content: str) -> str | None:
+    """Infer a Terraform platform kind from portable cluster/module signals."""
+
+    lower_content = content.lower()
+    for kind, (_, resource_patterns) in _TERRAFORM_PLATFORM_KIND_PATTERNS.items():
+        if any(resource_pattern in lower_content for resource_pattern in resource_patterns):
+            return kind
+    if any(pattern in lower_content for pattern in _ECS_CLUSTER_MODULE_PATTERNS):
+        return "ecs"
+    if any(pattern in lower_content for pattern in _EKS_CLUSTER_MODULE_PATTERNS):
+        return "eks"
+    return None
+
+
+def extract_terraform_platform_name(content: str) -> str | None:
+    """Extract a stable Terraform platform name from cluster-like fields."""
+
+    for pattern in (_TERRAFORM_CLUSTER_NAME_RE, _TERRAFORM_NAME_RE):
+        match = pattern.search(content)
+        if not match:
+            continue
+        candidate = match.group(1).strip()
+        if candidate and candidate.lower() not in _NON_PLATFORM_IDENTIFIERS:
+            return candidate
+    return None
+
+
+def infer_gitops_platform_kind(*, repo_name: str, repo_slug: str | None, content: str) -> str | None:
+    """Infer a platform kind from portable GitOps control-plane signals."""
+
+    normalized_name = repo_name.lower()
+    normalized_slug = (repo_slug or "").lower()
+    lower_content = content.lower()
+    if "eks" in normalized_name or "eks" in normalized_slug:
+        return "eks"
+    if "ecs" in normalized_name or "ecs" in normalized_slug:
+        return "ecs"
+    if any(key.lower() in lower_content for key in _GITOPS_EXPLICIT_PLATFORM_KEYS):
+        return "kubernetes"
+    return None
+
+
+def infer_gitops_platform_id(
+    *,
+    repo_name: str,
+    repo_slug: str | None,
+    content: str,
+    platform_name: str,
+    environment: str | None = None,
+    region: str | None = None,
+    locator: str | None = None,
+) -> str | None:
+    """Build a canonical platform id from GitOps repo metadata and destination config."""
+
+    platform_kind = infer_gitops_platform_kind(
+        repo_name=repo_name,
+        repo_slug=repo_slug,
+        content=content,
+    )
+    if platform_kind is None:
+        return None
+    return _canonical_platform_id(
+        kind=platform_kind,
+        provider="aws" if platform_kind in {"ecs", "eks"} else None,
+        name=platform_name,
+        environment=environment,
+        region=region,
+        locator=locator,
+    )
+
+
+def _canonical_platform_id(
+    *,
+    kind: str,
+    provider: str | None,
+    name: str | None,
+    environment: str | None,
+    region: str | None,
+    locator: str | None,
+) -> str | None:
+    """Build a canonical platform identifier without importing relationships."""
+
+    normalized_kind = _normalize_token(kind)
+    normalized_provider = _normalize_token(provider)
+    normalized_name = _normalize_token(name)
+    normalized_environment = _normalize_token(environment)
+    normalized_region = _normalize_token(region)
+    normalized_locator = _normalize_token(locator)
+
+    discriminator = normalized_locator or normalized_name
+    if discriminator is None and not (
+        normalized_environment is not None and normalized_region is not None
+    ):
+        return None
+
+    return (
+        "platform:"
+        f"{normalized_kind or 'none'}:"
+        f"{normalized_provider or 'none'}:"
+        f"{discriminator or 'none'}:"
+        f"{normalized_environment or 'none'}:"
+        f"{normalized_region or 'none'}"
+    )
+
+
 def infer_infrastructure_platform_descriptor(
     *,
     data_types: Iterable[str],
@@ -237,6 +365,10 @@ def _choose_platform_name(
 
 __all__ = [
     "infer_infrastructure_platform_descriptor",
+    "extract_terraform_platform_name",
+    "infer_gitops_platform_id",
+    "infer_gitops_platform_kind",
+    "infer_terraform_platform_kind",
     "infer_runtime_platform_kind",
     "materialize_infrastructure_platforms",
     "materialize_runtime_platform",

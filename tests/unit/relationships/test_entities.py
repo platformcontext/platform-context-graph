@@ -11,6 +11,8 @@ from platform_context_graph.relationships.entities import (
     RepositoryEntity,
     WorkloadSubjectEntity,
     canonical_platform_id,
+    platform_from_entity_id,
+    workload_subject_from_entity_id,
 )
 
 
@@ -110,3 +112,34 @@ def test_repository_from_parts_normalizes_remote_identity_and_slug() -> None:
     assert https_repo.remote_url == expected_remote
     assert ssh_repo.repo_slug == expected_slug
     assert https_repo.repo_slug == expected_slug
+
+
+def test_platform_from_entity_id_round_trips_canonical_platforms() -> None:
+    """Canonical platform ids should be parseable back into platform entities."""
+
+    entity = platform_from_entity_id(
+        "platform:ecs:aws:arn:aws:ecs:us-east-1:123456789012:cluster/node10:prod:us-east-1"
+    )
+
+    assert entity is not None
+    assert entity.kind == "ecs"
+    assert entity.provider == "aws"
+    assert entity.environment == "prod"
+    assert entity.region == "us-east-1"
+    assert entity.locator == "arn:aws:ecs:us-east-1:123456789012:cluster/node10"
+
+
+def test_workload_subject_from_entity_id_round_trips_subject_metadata() -> None:
+    """Canonical workload-subject ids should be parseable back into entities."""
+
+    entity = workload_subject_from_entity_id(
+        "workload-subject:repository:r_1234abcd:addon:grafana:ops-qa:"
+        "argocd/grafana/overlays/ops-qa"
+    )
+
+    assert entity is not None
+    assert entity.repository_id == "repository:r_1234abcd"
+    assert entity.subject_type == "addon"
+    assert entity.name == "grafana"
+    assert entity.environment == "ops-qa"
+    assert entity.path == "argocd/grafana/overlays/ops-qa"

@@ -74,6 +74,54 @@ def test_platform_chain_derives_depends_on_from_runs_on_and_provisions_platform(
     assert derived_edge.target_repo_id == "repository:r_terraform_stack_ecs"
 
 
+def test_platform_chain_derives_depends_on_for_eks_platforms() -> None:
+    """RUNS_ON + PROVISIONS_PLATFORM should also derive EKS compatibility edges."""
+
+    _candidates, resolved = resolve_entity_relationships(
+        evidence_facts=[
+            RelationshipEvidenceFact(
+                evidence_kind="TERRAFORM_EKS_CLUSTER",
+                relationship_type="PROVISIONS_PLATFORM",
+                source_repo_id="repository:r_terraform_stack_eks",
+                target_repo_id=None,
+                source_entity_id="repository:r_terraform_stack_eks",
+                target_entity_id="platform:eks:aws:cluster/bg-qa:qa:us-east-1",
+                confidence=0.99,
+                rationale="Terraform provisions the EKS cluster bg-qa",
+            ),
+            RelationshipEvidenceFact(
+                evidence_kind="ARGOCD_DESTINATION_PLATFORM",
+                relationship_type="RUNS_ON",
+                source_repo_id="repository:r_api_node_boats",
+                target_repo_id=None,
+                source_entity_id="repository:r_api_node_boats",
+                target_entity_id="platform:eks:aws:cluster/bg-qa:qa:us-east-1",
+                confidence=0.98,
+                rationale="ArgoCD targets the bg-qa EKS cluster",
+            ),
+        ],
+        assertions=[],
+    )
+
+    assert _resolved_keys(resolved) >= {
+        (
+            "repository:r_terraform_stack_eks",
+            "platform:eks:aws:cluster/bg-qa:qa:us-east-1",
+            "PROVISIONS_PLATFORM",
+        ),
+        (
+            "repository:r_api_node_boats",
+            "platform:eks:aws:cluster/bg-qa:qa:us-east-1",
+            "RUNS_ON",
+        ),
+        (
+            "repository:r_api_node_boats",
+            "repository:r_terraform_stack_eks",
+            "DEPENDS_ON",
+        ),
+    }
+
+
 def test_entity_resolver_does_not_emit_generic_dependency_to_platform_entities() -> None:
     """Generic compatibility edges should stay repo-to-repo, not repo-to-platform."""
 

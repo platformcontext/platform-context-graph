@@ -366,3 +366,121 @@ module "karpenter" {
     checkouts = build_repository_checkouts([infra_repo, service_repo])
 
     assert discover_checkout_file_evidence(checkouts) == []
+
+
+def test_discover_checkout_file_evidence_emits_ecs_platform_evidence(
+    tmp_path: Path,
+) -> None:
+    """Terraform ECS service configuration should emit platform runtime evidence."""
+
+    service_repo = tmp_path / "api-node-boats"
+    infra_repo = tmp_path / "terraform-stack-ecs"
+    service_repo.mkdir()
+    (service_repo / "README.md").write_text("service repo\n", encoding="utf-8")
+    (infra_repo / "shared").mkdir(parents=True)
+    (infra_repo / "shared" / "resources.tf").write_text(
+        """
+resource "aws_ecs_cluster" "node10" {
+  name = "node10"
+}
+
+module "api_node_boats" {
+  source = "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws"
+  name = "api-node-boats"
+  app_repo = "api-node-boats"
+  cluster_name = "node10"
+  service_discovery {
+    cloudmap_namespace = "bg-qa"
+  }
+}
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+
+    checkouts = build_repository_checkouts([infra_repo, service_repo])
+
+    evidence = discover_checkout_file_evidence(checkouts)
+
+    pairs = {(item.evidence_kind, item.relationship_type) for item in evidence}
+    assert ("TERRAFORM_ECS_CLUSTER", "PROVISIONS_PLATFORM") in pairs
+    assert ("TERRAFORM_ECS_SERVICE", "RUNS_ON") in pairs
+    assert ("TERRAFORM_APP_REPO", "PROVISIONS_DEPENDENCY_FOR") in pairs
+
+
+def test_discover_checkout_file_evidence_emits_eks_platform_evidence(
+    tmp_path: Path,
+) -> None:
+    """Terraform EKS cluster configuration should emit platform provisioning evidence."""
+
+    infra_repo = tmp_path / "terraform-stack-eks"
+    service_repo = tmp_path / "api-node-boats"
+    infra_repo.mkdir()
+    service_repo.mkdir()
+    (service_repo / "README.md").write_text("service repo\n", encoding="utf-8")
+    (infra_repo / "shared").mkdir(parents=True)
+    (infra_repo / "shared" / "resources.tf").write_text(
+        """
+resource "aws_eks_cluster" "bg_qa" {
+  name = "bg-qa"
+}
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+
+    checkouts = build_repository_checkouts([infra_repo, service_repo])
+
+    evidence = discover_checkout_file_evidence(checkouts)
+
+    assert [
+        (item.evidence_kind, item.relationship_type) for item in evidence
+    ] == [("TERRAFORM_EKS_CLUSTER", "PROVISIONS_PLATFORM")]
+    assert {item.source_repo_id for item in evidence} == {checkouts[0].logical_repo_id}
+
+
+def test_discover_checkout_file_evidence_emits_argocd_platform_evidence(
+    tmp_path: Path,
+) -> None:
+    """ArgoCD config discovery should also emit platform runtime evidence when explicit."""
+
+    argocd_repo = tmp_path / "iac-eks-argocd"
+    config_repo = tmp_path / "iac-eks-observability"
+    service_repo = tmp_path / "helm-charts"
+    (argocd_repo / "applicationsets").mkdir(parents=True)
+    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa").mkdir(
+        parents=True
+    )
+    service_repo.mkdir()
+    (argocd_repo / "applicationsets" / "grafana.yaml").write_text(
+        """
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/boatsgroup/iac-eks-observability
+              revision: main
+              files:
+                - path: "argocd/grafana/overlays/*/config.yaml"
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa" / "config.yaml").write_text(
+        """
+name: api-node-bw-home
+git:
+  repoURL: https://github.com/boatsgroup/api-node-bw-home
+  overlayPath: argocd/grafana/overlays/ops-qa
+destinationClusterName: bg-qa
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+
+    checkouts = build_repository_checkouts([argocd_repo, config_repo, service_repo])
+
+    evidence = discover_checkout_file_evidence(checkouts)
+
+    pairs = {(item.evidence_kind, item.relationship_type) for item in evidence}
+    assert ("ARGOCD_APPLICATIONSET_DISCOVERY", "DISCOVERS_CONFIG_IN") in pairs
+    assert ("ARGOCD_DESTINATION_PLATFORM", "RUNS_ON") in pairs

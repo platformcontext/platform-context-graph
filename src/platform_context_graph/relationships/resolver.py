@@ -8,6 +8,7 @@ from typing import Any, Sequence
 
 from ..observability import get_observability
 from ..utils.debug_log import emit_log_call, error_logger
+from .entities import CanonicalEntity, Repository, entity_from_id
 from .execution import (
     REPOSITORY_DEPENDENCY_SCOPE,
     build_repository_checkouts,
@@ -18,6 +19,7 @@ from .models import (
     RelationshipAssertion,
     RelationshipCandidate,
     RelationshipEvidenceFact,
+    RepositoryCheckout,
     ResolvedRelationship,
 )
 from .platform_resolution import resolve_entity_relationships
@@ -136,10 +138,17 @@ def resolve_repository_relationships_for_committed_repositories(
                 evidence_facts,
                 assertions,
             )
+            entities = collect_canonical_entities(
+                checkouts=checkouts,
+                evidence_facts=evidence_facts,
+                candidates=candidates,
+                resolved=resolved,
+            )
             generation = store.replace_generation(
                 scope=REPOSITORY_DEPENDENCY_SCOPE,
                 run_id=run_id,
                 checkouts=checkouts,
+                entities=entities,
                 evidence_facts=evidence_facts,
                 candidates=candidates,
                 resolved=resolved,
@@ -152,6 +161,10 @@ def resolve_repository_relationships_for_committed_repositories(
                 resolve_span.set_attribute(
                     "pcg.relationships.checkout_count",
                     len(checkouts),
+                )
+                resolve_span.set_attribute(
+                    "pcg.relationships.entity_count",
+                    len(entities),
                 )
                 resolve_span.set_attribute(
                     "pcg.relationships.evidence_count",
@@ -173,6 +186,7 @@ def resolve_repository_relationships_for_committed_repositories(
                     "scope": REPOSITORY_DEPENDENCY_SCOPE,
                     "run_id": run_id or "adhoc",
                     "generation_id": generation.generation_id,
+                    "entity_count": len(entities),
                     "candidate_count": len(candidates),
                     "resolved_count": len(resolved),
                 },
@@ -232,11 +246,53 @@ def resolve_repository_relationships_for_committed_repositories(
             raise
 
 
+def collect_canonical_entities(
+    *,
+    checkouts: Sequence[RepositoryCheckout],
+    evidence_facts: Sequence[RelationshipEvidenceFact],
+    candidates: Sequence[RelationshipCandidate],
+    resolved: Sequence[ResolvedRelationship],
+) -> list[CanonicalEntity]:
+    """Collect canonical entities referenced by one resolver generation."""
+
+    entities_by_id: dict[str, CanonicalEntity] = {}
+    for checkout in checkouts:
+        repository = Repository.from_parts(
+            name=checkout.repo_name,
+            remote_url=checkout.remote_url,
+            local_path=checkout.checkout_path,
+            repo_slug=checkout.repo_slug,
+        )
+        entities_by_id[repository.entity_id] = repository
+
+    def _remember(entity_id: str | None) -> None:
+        """Record one canonical entity id when it can be materialized safely."""
+
+        if not entity_id or entity_id in entities_by_id:
+            return
+        entity = entity_from_id(entity_id)
+        if entity is not None:
+            entities_by_id[entity.entity_id] = entity
+
+    for fact in evidence_facts:
+        _remember(fact.source_entity_id or fact.source_repo_id)
+        _remember(fact.target_entity_id or fact.target_repo_id)
+    for candidate in candidates:
+        _remember(candidate.source_entity_id or candidate.source_repo_id)
+        _remember(candidate.target_entity_id or candidate.target_repo_id)
+    for relationship in resolved:
+        _remember(relationship.source_entity_id or relationship.source_repo_id)
+        _remember(relationship.target_entity_id or relationship.target_repo_id)
+
+    return list(entities_by_id.values())
+
+
 __all__ = [
     "REPOSITORY_DEPENDENCY_SCOPE",
     "build_repository_checkouts",
     "discover_repository_dependency_evidence",
     "project_resolved_relationships",
+    "collect_canonical_entities",
     "resolve_entity_relationships",
     "resolve_repository_relationships",
     "resolve_repository_relationships_for_committed_repositories",

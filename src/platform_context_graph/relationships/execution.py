@@ -9,6 +9,7 @@ from typing import Any, Iterable, Sequence
 from ..observability import get_observability
 from ..repository_identity import git_remote_for_path, repository_metadata
 from ..utils.debug_log import emit_log_call, info_logger
+from .entities import platform_from_entity_id, workload_subject_from_entity_id
 from .file_evidence import discover_checkout_file_evidence
 from .identity import canonical_checkout_id
 from .models import RelationshipEvidenceFact, RepositoryCheckout, ResolvedRelationship
@@ -153,6 +154,23 @@ def discover_repository_dependency_evidence(
                     len(cross_repo_rows),
                 )
             file_evidence = discover_checkout_file_evidence(checkouts)
+            terraform_file_evidence_count = sum(
+                1
+                for item in file_evidence
+                if item.evidence_kind.startswith("TERRAFORM_")
+            )
+            gitops_file_evidence_count = sum(
+                1
+                for item in file_evidence
+                if item.evidence_kind.startswith("HELM_")
+                or item.evidence_kind.startswith("KUSTOMIZE_")
+                or item.evidence_kind.startswith("ARGOCD_")
+            )
+            platform_file_evidence_count = sum(
+                1
+                for item in file_evidence
+                if item.relationship_type in {"RUNS_ON", "PROVISIONS_PLATFORM"}
+            )
             evidence.extend(file_evidence)
             if discovery_span is not None:
                 discovery_span.set_attribute(
@@ -162,6 +180,18 @@ def discover_repository_dependency_evidence(
                 discovery_span.set_attribute(
                     "pcg.relationships.file_evidence_count",
                     len(file_evidence),
+                )
+                discovery_span.set_attribute(
+                    "pcg.relationships.file_terraform_evidence_count",
+                    terraform_file_evidence_count,
+                )
+                discovery_span.set_attribute(
+                    "pcg.relationships.file_gitops_evidence_count",
+                    gitops_file_evidence_count,
+                )
+                discovery_span.set_attribute(
+                    "pcg.relationships.file_platform_evidence_count",
+                    platform_file_evidence_count,
                 )
                 discovery_span.set_attribute(
                     "pcg.relationships.graph_evidence_count",
@@ -174,6 +204,9 @@ def discover_repository_dependency_evidence(
             extra_keys={
                 "graph_evidence_count": len(evidence) - len(file_evidence),
                 "file_evidence_count": len(file_evidence),
+                "file_terraform_evidence_count": terraform_file_evidence_count,
+                "file_gitops_evidence_count": gitops_file_evidence_count,
+                "file_platform_evidence_count": platform_file_evidence_count,
                 "evidence_count": len(evidence),
             },
         )
@@ -205,8 +238,15 @@ def project_resolved_relationships(
                 """Replace resolver-managed graph edges inside one write transaction."""
 
                 repo_ids = sorted(
-                    {item.source_repo_id for item in resolved}
-                    | {item.target_repo_id for item in resolved}
+                    {
+                        entity_id
+                        for item in resolved
+                        for entity_id in (
+                            item.source_entity_id or item.source_repo_id,
+                            item.target_entity_id or item.target_repo_id,
+                        )
+                        if entity_id and entity_id.startswith("repository:")
+                    }
                 )
                 if repo_ids:
                     repo_rows = tx.run(
@@ -229,33 +269,75 @@ def project_resolved_relationships(
                             + ", ".join(sorted(missing_repo_ids))
                         )
                 tx.run("""
-                    MATCH (:Repository)-[rel]->(:Repository)
+                    MATCH ()-[rel]->()
                     WHERE rel.evidence_source = 'resolver'
                     DELETE rel
                     """)
                 if not resolved:
                     return
-                for relationship_type in sorted(
-                    {item.relationship_type for item in resolved}
-                ):
-                    _validate_relationship_type(relationship_type)
-                    rows = [
+                platform_rows = _platform_projection_rows(resolved)
+                if platform_rows:
+                    tx.run(
+                        """
+                        UNWIND $rows AS row
+                        MERGE (platform:Platform {id: row.entity_id})
+                        SET platform.type = 'platform',
+                            platform.name = row.name,
+                            platform.kind = row.kind,
+                            platform.provider = row.provider,
+                            platform.environment = row.environment,
+                            platform.region = row.region,
+                            platform.locator = row.locator
+                        """,
+                        rows=platform_rows,
+                    )
+                workload_rows = _workload_subject_projection_rows(resolved)
+                if workload_rows:
+                    tx.run(
+                        """
+                        UNWIND $rows AS row
+                        MERGE (workload:WorkloadSubject {id: row.entity_id})
+                        SET workload.type = 'workload_subject',
+                            workload.name = row.name,
+                            workload.subject_type = row.subject_type,
+                            workload.repository_id = row.repository_id,
+                            workload.environment = row.environment,
+                            workload.path = row.path
+                        """,
+                        rows=workload_rows,
+                    )
+                grouped_rows: dict[
+                    tuple[str, str, str], list[dict[str, object]]
+                ] = {}
+                for item in resolved:
+                    source_entity_id = item.source_entity_id or item.source_repo_id
+                    target_entity_id = item.target_entity_id or item.target_repo_id
+                    if source_entity_id is None or target_entity_id is None:
+                        continue
+                    group_key = (
+                        _projection_label_for_entity_id(source_entity_id),
+                        _projection_label_for_entity_id(target_entity_id),
+                        item.relationship_type,
+                    )
+                    grouped_rows.setdefault(group_key, []).append(
                         {
-                            "source_repo_id": item.source_repo_id,
-                            "target_repo_id": item.target_repo_id,
+                            "source_entity_id": source_entity_id,
+                            "target_entity_id": target_entity_id,
                             "confidence": item.confidence,
                             "evidence_count": item.evidence_count,
                             "rationale": item.rationale,
                             "resolution_source": item.resolution_source,
                         }
-                        for item in resolved
-                        if item.relationship_type == relationship_type
-                    ]
+                    )
+                for (source_label, target_label, relationship_type), rows in sorted(
+                    grouped_rows.items()
+                ):
+                    _validate_relationship_type(relationship_type)
                     tx.run(
                         f"""
                         UNWIND $rows AS row
-                        MATCH (source:Repository {{id: row.source_repo_id}})
-                        MATCH (target:Repository {{id: row.target_repo_id}})
+                        MATCH (source:{source_label} {{id: row.source_entity_id}})
+                        MATCH (target:{target_label} {{id: row.target_entity_id}})
                         MERGE (source)-[rel:{relationship_type}]->(target)
                         SET rel.confidence = row.confidence,
                             rel.reason = row.rationale,
@@ -279,6 +361,67 @@ def project_resolved_relationships(
                 write_transaction(_write_projection)
                 return
             _write_projection(session)
+
+
+def _platform_projection_rows(
+    resolved: Sequence[ResolvedRelationship],
+) -> list[dict[str, object]]:
+    """Build stable graph-projection rows for referenced platform entities."""
+
+    rows: dict[str, dict[str, object]] = {}
+    for item in resolved:
+        for entity_id in (item.source_entity_id, item.target_entity_id):
+            if entity_id is None or not entity_id.startswith("platform:"):
+                continue
+            entity = platform_from_entity_id(entity_id)
+            if entity is None or entity.entity_id in rows:
+                continue
+            rows[entity.entity_id] = {
+                "entity_id": entity.entity_id,
+                "name": entity.name or entity.entity_id,
+                "kind": entity.kind,
+                "provider": entity.provider,
+                "environment": entity.environment,
+                "region": entity.region,
+                "locator": entity.locator,
+            }
+    return list(rows.values())
+
+
+def _workload_subject_projection_rows(
+    resolved: Sequence[ResolvedRelationship],
+) -> list[dict[str, object]]:
+    """Build stable graph-projection rows for referenced workload subjects."""
+
+    rows: dict[str, dict[str, object]] = {}
+    for item in resolved:
+        for entity_id in (item.source_entity_id, item.target_entity_id):
+            if entity_id is None or not entity_id.startswith("workload-subject:"):
+                continue
+            entity = workload_subject_from_entity_id(entity_id)
+            if entity is None or entity.entity_id in rows:
+                continue
+            rows[entity.entity_id] = {
+                "entity_id": entity.entity_id,
+                "name": entity.name or entity.entity_id,
+                "subject_type": entity.subject_type,
+                "repository_id": entity.repository_id,
+                "environment": entity.environment,
+                "path": entity.path,
+            }
+    return list(rows.values())
+
+
+def _projection_label_for_entity_id(entity_id: str) -> str:
+    """Return the graph label to use for one canonical entity id."""
+
+    if entity_id.startswith("repository:"):
+        return "Repository"
+    if entity_id.startswith("platform:"):
+        return "Platform"
+    if entity_id.startswith("workload-subject:"):
+        return "WorkloadSubject"
+    raise ValueError(f"unsupported canonical entity id for projection: {entity_id}")
 
 
 def _validate_relationship_type(relationship_type: str) -> None:

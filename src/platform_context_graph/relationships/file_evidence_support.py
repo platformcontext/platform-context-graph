@@ -254,6 +254,34 @@ def iter_argocd_deploy_repo_urls(config_path: Path) -> Iterator[str]:
                 yield cleaned
 
 
+def iter_argocd_destination_cluster_names(config_path: Path) -> Iterator[str]:
+    """Yield destination cluster names from one discovered ArgoCD config file."""
+
+    for document in load_yaml_documents(config_path):
+        if not isinstance(document, dict):
+            continue
+        for key in ("destinationClusterName", "destinationCluster"):
+            value = document.get(key)
+            if isinstance(value, str) and value.strip():
+                yield value.strip()
+        destination = document.get("destination")
+        if isinstance(destination, dict):
+            cluster_name = destination.get("name") or destination.get("clusterName")
+            if isinstance(cluster_name, str) and cluster_name.strip():
+                yield cluster_name.strip()
+
+
+def infer_environment_from_path(path: Path) -> str | None:
+    """Infer an environment hint from a config or overlay path when portable."""
+
+    for index, part in enumerate(path.parts[:-1]):
+        if part.lower() == "overlays" and index + 1 < len(path.parts) - 1:
+            candidate = path.parts[index + 1].strip()
+            if candidate:
+                return candidate
+    return None
+
+
 def iter_argocd_deployed_repo_identifiers(
     config_path: Path,
     target_root: Path,
@@ -350,6 +378,53 @@ def append_evidence_for_candidate(
         )
 
 
+def append_relationship_evidence(
+    *,
+    evidence: list[RelationshipEvidenceFact],
+    seen: set[tuple[str, str, str, str]],
+    source_repo_id: str | None,
+    target_repo_id: str | None,
+    source_entity_id: str | None,
+    target_entity_id: str | None,
+    evidence_kind: str,
+    relationship_type: str,
+    confidence: float,
+    rationale: str,
+    path: Path,
+    extractor: str,
+    extra_details: dict[str, Any] | None = None,
+) -> None:
+    """Append one concrete relationship evidence fact with entity-aware ids."""
+
+    source_identity = source_entity_id or source_repo_id
+    target_identity = target_entity_id or target_repo_id
+    if source_identity is None or target_identity is None:
+        return
+    if source_identity == target_identity:
+        return
+    key = (evidence_kind, source_identity, target_identity, str(path))
+    if key in seen:
+        return
+    seen.add(key)
+    evidence.append(
+        RelationshipEvidenceFact(
+            evidence_kind=evidence_kind,
+            relationship_type=relationship_type,
+            source_repo_id=source_repo_id,
+            target_repo_id=target_repo_id,
+            source_entity_id=source_entity_id,
+            target_entity_id=target_entity_id,
+            confidence=confidence,
+            rationale=rationale,
+            details={
+                "path": str(path),
+                "extractor": extractor,
+                **(extra_details or {}),
+            },
+        )
+    )
+
+
 def match_catalog(
     candidate: str,
     catalog: Sequence[CatalogEntry],
@@ -395,8 +470,11 @@ def candidate_tokens(candidate: str) -> set[str]:
 __all__ = [
     "CatalogEntry",
     "append_evidence_for_candidate",
+    "append_relationship_evidence",
     "build_catalog",
+    "infer_environment_from_path",
     "is_terraform_file",
+    "iter_argocd_destination_cluster_names",
     "iter_argocd_deploy_repo_urls",
     "iter_argocd_deployed_repo_identifiers",
     "iter_argocd_discovered_config_files",

@@ -22,6 +22,9 @@ __all__ = [
     "WorkloadSubjectEntity",
     "canonical_platform_id",
     "canonical_workload_subject_id",
+    "entity_from_id",
+    "platform_from_entity_id",
+    "workload_subject_from_entity_id",
 ]
 
 
@@ -176,6 +179,30 @@ class Platform(CanonicalEntity):
         )
 
 
+def platform_from_entity_id(entity_id: str) -> Platform | None:
+    """Parse one canonical platform id back into a lightweight entity."""
+
+    if not entity_id.startswith("platform:"):
+        return None
+    try:
+        rest = entity_id[len("platform:") :]
+        kind, provider, remainder = rest.split(":", 2)
+        discriminator, environment, region = remainder.rsplit(":", 2)
+    except ValueError:
+        return None
+    normalized_discriminator = None if discriminator == "none" else discriminator
+    return Platform(
+        entity_id=entity_id,
+        name=normalized_discriminator,
+        details={},
+        kind=kind if kind != "none" else "",
+        provider=None if provider == "none" else provider,
+        environment=None if environment == "none" else environment,
+        region=None if region == "none" else region,
+        locator=normalized_discriminator,
+    )
+
+
 def canonical_workload_subject_id(
     *,
     repository_id: str | None,
@@ -239,6 +266,38 @@ class WorkloadSubject(CanonicalEntity):
             environment=_normalize_token(environment),
             path=_normalize_path(path),
         )
+
+
+def workload_subject_from_entity_id(entity_id: str) -> WorkloadSubject | None:
+    """Parse one canonical workload-subject id back into a lightweight entity."""
+
+    if not entity_id.startswith("workload-subject:"):
+        return None
+    try:
+        rest = entity_id[len("workload-subject:") :]
+        repository_id, subject_type, name, environment, path = rest.rsplit(":", 4)
+    except ValueError:
+        return None
+    return WorkloadSubject(
+        entity_id=entity_id,
+        name=None if name == "none" else name,
+        details={},
+        repository_id=None if repository_id == "none" else repository_id,
+        subject_type="" if subject_type == "none" else subject_type,
+        environment=None if environment == "none" else environment,
+        path=None if path == "none" else path,
+    )
+
+
+def entity_from_id(entity_id: str) -> CanonicalEntity | None:
+    """Return a canonical entity for one known entity id format."""
+
+    if entity_id.startswith("repository:"):
+        return Repository(entity_id=entity_id, name=entity_id)
+    platform = platform_from_entity_id(entity_id)
+    if platform is not None:
+        return platform
+    return workload_subject_from_entity_id(entity_id)
 
 
 # Compatibility aliases kept for callers that still import the legacy *Entity names.

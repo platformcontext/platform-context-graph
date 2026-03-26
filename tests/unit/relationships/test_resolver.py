@@ -483,7 +483,7 @@ def test_project_resolved_relationships_uses_relationship_type_for_projection() 
     )
 
     queries = [query for query, _params in driver.session_instance.tx.calls]
-    assert any("MATCH (:Repository)-[rel]->(:Repository)" in query for query in queries)
+    assert any("MATCH ()-[rel]->()" in query for query in queries)
     assert any(
         "MERGE (source)-[rel:DISCOVERS_CONFIG_IN]->(target)" in query
         for query in queries
@@ -559,6 +559,156 @@ def test_project_resolved_relationships_projects_deploys_from_edges() -> None:
     assert any(
         "MERGE (source)-[rel:DEPLOYS_FROM]->(target)" in query for query in queries
     )
+
+
+def test_project_resolved_relationships_projects_platform_runtime_edges() -> None:
+    """Projection should materialize platform nodes for mixed repo-to-platform edges."""
+
+    class FakeResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def data(self):
+            return self._rows
+
+    class FakeTx:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        def run(self, query: str, **params: object):
+            self.calls.append((query, params))
+            if "UNWIND $repo_ids AS repo_id" in query:
+                return FakeResult([{"repo_id": "repository:r_api", "repo_count": 1}])
+            return FakeResult([])
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.tx = FakeTx()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute_write(self, callback):
+            return callback(self.tx)
+
+    class FakeDriver:
+        def __init__(self) -> None:
+            self.session_instance = FakeSession()
+
+        def session(self):
+            return self.session_instance
+
+    driver = FakeDriver()
+    db_manager = SimpleNamespace(get_driver=lambda: driver)
+
+    project_resolved_relationships(
+        db_manager=db_manager,
+        generation_id="generation_123",
+        resolved=[
+            ResolvedRelationship(
+                source_repo_id="repository:r_api",
+                target_repo_id=None,
+                source_entity_id="repository:r_api",
+                target_entity_id="platform:ecs:aws:cluster/node10:prod:us-east-1",
+                relationship_type="RUNS_ON",
+                confidence=0.98,
+                evidence_count=1,
+                rationale="Service runs on ECS cluster node10",
+                resolution_source="inferred",
+            )
+        ],
+    )
+
+    queries = [query for query, _params in driver.session_instance.tx.calls]
+    assert any("MERGE (platform:Platform {id: row.entity_id})" in query for query in queries)
+    assert any(
+        "MATCH (source:Repository {id: row.source_entity_id})" in query
+        and "MATCH (target:Platform {id: row.target_entity_id})" in query
+        and "MERGE (source)-[rel:RUNS_ON]->(target)" in query
+        for query in queries
+    )
+
+
+def test_resolve_repository_relationships_for_committed_repositories_persists_platform_entities_from_evidence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Generation persistence should register canonical platform entities from evidence."""
+
+    repo_path = tmp_path / "api-node-boats"
+    repo_path.mkdir()
+    captured: dict[str, object] = {}
+
+    class FakeStore:
+        enabled = True
+
+        def list_relationship_assertions(self, *, relationship_type: str | None = None):
+            assert relationship_type is None
+            return []
+
+        def replace_generation(self, **kwargs):
+            captured["entities"] = kwargs["entities"]
+            captured["evidence_facts"] = kwargs["evidence_facts"]
+            return ResolutionGeneration(
+                generation_id="generation_123",
+                scope="repo_dependencies",
+                run_id="run_123",
+                status="pending",
+            )
+
+        def activate_generation(self, *, scope: str, generation_id: str) -> None:
+            assert scope == "repo_dependencies"
+            assert generation_id == "generation_123"
+
+    monkeypatch.setattr(
+        "platform_context_graph.relationships.resolver.get_relationship_store",
+        lambda: FakeStore(),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.relationships.resolver.build_repository_checkouts",
+        lambda repo_paths: [
+            RepositoryCheckout(
+                checkout_id="checkout_123",
+                logical_repo_id="repository:r_api",
+                repo_name=Path(next(iter(repo_paths))).name,
+                checkout_path=str(repo_path),
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.relationships.resolver.discover_repository_dependency_evidence",
+        lambda _driver, *, checkouts=(): [
+            RelationshipEvidenceFact(
+                evidence_kind="TERRAFORM_ECS_SERVICE",
+                relationship_type="RUNS_ON",
+                source_repo_id="repository:r_api",
+                target_repo_id=None,
+                source_entity_id="repository:r_api",
+                target_entity_id="platform:ecs:aws:cluster/node10:prod:us-east-1",
+                confidence=0.98,
+                rationale="Service runs on ECS cluster node10",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.relationships.resolver.project_resolved_relationships",
+        lambda **_kwargs: None,
+    )
+
+    stats = resolve_repository_relationships_for_committed_repositories(
+        builder=SimpleNamespace(driver=object(), db_manager=object()),
+        committed_repo_paths=[repo_path],
+        run_id="run_123",
+        info_logger_fn=MagicMock(),
+    )
+
+    entity_ids = {entity.entity_id for entity in captured["entities"]}
+    assert "repository:r_api" in entity_ids
+    assert "platform:ecs:aws:cluster/node10:prod:us-east-1" in entity_ids
+    assert stats["evidence_facts"] == 1
 
 
 def test_resolve_repository_relationships_for_committed_repositories_activates_after_projection(
