@@ -1,0 +1,27 @@
+docs/docs/why-pcg.md
+  32decfe46e4572ba 1-90
+README.md
+  32decfe46e4572ba 21-43
+docs/mkdocs.yml
+  32decfe46e4572ba 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "1f66480da7b278a08781d0a0c8468ea36c708cb2",
+  "prompts": {
+    "32decfe46e4572ba": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2baa049-f1d1-4b0c-bbb7-4a0952976074",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 114,
+      "total_deletions": 0,
+      "accepted_lines": 114,
+      "overriden_lines": 0
+    }
+  }
+}
