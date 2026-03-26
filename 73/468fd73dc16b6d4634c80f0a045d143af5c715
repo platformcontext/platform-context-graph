@@ -1,0 +1,43 @@
+tests/integration/cli/test_cli_commands.py
+  8e8258835a482019 601,625,628-634,668,674-680
+docs/internal/docs-inventory.md
+  8e8258835a482019 39
+src/platform_context_graph/tools/graph_builder_persistence_unwind.py
+  8e8258835a482019 64
+src/platform_context_graph/cli/config_catalog.py
+  8e8258835a482019 45
+src/platform_context_graph/tools/graph_builder_call_relationships.py
+  8e8258835a482019 9-17,20-21,370,372-373,375-379
+tests/unit/core/test_graph_builder_module_sizes.py
+  8e8258835a482019 5-9,23-24
+src/platform_context_graph/tools/graph_builder_indexing_execution.py
+  8e8258835a482019 330,410-416,445,453-455,747-748
+tests/unit/tools/test_graph_builder_indexing_execution.py
+  8e8258835a482019 39-42,68,78,92-94,114,122,135
+src/platform_context_graph/indexing/coordinator_finalize.py
+  8e8258835a482019 120
+src/platform_context_graph/tools/graph_builder.py
+  8e8258835a482019 18-20,201-214
+src/platform_context_graph/tools/graph_builder_call_batches.py
+  8e8258835a482019 1-322
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.19",
+  "base_commit_sha": "73468fd73dc16b6d4634c80f0a045d143af5c715",
+  "prompts": {
+    "8e8258835a482019": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d27b6-d45d-7db1-9ea4-c167b305a49b",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 416,
+      "total_deletions": 314,
+      "accepted_lines": 416,
+      "overriden_lines": 0
+    }
+  }
+}
