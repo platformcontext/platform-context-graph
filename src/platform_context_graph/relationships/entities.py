@@ -6,7 +6,11 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from platform_context_graph.repository_identity import canonical_repository_id
+from platform_context_graph.repository_identity import (
+    canonical_repository_id,
+    normalize_remote_url,
+    repo_slug_from_remote_url,
+)
 
 __all__ = [
     "CanonicalEntity",
@@ -37,7 +41,7 @@ def _normalize_path(value: str | None) -> str | None:
         return None
     normalized = str(PurePosixPath(str(value).replace("\\", "/")).as_posix()).strip()
     normalized = normalized.strip("/")
-    return normalized.lower() or None
+    return normalized or None
 
 
 @dataclass(slots=True, frozen=True)
@@ -72,15 +76,19 @@ class Repository(CanonicalEntity):
         normalized_local_path = (
             str(Path(local_path).expanduser().resolve()) if local_path is not None else None
         )
+        normalized_remote_url = normalize_remote_url(remote_url)
+        normalized_repo_slug = repo_slug or repo_slug_from_remote_url(
+            normalized_remote_url
+        )
         entity_id = canonical_repository_id(
-            remote_url=remote_url,
+            remote_url=normalized_remote_url,
             local_path=normalized_local_path,
         )
         return cls(
             entity_id=entity_id,
             name=name.strip(),
-            repo_slug=repo_slug,
-            remote_url=remote_url,
+            repo_slug=normalized_repo_slug,
+            remote_url=normalized_remote_url,
             local_path=normalized_local_path,
             details=details or {},
         )
@@ -231,6 +239,7 @@ class WorkloadSubject(CanonicalEntity):
         )
 
 
+# Compatibility aliases kept for callers that still import the legacy *Entity names.
 RepositoryEntity = Repository
 PlatformEntity = Platform
 WorkloadSubjectEntity = WorkloadSubject
