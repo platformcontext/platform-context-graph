@@ -13,6 +13,7 @@ import yaml
 
 from ...query import content as content_queries
 from .common import get_db_manager, resolve_repository
+from .content_enrichment_openapi import dedupe_endpoint_rows, extract_openapi_endpoints
 
 _SPEC_CANDIDATES = (
     "server/init/plugins/spec.js",
@@ -36,6 +37,7 @@ _DOCS_ROUTE_RE = re.compile(r"path:\s*['\"]([^'\"]+)['\"]")
 _DEFAULT_VERSION_RE = re.compile(
     r"default(?:Api)?Version\s*:\s*['\"]([^'\"]+)['\"]"
 )
+_MAX_API_SURFACE_ENDPOINTS = 25
 
 
 def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[str, Any]:
@@ -71,6 +73,7 @@ def _extract_api_surface(database: Any, *, repo_id: str) -> dict[str, Any]:
     spec_files: list[dict[str, Any]] = []
     docs_routes: list[str] = []
     api_versions: list[str] = []
+    endpoints: list[dict[str, Any]] = []
     for relative_path in _SPEC_CANDIDATES:
         content = _load_repo_file(database, repo_id=repo_id, relative_path=relative_path)
         if content is None:
@@ -86,10 +89,24 @@ def _extract_api_surface(database: Any, *, repo_id: str) -> dict[str, Any]:
             docs_routes.extend(_DOCS_ROUTE_RE.findall(content))
         if relative_path.startswith("versioning.config."):
             api_versions.extend(_DEFAULT_VERSION_RE.findall(content))
+    for spec_file in _dedupe_spec_files(spec_files):
+        endpoints.extend(
+            extract_openapi_endpoints(
+                database,
+                repo_id=repo_id,
+                relative_path=spec_file["relative_path"],
+                load_repo_file=_load_repo_file,
+            )
+        )
+        if len(endpoints) >= _MAX_API_SURFACE_ENDPOINTS:
+            break
+    deduped_endpoints = dedupe_endpoint_rows(endpoints)
     return {
         "spec_files": _dedupe_spec_files(spec_files),
         "docs_routes": _dedupe_strings(docs_routes),
         "api_versions": _dedupe_strings(api_versions),
+        "endpoint_count": len(deduped_endpoints),
+        "endpoints": deduped_endpoints[:_MAX_API_SURFACE_ENDPOINTS],
     }
 
 
@@ -199,7 +216,6 @@ def _load_repo_file(database: Any, *, repo_id: str, relative_path: str) -> str |
         return None
     content = result.get("content")
     return content if isinstance(content, str) else None
-
 
 def _hostname_records_from_json(
     *, repo_name: str, relative_path: str, content: str

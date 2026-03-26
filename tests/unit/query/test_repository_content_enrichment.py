@@ -45,6 +45,30 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             "specPath: path.join(__dirname, '../../../specs/index.yaml'),\n"
             "route: { path: '/_specs' }\n"
         ),
+        "specs/index.yaml": (
+            "openapi: '3.1.0'\n"
+            "paths:\n"
+            "  $ref: ./paths/index.yaml\n"
+        ),
+        "specs/paths/index.yaml": (
+            "/_version:\n"
+            "  $ref: ./_version.yaml\n"
+            "/v3/search:\n"
+            "  $ref: ./v3/search.yaml\n"
+        ),
+        "specs/paths/_version.yaml": (
+            "get:\n"
+            "  operationId: getVersion\n"
+            "  summary: Get version\n"
+        ),
+        "specs/paths/v3/search.yaml": (
+            "get:\n"
+            "  operationId: search\n"
+            "  summary: Search boats\n"
+            "post:\n"
+            "  operationId: searchPost\n"
+            "  summary: Search boats with body\n"
+        ),
         "redocly.yaml": "apis:\n  main:\n    root: ./specs/index.yaml\n",
         "versioning.config.ts": "export const versioning = { defaultVersion: 'v3' };\n",
         "config/qa.json": '{"server":{"hostname":"api-node-boats.qa.bgrp.io"}}',
@@ -106,6 +130,21 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
     ]
     assert result["api_surface"]["docs_routes"] == ["/_specs"]
     assert result["api_surface"]["api_versions"] == ["v3"]
+    assert result["api_surface"]["endpoint_count"] == 2
+    assert result["api_surface"]["endpoints"] == [
+        {
+            "path": "/_version",
+            "methods": ["get"],
+            "operation_ids": ["getVersion"],
+            "relative_path": "specs/paths/_version.yaml",
+        },
+        {
+            "path": "/v3/search",
+            "methods": ["get", "post"],
+            "operation_ids": ["search", "searchPost"],
+            "relative_path": "specs/paths/v3/search.yaml",
+        },
+    ]
     assert result["limitations"] == []
     assert result["hostnames"] == [
         {
