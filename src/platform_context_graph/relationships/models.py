@@ -36,8 +36,8 @@ class RelationshipEvidenceFact:
 
     evidence_kind: str
     relationship_type: str
-    source_repo_id: str
-    target_repo_id: str
+    source_repo_id: str | None
+    target_repo_id: str | None
     confidence: float
     rationale: str
     source_entity_id: str | None = None
@@ -49,8 +49,8 @@ class RelationshipEvidenceFact:
 class RelationshipAssertion:
     """One explicit human or control-plane assertion about a relationship."""
 
-    source_repo_id: str
-    target_repo_id: str
+    source_repo_id: str | None
+    target_repo_id: str | None
     relationship_type: str
     decision: str
     reason: str
@@ -74,8 +74,8 @@ class MetadataAssertion:
 class RelationshipCandidate:
     """One machine-generated relationship candidate."""
 
-    source_repo_id: str
-    target_repo_id: str
+    source_repo_id: str | None
+    target_repo_id: str | None
     relationship_type: str
     confidence: float
     evidence_count: int
@@ -89,8 +89,8 @@ class RelationshipCandidate:
 class ResolvedRelationship:
     """One canonical relationship emitted by the resolver."""
 
-    source_repo_id: str
-    target_repo_id: str
+    source_repo_id: str | None
+    target_repo_id: str | None
     relationship_type: str
     confidence: float
     evidence_count: int

@@ -224,6 +224,46 @@ def test_resolve_repository_relationships_derives_generic_dependency_from_provis
     ]
 
 
+def test_resolve_repository_relationships_filters_non_repo_edges_from_repo_pipeline() -> (
+    None
+):
+    """The repo pipeline should not emit platform-only edges before projection widens."""
+
+    evidence = [
+        RelationshipEvidenceFact(
+            evidence_kind="TERRAFORM_ECS_CLUSTER",
+            relationship_type="PROVISIONS_PLATFORM",
+            source_repo_id="repository:r_terraform",
+            target_repo_id=None,
+            source_entity_id="repository:r_terraform",
+            target_entity_id="platform:ecs:aws:cluster/node10:prod:us-east-1",
+            confidence=0.99,
+            rationale="Terraform provisions the ECS cluster node10",
+        ),
+        RelationshipEvidenceFact(
+            evidence_kind="TERRAFORM_ECS_SERVICE",
+            relationship_type="RUNS_ON",
+            source_repo_id="repository:r_app",
+            target_repo_id=None,
+            source_entity_id="repository:r_app",
+            target_entity_id="platform:ecs:aws:cluster/node10:prod:us-east-1",
+            confidence=0.97,
+            rationale="Service deploy configuration binds the app to cluster node10",
+        ),
+    ]
+
+    candidates, resolved = resolve_repository_relationships(evidence, assertions=[])
+
+    assert [
+        (item.source_repo_id, item.target_repo_id, item.relationship_type)
+        for item in candidates
+    ] == []
+    assert [
+        (item.source_repo_id, item.target_repo_id, item.relationship_type)
+        for item in resolved
+    ] == []
+
+
 def test_resolve_repository_relationships_rejection_blocks_inferred_edge() -> None:
     """Explicit rejections should prevent inference from becoming canonical."""
 
