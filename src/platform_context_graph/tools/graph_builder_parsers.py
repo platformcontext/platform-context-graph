@@ -8,7 +8,11 @@ from pathlib import Path
 import threading
 from typing import Any
 from tree_sitter import Language, Parser
-from .graph_builder_raw_text import parser_key_for_path, register_raw_text_parsers
+from .graph_builder_raw_text import (
+    DOCKERFILE_PARSER_KEY,
+    parser_key_for_path,
+    register_raw_text_parsers,
+)
 from ..utils.tree_sitter_manager import get_tree_sitter_manager
 logger = logging.getLogger(__name__)
 
@@ -31,12 +35,11 @@ _LANGUAGE_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
     "dart": (".languages.dart", "DartTreeSitterParser"),
     "perl": (".languages.perl", "PerlTreeSitterParser"),
     "elixir": (".languages.elixir", "ElixirTreeSitterParser"),
+    "dockerfile": (".languages.dockerfile", "DockerfileTreeSitterParser"),
 }
-
 _EXTENSION_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
     ".tsx": (".languages.typescriptjsx", "TypescriptJSXTreeSitterParser"),
 }
-
 _TREE_SITTER_PARSER_EXTENSIONS: tuple[tuple[str, str], ...] = (
     (".py", "python"),
     (".ipynb", "python"),
@@ -68,8 +71,6 @@ _TREE_SITTER_PARSER_EXTENSIONS: tuple[tuple[str, str], ...] = (
     (".ex", "elixir"),
     (".exs", "elixir"),
 )
-
-
 def _load_attribute(module_name: str, attribute_name: str) -> Any:
     """Load an attribute from a relative module path.
 
@@ -82,8 +83,6 @@ def _load_attribute(module_name: str, attribute_name: str) -> Any:
     """
     module = importlib.import_module(module_name, package=__package__)
     return getattr(module, attribute_name)
-
-
 class TreeSitterParser:
     """Wrap a language-specific Tree-sitter parser implementation."""
 
@@ -103,7 +102,6 @@ class TreeSitterParser:
         if parser_spec is not None:
             parser_cls = _load_attribute(*parser_spec)
             self._language_specific_parser_cls = parser_cls
-
     @property
     def parser(self) -> Parser:
         """Return the parser instance bound to the current thread."""
@@ -117,7 +115,6 @@ class TreeSitterParser:
                 parser = Parser(self.language)
             self._parser_local.parser = parser
         return parser
-
     @property
     def language_specific_parser(self) -> Any:
         """Return a fresh language-specific parser bound to the current thread."""
@@ -125,12 +122,10 @@ class TreeSitterParser:
         if self._language_specific_parser_cls is None:
             return None
         return self._language_specific_parser_cls(self)
-
     def override_language_specific_parser(self, parser_cls: Any) -> None:
         """Override the language-specific parser class for this registry entry."""
 
         self._language_specific_parser_cls = parser_cls
-
     def parse(self, path: Path, is_dependency: bool = False, **kwargs: Any) -> dict:
         """Parse a file with the language-specific parser.
 
@@ -152,8 +147,6 @@ class TreeSitterParser:
         raise NotImplementedError(
             f"No language-specific parser implemented for {self.language_name}"
         )
-
-
 def _add_tree_sitter_parser(
     parsers: dict[str, Any], extension: str, language_name: str
 ) -> None:
@@ -162,22 +155,12 @@ def _add_tree_sitter_parser(
     try:
         parser = TreeSitterParser(language_name)
         parser_spec = _EXTENSION_SPECIFIC_PARSERS.get(extension)
-        if (
-            parser_spec is not None
-            and hasattr(parser, "language")
-            and hasattr(parser, "parser")
-        ):
+        if parser_spec is not None and hasattr(parser, "language") and hasattr(parser, "parser"):
             parser_cls = _load_attribute(*parser_spec)
             parser.override_language_specific_parser(parser_cls)
         parsers[extension] = parser
     except ValueError as exc:
-        logger.warning(
-            "Skipping parser for extension %s because language %s is unavailable: %s",
-            extension,
-            language_name,
-            exc,
-        )
-
+        logger.warning("Skipping parser for extension %s because language %s is unavailable: %s", extension, language_name, exc)
 
 def build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
     """Create the extension-to-parser registry used by ``GraphBuilder``.
@@ -204,11 +187,12 @@ def build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
         hcl_parser = HCLTerraformParser("hcl")
         parsers[".tf"] = hcl_parser
         parsers[".hcl"] = hcl_parser
+    try:
+        parsers[DOCKERFILE_PARSER_KEY] = TreeSitterParser("dockerfile")
+    except ValueError as exc:
+        logger.warning("Skipping parser for special filename %s because language dockerfile is unavailable: %s", DOCKERFILE_PARSER_KEY, exc)
     register_raw_text_parsers(parsers)
-
     return parsers
-
-
 def pre_scan_for_imports(builder: Any, files: list[Path]) -> dict[str, Any]:
     """Pre-scan files for import resolution hints.
 
@@ -458,18 +442,12 @@ def parse_file(
     parser_key = parser_key_for_path(path, builder.parsers)
     parser = builder.parsers.get(parser_key) if parser_key is not None else None
     if not parser:
-        warning_logger_fn(
-            f"No parser found for file {path}. Skipping"
-        )
+        warning_logger_fn(f"No parser found for file {path}. Skipping")
         return {"path": str(path), "error": f"No parser for {path.name}"}
 
-    debug_log_fn(
-        f"[parse_file] Starting parsing for: {path} with {parser.language_name} parser"
-    )
+    debug_log_fn(f"[parse_file] Starting parsing for: {path} with {parser.language_name} parser")
     try:
-        index_source = (
-            get_config_value_fn("INDEX_SOURCE") or "false"
-        ).lower() == "true"
+        index_source = (get_config_value_fn("INDEX_SOURCE") or "false").lower() == "true"
         if parser.language_name == "python":
             is_notebook = path.suffix == ".ipynb"
             file_data = parser.parse(
@@ -484,13 +462,9 @@ def parse_file(
         file_data["repo_path"] = str(repo_path)
         return file_data
     except Exception as exc:
-        error_logger_fn(
-            f"Error parsing {path} with {parser.language_name} parser: {exc}"
-        )
+        error_logger_fn(f"Error parsing {path} with {parser.language_name} parser: {exc}")
         debug_log_fn(f"[parse_file] Error parsing {path}: {exc}")
         return {"path": str(path), "error": str(exc)}
-
-
 __all__ = [
     "TreeSitterParser",
     "build_parser_registry",

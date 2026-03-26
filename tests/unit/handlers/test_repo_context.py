@@ -229,6 +229,64 @@ class TestGracefulDegradation:
         assert result["ecosystem"]["name"] == "my-platform"
         assert "mode" not in result
 
+
+def test_trace_deployment_chain_uses_repo_contains_for_repo_to_file_lookups(
+    monkeypatch,
+):
+    """Deployment-chain repo/file lookups should use REPO_CONTAINS."""
+
+    recorded_queries: list[str] = []
+
+    monkeypatch.setattr(
+        "platform_context_graph.mcp.tools.handlers.ecosystem_support.repository_queries.get_repository_context",
+        lambda *_args, **_kwargs: {
+            "repository": {
+                "id": "repository:r_api_node_boats",
+                "name": "api-node-boats",
+                "path": "/repos/api-node-boats",
+                "local_path": "/repos/api-node-boats",
+            },
+            "deploys_from": [],
+            "discovers_config_in": [],
+            "provisioned_by": [],
+            "platforms": [],
+            "summary": {},
+            "coverage": None,
+            "limitations": [],
+        },
+    )
+
+    db = make_mock_db({})
+    session = db.get_driver.return_value.session.return_value
+
+    def recording_run(query, **kwargs):
+        del kwargs
+        recorded_queries.append(query)
+        if "MATCH (r:Repository)" in query and "RETURN r.name as name" in query:
+            return MockResult(single_record={"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        return MockResult(records=[])
+
+    session.run = recording_run
+
+    result = trace_deployment_chain(db, "api-node-boats")
+
+    assert "error" not in result
+    assert any(
+        "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)"
+        in q
+        for q in recorded_queries
+    )
+    assert any(
+        "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)"
+        in q
+        for q in recorded_queries
+    )
+    assert any(
+        "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tf:TerraformResource)"
+        in q
+        for q in recorded_queries
+    )
+
     def test_repo_summary_omits_tier_when_null(self, monkeypatch):
         monkeypatch.setattr(
             "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",

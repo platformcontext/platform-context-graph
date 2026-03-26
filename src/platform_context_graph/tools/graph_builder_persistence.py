@@ -8,10 +8,7 @@ from typing import Any
 
 from ..cli.config_manager import get_config_value
 from ..core.records import record_to_dict
-from ..content.ingest import (
-    prepare_content_entries,
-    repository_metadata_from_row,
-)
+from ..content.ingest import prepare_content_entries, repository_metadata_from_row
 from ..observability import get_observability
 from ..utils.debug_log import emit_log_call
 from ..content.state import get_postgres_content_provider
@@ -25,22 +22,16 @@ from .graph_builder_persistence_batch import (
     should_flush_batches,
 )
 from .graph_builder_persistence_unwind import resolve_max_entity_value_length
-
-
 def _consume_write_result(result: Any) -> None:
     """Eagerly consume Neo4j write results to release transaction buffers."""
 
     consume = getattr(result, "consume", None)
     if callable(consume):
         consume()
-
-
 def _run_write_query(tx_or_session: Any, query: str, /, **parameters: Any) -> None:
     """Execute one write query and eagerly consume its result when supported."""
 
     _consume_write_result(tx_or_session.run(query, parameters=parameters))
-
-
 def _bounded_positive_int_config(name: str, default: int, *, maximum: int) -> int:
     """Return a bounded positive integer from config with a safe fallback."""
 
@@ -53,8 +44,6 @@ def _bounded_positive_int_config(name: str, default: int, *, maximum: int) -> in
         return max(1, min(int(raw_value), maximum))
     except ValueError:
         return default
-
-
 def add_repository_to_graph(
     builder: Any,
     repo_path: Path,
@@ -146,8 +135,6 @@ def add_repository_to_graph(
             has_remote=metadata["has_remote"],
             is_dependency=is_dependency,
         )
-
-
 def _merge_directory_chain(
     tx: Any,
     file_path_obj: Path,
@@ -192,6 +179,17 @@ def _merge_directory_chain(
 
     _run_write_query(
         tx,
+        """
+        MATCH (r:Repository {path: $repo_path})
+        MATCH (f:File {path: $file_path})
+        MERGE (r)-[:REPO_CONTAINS]->(f)
+        """,
+        repo_path=str(repo_path_obj),
+        file_path=file_path_str,
+    )
+
+    _run_write_query(
+        tx,
         f"""
         MATCH (p:{parent_label} {{path: $parent_path}})
         MATCH (f:File {{path: $file_path}})
@@ -200,8 +198,6 @@ def _merge_directory_chain(
         parent_path=parent_path,
         file_path=file_path_str,
     )
-
-
 def _content_dual_write(
     file_data: dict[str, Any],
     file_name: str,
@@ -247,8 +243,6 @@ def _content_dual_write(
             },
             exc_info=exc,
         )
-
-
 def _begin_transaction(session: Any) -> tuple[Any, bool]:
     """Begin an explicit transaction if the backend supports it.
 
@@ -265,8 +259,6 @@ def _begin_transaction(session: Any) -> tuple[Any, bool]:
         except (AttributeError, NotImplementedError, RuntimeError, TypeError):
             pass
     return session, False
-
-
 def add_file_to_graph(
     builder: Any,
     file_data: dict[str, Any],
@@ -342,9 +334,7 @@ def add_file_to_graph(
 
         # Postgres content dual-write is outside the Neo4j transaction.
         _content_dual_write(file_data, file_name, repository, warning_logger_fn)
-        max_entity_value_length = resolve_max_entity_value_length(
-            get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH")
-        )
+        max_entity_value_length = resolve_max_entity_value_length(get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH"))
 
         # All Neo4j writes go inside a single explicit transaction when
         # the backend supports it; otherwise fall back to auto-commit.
@@ -384,8 +374,6 @@ def add_file_to_graph(
             if is_explicit:
                 tx.rollback()
             raise
-
-
 def commit_file_batch_to_graph(
     builder: Any,
     file_data_list: list[dict[str, Any]],
@@ -426,9 +414,7 @@ def commit_file_batch_to_graph(
             "file_count": len(file_data_list),
         },
     )
-    max_entity_value_length = resolve_max_entity_value_length(
-        get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH")
-    )
+    max_entity_value_length = resolve_max_entity_value_length(get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH"))
     tx_file_limit = _bounded_positive_int_config(
         "PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE",
         5,
@@ -561,8 +547,6 @@ def commit_file_batch_to_graph(
                     current_file=str(Path(tx_chunk[-1]["path"]).resolve()),
                     committed=True,
                 )
-
-
 __all__ = [
     "add_file_to_graph",
     "add_repository_to_graph",

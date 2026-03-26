@@ -90,6 +90,9 @@ When PCG runs as a deployed service, `local_path` refers to the **server-side ch
     * `path` (string, absolute path)
     * `relative_path` (string)
     * `is_dependency` (boolean)
+* **`Directory`**
+    * `name` (string)
+    * `path` (string, absolute path)
 * **`Function`**
     * `name` (string)
     * `path` (string, absolute path)
@@ -136,11 +139,14 @@ When PCG runs as a deployed service, `local_path` refers to the **server-side ch
 
 ### Relationships
 * **`CONTAINS`**:
-    * `(Repository)-[:CONTAINS]->(File)`
+    * `(Repository)-[:CONTAINS]->(Directory)`
+    * `(Directory)-[:CONTAINS]->(Directory|File)`
     * `(File)-[:CONTAINS]->(Function)`
     * `(File)-[:CONTAINS]->(Class)`
     * `(Ecosystem)-[:CONTAINS]->(Tier)`
     * `(Tier)-[:CONTAINS]->(Repository)`
+* **`REPO_CONTAINS`**:
+    * `(Repository)-[:REPO_CONTAINS]->(File)` — direct flat file lookup that skips directory traversal
 * **`CALLS`**: `(Function)-[:CALLS]->(Function)`
 * **`IMPORTS`**: `(File)-[:IMPORTS]->(Module)`
 * **`INHERITS`**: `(Class)-[:INHERITS]->(Class)`
@@ -197,6 +203,6 @@ When PCG runs as a deployed service, `local_path` refers to the **server-side ch
 ### SOP-5: Using the Cypher Fallback
 1.  **Attempt Standard Tools:** First, always try to use `find_code` and `analyze_code_relationships`.
 2.  **Identify Failure:** If the standard tools cannot answer a complex, multi-step relationship query (e.g., "Find all functions that are called by a method in a class that inherits from 'BaseHandler'"), then and only then, resort to the fallback.
-3.  **Formulate & Execute:** Construct a Cypher query to find the answer and execute it using `execute_cypher_query`. **Consult the Graph Schema Reference above to ensure you use the correct property names (e.g. `path` vs `path`).**
+3.  **Formulate & Execute:** Construct a Cypher query to find the answer and execute it using `execute_cypher_query`. **Consult the Graph Schema Reference above to ensure you use the correct property names and traversal edges. Use `REPO_CONTAINS` for direct repo-to-file traversal, and `CONTAINS*` when you need the directory tree or file-contained entities.**
 4.  **Present Results:** Explain the results to the user based on the query output.
 """

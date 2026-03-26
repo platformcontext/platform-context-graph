@@ -9,7 +9,10 @@ from platform_context_graph.query.repositories import (
     get_repository_stats,
 )
 from platform_context_graph.query.repositories.common import resolve_repository
-from platform_context_graph.query.repositories.context_data import _fetch_infrastructure
+from platform_context_graph.query.repositories.context_data import (
+    _fetch_infrastructure,
+    build_repository_context,
+)
 from platform_context_graph.query.repositories.graph_counts import (
     repository_graph_counts,
 )
@@ -119,6 +122,10 @@ def test_repository_graph_counts_excludes_class_methods_from_top_level_count() -
     assert (
         "coalesce(r[$local_path_key], r.path) = $repo_path" in recorded_query["query"]
     )
+    assert "[:REPO_CONTAINS]->(file:File)" in recorded_query["query"]
+    assert "[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(fn:Function)" in recorded_query[
+        "query"
+    ]
     assert "[:IMPORTS]->(module:Module)" not in recorded_query["query"]
     assert "type(rel) = $imports_rel_type" in recorded_query["query"]
 
@@ -182,7 +189,7 @@ def test_fetch_infrastructure_uses_dynamic_optional_property_keys() -> None:
     terraform_variable_query = next(
         query
         for query, _ in recorded_queries
-        if "MATCH (r:Repository)-[:CONTAINS*]->(f:File)" in query
+        if "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)" in query
         and "TerraformVariable" in query
     )
     argocd_application_query = next(
@@ -201,6 +208,82 @@ def test_fetch_infrastructure_uses_dynamic_optional_property_keys() -> None:
     assert shared_kwargs["project_key"] == "project"
     assert shared_kwargs["dest_namespace_key"] == "dest_namespace"
     assert shared_kwargs["generators_key"] == "generators"
+
+
+def test_build_repository_context_uses_repo_contains_for_file_queries(
+    monkeypatch,
+) -> None:
+    """Repository context should use REPO_CONTAINS for flat repo-to-file lookups."""
+
+    recorded_queries: list[str] = []
+
+    class RecordingSession:
+        def run(self, query, **kwargs):
+            del kwargs
+            recorded_queries.append(query)
+            if "RETURN r.id as id" in query:
+                return MockResult(
+                    records=[
+                        {
+                            "id": "repository:r_ctx123",
+                            "name": "demo-repo",
+                            "path": "/repos/demo-repo",
+                            "local_path": "/repos/demo-repo",
+                            "remote_url": "https://github.com/platformcontext/demo-repo",
+                            "repo_slug": "platformcontext/demo-repo",
+                            "has_remote": True,
+                        }
+                    ]
+                )
+            return MockResult(records=[])
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data.repository_graph_counts",
+        lambda *_args, **_kwargs: {
+            "root_file_count": 0,
+            "root_directory_count": 1,
+            "file_count": 0,
+            "top_level_function_count": 0,
+            "class_method_count": 0,
+            "total_function_count": 0,
+            "class_count": 0,
+            "module_count": 0,
+        },
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data._fetch_infrastructure",
+        lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data._fetch_ecosystem",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data.build_relationship_summary",
+        lambda *_args, **_kwargs: {
+            "coverage": None,
+            "limitations": [],
+            "platforms": [],
+            "deploys_from": [],
+            "discovers_config_in": [],
+            "provisioned_by": [],
+            "provisions_dependencies_for": [],
+            "iac_relationships": [],
+            "deployment_chain": [],
+            "environments": [],
+            "summary": {},
+        },
+    )
+
+    result = build_repository_context(RecordingSession(), "demo-repo")
+
+    assert "error" not in result
+    assert any("MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)" in q for q in recorded_queries)
+    assert any(
+        "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)\n              -[:CONTAINS]->(fn:Function)"
+        in q
+        for q in recorded_queries
+    )
 
 
 def test_get_repository_context_returns_current_context_shape(monkeypatch):

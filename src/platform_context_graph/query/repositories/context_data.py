@@ -51,7 +51,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
     repo_ref = canonical_repository_ref(repo)
     file_stats = session.run(
         f"""
-        MATCH (r:Repository)-[:CONTAINS*]->(f:File)
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)
         WHERE {repository_scope_predicate()}
         RETURN f.name as file,
                split(f.name, '.')[-1] as ext
@@ -75,7 +75,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
 
     entry_points = session.run(
         f"""
-        MATCH (r:Repository)-[:CONTAINS*]->(f:File)
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)
               -[:CONTAINS]->(fn:Function)
         WHERE {repository_scope_predicate()}
           AND (fn.name IN ['main', 'handler', 'lambda_handler',
@@ -92,8 +92,8 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
     infrastructure = _fetch_infrastructure(session, repo)
     relationships = session.run(
         f"""
-        MATCH (r:Repository)-[:CONTAINS*]->(f1:File)-[:CONTAINS]->(n1)
-              -[rel]->(n2)<-[:CONTAINS]-(f2:File)<-[:CONTAINS*]-(r)
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(f1:File)-[:CONTAINS]->(n1)
+              -[rel]->(n2)<-[:CONTAINS]-(f2:File)<-[:REPO_CONTAINS]-(r)
         WHERE {repository_scope_predicate()}
           AND type(rel) IN [
             'SELECTS', 'CONFIGURES', 'PATCHES', 'ROUTES_TO',
@@ -336,7 +336,7 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
     for key, (label, projection) in label_queries.items():
         result = session.run(
             f"""
-            MATCH (r:Repository)-[:CONTAINS*]->(f:File)
+            MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)
                   -[:CONTAINS]->(n:{label})
             WHERE {repository_scope_predicate()}
             {projection}

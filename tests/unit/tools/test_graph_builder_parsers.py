@@ -106,7 +106,7 @@ def test_tree_sitter_parser_creates_distinct_parsers_per_thread(
 
 
 def test_build_parser_registry_registers_raw_text_search_parsers() -> None:
-    """Registry should include raw-text search handlers for non-code IaC files."""
+    """Registry should include non-code search handlers and Dockerfile parsing."""
 
     registry = graph_builder_parsers.build_parser_registry(lambda _key: "false")
 
@@ -114,16 +114,17 @@ def test_build_parser_registry_registers_raw_text_search_parsers() -> None:
     assert ".tpl" in registry
     assert ".conf" in registry
     assert "__dockerfile__" in registry
+    assert registry["__dockerfile__"].language_name == "dockerfile"
 
 
-def test_parse_file_uses_raw_text_parser_for_dockerfile(tmp_path: Path) -> None:
-    """Direct parsing should treat Dockerfiles as searchable raw text."""
+def test_parse_file_uses_structured_parser_for_dockerfile(tmp_path: Path) -> None:
+    """Direct parsing should extract Dockerfile structure and keep dockerfile language."""
 
     repo_path = tmp_path / "service"
     repo_path.mkdir()
     dockerfile = repo_path / "Dockerfile"
     dockerfile.write_text(
-        "FROM python:3.12-slim\nRUN pip install -r requirements.txt\n",
+        'FROM python:3.12-slim\nENTRYPOINT ["python", "app.py"]\n',
         encoding="utf-8",
     )
     builder = SimpleNamespace(
@@ -144,7 +145,8 @@ def test_parse_file_uses_raw_text_parser_for_dockerfile(tmp_path: Path) -> None:
     assert result["path"] == str(dockerfile)
     assert result["repo_path"] == str(repo_path)
     assert result["lang"] == "dockerfile"
-    assert result["functions"] == []
+    assert result["dockerfile_stages"][0]["base_image"] == "python"
+    assert result["dockerfile_stages"][0]["entrypoint"] == '["python", "app.py"]'
 
 
 def test_parse_file_uses_raw_text_parser_for_conf_j2(tmp_path: Path) -> None:

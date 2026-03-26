@@ -185,7 +185,7 @@ def trace_deployment_chain(
 
         repo_k8s_resources = session.run(
             """
-            MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)
+            MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)
             WHERE r.name CONTAINS $name
             RETURN k.name as name, k.kind as kind,
                    k.namespace as namespace,
@@ -198,7 +198,7 @@ def trace_deployment_chain(
         if source_repo_ids or resolved_source_repo_names:
             deployed_k8s_resources = session.run(
                 """
-                MATCH (repo:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)
+                MATCH (repo:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)
                 WHERE (repo.id IN $source_repo_ids OR repo.name IN $source_repo_names)
                   AND (
                       toLower(coalesce(f.relative_path, '')) CONTAINS $service_name_lc
@@ -221,7 +221,7 @@ def trace_deployment_chain(
 
         claims = session.run(
             """
-            MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)
+            MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)
             WHERE r.name CONTAINS $name
             RETURN claim.name as claim_name,
                    claim.kind as claim_kind,
@@ -232,7 +232,7 @@ def trace_deployment_chain(
 
         terraform = session.run(
             """
-            MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)
+            MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tf:TerraformResource)
             WHERE r.name CONTAINS $name
                OR (
                     r.id IN $provisioned_repo_ids
@@ -256,7 +256,7 @@ def trace_deployment_chain(
 
         tf_modules = session.run(
             """
-            MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)
+            MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(mod:TerraformModule)
             WHERE r.name CONTAINS $name
                OR (
                     r.id IN $provisioned_repo_ids
