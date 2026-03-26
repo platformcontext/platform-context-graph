@@ -357,6 +357,8 @@ def finalize_index_batch(
         stage_progress_callback(stage_name)
 
     def _run_function_call_stage() -> None:
+        """Materialize function-call edges and aggregate stage-level metrics."""
+
         aggregated_metrics: dict[str, float | int] = {}
         create_all_function_calls = builder._create_all_function_calls
         for repo_path in committed_repo_paths:
