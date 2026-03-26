@@ -1,0 +1,51 @@
+docs/docs/why-pcg.md
+  5ea0b6b38f42a68a 39,41,45,47-53,57,70-72
+README.md
+  5ea0b6b38f42a68a 29,31-47,51-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "0b53fda6d1f76000fd70cc836957b005769a8262",
+  "prompts": {
+    "5ea0b6b38f42a68a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f54e9129-8754-405c-8653-8361aeceafda",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 39,
+      "total_deletions": 11,
+      "accepted_lines": 39,
+      "overriden_lines": 0
+    },
+    "bc8de5acf5b9d599": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a1a75ed0-af0f-4475-8453-82f9a3b36f3f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1244,
+      "overriden_lines": 0
+    },
+    "eae21d7de878a51f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d1ad9-5824-7a81-9a36-270ee73e7bfe",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 234,
+      "overriden_lines": 0
+    }
+  }
+}
