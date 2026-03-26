@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from contextlib import contextmanager
 from typing import Any
 
+from ..observability import get_observability
 from .models import ContentEntityEntry, ContentFileEntry
 from .postgres_queries import (
     get_entity_content as postgres_get_entity_content,
@@ -80,9 +81,16 @@ class PostgresContentProvider:
             entry: File content to store.
         """
 
-        with self._cursor() as cursor:
-            cursor.execute(
-                """
+        with get_observability().start_span(
+            "pcg.content.postgres.upsert_file",
+            attributes={
+                "pcg.content.repo_id": entry.repo_id,
+                "pcg.content.relative_path": entry.relative_path,
+            },
+        ):
+            with self._cursor() as cursor:
+                cursor.execute(
+                    """
                 INSERT INTO content_files (
                     repo_id,
                     relative_path,
@@ -119,20 +127,20 @@ class PostgresContentProvider:
                     iac_relevant = EXCLUDED.iac_relevant,
                     indexed_at = EXCLUDED.indexed_at
                 """,
-                {
-                    "repo_id": entry.repo_id,
-                    "relative_path": entry.relative_path,
-                    "commit_sha": entry.commit_sha,
-                    "content": entry.content,
-                    "content_hash": entry.content_hash,
-                    "line_count": entry.line_count,
-                    "language": entry.language,
-                    "artifact_type": entry.artifact_type,
-                    "template_dialect": entry.template_dialect,
-                    "iac_relevant": entry.iac_relevant,
-                    "indexed_at": entry.indexed_at,
-                },
-            )
+                    {
+                        "repo_id": entry.repo_id,
+                        "relative_path": entry.relative_path,
+                        "commit_sha": entry.commit_sha,
+                        "content": entry.content,
+                        "content_hash": entry.content_hash,
+                        "line_count": entry.line_count,
+                        "language": entry.language,
+                        "artifact_type": entry.artifact_type,
+                        "template_dialect": entry.template_dialect,
+                        "iac_relevant": entry.iac_relevant,
+                        "indexed_at": entry.indexed_at,
+                    },
+                )
 
     def upsert_entities(self, entries: Sequence[ContentEntityEntry]) -> None:
         """Insert or update entity-content rows.
@@ -156,8 +164,15 @@ class PostgresContentProvider:
         except ValueError:
             batch_size = min(DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE, len(entries))
 
-        with self._cursor() as cursor:
-            query = """
+        with get_observability().start_span(
+            "pcg.content.postgres.upsert_entities",
+            attributes={
+                "pcg.content.entity_count": len(entries),
+                "pcg.content.repo_id": entries[0].repo_id,
+            },
+        ):
+            with self._cursor() as cursor:
+                query = """
                 INSERT INTO content_entities (
                     entity_id,
                     repo_id,
@@ -207,28 +222,28 @@ class PostgresContentProvider:
                     source_cache = EXCLUDED.source_cache,
                     indexed_at = EXCLUDED.indexed_at
                 """
-            rows = [
-                {
-                    "entity_id": entry.entity_id,
-                    "repo_id": entry.repo_id,
-                    "relative_path": entry.relative_path,
-                    "entity_type": entry.entity_type,
-                    "entity_name": entry.entity_name,
-                    "start_line": entry.start_line,
-                    "end_line": entry.end_line,
-                    "start_byte": entry.start_byte,
-                    "end_byte": entry.end_byte,
-                    "language": entry.language,
-                    "artifact_type": entry.artifact_type,
-                    "template_dialect": entry.template_dialect,
-                    "iac_relevant": entry.iac_relevant,
-                    "source_cache": entry.source_cache,
-                    "indexed_at": entry.indexed_at,
-                }
-                for entry in entries
-            ]
-            for start in range(0, len(rows), batch_size):
-                cursor.executemany(query, rows[start : start + batch_size])
+                rows = [
+                    {
+                        "entity_id": entry.entity_id,
+                        "repo_id": entry.repo_id,
+                        "relative_path": entry.relative_path,
+                        "entity_type": entry.entity_type,
+                        "entity_name": entry.entity_name,
+                        "start_line": entry.start_line,
+                        "end_line": entry.end_line,
+                        "start_byte": entry.start_byte,
+                        "end_byte": entry.end_byte,
+                        "language": entry.language,
+                        "artifact_type": entry.artifact_type,
+                        "template_dialect": entry.template_dialect,
+                        "iac_relevant": entry.iac_relevant,
+                        "source_cache": entry.source_cache,
+                        "indexed_at": entry.indexed_at,
+                    }
+                    for entry in entries
+                ]
+                for start in range(0, len(rows), batch_size):
+                    cursor.executemany(query, rows[start : start + batch_size])
 
     def delete_repository_content(self, repo_id: str) -> None:
         """Delete all cached content rows for one repository.

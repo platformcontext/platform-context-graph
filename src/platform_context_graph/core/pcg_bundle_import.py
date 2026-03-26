@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from platform_context_graph.observability import get_observability
 from platform_context_graph.utils.debug_log import (
     debug_log,
     info_logger,
@@ -39,48 +40,80 @@ class _BundleImportMixin:
 
         del readonly
         try:
-            info_logger(f"Starting import from {bundle_path}")
+            info_logger(
+                f"Starting import from {bundle_path}",
+                event_name="bundle.import.started",
+                extra_keys={"bundle_path": str(bundle_path)},
+            )
             if not bundle_path.exists():
                 return False, f"Bundle file not found: {bundle_path}"
 
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_path = Path(temp_dir)
-                with zipfile.ZipFile(bundle_path, "r") as bundle_zip:
-                    bundle_zip.extractall(temp_path)
+            with get_observability().start_span(
+                "pcg.bundle.import",
+                attributes={"pcg.bundle.path": str(bundle_path)},
+            ):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    temp_path = Path(temp_dir)
+                    with zipfile.ZipFile(bundle_path, "r") as bundle_zip:
+                        bundle_zip.extractall(temp_path)
 
-                is_valid, validation_msg = self._validate_bundle(temp_path)
-                if not is_valid:
-                    return False, f"Invalid bundle: {validation_msg}"
+                    is_valid, validation_msg = self._validate_bundle(temp_path)
+                    if not is_valid:
+                        return False, f"Invalid bundle: {validation_msg}"
 
-                metadata = json.loads((temp_path / "metadata.json").read_text())
-                info_logger(f"Loading bundle: {metadata.get('repo', 'unknown')}")
-                info_logger(f"Bundle version: {metadata.get('pcg_version', 'unknown')}")
-
-                repo_name = metadata.get("repo", "unknown")
-                repo_path = metadata.get("repo_path")
-
-                if clear_existing:
-                    info_logger("Clearing all existing graph data...")
-                    self._clear_graph()
-                elif self._check_existing_repository(repo_name, repo_path):
-                    return (
-                        False,
-                        f"Repository '{repo_name}' already exists in the database. "
-                        "Use clear_existing=True to replace it.",
+                    metadata = json.loads((temp_path / "metadata.json").read_text())
+                    info_logger(
+                        f"Loading bundle: {metadata.get('repo', 'unknown')}",
+                        event_name="bundle.import.metadata",
+                        extra_keys={
+                            "repo_name": metadata.get("repo", "unknown"),
+                            "pcg_version": metadata.get("pcg_version", "unknown"),
+                        },
                     )
 
-                self._import_schema(temp_path / "schema.json")
-                node_count = self._import_nodes(temp_path / "nodes.jsonl")
-                edge_count = self._import_edges(temp_path / "edges.jsonl")
+                    repo_name = metadata.get("repo", "unknown")
+                    repo_path = metadata.get("repo_path")
+
+                    if clear_existing:
+                        info_logger(
+                            "Clearing all existing graph data...",
+                            event_name="bundle.import.clear_existing",
+                            extra_keys={"bundle_path": str(bundle_path)},
+                        )
+                        self._clear_graph()
+                    elif self._check_existing_repository(repo_name, repo_path):
+                        return (
+                            False,
+                            f"Repository '{repo_name}' already exists in the database. "
+                            "Use clear_existing=True to replace it.",
+                        )
+
+                    self._import_schema(temp_path / "schema.json")
+                    node_count = self._import_nodes(temp_path / "nodes.jsonl")
+                    edge_count = self._import_edges(temp_path / "edges.jsonl")
 
             success_msg = f"✅ Successfully imported {bundle_path.name}\n"
             success_msg += f"   Repository: {metadata.get('repo', 'unknown')}\n"
             success_msg += f"   Nodes: {node_count:,} | Edges: {edge_count:,}"
-            info_logger(success_msg)
+            info_logger(
+                success_msg,
+                event_name="bundle.import.completed",
+                extra_keys={
+                    "bundle_path": str(bundle_path),
+                    "repo_name": metadata.get("repo", "unknown"),
+                    "node_count": node_count,
+                    "edge_count": edge_count,
+                },
+            )
             return True, success_msg
         except Exception as exc:  # pragma: no cover - exercised through callers
             error_msg = f"Failed to import bundle: {exc}"
-            warning_logger(error_msg)
+            warning_logger(
+                error_msg,
+                event_name="bundle.import.failed",
+                extra_keys={"bundle_path": str(bundle_path)},
+                exc_info=exc,
+            )
             return False, error_msg
 
     def _validate_bundle(self, bundle_dir: Path) -> tuple[bool, str]:
@@ -158,7 +191,11 @@ class _BundleImportMixin:
             )
             record = result.single()
             if not record:
-                warning_logger(f"Repository '{repo_identifier}' not found for deletion")
+                warning_logger(
+                    f"Repository '{repo_identifier}' not found for deletion",
+                    event_name="bundle.repository_delete.missing",
+                    extra_keys={"repo_identifier": repo_identifier},
+                )
                 return
 
             repo_path = record["path"]
@@ -178,7 +215,11 @@ class _BundleImportMixin:
                 """,
                 repo_path=repo_path,
             )
-            info_logger(f"Deleted repository: {repo_identifier}")
+            info_logger(
+                f"Deleted repository: {repo_identifier}",
+                event_name="bundle.repository_delete.completed",
+                extra_keys={"repo_identifier": repo_identifier},
+            )
 
     def _clear_graph(self) -> None:
         """Remove every node and edge from the current graph."""
@@ -194,7 +235,10 @@ class _BundleImportMixin:
         """
 
         del schema_file
-        debug_log("Schema import not yet implemented - relying on application schema")
+        debug_log(
+            "Schema import not yet implemented - relying on application schema",
+            event_name="bundle.schema.import.skipped",
+        )
 
     def _import_nodes(self, nodes_file: Path) -> int:
         """Import bundle nodes from JSONL.

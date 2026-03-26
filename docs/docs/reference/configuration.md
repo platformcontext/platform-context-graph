@@ -51,6 +51,28 @@ Here are the available settings you can configure.
 | **`PARALLEL_WORKERS`** | `4` | Legacy fallback for parse-worker count when `PCG_PARSE_WORKERS` is unset. |
 | **`CACHE_ENABLED`** | `true` | Caches file hashes to speed up re-indexing. |
 
+### Logging And Tracing
+
+These settings control the shared structured logging and OTEL tracing behavior used by the API, MCP runtime, ingester, Falkor worker, and local CLI.
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| **`PCG_LOG_FORMAT`** | `json` | Log output format. `json` is the production standard. `text` is only for local debugging. |
+| **`ENABLE_APP_LOGS`** | `INFO` | Application log threshold (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`, `DISABLED`). |
+| **`LIBRARY_LOG_LEVEL`** | `WARNING` | Log threshold for noisy third-party libraries such as `neo4j`, `asyncio`, and `urllib3`. |
+| **`DEBUG_LOGS`** | `false` | Enables the legacy debug-file sink. When enabled, it writes the same JSON envelope used on stdout. |
+| **`DEBUG_LOG_PATH`** | `~/mcp_debug.log` | Legacy debug-file path used only when `DEBUG_LOGS=true`. |
+| **`LOG_FILE_PATH`** | app home logs path | Optional structured file sink for process logs. Stdout JSON is still the canonical output. |
+
+Notes:
+
+- The default production shape is JSON on stdout plus OTEL traces over OTLP.
+- Logs are intentionally shaped for generic collectors. Loki, Elasticsearch, and similar backends can treat each line as one JSON document.
+- Every log record uses the same top-level envelope and stores custom dimensions under `extra_keys`.
+- Trace correlation is automatic when a log is emitted inside an active OTEL span.
+- The request ID becomes the default correlation ID unless an upstream correlation ID is already present.
+- OTEL logs export is not required for this setup. Stdout JSON is the source of truth for logs.
+
 ### Concurrency And Watch Controls
 
 These settings are the public knobs for the checkpointed Python indexing pipeline and repo-partitioned watch loop.
@@ -142,6 +164,9 @@ Use `.pcgignore` for project-specific exclusions. Use
 `PCG_IGNORE_DEPENDENCY_DIRS` to control the built-in dependency-root policy, and
 use `IGNORE_DIRS` only if you want to change the generic always-ignore
 directory list globally.
+
+For logging, the rule is simpler: keep `PCG_LOG_FORMAT=json` unless you are
+debugging locally and want a human-readable stream.
 
 To reset everything to defaults:
 ```bash

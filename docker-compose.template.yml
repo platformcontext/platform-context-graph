@@ -15,6 +15,25 @@ services:
       timeout: 5s
       retries: 10
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.143.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "${OTEL_COLLECTOR_OTLP_GRPC_PORT:-4317}:4317"
+      - "${OTEL_COLLECTOR_OTLP_HTTP_PORT:-4318}:4318"
+      - "${OTEL_COLLECTOR_PROMETHEUS_PORT:-9464}:9464"
+    depends_on:
+      - jaeger
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -49,6 +68,13 @@ services:
       PCG_FILESYSTEM_ROOT: /fixtures
       PCG_GIT_AUTH_METHOD: none
       PCG_REPOSITORY_RULES_JSON: "[]"
+      PCG_DEPLOYMENT_ENVIRONMENT: local-compose
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
     volumes:
       - pcg_data:/data
       - ./:/app-src
@@ -58,6 +84,10 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
+      jaeger:
+        condition: service_started
 
   platform-context-graph:
     build:
@@ -74,15 +104,31 @@ services:
       PCG_CONTENT_STORE_DSN: postgresql://pcg:testpassword@postgres:5432/platform_context_graph
       PCG_POSTGRES_DSN: postgresql://pcg:testpassword@postgres:5432/platform_context_graph
       PCG_HOME: /data/.platform-context-graph
+      PCG_REPOS_DIR: /data/repos
+      PCG_REPO_SOURCE_MODE: filesystem
+      PCG_FILESYSTEM_ROOT: /fixtures
+      PCG_GIT_AUTH_METHOD: none
       PCG_REPOSITORY_RULES_JSON: "[]"
+      PCG_DEPLOYMENT_ENVIRONMENT: local-compose
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
     volumes:
       - pcg_data:/data
       - ./:/app-src
+      - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
     depends_on:
       neo4j:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
+      jaeger:
+        condition: service_started
       bootstrap-index:
         condition: service_completed_successfully
 
@@ -108,6 +154,13 @@ services:
       PCG_REPOSITORY_RULES_JSON: "[]"
       PCG_REPO_SYNC_INITIAL_DELAY_SECONDS: "${PCG_REPO_SYNC_INITIAL_DELAY_SECONDS:-30}"
       PCG_REPO_SYNC_INTERVAL_SECONDS: "${REPO_SYNC_INTERVAL_SECONDS:-900}"
+      PCG_DEPLOYMENT_ENVIRONMENT: local-compose
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
     volumes:
       - pcg_data:/data
       - ./:/app-src
@@ -117,6 +170,10 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
+      jaeger:
+        condition: service_started
       bootstrap-index:
         condition: service_completed_successfully
 

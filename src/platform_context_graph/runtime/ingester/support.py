@@ -124,7 +124,11 @@ def log(component: str, message: str) -> None:
         message: Human-readable log message.
     """
 
-    info_logger(f"[{component}] {message}")
+    info_logger(
+        f"[{component}] {message}",
+        event_name="ingester.lifecycle",
+        extra_keys={"ingester_component": component},
+    )
 
 
 def fingerprint_tree(root: Path) -> str:

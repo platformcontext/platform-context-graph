@@ -2,6 +2,9 @@ image:
   repository: ghcr.io/platformcontext/platform-context-graph
   tag: "v0.0.29"
 
+env:
+  PCG_LOG_FORMAT: json
+
 neo4j:
   uri: bolt://neo4j.platform.svc.cluster.local:7687
   auth:
@@ -28,6 +31,26 @@ service:
 
 api:
   replicas: 1
+
+observability:
+  environment: ""
+  otel:
+    enabled: false
+    endpoint: ""
+    protocol: grpc
+    insecure: true
+    headers: {}
+    tracesExporter: otlp
+    metricsExporter: otlp
+    logsExporter: none
+    resourceAttributes: {}
+    excludedUrls:
+      - /health
+      - /api/v0/health
+      - /api/v0/openapi.json
+      - /api/v0/docs
+      - /api/v0/redoc
+    metricExportIntervalSeconds: 30
 
 worker:
   replicas: 1

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+import pytest
 
 from platform_context_graph.core.database import GraphStoreCapabilities
 from platform_context_graph.indexing.coordinator_models import (
@@ -96,6 +99,52 @@ def test_iter_snapshot_file_data_batches_streams_saved_rows(
         ["/tmp/example-repo/src/a.py", "/tmp/example-repo/src/b.py"],
         ["/tmp/example-repo/src/c.py"],
     ]
+
+
+def test_save_and_load_snapshot_emit_checkpoint_spans(tmp_path, monkeypatch) -> None:
+    """Checkpoint persistence should surface save/load spans for tracing."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    observability = importlib.import_module("platform_context_graph.observability")
+    observability.reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv(
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "http://otel-collector.monitoring.svc.cluster.local:4317",
+    )
+    span_exporter = InMemorySpanExporter()
+    observability.initialize_observability(
+        component="repository",
+        span_exporter=span_exporter,
+        metric_reader=InMemoryMetricReader(),
+    )
+
+    monkeypatch.setattr(
+        "platform_context_graph.indexing.coordinator_storage.get_app_home",
+        lambda: tmp_path,
+    )
+
+    snapshot = RepositorySnapshot(
+        repo_path="/tmp/example-repo",
+        file_count=1,
+        imports_map={"module": ["/tmp/example-repo/src/example.py"]},
+        file_data=[{"path": "/tmp/example-repo/src/example.py", "lang": "python"}],
+    )
+
+    _save_snapshot("run-1234", snapshot)
+    _load_snapshot_metadata("run-1234", Path(snapshot.repo_path))
+    _load_snapshot_file_data("run-1234", Path(snapshot.repo_path))
+
+    span_names = {span.name for span in span_exporter.get_finished_spans()}
+    assert "pcg.index.checkpoint.save_snapshot_metadata" in span_names
+    assert "pcg.index.checkpoint.save_snapshot_file_data" in span_names
+    assert "pcg.index.checkpoint.load_snapshot_metadata" in span_names
+    assert "pcg.index.checkpoint.load_snapshot_file_data" in span_names
 
 
 def test_graph_store_adapter_exposes_capabilities_and_builder_entrypoints() -> None:

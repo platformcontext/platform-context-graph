@@ -26,7 +26,7 @@ def _build_exact_name_query(
         MATCH (node:{label} {{name: $name}})
         {"WHERE node.path STARTS WITH $repo_path" if repo_path else ""}
         RETURN node.name as name, node.path as path, node.line_number as line_number,
-               node.source as source, node.docstring as docstring, node.is_dependency as is_dependency
+               node.source as source, node.docstring as docstring, node[$is_dependency_key] as is_dependency
         LIMIT 20
     """
 
@@ -88,8 +88,8 @@ class CodeFinderSearchMixin:
                 MATCH (node:{find_by})
                 WHERE {name_filter} {repo_filter}
                 RETURN node.name as name, node.path as path, node.line_number as line_number,
-                    node.source as source, node.docstring as docstring, node.is_dependency as is_dependency
-                ORDER BY node.is_dependency ASC, node.name
+                    node.source as source, node.docstring as docstring, node[$is_dependency_key] as is_dependency
+                ORDER BY coalesce(node[$is_dependency_key], false) ASC, node.name
                 LIMIT 20
             """
         return f"""
@@ -97,7 +97,7 @@ class CodeFinderSearchMixin:
                 WITH node, score
                 WHERE node:{find_by} {'AND node.name CONTAINS $search_term' if not fuzzy_search else ''} {repo_filter}
                 RETURN node.name as name, node.path as path, node.line_number as line_number,
-                    node.source as source, node.docstring as docstring, node.is_dependency as is_dependency
+                    node.source as source, node.docstring as docstring, node[$is_dependency_key] as is_dependency
                 ORDER BY score DESC
                 LIMIT 20
             """
@@ -121,6 +121,7 @@ class CodeFinderSearchMixin:
                     _build_exact_name_query("Function", repo_path),
                     name=search_term,
                     repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
                 return result.data()
 
@@ -131,6 +132,7 @@ class CodeFinderSearchMixin:
                 self.format_query("Function", fuzzy_search, repo_path),
                 search_term=formatted_search_term,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
             return result.data()
 
@@ -153,6 +155,7 @@ class CodeFinderSearchMixin:
                     _build_exact_name_query("Class", repo_path),
                     name=search_term,
                     repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
                 return result.data()
 
@@ -163,6 +166,7 @@ class CodeFinderSearchMixin:
                 self.format_query("Class", fuzzy_search, repo_path),
                 search_term=formatted_search_term,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
             return result.data()
 
@@ -184,12 +188,13 @@ class CodeFinderSearchMixin:
                 MATCH (v:Variable)
                 WHERE v.name CONTAINS $search_term {"AND v.path STARTS WITH $repo_path" if repo_path else ""}
                 RETURN v.name as name, v.path as path, v.line_number as line_number,
-                       v.value as value, v.context as context, v.is_dependency as is_dependency
-                ORDER BY v.is_dependency ASC, v.name
+                       v.value as value, v.context as context, v[$is_dependency_key] as is_dependency
+                ORDER BY coalesce(v[$is_dependency_key], false) ASC, v.name
                 LIMIT 20
             """,
                 search_term=search_term,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
             return result.data()
 
@@ -223,12 +228,13 @@ class CodeFinderSearchMixin:
                     END as type,
                     node.name as name, f.path as path,
                     node.line_number as line_number, node.source as source,
-                    node.docstring as docstring, node.is_dependency as is_dependency
+                    node.docstring as docstring, node[$is_dependency_key] as is_dependency
                 ORDER BY score DESC
                 LIMIT 20
             """,
                 search_term=search_term,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
             return result.data()
 
@@ -260,12 +266,13 @@ class CodeFinderSearchMixin:
                             '{type_name}' as type,
                             node.name as name, node.path as path,
                             node.line_number as line_number, node.source as source,
-                            node.docstring as docstring, node.is_dependency as is_dependency
-                        ORDER BY node.is_dependency ASC, node.name
+                            node.docstring as docstring, node[$is_dependency_key] as is_dependency
+                        ORDER BY coalesce(node[$is_dependency_key], false) ASC, node.name
                         LIMIT 20
                     """,
                         search_term=search_term,
                         repo_path=repo_path,
+                        is_dependency_key="is_dependency",
                     )
                     all_results.extend(result.data())
                 except Exception:

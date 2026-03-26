@@ -171,7 +171,7 @@ def test_code_search_resolves_canonical_repository_ids_before_querying_database(
         def run(self, query: str, **_kwargs):
             if (
                 "MATCH (r:Repository)" in query
-                and "coalesce(r.local_path, r.path) as local_path" in query
+                and "coalesce(r[$local_path_key], r.path) as local_path" in query
             ):
                 return FakeResult(
                     records=[
@@ -260,7 +260,7 @@ def test_code_search_workspace_scope_returns_repo_identity_per_result() -> None:
         def run(self, query: str, **_kwargs):
             if (
                 "MATCH (r:Repository)" in query
-                and "coalesce(r.local_path, r.path) as local_path" in query
+                and "coalesce(r[$local_path_key], r.path) as local_path" in query
             ):
                 return FakeResult(
                     records=[

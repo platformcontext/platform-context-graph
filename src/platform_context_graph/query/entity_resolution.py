@@ -6,7 +6,7 @@ import json
 import re
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 from ..domain import (
     AliasMetadata,
@@ -336,7 +336,12 @@ def _db_repository_matches(
             MATCH (r:Repository)
             RETURN {_repository_projection()}
             ORDER BY r.name
-        """).data()
+        """,
+            local_path_key="local_path",
+            remote_url_key="remote_url",
+            repo_slug_key="repo_slug",
+            has_remote_key="has_remote",
+        ).data()
 
     matches: list[dict[str, Any]] = []
     for repo in repos:

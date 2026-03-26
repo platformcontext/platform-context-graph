@@ -8,6 +8,7 @@ from platform_context_graph.query.repositories import (
     get_repository_context,
     get_repository_stats,
 )
+from platform_context_graph.query.repositories.common import resolve_repository
 from platform_context_graph.query.repositories.context_data import _fetch_infrastructure
 from platform_context_graph.query.repositories.graph_counts import repository_graph_counts
 
@@ -99,6 +100,86 @@ def test_repository_graph_counts_excludes_class_methods_from_top_level_count() -
     assert "WITH r" not in recorded_query["query"]
     assert "NOT EXISTS {" in recorded_query["query"]
     assert "(:Class)-[:CONTAINS]->(fn)" in recorded_query["query"]
+    assert "coalesce(r[$local_path_key], r.path) = $repo_path" in recorded_query["query"]
+    assert "[:IMPORTS]->(module:Module)" not in recorded_query["query"]
+    assert "type(rel) = $imports_rel_type" in recorded_query["query"]
+
+
+def test_resolve_repository_uses_dynamic_optional_repository_keys() -> None:
+    """Repository lookup should avoid sparse-key warnings for optional metadata."""
+
+    recorded: dict[str, object] = {}
+
+    class RecordingSession:
+        def run(self, query, **kwargs):
+            recorded["query"] = query
+            recorded["kwargs"] = kwargs
+            return MockResult(
+                records=[
+                    {
+                        "id": "repository:r_1234",
+                        "name": "my-api",
+                        "path": "/repos/my-api",
+                        "local_path": "/repos/my-api",
+                        "remote_url": "https://github.com/platformcontext/my-api",
+                        "repo_slug": "platformcontext/my-api",
+                        "has_remote": True,
+                    }
+                ]
+            )
+
+    resolved = resolve_repository(RecordingSession(), "repository:r_1234")
+
+    assert resolved is not None
+    assert "r[$remote_url_key] as remote_url" in recorded["query"]
+    assert "r[$repo_slug_key] as repo_slug" in recorded["query"]
+    assert "coalesce(r[$has_remote_key], false) as has_remote" in recorded["query"]
+    assert recorded["kwargs"] == {
+        "local_path_key": "local_path",
+        "remote_url_key": "remote_url",
+        "repo_slug_key": "repo_slug",
+        "has_remote_key": "has_remote",
+    }
+
+
+def test_fetch_infrastructure_uses_dynamic_optional_property_keys() -> None:
+    """Repository context infra queries should avoid sparse-key warnings."""
+
+    recorded_queries: list[tuple[str, dict[str, object]]] = []
+
+    class RecordingSession:
+        def run(self, query, **kwargs):
+            recorded_queries.append((query, kwargs))
+            return MockResult(records=[])
+
+    _fetch_infrastructure(
+        RecordingSession(),
+        {
+            "id": "repository:r_1234",
+            "path": "/repos/my-api",
+            "local_path": "/repos/my-api",
+        },
+    )
+
+    terraform_variable_query = next(
+        query for query, _ in recorded_queries if "MATCH (r:Repository)-[:CONTAINS*]->(f:File)" in query and "TerraformVariable" in query
+    )
+    argocd_application_query = next(
+        query for query, _ in recorded_queries if "ArgoCDApplication" in query
+    )
+    argocd_appset_query = next(
+        query for query, _ in recorded_queries if "ArgoCDApplicationSet" in query
+    )
+    _, shared_kwargs = recorded_queries[0]
+
+    assert "n[$default_key] as default" in terraform_variable_query
+    assert "n[$project_key] as project" in argocd_application_query
+    assert "n[$dest_namespace_key] as dest_namespace" in argocd_application_query
+    assert "n[$generators_key] as generators" in argocd_appset_query
+    assert shared_kwargs["default_key"] == "default"
+    assert shared_kwargs["project_key"] == "project"
+    assert shared_kwargs["dest_namespace_key"] == "dest_namespace"
+    assert shared_kwargs["generators_key"] == "generators"
 
 
 def test_get_repository_context_returns_current_context_shape():

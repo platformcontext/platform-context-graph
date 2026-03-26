@@ -7,10 +7,9 @@ import signal
 from pathlib import Path
 import logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+from platform_context_graph.observability import configure_logging
+
+configure_logging(component="falkor-worker", runtime_role="worker")
 logger = logging.getLogger("falkor_worker")
 
 # Global to handle shutdown
@@ -41,7 +40,7 @@ def run_worker():
     # Ensure dir exists
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"Starting FalkorDB Lite worker...")
+    logger.info("Starting FalkorDB Lite worker...")
     logger.info(f"DB Path: {db_path}")
     logger.info(f"Socket: {socket_path}")
 

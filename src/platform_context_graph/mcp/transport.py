@@ -10,7 +10,7 @@ import time
 import traceback
 from typing import Any, Awaitable, Callable, Protocol
 
-from ..observability import initialize_observability
+from ..observability import initialize_observability, new_request_id
 from ..prompts import LLM_SYSTEM_PROMPT
 from ..utils.debug_log import debug_logger, error_logger, info_logger, warning_logger
 
@@ -96,12 +96,29 @@ class ServerTransportMixin:
         request_id = body.get("id")
         request_started = time.perf_counter()
         request_success = False
+        request_id_value = str(request_id) if request_id is not None else new_request_id()
+        correlation_id = (
+            (params.get("correlation_id") if isinstance(params, dict) else None)
+            or (
+                (params.get("_meta") or {}).get("correlation_id")
+                if isinstance(params, dict) and isinstance(params.get("_meta"), dict)
+                else None
+            )
+            or request_id_value
+        )
         span_attributes = {
             "pcg.jsonrpc.method": method or "unknown",
             "pcg.transport": transport,
+            "pcg.request_id": request_id_value,
+            "pcg.correlation_id": correlation_id,
         }
 
-        with runtime.request_context(component="mcp", transport=transport):
+        with runtime.request_context(
+            component="mcp",
+            transport=transport,
+            request_id=request_id_value,
+            correlation_id=correlation_id,
+        ):
             with runtime.start_span(
                 "pcg.mcp.request",
                 component="mcp",
@@ -109,9 +126,23 @@ class ServerTransportMixin:
             ) as request_span:
                 try:
                     if request_id is not None:
-                        info_logger(f"JSON-RPC request method={method} id={request_id}")
+                        info_logger(
+                            "JSON-RPC request received",
+                            event_name="mcp.request.received",
+                            extra_keys={
+                                "jsonrpc_method": method or "unknown",
+                                "jsonrpc_request_id": request_id_value,
+                            },
+                        )
                     else:
-                        debug_logger(f"JSON-RPC notification method={method}")
+                        debug_logger(
+                            "JSON-RPC notification received",
+                            event_name="mcp.notification.received",
+                            extra_keys={
+                                "jsonrpc_method": method or "unknown",
+                                "jsonrpc_request_id": request_id_value,
+                            },
+                        )
 
                     if method == "initialize":
                         self.client_capabilities = dict(
@@ -144,7 +175,12 @@ class ServerTransportMixin:
                         tool_name = params.get("name")
                         args = params.get("arguments", {})
                         info_logger(
-                            f"tools/call -> {tool_name} args={list(args.keys())}"
+                            "MCP tool call started",
+                            event_name="mcp.tool.started",
+                            extra_keys={
+                                "tool_name": str(tool_name or "unknown"),
+                                "argument_keys": sorted(args.keys()),
+                            },
                         )
                         tool_started = time.perf_counter()
                         tool_success = False
@@ -203,6 +239,17 @@ class ServerTransportMixin:
                                     duration_seconds=time.perf_counter() - tool_started,
                                     success=tool_success,
                                 )
+                                info_logger(
+                                    "MCP tool call completed",
+                                    event_name="mcp.tool.completed",
+                                    extra_keys={
+                                        "tool_name": tool_metric_name,
+                                        "success": tool_success,
+                                        "duration_seconds": round(
+                                            time.perf_counter() - tool_started, 6
+                                        ),
+                                    },
+                                )
 
                     if request_id is None:
                         request_success = True
@@ -226,6 +273,17 @@ class ServerTransportMixin:
                         transport=transport,
                         duration_seconds=time.perf_counter() - request_started,
                         success=request_success,
+                    )
+                    info_logger(
+                        "MCP request completed",
+                        event_name="mcp.request.completed",
+                        extra_keys={
+                            "jsonrpc_method": str(method or "unknown"),
+                            "success": request_success,
+                            "duration_seconds": round(
+                                time.perf_counter() - request_started, 6
+                            ),
+                        },
                     )
 
     async def run(self: _TransportRuntime) -> None:

@@ -30,7 +30,7 @@ class CodeFinderAnalysisMixin:
             result = session.run(
                 f"""
                 MATCH (func:Function)
-                WHERE func.is_dependency = false {repo_filter}
+                WHERE coalesce(func[$is_dependency_key], false) = false {repo_filter}
                   AND NOT func.name IN ['main', 'setup', 'run']
                   AND NOT (func.name STARTS WITH '__' AND func.name ENDS WITH '__')
                   AND NOT func.name STARTS WITH '_test'
@@ -42,7 +42,7 @@ class CodeFinderAnalysisMixin:
                   AND ALL(decorator_name IN $exclude_decorated_with WHERE NOT decorator_name IN func.decorators)
                 WITH func
                 OPTIONAL MATCH (caller:Function)-[:CALLS]->(func)
-                WHERE caller.is_dependency = false
+                WHERE coalesce(caller[$is_dependency_key], false) = false
                 WITH func, count(caller) as caller_count
                 WHERE caller_count = 0
                 OPTIONAL MATCH (file:File)-[:CONTAINS]->(func)
@@ -58,6 +58,7 @@ class CodeFinderAnalysisMixin:
             """,
                 exclude_decorated_with=exclude_decorated_with,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
 
             return {
@@ -89,12 +90,16 @@ class CodeFinderAnalysisMixin:
                     WITH f, p, nodes(p) as path_nodes
                     WITH f, path_nodes, list_extract(path_nodes, size(path_nodes)) as target
                     WHERE target.name = $function_name AND target.path = $path {repo_filter}
-                    RETURN DISTINCT f.name AS caller_name, f.path AS caller_file_path, f.line_number AS caller_line_number, f.is_dependency AS caller_is_dependency
+                    RETURN DISTINCT f.name AS caller_name, f.path AS caller_file_path, f.line_number AS caller_line_number, f[$is_dependency_key] AS caller_is_dependency
                     ORDER BY caller_is_dependency ASC, caller_file_path, caller_line_number
                     LIMIT 50
                 """
                 result = session.run(
-                    query, function_name=function_name, path=path, repo_path=repo_path
+                    query,
+                    function_name=function_name,
+                    path=path,
+                    repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
             else:
                 query = f"""
@@ -102,12 +107,15 @@ class CodeFinderAnalysisMixin:
                     WITH f, p, nodes(p) as path_nodes
                     WITH f, path_nodes, list_extract(path_nodes, size(path_nodes)) as target
                     WHERE target.name = $function_name {repo_filter}
-                    RETURN DISTINCT f.name AS caller_name, f.path AS caller_file_path, f.line_number AS caller_line_number, f.is_dependency AS caller_is_dependency
+                    RETURN DISTINCT f.name AS caller_name, f.path AS caller_file_path, f.line_number AS caller_line_number, f[$is_dependency_key] AS caller_is_dependency
                     ORDER BY caller_is_dependency ASC, caller_file_path, caller_line_number
                     LIMIT 50
                 """
                 result = session.run(
-                    query, function_name=function_name, repo_path=repo_path
+                    query,
+                    function_name=function_name,
+                    repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
             return result.data()
 
@@ -136,12 +144,16 @@ class CodeFinderAnalysisMixin:
                     WITH p, nodes(p) as path_nodes
                     WITH list_extract(path_nodes, size(path_nodes)) as f
                     {repo_filter}
-                    RETURN DISTINCT f.name AS callee_name, f.path AS callee_file_path, f.line_number AS callee_line_number, f.is_dependency AS callee_is_dependency
+                    RETURN DISTINCT f.name AS callee_name, f.path AS callee_file_path, f.line_number AS callee_line_number, f[$is_dependency_key] AS callee_is_dependency
                     ORDER BY callee_is_dependency ASC, callee_file_path, callee_line_number
                     LIMIT 50
                 """
                 result = session.run(
-                    query, function_name=function_name, path=path, repo_path=repo_path
+                    query,
+                    function_name=function_name,
+                    path=path,
+                    repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
             else:
                 query = f"""
@@ -150,12 +162,15 @@ class CodeFinderAnalysisMixin:
                     WITH p, nodes(p) as path_nodes
                     WITH list_extract(path_nodes, size(path_nodes)) as f
                     {repo_filter}
-                    RETURN DISTINCT f.name AS callee_name, f.path AS callee_file_path, f.line_number AS callee_line_number, f.is_dependency AS callee_is_dependency
+                    RETURN DISTINCT f.name AS callee_name, f.path AS callee_file_path, f.line_number AS callee_line_number, f[$is_dependency_key] AS callee_is_dependency
                     ORDER BY callee_is_dependency ASC, callee_file_path, callee_line_number
                     LIMIT 50
                 """
                 result = session.run(
-                    query, function_name=function_name, repo_path=repo_path
+                    query,
+                    function_name=function_name,
+                    repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
             return result.data()
 
@@ -207,7 +222,7 @@ class CodeFinderAnalysisMixin:
                         name: node.name,
                         path: node.path,
                         line_number: node.line_number,
-                        is_dependency: node.is_dependency
+                        is_dependency: node[$is_dependency_key]
                     }}] as function_chain,
                     [rel in call_rels | {{
                         call_line: rel.line_number,
@@ -224,6 +239,7 @@ class CodeFinderAnalysisMixin:
                 "start_file": start_file,
                 "end_file": end_file,
                 "repo_path": repo_path,
+                "is_dependency_key": "is_dependency",
             }
             result = session.run(query, params)
             return result.data()
@@ -252,7 +268,7 @@ class CodeFinderAnalysisMixin:
             if label == "File":
                 query = """
                     MATCH (n:File)
-                    RETURN n.name as name, n.path as path, n.is_dependency as is_dependency
+                    RETURN n.name as name, n.path as path, n[$is_dependency_key] as is_dependency
                     ORDER BY n.path
                     LIMIT $limit
                 """
@@ -266,12 +282,12 @@ class CodeFinderAnalysisMixin:
             else:
                 query = f"""
                     MATCH (n:{label})
-                    RETURN n.name as name, n.path as path, n.line_number as line_number, n.is_dependency as is_dependency
+                    RETURN n.name as name, n.path as path, n.line_number as line_number, n[$is_dependency_key] as is_dependency
                     ORDER BY is_dependency ASC, name
                     LIMIT $limit
                 """
 
-            result = session.run(query, limit=limit)
+            result = session.run(query, limit=limit, is_dependency_key="is_dependency")
             return result.data()
 
     def find_module_dependencies(
@@ -290,26 +306,28 @@ class CodeFinderAnalysisMixin:
             repo_filter = "AND file.path STARTS WITH $repo_path" if repo_path else ""
             importers_result = session.run(
                 f"""
-                MATCH (file:File)-[imp:IMPORTS]->(module:Module {{name: $module_name}})
-                WHERE 1=1 {repo_filter}
+                MATCH (file:File)-[imp]->(module:Module {{name: $module_name}})
+                WHERE type(imp) = 'IMPORTS' {repo_filter}
                 OPTIONAL MATCH (repo:Repository)-[:CONTAINS]->(file)
                 RETURN DISTINCT
                     file.path as importer_file_path,
                     imp.line_number as import_line_number,
-                    file.is_dependency as file_is_dependency,
+                    file[$is_dependency_key] as file_is_dependency,
                     repo.name as repository_name
-                ORDER BY file.is_dependency ASC, file.path
+                ORDER BY file_is_dependency ASC, file.path
                 LIMIT 50
             """,
                 module_name=module_name,
                 repo_path=repo_path,
+                is_dependency_key="is_dependency",
             )
 
             imports_result = session.run(
                 f"""
-                MATCH (file:File)-[:IMPORTS]->(target_module:Module {{name: $module_name}})
-                MATCH (file)-[imp:IMPORTS]->(other_module:Module)
-                WHERE other_module <> target_module {repo_filter}
+                MATCH (file:File)-[target_rel]->(target_module:Module {{name: $module_name}})
+                WHERE type(target_rel) = 'IMPORTS'
+                MATCH (file)-[imp]->(other_module:Module)
+                WHERE type(imp) = 'IMPORTS' AND other_module <> target_module {repo_filter}
                 RETURN DISTINCT
                     other_module.name as imported_module,
                     imp.alias as import_alias
@@ -368,12 +386,13 @@ class CodeFinderAnalysisMixin:
                         WHEN container:Class THEN container.name
                         ELSE 'module_level'
                     END as scope_name,
-                    var.is_dependency as is_dependency
-                ORDER BY var.is_dependency ASC, path, line_number
-            """,
+                    var[$is_dependency_key] as is_dependency
+                ORDER BY is_dependency ASC, path, line_number
+                """,
                     variable_name=variable_name,
                     path=path,
                     repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
             else:
                 variable_instances = session.run(
@@ -399,11 +418,12 @@ class CodeFinderAnalysisMixin:
                             WHEN container:Class THEN container.name
                             ELSE 'module_level'
                         END as scope_name,
-                        var.is_dependency as is_dependency
-                    ORDER BY var.is_dependency ASC, path, line_number
+                        var[$is_dependency_key] as is_dependency
+                    ORDER BY is_dependency ASC, path, line_number
                 """,
                     variable_name=variable_name,
                     repo_path=repo_path,
+                    is_dependency_key="is_dependency",
                 )
 
             return {
@@ -471,12 +491,17 @@ class CodeFinderAnalysisMixin:
             repo_filter = "AND f.path STARTS WITH $repo_path" if repo_path else ""
             query = f"""
                 MATCH (f:Function)
-                WHERE f.cyclomatic_complexity IS NOT NULL AND f.is_dependency = false {repo_filter}
+                WHERE f.cyclomatic_complexity IS NOT NULL AND coalesce(f[$is_dependency_key], false) = false {repo_filter}
                 RETURN f.name as function_name, f.path as path, f.cyclomatic_complexity as complexity, f.line_number as line_number
                 ORDER BY f.cyclomatic_complexity DESC
                 LIMIT $limit
             """
-            result = session.run(query, limit=limit, repo_path=repo_path)
+            result = session.run(
+                query,
+                limit=limit,
+                repo_path=repo_path,
+                is_dependency_key="is_dependency",
+            )
             return result.data()
 
     def list_indexed_repositories(self) -> list[dict[str, Any]]:
@@ -490,7 +515,7 @@ class CodeFinderAnalysisMixin:
                 MATCH (r:Repository)
                 RETURN r.name as name,
                        r.path as path,
-                       coalesce(r.is_dependency, false) as is_dependency
+                       coalesce(r[$is_dependency_key], false) as is_dependency
                 ORDER BY r.name
-            """)
+            """, is_dependency_key="is_dependency")
             return result.data()

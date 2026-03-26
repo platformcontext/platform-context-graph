@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
-import traceback
 import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from platform_context_graph.observability import get_observability
 from platform_context_graph.utils.debug_log import error_logger, info_logger
 
 
@@ -38,48 +38,72 @@ class _BundleExportMixin:
         """
 
         try:
-            info_logger(f"Starting export to {output_path}")
+            info_logger(
+                f"Starting export to {output_path}",
+                event_name="bundle.export.started",
+                extra_keys={"output_path": str(output_path)},
+            )
 
             if not str(output_path).endswith(".pcg"):
                 output_path = Path(f"{output_path}.pcg")
 
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_path = Path(temp_dir)
-                metadata = self._extract_metadata(repo_path)
-                (temp_path / "metadata.json").write_text(
-                    json.dumps(_json_ready(metadata), indent=2),
-                    encoding="utf-8",
-                )
-
-                schema = self._extract_schema()
-                (temp_path / "schema.json").write_text(
-                    json.dumps(_json_ready(schema), indent=2),
-                    encoding="utf-8",
-                )
-
-                node_count = self._extract_nodes(temp_path / "nodes.jsonl", repo_path)
-                edge_count = self._extract_edges(temp_path / "edges.jsonl", repo_path)
-
-                stats: dict[str, Any] | None = None
-                if include_stats:
-                    stats = self._generate_stats(repo_path, node_count, edge_count)
-                    (temp_path / "stats.json").write_text(
-                        json.dumps(_json_ready(stats), indent=2),
+            with get_observability().start_span(
+                "pcg.bundle.export",
+                attributes={"pcg.bundle.output_path": str(output_path)},
+            ):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    temp_path = Path(temp_dir)
+                    metadata = self._extract_metadata(repo_path)
+                    (temp_path / "metadata.json").write_text(
+                        json.dumps(_json_ready(metadata), indent=2),
                         encoding="utf-8",
                     )
 
-                self._create_readme(temp_path / "README.md", metadata, stats)
-                self._create_zip(temp_path, output_path)
+                    schema = self._extract_schema()
+                    (temp_path / "schema.json").write_text(
+                        json.dumps(_json_ready(schema), indent=2),
+                        encoding="utf-8",
+                    )
+
+                    node_count = self._extract_nodes(
+                        temp_path / "nodes.jsonl", repo_path
+                    )
+                    edge_count = self._extract_edges(
+                        temp_path / "edges.jsonl", repo_path
+                    )
+
+                    stats: dict[str, Any] | None = None
+                    if include_stats:
+                        stats = self._generate_stats(repo_path, node_count, edge_count)
+                        (temp_path / "stats.json").write_text(
+                            json.dumps(_json_ready(stats), indent=2),
+                            encoding="utf-8",
+                        )
+
+                    self._create_readme(temp_path / "README.md", metadata, stats)
+                    self._create_zip(temp_path, output_path)
 
             success_msg = f"✅ Successfully exported to {output_path}\n"
             success_msg += f"   Nodes: {node_count:,} | Edges: {edge_count:,}"
-            info_logger(success_msg)
+            info_logger(
+                success_msg,
+                event_name="bundle.export.completed",
+                extra_keys={
+                    "output_path": str(output_path),
+                    "node_count": node_count,
+                    "edge_count": edge_count,
+                },
+            )
             return True, success_msg
 
         except Exception as exc:  # pragma: no cover - exercised through callers
             error_msg = f"Failed to export bundle: {exc}"
-            error_logger(error_msg)
-            traceback.print_exc()
+            error_logger(
+                error_msg,
+                event_name="bundle.export.failed",
+                extra_keys={"output_path": str(output_path)},
+                exc_info=exc,
+            )
             return False, error_msg
 
     def _extract_metadata(self, repo_path: Path | None) -> dict[str, Any]:

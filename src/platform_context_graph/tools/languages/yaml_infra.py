@@ -1,5 +1,4 @@
 """Compatibility facade for YAML infrastructure parsing."""
-
 from pathlib import Path
 from typing import Any, Callable
 
@@ -19,7 +18,13 @@ from .crossplane import (
     parse_crossplane_composition,
     parse_crossplane_xrd,
 )
-from .helm import is_helm_chart, is_helm_values, parse_helm_chart, parse_helm_values
+from .helm import (
+    is_helm_chart,
+    is_helm_template_manifest,
+    is_helm_values,
+    parse_helm_chart,
+    parse_helm_values,
+)
 from .kubernetes_manifest import has_k8s_api_version, parse_k8s_resource
 from .kustomize import is_kustomization, parse_kustomization
 from .yaml_infra_support import (
@@ -30,7 +35,6 @@ from .yaml_infra_support import (
 
 ResourcePredicate = Callable[[str, str], bool]
 ResourceParser = Callable[..., dict[str, Any]]
-
 _DOCUMENT_PARSERS: tuple[tuple[str, ResourcePredicate, ResourceParser], ...] = (
     ("argocd_applications", is_argocd_application, parse_argocd_application),
     ("argocd_applicationsets", is_argocd_applicationset, parse_argocd_applicationset),
@@ -41,8 +45,6 @@ _DOCUMENT_PARSERS: tuple[tuple[str, ResourcePredicate, ResourceParser], ...] = (
         parse_crossplane_composition,
     ),
 )
-
-
 class InfraYAMLParser:
     """Parse infrastructure YAML files into graph-friendly resource buckets."""
 
@@ -85,6 +87,9 @@ class InfraYAMLParser:
             values = parse_helm_values(file_path, self.language_name)
             if values is not None:
                 result["helm_values"].append(values)
+            return result
+
+        if is_helm_template_manifest(file_path):
             return result
 
         try:

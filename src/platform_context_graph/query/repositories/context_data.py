@@ -186,7 +186,7 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
             """
             RETURN n.name as name,
                    n.description as description,
-                   n.default as default
+                   n[$default_key] as default
             """,
         ),
         "terraform_outputs": (
@@ -199,34 +199,34 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
         "argocd_applications": (
             "ArgoCDApplication",
             """
-            RETURN n.name as name, n.project as project,
-                   n.dest_namespace as dest_namespace,
-                   n.source_repo as source_repo
+            RETURN n.name as name, n[$project_key] as project,
+                   n[$dest_namespace_key] as dest_namespace,
+                   n[$source_repo_key] as source_repo
             """,
         ),
         "argocd_applicationsets": (
             "ArgoCDApplicationSet",
             """
             RETURN n.name as name,
-                   n.generators as generators,
-                   n.project as project,
-                   n.dest_namespace as dest_namespace,
-                   n.source_repos as source_repos,
-                   n.source_paths as source_paths
+                   n[$generators_key] as generators,
+                   n[$project_key] as project,
+                   n[$dest_namespace_key] as dest_namespace,
+                   n[$source_repos_key] as source_repos,
+                   n[$source_paths_key] as source_paths
             """,
         ),
         "crossplane_xrds": (
             "CrossplaneXRD",
             """
             RETURN n.name as name, n.kind as kind,
-                   n.claim_kind as claim_kind
+                   n[$claim_kind_key] as claim_kind
             """,
         ),
         "crossplane_compositions": (
             "CrossplaneComposition",
             """
             RETURN n.name as name,
-                   n.composite_kind as composite_kind
+                   n[$composite_kind_key] as composite_kind
             """,
         ),
         "crossplane_claims": (
@@ -261,7 +261,7 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
             "TerragruntConfig",
             """
             RETURN n.name as name,
-                   n.terraform_source as terraform_source
+                   n[$terraform_source_key] as terraform_source
             """,
         ),
     }
@@ -275,6 +275,16 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
             {projection}
             """,
             **repository_scope(repo),
+            default_key="default",
+            project_key="project",
+            dest_namespace_key="dest_namespace",
+            generators_key="generators",
+            source_repo_key="source_repo",
+            source_repos_key="source_repos",
+            source_paths_key="source_paths",
+            claim_kind_key="claim_kind",
+            composite_kind_key="composite_kind",
+            terraform_source_key="terraform_source",
         ).data()
         if result:
             infrastructure[key] = result
@@ -297,26 +307,31 @@ def _fetch_ecosystem(session: Any, repo: dict[str, Any]) -> dict[str, Any] | Non
         f"""
         MATCH (t:Tier)-[:CONTAINS]->(r:Repository)
         WHERE {repository_scope_predicate()}
-        RETURN t.name as tier, t.risk_level as risk_level
+        RETURN t.name as tier, t[$risk_level_key] as risk_level
         LIMIT 1
         """,
         **scope,
+        risk_level_key="risk_level",
     ).single()
     deps = session.run(
         f"""
-        MATCH (r:Repository)-[:DEPENDS_ON]->(dep:Repository)
+        MATCH (r:Repository)-[rel]->(dep:Repository)
         WHERE {repository_scope_predicate()}
+          AND type(rel) = $depends_on_type
         RETURN collect(dep.name) as dependencies
         """,
         **scope,
+        depends_on_type="DEPENDS_ON",
     ).single()
     dependents = session.run(
         f"""
-        MATCH (r:Repository)<-[:DEPENDS_ON]-(dep:Repository)
+        MATCH (r:Repository)<-[rel]-(dep:Repository)
         WHERE {repository_scope_predicate()}
+          AND type(rel) = $depends_on_type
         RETURN collect(dep.name) as dependents
         """,
         **scope,
+        depends_on_type="DEPENDS_ON",
     ).single()
     if not (
         tier

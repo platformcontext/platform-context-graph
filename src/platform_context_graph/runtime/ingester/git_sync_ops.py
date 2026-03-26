@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from platform_context_graph.utils.debug_log import warning_logger
+from platform_context_graph.observability import get_observability
+from platform_context_graph.utils.debug_log import emit_log_call, warning_logger
 
 from .config import RepoSyncConfig
 from .repository_layout import managed_repository_roots
@@ -276,39 +277,58 @@ def clone_missing_repositories_detailed_impl(
     skipped = 0
     failed = 0
     env = git_env_fn(config)
+    telemetry = get_observability()
 
-    for repo_id in discovered:
-        repo_path = config.repos_dir / repo_checkout_name_fn(repo_id)
-        if (repo_path / ".git").exists():
-            skipped += 1
-            continue
+    with telemetry.start_span(
+        "pcg.ingester.clone_missing_repositories",
+        component=config.component,
+        attributes={"pcg.ingester.discovered_repo_count": len(discovered)},
+    ):
+        for repo_id in discovered:
+            repo_path = config.repos_dir / repo_checkout_name_fn(repo_id)
+            if (repo_path / ".git").exists():
+                skipped += 1
+                continue
 
-        remote_url = repo_remote_url_fn(config, repo_id, token)
-        repo_path.parent.mkdir(parents=True, exist_ok=True)
-        log(config.component, f"Cloning {repo_id}")
-        result = subprocess_run_fn(
-            [
-                "git",
-                "clone",
-                f"--depth={config.clone_depth}",
-                "--single-branch",
-                remote_url,
-                str(repo_path),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            env=env,
-        )
-        if result.returncode == 0:
-            cloned_paths.append(repo_path.resolve())
-            continue
+            remote_url = repo_remote_url_fn(config, repo_id, token)
+            repo_path.parent.mkdir(parents=True, exist_ok=True)
+            log(config.component, f"Cloning {repo_id}")
+            with telemetry.start_span(
+                "pcg.ingester.clone_repository",
+                component=config.component,
+                attributes={
+                    "pcg.repo.slug": repo_id,
+                    "pcg.repo.path": str(repo_path),
+                },
+            ):
+                result = subprocess_run_fn(
+                    [
+                        "git",
+                        "clone",
+                        f"--depth={config.clone_depth}",
+                        "--single-branch",
+                        remote_url,
+                        str(repo_path),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    env=env,
+                )
+            if result.returncode == 0:
+                cloned_paths.append(repo_path.resolve())
+                continue
 
-        failed += 1
-        shutil.rmtree(repo_path, ignore_errors=True)
-        warning_logger(
-            f"[{config.component}] Failed to clone {repo_id}: {result.stderr.strip()}"
-        )
+            failed += 1
+            shutil.rmtree(repo_path, ignore_errors=True)
+            warning_logger(
+                f"[{config.component}] Failed to clone {repo_id}: {result.stderr.strip()}",
+                event_name="ingester.clone.failed",
+                extra_keys={
+                    "repo_slug": repo_id,
+                    "repo_path": str(repo_path),
+                },
+            )
     return discovered, cloned_paths, skipped, failed
 
 
@@ -359,131 +379,164 @@ def update_existing_repositories_detailed_impl(
     branchless_repos: list[str] = []
     now = time.time()
     retry_ttl_seconds = default_branch_retry_seconds()
+    telemetry = get_observability()
 
-    for repo_dir in managed_repository_roots(config.repos_dir):
-        cache_key = branchless_retry_key(config, repo_dir)
-        if not force_default_branch_refresh:
-            expires_at = retry_cache.get(cache_key)
-            if expires_at is not None and expires_at > now:
-                continue
-            if expires_at is not None:
-                retry_cache.pop(cache_key, None)
+    with telemetry.start_span(
+        "pcg.ingester.update_existing_repositories",
+        component=config.component,
+    ):
+        for repo_dir in managed_repository_roots(config.repos_dir):
+            cache_key = branchless_retry_key(config, repo_dir)
+            if not force_default_branch_refresh:
+                expires_at = retry_cache.get(cache_key)
+                if expires_at is not None and expires_at > now:
+                    continue
+                if expires_at is not None:
+                    retry_cache.pop(cache_key, None)
 
-        refresh_repository_origin_url_fn(
-            repo_dir,
-            token,
-            env,
-            subprocess_run_fn=subprocess_run_fn,
-        )
+            with telemetry.start_span(
+                "pcg.ingester.update_repository",
+                component=config.component,
+                attributes={
+                    "pcg.repo.slug": cache_key,
+                    "pcg.repo.path": str(repo_dir),
+                },
+            ):
+                refresh_repository_origin_url_fn(
+                    repo_dir,
+                    token,
+                    env,
+                    subprocess_run_fn=subprocess_run_fn,
+                )
 
-        default_branch_resolution = _resolve_default_branch(
-            repo_dir,
-            env,
-            subprocess_run_fn=subprocess_run_fn,
-        )
-        if default_branch_resolution.error is not None:
-            failed += 1
-            warning_logger(
-                f"[{config.component}] Failed to resolve default branch for "
-                f"{cache_key}: {default_branch_resolution.error}"
-            )
-            continue
-        if default_branch_resolution.branch is None:
-            retry_cache[cache_key] = now + retry_ttl_seconds
-            branchless_repos.append(cache_key)
-            continue
-
-        retry_cache.pop(cache_key, None)
-        default_branch = default_branch_resolution.branch
-        heal_remote_head = default_branch_resolution.from_remote_head
-        fetch_result = _fetch_branch(
-            repo_dir,
-            default_branch,
-            config.clone_depth,
-            env,
-            config.component,
-            subprocess_run_fn=subprocess_run_fn,
-        )
-        if fetch_result.returncode != 0:
-            if _is_missing_remote_ref(fetch_result.stderr, default_branch):
-                remote_branch_resolution = _resolve_remote_default_branch(
+                default_branch_resolution = _resolve_default_branch(
                     repo_dir,
                     env,
                     subprocess_run_fn=subprocess_run_fn,
                 )
-                if remote_branch_resolution.error is not None:
+                if default_branch_resolution.error is not None:
                     failed += 1
-                    warning_logger(f"[{config.component}] Failed to resolve default branch for {cache_key}: {remote_branch_resolution.error}")
+                    emit_log_call(
+                        warning_logger,
+                        f"[{config.component}] Failed to resolve default branch for "
+                        f"{cache_key}: {default_branch_resolution.error}",
+                        event_name="ingester.default_branch.failed",
+                        extra_keys={"repo_slug": cache_key},
+                    )
                     continue
-                if remote_branch_resolution.branch is None:
+                if default_branch_resolution.branch is None:
                     retry_cache[cache_key] = now + retry_ttl_seconds
                     branchless_repos.append(cache_key)
                     continue
-                if remote_branch_resolution.branch != default_branch:
-                    default_branch = remote_branch_resolution.branch
-                    heal_remote_head = remote_branch_resolution.from_remote_head
-                    fetch_result = _fetch_branch(
+
+                retry_cache.pop(cache_key, None)
+                default_branch = default_branch_resolution.branch
+                heal_remote_head = default_branch_resolution.from_remote_head
+                fetch_result = _fetch_branch(
+                    repo_dir,
+                    default_branch,
+                    config.clone_depth,
+                    env,
+                    config.component,
+                    subprocess_run_fn=subprocess_run_fn,
+                )
+                if fetch_result.returncode != 0:
+                    if _is_missing_remote_ref(fetch_result.stderr, default_branch):
+                        remote_branch_resolution = _resolve_remote_default_branch(
+                            repo_dir,
+                            env,
+                            subprocess_run_fn=subprocess_run_fn,
+                        )
+                        if remote_branch_resolution.error is not None:
+                            failed += 1
+                            emit_log_call(
+                                warning_logger,
+                                f"[{config.component}] Failed to resolve default branch for {cache_key}: {remote_branch_resolution.error}",
+                                event_name="ingester.default_branch.failed",
+                                extra_keys={"repo_slug": cache_key},
+                            )
+                            continue
+                        if remote_branch_resolution.branch is None:
+                            retry_cache[cache_key] = now + retry_ttl_seconds
+                            branchless_repos.append(cache_key)
+                            continue
+                        if remote_branch_resolution.branch != default_branch:
+                            default_branch = remote_branch_resolution.branch
+                            heal_remote_head = remote_branch_resolution.from_remote_head
+                            fetch_result = _fetch_branch(
+                                repo_dir,
+                                default_branch,
+                                config.clone_depth,
+                                env,
+                                config.component,
+                                subprocess_run_fn=subprocess_run_fn,
+                            )
+                    if fetch_result.returncode != 0:
+                        failed += 1
+                        emit_log_call(
+                            warning_logger,
+                            f"[{config.component}] Failed to fetch {cache_key}: {fetch_result.stderr.strip()}",
+                            event_name="ingester.fetch.failed",
+                            extra_keys={"repo_slug": cache_key},
+                        )
+                        continue
+                if heal_remote_head:
+                    _set_remote_head_branch(
                         repo_dir,
                         default_branch,
-                        config.clone_depth,
                         env,
                         config.component,
                         subprocess_run_fn=subprocess_run_fn,
                     )
-            if fetch_result.returncode != 0:
-                failed += 1
-                warning_logger(
-                    f"[{config.component}] Failed to fetch {cache_key}: {fetch_result.stderr.strip()}"
+
+                local_head = subprocess_run_fn(
+                    ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    env=env,
+                ).stdout.strip()
+                remote_head = subprocess_run_fn(
+                    ["git", "-C", str(repo_dir), "rev-parse", "FETCH_HEAD"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    env=env,
+                ).stdout.strip()
+                if local_head == remote_head:
+                    continue
+
+                reset_result = subprocess_run_fn(
+                    ["git", "-C", str(repo_dir), "reset", "--hard", "FETCH_HEAD"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    env=env,
                 )
-                continue
-        if heal_remote_head:
-            _set_remote_head_branch(
-                repo_dir,
-                default_branch,
-                env,
-                config.component,
-                subprocess_run_fn=subprocess_run_fn,
-            )
-
-        local_head = subprocess_run_fn(
-            ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-            env=env,
-        ).stdout.strip()
-        remote_head = subprocess_run_fn(
-            ["git", "-C", str(repo_dir), "rev-parse", "FETCH_HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-            env=env,
-        ).stdout.strip()
-        if local_head == remote_head:
-            continue
-
-        reset_result = subprocess_run_fn(
-            ["git", "-C", str(repo_dir), "reset", "--hard", "FETCH_HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-            env=env,
-        )
-        if reset_result.returncode == 0:
-            updated_paths.append(repo_dir.resolve())
-        else:
-            failed += 1
-            warning_logger(
-                f"[{config.component}] Failed to reset {cache_key}: {reset_result.stderr.strip()}"
-            )
+                if reset_result.returncode == 0:
+                    updated_paths.append(repo_dir.resolve())
+                else:
+                    failed += 1
+                    emit_log_call(
+                        warning_logger,
+                        f"[{config.component}] Failed to reset {cache_key}: {reset_result.stderr.strip()}",
+                        event_name="ingester.reset.failed",
+                        extra_keys={"repo_slug": cache_key},
+                    )
     if branchless_repos:
         preview = ", ".join(branchless_repos[:5])
         if len(branchless_repos) > 5:
             preview = f"{preview}, ..."
-        warning_logger(
+        emit_log_call(
+            warning_logger,
             f"[{config.component}] Skipping {len(branchless_repos)} "
             f"{'repository' if len(branchless_repos) == 1 else 'repositories'} "
-            f"with no discoverable default branch: {preview}"
+            f"with no discoverable default branch: {preview}",
+            event_name="ingester.default_branch.missing",
+            extra_keys={
+                "repository_count": len(branchless_repos),
+                "preview": preview,
+            },
         )
     save_default_branch_retry_cache(config, retry_cache)
     return updated_paths, failed

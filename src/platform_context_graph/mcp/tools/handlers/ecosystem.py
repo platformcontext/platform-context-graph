@@ -70,11 +70,14 @@ def trace_deployment_chain(
             MATCH (app:ArgoCDApplication)-[:SOURCES_FROM]->(r:Repository)
             WHERE r.name CONTAINS $name
             RETURN app.name as app_name,
-                   app.project as project,
-                   app.dest_namespace as namespace,
-                   app.source_path as source_path
+                   app[$project_key] as project,
+                   app[$dest_namespace_key] as namespace,
+                   app[$source_path_key] as source_path
         """,
             name=service_name,
+            project_key="project",
+            dest_namespace_key="dest_namespace",
+            source_path_key="source_path",
         ).data()
 
         argocd_appsets = session.run(
@@ -86,14 +89,19 @@ def trace_deployment_chain(
                     WHERE r.name CONTAINS $name
                }
             RETURN app.name as app_name,
-                   app.project as project,
+                   app[$project_key] as project,
                    app.namespace as namespace,
-                   app.dest_namespace as dest_namespace,
-                   app.source_repos as source_repos,
-                   app.source_paths as source_paths,
-                   app.source_roots as source_roots
+                   app[$dest_namespace_key] as dest_namespace,
+                   app[$source_repos_key] as source_repos,
+                   app[$source_paths_key] as source_paths,
+                   app[$source_roots_key] as source_roots
         """,
             name=service_name,
+            project_key="project",
+            dest_namespace_key="dest_namespace",
+            source_repos_key="source_repos",
+            source_paths_key="source_paths",
+            source_roots_key="source_roots",
         ).data()
 
         # K8s resources in the repo
@@ -214,16 +222,19 @@ def find_blast_radius(
                 """
                 MATCH (source:Repository)
                 WHERE source.name CONTAINS $target_name
-                OPTIONAL MATCH path = (source)<-[:DEPENDS_ON*1..5]-(affected:Repository)
+                OPTIONAL MATCH path = (source)<-[rels*1..5]-(affected:Repository)
+                WHERE all(rel IN rels WHERE type(rel) = $depends_on_type)
                 OPTIONAL MATCH (affected)<-[:CONTAINS]-(tier:Tier)
                 RETURN DISTINCT
                     affected.name as repo,
                     tier.name as tier,
-                    tier.risk_level as risk,
+                    tier[$risk_level_key] as risk,
                     length(path) as hops
                 ORDER BY hops
             """,
                 target_name=target,
+                depends_on_type="DEPENDS_ON",
+                risk_level_key="risk_level",
             ).data()
 
         elif target_type == "terraform_module":
@@ -234,14 +245,17 @@ def find_blast_radius(
                    OR mod.source CONTAINS $target_name
                 MATCH (f:File)-[:CONTAINS]->(mod)
                 MATCH (repo:Repository)-[:CONTAINS*]->(f)
-                OPTIONAL MATCH (repo)<-[:DEPENDS_ON*0..5]-(affected:Repository)
+                OPTIONAL MATCH path = (repo)<-[rels*0..5]-(affected:Repository)
+                WHERE all(rel IN rels WHERE type(rel) = $depends_on_type)
                 OPTIONAL MATCH (affected)<-[:CONTAINS]-(tier:Tier)
                 RETURN DISTINCT
                     affected.name as repo,
                     tier.name as tier,
-                    tier.risk_level as risk
+                    tier[$risk_level_key] as risk
             """,
                 target_name=target,
+                depends_on_type="DEPENDS_ON",
+                risk_level_key="risk_level",
             ).data()
 
         elif target_type == "crossplane_xrd":
@@ -382,21 +396,25 @@ def get_repo_summary(
         # Dependencies
         deps = session.run(
             """
-            MATCH (r:Repository)-[:DEPENDS_ON]->(dep:Repository)
+            MATCH (r:Repository)-[rel]->(dep:Repository)
             WHERE r.name CONTAINS $name
+              AND type(rel) = $depends_on_type
             RETURN collect(dep.name) as dependencies
         """,
             name=repo_name,
+            depends_on_type="DEPENDS_ON",
         ).single()
 
         # Dependents
         dependents = session.run(
             """
-            MATCH (r:Repository)<-[:DEPENDS_ON]-(dep:Repository)
+            MATCH (r:Repository)<-[rel]-(dep:Repository)
             WHERE r.name CONTAINS $name
+              AND type(rel) = $depends_on_type
             RETURN collect(dep.name) as dependents
         """,
             name=repo_name,
+            depends_on_type="DEPENDS_ON",
         ).single()
 
         # Tier
@@ -404,10 +422,11 @@ def get_repo_summary(
             """
             MATCH (t:Tier)-[:CONTAINS]->(r:Repository)
             WHERE r.name CONTAINS $name
-            RETURN t.name as tier, t.risk_level as risk_level
+            RETURN t.name as tier, t[$risk_level_key] as risk_level
             LIMIT 1
         """,
             name=repo_name,
+            risk_level_key="risk_level",
         ).single()
 
     summary: dict[str, Any] = {

@@ -233,7 +233,7 @@ def test_get_workload_context_prefers_graph_backed_instances_over_namespace_defa
 def test_get_workload_context_surfaces_graph_backed_runtime_dependencies():
     db = make_mock_db(
         {
-            "MATCH (w:Workload)-[:DEPENDS_ON]->(dep:Workload)": MockResult(
+            "MATCH (w:Workload)-[rel]->(dep:Workload)": MockResult(
                 records=[
                     {
                         "id": "workload:api-node-forex",

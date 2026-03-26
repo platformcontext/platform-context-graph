@@ -290,8 +290,13 @@ def _matching_run_states(root_path: Path) -> list[IndexRunState]:
 def _persist_run_state(state: IndexRunState) -> None:
     """Persist the current checkpoint state to disk."""
 
-    state.updated_at = _utc_now()
-    _write_json_atomic(_run_state_path(state.run_id), _serialize_run_state(state))
+    with get_observability().start_span(
+        "pcg.index.checkpoint.save_run_state",
+        component=state.family,
+        attributes={"pcg.index.run_id": state.run_id},
+    ):
+        state.updated_at = _utc_now()
+        _write_json_atomic(_run_state_path(state.run_id), _serialize_run_state(state))
 
 
 def _load_or_create_run(
@@ -378,10 +383,17 @@ def _save_snapshot_metadata(
 ) -> None:
     """Persist one repository's lightweight snapshot metadata."""
 
-    _write_json_atomic(
-        _snapshot_metadata_path(run_id, Path(snapshot_metadata.repo_path)),
-        _normalize_json_value(asdict(snapshot_metadata)),
-    )
+    with get_observability().start_span(
+        "pcg.index.checkpoint.save_snapshot_metadata",
+        attributes={
+            "pcg.index.run_id": run_id,
+            "pcg.index.repo_path": snapshot_metadata.repo_path,
+        },
+    ):
+        _write_json_atomic(
+            _snapshot_metadata_path(run_id, Path(snapshot_metadata.repo_path)),
+            _normalize_json_value(asdict(snapshot_metadata)),
+        )
 
 
 def _save_snapshot_file_data(
@@ -389,14 +401,22 @@ def _save_snapshot_file_data(
 ) -> None:
     """Persist one repository's heavyweight file-data payload."""
 
-    path = _snapshot_file_data_path(run_id, repo_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
-    with tmp_path.open("w", encoding="utf-8") as handle:
-        for item in file_data:
-            handle.write(json.dumps(_normalize_json_value(item), sort_keys=True))
-            handle.write("\n")
-    os.replace(tmp_path, path)
+    with get_observability().start_span(
+        "pcg.index.checkpoint.save_snapshot_file_data",
+        attributes={
+            "pcg.index.run_id": run_id,
+            "pcg.index.repo_path": str(repo_path.resolve()),
+            "pcg.index.file_data_rows": len(file_data),
+        },
+    ):
+        path = _snapshot_file_data_path(run_id, repo_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            for item in file_data:
+                handle.write(json.dumps(_normalize_json_value(item), sort_keys=True))
+                handle.write("\n")
+        os.replace(tmp_path, path)
 
 
 def _load_snapshot_metadata(
@@ -404,21 +424,28 @@ def _load_snapshot_metadata(
 ) -> RepositorySnapshotMetadata | None:
     """Load one staged snapshot metadata payload when present."""
 
-    metadata_path = _snapshot_metadata_path(run_id, repo_path)
-    if metadata_path.exists():
-        return RepositorySnapshotMetadata(
-            **json.loads(metadata_path.read_text(encoding="utf-8"))
-        )
+    with get_observability().start_span(
+        "pcg.index.checkpoint.load_snapshot_metadata",
+        attributes={
+            "pcg.index.run_id": run_id,
+            "pcg.index.repo_path": str(repo_path.resolve()),
+        },
+    ):
+        metadata_path = _snapshot_metadata_path(run_id, repo_path)
+        if metadata_path.exists():
+            return RepositorySnapshotMetadata(
+                **json.loads(metadata_path.read_text(encoding="utf-8"))
+            )
 
-    legacy_path = _snapshot_path(run_id, repo_path)
-    if not legacy_path.exists():
-        return None
-    payload = json.loads(legacy_path.read_text(encoding="utf-8"))
-    return RepositorySnapshotMetadata(
-        repo_path=payload["repo_path"],
-        file_count=payload["file_count"],
-        imports_map=dict(payload.get("imports_map", {})),
-    )
+        legacy_path = _snapshot_path(run_id, repo_path)
+        if not legacy_path.exists():
+            return None
+        payload = json.loads(legacy_path.read_text(encoding="utf-8"))
+        return RepositorySnapshotMetadata(
+            repo_path=payload["repo_path"],
+            file_count=payload["file_count"],
+            imports_map=dict(payload.get("imports_map", {})),
+        )
 
 
 def _load_snapshot_file_data(
@@ -426,21 +453,28 @@ def _load_snapshot_file_data(
 ) -> list[dict[str, Any]] | None:
     """Load one staged snapshot file-data payload when present."""
 
-    file_data_path = _snapshot_file_data_path(run_id, repo_path)
-    if file_data_path.exists():
-        with file_data_path.open(encoding="utf-8") as handle:
-            return [json.loads(line) for line in handle if line.strip()]
+    with get_observability().start_span(
+        "pcg.index.checkpoint.load_snapshot_file_data",
+        attributes={
+            "pcg.index.run_id": run_id,
+            "pcg.index.repo_path": str(repo_path.resolve()),
+        },
+    ):
+        file_data_path = _snapshot_file_data_path(run_id, repo_path)
+        if file_data_path.exists():
+            with file_data_path.open(encoding="utf-8") as handle:
+                return [json.loads(line) for line in handle if line.strip()]
 
-    legacy_file_data_path = _legacy_snapshot_file_data_path(run_id, repo_path)
-    if legacy_file_data_path.exists():
-        payload = json.loads(legacy_file_data_path.read_text(encoding="utf-8"))
+        legacy_file_data_path = _legacy_snapshot_file_data_path(run_id, repo_path)
+        if legacy_file_data_path.exists():
+            payload = json.loads(legacy_file_data_path.read_text(encoding="utf-8"))
+            return list(payload.get("file_data", []))
+
+        legacy_path = _snapshot_path(run_id, repo_path)
+        if not legacy_path.exists():
+            return None
+        payload = json.loads(legacy_path.read_text(encoding="utf-8"))
         return list(payload.get("file_data", []))
-
-    legacy_path = _snapshot_path(run_id, repo_path)
-    if not legacy_path.exists():
-        return None
-    payload = json.loads(legacy_path.read_text(encoding="utf-8"))
-    return list(payload.get("file_data", []))
 
 
 def _iter_snapshot_file_data_batches(

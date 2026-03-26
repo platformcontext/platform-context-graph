@@ -152,9 +152,10 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
         ),
     ) -> None:
         """Start the PlatformContextGraph HTTP API server."""
-        main_module.console.print(
-            "[bold green]Starting PlatformContextGraph HTTP API...[/bold green]"
-        )
+        if main_module._console_output_enabled():
+            main_module.console.print(
+                "[bold green]Starting PlatformContextGraph HTTP API...[/bold green]"
+            )
         main_module._load_credentials()
         main_module.start_http_api(host=host, port=port, reload=reload)
 
@@ -173,9 +174,10 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
         ),
     ) -> None:
         """Start the combined MCP SSE and HTTP API service."""
-        main_module.console.print(
-            "[bold green]Starting PlatformContextGraph service (HTTP API + MCP)...[/bold green]"
-        )
+        if main_module._console_output_enabled():
+            main_module.console.print(
+                "[bold green]Starting PlatformContextGraph service (HTTP API + MCP)...[/bold green]"
+            )
         main_module._load_credentials()
         main_module.start_service(host=host, port=port, reload=reload)
 

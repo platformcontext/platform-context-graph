@@ -281,19 +281,26 @@ class ContentService:
         started = time.perf_counter()
         success = False
         hit = False
-        try:
-            result = call(**kwargs)
-            success = True
-            hit = bool(result)
-            return result
-        finally:
-            self._record_provider_metrics(
-                operation=operation,
-                backend=backend,
-                success=success,
-                hit=hit,
-                duration_seconds=time.perf_counter() - started,
-            )
+        with get_observability().start_span(
+            "pcg.content.provider_query",
+            attributes={
+                "pcg.content.operation": operation,
+                "pcg.content.backend": backend,
+            },
+        ):
+            try:
+                result = call(**kwargs)
+                success = True
+                hit = bool(result)
+                return result
+            finally:
+                self._record_provider_metrics(
+                    operation=operation,
+                    backend=backend,
+                    success=success,
+                    hit=hit,
+                    duration_seconds=time.perf_counter() - started,
+                )
 
     def _workspace_result(
         self,
@@ -316,25 +323,29 @@ class ContentService:
         started = time.perf_counter()
         success = False
         hit = False
-        try:
-            result = call(**kwargs)
-            success = True
-            hit = bool(result.get("available"))
-            return result
-        finally:
-            self._record_provider_metrics(
-                operation=operation,
-                backend="workspace",
-                success=success,
-                hit=hit,
-                duration_seconds=time.perf_counter() - started,
-            )
-            if hasattr(runtime, "record_content_workspace_fallback") and operation in {
-                "file",
-                "entity",
-                "lines",
-            }:
-                runtime.record_content_workspace_fallback(operation=operation)
+        with runtime.start_span(
+            "pcg.content.workspace_query",
+            attributes={"pcg.content.operation": operation},
+        ):
+            try:
+                result = call(**kwargs)
+                success = True
+                hit = bool(result.get("available"))
+                return result
+            finally:
+                self._record_provider_metrics(
+                    operation=operation,
+                    backend="workspace",
+                    success=success,
+                    hit=hit,
+                    duration_seconds=time.perf_counter() - started,
+                )
+                if hasattr(runtime, "record_content_workspace_fallback") and operation in {
+                    "file",
+                    "entity",
+                    "lines",
+                }:
+                    runtime.record_content_workspace_fallback(operation=operation)
 
     def _file_lines_from_postgres(
         self,

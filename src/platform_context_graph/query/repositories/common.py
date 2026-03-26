@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from ...repository_identity import canonical_repository_id, repository_metadata
@@ -70,7 +71,14 @@ def repository_metadata_from_row(row: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def repository_projection(alias: str = "r") -> str:
+def repository_projection(
+    alias: str = "r",
+    *,
+    local_path_param: str = "local_path_key",
+    remote_url_param: str = "remote_url_key",
+    repo_slug_param: str = "repo_slug_key",
+    has_remote_param: str = "has_remote_key",
+) -> str:
     """Return the standard Cypher projection for repository metadata.
 
     Args:
@@ -84,10 +92,10 @@ def repository_projection(alias: str = "r") -> str:
         f"{alias}.id as id, "
         f"{alias}.name as name, "
         f"{alias}.path as path, "
-        f"coalesce({alias}.local_path, {alias}.path) as local_path, "
-        f"{alias}.remote_url as remote_url, "
-        f"{alias}.repo_slug as repo_slug, "
-        f"coalesce({alias}.has_remote, false) as has_remote"
+        f"coalesce({alias}[${local_path_param}], {alias}.path) as local_path, "
+        f"{alias}[${remote_url_param}] as remote_url, "
+        f"{alias}[${repo_slug_param}] as repo_slug, "
+        f"coalesce({alias}[${has_remote_param}], false) as has_remote"
     )
 
 
@@ -125,15 +133,16 @@ def resolve_repository(session: Any, repo_id: str) -> dict[str, Any] | None:
         repository matches.
     """
 
-    if not repo_id.startswith("repository:"):
-        return None
-
     repos = session.run(
         f"""
             MATCH (r:Repository)
             RETURN {repository_projection()}
             ORDER BY r.name
-            """
+            """,
+        local_path_key="local_path",
+        remote_url_key="remote_url",
+        repo_slug_key="repo_slug",
+        has_remote_key="has_remote",
     ).data()
 
     for repo in repos:
@@ -141,4 +150,32 @@ def resolve_repository(session: Any, repo_id: str) -> dict[str, Any] | None:
         stored_id = repo.get("id") or metadata["id"]
         if stored_id == repo_id:
             return {**repo, **metadata, "id": repo.get("id") or metadata["id"]}
+
+    if not repo_id.startswith("repository:"):
+        path_candidate = Path(repo_id).expanduser()
+        if path_candidate.is_absolute():
+            resolved_path = str(path_candidate.resolve())
+            for repo in repos:
+                metadata = repository_metadata_from_row(repo)
+                if (
+                    metadata.get("local_path") == resolved_path
+                    or repo.get("path") == resolved_path
+                ):
+                    return {**repo, **metadata, "id": repo.get("id") or metadata["id"]}
+
+        lowered_identifier = repo_id.lower()
+        for repo in repos:
+            metadata = repository_metadata_from_row(repo)
+            candidates = [
+                repo.get("name"),
+                metadata.get("repo_slug"),
+                metadata.get("remote_url"),
+                repo.get("path"),
+                metadata.get("local_path"),
+            ]
+            if any(
+                isinstance(candidate, str) and candidate.lower() == lowered_identifier
+                for candidate in candidates
+            ):
+                return {**repo, **metadata, "id": repo.get("id") or metadata["id"]}
     return None

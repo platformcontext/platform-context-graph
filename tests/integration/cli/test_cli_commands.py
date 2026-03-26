@@ -130,6 +130,8 @@ class TestCLICommands:
             port=9000,
             reload=True,
             factory=True,
+            log_config=None,
+            access_log=False,
         )
 
     def test_start_service_uses_combined_app(self):
@@ -147,7 +149,12 @@ class TestCLICommands:
         app_obj = mock_run.call_args.args[0]
         assert app_obj.title == "PlatformContextGraph HTTP API"
         mock_run.assert_called_once_with(
-            app_obj, host="0.0.0.0", port=9000, reload=False
+            app_obj,
+            host="0.0.0.0",
+            port=9000,
+            reload=False,
+            log_config=None,
+            access_log=False,
         )
 
     @patch("platform_context_graph.cli.main.run_bootstrap_index")

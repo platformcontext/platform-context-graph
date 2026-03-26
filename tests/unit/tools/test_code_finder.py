@@ -176,4 +176,89 @@ def test_list_indexed_repositories_coalesces_missing_dependency_flag() -> None:
 
     assert finder.list_indexed_repositories() == []
     assert session.query is not None
-    assert "coalesce(r.is_dependency, false) as is_dependency" in session.query
+    assert "coalesce(r[$is_dependency_key], false) as is_dependency" in session.query
+    assert "coalesce(r.is_dependency, false) as is_dependency" not in session.query
+
+
+class RecordingResult:
+    def data(self) -> list[dict[str, object]]:
+        return []
+
+
+class RecordingSession:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def run(self, query: str, **_kwargs):
+        self.queries.append(query)
+        return RecordingResult()
+
+
+def _make_recording_finder(*, backend_type: str = "neo4j") -> tuple[CodeFinder, RecordingSession]:
+    session = RecordingSession()
+    driver = MagicMock()
+    driver.session.return_value = session
+    db_manager = MagicMock()
+    db_manager.get_driver.return_value = driver
+    db_manager.get_backend_type.return_value = backend_type
+    return CodeFinder(db_manager), session
+
+
+def test_find_dead_code_uses_dynamic_dependency_properties() -> None:
+    """Dead-code analysis should avoid sparse-graph property key warnings."""
+
+    finder, session = _make_recording_finder()
+
+    assert finder.find_dead_code() == {
+        "potentially_unused_functions": [],
+        "note": "These functions might be unused, but could be entry points, callbacks, or called dynamically",
+    }
+
+    assert session.queries
+    query = session.queries[-1]
+    assert "coalesce(func[$is_dependency_key], false) = false" in query
+    assert "coalesce(caller[$is_dependency_key], false) = false" in query
+    assert "func.is_dependency = false" not in query
+    assert "caller.is_dependency = false" not in query
+
+
+def test_find_by_variable_name_uses_dynamic_dependency_property() -> None:
+    """Variable search should avoid sparse-graph property key warnings."""
+
+    finder, session = _make_recording_finder()
+
+    assert finder.find_by_variable_name("API_KEY") == []
+
+    assert session.queries
+    query = session.queries[-1]
+    assert "v[$is_dependency_key] as is_dependency" in query
+    assert "coalesce(v[$is_dependency_key], false) ASC" in query
+    assert "v.is_dependency as is_dependency" not in query
+
+
+def test_find_module_dependencies_uses_dynamic_import_matching() -> None:
+    """Module dependency queries should avoid sparse relationship warnings."""
+
+    finder, session = _make_recording_finder()
+
+    assert finder.find_module_dependencies("requests") == {
+        "module_name": "requests",
+        "importers": [],
+        "imports": [],
+    }
+
+    assert len(session.queries) == 2
+    importers_query, imports_query = session.queries
+    assert "type(imp) = 'IMPORTS'" in importers_query
+    assert "file[$is_dependency_key] as file_is_dependency" in importers_query
+    assert "[imp:IMPORTS]" not in importers_query
+    assert "MATCH (file:File)-[target_rel]->(target_module:Module {name: $module_name})" in imports_query
+    assert "WHERE type(target_rel) = 'IMPORTS'" in imports_query
+    assert "MATCH (file)-[imp]->(other_module:Module)" in imports_query
+    assert "[imp:IMPORTS]" not in imports_query

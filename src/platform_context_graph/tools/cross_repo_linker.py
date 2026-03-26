@@ -163,19 +163,19 @@ class CrossRepoLinker:
                 MATCH (repo:Repository)
                 RETURN repo.id as id,
                        repo.name as name,
-                       repo.remote_url as remote_url,
-                       repo.repo_slug as repo_slug
-            """).data()
+                       repo[$remote_url_key] as remote_url,
+                       repo[$repo_slug_key] as repo_slug
+            """, remote_url_key="remote_url", repo_slug_key="repo_slug").data()
             repository_index = _repository_index(repository_rows)
             links: list[dict[str, str]] = []
             seen_links: set[tuple[str, str, str]] = set()
 
             application_rows = session.run("""
                 MATCH (app:ArgoCDApplication)
-                WHERE app.source_repo IS NOT NULL
-                  AND app.source_repo <> ''
-                RETURN app.source_repo as source_repo
-            """).data()
+                WHERE app[$source_repo_key] IS NOT NULL
+                  AND app[$source_repo_key] <> ''
+                RETURN app[$source_repo_key] as source_repo
+            """, source_repo_key="source_repo").data()
             for row in application_rows:
                 source_repo = _clean_text(row.get("source_repo"))
                 if source_repo is None:
@@ -192,10 +192,10 @@ class CrossRepoLinker:
 
             appset_rows = session.run("""
                 MATCH (app:ArgoCDApplicationSet)
-                WHERE app.source_repos IS NOT NULL
-                  AND app.source_repos <> ''
-                RETURN app.source_repos as source_repos
-            """).data()
+                WHERE app[$source_repos_key] IS NOT NULL
+                  AND app[$source_repos_key] <> ''
+                RETURN app[$source_repos_key] as source_repos
+            """, source_repos_key="source_repos").data()
             for row in appset_rows:
                 source_repos = _clean_text(row.get("source_repos"))
                 if source_repos is None:
@@ -226,12 +226,13 @@ class CrossRepoLinker:
                     """
                     UNWIND $links AS link
                     MATCH (app:ArgoCDApplication)
-                    WHERE app.source_repo = link.source_repo
+                    WHERE app[$source_repo_key] = link.source_repo
                     MATCH (repo:Repository {id: link.repo_id})
                     MERGE (app)-[:SOURCES_FROM]->(repo)
                     RETURN count(*) as cnt
                     """,
                     links=application_links,
+                    source_repo_key="source_repo",
                 )
                 application_record = application_result.single()
 
@@ -241,12 +242,13 @@ class CrossRepoLinker:
                     """
                     UNWIND $links AS link
                     MATCH (app:ArgoCDApplicationSet)
-                    WHERE app.source_repos = link.source_repos
+                    WHERE app[$source_repos_key] = link.source_repos
                     MATCH (repo:Repository {id: link.repo_id})
                     MERGE (app)-[:SOURCES_FROM]->(repo)
                     RETURN count(*) as cnt
                     """,
                     links=appset_links,
+                    source_repos_key="source_repos",
                 )
                 appset_record = appset_result.single()
             return (application_record["cnt"] if application_record else 0) + (
@@ -262,10 +264,10 @@ class CrossRepoLinker:
             result = session.run("""
                 MATCH (claim:CrossplaneClaim)
                 MATCH (xrd:CrossplaneXRD)
-                WHERE claim.kind = xrd.claim_kind
+                WHERE claim.kind = xrd[$claim_kind_key]
                 MERGE (claim)-[:SATISFIED_BY]->(xrd)
                 RETURN count(*) as cnt
-            """)
+            """, claim_kind_key="claim_kind")
             record = result.single()
             return record["cnt"] if record else 0
 
@@ -278,10 +280,10 @@ class CrossRepoLinker:
             result = session.run("""
                 MATCH (xrd:CrossplaneXRD)
                 MATCH (comp:CrossplaneComposition)
-                WHERE comp.composite_kind = xrd.kind
+                WHERE comp[$composite_kind_key] = xrd.kind
                 MERGE (xrd)-[:IMPLEMENTED_BY]->(comp)
                 RETURN count(*) as cnt
-            """)
+            """, composite_kind_key="composite_kind")
             record = result.single()
             return record["cnt"] if record else 0
 
@@ -296,9 +298,9 @@ class CrossRepoLinker:
                 MATCH (repo:Repository)
                 RETURN repo.id as id,
                        repo.name as name,
-                       repo.remote_url as remote_url,
-                       repo.repo_slug as repo_slug
-            """).data()
+                       repo[$remote_url_key] as remote_url,
+                       repo[$repo_slug_key] as repo_slug
+            """, remote_url_key="remote_url", repo_slug_key="repo_slug").data()
             repository_index = _repository_index(repository_rows)
             links: list[dict[str, str]] = []
             seen_links: set[tuple[str, str]] = set()
@@ -348,27 +350,27 @@ class CrossRepoLinker:
         with self.driver.session() as session:
             application_result = session.run("""
                 MATCH (app:ArgoCDApplication)
-                WHERE app.dest_namespace IS NOT NULL
-                  AND app.dest_namespace <> ''
+                WHERE app[$dest_namespace_key] IS NOT NULL
+                  AND app[$dest_namespace_key] <> ''
                 MATCH (k:K8sResource)
-                WHERE k.namespace = app.dest_namespace
+                WHERE k.namespace = app[$dest_namespace_key]
                 MATCH (f:File)-[:CONTAINS]->(k)
                 MATCH (repo:Repository)-[:CONTAINS*]->(f)
                 MATCH (app)-[:SOURCES_FROM]->(repo)
                 MERGE (app)-[:DEPLOYS]->(k)
                 RETURN count(*) as cnt
-            """)
+            """, dest_namespace_key="dest_namespace")
             appset_result = session.run("""
                 MATCH (app:ArgoCDApplicationSet)-[:SOURCES_FROM]->(repo:Repository)
-                WHERE app.source_roots IS NOT NULL
-                  AND app.source_roots <> ''
+                WHERE app[$source_roots_key] IS NOT NULL
+                  AND app[$source_roots_key] <> ''
                 MATCH (repo)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)
-                WHERE any(source_root IN split(app.source_roots, ',')
+                WHERE any(source_root IN split(app[$source_roots_key], ',')
                     WHERE trim(source_root) <> ''
                       AND f.relative_path STARTS WITH trim(source_root))
                 MERGE (app)-[:DEPLOYS]->(k)
                 RETURN count(*) as cnt
-            """)
+            """, source_roots_key="source_roots")
             application_record = application_result.single()
             appset_record = appset_result.single()
             return (application_record["cnt"] if application_record else 0) + (

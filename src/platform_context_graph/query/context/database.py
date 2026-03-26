@@ -43,14 +43,18 @@ def db_workload_context(
                    w.repo_id as repo_id,
                    repo.name as repo_name,
                    repo.path as repo_path,
-                   coalesce(repo.local_path, repo.path) as repo_local_path,
-                   coalesce(repo.repo_slug, '') as repo_slug,
-                   coalesce(repo.remote_url, '') as repo_remote_url,
-                   coalesce(repo.has_remote, false) as repo_has_remote
+                   coalesce(repo[$local_path_key], repo.path) as repo_local_path,
+                   coalesce(repo[$repo_slug_key], '') as repo_slug,
+                   coalesce(repo[$remote_url_key], '') as repo_remote_url,
+                   coalesce(repo[$has_remote_key], false) as repo_has_remote
             LIMIT 1
             """,
             canonical_workload_id=f"workload:{workload_name}",
             workload_name=workload_name,
+            local_path_key="local_path",
+            repo_slug_key="repo_slug",
+            remote_url_key="remote_url",
+            has_remote_key="has_remote",
         ).single()
         instance_rows = session.run(
             """
@@ -70,12 +74,14 @@ def db_workload_context(
         ).data()
         dependency_rows = session.run(
             """
-            MATCH (w:Workload)-[:DEPENDS_ON]->(dep:Workload)
+            MATCH (w:Workload)-[rel]->(dep:Workload)
             WHERE w.id = $canonical_workload_id
+              AND type(rel) = $depends_on_type
             RETURN dep.id as id, dep.name as name, dep.kind as kind, dep.repo_id as repo_id
             ORDER BY dep.name
             """,
             canonical_workload_id=f"workload:{workload_name}",
+            depends_on_type="DEPENDS_ON",
         ).data()
         repo = session.run(
             f"""
@@ -84,6 +90,10 @@ def db_workload_context(
             RETURN {_repository_projection()}
         """,
             name=workload_name,
+            local_path_key="local_path",
+            remote_url_key="remote_url",
+            repo_slug_key="repo_slug",
+            has_remote_key="has_remote",
         ).single()
         resource_rows = session.run(
             """

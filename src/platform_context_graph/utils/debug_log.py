@@ -1,103 +1,198 @@
-"""Logging helpers and config-aware debug logging."""
+"""Compatibility logging helpers backed by the shared structured logger."""
 
-import os
-from datetime import datetime
+from __future__ import annotations
+
+import inspect
 import logging
-from pathlib import Path
+from typing import Any
+
+from platform_context_graph.observability.structured_logging import (
+    debug_file_logging_enabled,
+    emit_structured_log,
+    logging_level_from_config,
+)
 
 logger = logging.getLogger(__name__)
+debug_file_logger = logging.getLogger("platform_context_graph.debug")
 
-# Log level mapping
 LOG_LEVELS = {
     "DEBUG": logging.DEBUG,
     "INFO": logging.INFO,
     "WARNING": logging.WARNING,
     "ERROR": logging.ERROR,
     "CRITICAL": logging.CRITICAL,
-    "DISABLED": logging.CRITICAL + 10,  # Higher than CRITICAL to disable all
+    "DISABLED": logging.CRITICAL + 10,
 }
 
 
-def _get_config_value(key, default):
-    """Return a config value with a fallback when config is unavailable."""
-    try:
-        from platform_context_graph.cli.config_manager import get_config_value
-
-        value = get_config_value(key)
-        if value is None:
-            return default
-        # Convert string boolean to actual boolean
-        if isinstance(value, str):
-            if value.lower() in ("true", "false"):
-                return value.lower() == "true"
-        return value
-    except Exception:
-        return default
-
-
-def _should_log(level_name):
+def _should_log(level_name: str) -> bool:
     """Return whether a message at the given level should be emitted."""
-    configured_level = _get_config_value("ENABLE_APP_LOGS", "INFO")
 
-    # Handle legacy boolean values
-    if isinstance(configured_level, bool):
-        return configured_level
-
-    # Convert to uppercase for comparison
-    configured_level = str(configured_level).upper()
-
-    # If disabled, don't log anything
-    if configured_level == "DISABLED":
+    configured_level = logging_level_from_config()
+    if configured_level > logging.CRITICAL:
         return False
-
-    # Get numeric levels
-    configured_numeric = LOG_LEVELS.get(configured_level, logging.INFO)
-    message_numeric = LOG_LEVELS.get(level_name.upper(), logging.INFO)
-
-    # Log if message level >= configured level
-    return message_numeric >= configured_numeric
+    return LOG_LEVELS.get(level_name.upper(), logging.INFO) >= configured_level
 
 
-def debug_log(message):
-    """Write a debug message to the configured file when enabled."""
-    # Check if debug logging is enabled via config
-    debug_mode = _get_config_value("DEBUG_LOGS", False)
-    if not debug_mode:
-        return
+def emit_log_call(
+    logger_fn: Any,
+    message: str,
+    *,
+    event_name: str | None = None,
+    extra_keys: dict[str, Any] | None = None,
+    exc_info: Any = None,
+) -> Any:
+    """Call a logger-compatible function with structured kwargs when supported."""
 
-    # Get debug log path from config
-    debug_file = _get_config_value(
-        "DEBUG_LOG_PATH", os.path.expanduser("~/mcp_debug.log")
+    if not callable(logger_fn):
+        return None
+    signature_supports_kwargs = _supports_structured_kwargs(logger_fn)
+    if signature_supports_kwargs is False:
+        return logger_fn(message)
+    try:
+        return logger_fn(
+            message,
+            event_name=event_name,
+            extra_keys=extra_keys,
+            exc_info=exc_info,
+        )
+    except TypeError as exc:
+        if not _looks_like_unsupported_kwargs(exc):
+            raise
+        return logger_fn(message)
+
+
+def _supports_structured_kwargs(logger_fn: Any) -> bool | None:
+    """Return whether a callable advertises support for structured log kwargs."""
+
+    try:
+        signature = inspect.signature(logger_fn)
+    except (TypeError, ValueError):
+        return None
+
+    parameters = signature.parameters.values()
+    if any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters):
+        return True
+
+    supported = {
+        parameter.name
+        for parameter in signature.parameters.values()
+        if parameter.kind
+        in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+    }
+    return {"event_name", "extra_keys", "exc_info"}.issubset(supported)
+
+
+def _looks_like_unsupported_kwargs(exc: TypeError) -> bool:
+    """Return whether a ``TypeError`` came from incompatible call kwargs."""
+
+    message = str(exc)
+    return (
+        "unexpected keyword argument" in message
+        or "positional argument but" in message
+        or "positional arguments but" in message
     )
 
-    # Ensure parent directory exists
-    Path(debug_file).parent.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(debug_file, "a") as f:
-        f.write(f"[{timestamp}] {message}\n")
-        f.flush()
+def debug_log(
+    message: str,
+    *,
+    event_name: str | None = None,
+    extra_keys: dict[str, Any] | None = None,
+    exc_info: Any = None,
+) -> None:
+    """Emit a legacy debug-file log through the structured logging pipeline."""
+
+    if not debug_file_logging_enabled():
+        return
+    emit_structured_log(
+        debug_file_logger,
+        logging.DEBUG,
+        message,
+        event_name=event_name,
+        extra_keys=extra_keys,
+        exc_info=exc_info,
+    )
 
 
-def info_logger(msg):
-    """Log info message if log level allows"""
+def info_logger(
+    msg: str,
+    *,
+    event_name: str | None = None,
+    extra_keys: dict[str, Any] | None = None,
+    exc_info: Any = None,
+) -> None:
+    """Log an info message when the configured threshold allows it."""
+
     if _should_log("INFO"):
-        return logger.info(msg)
+        emit_structured_log(
+            logger,
+            logging.INFO,
+            msg,
+            event_name=event_name,
+            extra_keys=extra_keys,
+            exc_info=exc_info,
+        )
 
 
-def error_logger(msg):
-    """Log error message if log level allows"""
+def error_logger(
+    msg: str,
+    *,
+    event_name: str | None = None,
+    extra_keys: dict[str, Any] | None = None,
+    exc_info: Any = None,
+) -> None:
+    """Log an error message when the configured threshold allows it."""
+
     if _should_log("ERROR"):
-        return logger.error(msg)
+        emit_structured_log(
+            logger,
+            logging.ERROR,
+            msg,
+            event_name=event_name,
+            extra_keys=extra_keys,
+            exc_info=exc_info,
+        )
 
 
-def warning_logger(msg):
-    """Log warning message if log level allows"""
+def warning_logger(
+    msg: str,
+    *,
+    event_name: str | None = None,
+    extra_keys: dict[str, Any] | None = None,
+    exc_info: Any = None,
+) -> None:
+    """Log a warning message when the configured threshold allows it."""
+
     if _should_log("WARNING"):
-        return logger.warning(msg)
+        emit_structured_log(
+            logger,
+            logging.WARNING,
+            msg,
+            event_name=event_name,
+            extra_keys=extra_keys,
+            exc_info=exc_info,
+        )
 
 
-def debug_logger(msg):
-    """Log debug message if log level allows"""
+def debug_logger(
+    msg: str,
+    *,
+    event_name: str | None = None,
+    extra_keys: dict[str, Any] | None = None,
+    exc_info: Any = None,
+) -> None:
+    """Log a debug message when the configured threshold allows it."""
+
     if _should_log("DEBUG"):
-        return logger.debug(msg)
+        emit_structured_log(
+            logger,
+            logging.DEBUG,
+            msg,
+            event_name=event_name,
+            extra_keys=extra_keys,
+            exc_info=exc_info,
+        )
