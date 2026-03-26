@@ -1,0 +1,31 @@
+src/platform_context_graph/query/repositories/coverage_data.py
+  f7e4148e402ea6cf 100,107-108
+tests/unit/query/test_repository_coverage_data.py
+  f7e4148e402ea6cf 225-255
+src/platform_context_graph/mcp/tools/handlers/ecosystem.py
+  f7e4148e402ea6cf 196-203
+src/platform_context_graph/mcp/tools/handlers/ecosystem_support.py
+  f7e4148e402ea6cf 82-128,130-134,136,138,140-175,391-392,405-410,412-413
+tests/unit/handlers/test_repo_context.py
+  f7e4148e402ea6cf 290-294,453-619
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "a63c02099ec13272d06c15b31ebc3e14f5330d25",
+  "prompts": {
+    "f7e4148e402ea6cf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2c74-bf33-7a00-9087-fb5e3e7f467e",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 316,
+      "total_deletions": 13,
+      "accepted_lines": 316,
+      "overriden_lines": 0
+    }
+  }
+}
