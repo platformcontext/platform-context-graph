@@ -203,7 +203,7 @@ ECOSYSTEM_TOOLS = {
     },
     "get_repo_summary": {
         "name": "get_repo_summary",
-        "description": "Get a structured summary of a repository: files, code entities, infrastructure resources, ecosystem connections, dependencies, tier info, and repository coverage. If completeness_state is not complete, report the missing graph/content coverage instead of implying those files or entities do not exist.",
+        "description": "Get a structured summary of a repository: files, code entities, infrastructure resources, canonical platform/runtime relationships, deploy/config sources, ecosystem connections, dependencies, environments, tier info, repository coverage, and stable limitation codes. If completeness_state is not complete, report the missing graph/content coverage and any limitation codes instead of implying those files or entities do not exist.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -217,7 +217,7 @@ ECOSYSTEM_TOOLS = {
     },
     "get_repo_context": {
         "name": "get_repo_context",
-        "description": "Get complete context for a repository in a single call: recursive file counts, code entities, infrastructure resources, platform/runtime hints, intra-repo relationships, ecosystem info, and a concise coverage summary. Use canonical repository IDs only. If completeness_state is not complete, report the missing coverage instead of implying the repo lacks those files or entities.",
+        "description": "Get complete context for a repository in a single call: recursive file counts, code entities, infrastructure resources, canonical platform/runtime relationships, deployment chains, ecosystem info, and a concise coverage summary with stable limitation codes. Use canonical repository IDs only. If completeness_state is not complete, report the missing coverage instead of implying the repo lacks those files or entities.",
         "inputSchema": {
             "type": "object",
             "properties": {

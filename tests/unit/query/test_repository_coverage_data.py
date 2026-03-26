@@ -221,5 +221,4 @@ def test_coverage_summary_reports_limitations_for_partial_rows() -> None:
 
     assert summary is not None
     assert summary["completeness_state"] == "graph_partial"
-    assert summary["limitations"]
-    assert "partial" in summary["limitations"][0].lower()
+    assert summary["limitations"] == ["graph_partial", "content_partial"]

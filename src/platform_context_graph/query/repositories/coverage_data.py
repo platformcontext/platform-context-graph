@@ -90,32 +90,19 @@ def coverage_summary_from_row(row: dict[str, Any] | None) -> dict[str, Any] | No
 
 
 def coverage_limitations_from_row(row: dict[str, Any] | None) -> list[str]:
-    """Return truthful coverage limitations for a persisted row."""
+    """Return stable coverage limitation codes for a persisted row."""
 
     if row is None:
-        return ["coverage unavailable for this repository"]
+        return ["graph_partial", "content_partial"]
 
     limitations: list[str] = []
     gaps = coverage_gaps_from_row(row)
-    completeness_state = str(gaps["completeness_state"])
-
-    if completeness_state == "failed":
-        limitations.append(
-            "coverage run failed; runtime and deployment summaries may be incomplete"
-        )
-    elif completeness_state != "complete":
-        limitations.append(
-            "coverage is partial; runtime and deployment summaries may be incomplete"
-        )
-
-    if not bool(row.get("graph_available")):
-        limitations.append(
-            "graph coverage is unavailable; graph-derived relationships may be incomplete"
-        )
-    if not bool(row.get("server_content_available")):
-        limitations.append(
-            "server content coverage is unavailable; deployment-source discovery may be incomplete"
-        )
+    if int(gaps["graph_gap_count"]) > 0 or not bool(row.get("graph_available")):
+        limitations.append("graph_partial")
+    if int(gaps["content_gap_count"]) > 0 or not bool(
+        row.get("server_content_available")
+    ):
+        limitations.append("content_partial")
 
     return limitations
 

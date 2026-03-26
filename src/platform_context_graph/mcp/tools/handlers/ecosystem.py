@@ -10,8 +10,7 @@ from typing import Any
 from ....core.database import DatabaseManager
 from ....query import infra as infra_queries
 from ....query import repositories as repository_queries
-from ....query.repositories.coverage_data import coverage_summary_from_row
-from ....runtime.status_store import get_repository_coverage as get_runtime_repository_coverage
+from ....utils.debug_log import emit_log_call, warning_logger
 
 
 def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -337,126 +336,76 @@ def get_repo_summary(
         Summary with files, code entities, infra resources,
         and ecosystem connections.
     """
-    driver = db_manager.get_driver()
-
-    with driver.session() as session:
-        # Basic info
-        repo = session.run(
-            "MATCH (r:Repository) "
-            "WHERE r.name CONTAINS $name "
-            "RETURN r.id as id, r.name as name, r.path as path "
-            "LIMIT 1",
-            name=repo_name,
-        ).single()
-
-        if not repo:
-            return {"error": f"Repository '{repo_name}' not found"}
-
-        # File count by extension
-        file_stats = session.run(
-            """
-            MATCH (r:Repository)-[:CONTAINS*]->(f:File)
-            WHERE r.name CONTAINS $name
-            RETURN f.name as file,
-                   split(f.name, '.')[-1] as ext
-        """,
-            name=repo_name,
-        ).data()
-
-        ext_counts: dict[str, int] = {}
-        for f in file_stats:
-            ext = f.get("ext", "")
-            ext_counts[ext] = ext_counts.get(ext, 0) + 1
-
-        # Code entities
-        code_stats = session.run(
-            """
-            MATCH (r:Repository)-[:CONTAINS*]->(f:File)
-            WHERE r.name CONTAINS $name
-            OPTIONAL MATCH (f)-[:CONTAINS]->(fn:Function)
-            OPTIONAL MATCH (f)-[:CONTAINS]->(cls:Class)
-            RETURN count(DISTINCT fn) as functions,
-                   count(DISTINCT cls) as classes
-        """,
-            name=repo_name,
-        ).single()
-
-        # Infrastructure resources
-        infra = session.run(
-            """
-            MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(n)
-            WHERE r.name CONTAINS $name
-              AND (n:K8sResource OR n:ArgoCDApplication
-                   OR n:CrossplaneXRD OR n:CrossplaneClaim
-                   OR n:TerraformResource OR n:HelmChart)
-            RETURN labels(n)[0] as type,
-                   count(n) as count
-        """,
-            name=repo_name,
-        ).data()
-
-        # Dependencies
-        deps = session.run(
-            """
-            MATCH (r:Repository)-[rel]->(dep:Repository)
-            WHERE r.name CONTAINS $name
-              AND type(rel) = $depends_on_type
-            RETURN collect(dep.name) as dependencies
-        """,
-            name=repo_name,
-            depends_on_type="DEPENDS_ON",
-        ).single()
-
-        # Dependents
-        dependents = session.run(
-            """
-            MATCH (r:Repository)<-[rel]-(dep:Repository)
-            WHERE r.name CONTAINS $name
-              AND type(rel) = $depends_on_type
-            RETURN collect(dep.name) as dependents
-        """,
-            name=repo_name,
-            depends_on_type="DEPENDS_ON",
-        ).single()
-
-        # Tier
-        tier = session.run(
-            """
-            MATCH (t:Tier)-[:CONTAINS]->(r:Repository)
-            WHERE r.name CONTAINS $name
-            RETURN t.name as tier, t[$risk_level_key] as risk_level
-            LIMIT 1
-        """,
-            name=repo_name,
-            risk_level_key="risk_level",
-        ).single()
-
-    coverage = coverage_summary_from_row(
-        get_runtime_repository_coverage(repo_id=str(repo["id"]))
+    context = repository_queries.get_repository_context(
+        db_manager,
+        repo_id=repo_name,
     )
-    file_count = len(file_stats)
-    if coverage is not None:
-        file_count = int(coverage.get("discovered_file_count") or file_count)
+    if "error" in context:
+        return context
 
+    repository = context.get("repository") or {}
+    ecosystem = context.get("ecosystem") or {}
+    coverage = context.get("coverage")
+    limitations = list(context.get("limitations") or [])
     summary: dict[str, Any] = {
-        "name": repo["name"],
-        "path": repo["path"],
-        "file_count": file_count,
-        "files_by_extension": ext_counts,
-        "code": dict(code_stats) if code_stats else {},
-        "infrastructure": infra,
-        "dependencies": deps["dependencies"] if deps else [],
-        "dependents": dependents["dependents"] if dependents else [],
+        "name": repository.get("name"),
+        "path": repository.get("local_path") or repository.get("path"),
+        "file_count": repository.get("discovered_file_count")
+        or repository.get("file_count")
+        or 0,
+        "files_by_extension": repository.get("files_by_extension", {}),
+        "code": context.get("code", {}),
+        "infrastructure": context.get("infrastructure", {}),
+        "dependencies": ecosystem.get("dependencies", []),
+        "dependents": ecosystem.get("dependents", []),
+        "coverage": coverage,
+        "platforms": context.get("platforms", []),
+        "deploys_from": context.get("deploys_from", []),
+        "discovers_config_in": context.get("discovers_config_in", []),
+        "provisioned_by": context.get("provisioned_by", []),
+        "provisions_dependencies_for": context.get(
+            "provisions_dependencies_for", []
+        ),
+        "environments": context.get("environments", []),
+        "limitations": limitations,
     }
-    if coverage is not None:
-        summary["coverage"] = coverage
-        if coverage.get("completeness_state") != "complete":
-            summary["note"] = (
-                "Repository coverage is partial; graph/content counts may be incomplete."
-            )
-    if tier:
-        summary["tier"] = dict(tier)
+    if limitations:
+        summary["note"] = _repo_summary_note(limitations=limitations, coverage=coverage)
+        emit_log_call(
+            warning_logger,
+            "Repository summary assembled with known limitations",
+            event_name="repository.summary.limitations",
+            extra_keys={
+                "repo_name": summary.get("name"),
+                "limitations": limitations,
+                "platform_count": len(summary["platforms"]),
+                "environment_count": len(summary["environments"]),
+            },
+        )
+    if ecosystem.get("tier") is not None or ecosystem.get("risk_level") is not None:
+        summary["tier"] = {
+            "tier": ecosystem.get("tier"),
+            "risk_level": ecosystem.get("risk_level"),
+        }
     return summary
+
+
+def _repo_summary_note(
+    *, limitations: list[str], coverage: dict[str, Any] | None
+) -> str:
+    """Return a short human-readable note for limitation codes."""
+
+    if "graph_partial" in limitations or "content_partial" in limitations:
+        return "Repository coverage is partial; graph/content counts may be incomplete."
+    if "dns_unknown" in limitations and "entrypoint_unknown" in limitations:
+        return "DNS and entrypoint evidence are currently unavailable for this repository."
+    if "dns_unknown" in limitations:
+        return "DNS evidence is currently unavailable for this repository."
+    if "entrypoint_unknown" in limitations:
+        return "Entrypoint evidence is currently unavailable for this repository."
+    if coverage and coverage.get("completeness_state") == "failed":
+        return "Repository coverage failed; runtime and deployment summaries may be incomplete."
+    return "Repository context has known limitations."
 
 
 def get_repo_context(

@@ -624,8 +624,7 @@ def test_get_repository_context_surfaces_partial_coverage_gaps(monkeypatch) -> N
     assert result["repository"]["graph_recursive_file_count"] == 12
     assert result["repository"]["content_file_count"] == 0
     assert result["repository"]["completeness_state"] == "graph_partial"
-    assert result["limitations"]
-    assert "partial" in result["limitations"][0].lower()
+    assert result["limitations"] == ["graph_partial", "content_partial"]
 
 
 def test_get_repository_stats_supports_repo_and_overall_modes(monkeypatch):
