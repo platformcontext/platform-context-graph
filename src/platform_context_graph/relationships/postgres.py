@@ -34,31 +34,33 @@ except ImportError:  # pragma: no cover
     psycopg = None
     dict_row = None
 
-
 def _now() -> datetime:
     """Return the current UTC timestamp for persistence records."""
 
     return datetime.now(tz=UTC)
 
 
-def _digest(prefix: str, *parts: str) -> str:
+def _digest(prefix: str, *parts: str | None) -> str:
     """Build a stable short identifier from one or more input parts."""
 
-    digest = hashlib.sha1("\n".join(parts).encode("utf-8")).hexdigest()[:16]
+    normalized_parts = ["<none>" if part is None else part for part in parts]
+    digest = hashlib.sha1("\n".join(normalized_parts).encode("utf-8")).hexdigest()[:16]
     return f"{prefix}_{digest}"
 
 
-def repository_entity_id(repo_id: str) -> str:
+def repository_entity_id(repo_id: str | None) -> str | None:
     """Return the canonical entity identifier for one repository row."""
 
     return repo_id
 
 
-def entity_or_repo_identity(row: Mapping[str, Any], side: str) -> str:
+def entity_or_repo_identity(row: Mapping[str, Any], side: str) -> str | None:
     """Return an explicit entity id or fall back to the repo-backed entity id."""
 
-    return row.get(f"{side}_entity_id") or repository_entity_id(row[f"{side}_repo_id"])
-
+    entity_id = row.get(f"{side}_entity_id")
+    if entity_id:
+        return entity_id
+    return repository_entity_id(row.get(f"{side}_repo_id"))
 
 class PostgresRelationshipStore:
     """Persist repository relationship evidence, assertions, and resolutions."""
@@ -414,7 +416,9 @@ class PostgresRelationshipStore:
                   ON generations.generation_id = resolved.generation_id
                 WHERE generations.scope = %(scope)s
                   AND generations.status = 'active'
-                ORDER BY resolved.source_repo_id, resolved.target_repo_id
+                ORDER BY COALESCE(resolved.source_entity_id, resolved.source_repo_id),
+                         COALESCE(resolved.target_entity_id, resolved.target_repo_id),
+                         resolved.relationship_type
                 """,
                 {"scope": scope},
             )
@@ -467,7 +471,9 @@ class PostgresRelationshipStore:
                 JOIN relationship_generations AS generations
                   ON generations.generation_id = candidates.generation_id
                 {where_clause}
-                ORDER BY candidates.source_repo_id, candidates.target_repo_id
+                ORDER BY COALESCE(candidates.source_entity_id, candidates.source_repo_id),
+                         COALESCE(candidates.target_entity_id, candidates.target_repo_id),
+                         candidates.relationship_type
                 """,
                 params,
             )

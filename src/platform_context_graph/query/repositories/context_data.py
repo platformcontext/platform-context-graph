@@ -355,6 +355,21 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
         ).data()
         if result:
             infrastructure[key] = result
+    direct_runtime_platforms = session.run(
+        f"""
+        MATCH (r:Repository)-[:RUNS_ON]->(p:Platform)
+        WHERE {repository_scope_predicate()}
+        RETURN DISTINCT p.id as id,
+               p.name as name,
+               p.kind as kind,
+               p.provider as provider,
+               p.environment as environment,
+               NULL as workload_instance_id,
+               NULL as workload_environment
+        ORDER BY p.kind, p.name
+        """,
+        **repository_scope(repo),
+    ).data()
     runtime_platforms = session.run(
         f"""
         MATCH (r:Repository)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[:RUNS_ON]->(p:Platform)
@@ -370,8 +385,11 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
         """,
         **repository_scope(repo),
     ).data()
-    if runtime_platforms:
-        infrastructure["runtime_platforms"] = runtime_platforms
+    merged_runtime_platforms = _dedupe_rows(
+        [*direct_runtime_platforms, *runtime_platforms]
+    )
+    if merged_runtime_platforms:
+        infrastructure["runtime_platforms"] = merged_runtime_platforms
 
     provisioned_platforms = session.run(
         f"""
@@ -446,3 +464,17 @@ def _fetch_ecosystem(session: Any, repo: dict[str, Any]) -> dict[str, Any] | Non
         "dependencies": deps["dependencies"] if deps else [],
         "dependents": dependents["dependents"] if dependents else [],
     }
+
+
+def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return rows with duplicates removed while preserving order."""
+
+    seen: set[tuple[tuple[str, str], ...]] = set()
+    deduped: list[dict[str, Any]] = []
+    for row in rows:
+        key = tuple(sorted((str(k), repr(v)) for k, v in row.items()))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    return deduped

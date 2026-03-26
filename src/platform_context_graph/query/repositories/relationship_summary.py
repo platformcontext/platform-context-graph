@@ -119,7 +119,22 @@ def _fetch_runtime_platforms(
 ) -> list[dict[str, Any]]:
     """Return runtime platforms reached through workload instances."""
 
-    rows = session.run(
+    direct_rows = session.run(
+        f"""
+        MATCH (r:Repository)-[:RUNS_ON]->(p:Platform)
+        WHERE {repository_scope_predicate()}
+        RETURN DISTINCT p.id as id,
+               p.name as name,
+               p.kind as kind,
+               p.provider as provider,
+               p.environment as environment,
+               NULL as workload_instance_id,
+               NULL as workload_environment
+        ORDER BY p.kind, p.name
+        """,
+        **_query_params(repo_ref),
+    ).data()
+    instance_rows = session.run(
         f"""
         MATCH (r:Repository)
         WHERE {repository_scope_predicate()}
@@ -136,14 +151,16 @@ def _fetch_runtime_platforms(
         """,
         **_query_params(repo_ref),
     ).data()
-    return [
-        {
-            **row,
-            "relationship_type": "RUNS_ON",
-            "source": "runtime",
-        }
-        for row in rows
-    ]
+    return _dedupe_rows(
+        [
+            {
+                **row,
+                "relationship_type": "RUNS_ON",
+                "source": "runtime",
+            }
+            for row in [*direct_rows, *instance_rows]
+        ]
+    )
 
 
 def _fetch_provisioned_platforms(
@@ -176,25 +193,26 @@ def _fetch_provisioned_platforms(
 
 
 def _fetch_deploys_from(session: Any, repo_ref: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return ArgoCD application deploy-source rows for the repository."""
+    """Return canonical deployment-source repositories for the repository."""
 
     rows = session.run(
         f"""
-        MATCH (app:ArgoCDApplication)-[:SOURCES_FROM]->(r:Repository)
+        MATCH (r:Repository)-[:DEPLOYS_FROM]->(dep:Repository)
         WHERE {repository_scope_predicate()}
-        RETURN DISTINCT app.name as app_name,
-               app[$project_key] as project,
-               app[$dest_namespace_key] as namespace,
-               app[$source_path_key] as source_path
-        ORDER BY app.name
+        RETURN DISTINCT dep.id as id,
+               dep.name as name,
+               dep.path as path,
+               coalesce(dep[$local_path_key], dep.path) as local_path,
+               dep[$remote_url_key] as remote_url,
+               dep[$repo_slug_key] as repo_slug,
+               coalesce(dep[$has_remote_key], false) as has_remote
+        ORDER BY dep.name
         """,
         **_query_params(repo_ref),
     ).data()
     return [
         {
-            **row,
-            "source_repo": repo_ref.get("name"),
-            "source_repo_id": repo_ref.get("id"),
+            **canonical_repository_ref(row),
             "relationship_type": "DEPLOYS_FROM",
         }
         for row in rows
@@ -204,34 +222,27 @@ def _fetch_deploys_from(session: Any, repo_ref: dict[str, Any]) -> list[dict[str
 def _fetch_discovers_config_in(
     session: Any, repo_ref: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    """Return ArgoCD config-discovery rows for the repository."""
+    """Return canonical config-source repositories for the repository."""
 
     rows = session.run(
         f"""
-        MATCH (app:ArgoCDApplicationSet)
-        WHERE app.name CONTAINS $repo_name
-           OR EXISTS {{
-                MATCH (app)-[:SOURCES_FROM]->(r:Repository)
-                WHERE {repository_scope_predicate()}
-           }}
-        RETURN DISTINCT app.name as app_name,
-               app[$project_key] as project,
-               app.namespace as namespace,
-               app[$dest_namespace_key] as dest_namespace,
-               app[$source_repos_key] as source_repos,
-               app[$source_paths_key] as source_paths,
-               app[$source_roots_key] as source_roots
-        ORDER BY app.name
+        MATCH (r:Repository)-[:DISCOVERS_CONFIG_IN]->(cfg:Repository)
+        WHERE {repository_scope_predicate()}
+        RETURN DISTINCT cfg.id as id,
+               cfg.name as name,
+               cfg.path as path,
+               coalesce(cfg[$local_path_key], cfg.path) as local_path,
+               cfg[$remote_url_key] as remote_url,
+               cfg[$repo_slug_key] as repo_slug,
+               coalesce(cfg[$has_remote_key], false) as has_remote
+        ORDER BY cfg.name
         """,
-        repo_name=repo_ref.get("name"),
         **_query_params(repo_ref),
     ).data()
     return [
         {
-            **row,
+            **canonical_repository_ref(row),
             "relationship_type": "DISCOVERS_CONFIG_IN",
-            "source_repo": repo_ref.get("name"),
-            "source_repo_id": repo_ref.get("id"),
         }
         for row in rows
     ]
@@ -240,26 +251,19 @@ def _fetch_discovers_config_in(
 def _fetch_provisioned_by(
     session: Any, repo_ref: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    """Return infrastructure repositories that provision the runtime platform."""
+    """Return canonical infrastructure repositories that provision this repository."""
 
     rows = session.run(
         f"""
-        MATCH (r:Repository)
+        MATCH (prov:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(r:Repository)
         WHERE {repository_scope_predicate()}
-        MATCH (r)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)
-              -[:RUNS_ON]->(p:Platform)<-[:PROVISIONS_PLATFORM]-(prov:Repository)
         RETURN DISTINCT prov.id as id,
                prov.name as name,
                prov.path as path,
                coalesce(prov[$local_path_key], prov.path) as local_path,
                prov[$remote_url_key] as remote_url,
                prov[$repo_slug_key] as repo_slug,
-               coalesce(prov[$has_remote_key], false) as has_remote,
-               p.id as platform_id,
-               p.name as platform_name,
-               p.kind as platform_kind,
-               p.provider as platform_provider,
-               p.environment as platform_environment
+               coalesce(prov[$has_remote_key], false) as has_remote
         ORDER BY prov.name
         """,
         **_query_params(repo_ref),
@@ -267,11 +271,6 @@ def _fetch_provisioned_by(
     return [
         {
             **canonical_repository_ref(row),
-            "platform_id": row.get("platform_id"),
-            "platform_name": row.get("platform_name"),
-            "platform_kind": row.get("platform_kind"),
-            "platform_provider": row.get("platform_provider"),
-            "platform_environment": row.get("platform_environment"),
             "relationship_type": "PROVISIONED_BY",
         }
         for row in rows
@@ -281,27 +280,19 @@ def _fetch_provisioned_by(
 def _fetch_provisions_dependencies_for(
     session: Any, repo_ref: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    """Return repositories that run on platforms provisioned by the repository."""
+    """Return canonical repositories provisioned by this infrastructure repository."""
 
     rows = session.run(
         f"""
-        MATCH (r:Repository)
+        MATCH (r:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(dep:Repository)
         WHERE {repository_scope_predicate()}
-        MATCH (r)-[:PROVISIONS_PLATFORM]->(p:Platform)
-              <-[:RUNS_ON]-(i:WorkloadInstance)
-              <-[:INSTANCE_OF]-(:Workload)<-[:DEFINES]-(dep:Repository)
         RETURN DISTINCT dep.id as id,
                dep.name as name,
                dep.path as path,
                coalesce(dep[$local_path_key], dep.path) as local_path,
                dep[$remote_url_key] as remote_url,
                dep[$repo_slug_key] as repo_slug,
-               coalesce(dep[$has_remote_key], false) as has_remote,
-               p.id as platform_id,
-               p.name as platform_name,
-               p.kind as platform_kind,
-               p.provider as platform_provider,
-               p.environment as platform_environment
+               coalesce(dep[$has_remote_key], false) as has_remote
         ORDER BY dep.name
         """,
         **_query_params(repo_ref),
@@ -309,11 +300,6 @@ def _fetch_provisions_dependencies_for(
     return [
         {
             **canonical_repository_ref(row),
-            "platform_id": row.get("platform_id"),
-            "platform_name": row.get("platform_name"),
-            "platform_kind": row.get("platform_kind"),
-            "platform_provider": row.get("platform_provider"),
-            "platform_environment": row.get("platform_environment"),
             "relationship_type": "PROVISIONS_DEPENDENCY_FOR",
         }
         for row in rows
@@ -371,8 +357,8 @@ def _build_deployment_chain(
                 "relationship_type": row["relationship_type"],
                 "source_name": repo_ref.get("name"),
                 "source_id": repo_ref.get("id"),
-                "target_name": row.get("app_name") or row.get("source_path"),
-                "target_kind": "ArgoCDApplication",
+                "target_name": row.get("name") or row.get("source_path"),
+                "target_kind": "Repository",
                 **row,
             }
         )
@@ -382,8 +368,8 @@ def _build_deployment_chain(
                 "relationship_type": row["relationship_type"],
                 "source_name": repo_ref.get("name"),
                 "source_id": repo_ref.get("id"),
-                "target_name": row.get("source_repos") or row.get("source_paths"),
-                "target_kind": "ArgoCDApplicationSet",
+                "target_name": row.get("name") or row.get("source_repos"),
+                "target_kind": "Repository",
                 **row,
             }
         )
@@ -404,8 +390,8 @@ def _build_deployment_chain(
                 "relationship_type": row["relationship_type"],
                 "source_name": row.get("name"),
                 "source_id": row.get("id"),
-                "target_name": row.get("platform_name"),
-                "target_kind": "Platform",
+                "target_name": repo_ref.get("name"),
+                "target_kind": "Repository",
                 **row,
             }
         )

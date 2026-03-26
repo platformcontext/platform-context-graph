@@ -109,6 +109,97 @@ def test_replace_generation_persists_relationship_entities(monkeypatch) -> None:
     assert evidence_rows[0]["target_entity_id"] == "repository:r_auth"
 
 
+def test_replace_generation_persists_repo_to_platform_records(monkeypatch) -> None:
+    """Generation replacement should allow mixed repo/platform relationship rows."""
+
+    store = PostgresRelationshipStore("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    platform_id = "platform:ecs:aws:cluster/node10:prod:us-east-1"
+    generation = store.replace_generation(
+        scope="repo_dependencies",
+        run_id="run-456",
+        checkouts=[],
+        entities=[
+            Platform(
+                entity_id=platform_id,
+                kind="ecs",
+                provider="aws",
+                name="node10",
+                environment="prod",
+                region="us-east-1",
+                locator="cluster/node10",
+            )
+        ],
+        evidence_facts=[
+            RelationshipEvidenceFact(
+                evidence_kind="TERRAFORM_ECS_SERVICE",
+                relationship_type="RUNS_ON",
+                source_repo_id="repository:r_api",
+                target_repo_id=None,
+                source_entity_id="repository:r_api",
+                target_entity_id=platform_id,
+                confidence=0.95,
+                rationale="Service module binds the repo to the ECS cluster.",
+            )
+        ],
+        candidates=[
+            RelationshipCandidate(
+                source_repo_id="repository:r_api",
+                target_repo_id=None,
+                source_entity_id="repository:r_api",
+                target_entity_id=platform_id,
+                relationship_type="RUNS_ON",
+                confidence=0.95,
+                evidence_count=1,
+                rationale="Service module binds the repo to the ECS cluster.",
+            )
+        ],
+        resolved=[
+            ResolvedRelationship(
+                source_repo_id="repository:r_api",
+                target_repo_id=None,
+                source_entity_id="repository:r_api",
+                target_entity_id=platform_id,
+                relationship_type="RUNS_ON",
+                confidence=0.95,
+                evidence_count=1,
+                rationale="Service runs on the resolved ECS platform.",
+                resolution_source="inferred",
+            )
+        ],
+    )
+
+    assert generation.generation_id.startswith("generation_")
+
+    evidence_insert, evidence_rows = cursor.executemany.call_args_list[1].args
+    assert "INSERT INTO relationship_evidence_facts" in evidence_insert
+    assert evidence_rows[0]["source_repo_id"] == "repository:r_api"
+    assert evidence_rows[0]["target_repo_id"] is None
+    assert evidence_rows[0]["source_entity_id"] == "repository:r_api"
+    assert evidence_rows[0]["target_entity_id"] == platform_id
+
+    candidate_insert, candidate_rows = cursor.executemany.call_args_list[2].args
+    assert "INSERT INTO relationship_candidates" in candidate_insert
+    assert candidate_rows[0]["source_repo_id"] == "repository:r_api"
+    assert candidate_rows[0]["target_repo_id"] is None
+    assert candidate_rows[0]["source_entity_id"] == "repository:r_api"
+    assert candidate_rows[0]["target_entity_id"] == platform_id
+
+    resolved_insert, resolved_rows = cursor.executemany.call_args_list[3].args
+    assert "INSERT INTO resolved_relationships" in resolved_insert
+    assert resolved_rows[0]["source_repo_id"] == "repository:r_api"
+    assert resolved_rows[0]["target_repo_id"] is None
+    assert resolved_rows[0]["source_entity_id"] == "repository:r_api"
+    assert resolved_rows[0]["target_entity_id"] == platform_id
+
+
 def test_existing_repo_backed_generation_remains_readable_until_entity_cutover(
     monkeypatch,
 ) -> None:

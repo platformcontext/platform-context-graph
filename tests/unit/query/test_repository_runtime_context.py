@@ -109,6 +109,24 @@ def _make_session() -> MockSession:
         "environment": "prod",
         "relationship_type": "PROVISIONS_PLATFORM",
     }
+    helm_repo = {
+        "id": "repository:r_helm123",
+        "name": "helm-charts",
+        "path": "/repos/helm-charts",
+        "local_path": "/repos/helm-charts",
+        "remote_url": "https://github.com/platformcontext/helm-charts",
+        "repo_slug": "platformcontext/helm-charts",
+        "has_remote": True,
+    }
+    infra_repo = {
+        "id": "repository:r_infra123",
+        "name": "infra-stack",
+        "path": "/repos/infra-stack",
+        "local_path": "/repos/infra-stack",
+        "remote_url": "https://github.com/platformcontext/infra-stack",
+        "repo_slug": "platformcontext/infra-stack",
+        "has_remote": True,
+    }
     return MockSession(
         {
             "MATCH (r:Repository)-[:CONTAINS*]->(f:File)": MockResult(
@@ -120,6 +138,18 @@ def _make_session() -> MockSession:
             "RUNS_ON]->(p:Platform)": MockResult(records=[runtime_platform]),
             "PROVISIONS_PLATFORM]->(p:Platform)": MockResult(
                 records=[provisioned_platform]
+            ),
+            "MATCH (r:Repository)-[:DEPLOYS_FROM]->(dep:Repository)": MockResult(
+                records=[helm_repo]
+            ),
+            "MATCH (r:Repository)-[:DISCOVERS_CONFIG_IN]->(cfg:Repository)": MockResult(
+                records=[]
+            ),
+            "MATCH (prov:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(r:Repository)": MockResult(
+                records=[infra_repo]
+            ),
+            "MATCH (r:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(dep:Repository)": MockResult(
+                records=[]
             ),
             "SOURCES_FROM": MockResult(
                 records=[
@@ -141,20 +171,6 @@ def _make_session() -> MockSession:
                         "source_repos": "https://github.com/platformcontext/helm-charts",
                         "source_paths": "argocd/api-node-boats/overlays/prod",
                         "relationship_type": "DISCOVERS_CONFIG_IN",
-                    }
-                ]
-            ),
-            "<-[:PROVISIONS_PLATFORM]-(prov:Repository)": MockResult(
-                records=[
-                    {
-                        "id": "repository:r_infra123",
-                        "name": "infra-stack",
-                        "path": "/repos/infra-stack",
-                        "local_path": "/repos/infra-stack",
-                        "remote_url": "https://github.com/platformcontext/infra-stack",
-                        "repo_slug": "platformcontext/infra-stack",
-                        "has_remote": True,
-                        "platform_id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
                     }
                 ]
             ),
@@ -233,13 +249,189 @@ def test_build_relationship_summary_uses_canonical_provisioning_relationship_nam
         "platform_context_graph.query.repositories.relationship_summary.get_runtime_repository_coverage",
         lambda **_kwargs: _coverage_row(),
     )
-    session = _make_session()
+    session = MockSession(
+        {
+            "MATCH (r:Repository)-[:RUNS_ON]->(p:Platform)": MockResult(records=[]),
+            "MATCH (r:Repository)-[:PROVISIONS_PLATFORM]->(p:Platform)": MockResult(
+                records=[]
+            ),
+            "MATCH (r:Repository)-[:DEPLOYS_FROM]->(dep:Repository)": MockResult(
+                records=[]
+            ),
+            "MATCH (r:Repository)-[:DISCOVERS_CONFIG_IN]->(cfg:Repository)": MockResult(
+                records=[]
+            ),
+            "MATCH (prov:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(r:Repository)": MockResult(
+                records=[]
+            ),
+            "MATCH (r:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(dep:Repository)": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_app123",
+                        "name": "payments-service",
+                        "path": "/repos/payments-service",
+                        "local_path": "/repos/payments-service",
+                        "remote_url": "https://github.com/platformcontext/payments-service",
+                        "repo_slug": "platformcontext/payments-service",
+                        "has_remote": True,
+                    }
+                ]
+            ),
+            "type(rel) IN": MockResult(records=[]),
+        }
+    )
 
     result = build_relationship_summary(session, _repo_row())
 
     assert result["provisions_dependencies_for"][0]["relationship_type"] == (
         "PROVISIONS_DEPENDENCY_FOR"
     )
+
+
+def test_build_relationship_summary_prefers_canonical_repo_edges_for_service_context(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.relationship_summary.get_runtime_repository_coverage",
+        lambda **_kwargs: _coverage_row(),
+    )
+    session = MockSession(
+        {
+            "MATCH (r:Repository)-[:CONTAINS*]->(f:File)": MockResult(records=[]),
+            "fn.name IN": MockResult(records=[]),
+            "MATCH (r:Repository)-[:RUNS_ON]->(p:Platform)": MockResult(records=[]),
+            "MATCH (r:Repository)-[:PROVISIONS_PLATFORM]->(p:Platform)": MockResult(
+                records=[]
+            ),
+            "MATCH (r:Repository)-[:DEPLOYS_FROM]->(dep:Repository)": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_helm123",
+                        "name": "helm-charts",
+                        "path": "/repos/helm-charts",
+                        "local_path": "/repos/helm-charts",
+                        "remote_url": "https://github.com/platformcontext/helm-charts",
+                        "repo_slug": "platformcontext/helm-charts",
+                        "has_remote": True,
+                    }
+                ]
+            ),
+            "MATCH (r:Repository)-[:DISCOVERS_CONFIG_IN]->(cfg:Repository)": MockResult(
+                records=[]
+            ),
+            "MATCH (prov:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(r:Repository)": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_node10",
+                        "name": "terraform-stack-node10",
+                        "path": "/repos/terraform-stack-node10",
+                        "local_path": "/repos/terraform-stack-node10",
+                        "remote_url": "https://github.com/platformcontext/terraform-stack-node10",
+                        "repo_slug": "platformcontext/terraform-stack-node10",
+                        "has_remote": True,
+                    }
+                ]
+            ),
+            "MATCH (r:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(dep:Repository)": MockResult(
+                records=[]
+            ),
+            "type(rel) IN": MockResult(records=[]),
+            "MATCH (app:ArgoCDApplication)-[:SOURCES_FROM]->(r:Repository)": MockResult(
+                records=[
+                    {
+                        "app_name": "api-node-boats",
+                        "project": "should-not-win",
+                        "namespace": "argocd",
+                        "source_path": "argocd/api-node-boats/overlays/prod",
+                    }
+                ]
+            ),
+            "MATCH (app:ArgoCDApplicationSet)": MockResult(
+                records=[
+                    {
+                        "app_name": "api-node-boats",
+                        "project": "should-not-win",
+                        "namespace": "argocd",
+                        "source_repos": "https://github.com/platformcontext/helm-charts",
+                        "source_paths": "argocd/api-node-boats/overlays/prod",
+                    }
+                ]
+            ),
+        }
+    )
+
+    result = build_relationship_summary(session, _repo_row())
+
+    assert len(result["deploys_from"]) == 1
+    assert result["deploys_from"][0]["name"] == "helm-charts"
+    assert result["deploys_from"][0]["repo_slug"] == "platformcontext/helm-charts"
+    assert result["deploys_from"][0]["relationship_type"] == "DEPLOYS_FROM"
+    assert result["discovers_config_in"] == []
+    assert len(result["provisioned_by"]) == 1
+    assert result["provisioned_by"][0]["name"] == "terraform-stack-node10"
+    assert (
+        result["provisioned_by"][0]["repo_slug"]
+        == "platformcontext/terraform-stack-node10"
+    )
+    assert result["provisioned_by"][0]["relationship_type"] == "PROVISIONED_BY"
+    assert result["deployment_chain"][0]["relationship_type"] == "DEPLOYS_FROM"
+
+
+def test_build_relationship_summary_reads_direct_repository_runtime_platform_edges(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.relationship_summary.get_runtime_repository_coverage",
+        lambda **_kwargs: _coverage_row(),
+    )
+    session = MockSession(
+        {
+            "MATCH (r:Repository)-[:RUNS_ON]->(p:Platform)": MockResult(
+                records=[
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:none:none",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": None,
+                    }
+                ]
+            ),
+            "MATCH (r:Repository)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)": MockResult(
+                records=[]
+            ),
+            "MATCH (r:Repository)-[:PROVISIONS_PLATFORM]->(p:Platform)": MockResult(
+                records=[]
+            ),
+            "MATCH (r:Repository)-[:DEPLOYS_FROM]->(dep:Repository)": MockResult(
+                records=[]
+            ),
+            "MATCH (r:Repository)-[:DISCOVERS_CONFIG_IN]->(cfg:Repository)": MockResult(
+                records=[]
+            ),
+            "MATCH (prov:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(r:Repository)": MockResult(
+                records=[]
+            ),
+            "MATCH (r:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(dep:Repository)": MockResult(
+                records=[]
+            ),
+            "type(rel) IN": MockResult(records=[]),
+        }
+    )
+
+    result = build_relationship_summary(session, _repo_row())
+
+    assert result["platforms"] == [
+        {
+            "id": "platform:ecs:aws:cluster/node10:none:none",
+            "name": "node10",
+            "kind": "ecs",
+            "provider": "aws",
+            "environment": None,
+            "relationship_type": "RUNS_ON",
+            "source": "runtime",
+        }
+    ]
 
 
 def test_build_repository_context_returns_platforms_deployment_chain_and_limitations(

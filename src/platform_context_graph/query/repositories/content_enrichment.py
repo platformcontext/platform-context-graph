@@ -33,7 +33,9 @@ _HOSTNAME_CANDIDATES = (
 )
 _BASE_URL_RE = re.compile(r"baseUrl:\s*['\"]https?://([^/'\"]+)")
 _DOCS_ROUTE_RE = re.compile(r"path:\s*['\"]([^'\"]+)['\"]")
-_DEFAULT_VERSION_RE = re.compile(r"defaultApiVersion\s*:\s*['\"]([^'\"]+)['\"]")
+_DEFAULT_VERSION_RE = re.compile(
+    r"default(?:Api)?Version\s*:\s*['\"]([^'\"]+)['\"]"
+)
 
 
 def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[str, Any]:
@@ -49,12 +51,14 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
         database,
         repo_id=repo_id,
         repo_name=str(repository.get("name") or ""),
+        deploys_from=context.get("deploys_from") or [],
         discovers_config_in=context.get("discovers_config_in") or [],
     )
     if api_surface:
         context["api_surface"] = api_surface
     if hostnames:
         context["hostnames"] = hostnames
+        _remove_limitation(context, "dns_unknown")
     return context
 
 
@@ -91,6 +95,7 @@ def _extract_hostnames(
     *,
     repo_id: str,
     repo_name: str,
+    deploys_from: list[dict[str, Any]],
     discovers_config_in: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Extract public and internal hostnames from repo and related config repos."""
@@ -120,6 +125,7 @@ def _extract_hostnames(
         _extract_related_config_hostnames(
             database,
             repo_name=repo_name,
+            deploys_from=deploys_from,
             discovers_config_in=discovers_config_in,
         )
     )
@@ -130,15 +136,20 @@ def _extract_related_config_hostnames(
     database: Any,
     *,
     repo_name: str,
+    deploys_from: list[dict[str, Any]],
     discovers_config_in: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Extract hostname hints from related config repositories."""
 
     related_hostnames: list[dict[str, Any]] = []
     db_manager = get_db_manager(database)
+    related_rows = list(deploys_from) + list(discovers_config_in)
     with db_manager.get_driver().session() as session:
-        for row in discovers_config_in:
-            for source_repo in _split_csv(row.get("source_repos")):
+        for row in related_rows:
+            repo_candidates = _split_csv(row.get("source_repos"))
+            if not repo_candidates and isinstance(row.get("name"), str):
+                repo_candidates = [str(row["name"])]
+            for source_repo in repo_candidates:
                 resolved_repo = _resolve_related_repo(session, source_repo)
                 if resolved_repo is None:
                     continue
@@ -162,6 +173,15 @@ def _extract_related_config_hostnames(
                                 )
                             )
     return related_hostnames
+
+
+def _remove_limitation(context: dict[str, Any], limitation: str) -> None:
+    """Remove one limitation code from a repository context payload."""
+
+    limitations = context.get("limitations")
+    if not isinstance(limitations, list):
+        return
+    context["limitations"] = [item for item in limitations if item != limitation]
 
 
 def _load_repo_file(database: Any, *, repo_id: str, relative_path: str) -> str | None:

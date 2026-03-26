@@ -407,6 +407,61 @@ module "api_node_boats" {
     assert ("TERRAFORM_APP_REPO", "PROVISIONS_DEPENDENCY_FOR") in pairs
 
 
+def test_discover_checkout_file_evidence_emits_ecs_platform_evidence_for_indirect_cluster_and_name_fallback(
+    tmp_path: Path,
+) -> None:
+    """Terraform ECS stacks should support local-backed cluster names and name/repo fallbacks."""
+
+    service_repo = tmp_path / "api-node-boats"
+    infra_repo = tmp_path / "terraform-stack-node10"
+    service_repo.mkdir()
+    (service_repo / "README.md").write_text("service repo\n", encoding="utf-8")
+    (infra_repo / "shared").mkdir(parents=True)
+    (infra_repo / "shared" / "resources.tf").write_text(
+        """
+locals {
+  cluster = "node10"
+}
+
+resource "aws_ecs_cluster" "default" {
+  name = local.cluster
+}
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+    (infra_repo / "shared" / "ecs.tf").write_text(
+        """
+module "api_node_boats" {
+  source = "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws"
+  name = "api-node-boats"
+  cluster_name = aws_ecs_cluster.default.name
+  create_deploy = false
+}
+
+module "api_node_boats_batch" {
+  source = "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws"
+  repo_name = "api-node-boats"
+  cluster_name = aws_ecs_cluster.default.name
+}
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+
+    checkouts = build_repository_checkouts([infra_repo, service_repo])
+
+    evidence = discover_checkout_file_evidence(checkouts)
+
+    pairs = {(item.evidence_kind, item.relationship_type) for item in evidence}
+    assert ("TERRAFORM_ECS_CLUSTER", "PROVISIONS_PLATFORM") in pairs
+    assert ("TERRAFORM_ECS_SERVICE", "RUNS_ON") in pairs
+    assert any(
+        item.relationship_type == "RUNS_ON"
+        and item.source_repo_id == checkouts[1].logical_repo_id
+        and item.target_entity_id == "platform:ecs:aws:cluster/node10:none:none"
+        for item in evidence
+    )
+
+
 def test_discover_checkout_file_evidence_emits_eks_platform_evidence(
     tmp_path: Path,
 ) -> None:
@@ -484,6 +539,66 @@ destinationClusterName: bg-qa
     pairs = {(item.evidence_kind, item.relationship_type) for item in evidence}
     assert ("ARGOCD_APPLICATIONSET_DISCOVERY", "DISCOVERS_CONFIG_IN") in pairs
     assert ("ARGOCD_DESTINATION_PLATFORM", "RUNS_ON") in pairs
+
+
+def test_discover_checkout_file_evidence_emits_argocd_platform_evidence_from_overlay_files(
+    tmp_path: Path,
+) -> None:
+    """ArgoCD-discovered overlays should infer runtime platforms from sibling overlay files."""
+
+    argocd_repo = tmp_path / "iac-eks-argocd"
+    helm_repo = tmp_path / "helm-charts"
+    service_repo = tmp_path / "api-node-boats"
+    (argocd_repo / "applicationsets").mkdir(parents=True)
+    (helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa").mkdir(
+        parents=True
+    )
+    service_repo.mkdir()
+    (service_repo / "README.md").write_text("service repo\n", encoding="utf-8")
+    (argocd_repo / "applicationsets" / "api-node-boats.yaml").write_text(
+        """
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/boatsgroup/helm-charts
+              revision: main
+              files:
+                - path: "argocd/api-node-boats/overlays/*/config.yaml"
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+    (helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "config.yaml").write_text(
+        """
+addon: api-node-boats
+git:
+  repoURL: https://github.com/boatsgroup/helm-charts
+  overlayPath: argocd/api-node-boats/overlays/bg-qa
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+    (helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "xirsarole-patch.yaml").write_text(
+        """
+spec:
+  clusterName: bg-qa
+        """.strip() + "\n",
+        encoding="utf-8",
+    )
+
+    checkouts = build_repository_checkouts([argocd_repo, helm_repo, service_repo])
+
+    evidence = discover_checkout_file_evidence(checkouts)
+
+    assert any(
+        item.evidence_kind == "ARGOCD_DESTINATION_PLATFORM"
+        and item.relationship_type == "RUNS_ON"
+        and item.source_repo_id == checkouts[2].logical_repo_id
+        and item.target_entity_id == "platform:eks:aws:cluster/bg-qa:bg-qa:none"
+        for item in evidence
+    )
 
 
 def test_discover_checkout_file_evidence_materializes_workload_subject_for_non_repo_argocd_deployable(

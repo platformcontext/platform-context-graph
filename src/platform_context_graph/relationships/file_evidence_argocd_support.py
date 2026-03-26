@@ -18,6 +18,19 @@ __all__ = [
     "iter_argocd_discovery_targets",
 ]
 
+_CLUSTER_VALUE_KEYS = {
+    "cluster",
+    "clustername",
+    "destinationcluster",
+    "destinationclustername",
+}
+_IGNORED_CLUSTER_VALUES = {
+    "placeholder",
+    "{{.cluster}}",
+    "{{.clustername}}",
+    "{{.environment}}",
+}
+
 
 def iter_argocd_discovery_targets(document: Any) -> Iterator[tuple[str, str]]:
     """Yield ApplicationSet repo URLs and discovery paths for git file generators."""
@@ -107,18 +120,14 @@ def iter_argocd_applicationset_source_repo_urls(document: Any) -> Iterator[str]:
 def iter_argocd_destination_cluster_names(config_path: Path) -> Iterator[str]:
     """Yield destination cluster names from one discovered ArgoCD config file."""
 
-    for document in load_yaml_documents(config_path):
-        if not isinstance(document, dict):
-            continue
-        for key in ("destinationClusterName", "destinationCluster"):
-            value = document.get(key)
-            if isinstance(value, str) and value.strip():
-                yield value.strip()
-        destination = document.get("destination")
-        if isinstance(destination, dict):
-            cluster_name = destination.get("name") or destination.get("clusterName")
-            if isinstance(cluster_name, str) and cluster_name.strip():
-                yield cluster_name.strip()
+    yielded: set[str] = set()
+    for yaml_path in _iter_related_overlay_yaml_files(config_path):
+        for document in load_yaml_documents(yaml_path):
+            for cluster_name in _iter_cluster_names(document):
+                if cluster_name in yielded:
+                    continue
+                yielded.add(cluster_name)
+                yield cluster_name
 
 
 def infer_environment_from_path(path: Path) -> str | None:
@@ -204,3 +213,52 @@ def _iter_argocd_git_generators(
             nested_generators = nested.get("generators")
             if isinstance(nested_generators, list):
                 yield from _iter_argocd_git_generators(nested_generators)
+
+
+def _iter_related_overlay_yaml_files(config_path: Path) -> Iterator[Path]:
+    """Yield the discovered config and sibling overlay YAML files."""
+
+    yielded: set[Path] = set()
+    for candidate in [config_path, *sorted(config_path.parent.glob("*.y*ml"))]:
+        if not candidate.is_file() or candidate in yielded:
+            continue
+        yielded.add(candidate)
+        yield candidate
+
+
+def _iter_cluster_names(node: Any) -> Iterator[str]:
+    """Yield concrete cluster names from one YAML document recursively."""
+
+    if isinstance(node, dict):
+        destination = node.get("destination")
+        if isinstance(destination, dict):
+            for value in (
+                destination.get("name"),
+                destination.get("clusterName"),
+                destination.get("cluster"),
+            ):
+                cleaned = _normalize_cluster_value(value)
+                if cleaned:
+                    yield cleaned
+        for key, value in node.items():
+            cleaned = _normalize_cluster_value(value) if str(key).lower() in _CLUSTER_VALUE_KEYS else None
+            if cleaned:
+                yield cleaned
+            yield from _iter_cluster_names(value)
+        return
+    if isinstance(node, list):
+        for item in node:
+            yield from _iter_cluster_names(item)
+
+
+def _normalize_cluster_value(value: Any) -> str | None:
+    """Return a stable cluster value or ``None`` when it is placeholder-like."""
+
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if cleaned.lower() in _IGNORED_CLUSTER_VALUES:
+        return None
+    return cleaned

@@ -46,7 +46,7 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             "route: { path: '/_specs' }\n"
         ),
         "redocly.yaml": "apis:\n  main:\n    root: ./specs/index.yaml\n",
-        "versioning.config.ts": "export default { defaultApiVersion: 'v3' };\n",
+        "versioning.config.ts": "export const versioning = { defaultVersion: 'v3' };\n",
         "config/qa.json": '{"server":{"hostname":"api-node-boats.qa.bgrp.io"}}',
         "config/production.json": (
             '{"server":{"hostname":"api-node-boats.prod.bgrp.io"}}'
@@ -86,12 +86,13 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             "name": "api-node-boats",
             "path": "/repos/api-node-boats",
         },
-        "discovers_config_in": [
+        "deploys_from": [
             {
                 "source_repos": "https://github.com/boatsgroup/helm-charts",
                 "source_paths": "argocd/api-node-boats/overlays/bg-qa/config.yaml",
             }
         ],
+        "limitations": ["dns_unknown"],
     }
 
     result = enrich_repository_context(_DummyDB(), context)
@@ -104,6 +105,7 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
     ]
     assert result["api_surface"]["docs_routes"] == ["/_specs"]
     assert result["api_surface"]["api_versions"] == ["v3"]
+    assert result["limitations"] == []
     assert result["hostnames"] == [
         {
             "hostname": "api-node-boats.qa.bgrp.io",

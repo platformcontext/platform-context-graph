@@ -359,7 +359,33 @@ def test_get_repository_context_returns_current_context_shape(monkeypatch):
                     }
                 ]
             ),
-            "dep:Repository": MockResult(
+            "MATCH (r:Repository)-[:DEPLOYS_FROM]->(dep:Repository)": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_deploy123",
+                        "name": "helm-charts",
+                        "path": "/repos/helm-charts",
+                        "local_path": "/repos/helm-charts",
+                        "remote_url": "https://github.com/platformcontext/helm-charts",
+                        "repo_slug": "platformcontext/helm-charts",
+                        "has_remote": True,
+                    }
+                ]
+            ),
+            "MATCH (prov:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(r:Repository)": MockResult(
+                records=[
+                    {
+                        "id": "repository:r_infra123",
+                        "name": "infra-stack",
+                        "path": "/repos/infra-stack",
+                        "local_path": "/repos/infra-stack",
+                        "remote_url": "https://github.com/platformcontext/infra-stack",
+                        "repo_slug": "platformcontext/infra-stack",
+                        "has_remote": True,
+                    }
+                ]
+            ),
+            "MATCH (r:Repository)-[:PROVISIONS_DEPENDENCY_FOR]->(dep:Repository)": MockResult(
                 records=[
                     {
                         "id": "repository:r_app123",
@@ -409,7 +435,7 @@ def test_get_repository_context_returns_current_context_shape(monkeypatch):
     assert result["repository"]["index_status"] == "completed"
     assert result["platforms"]
     assert result["deploys_from"]
-    assert result["discovers_config_in"]
+    assert result["discovers_config_in"] == []
     assert result["provisioned_by"]
     assert result["provisions_dependencies_for"]
     assert result["iac_relationships"] == []

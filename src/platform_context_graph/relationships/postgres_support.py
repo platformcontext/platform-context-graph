@@ -83,8 +83,8 @@ CREATE TABLE IF NOT EXISTS relationship_evidence_facts (
     generation_id TEXT NOT NULL,
     evidence_kind TEXT NOT NULL,
     relationship_type TEXT NOT NULL,
-    source_repo_id TEXT NOT NULL,
-    target_repo_id TEXT NOT NULL,
+    source_repo_id TEXT,
+    target_repo_id TEXT,
     confidence DOUBLE PRECISION NOT NULL,
     rationale TEXT NOT NULL,
     details JSONB NOT NULL,
@@ -98,11 +98,15 @@ ALTER TABLE relationship_evidence_facts
     ADD COLUMN IF NOT EXISTS source_entity_id TEXT,
     ADD COLUMN IF NOT EXISTS target_entity_id TEXT;
 
+ALTER TABLE relationship_evidence_facts
+    ALTER COLUMN source_repo_id DROP NOT NULL,
+    ALTER COLUMN target_repo_id DROP NOT NULL;
+
 CREATE TABLE IF NOT EXISTS relationship_candidates (
     candidate_id TEXT PRIMARY KEY,
     generation_id TEXT NOT NULL,
-    source_repo_id TEXT NOT NULL,
-    target_repo_id TEXT NOT NULL,
+    source_repo_id TEXT,
+    target_repo_id TEXT,
     relationship_type TEXT NOT NULL,
     confidence DOUBLE PRECISION NOT NULL,
     evidence_count INTEGER NOT NULL,
@@ -117,17 +121,20 @@ ALTER TABLE relationship_candidates
     ADD COLUMN IF NOT EXISTS source_entity_id TEXT,
     ADD COLUMN IF NOT EXISTS target_entity_id TEXT;
 
+ALTER TABLE relationship_candidates
+    ALTER COLUMN source_repo_id DROP NOT NULL,
+    ALTER COLUMN target_repo_id DROP NOT NULL;
+
 CREATE TABLE IF NOT EXISTS resolved_relationships (
     generation_id TEXT NOT NULL,
-    source_repo_id TEXT NOT NULL,
-    target_repo_id TEXT NOT NULL,
+    source_repo_id TEXT,
+    target_repo_id TEXT,
     relationship_type TEXT NOT NULL,
     confidence DOUBLE PRECISION NOT NULL,
     evidence_count INTEGER NOT NULL,
     rationale TEXT NOT NULL,
     resolution_source TEXT NOT NULL,
-    details JSONB NOT NULL,
-    PRIMARY KEY (generation_id, source_repo_id, target_repo_id, relationship_type)
+    details JSONB NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS resolved_relationships_generation_idx
@@ -136,6 +143,21 @@ CREATE INDEX IF NOT EXISTS resolved_relationships_generation_idx
 ALTER TABLE resolved_relationships
     ADD COLUMN IF NOT EXISTS source_entity_id TEXT,
     ADD COLUMN IF NOT EXISTS target_entity_id TEXT;
+
+ALTER TABLE resolved_relationships
+    ALTER COLUMN source_repo_id DROP NOT NULL,
+    ALTER COLUMN target_repo_id DROP NOT NULL;
+
+ALTER TABLE resolved_relationships
+    DROP CONSTRAINT IF EXISTS resolved_relationships_pkey;
+
+CREATE UNIQUE INDEX IF NOT EXISTS resolved_relationships_identity_idx
+    ON resolved_relationships (
+        generation_id,
+        COALESCE(source_entity_id, source_repo_id),
+        COALESCE(target_entity_id, target_repo_id),
+        relationship_type
+    );
 """
 
 __all__ = ["RELATIONSHIP_SCHEMA"]

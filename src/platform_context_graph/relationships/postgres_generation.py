@@ -16,6 +16,12 @@ from .models import (
 )
 
 
+def _identity_part(*, entity_id: str | None, repository_id: str | None) -> str | None:
+    """Return the best available stable identity part for persistence digests."""
+
+    return entity_id or repository_id
+
+
 def persist_generation_records(
     *,
     cursor: Any,
@@ -187,8 +193,14 @@ def persist_generation_records(
                         generation.generation_id,
                         fact.relationship_type,
                         fact.evidence_kind,
-                        fact.source_repo_id,
-                        fact.target_repo_id,
+                        _identity_part(
+                            entity_id=fact.source_entity_id,
+                            repository_id=fact.source_repo_id,
+                        ),
+                        _identity_part(
+                            entity_id=fact.target_entity_id,
+                            repository_id=fact.target_repo_id,
+                        ),
                         json.dumps(fact.details, sort_keys=True),
                     ),
                     "generation_id": generation.generation_id,
@@ -242,8 +254,14 @@ def persist_generation_records(
                         "candidate",
                         generation.generation_id,
                         candidate.relationship_type,
-                        candidate.source_repo_id,
-                        candidate.target_repo_id,
+                        _identity_part(
+                            entity_id=candidate.source_entity_id,
+                            repository_id=candidate.source_repo_id,
+                        ),
+                        _identity_part(
+                            entity_id=candidate.target_entity_id,
+                            repository_id=candidate.target_repo_id,
+                        ),
                     ),
                     "generation_id": generation.generation_id,
                     "source_repo_id": candidate.source_repo_id,
