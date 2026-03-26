@@ -1,0 +1,37 @@
+src/platform_context_graph/relationships/evidence_argocd.py
+  9443d7a1fa7e7208 13
+  74b29297a65ae3a7 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "ddf269f3d835bd4b02d2a5eae953af2f055e4130",
+  "prompts": {
+    "74b29297a65ae3a7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2b3f-19fc-7af1-afcd-b7a381859912",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "9443d7a1fa7e7208": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2b4a-1855-7220-827d-722325d19279",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
