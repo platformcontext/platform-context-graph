@@ -1,0 +1,93 @@
+tests/unit/relationships/test_file_evidence.py
+  6882d3d2eec12f97 31,66,73,111,155-192,300-346,362
+  bdd10350fac00a5c 40-41,81-84,122-124,128-152
+  ed13f379856156ed 1-30,32-39,42-65,67-72,74-80,87-110,112-118,153-154,347-361,363-368
+  fd72a0d751f06c26 193-198,200-201,203-233,237-243,298-299
+  be93830d8c96bbfb 119-121,125
+  ea2135648c575158 85-86,126-127,199,202,234-236,244-297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "e3e03096ba86680215eb57f4519fee4b9c191a85",
+  "prompts": {
+    "6882d3d2eec12f97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2691-3500-7b53-9c25-c8cceb54b51a",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 90,
+      "total_deletions": 10,
+      "accepted_lines": 90,
+      "overriden_lines": 0
+    },
+    "bdd10350fac00a5c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2a95-71ea-76a3-94e2-0311612eb38b",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 36,
+      "total_deletions": 11,
+      "accepted_lines": 34,
+      "overriden_lines": 0
+    },
+    "be93830d8c96bbfb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2aad-4dc3-7723-83f3-dbc6f990b0eb",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 2,
+      "accepted_lines": 4,
+      "overriden_lines": 0
+    },
+    "ea2135648c575158": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2aad-4ab7-7020-a82e-728fce2f2d18",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 63,
+      "total_deletions": 7,
+      "accepted_lines": 63,
+      "overriden_lines": 0
+    },
+    "ed13f379856156ed": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d281a-b578-7070-9ea4-cef8f2ba6433",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 154,
+      "total_deletions": 0,
+      "accepted_lines": 129,
+      "overriden_lines": 0
+    },
+    "fd72a0d751f06c26": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d284c-f75a-7940-852c-059395ba41a9",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 51,
+      "total_deletions": 0,
+      "accepted_lines": 48,
+      "overriden_lines": 0
+    }
+  }
+}
