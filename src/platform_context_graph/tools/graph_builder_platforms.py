@@ -7,6 +7,7 @@ from typing import Any, Iterable
 
 from .runtime_platform_families import infer_infrastructure_runtime_family_kind
 from .runtime_platform_families import infer_terraform_runtime_family_kind
+from .runtime_platform_families import lookup_runtime_family
 
 _NON_PLATFORM_IDENTIFIERS = {
     "alerts",
@@ -303,10 +304,13 @@ def infer_infrastructure_platform_descriptor(
     if platform_kind is None:
         return None
 
-    platform_provider = "aws" if any(
+    family = lookup_runtime_family(platform_kind)
+    platform_provider = family.provider if family is not None else None
+    if platform_provider is None and any(
         value.startswith("aws_")
         for value in normalized_data_types + normalized_resource_types
-    ) else None
+    ):
+        platform_provider = "aws"
     platform_name = _choose_platform_name(
         resource_names=normalized_resource_names,
         data_names=normalized_data_names,

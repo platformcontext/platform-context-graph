@@ -12,6 +12,7 @@ from ..tools.graph_builder_platforms import (
 )
 from ..tools.runtime_platform_families import lookup_runtime_family
 from ..tools.runtime_platform_families import matches_service_module_source
+from ..tools.runtime_platform_families import terraform_platform_evidence_kind
 from .entities import canonical_platform_id
 from .file_evidence_support import (
     CatalogEntry,
@@ -207,11 +208,7 @@ def _discover_terraform_platform_evidence(
             target_repo_id=None,
             source_entity_id=checkout.logical_repo_id,
             target_entity_id=platform_id,
-            evidence_kind=(
-                "TERRAFORM_ECS_CLUSTER"
-                if kind == "ecs"
-                else "TERRAFORM_EKS_CLUSTER"
-            ),
+            evidence_kind=terraform_platform_evidence_kind(kind, scope="cluster"),
             relationship_type="PROVISIONS_PLATFORM",
             confidence=0.99,
             rationale="Terraform provisions the cluster declared in this file",
@@ -261,11 +258,7 @@ def _discover_terraform_platform_evidence(
                 target_repo_id=None,
                 source_entity_id=entry.repo_id,
                 target_entity_id=platform_id,
-                evidence_kind=(
-                    "TERRAFORM_ECS_SERVICE"
-                    if kind == "ecs"
-                    else "TERRAFORM_EKS_SERVICE"
-                ),
+                evidence_kind=terraform_platform_evidence_kind(kind, scope="service"),
                 relationship_type="RUNS_ON",
                 confidence=0.97,
                 rationale="Terraform service configuration binds the app to the cluster",

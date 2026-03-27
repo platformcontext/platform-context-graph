@@ -1,9 +1,11 @@
 """Tests for generic Terraform runtime-family helpers."""
 
 from platform_context_graph.tools.runtime_platform_families import (
+    format_platform_kind_label,
     infer_terraform_runtime_family_kind,
     lookup_runtime_family,
     matches_service_module_source,
+    terraform_platform_evidence_kind,
 )
 
 
@@ -49,3 +51,23 @@ def test_lookup_runtime_family_exposes_generic_family_metadata() -> None:
     assert family.kind == "ecs"
     assert "aws_ecs_cluster" in family.cluster_resource_types
     assert "ecs-application/aws" in family.service_module_patterns
+
+
+def test_terraform_platform_evidence_kind_is_family_driven() -> None:
+    """Terraform evidence-kind names should derive from the shared registry."""
+
+    assert terraform_platform_evidence_kind("ecs", scope="cluster") == (
+        "TERRAFORM_ECS_CLUSTER"
+    )
+    assert terraform_platform_evidence_kind("eks", scope="service") == (
+        "TERRAFORM_EKS_SERVICE"
+    )
+
+
+def test_format_platform_kind_label_prefers_registered_display_names() -> None:
+    """Platform labels should stay consistent across runtime-aware summaries."""
+
+    assert format_platform_kind_label("ecs") == "ECS"
+    assert format_platform_kind_label("eks") == "EKS"
+    assert format_platform_kind_label("kubernetes") == "Kubernetes"
+    assert format_platform_kind_label("nomad") == "NOMAD"

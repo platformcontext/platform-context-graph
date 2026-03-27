@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...tools.runtime_platform_families import format_platform_kind_label
+
 _GITOPS_DELIVERY_MODES = frozenset({"eks_gitops", "eks_gitops_rollback"})
 _DIRECT_DELIVERY_MODES = frozenset(
     {"continuous_deployment", "image_build_push", "deployment_verification"}
@@ -243,15 +245,9 @@ def _platform_kind_phrase(platform_kinds: list[str]) -> str:
     if not platform_kinds:
         return ""
     if len(platform_kinds) == 1:
-        kind = platform_kinds[0].strip().lower()
-        if kind == "eks":
-            return "EKS platforms"
-        if kind == "ecs":
-            return "ECS platforms"
-        if kind == "kubernetes":
-            return "Kubernetes platforms"
-        return f"{kind} platforms"
-    rendered = ", ".join(kind.upper() for kind in platform_kinds)
+        rendered = format_platform_kind_label(platform_kinds[0])
+        return f"{rendered} platforms" if rendered else ""
+    rendered = ", ".join(format_platform_kind_label(kind) for kind in platform_kinds)
     return f"{rendered} platforms"
 
 

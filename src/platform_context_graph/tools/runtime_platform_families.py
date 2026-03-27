@@ -12,6 +12,7 @@ class TerraformRuntimeFamily:
 
     kind: str
     provider: str | None
+    display_name: str
     cluster_module_patterns: tuple[str, ...]
     cluster_resource_types: tuple[str, ...]
     service_module_patterns: tuple[str, ...]
@@ -22,6 +23,7 @@ _RUNTIME_FAMILIES: tuple[TerraformRuntimeFamily, ...] = (
     TerraformRuntimeFamily(
         kind="ecs",
         provider="aws",
+        display_name="ECS",
         cluster_module_patterns=("batch-compute-resource/aws", "ecs-cluster/aws"),
         cluster_resource_types=("aws_ecs_cluster",),
         service_module_patterns=("ecs-application/aws",),
@@ -30,6 +32,7 @@ _RUNTIME_FAMILIES: tuple[TerraformRuntimeFamily, ...] = (
     TerraformRuntimeFamily(
         kind="eks",
         provider="aws",
+        display_name="EKS",
         cluster_module_patterns=(
             "terraform-aws-modules/eks/aws",
             "eks-blueprints",
@@ -119,11 +122,33 @@ def matches_service_module_source(source: str, *, kind: str) -> bool:
     return any(pattern in normalized for pattern in family.service_module_patterns)
 
 
+def terraform_platform_evidence_kind(kind: str, *, scope: str) -> str:
+    """Build a stable Terraform evidence kind for one runtime family and scope."""
+
+    normalized_kind = str(kind).strip().upper() or "UNKNOWN"
+    normalized_scope = str(scope).strip().upper() or "UNKNOWN"
+    return f"TERRAFORM_{normalized_kind}_{normalized_scope}"
+
+
+def format_platform_kind_label(kind: str) -> str:
+    """Return a human-readable label for one platform kind."""
+
+    normalized = str(kind).strip().lower()
+    family = lookup_runtime_family(normalized)
+    if family is not None:
+        return family.display_name
+    if normalized == "kubernetes":
+        return "Kubernetes"
+    return normalized.upper() if normalized else ""
+
+
 __all__ = [
     "TerraformRuntimeFamily",
+    "format_platform_kind_label",
     "infer_infrastructure_runtime_family_kind",
     "infer_terraform_runtime_family_kind",
     "iter_runtime_families",
     "lookup_runtime_family",
     "matches_service_module_source",
+    "terraform_platform_evidence_kind",
 ]
