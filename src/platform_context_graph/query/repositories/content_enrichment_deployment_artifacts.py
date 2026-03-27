@@ -9,6 +9,7 @@ from typing import Any, Callable
 import yaml
 
 from .content_enrichment_deployment_artifacts_support import (
+    extract_config_path_rows_from_terraform_files,
     extract_config_path_rows_from_kustomize_resources,
     extract_kustomize_rows,
 )
@@ -19,6 +20,7 @@ def extract_related_deployment_artifacts(
     repo_name: str,
     deploys_from: list[dict[str, Any]],
     discovers_config_in: list[dict[str, Any]],
+    provisioned_by: list[dict[str, Any]],
     resolve_related_repo: Callable[[str], dict[str, Any] | None],
     values_path_patterns: Callable[[str], list[str]],
     infer_environment_from_path: Callable[[str], str | None],
@@ -118,6 +120,26 @@ def extract_related_deployment_artifacts(
                                 environment=environment,
                             )
                         )
+    for row in provisioned_by:
+        if not isinstance(row, dict):
+            continue
+        repo_candidates = split_csv(row.get("source_repos"))
+        if not repo_candidates and isinstance(row.get("name"), str):
+            repo_candidates = [str(row["name"])]
+        for source_repo in repo_candidates:
+            resolved_repo = resolve_related_repo(source_repo)
+            if resolved_repo is None:
+                continue
+            local_path = resolved_repo.get("local_path") or resolved_repo.get("path")
+            if not isinstance(local_path, str) or not local_path:
+                continue
+            config_paths.extend(
+                extract_config_path_rows_from_terraform_files(
+                    repo_root=Path(local_path),
+                    source_repo_name=str(resolved_repo.get("name") or ""),
+                    infer_environment_from_path=infer_environment_from_path,
+                )
+            )
 
     return {
         "charts": _dedupe_rows(charts),

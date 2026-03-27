@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Callable
+
+_TERRAFORM_CONFIG_PATH_RE = re.compile(
+    r'(?P<path>/(?:configd|api)/[A-Za-z0-9._/-]+/\*)',
+    re.IGNORECASE,
+)
 
 
 def extract_kustomize_rows(
@@ -269,6 +275,38 @@ def extract_config_path_rows_from_resource(
             rows.append(
                 {
                     "path": path,
+                    "source_repo": source_repo_name,
+                    "relative_path": relative_path,
+                    "environment": environment,
+                }
+            )
+    return rows
+
+
+def extract_config_path_rows_from_terraform_files(
+    *,
+    repo_root: Path,
+    source_repo_name: str,
+    infer_environment_from_path: Callable[[str], str | None],
+) -> list[dict[str, Any]]:
+    """Extract parameter-path rows from Terraform and Terragrunt text files."""
+
+    rows: list[dict[str, Any]] = []
+    for file_path in sorted(repo_root.rglob("*")):
+        if not file_path.is_file():
+            continue
+        if file_path.suffix not in {".tf", ".tfvars", ".hcl"}:
+            continue
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        relative_path = str(file_path.relative_to(repo_root.resolve()))
+        environment = infer_environment_from_path(relative_path)
+        for match in _TERRAFORM_CONFIG_PATH_RE.finditer(content):
+            rows.append(
+                {
+                    "path": str(match.group("path") or "").strip(),
                     "source_repo": source_repo_name,
                     "relative_path": relative_path,
                     "environment": environment,

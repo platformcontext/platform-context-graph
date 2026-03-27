@@ -204,6 +204,21 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         ),
         encoding="utf-8",
     )
+    terraform_repo = tmp_path / "terraform-stack-node10"
+    (terraform_repo / "shared").mkdir(parents=True)
+    (terraform_repo / "shared" / "iam.tf").write_text(
+        "\n".join(
+            [
+                "data \"aws_iam_policy_document\" \"api_node_boats\" {",
+                "  statement {",
+                '    resources = ["/configd/api-node-boats/*", "/api/api-node-boats/*", "/configd/elasticache/*"]',
+                "  }",
+                "}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     file_contents = {
         "server/init/plugins/spec.js": (
@@ -351,6 +366,13 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
                 "name": "terraform-stack-boattrader",
                 "path": str(tmp_path / "terraform-stack-boattrader"),
                 "local_path": str(tmp_path / "terraform-stack-boattrader"),
+            }
+        if candidate in {"repository:r_terraform123", "terraform-stack-node10"}:
+            return {
+                "id": "repository:r_terraform123",
+                "name": "terraform-stack-node10",
+                "path": str(terraform_repo),
+                "local_path": str(terraform_repo),
             }
         return None
 
@@ -633,6 +655,24 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
                 "path": "/api/api-node-boats/*",
                 "source_repo": "helm-charts",
                 "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                "environment": None,
+            },
+            {
+                "path": "/configd/api-node-boats/*",
+                "source_repo": "terraform-stack-node10",
+                "relative_path": "shared/iam.tf",
+                "environment": None,
+            },
+            {
+                "path": "/api/api-node-boats/*",
+                "source_repo": "terraform-stack-node10",
+                "relative_path": "shared/iam.tf",
+                "environment": None,
+            },
+            {
+                "path": "/configd/elasticache/*",
+                "source_repo": "terraform-stack-node10",
+                "relative_path": "shared/iam.tf",
                 "environment": None,
             },
         ],
