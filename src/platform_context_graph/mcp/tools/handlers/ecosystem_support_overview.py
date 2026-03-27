@@ -74,6 +74,7 @@ def build_deployment_overview(
             "kustomize_patches": list(
                 deployment_artifacts.get("kustomize_patches") or []
             ),
+            "config_paths": list(deployment_artifacts.get("config_paths") or []),
         }
         compact_artifacts = {
             key: value for key, value in compact_artifacts.items() if value

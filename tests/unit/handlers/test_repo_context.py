@@ -499,6 +499,20 @@ class TestRepoSummary:
                             "environment": "bg-qa",
                         }
                     ],
+                    "config_paths": [
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "environment": None,
+                        },
+                        {
+                            "path": "/api/api-node-boats/*",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "environment": None,
+                        },
+                    ],
                     "service_ports": [
                         {
                             "port": "3081",
@@ -623,6 +637,20 @@ class TestRepoSummary:
                             "relative_path": "argocd/api-node-boats/overlays/bg-qa/kustomization.yaml",
                             "environment": "bg-qa",
                         }
+                    ],
+                    "config_paths": [
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "environment": None,
+                        },
+                        {
+                            "path": "/api/api-node-boats/*",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "environment": None,
+                        },
                     ],
                     "service_ports": [
                         {

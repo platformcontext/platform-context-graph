@@ -138,6 +138,12 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
                 "kind: XIRSARole",
                 "metadata:",
                 "  name: api-node-boats",
+                "spec:",
+                "  policyDocument:",
+                "    Statement:",
+                "      - Resource:",
+                "          - arn:aws:ssm:AWS_REGION:AWS_ACCOUNT_ID:parameter/configd/api-node-boats/*",
+                "          - arn:aws:ssm:AWS_REGION:AWS_ACCOUNT_ID:parameter/api/api-node-boats/*",
                 "",
             ]
         ),
@@ -513,6 +519,20 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
                 "relative_path": "argocd/api-node-boats/overlays/bg-qa/kustomization.yaml",
                 "environment": "bg-qa",
             }
+        ],
+        "config_paths": [
+            {
+                "path": "/configd/api-node-boats/*",
+                "source_repo": "helm-charts",
+                "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                "environment": None,
+            },
+            {
+                "path": "/api/api-node-boats/*",
+                "source_repo": "helm-charts",
+                "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                "environment": None,
+            },
         ],
     }
 
