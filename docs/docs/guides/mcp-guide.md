@@ -51,6 +51,21 @@ The assistant calls `get_service_context payment-service` and gets back: 4 downs
 | "Find complex functions" | `find_most_complex_functions` |
 | "What's dead code?" | `find_dead_code` |
 
+## Story-first responses
+
+For repository and deployment questions, PCG now returns a top-level `story` field on:
+
+- `get_repo_summary`
+- `trace_deployment_chain`
+
+Use it this way:
+
+1. start with `story`
+2. use `deployment_overview` for grouped supporting context
+3. use the detailed fields only when you need file-by-file evidence
+
+This keeps answers concise without hiding the underlying evidence.
+
 ## Repository access handoff
 
 When PCG is deployed remotely, the server may not have local access to every repository. Content retrieval follows a fallback chain:

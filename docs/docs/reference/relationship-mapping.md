@@ -12,6 +12,21 @@ The rule of thumb is:
 - shape the final MCP/API answer from those summaries
 - explain truthfulness and completeness explicitly when evidence is partial
 
+## Ownership By Stage
+
+One of the easiest ways to introduce bugs in dynamic mappings is to let one stage do the job of another. The table below is the guardrail.
+
+| Stage | Owns | Allowed to emit | Must not do |
+| :--- | :--- | :--- | :--- |
+| Index | parsed files, graph entities, raw properties | graph state | infer cross-repo truth from partial data |
+| Cross-repo linking | repo identity and reference normalization | candidate repo links | invent semantic relationship types |
+| Evidence extraction | explainable facts from graph or files | evidence facts with `evidence_kind`, rationale, confidence | collapse meaning to `DEPENDS_ON` for convenience |
+| Typed resolution | canonical meaning and precedence | typed canonical edges and compatibility derivations | shape user-facing prose |
+| Repo-context enrichment | nearby supporting context | deployment artifacts, workflow summaries, consumer summaries | override canonical truth |
+| MCP/API answer shaping | concise explanation | `story`, `deployment_overview`, notes | invent new edges or hide completeness gaps |
+
+If a change feels ambiguous, start by asking which stage actually owns the decision. That usually reveals the right place to implement it.
+
 ## End-To-End Flow
 
 ```mermaid
@@ -32,6 +47,24 @@ flowchart TD
     class D,E,F canonical;
     class G,H,I,J derived;
 ```
+
+## Story-First Answer Contract
+
+MCP and HTTP responses now intentionally expose a top-level `story` field on `get_repo_summary` and `trace_deployment_chain`.
+
+Use it this way:
+
+1. read `story` first for the concise answer
+2. read `deployment_overview` next for grouped supporting context
+3. read the detailed fields only when you need exact evidence rows, file paths, or artifact lists
+
+That keeps answer shaping consistent:
+
+- `story` is the short narrative
+- `deployment_overview` is the grouped summary data
+- raw fields are the evidence-heavy drill-down surface
+
+Do not make the caller reconstruct the main narrative from `delivery_paths`, `consumer_repositories`, `hostnames`, and `deployment_artifacts` unless they explicitly need that level of detail.
 
 ### 1. Index
 
@@ -65,6 +98,18 @@ Canonical relationship types today are:
 - `RUNS_ON`
 
 Typed relationships are canonical. A compatibility `DEPENDS_ON` edge may be derived later so older query surfaces still work, but the typed edge is the actual statement of meaning.
+
+### Resolution Precedence Order
+
+When multiple signals compete, resolve in this order:
+
+1. explicit assertions and rejections
+2. typed relationships with direct tool-semantic evidence
+3. typed relationships with weaker heuristic evidence
+4. compatibility `DEPENDS_ON` derived from stronger typed edges
+5. generic fallback only if no stronger truthful type exists
+
+This is the main rule that keeps the graph from becoming a pile of vague `DEPENDS_ON` edges.
 
 ### 5. Derived summaries
 
@@ -175,6 +220,50 @@ ECS currently uses these attributes to explain variants like direct CodeDeploy-b
 
 If a future runtime needs new module attributes, add them as generic deployment metadata first, document them here, and only then teach the answer-shaping layer how to describe them.
 
+## Generic Runtime Extension Pattern
+
+The runtime extension pattern should work whether the target is ECS, Fargate, Elastic Beanstalk, Kubernetes, or another cloud/runtime combination.
+
+The sequence is:
+
+```mermaid
+flowchart LR
+    A[Parse generic module metadata] --> B[Resolve platform identity]
+    B --> C[Emit typed canonical edges]
+    C --> D[Derive repo summaries]
+    D --> E[Shape story-first answer]
+
+    A1[deployment_name\nrepo_name\ncreate_deploy\ncluster_name\nzone_id\ndeploy_entry_point]
+    A -.-> A1
+```
+
+The rule is:
+
+- parser layer captures portable deployment concepts
+- resolver layer decides canonical relationship meaning
+- answer layer explains provider-specific meaning
+
+That means:
+
+- ECS can use `cluster_name`, `repo_name`, and `create_deploy`
+- Fargate can reuse the same fields if the module still models a deployable service variant
+- Elastic Beanstalk can rely on `deployment_name` and `deploy_entry_point`
+- another cloud can still map into `Platform.kind`, `Platform.provider`, `PROVISIONS_PLATFORM`, and `RUNS_ON`
+
+Do not create an ECS-only parser contract just because ECS is the first rich example.
+
+### What To Add For A New Runtime
+
+When a contributor adds support for another Terraform-managed runtime family, the change order should be:
+
+1. add generic parser attributes only if the runtime needs new portable deployment metadata
+2. keep provider-specific interpretation out of the parser
+3. resolve canonical platform relationships from those attributes plus surrounding infra evidence
+4. add read-side summaries only after the canonical relationship meaning is correct
+5. update the `story` shaping only after the lower layers are stable
+
+If the feature skips straight to answer shaping, it will drift.
+
 ## Deployment Artifacts
 
 Deployment artifacts are the derived pieces of repository context that help answer "what deploys from here?" after the canonical mapping has been resolved.
@@ -193,6 +282,20 @@ Examples include:
 
 Use deployment artifacts to enrich answers and summaries. Do not treat them as a replacement for the underlying relationship edge.
 
+### Shared Config And Consumer Summaries
+
+Two derived summaries are especially easy to overuse:
+
+- `shared_config_paths`
+- `consumer_repositories`
+
+They should help answer:
+
+- which repos appear to share config families with this service
+- which repos reference or call this service without deploying it
+
+They should not be used to invent deployment or provisioning relationships by themselves.
+
 ## Safe Extension
 
 When adding a new mapping family, follow this order:
@@ -204,6 +307,19 @@ When adding a new mapping family, follow this order:
 5. Decide whether the new family should also feed repo-context enrichment.
 6. Add positive and negative tests.
 7. Validate on a mixed corpus, not just a single synthetic repo pair.
+
+## Dynamic Mapping Checklist
+
+Before merging a new mapping family or runtime interpretation, verify all of these:
+
+1. The parser change is still generic and open-source portable.
+2. The new evidence rows are explainable with file paths or graph sources.
+3. The resolver precedence is explicit and tested.
+4. The direction of the canonical edge matches the actual actor and target.
+5. Compatibility `DEPENDS_ON` is derived only after the typed meaning is correct.
+6. Repo-context enrichment uses the canonical edge instead of bypassing it.
+7. MCP/API `story` gets clearer, not noisier.
+8. Partial coverage still produces a truthful note instead of a confident omission.
 
 ### Pick The Semantic First
 

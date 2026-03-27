@@ -36,6 +36,8 @@ A database is unhealthy. Which services use it, and how are they deployed?
 
 `trace_deployment_chain` goes the other direction — from a service name through ArgoCD, K8s resources, images, and backing infrastructure.
 
+For MCP and API callers, start with the top-level `story` field from `trace_deployment_chain` or `get_repo_summary`, then drill into `deployment_overview` and the detailed fields if you need the exact evidence rows.
+
 ## Onboarding a new engineer
 
 Day one. A new engineer needs to understand how the payment service fits into the platform.

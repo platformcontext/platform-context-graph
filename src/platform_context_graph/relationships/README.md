@@ -32,6 +32,20 @@ flowchart TD
 
 The package should remain truthful about what is canonical versus what is derived later for presentation.
 
+## Stage Discipline
+
+Keep each stage doing one job:
+
+1. indexing parses and stores graph entities
+2. linking resolves repo identity and cross-checkout references
+3. evidence extraction emits explainable facts
+4. resolution decides canonical meaning and precedence
+5. persistence and projection publish the active generation
+6. repo-context enrichment adds nearby supporting context
+7. MCP/API shaping turns that into a concise narrative
+
+If a change crosses those boundaries, document why. Most bugs in this system come from skipping straight to summary logic or from letting a parser embed provider-specific semantic meaning.
+
 ## Module Map
 
 | Module | Responsibility |
@@ -92,6 +106,17 @@ Deployment artifacts are not the canonical relationship itself. They are the rea
 
 That makes them useful for answer shaping, but they should never override the underlying typed edge.
 
+### Story-First MCP Output Is Also Derived
+
+`get_repo_summary` and `trace_deployment_chain` now expose a top-level `story` field. It is a presentation contract, not canonical relationship storage.
+
+Rules:
+
+1. build `story` from canonical relationships plus derived summaries
+2. prefer `topology_story`, then `deployment_story`, then notes
+3. do not put a fact in `story` unless the lower layers can already explain it
+4. keep the raw evidence-heavy fields intact for drill-down
+
 ## Terraform Runtime Extension Rules
 
 When Terraform or Terragrunt module blocks carry deployment-oriented metadata, keep the parser contract generic so it can support more than one runtime family.
@@ -115,6 +140,17 @@ Rules:
 4. add tests that prove the attribute is parsed, persisted, and surfaced through repo-context summaries
 
 Treat ECS as the first example of this extension pattern, not the only intended consumer.
+
+### Runtime Expansion Order
+
+For Terraform-managed runtimes such as ECS today and Fargate or Elastic Beanstalk later:
+
+1. add or reuse generic module attributes
+2. resolve `Platform` identity and typed edges
+3. enrich repo context with deployment artifacts and runtime summaries
+4. update the MCP `story` only after the typed and derived layers are correct
+
+Do not skip directly from parser fields to user-facing prose.
 
 ## Where To Add New Mappings
 
@@ -152,6 +188,8 @@ If the new mapping should influence deployment-artifact summaries or delivery-pa
 6. Add positive and negative tests.
 7. Validate the mapping on a mixed local corpus, not just a synthetic one-repo fixture.
 8. Decide explicitly whether the new mapping should emit `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, `RUNS_ON`, or a generic fallback.
+9. Decide whether the new mapping should influence `story`, `deployment_overview`, or neither.
+10. Document the extension path if the new mapping introduces a reusable runtime pattern.
 
 ## Choosing The Next Type
 
@@ -223,6 +261,12 @@ The main relationship test files are:
 - `tests/unit/relationships/test_resolver.py`
 
 If the new mapping changes repo-context enrichment, also check the query-side summaries that consume `deploys_from` and `discovers_config_in`.
+
+If the new mapping changes MCP answer shape, also verify:
+
+- the top-level `story` stays concise
+- lower-level evidence remains available
+- completeness notes still surface when data is partial
 
 ## Current Example
 
