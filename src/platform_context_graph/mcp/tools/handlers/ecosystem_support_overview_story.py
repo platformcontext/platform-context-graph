@@ -59,6 +59,38 @@ def build_topology_story(
     return lines
 
 
+def build_deployment_story_fallback(
+    *,
+    runtime_platforms: list[dict[str, Any]],
+    deployment_controllers: list[str],
+    service_variants: list[dict[str, Any]],
+) -> list[str]:
+    """Return a fallback deployment story when workflow paths are unavailable."""
+
+    if not deployment_controllers:
+        return []
+    controller_summary = _human_join([str(value).strip() for value in deployment_controllers])
+    if not controller_summary:
+        return []
+    variant_names = _human_join(
+        [
+            str(row.get("name") or "").strip()
+            for row in service_variants
+            if isinstance(row, dict) and str(row.get("name") or "").strip()
+        ]
+    )
+    platform_summary = _runtime_platform_summary(runtime_platforms)
+
+    line = f"Deployment controllers {controller_summary} manage"
+    if variant_names:
+        line += f" variants {variant_names}"
+    else:
+        line += " this service"
+    if platform_summary:
+        line += f" on {platform_summary}"
+    return [line + "."]
+
+
 def build_network_access_story(
     *,
     gateways: list[dict[str, Any]],
@@ -92,6 +124,40 @@ def build_network_access_story(
     if gateway_names:
         return f"Traffic enters through gateways {gateway_names}."
     return f"Service traffic listens on ports {port_values}."
+
+
+def _runtime_platform_summary(runtime_platforms: list[dict[str, Any]]) -> str:
+    """Return a compact runtime-platform summary for story fallback lines."""
+
+    rendered: list[str] = []
+    for row in runtime_platforms:
+        if not isinstance(row, dict):
+            continue
+        kind = str(row.get("kind") or "").strip().upper()
+        name = str(row.get("name") or "").strip()
+        environment = str(row.get("environment") or "").strip()
+        if not kind:
+            continue
+        detail = kind
+        if name:
+            detail += f" {name}"
+        if environment:
+            detail += f" in {environment}"
+        rendered.append(detail)
+    return _human_join(rendered)
+
+
+def _human_join(values: list[str]) -> str:
+    """Return a human-readable conjunction for one or more strings."""
+
+    ordered = [value for value in values if value]
+    if not ordered:
+        return ""
+    if len(ordered) == 1:
+        return ordered[0]
+    if len(ordered) == 2:
+        return f"{ordered[0]} and {ordered[1]}"
+    return f"{', '.join(ordered[:-1])}, and {ordered[-1]}"
 
 
 def build_shared_config_story(rows: list[dict[str, Any]]) -> str:
@@ -206,6 +272,7 @@ def _consumer_evidence_label(row: dict[str, Any]) -> str:
 
 __all__ = [
     "build_consumer_story",
+    "build_deployment_story_fallback",
     "build_network_access_story",
     "build_shared_config_story",
     "build_topology_story",

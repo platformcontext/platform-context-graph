@@ -89,3 +89,59 @@ def test_build_deployment_overview_separates_distinct_shared_config_groups() -> 
     assert overview["topology_story"] == [
         "Shared config families span helm-charts, terraform-stack-node10: /api/api-node-boats/*, /configd/api-node-boats/*; and helm-charts, iac-eks-observability: /secrets/api-node-boats/*."
     ]
+
+
+def test_build_deployment_overview_falls_back_to_controller_story() -> None:
+    """Deployment controllers and variants should shape a story without workflows."""
+
+    overview = build_deployment_overview(
+        hostnames=[],
+        api_surface={},
+        platforms=[
+            {
+                "id": "platform:ecs:aws:cluster/node10:prod:none",
+                "kind": "ecs",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "node10",
+            }
+        ],
+        delivery_paths=[],
+        terraform_modules=[
+            {
+                "name": "api_node_boats",
+                "repository": "terraform-stack-node10",
+                "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                "version": "~> 3.0",
+                "deployment_name": "api-node-boats",
+                "repo_name": "api-node-boats",
+                "create_deploy": True,
+                "cluster_name": "node10",
+            },
+            {
+                "name": "api_node_boats_batch",
+                "repository": "terraform-stack-node10",
+                "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                "version": "~> 3.0",
+                "deployment_name": "api-node-boats-batch",
+                "repo_name": "api-node-boats",
+                "create_deploy": False,
+                "cluster_name": "node10",
+            },
+        ],
+        terraform_resources=[
+            {
+                "resource_type": "aws_codedeploy_deployment_group",
+                "name": "api_node_boats",
+                "repository": "terraform-stack-node10",
+                "file": "shared/codedeploy.tf",
+            }
+        ],
+    )
+
+    assert overview["deployment_story"] == [
+        "Deployment controllers codedeploy and terraform manage variants api_node_boats and api_node_boats_batch on ECS node10 in prod."
+    ]
+    assert overview["topology_story"] == [
+        "Deployment controllers codedeploy and terraform manage variants api_node_boats and api_node_boats_batch on ECS node10 in prod."
+    ]

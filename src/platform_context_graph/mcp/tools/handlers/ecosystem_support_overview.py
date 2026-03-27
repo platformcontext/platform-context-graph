@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from .ecosystem_support_overview_story import build_deployment_story_fallback
 from .ecosystem_support_overview_story import build_topology_story
 
 
@@ -61,9 +62,6 @@ def build_deployment_overview(
             if isinstance(row, dict)
         ],
     }
-    deployment_story = _build_deployment_story(overview["delivery_paths"])
-    if deployment_story:
-        overview["deployment_story"] = deployment_story
     if provisioning_source_chains:
         overview["provisioning_source_chains"] = list(provisioning_source_chains)
     if consumer_repositories:
@@ -79,17 +77,6 @@ def build_deployment_overview(
     shared_config_paths = _build_shared_config_paths(deployment_artifacts or {})
     if shared_config_paths:
         overview["shared_config_paths"] = shared_config_paths
-    topology_story = build_topology_story(
-        hostnames=overview["internet_entrypoints"],
-        api_surface=overview["api_surface"],
-        deployment_story=deployment_story,
-        gateways=list((deployment_artifacts or {}).get("gateways") or []),
-        service_ports=list((deployment_artifacts or {}).get("service_ports") or []),
-        shared_config_paths=shared_config_paths,
-        consumer_repositories=overview.get("consumer_repositories", []),
-    )
-    if topology_story:
-        overview["topology_story"] = topology_story
     service_variants = _build_service_variants(terraform_modules or [])
     if service_variants:
         overview["service_variants"] = service_variants
@@ -127,6 +114,26 @@ def build_deployment_overview(
     )
     if deployment_controllers:
         overview["deployment_controllers"] = deployment_controllers
+    deployment_story = _build_deployment_story(overview["delivery_paths"])
+    if not deployment_story:
+        deployment_story = build_deployment_story_fallback(
+            runtime_platforms=overview["runtime_platforms"],
+            deployment_controllers=deployment_controllers,
+            service_variants=service_variants,
+        )
+    if deployment_story:
+        overview["deployment_story"] = deployment_story
+    topology_story = build_topology_story(
+        hostnames=overview["internet_entrypoints"],
+        api_surface=overview["api_surface"],
+        deployment_story=deployment_story,
+        gateways=list((deployment_artifacts or {}).get("gateways") or []),
+        service_ports=list((deployment_artifacts or {}).get("service_ports") or []),
+        shared_config_paths=shared_config_paths,
+        consumer_repositories=overview.get("consumer_repositories", []),
+    )
+    if topology_story:
+        overview["topology_story"] = topology_story
     return overview
 
 
