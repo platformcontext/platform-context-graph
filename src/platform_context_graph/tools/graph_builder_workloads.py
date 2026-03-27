@@ -85,7 +85,7 @@ def materialize_workloads(
     with builder.driver.session() as session:
         candidate_rows = session.run("""
             MATCH (repo:Repository)
-            OPTIONAL MATCH (repo)-[:CONTAINS*]->(:File)-[:CONTAINS]->(k:K8sResource)
+            OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(k:K8sResource)
             WHERE k.name = repo.name
             WITH repo,
                  collect(DISTINCT toLower(coalesce(k.kind, ''))) as resource_kinds,
@@ -166,7 +166,7 @@ def materialize_workloads(
             if deployment_repo_id and source_roots:
                 environment_rows = session.run(
                     """
-                    MATCH (deployment_repo:Repository {id: $deployment_repo_id})-[:CONTAINS*]->(f:File)
+                    MATCH (deployment_repo:Repository {id: $deployment_repo_id})-[:REPO_CONTAINS]->(f:File)
                     WHERE any(source_root IN $source_roots
                         WHERE trim(source_root) <> ''
                           AND f.relative_path STARTS WITH trim(source_root))
@@ -271,7 +271,7 @@ def _materialize_runtime_dependencies(
     """Create repo and workload dependency edges from runtime service lists."""
     file_rows = session.run(
         """
-        MATCH (repo:Repository {id: $repo_id})-[:CONTAINS*]->(f:File)
+        MATCH (repo:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)
         WHERE f.name IN [$typescript_entrypoint, $javascript_entrypoint]
         RETURN f.path as path, f.relative_path as relative_path
         ORDER BY f.relative_path

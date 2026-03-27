@@ -278,7 +278,7 @@ class CrossRepoLinker:
                 MATCH (k:K8sResource)
                 WHERE k.namespace = app[$dest_namespace_key]
                 MATCH (f:File)-[:CONTAINS]->(k)
-                MATCH (repo:Repository)-[:CONTAINS*]->(f)
+                MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)
                 MATCH (app)-[:SOURCES_FROM]->(repo)
                 MERGE (app)-[:DEPLOYS]->(k)
                 RETURN count(*) as cnt
@@ -287,7 +287,7 @@ class CrossRepoLinker:
                 MATCH (app:ArgoCDApplicationSet)-[:SOURCES_FROM]->(repo:Repository)
                 WHERE app[$source_roots_key] IS NOT NULL
                   AND app[$source_roots_key] <> ''
-                MATCH (repo)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)
+                MATCH (repo)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)
                 WHERE any(source_root IN split(app[$source_roots_key], ',')
                     WHERE trim(source_root) <> ''
                       AND f.relative_path STARTS WITH trim(source_root))

@@ -102,9 +102,9 @@ def materialize_infrastructure_platforms(session: Any) -> None:
     platform_rows = session.run(
         """
         MATCH (repo:Repository)
-        OPTIONAL MATCH (repo)-[:CONTAINS*]->(:File)-[:CONTAINS]->(ds:TerraformDataSource)
-        OPTIONAL MATCH (repo)-[:CONTAINS*]->(:File)-[:CONTAINS]->(mod:TerraformModule)
-        OPTIONAL MATCH (repo)-[:CONTAINS*]->(:File)-[:CONTAINS]->(tf:TerraformResource)
+        OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(ds:TerraformDataSource)
+        OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(mod:TerraformModule)
+        OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(tf:TerraformResource)
         WITH repo,
              collect(DISTINCT toLower(coalesce(ds.data_type, ''))) as data_types,
              collect(DISTINCT toLower(coalesce(ds.data_name, ''))) as data_names,

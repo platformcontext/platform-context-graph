@@ -98,8 +98,13 @@ def test_link_argocd_deploys_maps_applicationsets() -> None:
 
     assert count == 2
     assert any(
+        "MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)" in query
+        for query in queries
+    )
+    assert any(
         "MATCH (app:ArgoCDApplicationSet)-[:SOURCES_FROM]->(repo:Repository)"
         in query
         and "source_roots" in query
+        and "[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)" in query
         for query in queries
     )

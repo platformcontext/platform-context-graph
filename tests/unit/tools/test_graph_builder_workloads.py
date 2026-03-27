@@ -111,6 +111,11 @@ def test_materialize_workloads_creates_workload_instance_and_deployment_source()
         "OPTIONAL MATCH (app)-[source_rel]->(deployment_repo:Repository)"
         in candidate_query
     )
+    assert (
+        "OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(k:K8sResource)"
+        in candidate_query
+    )
+    assert "OPTIONAL MATCH (repo)-[:CONTAINS*]->(:File)-[:CONTAINS]->(k:K8sResource)" not in candidate_query
     assert "type(source_rel) = 'SOURCES_FROM'" in candidate_query
     assert "[:SOURCES_FROM]" not in candidate_query
     assert "app[$source_roots_key]" in candidate_query
@@ -186,6 +191,13 @@ def test_materialize_workloads_creates_runtime_platform_relationships() -> None:
     assert runs_on_edge["environment"] == "bg-qa"
     assert runs_on_edge["instance_id"] == "workload-instance:api-node-search:bg-qa"
     assert runs_on_edge["platform_id"] == "platform:kubernetes:none:bg-qa:bg-qa:none"
+    deployment_source_query = next(
+        query
+        for query, _kwargs in recorded_calls
+        if "RETURN deployment_repo.id as deployment_repo_id" in query
+    )
+    assert "[:REPO_CONTAINS]->(f:File)" in deployment_source_query
+    assert "[:CONTAINS*]->(f:File)" not in deployment_source_query
 
 
 def test_materialize_workloads_creates_infrastructure_platform_relationships(
@@ -266,6 +278,11 @@ def test_materialize_workloads_creates_infrastructure_platform_relationships(
     }
     assert provisions_edge["platform_id"] == "platform:ecs:aws:cluster/node10:none:none"
     assert provisions_edge["repo_id"] == "repository:r_9a1b2c3d"
+    platform_query = next(
+        query for query, _kwargs in recorded_calls if "TerraformDataSource" in query
+    )
+    assert "[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(ds:TerraformDataSource)" in platform_query
+    assert "[:CONTAINS*]->(:File)-[:CONTAINS]->(ds:TerraformDataSource)" not in platform_query
 
 
 def test_infer_infrastructure_platform_descriptor_returns_canonical_cluster_locator() -> (
