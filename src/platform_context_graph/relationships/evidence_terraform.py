@@ -10,6 +10,8 @@ from ..tools.graph_builder_platforms import (
     extract_terraform_platform_name,
     infer_terraform_platform_kind,
 )
+from ..tools.runtime_platform_families import lookup_runtime_family
+from ..tools.runtime_platform_families import matches_service_module_source
 from .entities import canonical_platform_id
 from .file_evidence_support import (
     CatalogEntry,
@@ -165,6 +167,8 @@ def _discover_terraform_platform_evidence(
     kind = infer_terraform_platform_kind(content)
     if kind is None:
         return evidence
+    family = lookup_runtime_family(kind)
+    provider = family.provider if family is not None else "aws"
     environment = _first_quoted_value(content, "cloudmap_namespace")
     clusters = {
         cluster_name
@@ -216,7 +220,7 @@ def _discover_terraform_platform_evidence(
             extra_details={
                 "cluster_name": cluster_name,
                 "environment": environment,
-                "provider": "aws",
+                "provider": provider,
                 "kind": kind,
             },
         )
@@ -224,7 +228,7 @@ def _discover_terraform_platform_evidence(
     for match in _MODULE_RE.finditer(content):
         body = match.group("body")
         source = _first_quoted_value(body, "source") or ""
-        if "ecs-application/aws" not in source.lower():
+        if not matches_service_module_source(source, kind=kind):
             continue
         cluster_name = _resolve_assignment_value(
             body,
@@ -271,7 +275,7 @@ def _discover_terraform_platform_evidence(
                     "cluster_name": cluster_name,
                     "app_repo": app_repo,
                     "environment": environment_hint,
-                    "provider": "aws",
+                    "provider": provider,
                     "kind": kind,
                 },
             )
@@ -421,9 +425,10 @@ def _terraform_platform_id(
 ) -> str | None:
     """Build a canonical platform id from Terraform cluster metadata."""
 
+    family = lookup_runtime_family(kind)
     return canonical_platform_id(
         kind=kind,
-        provider="aws",
+        provider=family.provider if family is not None else "aws",
         name=name,
         environment=environment,
         region=None,

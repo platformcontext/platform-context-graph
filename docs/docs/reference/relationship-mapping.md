@@ -210,6 +210,15 @@ Use that contract in this order:
 
 This keeps the parser portable and makes it safe for contributors to add future runtime families without rewriting the semantic contract.
 
+The runtime-specific decision point now lives in a shared Terraform runtime-family registry. That registry owns family-scoped signals such as:
+
+- cluster resource types
+- cluster module source patterns
+- service module source patterns
+- non-cluster support module patterns
+
+ECS and EKS are the first registered families. Future families such as Fargate or Elastic Beanstalk should extend that registry instead of introducing ad hoc checks in multiple layers.
+
 ### ECS As The First Example, Not The Final Shape
 
 ECS currently uses these attributes to explain variants like direct CodeDeploy-backed services and background jobs. The same pattern should be used for future Terraform-managed deployment targets:
@@ -256,11 +265,12 @@ Do not create an ECS-only parser contract just because ECS is the first rich exa
 
 When a contributor adds support for another Terraform-managed runtime family, the change order should be:
 
-1. add generic parser attributes only if the runtime needs new portable deployment metadata
-2. keep provider-specific interpretation out of the parser
-3. resolve canonical platform relationships from those attributes plus surrounding infra evidence
-4. add read-side summaries only after the canonical relationship meaning is correct
-5. update the `story` shaping only after the lower layers are stable
+1. extend the shared runtime-family registry with the new family signals
+2. add generic parser attributes only if the runtime needs new portable deployment metadata
+3. keep provider-specific interpretation out of the parser
+4. resolve canonical platform relationships from those attributes plus surrounding infra evidence
+5. add read-side summaries only after the canonical relationship meaning is correct
+6. update the `story` shaping only after the lower layers are stable
 
 If the feature skips straight to answer shaping, it will drift.
 

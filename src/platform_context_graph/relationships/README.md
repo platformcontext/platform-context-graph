@@ -132,6 +132,8 @@ Current `TerraformModule` deployment attributes include:
 
 These fields are currently useful for ECS-oriented summaries, but they are deliberately not named as ECS-only fields. The goal is to let future contributors extend the same flow for Fargate, Elastic Beanstalk, or another cloud/provider runtime without introducing a second parser contract.
 
+Runtime-family matching should stay centralized. Terraform resource types and module source patterns that identify one runtime family belong in the shared Terraform runtime-family registry, not in scattered ECS-only or EKS-only conditionals.
+
 Rules:
 
 1. add new Terraform module attributes only when they describe a portable deployment concept
@@ -145,10 +147,11 @@ Treat ECS as the first example of this extension pattern, not the only intended 
 
 For Terraform-managed runtimes such as ECS today and Fargate or Elastic Beanstalk later:
 
-1. add or reuse generic module attributes
-2. resolve `Platform` identity and typed edges
-3. enrich repo context with deployment artifacts and runtime summaries
-4. update the MCP `story` only after the typed and derived layers are correct
+1. extend the shared runtime-family registry when the runtime needs new family signals
+2. add or reuse generic module attributes
+3. resolve `Platform` identity and typed edges
+4. enrich repo context with deployment artifacts and runtime summaries
+5. update the MCP `story` only after the typed and derived layers are correct
 
 Do not skip directly from parser fields to user-facing prose.
 

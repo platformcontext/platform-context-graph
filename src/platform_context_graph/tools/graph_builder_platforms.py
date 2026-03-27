@@ -5,6 +5,9 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
+from .runtime_platform_families import infer_infrastructure_runtime_family_kind
+from .runtime_platform_families import infer_terraform_runtime_family_kind
+
 _NON_PLATFORM_IDENTIFIERS = {
     "alerts",
     "current",
@@ -18,23 +21,6 @@ _NON_PLATFORM_IDENTIFIERS = {
     "private-regionless",
     "public",
     "terraform_state",
-}
-_ECS_CLUSTER_MODULE_PATTERNS = (
-    "batch-compute-resource/aws",
-    "ecs-cluster/aws",
-)
-_EKS_CLUSTER_MODULE_PATTERNS = (
-    "terraform-aws-modules/eks/aws",
-    "eks-blueprints",
-    "eks-cluster",
-)
-_NON_CLUSTER_MODULE_PATTERNS = (
-    "ecs-application/aws",
-    "iam-role-for-service-accounts-eks",
-)
-_TERRAFORM_PLATFORM_KIND_PATTERNS = {
-    "ecs": (_ECS_CLUSTER_MODULE_PATTERNS, ("aws_ecs_cluster",)),
-    "eks": (_EKS_CLUSTER_MODULE_PATTERNS, ("aws_eks_cluster",)),
 }
 _TERRAFORM_CLUSTER_NAME_RE = re.compile(r'\bcluster_name\b\s*=\s*"([^"]+)"', re.IGNORECASE)
 _TERRAFORM_NAME_RE = re.compile(r'\bname\b\s*=\s*"([^"]+)"', re.IGNORECASE)
@@ -191,15 +177,7 @@ def infer_runtime_platform_kind(resource_kinds: Iterable[str]) -> str | None:
 def infer_terraform_platform_kind(content: str) -> str | None:
     """Infer a Terraform platform kind from portable cluster/module signals."""
 
-    lower_content = content.lower()
-    for kind, (_, resource_patterns) in _TERRAFORM_PLATFORM_KIND_PATTERNS.items():
-        if any(resource_pattern in lower_content for resource_pattern in resource_patterns):
-            return kind
-    if any(pattern in lower_content for pattern in _ECS_CLUSTER_MODULE_PATTERNS):
-        return "ecs"
-    if any(pattern in lower_content for pattern in _EKS_CLUSTER_MODULE_PATTERNS):
-        return "eks"
-    return None
+    return infer_terraform_runtime_family_kind(content)
 
 
 def extract_terraform_platform_name(content: str) -> str | None:
@@ -318,23 +296,11 @@ def infer_infrastructure_platform_descriptor(
         str(value).strip() for value in resource_names if str(value).strip()
     ]
 
-    platform_kind: str | None = None
-    if any("aws_ecs_cluster" == value for value in normalized_resource_types) or any(
-        pattern in value for value in normalized_module_sources for pattern in _ECS_CLUSTER_MODULE_PATTERNS
-    ):
-        platform_kind = "ecs"
-    elif any("aws_eks_cluster" == value for value in normalized_resource_types) or any(
-        pattern in value for value in normalized_module_sources for pattern in _EKS_CLUSTER_MODULE_PATTERNS
-    ):
-        platform_kind = "eks"
+    platform_kind = infer_infrastructure_runtime_family_kind(
+        resource_types=normalized_resource_types,
+        module_sources=normalized_module_sources,
+    )
     if platform_kind is None:
-        return None
-
-    if any(
-        pattern in value
-        for value in normalized_module_sources
-        for pattern in _NON_CLUSTER_MODULE_PATTERNS
-    ):
         return None
 
     platform_provider = "aws" if any(
