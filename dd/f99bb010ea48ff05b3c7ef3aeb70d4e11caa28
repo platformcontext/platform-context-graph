@@ -1,0 +1,25 @@
+tests/unit/query/test_repository_automation_paths.py
+  16c0ced4b3103ecd 7-12,80-171
+tests/unit/query/test_repository_content_enrichment.py
+  16c0ced4b3103ecd 844-935
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "ddf99bb010ea48ff05b3c7ef3aeb70d4e11caa28",
+  "prompts": {
+    "16c0ced4b3103ecd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2db0-bf07-7fc0-81cd-44e98d4ff7a1",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 191,
+      "total_deletions": 0,
+      "accepted_lines": 191,
+      "overriden_lines": 0
+    }
+  }
+}
