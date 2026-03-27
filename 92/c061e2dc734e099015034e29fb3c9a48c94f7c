@@ -1,0 +1,25 @@
+tests/unit/query/test_repository_content_enrichment.py
+  805fae0ae663f528 141-146,523-535
+tests/unit/handlers/test_repo_context.py
+  805fae0ae663f528 502-515,641-653
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "92c061e2dc734e099015034e29fb3c9a48c94f7c",
+  "prompts": {
+    "805fae0ae663f528": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2ce3-b5d3-7d62-b6ea-c0735ba279c8",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 94,
+      "overriden_lines": 0
+    }
+  }
+}
