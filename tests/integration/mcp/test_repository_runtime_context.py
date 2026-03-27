@@ -16,6 +16,16 @@ def test_get_repo_summary_tool_surfaces_platforms_and_limitations() -> None:
             "platforms": [
                 {"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}
             ],
+            "delivery_workflows": {
+                "github_actions": {
+                    "commands": [
+                        {
+                            "command": "deploy-eks",
+                            "workflow": "node-api-deploy-eks.yml",
+                        }
+                    ]
+                }
+            },
             "api_surface": {"docs_routes": ["/_specs"], "api_versions": ["v3"]},
             "hostnames": [{"hostname": "api-node-boats.qa.bgrp.io"}],
             "limitations": ["dns_unknown", "entrypoint_unknown"],
@@ -26,6 +36,9 @@ def test_get_repo_summary_tool_surfaces_platforms_and_limitations() -> None:
     mock_summary.assert_called_once_with(server.db_manager, "api-node-boats")
     assert result["platforms"] == [
         {"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}
+    ]
+    assert result["delivery_workflows"]["github_actions"]["commands"] == [
+        {"command": "deploy-eks", "workflow": "node-api-deploy-eks.yml"}
     ]
     assert result["api_surface"]["docs_routes"] == ["/_specs"]
     assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
@@ -42,6 +55,14 @@ def test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations() 
             "repository": {"name": "api-node-boats"},
             "platforms": [{"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}],
             "deploys_from": [{"name": "helm-charts"}],
+            "delivery_workflows": {
+                "jenkins": [
+                    {
+                        "relative_path": "Jenkinsfile",
+                        "pipeline_calls": ["pipelinePM2"],
+                    }
+                ]
+            },
             "api_surface": {"api_versions": ["v3"]},
             "hostnames": [{"hostname": "api-node-boats.qa.bgrp.io"}],
             "limitations": ["dns_unknown", "entrypoint_unknown"],
@@ -52,6 +73,9 @@ def test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations() 
     mock_trace.assert_called_once_with(server.db_manager, "api-node-boats")
     assert result["platforms"] == [
         {"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}
+    ]
+    assert result["delivery_workflows"]["jenkins"] == [
+        {"relative_path": "Jenkinsfile", "pipeline_calls": ["pipelinePM2"]}
     ]
     assert result["api_surface"]["api_versions"] == ["v3"]
     assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"

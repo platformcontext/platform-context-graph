@@ -427,6 +427,17 @@ class TestRepoSummary:
                 ],
                 "provisions_dependencies_for": [],
                 "environments": ["prod"],
+                "delivery_workflows": {
+                    "github_actions": {
+                        "commands": [
+                            {
+                                "command": "deploy-eks",
+                                "workflow": "node-api-deploy-eks.yml",
+                                "delivery_mode": "eks_gitops",
+                            }
+                        ]
+                    }
+                },
                 "api_surface": {
                     "spec_files": [{"relative_path": "specs/index.yaml"}],
                     "docs_routes": ["/_specs"],
@@ -446,6 +457,13 @@ class TestRepoSummary:
         assert result["platforms"][0]["kind"] == "ecs"
         assert result["deploys_from"][0]["name"] == "helm-charts"
         assert result["dependencies"] == ["terraform-stack-ecs"]
+        assert result["delivery_workflows"]["github_actions"]["commands"] == [
+            {
+                "command": "deploy-eks",
+                "workflow": "node-api-deploy-eks.yml",
+                "delivery_mode": "eks_gitops",
+            }
+        ]
         assert result["api_surface"]["docs_routes"] == ["/_specs"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
         assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]
@@ -780,6 +798,17 @@ class TestTraceDeploymentChain:
                     }
                 ],
                 "environments": ["prod"],
+                "delivery_workflows": {
+                    "github_actions": {
+                        "commands": [
+                            {
+                                "command": "deploy",
+                                "workflow": "node-api-cd.yml",
+                                "delivery_mode": "continuous_deployment",
+                            }
+                        ]
+                    }
+                },
                 "api_surface": {"docs_routes": ["/_specs"], "api_versions": ["v3"]},
                 "hostnames": [
                     {"hostname": "api-node-boats.qa.bgrp.io", "visibility": "public"}
@@ -817,6 +846,13 @@ class TestTraceDeploymentChain:
         assert result["deploys_from"][0]["name"] == "helm-charts"
         assert result["provisioned_by"][0]["name"] == "terraform-stack-ecs"
         assert result["environments"] == ["prod"]
+        assert result["delivery_workflows"]["github_actions"]["commands"] == [
+            {
+                "command": "deploy",
+                "workflow": "node-api-cd.yml",
+                "delivery_mode": "continuous_deployment",
+            }
+        ]
         assert result["api_surface"]["api_versions"] == ["v3"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
         assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]

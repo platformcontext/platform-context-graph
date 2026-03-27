@@ -16,6 +16,7 @@ _DEPENDENCY_ROOTS_BY_ECOSYSTEM: Final[dict[str, tuple[str, ...]]] = {
     "dart": (),
     "elixir": ("deps",),
     "go": ("vendor",),
+    "groovy": (),
     "haskell": (),
     "helm": (),
     "java": (),

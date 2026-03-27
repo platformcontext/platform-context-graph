@@ -56,6 +56,7 @@ LANGUAGE_ALIASES = {
     "elixir": "elixir",
     "ex": "elixir",
     "exs": "elixir",
+    "groovy": "groovy",
     "hcl": "hcl",
     "json": "json",
     "dockerfile": "dockerfile",

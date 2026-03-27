@@ -30,6 +30,44 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
+    service_repo = tmp_path / "api-node-boats"
+    (service_repo / ".github" / "workflows").mkdir(parents=True)
+    (service_repo / ".github" / "workflows" / "pr-ci-dispatch.yml").write_text(
+        "\n".join(
+            [
+                "name: 'Pull Request: CI Dispatch'",
+                "on:",
+                "  pull_request:",
+                "    types: [opened, synchronize, reopened]",
+                "jobs:",
+                "  dispatch-api-ci:",
+                "    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-ci.yml@v2",
+                "    with:",
+                "      environment-name: bg-qa",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (service_repo / ".github" / "workflows" / "pr-command-dispatch.yml").write_text(
+        "\n".join(
+            [
+                "name: 'Pull Request: Command Dispatch'",
+                "on:",
+                "  issue_comment:",
+                "    types: [created]",
+                "  workflow_dispatch: {}",
+                "jobs:",
+                "  dispatch-command:",
+                "    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2",
+                "    with:",
+                "      automation-repo: boatsgroup/core-engineering-automation",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
     helm_repo = tmp_path / "helm-charts"
     values_path = (
         helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "values.yaml"
@@ -37,6 +75,36 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
     values_path.parent.mkdir(parents=True)
     values_path.write_text(
         "ingress:\n  hostnames:\n    - api-node-boats.qa.svc.bgrp.io\n",
+        encoding="utf-8",
+    )
+    automation_repo = tmp_path / "core-engineering-automation"
+    (automation_repo / ".github" / "workflows").mkdir(parents=True)
+    (
+        automation_repo / ".github" / "workflows" / "node-api-command-processing.yml"
+    ).write_text(
+        "\n".join(
+            [
+                "name: 'Node.js API: Command Processing'",
+                "env:",
+                "  VALID_COMMANDS_DATA: |",
+                "    [",
+                '      {"name":"deploy","description":"Dispatch Node.js API CD"},',
+                '      {"name":"deploy-eks","description":"Build, push to ECR, and update helm-charts for ArgoCD EKS deployment"},',
+                '      {"name":"push-ecr","description":"Build and push Docker image to ECR (no ECS deployment)"}',
+                "    ]",
+                "jobs:",
+                "  dispatch-api-cd:",
+                "    if: needs.parse-command.outputs.command == 'deploy'",
+                "    uses: ./.github/workflows/node-api-cd.yml",
+                "  deploy-to-eks:",
+                "    if: needs.parse-command.outputs.command == 'deploy-eks'",
+                "    uses: ./.github/workflows/node-api-deploy-eks.yml",
+                "  push-to-ecr:",
+                "    if: needs.parse-command.outputs.command == 'push-ecr'",
+                "    uses: ./.github/workflows/node-api-ecr-push.yml",
+                "",
+            ]
+        ),
         encoding="utf-8",
     )
 
@@ -93,23 +161,41 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
         _fake_get_file_content,
     )
+    def _resolve_repository(_session, candidate: str):
+        if candidate in {
+            "https://github.com/boatsgroup/core-engineering-automation",
+            "boatsgroup/core-engineering-automation",
+            "core-engineering-automation",
+        }:
+            return {
+                "id": "repository:r_automation123",
+                "name": "core-engineering-automation",
+                "path": str(automation_repo),
+                "local_path": str(automation_repo),
+            }
+        if candidate in {
+            "https://github.com/boatsgroup/helm-charts",
+            "helm-charts",
+        }:
+            return {
+                "id": "repository:r_helm123",
+                "name": "helm-charts",
+                "path": str(helm_repo),
+                "local_path": str(helm_repo),
+            }
+        return None
+
     monkeypatch.setattr(
         "platform_context_graph.query.repositories.content_enrichment.resolve_repository",
-        lambda _session, candidate: {
-            "id": "repository:r_helm123",
-            "name": "helm-charts",
-            "path": str(helm_repo),
-            "local_path": str(helm_repo),
-        }
-        if candidate in {"https://github.com/boatsgroup/helm-charts", "helm-charts"}
-        else None,
+        _resolve_repository,
     )
 
     context = {
         "repository": {
             "id": "repository:r_api_node_boats",
             "name": "api-node-boats",
-            "path": "/repos/api-node-boats",
+            "path": str(service_repo),
+            "local_path": str(service_repo),
         },
         "deploys_from": [
             {
@@ -178,3 +264,199 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         },
     ]
     assert result["observed_config_environments"] == ["qa", "production", "bg-qa"]
+    assert result["delivery_workflows"]["github_actions"]["automation_repositories"] == [
+        {
+            "repository": "boatsgroup/core-engineering-automation",
+            "owner": "boatsgroup",
+            "name": "core-engineering-automation",
+            "ref": "v2",
+        }
+    ]
+    assert result["delivery_workflows"]["github_actions"]["commands"] == [
+        {
+            "command": "deploy",
+            "description": "Dispatch Node.js API CD",
+            "workflow": "node-api-cd.yml",
+            "workflow_path": ".github/workflows/node-api-cd.yml",
+            "delivery_mode": "continuous_deployment",
+            "automation_repository": "boatsgroup/core-engineering-automation",
+        },
+        {
+            "command": "deploy-eks",
+            "description": "Build, push to ECR, and update helm-charts for ArgoCD EKS deployment",
+            "workflow": "node-api-deploy-eks.yml",
+            "workflow_path": ".github/workflows/node-api-deploy-eks.yml",
+            "delivery_mode": "eks_gitops",
+            "automation_repository": "boatsgroup/core-engineering-automation",
+        },
+        {
+            "command": "push-ecr",
+            "description": "Build and push Docker image to ECR (no ECS deployment)",
+            "workflow": "node-api-ecr-push.yml",
+            "workflow_path": ".github/workflows/node-api-ecr-push.yml",
+            "delivery_mode": "image_build_push",
+            "automation_repository": "boatsgroup/core-engineering-automation",
+        },
+    ]
+
+
+def test_enrich_repository_context_extracts_jenkins_pipeline_hints(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    service_repo = tmp_path / "api-node-whisper"
+    service_repo.mkdir()
+    (service_repo / "Jenkinsfile").write_text(
+        "\n".join(
+            [
+                "@Library('pipelines') _",
+                "",
+                "pipelinePM2(",
+                "  use_configd: true,",
+                "  entry_point: 'dist/api-node-whisper.js',",
+                "  pre_deploy: { pipe, params ->",
+                "    sh 'echo migrate'",
+                "  }",
+                ")",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
+        lambda _database, *, repo_id, relative_path: {"available": False, "content": None},
+    )
+
+    context = {
+        "repository": {
+            "id": "repository:r_api_node_whisper",
+            "name": "api-node-whisper",
+            "path": str(service_repo),
+            "local_path": str(service_repo),
+        },
+        "limitations": [],
+    }
+
+    result = enrich_repository_context(_DummyDB(), context)
+
+    assert result["delivery_workflows"]["jenkins"] == [
+        {
+            "relative_path": "Jenkinsfile",
+            "shared_libraries": ["pipelines"],
+            "pipeline_calls": ["pipelinePM2"],
+            "entry_points": ["dist/api-node-whisper.js"],
+            "use_configd": True,
+            "has_pre_deploy": True,
+        }
+    ]
+
+
+def test_enrich_repository_context_extracts_nested_workflow_command_metadata(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    service_repo = tmp_path / "api-node-boats"
+    (service_repo / ".github" / "workflows").mkdir(parents=True)
+    (service_repo / ".github" / "workflows" / "pr-command-dispatch.yml").write_text(
+        "\n".join(
+            [
+                "name: 'Pull Request: Command Dispatch'",
+                "on:",
+                "  issue_comment:",
+                "    types: [created]",
+                "jobs:",
+                "  dispatch-command:",
+                "    uses: boatsgroup/core-engineering-automation/.github/workflows/node-api-command-processing.yml@v2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    automation_repo = tmp_path / "core-engineering-automation"
+    (automation_repo / ".github" / "workflows").mkdir(parents=True)
+    (
+        automation_repo / ".github" / "workflows" / "node-api-command-processing.yml"
+    ).write_text(
+        "\n".join(
+            [
+                "name: 'Node.js API: Command Processing'",
+                "jobs:",
+                "  parse-command:",
+                "    steps:",
+                "      - name: Post Command Feedback",
+                "        env:",
+                "          VALID_COMMANDS_DATA: |",
+                "            [",
+                '              {"name":"deploy-eks","description":"Build, push to ECR, and update helm-charts for ArgoCD EKS deployment"},',
+                '              {"name":"rollback-eks","description":"Rollback EKS deployment to a known ECR image tag"},',
+                "            ]",
+                "  deploy-to-eks:",
+                "    if: needs.parse-command.outputs.command == 'deploy-eks'",
+                "    uses: ./.github/workflows/node-api-deploy-eks.yml",
+                "  rollback-eks:",
+                "    if: needs.parse-command.outputs.command == 'rollback-eks'",
+                "    uses: ./.github/workflows/node-api-rollback-eks.yml",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
+        lambda _database, *, repo_id, relative_path: {
+            "available": False,
+            "content": None,
+        },
+    )
+
+    def _resolve_repository(_session, candidate: str):
+        if candidate in {
+            "https://github.com/boatsgroup/core-engineering-automation",
+            "boatsgroup/core-engineering-automation",
+            "core-engineering-automation",
+        }:
+            return {
+                "id": "repository:r_automation123",
+                "name": "core-engineering-automation",
+                "path": str(automation_repo),
+                "local_path": str(automation_repo),
+            }
+        return None
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.resolve_repository",
+        _resolve_repository,
+    )
+
+    result = enrich_repository_context(
+        _DummyDB(),
+        {
+            "repository": {
+                "id": "repository:r_api_node_boats",
+                "name": "api-node-boats",
+                "path": str(service_repo),
+                "local_path": str(service_repo),
+            },
+            "limitations": [],
+        },
+    )
+
+    assert result["delivery_workflows"]["github_actions"]["commands"] == [
+        {
+            "command": "deploy-eks",
+            "description": "Build, push to ECR, and update helm-charts for ArgoCD EKS deployment",
+            "workflow": "node-api-deploy-eks.yml",
+            "workflow_path": ".github/workflows/node-api-deploy-eks.yml",
+            "delivery_mode": "eks_gitops",
+            "automation_repository": "boatsgroup/core-engineering-automation",
+        },
+        {
+            "command": "rollback-eks",
+            "description": "Rollback EKS deployment to a known ECR image tag",
+            "workflow": "node-api-rollback-eks.yml",
+            "workflow_path": ".github/workflows/node-api-rollback-eks.yml",
+            "delivery_mode": "eks_gitops_rollback",
+            "automation_repository": "boatsgroup/core-engineering-automation",
+        },
+    ]

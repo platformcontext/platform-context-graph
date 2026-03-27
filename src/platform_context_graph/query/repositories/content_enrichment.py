@@ -14,6 +14,7 @@ import yaml
 from ...query import content as content_queries
 from .common import get_db_manager, resolve_repository
 from .content_enrichment_openapi import dedupe_endpoint_rows, extract_openapi_endpoints
+from .content_enrichment_workflows import extract_delivery_workflows
 
 _SPEC_CANDIDATES = (
     "server/init/plugins/spec.js",
@@ -64,6 +65,12 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
         if observed_environments:
             context["observed_config_environments"] = observed_environments
         _remove_limitation(context, "dns_unknown")
+    delivery_workflows = _extract_delivery_workflows(
+        database,
+        repository=repository,
+    )
+    if delivery_workflows:
+        context["delivery_workflows"] = delivery_workflows
     return context
 
 
@@ -150,6 +157,27 @@ def _extract_hostnames(
         )
     )
     return _dedupe_hostname_rows(hostnames)
+
+
+def _extract_delivery_workflows(
+    database: Any,
+    *,
+    repository: dict[str, Any],
+) -> dict[str, Any]:
+    """Extract workflow and automation hints from a repository checkout."""
+
+    db_manager = get_db_manager(database)
+
+    def _resolve_repo(candidate: str) -> dict[str, Any] | None:
+        """Resolve one related repository candidate through the graph database."""
+
+        with db_manager.get_driver().session() as session:
+            return _resolve_related_repo(session, candidate)
+
+    return extract_delivery_workflows(
+        repository=repository,
+        resolve_repository=_resolve_repo,
+    )
 
 
 def _extract_related_config_hostnames(

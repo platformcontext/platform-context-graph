@@ -10,6 +10,7 @@ from typing import Any
 from tree_sitter import Language, Parser
 from .graph_builder_raw_text import (
     DOCKERFILE_PARSER_KEY,
+    JENKINSFILE_PARSER_KEY,
     parser_key_for_path,
     register_raw_text_parsers,
 )
@@ -35,6 +36,7 @@ _LANGUAGE_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
     "dart": (".languages.dart", "DartTreeSitterParser"),
     "perl": (".languages.perl", "PerlTreeSitterParser"),
     "elixir": (".languages.elixir", "ElixirTreeSitterParser"),
+    "groovy": (".languages.groovy", "GroovyTreeSitterParser"),
     "hcl": (".languages.hcl_terraform", "HCLTerraformParser"),
     "json": (".languages.json_config", "JSONConfigTreeSitterParser"),
     "dockerfile": (".languages.dockerfile", "DockerfileTreeSitterParser"),
@@ -72,6 +74,7 @@ _TREE_SITTER_PARSER_EXTENSIONS: tuple[tuple[str, str], ...] = (
     (".pm", "perl"),
     (".ex", "elixir"),
     (".exs", "elixir"),
+    (".groovy", "groovy"),
 )
 def _load_attribute(module_name: str, attribute_name: str) -> Any:
     """Load an attribute from a relative module path.
@@ -196,6 +199,15 @@ def build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
             "Skipping parser for special filename %s because language dockerfile "
             "is unavailable: %s",
             DOCKERFILE_PARSER_KEY,
+            exc,
+        )
+    try:
+        parsers[JENKINSFILE_PARSER_KEY] = TreeSitterParser("groovy")
+    except ValueError as exc:
+        logger.warning(
+            "Skipping parser for special filename %s because language groovy "
+            "is unavailable: %s",
+            JENKINSFILE_PARSER_KEY,
             exc,
         )
     register_raw_text_parsers(parsers)

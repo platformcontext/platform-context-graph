@@ -189,6 +189,7 @@ def get_repo_summary(
         "observed_config_environments": context.get(
             "observed_config_environments", []
         ),
+        "delivery_workflows": context.get("delivery_workflows", {}),
         "api_surface": context.get("api_surface", {}),
         "hostnames": context.get("hostnames", []),
         "limitations": limitations,
