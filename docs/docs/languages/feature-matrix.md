@@ -12,9 +12,11 @@ This file is auto-generated. Do not edit manually.
 | Dart | `DartTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | Y | - | 11/11 | 11/11 | `tests/fixtures/ecosystems/dart_comprehensive/` |
 | Elixir | `ElixirTreeSitterParser` | Y | Y | - | - | Y | Y | P | - | - | - | 7/7 | 7/7 | `tests/fixtures/ecosystems/elixir_comprehensive/` |
 | Go | `GoTreeSitterParser` | Y | - | Y | - | Y | Y | Y | Y | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/go_comprehensive/` |
+| Groovy | `GroovyTreeSitterParser` | - | - | - | - | - | - | - | - | - | - | 6/6 | 6/6 | `tests/fixtures/ecosystems/groovy_comprehensive/` |
 | Haskell | `HaskellTreeSitterParser` | Y | - | - | Y | Y | Y | Y | Y | Y | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/haskell_comprehensive/` |
 | Java | `JavaTreeSitterParser` | Y | Y | Y | - | Y | Y | Y | - | Y | - | 11/11 | 11/11 | `tests/fixtures/ecosystems/java_comprehensive/` |
 | JavaScript | `JavascriptTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/javascript_comprehensive/` |
+| JSON Config | `JSONConfigTreeSitterParser` | Y | - | - | - | - | - | Y | - | - | - | 5/5 | 5/5 | `tests/fixtures/ecosystems/json_comprehensive/` |
 | Kotlin | `KotlinTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/kotlin_comprehensive/` |
 | Perl | `PerlTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/perl_comprehensive/` |
 | PHP | `PhpTreeSitterParser` | Y | Y | Y | Y | Y | Y | Y | - | - | - | 10/10 | 10/10 | `tests/fixtures/ecosystems/php_comprehensive/` |
@@ -36,5 +38,5 @@ This file is auto-generated. Do not edit manually.
 | Helm | `InfraYAMLParser` | Y | - | - | Y | 5/5 | 5/5 | `tests/fixtures/ecosystems/helm_comprehensive/` |
 | Kubernetes | `InfraYAMLParser` | Y | - | - | - | 7/7 | 7/7 | `tests/fixtures/ecosystems/kubernetes_comprehensive/` |
 | Kustomize | `InfraYAMLParser` | Y | - | - | - | 5/5 | 5/5 | `tests/fixtures/ecosystems/kustomize_comprehensive/` |
-| Terraform | `HCLTerraformParser` | Y | - | Y | Y | 6/6 | 6/6 | `tests/fixtures/ecosystems/terraform_comprehensive/` |
+| Terraform | `HCLTerraformParser` | Y | Y | Y | Y | 8/8 | 8/8 | `tests/fixtures/ecosystems/terraform_comprehensive/` |
 | Terragrunt | `HCLTerraformParser` | Y | - | - | - | 3/3 | 3/3 | `tests/fixtures/ecosystems/terragrunt_comprehensive/` |

@@ -229,29 +229,1003 @@ class TestGracefulDegradation:
         assert result["ecosystem"]["name"] == "my-platform"
         assert "mode" not in result
 
-    def test_repo_summary_omits_tier_when_null(self):
-        repo_record = MockRecord({"name": "my-repo", "path": "/repos/my-repo"})
-        db = make_mock_db(
-            {
-                "RETURN r.name as name, r.path as path": MockResult(
-                    single_record=repo_record
-                ),
-                "split(f.name": MockResult(records=[]),
-                "count(DISTINCT fn)": MockResult(
-                    single_record=MockRecord({"functions": 0, "classes": 0})
-                ),
-                "labels(n)": MockResult(records=[]),
-                "DEPENDS_ON]->(dep": MockResult(
-                    single_record=MockRecord({"dependencies": []})
-                ),
-                "DEPENDS_ON]-(dep": MockResult(
-                    single_record=MockRecord({"dependents": []})
-                ),
-                "Tier": MockResult(single_record=None),
-            }
+
+def test_trace_deployment_chain_uses_repo_contains_for_repo_to_file_lookups(
+    monkeypatch,
+):
+    """Deployment-chain repo/file lookups should use REPO_CONTAINS."""
+
+    recorded_queries: list[str] = []
+
+    monkeypatch.setattr(
+        "platform_context_graph.mcp.tools.handlers.ecosystem_support.repository_queries.get_repository_context",
+        lambda *_args, **_kwargs: {
+            "repository": {
+                "id": "repository:r_api_node_boats",
+                "name": "api-node-boats",
+                "path": "/repos/api-node-boats",
+                "local_path": "/repos/api-node-boats",
+            },
+            "deploys_from": [],
+            "discovers_config_in": [],
+            "provisioned_by": [],
+            "platforms": [],
+            "summary": {},
+            "coverage": None,
+            "limitations": [],
+        },
+    )
+
+    db = make_mock_db({})
+    session = db.get_driver.return_value.session.return_value
+
+    def recording_run(query, **kwargs):
+        del kwargs
+        recorded_queries.append(query)
+        if "MATCH (r:Repository)" in query and "RETURN r.name as name" in query:
+            return MockResult(single_record={"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        return MockResult(records=[])
+
+    session.run = recording_run
+
+    result = trace_deployment_chain(db, "api-node-boats")
+
+    assert "error" not in result
+    assert any(
+        "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)"
+        in q
+        for q in recorded_queries
+    )
+    assert any(
+        "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)"
+        in q
+        for q in recorded_queries
+    )
+    assert any(
+        "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tf:TerraformResource)"
+        in q
+        for q in recorded_queries
+    )
+
+
+def test_find_blast_radius_uses_repo_contains_for_flat_repo_file_lookups():
+    """Blast-radius lookups for infra nodes should use REPO_CONTAINS."""
+
+    recorded_queries: list[str] = []
+
+    class RecordingSession:
+        def run(self, query, **kwargs):
+            del kwargs
+            recorded_queries.append(query)
+            return MockResult(records=[])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    db = MagicMock()
+    db.get_driver.return_value.session.return_value = RecordingSession()
+
+    find_blast_radius(db, "terraform-aws-vpc", "terraform_module")
+    find_blast_radius(db, "composite-postgres", "crossplane_xrd")
+
+    assert any("MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)" in q for q in recorded_queries)
+    assert not any("MATCH (repo:Repository)-[:CONTAINS*]->(f)" in q for q in recorded_queries)
+
+
+
+class TestRepoSummary:
+    """Test repo summary shaping and truthfulness notes."""
+
+    def test_repo_summary_omits_tier_when_null(self, monkeypatch):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_summary123",
+                    "name": "my-repo",
+                    "path": "/repos/my-repo",
+                    "file_count": 0,
+                    "files_by_extension": {},
+                },
+                "code": {"functions": 0, "classes": 0},
+                "infrastructure": {},
+                "ecosystem": {
+                    "tier": None,
+                    "risk_level": None,
+                    "dependencies": [],
+                    "dependents": [],
+                },
+                "coverage": None,
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "environments": [],
+                "limitations": [],
+                "relationships": [],
+            },
         )
-        result = get_repo_summary(db, "my-repo")
+        result = get_repo_summary(make_mock_db({}), "my-repo")
         assert "tier" not in result
+
+    def test_repo_summary_surfaces_partial_coverage_note(self, monkeypatch):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_partial123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 12,
+                    "discovered_file_count": 196,
+                    "files_by_extension": {"json": 12},
+                },
+                "code": {"functions": 0, "classes": 0},
+                "infrastructure": {},
+                "ecosystem": None,
+                "coverage": {
+                    "run_id": "run-123",
+                    "completeness_state": "graph_partial",
+                    "graph_available": True,
+                    "server_content_available": False,
+                    "discovered_file_count": 196,
+                    "graph_recursive_file_count": 12,
+                    "content_file_count": 12,
+                    "content_entity_count": 24,
+                    "graph_gap_count": 184,
+                    "content_gap_count": 0,
+                },
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "environments": [],
+                "limitations": ["graph_partial", "content_partial"],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+
+        assert result["file_count"] == 196
+        assert result["coverage"]["completeness_state"] == "graph_partial"
+        assert result["coverage"]["graph_gap_count"] == 184
+        assert "partial" in result["note"].lower()
+        assert result["story"] == [result["note"]]
+
+    def test_repo_summary_surfaces_runtime_context_and_limitation_codes(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 196,
+                    "files_by_extension": {"yaml": 43, "js": 77},
+                },
+                "code": {"functions": 12, "classes": 1},
+                "infrastructure": {"terraform_modules": []},
+                "ecosystem": {
+                    "tier": None,
+                    "risk_level": None,
+                    "dependencies": ["terraform-stack-ecs"],
+                    "dependents": [],
+                },
+                "coverage": {
+                    "completeness_state": "complete",
+                    "discovered_file_count": 196,
+                    "graph_recursive_file_count": 196,
+                    "content_file_count": 196,
+                    "content_entity_count": 240,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": "prod",
+                        "relationship_type": "RUNS_ON",
+                    }
+                ],
+                "deploys_from": [
+                    {
+                        "id": "repository:r_helm123",
+                        "name": "helm-charts",
+                        "relationship_type": "DEPLOYS_FROM",
+                    }
+                ],
+                "discovers_config_in": [],
+                "provisioned_by": [
+                    {
+                        "id": "repository:r_terraform123",
+                        "name": "terraform-stack-ecs",
+                        "relationship_type": "PROVISIONED_BY",
+                    }
+                ],
+                "provisions_dependencies_for": [],
+                "environments": ["prod"],
+                "delivery_workflows": {
+                    "github_actions": {
+                        "commands": [
+                            {
+                                "command": "deploy-eks",
+                                "workflow": "node-api-deploy-eks.yml",
+                                "delivery_mode": "eks_gitops",
+                            }
+                        ]
+                    }
+                },
+                "delivery_paths": [
+                    {
+                        "path_kind": "gitops",
+                        "controller": "github_actions",
+                        "delivery_mode": "eks_gitops",
+                        "commands": ["deploy-eks"],
+                        "supporting_workflows": ["node-api-deploy-eks.yml"],
+                        "automation_repositories": [
+                            "boatsgroup/core-engineering-automation"
+                        ],
+                        "platform_kinds": ["eks"],
+                        "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+                        "deployment_sources": ["helm-charts"],
+                        "config_sources": [],
+                        "provisioning_repositories": [],
+                        "environments": ["bg-qa"],
+                        "summary": "GitHub Actions drives a GitOps deployment path through helm-charts onto EKS platforms.",
+                    }
+                ],
+                "deployment_artifacts": {
+                    "charts": [
+                        {
+                            "repo_url": "boatsgroup.pe.jfrog.io",
+                            "chart": "bg-helm/api-node-template",
+                            "version": "0.2.1",
+                            "release_name": "api-node-boats",
+                            "namespace": "api-node",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/config.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                    "images": [
+                        {
+                            "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
+                            "tag": "3.21.0",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                    "kustomize_resources": [
+                        {
+                            "resource_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "kind": "XIRSARole",
+                            "name": "api-node-boats",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/kustomization.yaml",
+                            "environment": None,
+                        }
+                    ],
+                    "kustomize_patches": [
+                        {
+                            "patch_path": "argocd/api-node-boats/overlays/bg-qa/xirsarole-patch.yaml",
+                            "target_kind": "XIRSARole",
+                            "target_name": "api-node-boats",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/kustomization.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                    "config_paths": [
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "environment": None,
+                        },
+                        {
+                            "path": "/api/api-node-boats/*",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "environment": None,
+                        },
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "terraform-stack-node10",
+                            "relative_path": "shared/iam.tf",
+                            "environment": None,
+                        },
+                    ],
+                    "service_ports": [
+                        {
+                            "port": "3081",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/values.yaml",
+                            "environment": None,
+                        }
+                    ],
+                    "gateways": [
+                        {
+                            "name": "envoy-internal",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                },
+                "api_surface": {
+                    "spec_files": [{"relative_path": "specs/index.yaml"}],
+                    "docs_routes": ["/_specs"],
+                    "api_versions": ["v3"],
+                },
+                "hostnames": [
+                    {"hostname": "api-node-boats.qa.bgrp.io", "visibility": "public"}
+                ],
+                "consumer_repositories": [
+                    {
+                        "repository": "automate-yachtworld",
+                        "repo_id": "repository:r_yachtworld123",
+                        "evidence_kinds": ["hostname_reference"],
+                        "matched_values": ["api-node-boats.qa.bgrp.io"],
+                        "sample_paths": ["group_vars/qa/api.yml"],
+                    }
+                ],
+                "limitations": ["dns_unknown", "entrypoint_unknown"],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+
+        assert result["name"] == "api-node-boats"
+        assert result["platforms"][0]["kind"] == "ecs"
+        assert result["deploys_from"][0]["name"] == "helm-charts"
+        assert result["dependencies"] == ["terraform-stack-ecs"]
+        assert result["delivery_workflows"]["github_actions"]["commands"] == [
+            {
+                "command": "deploy-eks",
+                "workflow": "node-api-deploy-eks.yml",
+                "delivery_mode": "eks_gitops",
+            }
+        ]
+        assert result["delivery_paths"][0]["path_kind"] == "gitops"
+        assert result["delivery_paths"][0]["deployment_sources"] == ["helm-charts"]
+        assert result["deployment_artifacts"]["images"][0]["tag"] == "3.21.0"
+        assert result["consumer_repositories"] == [
+            {
+                "repository": "automate-yachtworld",
+                "repo_id": "repository:r_yachtworld123",
+                "evidence_kinds": ["hostname_reference"],
+                "matched_values": ["api-node-boats.qa.bgrp.io"],
+                "sample_paths": ["group_vars/qa/api.yml"],
+            }
+        ]
+        assert result["deployment_overview"] == {
+            "internet_entrypoints": [
+                {
+                    "hostname": "api-node-boats.qa.bgrp.io",
+                    "visibility": "public",
+                }
+            ],
+            "internal_entrypoints": [],
+            "api_surface": {
+                "docs_routes": ["/_specs"],
+                "api_versions": ["v3"],
+            },
+            "runtime_platforms": [
+                {
+                    "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    "kind": "ecs",
+                    "provider": "aws",
+                    "environment": "prod",
+                    "name": "node10",
+                }
+            ],
+            "delivery_paths": [
+                {
+                    "path_kind": "gitops",
+                    "controller": "github_actions",
+                    "delivery_mode": "eks_gitops",
+                    "summary": "GitHub Actions drives a GitOps deployment path through helm-charts onto EKS platforms.",
+                    "automation_repositories": [
+                        "boatsgroup/core-engineering-automation"
+                    ],
+                    "platform_kinds": ["eks"],
+                    "deployment_sources": ["helm-charts"],
+                    "config_sources": [],
+                    "provisioning_repositories": [],
+                    "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+                    "environments": ["bg-qa"],
+                }
+            ],
+            "deployment_story": [
+                "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa."
+            ],
+            "topology_story": [
+                "Public entrypoints: api-node-boats.qa.bgrp.io.",
+                "API surface exposes versions v3 and docs routes /_specs.",
+                "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
+                "Traffic enters through gateways envoy-internal on service ports 3081.",
+                "Shared config families span helm-charts, terraform-stack-node10: /configd/api-node-boats/*.",
+                "Consumer-only repository automate-yachtworld references this service via hostname references in group_vars/qa/api.yml.",
+            ],
+            "consumer_repositories": [
+                {
+                    "repository": "automate-yachtworld",
+                    "evidence_kinds": ["hostname_reference"],
+                    "sample_paths": ["group_vars/qa/api.yml"],
+                }
+            ],
+            "shared_config_paths": [
+                {
+                    "path": "/configd/api-node-boats/*",
+                    "source_repositories": [
+                        "helm-charts",
+                        "terraform-stack-node10",
+                    ],
+                }
+            ],
+                "deployment_artifacts": {
+                    "charts": [
+                        {
+                            "repo_url": "boatsgroup.pe.jfrog.io",
+                        "chart": "bg-helm/api-node-template",
+                        "version": "0.2.1",
+                        "release_name": "api-node-boats",
+                        "namespace": "api-node",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/config.yaml",
+                        "environment": "bg-qa",
+                    }
+                ],
+                "images": [
+                    {
+                        "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
+                        "tag": "3.21.0",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                    "kustomize_resources": [
+                        {
+                            "resource_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "kind": "XIRSARole",
+                            "name": "api-node-boats",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/kustomization.yaml",
+                            "environment": None,
+                        }
+                    ],
+                    "kustomize_patches": [
+                        {
+                            "patch_path": "argocd/api-node-boats/overlays/bg-qa/xirsarole-patch.yaml",
+                            "target_kind": "XIRSARole",
+                            "target_name": "api-node-boats",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/kustomization.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                    "config_paths": [
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "environment": None,
+                        },
+                        {
+                            "path": "/api/api-node-boats/*",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "environment": None,
+                        },
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "terraform-stack-node10",
+                            "relative_path": "shared/iam.tf",
+                            "environment": None,
+                        },
+                    ],
+                    "service_ports": [
+                        {
+                            "port": "3081",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/base/values.yaml",
+                        "environment": None,
+                    }
+                ],
+                "gateways": [
+                    {
+                        "name": "envoy-internal",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                        "environment": "bg-qa",
+                    }
+                ],
+            },
+            "deployment_controllers": ["github_actions"],
+        }
+        assert result["story"] == [
+            "Public entrypoints: api-node-boats.qa.bgrp.io.",
+            "API surface exposes versions v3 and docs routes /_specs.",
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
+            "Traffic enters through gateways envoy-internal on service ports 3081.",
+            "Shared config families span helm-charts, terraform-stack-node10: /configd/api-node-boats/*.",
+            "Consumer-only repository automate-yachtworld references this service via hostname references in group_vars/qa/api.yml.",
+            "DNS and entrypoint evidence are currently unavailable for this repository.",
+        ]
+        assert result["api_surface"]["docs_routes"] == ["/_specs"]
+        assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
+        assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]
+
+    def test_repo_summary_notes_config_environments_when_runtime_unknown(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 196,
+                    "discovered_file_count": 196,
+                    "files_by_extension": {"json": 12, "js": 77},
+                },
+                "code": {"functions": 12, "classes": 1},
+                "infrastructure": {},
+                "ecosystem": {"dependencies": [], "dependents": []},
+                "coverage": {
+                    "completeness_state": "complete",
+                    "discovered_file_count": 196,
+                    "graph_recursive_file_count": 196,
+                    "content_file_count": 196,
+                    "content_entity_count": 240,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "environments": [],
+                "observed_config_environments": ["bg-qa", "prod"],
+                "api_surface": {},
+                "hostnames": [
+                    {
+                        "hostname": "api-node-boats.qa.bgrp.io",
+                        "environment": "bg-qa",
+                        "visibility": "public",
+                    }
+                ],
+                "limitations": [],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+
+        assert "note" in result
+        assert "bg-qa, prod" in result["note"]
+        assert "runtime evidence" in result["note"].lower()
+
+    def test_repo_summary_story_surfaces_dual_delivery_paths_without_control_plane_consumers(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 199,
+                    "discovered_file_count": 199,
+                    "files_by_extension": {"yaml": 84, "js": 251},
+                },
+                "code": {"functions": 347, "classes": 0},
+                "infrastructure": {"terraform_modules": []},
+                "ecosystem": {
+                    "dependencies": [
+                        "helm-charts",
+                        "terraform-stack-node10",
+                    ],
+                    "dependents": [],
+                },
+                "coverage": {
+                    "completeness_state": "complete",
+                    "discovered_file_count": 199,
+                    "graph_recursive_file_count": 199,
+                    "content_file_count": 199,
+                    "content_entity_count": 3106,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": "prod",
+                        "relationship_type": "RUNS_ON",
+                    },
+                    {
+                        "id": "platform:eks:aws:cluster/bg-qa:bg-qa:none",
+                        "name": "bg-qa",
+                        "kind": "eks",
+                        "provider": "aws",
+                        "environment": "bg-qa",
+                        "relationship_type": "RUNS_ON",
+                    },
+                ],
+                "deploys_from": [
+                    {
+                        "id": "repository:r_helm123",
+                        "name": "helm-charts",
+                        "relationship_type": "DEPLOYS_FROM",
+                    }
+                ],
+                "discovers_config_in": [
+                    {
+                        "id": "repository:r_obs123",
+                        "name": "iac-eks-observability",
+                        "relationship_type": "DISCOVERS_CONFIG_IN",
+                    }
+                ],
+                "provisioned_by": [
+                    {
+                        "id": "repository:r_terraform123",
+                        "name": "terraform-stack-node10",
+                        "relationship_type": "PROVISIONED_BY",
+                    }
+                ],
+                "provisions_dependencies_for": [],
+                "environments": ["prod"],
+                "observed_config_environments": ["bg-qa", "prod"],
+                "delivery_workflows": {
+                    "github_actions": {
+                        "commands": [
+                            {
+                                "command": "deploy",
+                                "workflow": "node-api-cd.yml",
+                                "delivery_mode": "ecs_direct",
+                            },
+                            {
+                                "command": "deploy-eks",
+                                "workflow": "node-api-deploy-eks.yml",
+                                "delivery_mode": "eks_gitops",
+                            },
+                        ]
+                    }
+                },
+                "delivery_paths": [
+                    {
+                        "path_kind": "gitops",
+                        "controller": "github_actions",
+                        "delivery_mode": "eks_gitops",
+                        "commands": ["deploy-eks"],
+                        "supporting_workflows": ["node-api-deploy-eks.yml"],
+                        "automation_repositories": [
+                            "boatsgroup/core-engineering-automation"
+                        ],
+                        "platform_kinds": ["eks"],
+                        "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+                        "deployment_sources": ["helm-charts"],
+                        "config_sources": ["iac-eks-observability"],
+                        "provisioning_repositories": [],
+                        "environments": ["bg-qa"],
+                        "summary": "GitHub Actions drives a GitOps deployment path through helm-charts onto EKS platforms.",
+                    },
+                    {
+                        "path_kind": "direct",
+                        "controller": "github_actions",
+                        "delivery_mode": "ecs_direct",
+                        "commands": ["deploy"],
+                        "supporting_workflows": ["node-api-cd.yml"],
+                        "automation_repositories": [
+                            "boatsgroup/core-engineering-automation"
+                        ],
+                        "platform_kinds": ["ecs"],
+                        "platforms": [
+                            "platform:ecs:aws:cluster/node10:prod:us-east-1"
+                        ],
+                        "deployment_sources": [],
+                        "config_sources": [],
+                        "provisioning_repositories": ["terraform-stack-node10"],
+                        "environments": ["prod"],
+                        "summary": "GitHub Actions drives a direct deployment path through terraform-stack-node10 onto ECS platforms.",
+                    },
+                ],
+                "deployment_artifacts": {
+                    "config_paths": [
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "environment": None,
+                        },
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "terraform-stack-node10",
+                            "relative_path": "shared/iam.tf",
+                            "environment": None,
+                        },
+                    ],
+                    "service_ports": [
+                        {
+                            "port": "3081",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/values.yaml",
+                            "environment": None,
+                        }
+                    ],
+                    "gateways": [
+                        {
+                            "name": "envoy-internal",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                },
+                "api_surface": {
+                    "spec_files": [{"relative_path": "specs/index.yaml"}],
+                    "docs_routes": ["/_specs"],
+                    "api_versions": ["v3"],
+                },
+                "hostnames": [
+                    {
+                        "hostname": "api-node-boats.qa.bgrp.io",
+                        "visibility": "public",
+                    }
+                ],
+                "consumer_repositories": [],
+                "limitations": [],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+
+        assert result["consumer_repositories"] == []
+        assert len(result["delivery_paths"]) == 2
+        assert result["story"] == [
+            "Public entrypoints: api-node-boats.qa.bgrp.io.",
+            "API surface exposes versions v3 and docs routes /_specs.",
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-node10 onto ECS in prod.",
+            "Traffic enters through gateways envoy-internal on service ports 3081.",
+            "Shared config families span helm-charts, terraform-stack-node10: /configd/api-node-boats/*.",
+            "Confirmed runtime environments: prod. Configuration also references: bg-qa.",
+        ]
+
+    def test_repo_summary_story_surfaces_controller_driven_paths(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_mws123",
+                    "name": "automate-mws",
+                    "path": "/repos/automate-mws",
+                    "file_count": 48,
+                    "discovered_file_count": 48,
+                    "files_by_extension": {"yml": 31, "groovy": 2, "py": 1},
+                },
+                "code": {"functions": 2, "classes": 0},
+                "infrastructure": {},
+                "ecosystem": {"dependencies": ["terraform-stack-mws"], "dependents": []},
+                "coverage": {
+                    "completeness_state": "complete",
+                    "discovered_file_count": 48,
+                    "graph_recursive_file_count": 48,
+                    "content_file_count": 48,
+                    "content_entity_count": 140,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [
+                    {
+                        "id": "repository:r_tf_mws",
+                        "name": "terraform-stack-mws",
+                        "relationship_type": "PROVISIONED_BY",
+                    }
+                ],
+                "provisions_dependencies_for": [],
+                "environments": [],
+                "observed_config_environments": ["prod"],
+                "delivery_workflows": {
+                    "jenkins": [
+                        {
+                            "relative_path": "Jenkinsfile",
+                            "pipeline_calls": ["pipeline"],
+                        }
+                    ]
+                },
+                "delivery_paths": [],
+                "controller_driven_paths": [
+                    {
+                        "controller_kind": "jenkins",
+                        "automation_kind": "ansible",
+                        "entry_points": ["deploy.yml"],
+                        "target_descriptors": ["mws", "prod"],
+                        "runtime_family": "wordpress_website_fleet",
+                        "supporting_repositories": ["terraform-stack-mws"],
+                        "confidence": "high",
+                        "explanation": (
+                            "jenkins controller Jenkinsfile invokes ansible entry points "
+                            "deploy.yml targeting mws, prod for wordpress_website_fleet "
+                            "with support from terraform-stack-mws."
+                        ),
+                    }
+                ],
+                "deployment_artifacts": {},
+                "api_surface": {},
+                "hostnames": [],
+                "consumer_repositories": [],
+                "limitations": [],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "automate-mws")
+
+        assert result["controller_driven_paths"] == [
+            {
+                "controller_kind": "jenkins",
+                "automation_kind": "ansible",
+                "entry_points": ["deploy.yml"],
+                "target_descriptors": ["mws", "prod"],
+                "runtime_family": "wordpress_website_fleet",
+                "supporting_repositories": ["terraform-stack-mws"],
+                "confidence": "high",
+                "explanation": (
+                    "jenkins controller Jenkinsfile invokes ansible entry points "
+                    "deploy.yml targeting mws, prod for wordpress_website_fleet "
+                    "with support from terraform-stack-mws."
+                ),
+            }
+        ]
+        assert result["story"] == [
+            "Jenkins invokes Ansible entry points deploy.yml targeting mws and prod for wordpress website fleets with support from terraform-stack-mws.",
+            "Configuration references environments prod, but runtime evidence has not confirmed deployed environments.",
+        ]
+
+    def test_repo_summary_notes_config_environments_beyond_runtime(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 196,
+                    "discovered_file_count": 196,
+                    "files_by_extension": {"json": 12, "js": 77},
+                },
+                "code": {"functions": 12, "classes": 1},
+                "infrastructure": {},
+                "ecosystem": {"dependencies": [], "dependents": []},
+                "coverage": {
+                    "completeness_state": "complete",
+                    "discovered_file_count": 196,
+                    "graph_recursive_file_count": 196,
+                    "content_file_count": 196,
+                    "content_entity_count": 240,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [
+                    {
+                        "id": "platform:eks:aws:cluster/bg-qa",
+                        "name": "bg-qa",
+                        "kind": "eks",
+                        "provider": "aws",
+                        "environment": "bg-qa",
+                        "relationship_type": "RUNS_ON",
+                    }
+                ],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "environments": ["bg-qa"],
+                "observed_config_environments": ["bg-qa", "prod"],
+                "api_surface": {},
+                "hostnames": [
+                    {
+                        "hostname": "api-node-boats.qa.bgrp.io",
+                        "environment": "bg-qa",
+                        "visibility": "public",
+                    },
+                    {
+                        "hostname": "api-node-boats.prod.bgrp.io",
+                        "environment": "prod",
+                        "visibility": "public",
+                    },
+                ],
+                "limitations": [],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+
+        assert "note" in result
+        assert "confirmed runtime environments: bg-qa" in result["note"].lower()
+        assert "configuration also references: prod" in result["note"].lower()
+
+    def test_repo_summary_notes_pending_finalization_truthfully(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 199,
+                    "discovered_file_count": 199,
+                    "files_by_extension": {"yaml": 84, "js": 251},
+                },
+                "code": {"functions": 347, "classes": 0},
+                "infrastructure": {},
+                "ecosystem": {"dependencies": [], "dependents": []},
+                "coverage": {
+                    "completeness_state": "complete",
+                    "finalization_status": "pending",
+                    "discovered_file_count": 199,
+                    "graph_recursive_file_count": 199,
+                    "content_file_count": 199,
+                    "content_entity_count": 3106,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "environments": [],
+                "observed_config_environments": [],
+                "api_surface": {},
+                "hostnames": [],
+                "limitations": ["finalization_incomplete"],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+
+        assert "note" in result
+        assert "finalization" in result["note"].lower()
+        assert "incomplete" in result["note"].lower()
 
     def test_blast_radius_adds_note_when_tier_null(self):
         db = make_mock_db(
@@ -271,7 +1245,26 @@ class TestGracefulDegradation:
 class TestTraceDeploymentChain:
     """Test deployment traces for repository and ApplicationSet-backed services."""
 
-    def test_returns_applicationset_backed_chain(self):
+    def test_returns_applicationset_backed_chain(self, monkeypatch):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_search123",
+                    "name": "api-node-search",
+                    "path": "/repos/api-node-search",
+                },
+                "coverage": None,
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "deployment_chain": [],
+                "environments": [],
+                "limitations": [],
+            },
+        )
         repo_record = MockRecord({"name": "api-node-search", "path": "/repos/api-node-search"})
 
         db = make_mock_db(
@@ -279,9 +1272,7 @@ class TestTraceDeploymentChain:
                 "RETURN r.name as name, r.path as path": MockResult(
                     single_record=repo_record
                 ),
-                "MATCH (app:ArgoCDApplication)-[:SOURCES_FROM]->(r:Repository)": MockResult(
-                    records=[]
-                ),
+                "MATCH (app:ArgoCDApplication)": MockResult(records=[]),
                 "MATCH (app:ArgoCDApplicationSet)": MockResult(
                     records=[
                         {
@@ -295,7 +1286,7 @@ class TestTraceDeploymentChain:
                         }
                     ]
                 ),
-                "MATCH (app)-[:DEPLOYS]->(k:K8sResource)": MockResult(
+                "repo.id IN $source_repo_ids OR repo.name IN $source_repo_names": MockResult(
                     records=[
                         {
                             "name": "api-node-search",
@@ -346,4 +1337,672 @@ class TestTraceDeploymentChain:
                 "repository": "helm-charts",
                 "deployed_by": "api-node-search",
             }
+        ]
+
+    def test_trace_deployment_chain_surfaces_runtime_context_and_limitations(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                },
+                "coverage": {
+                    "completeness_state": "complete",
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                },
+                "platforms": [
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": "prod",
+                        "relationship_type": "RUNS_ON",
+                    }
+                ],
+                "deploys_from": [
+                    {
+                        "id": "repository:r_helm123",
+                        "name": "helm-charts",
+                        "relationship_type": "DEPLOYS_FROM",
+                    }
+                ],
+                "discovers_config_in": [],
+                "provisioned_by": [
+                    {
+                        "id": "repository:r_tf123",
+                        "name": "terraform-stack-ecs",
+                        "relationship_type": "PROVISIONED_BY",
+                    }
+                ],
+                "provisions_dependencies_for": [],
+                "deployment_chain": [
+                    {
+                        "relationship_type": "RUNS_ON",
+                        "target_name": "node10",
+                        "target_kind": "Platform",
+                    }
+                ],
+                "environments": ["prod"],
+                "delivery_workflows": {
+                    "github_actions": {
+                        "commands": [
+                            {
+                                "command": "deploy",
+                                "workflow": "node-api-cd.yml",
+                                "delivery_mode": "continuous_deployment",
+                            }
+                        ]
+                    }
+                },
+                "delivery_paths": [
+                    {
+                        "path_kind": "direct",
+                        "controller": "github_actions",
+                        "delivery_mode": "continuous_deployment",
+                        "commands": ["deploy"],
+                        "supporting_workflows": ["node-api-cd.yml"],
+                        "automation_repositories": [
+                            "boatsgroup/core-engineering-automation"
+                        ],
+                        "platform_kinds": ["ecs"],
+                        "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
+                        "deployment_sources": [],
+                        "config_sources": [],
+                        "provisioning_repositories": ["terraform-stack-ecs"],
+                        "environments": ["prod"],
+                        "summary": "GitHub Actions drives a direct deployment path through terraform-stack-ecs onto ECS platforms.",
+                    }
+                ],
+                "deployment_artifacts": {
+                    "images": [
+                        {
+                            "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
+                            "tag": "3.21.0",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ]
+                },
+                "api_surface": {"docs_routes": ["/_specs"], "api_versions": ["v3"]},
+                "hostnames": [
+                    {"hostname": "api-node-boats.qa.bgrp.io", "visibility": "public"}
+                ],
+                "limitations": ["dns_unknown", "entrypoint_unknown"],
+            },
+        )
+        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        db = make_mock_db(
+            {
+                "RETURN r.name as name, r.path as path": MockResult(
+                    single_record=repo_record
+                ),
+                "MATCH (app:ArgoCDApplication)": MockResult(records=[]),
+                "MATCH (app:ArgoCDApplicationSet)": MockResult(records=[]),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
+                    records=[]
+                ),
+            }
+        )
+
+        result = trace_deployment_chain(db, "api-node-boats")
+
+        assert result["repository"]["name"] == "api-node-boats"
+        assert result["platforms"][0]["kind"] == "ecs"
+        assert result["deploys_from"][0]["name"] == "helm-charts"
+        assert result["provisioned_by"][0]["name"] == "terraform-stack-ecs"
+        assert result["environments"] == ["prod"]
+        assert result["delivery_workflows"]["github_actions"]["commands"] == [
+            {
+                "command": "deploy",
+                "workflow": "node-api-cd.yml",
+                "delivery_mode": "continuous_deployment",
+            }
+        ]
+        assert result["delivery_paths"][0]["path_kind"] == "direct"
+        assert result["delivery_paths"][0]["provisioning_repositories"] == [
+            "terraform-stack-ecs"
+        ]
+        assert result["deployment_artifacts"]["images"][0]["repository"].endswith(
+            "/api-node-boats"
+        )
+        assert result["deployment_overview"] == {
+            "internet_entrypoints": [
+                {
+                    "hostname": "api-node-boats.qa.bgrp.io",
+                    "visibility": "public",
+                }
+            ],
+            "internal_entrypoints": [],
+            "api_surface": {
+                "docs_routes": ["/_specs"],
+                "api_versions": ["v3"],
+            },
+            "runtime_platforms": [
+                {
+                    "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    "kind": "ecs",
+                    "provider": "aws",
+                    "environment": "prod",
+                    "name": "node10",
+                }
+            ],
+            "delivery_paths": [
+                {
+                    "path_kind": "direct",
+                    "controller": "github_actions",
+                    "delivery_mode": "continuous_deployment",
+                    "summary": "GitHub Actions drives a direct deployment path through terraform-stack-ecs onto ECS platforms.",
+                    "automation_repositories": [
+                        "boatsgroup/core-engineering-automation"
+                    ],
+                    "platform_kinds": ["ecs"],
+                    "deployment_sources": [],
+                    "config_sources": [],
+                    "provisioning_repositories": ["terraform-stack-ecs"],
+                    "platforms": [
+                        "platform:ecs:aws:cluster/node10:prod:us-east-1"
+                    ],
+                    "environments": ["prod"],
+                }
+            ],
+            "deployment_story": [
+                "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod."
+            ],
+            "topology_story": [
+                "Public entrypoints: api-node-boats.qa.bgrp.io.",
+                "API surface exposes versions v3 and docs routes /_specs.",
+                "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod.",
+            ],
+            "deployment_artifacts": {
+                "images": [
+                    {
+                        "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
+                        "tag": "3.21.0",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                        "environment": "bg-qa",
+                    }
+                ]
+            },
+            "deployment_controllers": ["github_actions"],
+        }
+        assert result["story"] == [
+            "Public entrypoints: api-node-boats.qa.bgrp.io.",
+            "API surface exposes versions v3 and docs routes /_specs.",
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod.",
+            "DNS and entrypoint evidence are currently unavailable for this repository.",
+        ]
+        assert result["api_surface"]["api_versions"] == ["v3"]
+        assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
+        assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]
+
+    def test_trace_deployment_chain_uses_canonical_source_repositories(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                },
+                "coverage": {
+                    "completeness_state": "complete",
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                },
+                "platforms": [
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:none:none",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "relationship_type": "RUNS_ON",
+                    }
+                ],
+                "deploys_from": [
+                    {
+                        "id": "repository:r_helm123",
+                        "name": "helm-charts",
+                        "relationship_type": "DEPLOYS_FROM",
+                    }
+                ],
+                "discovers_config_in": [],
+                "provisioned_by": [
+                    {
+                        "id": "repository:r_tf123",
+                        "name": "terraform-stack-node10",
+                        "relationship_type": "PROVISIONED_BY",
+                    }
+                ],
+                "provisions_dependencies_for": [],
+                "deployment_chain": [],
+                "environments": ["bg-qa"],
+                "api_surface": {"api_versions": ["v3"]},
+                "hostnames": [],
+                "limitations": [],
+            },
+        )
+        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        db = make_mock_db(
+            {
+                "RETURN r.name as name, r.path as path": MockResult(
+                    single_record=repo_record
+                ),
+                "MATCH (app:ArgoCDApplication)": MockResult(records=[]),
+                "MATCH (app:ArgoCDApplicationSet)": MockResult(
+                    records=[
+                        {
+                            "app_name": "api-node-boats",
+                            "project": "{{.argocd.project}}",
+                            "namespace": "argocd",
+                            "dest_namespace": "{{.helm.namespace}}",
+                            "source_repos": "https://github.com/boatsgroup/helm-charts",
+                            "source_paths": "argocd/api-node-boats/overlays/*/config.yaml",
+                            "source_roots": "argocd/api-node-boats/",
+                        }
+                    ]
+                ),
+                "repo.id IN $source_repo_ids OR repo.name IN $source_repo_names": MockResult(
+                    records=[
+                        {
+                            "name": "api-node-boats",
+                            "kind": "XIRSARole",
+                            "namespace": "",
+                            "file": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "repository": "helm-charts",
+                            "deployed_by": "api-node-boats",
+                        }
+                    ]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
+                    records=[]
+                ),
+            }
+        )
+
+        result = trace_deployment_chain(db, "api-node-boats")
+
+        assert result["argocd_applications"] == []
+        assert result["argocd_applicationsets"] == [
+            {
+                "app_name": "api-node-boats",
+                "project": "{{.argocd.project}}",
+                "namespace": "argocd",
+                "dest_namespace": "{{.helm.namespace}}",
+                "source_repos": "https://github.com/boatsgroup/helm-charts",
+                "source_paths": "argocd/api-node-boats/overlays/*/config.yaml",
+                "source_roots": "argocd/api-node-boats/",
+            }
+        ]
+        assert result["k8s_resources"] == [
+            {
+                "name": "api-node-boats",
+                "kind": "XIRSARole",
+                "namespace": "",
+                "file": "argocd/api-node-boats/base/xirsarole.yaml",
+                "repository": "helm-charts",
+                "deployed_by": "api-node-boats",
+            }
+        ]
+
+    def test_trace_deployment_chain_ignores_shared_source_repo_overmatch(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                },
+                "coverage": None,
+                "platforms": [],
+                "deploys_from": [
+                    {
+                        "id": "repository:r_helm123",
+                        "name": "helm-charts",
+                        "relationship_type": "DEPLOYS_FROM",
+                    }
+                ],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "deployment_chain": [],
+                "environments": [],
+                "limitations": [],
+            },
+        )
+        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+
+        db = make_mock_db(
+            {
+                "RETURN r.name as name, r.path as path": MockResult(
+                    single_record=repo_record
+                ),
+                "any(source_repo_name IN $source_repo_names": MockResult(
+                    records=[
+                        {
+                            "app_name": "portal-react-platform-adb",
+                            "project": "default",
+                            "namespace": "adb",
+                            "source_path": "helm-charts/portal-react-platform",
+                        }
+                    ]
+                ),
+                "MATCH (app:ArgoCDApplicationSet)": MockResult(records=[]),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
+                    records=[]
+                ),
+            }
+        )
+
+        result = trace_deployment_chain(db, "api-node-boats")
+
+        assert result["argocd_applications"] == []
+
+    def test_trace_deployment_chain_filters_provisioning_repo_to_service_relevant_terraform(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                },
+                "coverage": None,
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [
+                    {
+                        "id": "repository:r_tf123",
+                        "name": "terraform-stack-node10",
+                        "relationship_type": "PROVISIONED_BY",
+                    }
+                ],
+                "provisions_dependencies_for": [],
+                "deployment_chain": [],
+                "environments": [],
+                "limitations": [],
+            },
+        )
+        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+
+        db = make_mock_db(
+            {
+                "RETURN r.name as name, r.path as path": MockResult(
+                    single_record=repo_record
+                ),
+                "MATCH (app:ArgoCDApplication)": MockResult(records=[]),
+                "MATCH (app:ArgoCDApplicationSet)": MockResult(records=[]),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                    records=[]
+                ),
+                "WHERE toLower(coalesce(tf.name, '')) CONTAINS token": MockResult(
+                    records=[
+                        {
+                            "name": "aws_route53_record.api_node_boats",
+                            "resource_type": "aws_route53_record",
+                            "file": "shared/resources.tf",
+                            "repository": "terraform-stack-node10",
+                        },
+                        {
+                            "name": "aws_codedeploy_deployment_group.api_node_boats",
+                            "resource_type": "aws_codedeploy_deployment_group",
+                            "file": "shared/ecs.tf",
+                            "repository": "terraform-stack-node10",
+                        }
+                    ]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
+                    records=[
+                        {
+                            "name": "aws_route53_record.api_node_forex",
+                            "resource_type": "aws_route53_record",
+                            "file": "shared/resources.tf",
+                            "repository": "terraform-stack-node10",
+                        }
+                    ]
+                ),
+                "WHERE toLower(coalesce(mod.name, '')) CONTAINS token": MockResult(
+                    records=[
+                        {
+                            "name": "api_node_boats",
+                            "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                            "version": "~> 3.0",
+                            "deployment_name": "api-node-boats",
+                            "repo_name": "api-node-boats",
+                            "create_deploy": "true",
+                            "cluster_name": "node10",
+                            "zone_id": "Z123456",
+                            "deploy_entry_point": "api-node-boats.js",
+                            "repository": "terraform-stack-node10",
+                        },
+                        {
+                            "name": "api_node_boats_batch",
+                            "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                            "version": "~> 3.0",
+                            "deployment_name": "api-node-boats-batch",
+                            "repo_name": "api-node-boats",
+                            "create_deploy": "false",
+                            "cluster_name": "node10",
+                            "zone_id": "Z123456",
+                            "deploy_entry_point": "api-node-boats-batch.js",
+                            "repository": "terraform-stack-node10",
+                        }
+                    ]
+                ),
+                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
+                    records=[
+                        {
+                            "name": "api_node_forex",
+                            "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                            "version": "~> 3.0",
+                            "repository": "terraform-stack-node10",
+                        }
+                    ]
+                ),
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tg:TerragruntConfig)": MockResult(
+                    records=[
+                        {
+                            "name": "terragrunt",
+                            "terraform_source": "git::ssh://git@github.com/platformcontext/terraform-platform-modules.git//ecs/service?ref=v1.2.3",
+                            "file": "terragrunt.hcl",
+                            "repository": "terraform-stack-node10",
+                            "source_repository": "terraform-platform-modules",
+                        }
+                    ]
+                ),
+            }
+        )
+
+        result = trace_deployment_chain(db, "api-node-boats")
+
+        assert result["terraform_resources"] == [
+            {
+                "name": "aws_route53_record.api_node_boats",
+                "resource_type": "aws_route53_record",
+                "file": "shared/resources.tf",
+                "repository": "terraform-stack-node10",
+            },
+            {
+                "name": "aws_codedeploy_deployment_group.api_node_boats",
+                "resource_type": "aws_codedeploy_deployment_group",
+                "file": "shared/ecs.tf",
+                "repository": "terraform-stack-node10",
+            }
+        ]
+        assert result["terraform_modules"] == [
+            {
+                "name": "api_node_boats",
+                "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                "version": "~> 3.0",
+                "deployment_name": "api-node-boats",
+                "repo_name": "api-node-boats",
+                "create_deploy": "true",
+                "cluster_name": "node10",
+                "zone_id": "Z123456",
+                "deploy_entry_point": "api-node-boats.js",
+                "repository": "terraform-stack-node10",
+            },
+            {
+                "name": "api_node_boats_batch",
+                "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                "version": "~> 3.0",
+                "deployment_name": "api-node-boats-batch",
+                "repo_name": "api-node-boats",
+                "create_deploy": "false",
+                "cluster_name": "node10",
+                "zone_id": "Z123456",
+                "deploy_entry_point": "api-node-boats-batch.js",
+                "repository": "terraform-stack-node10",
+            }
+        ]
+        assert result["terragrunt_configs"] == [
+            {
+                "name": "terragrunt",
+                "terraform_source": "git::ssh://git@github.com/platformcontext/terraform-platform-modules.git//ecs/service?ref=v1.2.3",
+                "file": "terragrunt.hcl",
+                "repository": "terraform-stack-node10",
+                "source_repository": "terraform-platform-modules",
+            }
+        ]
+        assert result["provisioning_source_chains"] == [
+            {
+                "repository": "terraform-stack-node10",
+                "terraform_modules": [
+                    {
+                        "name": "api_node_boats",
+                        "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                        "version": "~> 3.0",
+                        "source_repository": None,
+                    },
+                    {
+                        "name": "api_node_boats_batch",
+                        "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                        "version": "~> 3.0",
+                        "source_repository": None,
+                    }
+                ],
+                "terragrunt_configs": [
+                    {
+                        "name": "terragrunt",
+                        "terraform_source": "git::ssh://git@github.com/platformcontext/terraform-platform-modules.git//ecs/service?ref=v1.2.3",
+                        "file": "terragrunt.hcl",
+                        "source_repository": "terraform-platform-modules",
+                    }
+                ],
+            }
+        ]
+        assert result["deployment_overview"]["network_signals"] == {
+            "terraform": [
+                {
+                    "name": "aws_route53_record.api_node_boats",
+                    "resource_type": "aws_route53_record",
+                    "repository": "terraform-stack-node10",
+                    "file": "shared/resources.tf",
+                },
+                {
+                    "name": "aws_codedeploy_deployment_group.api_node_boats",
+                    "resource_type": "aws_codedeploy_deployment_group",
+                    "repository": "terraform-stack-node10",
+                    "file": "shared/ecs.tf",
+                }
+            ]
+        }
+        assert result["deployment_overview"]["provisioning_source_chains"] == [
+            {
+                "repository": "terraform-stack-node10",
+                "terraform_modules": [
+                    {
+                        "name": "api_node_boats",
+                        "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                        "version": "~> 3.0",
+                        "source_repository": None,
+                    },
+                    {
+                        "name": "api_node_boats_batch",
+                        "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                        "version": "~> 3.0",
+                        "source_repository": None,
+                    }
+                ],
+                "terragrunt_configs": [
+                    {
+                        "name": "terragrunt",
+                        "terraform_source": "git::ssh://git@github.com/platformcontext/terraform-platform-modules.git//ecs/service?ref=v1.2.3",
+                        "file": "terragrunt.hcl",
+                        "source_repository": "terraform-platform-modules",
+                    }
+                ],
+            }
+        ]
+        assert result["deployment_overview"]["service_variants"] == [
+            {
+                "name": "api_node_boats",
+                "repository": "terraform-stack-node10",
+                "module_source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                "version": "~> 3.0",
+                "deployment_name": "api-node-boats",
+                "repo_name": "api-node-boats",
+                "create_deploy": True,
+                "cluster_name": "node10",
+                "zone_id": "Z123456",
+                "entry_point": "api-node-boats.js",
+            },
+            {
+                "name": "api_node_boats_batch",
+                "repository": "terraform-stack-node10",
+                "module_source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                "version": "~> 3.0",
+                "deployment_name": "api-node-boats-batch",
+                "repo_name": "api-node-boats",
+                "create_deploy": False,
+                "cluster_name": "node10",
+                "zone_id": "Z123456",
+                "entry_point": "api-node-boats-batch.js",
+            },
+        ]
+        assert result["deployment_overview"]["deployment_controllers"] == [
+            "codedeploy",
+            "terraform",
         ]

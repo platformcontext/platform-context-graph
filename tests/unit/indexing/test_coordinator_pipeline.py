@@ -550,7 +550,7 @@ def test_pipeline_tracks_repository_phase_transitions(tmp_path: Path) -> None:
 
 
 def test_pipeline_tracks_commit_current_file_during_batch_heartbeats(
-    tmp_path: Path
+    tmp_path: Path,
 ) -> None:
     """Long commit batches should refresh current-file progress before commit ends."""
 
@@ -721,9 +721,7 @@ def test_pipeline_progress_heartbeats_do_not_overwrite_partial_coverage(
             ),
             publish_run_repository_coverage_fn=lambda **kwargs: coverage_calls.append(
                 (
-                    tuple(
-                        str(path.resolve()) for path in kwargs["repo_paths"]
-                    ),
+                    tuple(str(path.resolve()) for path in kwargs["repo_paths"]),
                     kwargs["include_graph_counts"],
                     kwargs["include_content_counts"],
                 )
@@ -920,6 +918,123 @@ def test_finalize_repository_batch_treats_commit_incomplete_as_blocking() -> Non
     assert run_state.status == "partial_failure"
     assert run_state.finalization_status == "pending"
     assert persisted_statuses == [("partial_failure", "pending")]
+
+
+def test_finalize_repository_batch_logs_structured_deferred_event() -> None:
+    """Deferred finalization should emit a structured lifecycle log."""
+
+    repo_path = Path("/tmp/repo-a")
+    run_state = _make_run_state([repo_path])
+    run_state.repositories[str(repo_path.resolve())].status = "commit_incomplete"
+    log_records: list[dict[str, object]] = []
+
+    def capture_info(
+        message: str,
+        *,
+        event_name: str | None = None,
+        extra_keys: dict[str, object] | None = None,
+        exc_info: object = None,
+    ) -> None:
+        log_records.append(
+            {
+                "message": message,
+                "event_name": event_name,
+                "extra_keys": dict(extra_keys or {}),
+                "exc_info": exc_info,
+            }
+        )
+
+    finalize_repository_batch(
+        builder=SimpleNamespace(),
+        root_path=repo_path,
+        run_state=run_state,
+        repo_paths=[repo_path],
+        committed_repo_paths=[],
+        iter_snapshot_file_data_fn=lambda _repo_path: iter(()),
+        merged_imports_map={},
+        component="test",
+        family="index",
+        source="manual",
+        info_logger_fn=capture_info,
+        error_logger_fn=lambda *_a, **_kw: None,
+        finalize_index_batch_fn=lambda *_a, **_kw: (_ for _ in ()).throw(
+            AssertionError("finalization should not run")
+        ),
+        persist_run_state_fn=lambda _state: None,
+        delete_snapshots_fn=lambda *_a, **_kw: None,
+        telemetry=_telemetry(),
+        utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+        publish_run_repository_coverage_fn=_publish_coverage,
+        publish_runtime_progress_fn=_noop,
+    )
+
+    assert log_records[-1]["event_name"] == "index.finalization.deferred"
+    assert log_records[-1]["extra_keys"] == {
+        "run_id": "test-run",
+        "root_path": str(repo_path.resolve()),
+        "repository_count": 1,
+        "blocking_repositories": 1,
+    }
+    assert log_records[-1]["exc_info"] is None
+
+
+def test_finalize_repository_batch_logs_structured_failure_event() -> None:
+    """Finalization failures should preserve structured exception context."""
+
+    repo_path = Path("/tmp/repo-a")
+    run_state = _make_run_state([repo_path])
+    run_state.repositories[str(repo_path.resolve())].status = "completed"
+    error_records: list[dict[str, object]] = []
+
+    def capture_error(
+        message: str,
+        *,
+        event_name: str | None = None,
+        extra_keys: dict[str, object] | None = None,
+        exc_info: object = None,
+    ) -> None:
+        error_records.append(
+            {
+                "message": message,
+                "event_name": event_name,
+                "extra_keys": dict(extra_keys or {}),
+                "exc_info": exc_info,
+            }
+        )
+
+    def finalize_index_batch_fn(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    finalize_repository_batch(
+        builder=SimpleNamespace(),
+        root_path=repo_path,
+        run_state=run_state,
+        repo_paths=[repo_path],
+        committed_repo_paths=[repo_path],
+        iter_snapshot_file_data_fn=lambda _repo_path: iter(()),
+        merged_imports_map={},
+        component="test",
+        family="index",
+        source="manual",
+        info_logger_fn=lambda *_a, **_kw: None,
+        error_logger_fn=capture_error,
+        finalize_index_batch_fn=finalize_index_batch_fn,
+        persist_run_state_fn=lambda _state: None,
+        delete_snapshots_fn=lambda *_a, **_kw: None,
+        telemetry=_telemetry(),
+        utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+        publish_run_repository_coverage_fn=_publish_coverage,
+        publish_runtime_progress_fn=_noop,
+    )
+
+    assert error_records[-1]["event_name"] == "index.finalization.failed"
+    assert error_records[-1]["extra_keys"] == {
+        "run_id": "test-run",
+        "root_path": str(repo_path.resolve()),
+        "repository_count": 1,
+        "blocking_repositories": 0,
+    }
+    assert isinstance(error_records[-1]["exc_info"], RuntimeError)
 
 
 def test_finalize_repository_batch_persists_function_call_heartbeats() -> None:

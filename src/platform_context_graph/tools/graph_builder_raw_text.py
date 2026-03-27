@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 DOCKERFILE_PARSER_KEY = "__dockerfile__"
+JENKINSFILE_PARSER_KEY = "__jenkinsfile__"
 RAW_TEXT_PARSER_EXTENSIONS = frozenset(
     {".j2", ".jinja", ".jinja2", ".tpl", ".tftpl", ".conf", ".cfg", ".cnf"}
 )
@@ -55,6 +56,7 @@ def register_raw_text_parsers(parsers: dict[str, Any]) -> None:
     for extension in RAW_TEXT_PARSER_EXTENSIONS:
         parsers.setdefault(extension, raw_text_parser)
     parsers.setdefault(DOCKERFILE_PARSER_KEY, raw_text_parser)
+    parsers.setdefault(JENKINSFILE_PARSER_KEY, raw_text_parser)
 
 
 def parser_key_for_path(path: Path, parsers: Mapping[str, Any]) -> str | None:
@@ -68,6 +70,10 @@ def parser_key_for_path(path: Path, parsers: Mapping[str, Any]) -> str | None:
         name == "dockerfile" or name.startswith("dockerfile.")
     ) and DOCKERFILE_PARSER_KEY in parsers:
         return DOCKERFILE_PARSER_KEY
+    if (
+        name == "jenkinsfile" or name.startswith("jenkinsfile.")
+    ) and JENKINSFILE_PARSER_KEY in parsers:
+        return JENKINSFILE_PARSER_KEY
     return None
 
 
@@ -78,6 +84,8 @@ def raw_text_language_for_path(path: Path) -> str:
     suffixes = tuple(suffix.lower() for suffix in path.suffixes)
     if name == "dockerfile" or name.startswith("dockerfile."):
         return "dockerfile"
+    if name == "jenkinsfile" or name.startswith("jenkinsfile."):
+        return "groovy"
     if _CONFIG_EXTENSIONS.intersection(suffixes):
         if _JINJA_EXTENSIONS.intersection(suffixes) or _TEMPLATE_EXTENSIONS.intersection(
             suffixes

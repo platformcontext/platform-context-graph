@@ -106,7 +106,7 @@ def test_tree_sitter_parser_creates_distinct_parsers_per_thread(
 
 
 def test_build_parser_registry_registers_raw_text_search_parsers() -> None:
-    """Registry should include raw-text search handlers for non-code IaC files."""
+    """Registry should include non-code search handlers and Dockerfile parsing."""
 
     registry = graph_builder_parsers.build_parser_registry(lambda _key: "false")
 
@@ -114,16 +114,40 @@ def test_build_parser_registry_registers_raw_text_search_parsers() -> None:
     assert ".tpl" in registry
     assert ".conf" in registry
     assert "__dockerfile__" in registry
+    assert "__jenkinsfile__" in registry
+    assert registry["__dockerfile__"].language_name == "dockerfile"
+    assert registry["__jenkinsfile__"].language_name == "groovy"
 
 
-def test_parse_file_uses_raw_text_parser_for_dockerfile(tmp_path: Path) -> None:
-    """Direct parsing should treat Dockerfiles as searchable raw text."""
+def test_build_parser_registry_uses_tree_sitter_for_hcl() -> None:
+    """Terraform files should be registered through the tree-sitter wrapper."""
+
+    registry = graph_builder_parsers.build_parser_registry(lambda _key: "true")
+
+    assert ".tf" in registry
+    assert ".hcl" in registry
+    assert registry[".tf"].__class__.__name__ == "TreeSitterParser"
+    assert registry[".tf"].language_name == "hcl"
+
+
+def test_build_parser_registry_uses_tree_sitter_for_json() -> None:
+    """JSON config files should be registered through the tree-sitter wrapper."""
+
+    registry = graph_builder_parsers.build_parser_registry(lambda key: "true")
+
+    assert ".json" in registry
+    assert registry[".json"].__class__.__name__ == "TreeSitterParser"
+    assert registry[".json"].language_name == "json"
+
+
+def test_parse_file_uses_structured_parser_for_dockerfile(tmp_path: Path) -> None:
+    """Direct parsing should extract Dockerfile structure and keep dockerfile language."""
 
     repo_path = tmp_path / "service"
     repo_path.mkdir()
     dockerfile = repo_path / "Dockerfile"
     dockerfile.write_text(
-        "FROM python:3.12-slim\nRUN pip install -r requirements.txt\n",
+        'FROM python:3.12-slim\nENTRYPOINT ["python", "app.py"]\n',
         encoding="utf-8",
     )
     builder = SimpleNamespace(
@@ -144,7 +168,50 @@ def test_parse_file_uses_raw_text_parser_for_dockerfile(tmp_path: Path) -> None:
     assert result["path"] == str(dockerfile)
     assert result["repo_path"] == str(repo_path)
     assert result["lang"] == "dockerfile"
-    assert result["functions"] == []
+    assert result["dockerfile_stages"][0]["base_image"] == "python"
+    assert result["dockerfile_stages"][0]["entrypoint"] == '["python", "app.py"]'
+
+
+def test_parse_file_uses_structured_parser_for_jenkinsfile(tmp_path: Path) -> None:
+    """Special Jenkinsfile names should use the Groovy parser rather than raw text."""
+
+    repo_path = tmp_path / "service"
+    repo_path.mkdir()
+    jenkinsfile = repo_path / "Jenkinsfile"
+    jenkinsfile.write_text(
+        "\n".join(
+            [
+                "@Library('pipelines') _",
+                "",
+                "pipelinePM2(",
+                "  use_configd: true,",
+                "  entry_point: 'dist/api-node-myboats.js'",
+                ")",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    builder = SimpleNamespace(
+        parsers=graph_builder_parsers.build_parser_registry(lambda _key: "false")
+    )
+
+    result = graph_builder_parsers.parse_file(
+        builder,
+        repo_path,
+        jenkinsfile,
+        False,
+        get_config_value_fn=lambda _key: "false",
+        debug_log_fn=lambda *_args, **_kwargs: None,
+        error_logger_fn=lambda *_args, **_kwargs: None,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert result["path"] == str(jenkinsfile)
+    assert result["repo_path"] == str(repo_path)
+    assert result["lang"] == "groovy"
+    assert result["pipeline_calls"] == ["pipelinePM2"]
+    assert result["entry_points"] == ["dist/api-node-myboats.js"]
 
 
 def test_parse_file_uses_raw_text_parser_for_conf_j2(tmp_path: Path) -> None:

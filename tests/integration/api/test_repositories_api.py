@@ -69,6 +69,41 @@ def test_repository_routes_expose_context_and_stats_by_canonical_id() -> None:
     ]
 
 
+def test_repository_context_route_preserves_platforms_and_limitations() -> None:
+    def get_repository_context(database: object, **kwargs: object) -> dict[str, object]:
+        del database, kwargs
+        return {
+            "repository": {"id": "repository:r_ab12cd34", "name": "payments-api"},
+            "platforms": [{"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}],
+            "limitations": ["dns_unknown", "entrypoint_unknown"],
+        }
+
+    services = SimpleNamespace(
+        database=object(),
+        repositories=SimpleNamespace(
+            get_repository_context=get_repository_context,
+            get_repository_stats=lambda *_args, **_kwargs: pytest.fail(
+                "stats should not be called"
+            ),
+            get_repository_coverage=lambda *_args, **_kwargs: pytest.fail(
+                "coverage should not be called"
+            ),
+            list_repositories=lambda *_args, **_kwargs: pytest.fail(
+                "listing should not be called"
+            ),
+        ),
+    )
+
+    with _make_client(query_services=services) as client:
+        response = client.get("/api/v0/repositories/repository:r_ab12cd34/context")
+
+    assert response.status_code == 200
+    assert response.json()["platforms"] == [
+        {"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}
+    ]
+    assert response.json()["limitations"] == ["dns_unknown", "entrypoint_unknown"]
+
+
 def test_run_level_repository_coverage_route_passes_filters() -> None:
     coverage_calls: list[dict[str, object]] = []
 

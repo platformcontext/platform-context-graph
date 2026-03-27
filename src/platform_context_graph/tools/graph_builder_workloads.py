@@ -6,6 +6,10 @@ from pathlib import Path
 import re
 from typing import Any, Iterable
 
+from .graph_builder_platforms import (
+    materialize_infrastructure_platforms,
+    materialize_runtime_platform,
+)
 from .languages.runtime_dependencies import extract_runtime_service_dependencies
 
 _OVERLAY_ENVIRONMENT_RE = re.compile(r"(?:^|/)overlays/([^/]+)/")
@@ -81,7 +85,7 @@ def materialize_workloads(
     with builder.driver.session() as session:
         candidate_rows = session.run("""
             MATCH (repo:Repository)
-            OPTIONAL MATCH (repo)-[:CONTAINS*]->(:File)-[:CONTAINS]->(k:K8sResource)
+            OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(k:K8sResource)
             WHERE k.name = repo.name
             WITH repo,
                  collect(DISTINCT toLower(coalesce(k.kind, ''))) as resource_kinds,
@@ -162,7 +166,7 @@ def materialize_workloads(
             if deployment_repo_id and source_roots:
                 environment_rows = session.run(
                     """
-                    MATCH (deployment_repo:Repository {id: $deployment_repo_id})-[:CONTAINS*]->(f:File)
+                    MATCH (deployment_repo:Repository {id: $deployment_repo_id})-[:REPO_CONTAINS]->(f:File)
                     WHERE any(source_root IN $source_roots
                         WHERE trim(source_root) <> ''
                           AND f.relative_path STARTS WITH trim(source_root))
@@ -229,12 +233,22 @@ def materialize_workloads(
                         seen_deployment_sources.add(deployment_signature)
                         stats["deployment_sources"] += 1
 
+                materialize_runtime_platform(
+                    session,
+                    instance_id=instance_id,
+                    environment=environment,
+                    workload_name=repo_name,
+                    resource_kinds=row.get("resource_kinds", []),
+                )
+
             _materialize_runtime_dependencies(
                 session,
                 repo_id=repo_id,
                 repo_name=repo_name,
                 workload_id=workload_id,
             )
+
+        materialize_infrastructure_platforms(session)
 
     if stats["workloads"] > 0:
         info_logger_fn(
@@ -257,7 +271,7 @@ def _materialize_runtime_dependencies(
     """Create repo and workload dependency edges from runtime service lists."""
     file_rows = session.run(
         """
-        MATCH (repo:Repository {id: $repo_id})-[:CONTAINS*]->(f:File)
+        MATCH (repo:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)
         WHERE f.name IN [$typescript_entrypoint, $javascript_entrypoint]
         RETURN f.path as path, f.relative_path as relative_path
         ORDER BY f.relative_path
@@ -329,6 +343,4 @@ def _materialize_runtime_dependencies(
             target_workload_id=f"workload:{dependency_name}",
             workload_id=workload_id,
         )
-
-
 __all__ = ["materialize_workloads"]

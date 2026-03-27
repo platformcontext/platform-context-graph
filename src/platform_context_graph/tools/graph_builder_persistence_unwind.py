@@ -39,6 +39,8 @@ ITEM_MAPPINGS_KEYS: list[tuple[str, str]] = [
     ("terraform_outputs", "TerraformOutput"),
     ("terraform_modules", "TerraformModule"),
     ("terraform_data_sources", "TerraformDataSource"),
+    ("terraform_providers", "TerraformProvider"),
+    ("terraform_locals", "TerraformLocal"),
     ("terragrunt_configs", "TerragruntConfig"),
     ("cloudformation_resources", "CloudFormationResource"),
     ("cloudformation_parameters", "CloudFormationParameter"),
@@ -61,7 +63,7 @@ def _consume_write_result(result: Any) -> None:
 def _run_write_query(tx: Any, query: str, /, **parameters: Any) -> None:
     """Execute one write query and eagerly consume its result when supported."""
 
-    _consume_write_result(tx.run(query, parameters=parameters))
+    _consume_write_result(tx.run(query, **parameters))
 
 
 def resolve_max_entity_value_length(raw_value: str | None = None) -> int:

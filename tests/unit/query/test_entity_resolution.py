@@ -358,7 +358,7 @@ def test_resolve_entity_discovers_live_workloads_from_runtime_and_argocd_metadat
                 return FakeResult(records=[])
             if "MATCH (i:WorkloadInstance)" in query:
                 return FakeResult(records=[])
-            if "MATCH (repo:Repository)-[:CONTAINS*]->(:File)-[:CONTAINS]->(k:K8sResource)" in query:
+            if "MATCH (repo:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(k:K8sResource)" in query:
                 return FakeResult(
                     records=[
                         {

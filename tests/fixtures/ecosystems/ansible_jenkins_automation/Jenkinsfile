@@ -1,0 +1,14 @@
+pipeline {
+  agent any
+
+  stages {
+    stage('Deploy') {
+      steps {
+        script {
+          pipelineDeploy()
+          sh './scripts/deploy.sh'
+        }
+      }
+    }
+  }
+}

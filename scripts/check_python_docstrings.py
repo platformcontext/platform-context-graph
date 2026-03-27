@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-
 DEFAULT_SCAN_ROOT = Path("src")
+DEFAULT_EXEMPTIONS_FILE = Path("scripts/python_docstring_exemptions.txt")
 DEFAULT_EXEMPT_PATHS = (
     Path("src/platform_context_graph/tools/scip_pb2.py"),
     Path("src/platform_context_graph.egg-info"),
@@ -74,8 +74,21 @@ def is_exempt(path: Path, exemptions: Iterable[Path]) -> bool:
 def build_exemptions(extra_exemptions: Iterable[str]) -> tuple[Path, ...]:
     """Build the full exemption allowlist for the current invocation."""
 
+    configured_file_exemptions = _load_file_exemptions(DEFAULT_EXEMPTIONS_FILE)
     configured = tuple(Path(value) for value in extra_exemptions)
-    return DEFAULT_EXEMPT_PATHS + configured
+    return DEFAULT_EXEMPT_PATHS + configured_file_exemptions + configured
+
+
+def _load_file_exemptions(path: Path) -> tuple[Path, ...]:
+    """Load repository-relative exemptions from a newline-delimited file."""
+
+    if not path.exists():
+        return ()
+    return tuple(
+        Path(line.strip())
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
 
 
 def find_violations(
@@ -161,7 +174,9 @@ def _collect_docstring_violations(
 
             if ast.get_docstring(node):
                 return
-            qualified_name = ".".join([*self.stack, node.name]) if self.stack else node.name
+            qualified_name = (
+                ".".join([*self.stack, node.name]) if self.stack else node.name
+            )
             violations.append(
                 DocstringViolation(
                     path=relative_path,

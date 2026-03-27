@@ -40,6 +40,7 @@ nav:
     - MCP Guide: guides/mcp-guide.md
     - Neo4j Setup: guides/neo4j-setup.md
     - Shared Infra Trace: guides/shared-infra-trace.md
+    - Relationship Graph Examples: guides/relationship-graphs.md
     - Fixture Ecosystems: guides/fixture-ecosystems.md
     - Visualization: guides/visualization.md
     - Bundles: guides/bundles.md
@@ -50,6 +51,7 @@ nav:
     - MCP Cookbook: reference/mcp-cookbook.md
   - Reference:
     - Architecture: architecture.md
+    - Relationship Mapping: reference/relationship-mapping.md
     - How It Works: concepts/how-it-works.md
     - Graph Model: concepts/graph-model.md
     - Modes: concepts/modes.md

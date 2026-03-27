@@ -56,7 +56,7 @@ _Infrastructure & deployment tracing:_
 
 Open source. MIT licensed. Self-hosted. No telemetry. [30+ language parsers](docs/docs/contributing-language-support.md), first-class IaC support, extensible by design.
 
-[Why PCG →](docs/docs/why-pcg.md) · [Quickstart →](docs/docs/getting-started/quickstart.md) · [MCP Guide →](docs/docs/guides/mcp-guide.md)
+[Why PCG →](docs/docs/why-pcg.md) · [Quickstart →](docs/docs/getting-started/quickstart.md) · [MCP Guide →](docs/docs/guides/mcp-guide.md) · [Relationship Graph Examples →](docs/docs/guides/relationship-graphs.md)
 
 ## What is this
 
@@ -182,6 +182,7 @@ docker compose up --build
 - Docs site source: [docs/](docs/)
 - Quickstart: [docs/docs/getting-started/quickstart.md](docs/docs/getting-started/quickstart.md)
 - MCP Guide: [docs/docs/guides/mcp-guide.md](docs/docs/guides/mcp-guide.md)
+- Relationship Graph Examples: [docs/docs/guides/relationship-graphs.md](docs/docs/guides/relationship-graphs.md)
 - HTTP API: [docs/docs/reference/http-api.md](docs/docs/reference/http-api.md)
 - Deployment Overview: [docs/docs/deployment/overview.md](docs/docs/deployment/overview.md)
 

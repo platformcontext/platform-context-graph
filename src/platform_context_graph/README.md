@@ -11,6 +11,7 @@ Top-level packages are organized by responsibility:
 - `mcp`: MCP server, transport, tool registry, and tool handlers.
 - `observability`: OpenTelemetry bootstrap and metrics helpers.
 - `query`: read-side graph context queries.
+- `relationships`: evidence-backed repository relationship discovery and resolution.
 - `runtime`: sync and background runtime orchestration.
 - `tools`: indexer, parsers, and graph-building helpers.
 - `utils`: reusable cross-cutting helpers.

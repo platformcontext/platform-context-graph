@@ -20,18 +20,18 @@ capabilities:
     target: TerragruntConfig
   unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config
   integration_test: tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created
-- id: include-block-labels-and-paths
-  name: Include block labels and paths
+- id: include-block-labels
+  name: Include block labels
   status: supported
-  extracted_bucket: imports
+  extracted_bucket: terragrunt_configs
   required_fields:
   - name
   - line_number
-  - labels
+  - includes
   graph_surface:
     kind: property
-    target: TerragruntConfig.path
-  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_resource_with_nested_blocks
+    target: TerragruntConfig.includes
+  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config
   integration_test: tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created
 - id: locals-block
   name: Locals block
@@ -44,7 +44,7 @@ capabilities:
   graph_surface:
     kind: property
     target: TerragruntConfig.locals
-  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terraform_variables
+  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config
   integration_test: tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created
   rationale: Locals are preserved on the Terragrunt config payload, but they are not
     expanded into independently queryable graph entities.
@@ -59,7 +59,7 @@ capabilities:
   graph_surface:
     kind: property
     target: TerragruntConfig.inputs
-  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terraform_variables
+  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config
   integration_test: tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created
   rationale: Inputs are stored on the Terragrunt config node, but they are not normalized
     into separate variable-like graph nodes today.
@@ -72,7 +72,7 @@ capabilities:
   graph_surface:
     kind: property
     target: TerragruntConfig.source
-  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_resource_with_nested_blocks
+  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config
   integration_test: tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_has_terraform_source
 known_limitations:
 - Dependency blocks and their `outputs` references are not modeled as graph edges

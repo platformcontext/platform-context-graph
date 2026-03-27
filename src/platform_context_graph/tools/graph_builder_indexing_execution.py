@@ -312,9 +312,7 @@ def _supports_keyword_arguments(callback: Any, keyword_names: tuple[str, ...]) -
     except (TypeError, ValueError):
         return False
     accepted = {parameter.name for parameter in parameters}
-    if any(
-        parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters
-    ):
+    if any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters):
         return True
     return all(name in accepted for name in keyword_names)
 
@@ -327,6 +325,7 @@ def finalize_index_batch(
     merged_imports_map: dict[str, list[str]],
     info_logger_fn: Any,
     stage_progress_callback: Any | None = None,
+    run_id: str | None = None,
 ) -> dict[str, float]:
     """Create cross-file and cross-repo relationships after repo commits finish."""
 
@@ -335,9 +334,13 @@ def finalize_index_batch(
         "Creating inheritance links and function calls for "
         f"{len(committed_repo_paths)} committed repositories...",
         event_name="index.finalization.started",
-        extra_keys={"repository_count": len(committed_repo_paths)},
+        extra_keys={"repository_count": len(committed_repo_paths), "run_id": run_id},
     )
     total_start = time.monotonic()
+    committed_repo_data_iter = lambda: _iter_repository_file_data(
+        committed_repo_paths,
+        iter_snapshot_file_data_fn,
+    )
     stage_timings: dict[str, float] = {}
 
     def _notify_stage_progress(stage_name: str, **kwargs: Any) -> None:
@@ -353,16 +356,9 @@ def finalize_index_batch(
             return
         stage_progress_callback(stage_name)
 
-    def _run_inheritance_stage() -> None:
-        builder._create_all_inheritance_links(
-            _iter_repository_file_data(
-                committed_repo_paths,
-                iter_snapshot_file_data_fn,
-            ),
-            merged_imports_map,
-        )
-
     def _run_function_call_stage() -> None:
+        """Materialize function-call edges and aggregate stage-level metrics."""
+
         aggregated_metrics: dict[str, float | int] = {}
         create_all_function_calls = builder._create_all_function_calls
         for repo_path in committed_repo_paths:
@@ -393,19 +389,27 @@ def finalize_index_batch(
             )
         setattr(builder, "_last_call_relationship_metrics", aggregated_metrics)
 
-    def _run_infra_stage() -> None:
-        builder._create_all_infra_links(
-            _iter_repository_file_data(
-                committed_repo_paths,
-                iter_snapshot_file_data_fn,
-            )
-        )
-
     for stage_name, stage_fn in (
-        ("inheritance", _run_inheritance_stage),
+        (
+            "inheritance",
+            lambda: builder._create_all_inheritance_links(
+                committed_repo_data_iter(),
+                merged_imports_map,
+            ),
+        ),
         ("function_calls", _run_function_call_stage),
-        ("infra_links", _run_infra_stage),
+        (
+            "infra_links",
+            lambda: builder._create_all_infra_links(committed_repo_data_iter()),
+        ),
         ("workloads", builder._materialize_workloads),
+        (
+            "relationship_resolution",
+            lambda: builder._resolve_repository_relationships(
+                committed_repo_paths,
+                run_id=run_id,
+            ),
+        ),
     ):
         _notify_stage_progress(stage_name)
         log_memory_usage(
@@ -424,7 +428,11 @@ def finalize_index_batch(
             info_logger_fn,
             f"Finalization stage {stage_name} done in {elapsed:.1f}s",
             event_name="index.finalization.stage.completed",
-            extra_keys={"stage": stage_name, "duration_seconds": round(elapsed, 3)},
+            extra_keys={
+                "stage": stage_name,
+                "duration_seconds": round(elapsed, 3),
+                "run_id": run_id,
+            },
         )
     total_elapsed = time.monotonic() - total_start
     emit_log_call(
@@ -434,13 +442,18 @@ def finalize_index_batch(
         f"function_calls={stage_timings['function_calls']:.1f}s, "
         f"infra_links={stage_timings['infra_links']:.1f}s, "
         f"workloads={stage_timings['workloads']:.1f}s, "
+        f"relationship_resolution={stage_timings['relationship_resolution']:.1f}s, "
         f"total={total_elapsed:.1f}s",
         event_name="index.finalization.completed",
         extra_keys={
+            "run_id": run_id,
             "inheritance_seconds": round(stage_timings["inheritance"], 3),
             "function_calls_seconds": round(stage_timings["function_calls"], 3),
             "infra_links_seconds": round(stage_timings["infra_links"], 3),
             "workloads_seconds": round(stage_timings["workloads"], 3),
+            "relationship_resolution_seconds": round(
+                stage_timings["relationship_resolution"], 3
+            ),
             "total_seconds": round(total_elapsed, 3),
         },
     )
@@ -636,7 +649,9 @@ async def build_graph_from_path_async(
             )
             repo_name = repo_name_cache.get(repo_path)
             if repo_name is None:
-                repo_name_cache[repo_path] = repo_name = repository_display_name(repo_path)
+                repo_name_cache[repo_path] = repo_name = repository_display_name(
+                    repo_path
+                )
 
             if repo_name != current_repo_name:
                 if current_repo_name is not None:
@@ -716,9 +731,11 @@ async def build_graph_from_path_async(
                 "total_files": total_files,
                 "repository_count": repos_completed,
                 "duration_seconds": round(total_elapsed, 3),
-                "files_per_second": round(processed_count / total_elapsed, 3)
-                if total_elapsed > 0
-                else 0.0,
+                "files_per_second": (
+                    round(processed_count / total_elapsed, 3)
+                    if total_elapsed > 0
+                    else 0.0
+                ),
             },
         )
         emit_log_call(
@@ -732,6 +749,8 @@ async def build_graph_from_path_async(
         builder._create_all_function_calls(all_file_data, imports_map)
         builder._create_all_infra_links(all_file_data)
         builder._materialize_workloads()
+        committed_repo_paths = sorted(git_repos) if git_repos else [repo_root]
+        builder._resolve_repository_relationships(committed_repo_paths)
         link_elapsed = time.monotonic() - link_start
         emit_log_call(
             info_logger_fn,

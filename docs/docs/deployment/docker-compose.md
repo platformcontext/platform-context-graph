@@ -29,6 +29,14 @@ inspect spans. The collector also exposes Prometheus-format metrics on
 `http://localhost:9464/metrics` by default, so local OTLP metric export has a real sink instead of
 failing with `UNIMPLEMENTED`.
 
+The indexing services also honor worker-tuning controls from the environment:
+
+- `PCG_PARSE_WORKERS`
+- `PCG_INDEX_QUEUE_DEPTH`
+
+Compose passes those values through to `bootstrap-index`, `repo-sync`, and
+`platform-context-graph`, so local and containerized runs stay aligned.
+
 For a real local end-to-end run against a host directory, override the host-side source root with
 an absolute path:
 
@@ -59,6 +67,7 @@ This stack is intended for:
 - validating fixture-driven indexing flows
 - live trace inspection through the bundled Jaeger UI
 - live OTEL metric inspection through the collector Prometheus endpoint
+- exercising indexing worker controls in the same environment shape used by CI
 
 It also exercises the content-store contract:
 

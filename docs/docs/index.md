@@ -8,6 +8,7 @@ PlatformContextGraph gives AI systems and engineers a queryable map of code, dep
 [Deploy](deployment/overview.md){ .md-button }
 [HTTP API](reference/http-api.md){ .md-button }
 [MCP Guide](guides/mcp-guide.md){ .md-button }
+[Relationship Graphs](guides/relationship-graphs.md){ .md-button }
 
 ## Why PCG
 
@@ -66,6 +67,7 @@ Run PCG as a networked service with a stateless API runtime, a stateful reposito
 ### Deep dives
 
 - [Shared Infra Trace](guides/shared-infra-trace.md)
+- [Relationship Graph Examples](guides/relationship-graphs.md)
 - [Fixture Ecosystems](guides/fixture-ecosystems.md)
 - [Graph Model](concepts/graph-model.md)
 - [Architecture](architecture.md)

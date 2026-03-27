@@ -84,6 +84,7 @@ def test_graph_missing_repository_paths_marks_drifted_checkout_missing(
 
     assert missing == [repo_path.resolve()]
     assert session.calls[0][1]["repo_probes"][0]["repo_id"] == "repository:r_12345678"
+    assert "[:REPO_CONTAINS]->(f:File)" in session.calls[0][0]
 
 
 def test_graph_missing_repository_paths_marks_foreign_file_subtrees_for_recovery(
@@ -135,3 +136,4 @@ def test_graph_missing_repository_paths_marks_foreign_file_subtrees_for_recovery
 
     assert missing == [repo_path.resolve()]
     assert "has_foreign_files" in session.calls[0][0]
+    assert "[:REPO_CONTAINS]->(f:File)" in session.calls[0][0]

@@ -121,6 +121,18 @@ def canonical_repository_ref(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def graph_relationship_types(session: Any) -> set[str]:
+    """Return the available graph relationship types for the current session."""
+
+    rows = session.run("CALL db.relationshipTypes()").data()
+    relationship_types: set[str] = set()
+    for row in rows:
+        for value in row.values():
+            if isinstance(value, str) and value:
+                relationship_types.add(value)
+    return relationship_types
+
+
 def resolve_repository(session: Any, repo_id: str) -> dict[str, Any] | None:
     """Resolve one canonical repository identifier against the indexed graph.
 

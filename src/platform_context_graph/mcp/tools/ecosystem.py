@@ -125,7 +125,7 @@ ECOSYSTEM_TOOLS = {
     },
     "trace_deployment_chain": {
         "name": "trace_deployment_chain",
-        "description": "Trace the full deployment chain for a service across ArgoCD Applications and ApplicationSets, then surface the related K8s, Crossplane, and Terraform resources. Useful for incident investigation and impact analysis.",
+        "description": "Trace the full deployment chain for a service across ArgoCD Applications and ApplicationSets, then surface the related K8s, Crossplane, and Terraform resources. Start with the top-level `story` field for the concise deployment narrative, then use `deployment_overview` and the detailed fields for drill-down. Useful for incident investigation and impact analysis.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -203,7 +203,7 @@ ECOSYSTEM_TOOLS = {
     },
     "get_repo_summary": {
         "name": "get_repo_summary",
-        "description": "Get a structured summary of a repository: files, code entities, infrastructure resources, ecosystem connections, dependencies, and tier info.",
+        "description": "Get a structured summary of a repository: files, code entities, infrastructure resources, canonical platform/runtime relationships, deploy/config sources, ecosystem connections, dependencies, environments, tier info, repository coverage, and stable limitation codes. Start with the top-level `story` field for the concise repo and deployment narrative, then use `deployment_overview` and the detailed fields for drill-down. If completeness_state is not complete, report the missing graph/content coverage and any limitation codes instead of implying those files or entities do not exist.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -217,7 +217,7 @@ ECOSYSTEM_TOOLS = {
     },
     "get_repo_context": {
         "name": "get_repo_context",
-        "description": "Get complete context for a repository in a single call: recursive file counts, code entities, infrastructure resources, intra-repo relationships, ecosystem info, and a concise coverage summary. Use canonical repository IDs only.",
+        "description": "Get complete context for a repository in a single call: recursive file counts, code entities, infrastructure resources, canonical platform/runtime relationships, deployment chains, ecosystem info, and a concise coverage summary with stable limitation codes. Use canonical repository IDs only. If completeness_state is not complete, report the missing coverage instead of implying the repo lacks those files or entities.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -231,7 +231,7 @@ ECOSYSTEM_TOOLS = {
     },
     "get_repository_coverage": {
         "name": "get_repository_coverage",
-        "description": "Get durable per-run coverage and completeness data for one canonical repository identifier.",
+        "description": "Get durable per-run coverage and completeness data for one canonical repository identifier, including discovered-vs-graph and graph-vs-content gap counts.",
         "inputSchema": {
             "type": "object",
             "properties": {

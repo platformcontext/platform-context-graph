@@ -17,6 +17,7 @@ from .coverage_data import (
     get_repository_coverage_payload,
     list_repository_coverage_payload,
 )
+from .content_enrichment import enrich_repository_context
 from .context_data import build_repository_context
 from .listing import list_repositories_rows
 from .stats_data import build_repository_stats
@@ -60,7 +61,10 @@ def get_repository_context(database: Any, *, repo_id: str) -> dict[str, Any]:
 
     with trace_query("repository_context"):
         with get_db_manager(database).get_driver().session() as session:
-            return build_repository_context(session, repo_id)
+            context = build_repository_context(session, repo_id)
+        if "error" in context:
+            return context
+        return enrich_repository_context(database, context)
 
 
 def get_repository_stats(

@@ -27,6 +27,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/guides/fixture-ecosystems.md` | Fixture ecosystems | active |
 | `docs/docs/guides/mcp-guide.md` | MCP usage guide | active |
 | `docs/docs/guides/neo4j-setup.md` | Neo4j setup | active |
+| `docs/docs/guides/relationship-graphs.md` | Public relationship graph examples and capability showcase | active |
 | `docs/docs/guides/shared-infra-trace.md` | Shared infra tracing walkthrough | active |
 | `docs/docs/guides/visualization.md` | Visualization guide | active |
 | `docs/docs/license.md` | License page | active |
@@ -36,13 +37,16 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/reference/cli-system.md` | CLI system reference | active |
 | `docs/docs/reference/configuration.md` | Configuration reference | active |
 | `docs/docs/reference/http-api.md` | HTTP API reference | active |
+| `docs/docs/reference/logging.md` | Logging and telemetry reference | active |
 | `docs/docs/reference/mcp-cookbook.md` | MCP examples | active |
 | `docs/docs/reference/mcp-reference.md` | MCP reference | active |
 | `docs/docs/reference/pcgignore.md` | `.pcgignore` reference | active |
+| `docs/docs/reference/relationship-mapping.md` | Relationship mapping and typed edge semantics | active |
 | `docs/docs/reference/source-layout.md` | Source layout map | active |
 | `docs/docs/reference/troubleshooting.md` | Troubleshooting guide | active |
 | `docs/docs/roadmap.md` | Public roadmap | active |
 | `docs/docs/use-cases.md` | Use cases | active |
+| `docs/docs/why-pcg.md` | Why PlatformContextGraph exists | active |
 | `docs/docs/languages/feature-matrix.md` | Parser feature matrix | active |
 | `docs/docs/languages/python.md` | Python parser spec | active |
 | `docs/docs/languages/go.md` | Go parser spec | active |
@@ -71,6 +75,8 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/languages/crossplane.md` | Crossplane parser spec | active |
 | `docs/docs/languages/kubernetes.md` | Kubernetes parser spec | active |
 | `docs/docs/languages/cloudformation.md` | CloudFormation parser spec | active |
+| `docs/docs/languages/json.md` | JSON config parser spec | active |
+| `docs/docs/languages/groovy.md` | Groovy parser spec | active |
 
 ## Internal docs
 

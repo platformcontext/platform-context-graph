@@ -24,7 +24,7 @@ capabilities:
 - id: variable-blocks
   name: Variable blocks
   status: supported
-  extracted_bucket: variables
+  extracted_bucket: terraform_variables
   required_fields:
   - name
   - line_number
@@ -48,7 +48,7 @@ capabilities:
 - id: module-blocks
   name: Module blocks
   status: supported
-  extracted_bucket: modules
+  extracted_bucket: terraform_modules
   required_fields:
   - name
   - line_number
@@ -81,6 +81,31 @@ capabilities:
     target: terraform-block-metadata
   unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_resource_with_nested_blocks
   integration_test: tests/integration/test_iac_graph.py::TestTerraformGraph::test_terraform_resources_created
+- id: provider-blocks
+  name: Provider blocks
+  status: supported
+  extracted_bucket: terraform_providers
+  required_fields:
+  - name
+  - line_number
+  graph_surface:
+    kind: node
+    target: TerraformProvider
+  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terraform_providers
+  integration_test: tests/integration/test_iac_graph.py::TestTerraformGraph::test_terraform_providers_created
+- id: locals-blocks
+  name: Locals blocks
+  status: supported
+  extracted_bucket: terraform_locals
+  required_fields:
+  - name
+  - line_number
+  - value
+  graph_surface:
+    kind: node
+    target: TerraformLocal
+  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terraform_locals
+  integration_test: tests/integration/test_iac_graph.py::TestTerraformGraph::test_terraform_locals_created
 known_limitations:
 - '`count` and `for_each` meta-arguments are not expanded to model multiple resource
   instances'

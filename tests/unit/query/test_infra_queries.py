@@ -144,3 +144,66 @@ def test_get_infra_relationships_preserves_current_shape():
     assert result["query_type"] == "what_deploys"
     assert result["target"] == "my-api"
     assert result["count"] == 1
+
+
+def test_infra_queries_use_repo_contains_for_flat_repo_file_lookups():
+    """Infra query helpers should prefer REPO_CONTAINS for repo-to-file scans."""
+
+    recorded_queries: list[str] = []
+
+    class RecordingSession:
+        def run(self, query, **kwargs):
+            del kwargs
+            recorded_queries.append(query)
+            if "OPTIONAL MATCH (e:Ecosystem)" in query:
+                return MockResult(single_record=MockRecord({"name": None, "org": None}))
+            if "MATCH (t:Tier)" in query:
+                return MockResult(records=[])
+            if "MATCH (r:Repository)" in query:
+                return MockResult(records=[])
+            if "OPTIONAL MATCH (k:K8sResource)" in query:
+                return MockResult(
+                    single_record=MockRecord(
+                        {"k8s": 0, "argocd": 0, "xrds": 0, "terraform": 0, "helm": 0}
+                    )
+                )
+            if "OPTIONAL MATCH ()-[s:SOURCES_FROM]->()" in query:
+                return MockResult(
+                    single_record=MockRecord(
+                        {
+                            "sources_from": 0,
+                            "deploys": 0,
+                            "satisfied_by": 0,
+                            "depends_on": 0,
+                        }
+                    )
+                )
+            return MockResult(records=[])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    db = MagicMock()
+    db.get_driver.return_value.session.return_value = RecordingSession()
+
+    get_infra_relationships(
+        db,
+        target="shared-rds",
+        relationship_type="who_consumes_xrd",
+    )
+    get_infra_relationships(
+        db,
+        target="terraform-aws-vpc",
+        relationship_type="module_consumers",
+    )
+    get_ecosystem_overview(db)
+
+    assert any("[:REPO_CONTAINS]->(f:File)" in q or "[:REPO_CONTAINS]->(f)" in q for q in recorded_queries)
+    assert not any(
+        "MATCH (repo:Repository)-[:CONTAINS*]->(f:File)" in q
+        for q in recorded_queries
+    )
+    assert any("OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)" in q for q in recorded_queries)

@@ -148,7 +148,7 @@ CODEBASE_TOOLS = {
     },
     "execute_cypher_query": {
         "name": "execute_cypher_query",
-        "description": "Fallback tool to run a direct, read-only Cypher query against the code graph. Use this for complex questions not covered by other tools. The graph contains nodes representing code structures and relationships between them. **Schema Overview:**\n- **Nodes:** `Repository`, `File`, `Module`, `Class`, `Function`.\n- **Properties:** Nodes have properties like `name`, `path`, `cyclomatic_complexity` (on Function nodes), and `source`.\n- **Relationships:** `CONTAINS` (e.g., File-[:CONTAINS]->Function), `CALLS` (Function-[:CALLS]->Function or File-[:CALLS]->Function), `IMPORTS` (File-[:IMPORTS]->Module), `INHERITS` (Class-[:INHERITS]->Class).",
+        "description": "Fallback tool to run a direct, read-only Cypher query against the code graph. Use this for complex questions not covered by other tools. The graph contains nodes representing code structures and relationships between them. **Schema Overview:**\n- **Nodes:** `Repository`, `Directory`, `File`, `Module`, `Class`, `Function`.\n- **Properties:** Nodes have properties like `name`, `path`, `relative_path`, `cyclomatic_complexity` (on Function nodes), and `source`.\n- **Relationships:** `REPO_CONTAINS` for direct `Repository -> File` traversal, hierarchical `CONTAINS` for `Repository -> Directory -> File` and `File -> code/infrastructure entities`, plus `CALLS`, `IMPORTS`, and `INHERITS`.\n- **Traversal guidance:** Use `REPO_CONTAINS` when you need flat repo-to-file lookups. Use `CONTAINS*` when you want to walk the directory tree or traverse from a file to contained entities.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -354,7 +354,7 @@ CODEBASE_TOOLS = {
     },
     "get_repository_stats": {
         "name": "get_repository_stats",
-        "description": "Get graph-derived statistics about indexed repositories, including recursive files, root files/directories, total functions, top-level functions, class methods, classes, and modules. Use canonical repository IDs when scoping to one repository.",
+        "description": "Get graph-derived statistics about indexed repositories, including recursive files, root files/directories, total functions, top-level functions, class methods, classes, and modules. Use canonical repository IDs when scoping to one repository. When coverage indicates graph_partial or content_partial, report the coverage gap and do not present graph-only counts as complete repository coverage.",
         "inputSchema": {
             "type": "object",
             "properties": {

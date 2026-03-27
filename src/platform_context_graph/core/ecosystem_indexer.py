@@ -372,7 +372,7 @@ class EcosystemIndexer:
                 driver = self.graph_builder.db_manager.get_driver()
                 with driver.session() as session:
                     result = session.run(
-                        "MATCH (r:Repository)-[:CONTAINS*]->(f:File) "
+                        "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File) "
                         "WHERE r.name = $name RETURN count(f) as cnt",
                         name=repo_name,
                     ).single()

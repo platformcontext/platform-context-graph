@@ -53,7 +53,7 @@ def graph_recovery_repository_paths(repository_paths: Iterable[Path]) -> list[Pa
                        probe.repo_slug AS repo_slug,
                        graph_path AS graph_path,
                        EXISTS {
-                           MATCH (r)-[:CONTAINS*]->(f:File)
+                           MATCH (r)-[:REPO_CONTAINS]->(f:File)
                            WHERE f.path IS NOT NULL
                              AND NOT f.path STARTS WITH probe.repo_path + "/"
                        } AS has_foreign_files,
@@ -62,7 +62,7 @@ def graph_recovery_repository_paths(repository_paths: Iterable[Path]) -> list[Pa
                            WHEN graph_path IS NULL THEN true
                            WHEN graph_path <> probe.repo_path THEN true
                            WHEN EXISTS {
-                               MATCH (r)-[:CONTAINS*]->(f:File)
+                               MATCH (r)-[:REPO_CONTAINS]->(f:File)
                                WHERE f.path IS NOT NULL
                                  AND NOT f.path STARTS WITH probe.repo_path + "/"
                            } THEN true

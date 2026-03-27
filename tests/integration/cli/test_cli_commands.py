@@ -1,8 +1,15 @@
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typer.testing import CliRunner
 from unittest.mock import AsyncMock, MagicMock, patch
 from platform_context_graph.cli.main import app
+from platform_context_graph.relationships import (
+    RelationshipAssertion,
+    RelationshipCandidate,
+    ResolvedRelationship,
+    ResolutionGeneration,
+)
 
 runner = CliRunner()
 
@@ -353,6 +360,227 @@ class TestCLICommands:
         assert kwargs["timeout"] == 900
         assert kwargs["files"]["bundle"][0] == "dependency.pcg"
 
+    @patch("platform_context_graph.cli.main._initialize_services")
+    @patch("platform_context_graph.cli.commands.ecosystem.new_request_id")
+    def test_ecosystem_resolve_uses_indexed_repositories_by_default(
+        self,
+        mock_new_request_id,
+        mock_initialize_services,
+        tmp_path: Path,
+    ):
+        """`pcg ecosystem resolve` should resolve relationships for indexed repos."""
+
+        repo_a = tmp_path / "payments-api"
+        repo_b = tmp_path / "orders-api"
+        repo_a.mkdir()
+        repo_b.mkdir()
+
+        db_manager = SimpleNamespace(close_driver=MagicMock())
+        graph_builder = MagicMock()
+        graph_builder._resolve_repository_relationships.return_value = {
+            "checkouts": 2,
+            "evidence_facts": 5,
+            "candidates": 3,
+            "resolved_relationships": 2,
+        }
+        code_finder = SimpleNamespace(
+            list_indexed_repositories=lambda: [
+                {"name": "orders-api", "path": str(repo_b)},
+                {"name": "payments-api", "path": str(repo_a)},
+            ]
+        )
+        mock_new_request_id.return_value = "resolve123"
+        mock_initialize_services.return_value = (db_manager, graph_builder, code_finder)
+
+        result = runner.invoke(app, ["ecosystem", "resolve"])
+
+        assert result.exit_code == 0
+        graph_builder._resolve_repository_relationships.assert_called_once_with(
+            [repo_b.resolve(), repo_a.resolve()],
+            run_id="adhoc_resolve123",
+        )
+        assert "resolved_relationships" in result.stdout
+        db_manager.close_driver.assert_called_once()
+
+    @patch(
+        "platform_context_graph.cli.commands.ecosystem_relationships.get_relationship_store"
+    )
+    def test_ecosystem_relationships_lists_active_resolved_edges(
+        self,
+        mock_get_relationship_store,
+    ):
+        """`pcg ecosystem relationships` should render active resolved edges."""
+
+        mock_store = MagicMock()
+        mock_store.get_active_generation.return_value = ResolutionGeneration(
+            generation_id="generation_123",
+            scope="repo_dependencies",
+            run_id="run_123",
+            status="active",
+        )
+        mock_store.list_resolved_relationships.return_value = [
+            ResolvedRelationship(
+                source_repo_id="repo:payments",
+                target_repo_id="repo:orders",
+                relationship_type="DEPENDS_ON",
+                confidence=0.95,
+                evidence_count=4,
+                rationale="Workload dependency",
+                resolution_source="inferred",
+            )
+        ]
+        mock_get_relationship_store.return_value = mock_store
+
+        result = runner.invoke(app, ["ecosystem", "relationships"])
+
+        assert result.exit_code == 0
+        assert "repo:payments" in result.stdout
+        assert "generation_123" in result.stdout
+        mock_store.get_active_generation.assert_called_once_with(
+            scope="repo_dependencies"
+        )
+        mock_store.list_resolved_relationships.assert_called_once_with(
+            scope="repo_dependencies"
+        )
+
+    @patch(
+        "platform_context_graph.cli.main._initialize_services",
+        side_effect=AssertionError("graph bootstrap should not run"),
+    )
+    @patch(
+        "platform_context_graph.cli.commands.ecosystem_relationships.get_relationship_store"
+    )
+    def test_ecosystem_relationships_reads_store_without_graph_bootstrap(
+        self,
+        mock_get_relationship_store,
+        mock_initialize_services,
+    ):
+        """Store-backed review commands should not depend on graph service startup."""
+
+        mock_store = MagicMock()
+        mock_store.get_active_generation.return_value = ResolutionGeneration(
+            generation_id="generation_123",
+            scope="repo_dependencies",
+            run_id="run_123",
+            status="active",
+        )
+        mock_store.list_resolved_relationships.return_value = []
+        mock_get_relationship_store.return_value = mock_store
+
+        result = runner.invoke(app, ["ecosystem", "relationships"])
+
+        assert result.exit_code == 0
+        assert "generation_123" in result.stdout
+        mock_initialize_services.assert_not_called()
+
+    @patch(
+        "platform_context_graph.cli.commands.ecosystem_relationships.get_relationship_store"
+    )
+    def test_ecosystem_candidates_lists_active_candidates(
+        self,
+        mock_get_relationship_store,
+    ):
+        """`pcg ecosystem candidates` should list active relationship candidates."""
+
+        mock_store = MagicMock()
+        mock_store.list_relationship_candidates.return_value = [
+            RelationshipCandidate(
+                source_repo_id="repo:payments",
+                target_repo_id="repo:orders",
+                relationship_type="DEPENDS_ON",
+                confidence=0.83,
+                evidence_count=2,
+                rationale="Cross-repo workload evidence",
+            )
+        ]
+        mock_get_relationship_store.return_value = mock_store
+
+        result = runner.invoke(app, ["ecosystem", "candidates"])
+
+        assert result.exit_code == 0
+        assert "repo:payments" in result.stdout
+        assert "0.83" in result.stdout
+        mock_store.list_relationship_candidates.assert_called_once_with(
+            scope="repo_dependencies",
+            relationship_type=None,
+        )
+
+    @patch(
+        "platform_context_graph.cli.commands.ecosystem_relationships.get_relationship_store"
+    )
+    def test_ecosystem_assert_relationship_persists_assertion(
+        self,
+        mock_get_relationship_store,
+    ):
+        """`pcg ecosystem assert-relationship` should persist an explicit assertion."""
+
+        mock_store = MagicMock()
+        mock_get_relationship_store.return_value = mock_store
+
+        result = runner.invoke(
+            app,
+            [
+                "ecosystem",
+                "assert-relationship",
+                "repo:payments",
+                "repo:orders",
+                "--reason",
+                "Validated by runtime dependency",
+                "--actor",
+                "cli-user",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_store.upsert_relationship_assertion.assert_called_once_with(
+            RelationshipAssertion(
+                source_repo_id="repo:payments",
+                target_repo_id="repo:orders",
+                relationship_type="DEPENDS_ON",
+                decision="assert",
+                reason="Validated by runtime dependency",
+                actor="cli-user",
+            )
+        )
+
+    @patch(
+        "platform_context_graph.cli.commands.ecosystem_relationships.get_relationship_store"
+    )
+    def test_ecosystem_reject_relationship_persists_rejection(
+        self,
+        mock_get_relationship_store,
+    ):
+        """`pcg ecosystem reject-relationship` should persist an explicit rejection."""
+
+        mock_store = MagicMock()
+        mock_get_relationship_store.return_value = mock_store
+
+        result = runner.invoke(
+            app,
+            [
+                "ecosystem",
+                "reject-relationship",
+                "repo:payments",
+                "repo:orders",
+                "--reason",
+                "False positive",
+                "--actor",
+                "cli-user",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_store.upsert_relationship_assertion.assert_called_once_with(
+            RelationshipAssertion(
+                source_repo_id="repo:payments",
+                target_repo_id="repo:orders",
+                relationship_type="DEPENDS_ON",
+                decision="reject",
+                reason="False positive",
+                actor="cli-user",
+            )
+        )
+
 
 class TestNeo4jDatabaseNameCLI:
     """Integration tests for NEO4J_DATABASE display in CLI commands."""
@@ -375,6 +603,7 @@ class TestNeo4jDatabaseNameCLI:
             "NEO4J_PASSWORD": "password",
             "NEO4J_DATABASE": "mydb",
             "DEFAULT_DATABASE": "neo4j",
+            "PCG_LOG_FORMAT": "text",
         }
         with patch.dict(os.environ, env, clear=False):
             with patch("platform_context_graph.cli.main._load_credentials"):
@@ -398,9 +627,16 @@ class TestNeo4jDatabaseNameCLI:
             "NEO4J_PASSWORD": "password",
             "NEO4J_DATABASE": "mydb",
             "DEFAULT_DATABASE": "neo4j",
+            "PCG_LOG_FORMAT": "text",
         }
         with patch.dict(os.environ, env, clear=False):
-            with patch("platform_context_graph.cli.main.Path") as mock_path:
+            with (
+                patch("platform_context_graph.cli.main.Path") as mock_path,
+                patch(
+                    "platform_context_graph.cli.main.get_app_env_file",
+                    return_value=Path("/tmp/pcg-missing.env"),
+                ),
+            ):
                 # Prevent file system access in _load_credentials
                 mock_path.home.return_value.__truediv__ = MagicMock(
                     return_value=MagicMock(exists=MagicMock(return_value=False))
@@ -434,12 +670,19 @@ class TestNeo4jDatabaseNameCLI:
             "NEO4J_USERNAME": "neo4j",
             "NEO4J_PASSWORD": "password",
             "DEFAULT_DATABASE": "neo4j",
+            "PCG_LOG_FORMAT": "text",
         }
         # Remove NEO4J_DATABASE if it exists
         clean_env = {k: v for k, v in os.environ.items() if k != "NEO4J_DATABASE"}
         clean_env.update(env)
         with patch.dict(os.environ, clean_env, clear=True):
-            with patch("platform_context_graph.cli.main.Path") as mock_path:
+            with (
+                patch("platform_context_graph.cli.main.Path") as mock_path,
+                patch(
+                    "platform_context_graph.cli.main.get_app_env_file",
+                    return_value=Path("/tmp/pcg-missing.env"),
+                ),
+            ):
                 mock_path.home.return_value.__truediv__ = MagicMock(
                     return_value=MagicMock(exists=MagicMock(return_value=False))
                 )

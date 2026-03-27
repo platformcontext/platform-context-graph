@@ -12,6 +12,8 @@ from ...runtime.status_store import (
 
 __all__ = [
     "coverage_summary_from_row",
+    "coverage_gaps_from_row",
+    "coverage_limitations_from_row",
     "get_repository_coverage_payload",
     "list_repository_coverage_payload",
 ]
@@ -25,11 +27,44 @@ def _normalize_value(value: Any) -> Any:
     return value
 
 
+def coverage_gaps_from_row(row: dict[str, Any] | None) -> dict[str, int | str]:
+    """Return completeness and gap counters for one persisted coverage row."""
+
+    if row is None:
+        return {
+            "completeness_state": "failed",
+            "graph_gap_count": 0,
+            "content_gap_count": 0,
+        }
+    discovered_file_count = int(row.get("discovered_file_count") or 0)
+    graph_recursive_file_count = int(row.get("graph_recursive_file_count") or 0)
+    content_file_count = int(row.get("content_file_count") or 0)
+    graph_gap_count = max(discovered_file_count - graph_recursive_file_count, 0)
+    content_gap_count = max(graph_recursive_file_count - content_file_count, 0)
+    status = str(row.get("status") or "").lower()
+    finalization_status = str(row.get("finalization_status") or "").lower()
+
+    completeness_state = "complete"
+    if status == "failed" or finalization_status == "failed":
+        completeness_state = "failed"
+    elif graph_gap_count > 0:
+        completeness_state = "graph_partial"
+    elif content_gap_count > 0:
+        completeness_state = "content_partial"
+
+    return {
+        "completeness_state": completeness_state,
+        "graph_gap_count": graph_gap_count,
+        "content_gap_count": content_gap_count,
+    }
+
+
 def coverage_summary_from_row(row: dict[str, Any] | None) -> dict[str, Any] | None:
     """Project a concise repository coverage summary from one persisted row."""
 
     if row is None:
         return None
+    gaps = coverage_gaps_from_row(row)
     return {
         "run_id": row.get("run_id"),
         "index_status": row.get("status"),
@@ -49,13 +84,37 @@ def coverage_summary_from_row(row: dict[str, Any] | None) -> dict[str, Any] | No
         "classes": int(row.get("class_count") or 0),
         "last_error": _normalize_value(row.get("last_error")),
         "updated_at": _normalize_value(row.get("updated_at")),
+        "limitations": coverage_limitations_from_row(row),
+        **gaps,
     }
+
+
+def coverage_limitations_from_row(row: dict[str, Any] | None) -> list[str]:
+    """Return stable coverage limitation codes for a persisted row."""
+
+    if row is None:
+        return ["graph_partial", "content_partial"]
+
+    limitations: list[str] = []
+    gaps = coverage_gaps_from_row(row)
+    finalization_status = str(row.get("finalization_status") or "").lower()
+    if int(gaps["graph_gap_count"]) > 0 or not bool(row.get("graph_available")):
+        limitations.append("graph_partial")
+    if int(gaps["content_gap_count"]) > 0 or not bool(
+        row.get("server_content_available")
+    ):
+        limitations.append("content_partial")
+    if finalization_status not in {"", "completed", "failed"}:
+        limitations.append("finalization_incomplete")
+
+    return limitations
 
 
 def _normalize_coverage_row(row: dict[str, Any]) -> dict[str, Any]:
     """Normalize one persisted runtime coverage row into the public shape."""
 
     summary = coverage_summary_from_row(row) or {}
+    gaps = coverage_gaps_from_row(row)
     return {
         "run_id": row.get("run_id"),
         "repo_id": row.get("repo_id"),
@@ -83,6 +142,8 @@ def _normalize_coverage_row(row: dict[str, Any]) -> dict[str, Any]:
         "finalization_finished_at": _normalize_value(
             row.get("finalization_finished_at")
         ),
+        "limitations": summary.get("limitations", []),
+        **gaps,
         "summary": summary,
     }
 

@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..utils.debug_log import emit_log_call
+
 _FINALIZATION_COVERAGE_HEARTBEAT_SECONDS = 15.0
 
 
@@ -117,6 +119,7 @@ def finalize_repository_batch(
                     merged_imports_map=merged_imports_map,
                     info_logger_fn=info_logger_fn,
                     stage_progress_callback=_stage_progress_callback,
+                    run_id=run_state.run_id,
                 )
                 run_state.finalization_finished_at = utc_now_fn()
                 run_state.finalization_duration_seconds = time.perf_counter() - started
@@ -161,8 +164,17 @@ def finalize_repository_batch(
                 if finalize_span is not None:
                     finalize_span.record_exception(exc)
                 _publish_runtime_status()
-                error_logger_fn(
-                    f"Failed to finalize repository batch for {root_path.resolve()}: {exc}"
+                emit_log_call(
+                    error_logger_fn,
+                    f"Failed to finalize repository batch for {root_path.resolve()}",
+                    event_name="index.finalization.failed",
+                    extra_keys={
+                        "run_id": run_state.run_id,
+                        "root_path": str(root_path.resolve()),
+                        "repository_count": len(repo_paths),
+                        "blocking_repositories": run_state.blocking_repositories(),
+                    },
+                    exc_info=exc,
                 )
         return
 
@@ -175,5 +187,16 @@ def finalize_repository_batch(
         repo_paths=repo_paths,
         include_graph_counts=True,
         include_content_counts=True,
+    )
+    emit_log_call(
+        info_logger_fn,
+        "Repository batch finalization deferred because repositories are still blocking",
+        event_name="index.finalization.deferred",
+        extra_keys={
+            "run_id": run_state.run_id,
+            "root_path": str(root_path.resolve()),
+            "repository_count": len(repo_paths),
+            "blocking_repositories": run_state.blocking_repositories(),
+        },
     )
     _publish_runtime_status()

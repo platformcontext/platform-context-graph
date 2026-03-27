@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...runtime.status_store import get_repository_coverage as get_runtime_repository_coverage
-from .common import canonical_repository_ref, resolve_repository
-from .coverage_data import coverage_summary_from_row
-from .graph_counts import repository_graph_counts, repository_scope, repository_scope_predicate
+from ...utils.debug_log import emit_log_call, warning_logger
+from .common import canonical_repository_ref, graph_relationship_types, resolve_repository
+from .context_limitations import build_context_limitations
+from .graph_counts import (
+    repository_graph_counts,
+    repository_scope,
+    repository_scope_predicate,
+)
+from .relationship_summary import build_relationship_summary
 
 LANGUAGE_BY_EXTENSION = {
     "py": "python",
@@ -46,7 +51,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
     repo_ref = canonical_repository_ref(repo)
     file_stats = session.run(
         f"""
-        MATCH (r:Repository)-[:CONTAINS*]->(f:File)
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)
         WHERE {repository_scope_predicate()}
         RETURN f.name as file,
                split(f.name, '.')[-1] as ext
@@ -70,7 +75,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
 
     entry_points = session.run(
         f"""
-        MATCH (r:Repository)-[:CONTAINS*]->(f:File)
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)
               -[:CONTAINS]->(fn:Function)
         WHERE {repository_scope_predicate()}
           AND (fn.name IN ['main', 'handler', 'lambda_handler',
@@ -87,8 +92,8 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
     infrastructure = _fetch_infrastructure(session, repo)
     relationships = session.run(
         f"""
-        MATCH (r:Repository)-[:CONTAINS*]->(f1:File)-[:CONTAINS]->(n1)
-              -[rel]->(n2)<-[:CONTAINS]-(f2:File)<-[:CONTAINS*]-(r)
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(f1:File)-[:CONTAINS]->(n1)
+              -[rel]->(n2)<-[:CONTAINS]-(f2:File)<-[:REPO_CONTAINS]-(r)
         WHERE {repository_scope_predicate()}
           AND type(rel) IN [
             'SELECTS', 'CONFIGURES', 'PATCHES', 'ROUTES_TO',
@@ -105,31 +110,81 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         **scope,
     ).data()
     ecosystem = _fetch_ecosystem(session, repo)
-    coverage_summary = coverage_summary_from_row(
-        get_runtime_repository_coverage(repo_id=repo_ref["id"])
+    relationship_summary = build_relationship_summary(session, repo_ref)
+    coverage_summary = relationship_summary["coverage"]
+    if (
+        coverage_summary is not None
+        and coverage_summary.get("completeness_state") != "complete"
+    ):
+        emit_log_call(
+            warning_logger,
+            "Repository context assembled from partial repository coverage",
+            event_name="repository.context.partial_coverage",
+            extra_keys={
+                "repo_id": repo_ref["id"],
+                "repo_name": repo_ref["name"],
+                "run_id": coverage_summary.get("run_id"),
+                "completeness_state": coverage_summary.get("completeness_state"),
+                "discovered_file_count": coverage_summary.get("discovered_file_count"),
+                "graph_recursive_file_count": coverage_summary.get(
+                    "graph_recursive_file_count"
+                ),
+                "content_file_count": coverage_summary.get("content_file_count"),
+                "graph_gap_count": coverage_summary.get("graph_gap_count"),
+                "content_gap_count": coverage_summary.get("content_gap_count"),
+            },
+        )
+    repository_payload = {
+        **repo_ref,
+        "file_count": counts["file_count"],
+        "root_file_count": counts["root_file_count"],
+        "root_directory_count": counts["root_directory_count"],
+        "files_by_extension": ext_counts,
+        "graph_available": counts["file_count"] > 0,
+        "server_content_available": (
+            bool(coverage_summary["server_content_available"])
+            if coverage_summary is not None
+            else False
+        ),
+        "active_run_id": (
+            coverage_summary["run_id"] if coverage_summary is not None else None
+        ),
+        "index_status": (
+            coverage_summary.get("index_status")
+            if coverage_summary is not None
+            else None
+        ),
+    }
+    if coverage_summary is not None:
+        repository_payload.update(
+            {
+                "discovered_file_count": coverage_summary.get(
+                    "discovered_file_count", 0
+                ),
+                "graph_recursive_file_count": coverage_summary.get(
+                    "graph_recursive_file_count", 0
+                ),
+                "content_file_count": coverage_summary.get("content_file_count", 0),
+                "content_entity_count": coverage_summary.get(
+                    "content_entity_count", 0
+                ),
+                "completeness_state": coverage_summary.get(
+                    "completeness_state", "failed"
+                ),
+                "graph_gap_count": coverage_summary.get("graph_gap_count", 0),
+                "content_gap_count": coverage_summary.get("content_gap_count", 0),
+            }
+        )
+    limitations = build_context_limitations(
+        base_limitations=relationship_summary["limitations"],
+        coverage=coverage_summary,
+        entry_points=entry_points,
+        infrastructure=infrastructure,
+        deployment_chain=relationship_summary["deployment_chain"],
+        platforms=relationship_summary["platforms"],
     )
     return {
-        "repository": {
-            **repo_ref,
-            "file_count": counts["file_count"],
-            "root_file_count": counts["root_file_count"],
-            "root_directory_count": counts["root_directory_count"],
-            "files_by_extension": ext_counts,
-            "graph_available": counts["file_count"] > 0,
-            "server_content_available": (
-                bool(coverage_summary["server_content_available"])
-                if coverage_summary is not None
-                else False
-            ),
-            "active_run_id": (
-                coverage_summary["run_id"] if coverage_summary is not None else None
-            ),
-            "index_status": (
-                coverage_summary["index_status"]
-                if coverage_summary is not None
-                else None
-            ),
-        },
+        "repository": repository_payload,
         "code": {
             "functions": counts["total_function_count"],
             "top_level_functions": counts["top_level_function_count"],
@@ -139,6 +194,18 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
             "entry_points": entry_points,
         },
         "coverage": coverage_summary,
+        "platforms": relationship_summary["platforms"],
+        "deploys_from": relationship_summary["deploys_from"],
+        "discovers_config_in": relationship_summary["discovers_config_in"],
+        "provisioned_by": relationship_summary["provisioned_by"],
+        "provisions_dependencies_for": relationship_summary[
+            "provisions_dependencies_for"
+        ],
+        "iac_relationships": relationship_summary["iac_relationships"],
+        "deployment_chain": relationship_summary["deployment_chain"],
+        "environments": relationship_summary["environments"],
+        "summary": relationship_summary["summary"],
+        "limitations": limitations,
         "infrastructure": infrastructure,
         "relationships": relationships,
         "ecosystem": ecosystem,
@@ -178,7 +245,13 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
             """
             RETURN n.name as name,
                    n.source as source,
-                   n.version as version
+                   n.version as version,
+                   n.deployment_name as deployment_name,
+                   n.repo_name as repo_name,
+                   n.create_deploy as create_deploy,
+                   n.cluster_name as cluster_name,
+                   n.zone_id as zone_id,
+                   n.deploy_entry_point as deploy_entry_point
             """,
         ),
         "terraform_variables": (
@@ -269,7 +342,7 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
     for key, (label, projection) in label_queries.items():
         result = session.run(
             f"""
-            MATCH (r:Repository)-[:CONTAINS*]->(f:File)
+            MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)
                   -[:CONTAINS]->(n:{label})
             WHERE {repository_scope_predicate()}
             {projection}
@@ -288,6 +361,59 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
         ).data()
         if result:
             infrastructure[key] = result
+    direct_runtime_platforms = session.run(
+        f"""
+        MATCH (r:Repository)-[:RUNS_ON]->(p:Platform)
+        WHERE {repository_scope_predicate()}
+        RETURN DISTINCT p.id as id,
+               p.name as name,
+               p.kind as kind,
+               p.provider as provider,
+               p.environment as environment,
+               NULL as workload_instance_id,
+               NULL as workload_environment
+        ORDER BY p.kind, p.name
+        """,
+        **repository_scope(repo),
+    ).data()
+    runtime_platforms: list[dict[str, Any]] = []
+    if "INSTANCE_OF" in graph_relationship_types(session):
+        runtime_platforms = session.run(
+            f"""
+            MATCH (r:Repository)-[:DEFINES]->(:Workload)<-[:INSTANCE_OF]-(i:WorkloadInstance)-[:RUNS_ON]->(p:Platform)
+            WHERE {repository_scope_predicate()}
+            RETURN DISTINCT p.id as id,
+                   p.name as name,
+                   p.kind as kind,
+                   p.provider as provider,
+                   p.environment as environment,
+                   i.id as workload_instance_id,
+                   i.environment as workload_environment
+            ORDER BY p.kind, p.name
+            """,
+            **repository_scope(repo),
+        ).data()
+    merged_runtime_platforms = _dedupe_rows(
+        [*direct_runtime_platforms, *runtime_platforms]
+    )
+    if merged_runtime_platforms:
+        infrastructure["runtime_platforms"] = merged_runtime_platforms
+
+    provisioned_platforms = session.run(
+        f"""
+        MATCH (r:Repository)-[:PROVISIONS_PLATFORM]->(p:Platform)
+        WHERE {repository_scope_predicate()}
+        RETURN DISTINCT p.id as id,
+               p.name as name,
+               p.kind as kind,
+               p.provider as provider,
+               p.environment as environment
+        ORDER BY p.kind, p.name
+        """,
+        **repository_scope(repo),
+    ).data()
+    if provisioned_platforms:
+        infrastructure["provisioned_platforms"] = provisioned_platforms
     return infrastructure
 
 
@@ -346,3 +472,17 @@ def _fetch_ecosystem(session: Any, repo: dict[str, Any]) -> dict[str, Any] | Non
         "dependencies": deps["dependencies"] if deps else [],
         "dependents": dependents["dependents"] if dependents else [],
     }
+
+
+def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return rows with duplicates removed while preserving order."""
+
+    seen: set[tuple[tuple[str, str], ...]] = set()
+    deduped: list[dict[str, Any]] = []
+    for row in rows:
+        key = tuple(sorted((str(k), repr(v)) for k, v in row.items()))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    return deduped

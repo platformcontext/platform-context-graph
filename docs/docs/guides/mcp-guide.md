@@ -51,6 +51,41 @@ The assistant calls `get_service_context payment-service` and gets back: 4 downs
 | "Find complex functions" | `find_most_complex_functions` |
 | "What's dead code?" | `find_dead_code` |
 
+## Story-first responses
+
+For repository and deployment questions, PCG now returns a top-level `story` field on:
+
+- `get_repo_summary`
+- `trace_deployment_chain`
+
+Use it this way:
+
+1. start with `story`
+2. use `deployment_overview` for grouped supporting context
+3. use the detailed fields only when you need file-by-file evidence
+
+This keeps answers concise without hiding the underlying evidence.
+
+The current story order is:
+
+1. public entrypoints
+2. API surface
+3. deployment path
+4. ingress or service-port cues
+5. shared config families
+6. consumer-only repositories
+7. limitation notes
+
+`deployment_story` usually comes from explicit delivery paths. When those are missing, PCG next tries to synthesize a truthful delivery path from reusable-workflow handoff plus canonical deploy/provision/runtime context. Only after that does it fall back to controller/runtime evidence such as Terraform, CodeDeploy, runtime platforms, and service variants.
+
+There is now a controller-driven automation tier between those two extremes. For example, if a repo is deployed through Jenkins invoking Ansible, PCG can surface that as story-first context through `controller_driven_paths` even when GitHub Actions style delivery rows are absent. Consume that layer in this order:
+
+1. `story`
+2. `deployment_overview`
+3. `delivery_paths`
+4. `controller_driven_paths`
+5. detailed evidence fields
+
 ## Repository access handoff
 
 When PCG is deployed remotely, the server may not have local access to every repository. Content retrieval follows a fallback chain:
