@@ -405,30 +405,12 @@ def _build_topology_story(
         lines.append(f"API surface exposes {' and '.join(details)}.")
 
     lines.extend(deployment_story)
-
-    for row in shared_config_paths:
-        if not isinstance(row, dict):
-            continue
-        path = str(row.get("path") or "").strip()
-        repositories = [
-            str(value).strip()
-            for value in row.get("source_repositories") or []
-            if str(value).strip()
-        ]
-        if path and repositories:
-            lines.append(
-                f"Shared config paths include {path} across {', '.join(repositories)}."
-            )
-
-    consumer_names = [
-        str(row.get("repository") or "").strip()
-        for row in consumer_repositories
-        if isinstance(row, dict) and str(row.get("repository") or "").strip()
-    ]
-    if consumer_names:
-        lines.append(
-            f"Consumer-only repositories include {', '.join(consumer_names)}."
-        )
+    shared_config_story = _shared_config_story(shared_config_paths)
+    if shared_config_story:
+        lines.append(shared_config_story)
+    consumer_story = _consumer_story(consumer_repositories)
+    if consumer_story:
+        lines.append(consumer_story)
 
     return lines
 
@@ -455,3 +437,55 @@ def _build_shared_config_paths(
         for path, source_repositories in sorted(grouped.items())
         if len(source_repositories) > 1
     ]
+
+
+def _shared_config_story(rows: list[dict[str, Any]]) -> str:
+    """Return one ranked, truncated shared-config story line."""
+
+    ranked = sorted(
+        [row for row in rows if isinstance(row, dict)],
+        key=lambda row: (-len(row.get("source_repositories") or []), str(row.get("path") or "")),
+    )
+    parts = [
+        f"{str(row.get('path') or '').strip()} across {_limited_list(row.get('source_repositories') or [], 3)}"
+        for row in ranked[:2]
+        if str(row.get("path") or "").strip() and (row.get("source_repositories") or [])
+    ]
+    if not parts:
+        return ""
+    extra = len(ranked) - len(parts)
+    suffix = f"; and {extra} more" if extra > 0 else ""
+    return f"Shared config families include {'; '.join(parts)}{suffix}."
+
+
+def _consumer_story(rows: list[dict[str, Any]]) -> str:
+    """Return one ranked consumer-only story line."""
+
+    ranked = [row for row in rows if isinstance(row, dict) and str(row.get("repository") or "").strip()]
+    if not ranked:
+        return ""
+    if len(ranked) == 1:
+        row = ranked[0]
+        repo = str(row.get("repository") or "").strip()
+        kind = str((row.get("evidence_kinds") or [""])[0]).strip()
+        evidence = {
+            "hostname_reference": "hostname references",
+            "config_path_reference": "config path references",
+            "repository_reference": "repository references",
+        }.get(kind, kind.replace("_", " ").strip())
+        sample_path = str((row.get("sample_paths") or [""])[0]).strip()
+        suffix = f" in {sample_path}" if evidence and sample_path else ""
+        if evidence:
+            return f"Consumer-only repository {repo} references this service via {evidence}{suffix}."
+        return f"Consumer-only repository {repo} references this service."
+    return f"Consumer-only repositories include {_limited_list([row.get('repository') for row in ranked], 3)}."
+
+
+def _limited_list(values: list[Any], limit: int) -> str:
+    """Return an ordered, truncated comma-separated list."""
+
+    ordered = [str(value).strip() for value in values if str(value).strip()]
+    if len(ordered) <= limit:
+        return ", ".join(ordered)
+    shown = ", ".join(ordered[:limit])
+    return f"{shown}, and {len(ordered) - limit} more"
