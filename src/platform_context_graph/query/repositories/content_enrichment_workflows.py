@@ -299,12 +299,12 @@ def _extract_jenkinsfiles(repo_root: Path) -> list[dict[str, Any]]:
                 continue
             content = file_path.read_text(encoding="utf-8", errors="ignore")
             metadata = extract_jenkins_pipeline_metadata(content)
-            rows.append(
-                {
-                    "relative_path": str(file_path.relative_to(repo_root)),
-                    **metadata,
-                }
-            )
+            # Keep all Jenkins controller hints together so later enrichment can correlate them.
+            jenkins_row = {
+                "relative_path": str(file_path.relative_to(repo_root)),
+                **metadata,
+            }
+            rows.append(jenkins_row)
     return _dedupe_rows(rows)
 
 

@@ -30,6 +30,7 @@ class GroovyTreeSitterParser:
         source_bytes = path.read_bytes()
         self.parser.parse(source_bytes)
         source_text = source_bytes.decode("utf-8", "ignore")
+        pipeline_metadata = extract_jenkins_pipeline_metadata(source_text)
         result = {
             "path": str(path),
             "lang": "groovy",
@@ -41,7 +42,7 @@ class GroovyTreeSitterParser:
             "variables": [],
             "modules": [],
             "module_inclusions": [],
-            **extract_jenkins_pipeline_metadata(source_text),
+            **pipeline_metadata,
         }
         if index_source:
             result["source"] = source_text
