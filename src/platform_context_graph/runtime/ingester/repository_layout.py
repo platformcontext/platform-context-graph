@@ -36,6 +36,7 @@ def discover_filesystem_repository_ids(filesystem_root: Path) -> list[str]:
     repo_ids = [
         repo_root.relative_to(resolved_root).as_posix()
         for repo_root in _discover_repo_roots(resolved_root)
+        if repo_root != resolved_root
     ]
     return sorted(repo_ids)
 

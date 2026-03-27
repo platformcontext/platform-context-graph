@@ -115,6 +115,21 @@ def test_managed_repository_roots_ignores_nested_git_directories(
     assert roots == [repo_root.resolve()]
 
 
+def test_discover_filesystem_repository_ids_ignores_empty_source_root(
+    tmp_path: Path,
+) -> None:
+    """An empty filesystem source root should not be treated as repo ``.``."""
+
+    layout = importlib.import_module(
+        "platform_context_graph.runtime.ingester.repository_layout"
+    )
+
+    filesystem_root = tmp_path / "fixtures"
+    filesystem_root.mkdir()
+
+    assert layout.discover_filesystem_repository_ids(filesystem_root) == []
+
+
 def test_default_branch_retry_seconds_reads_env_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

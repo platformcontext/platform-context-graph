@@ -133,11 +133,19 @@ def build_deployment_overview(
     )
     if deployment_controllers:
         overview["deployment_controllers"] = deployment_controllers
+    controller_driven_story = build_controller_driven_story(
+        controller_driven_paths=list(overview.get("controller_driven_paths") or [])
+    )
     deployment_story = _build_deployment_story(overview["delivery_paths"])
-    if not deployment_story:
-        deployment_story = build_controller_driven_story(
-            controller_driven_paths=list(overview.get("controller_driven_paths") or [])
+    if (
+        controller_driven_story
+        and _should_prefer_controller_driven_story(
+            delivery_paths=overview["delivery_paths"]
         )
+    ):
+        deployment_story = controller_driven_story
+    if not deployment_story:
+        deployment_story = controller_driven_story
     if not deployment_story:
         deployment_story = build_deployment_story_fallback(
             runtime_platforms=overview["runtime_platforms"],
@@ -388,6 +396,32 @@ def _build_deployment_story(delivery_paths: list[dict[str, Any]]) -> list[str]:
             line += f" in {', '.join(environments)}"
         lines.append(line + ".")
     return lines
+
+
+def _should_prefer_controller_driven_story(
+    *, delivery_paths: list[dict[str, Any]]
+) -> bool:
+    """Return whether controller-driven story is richer than current delivery paths."""
+
+    if not delivery_paths:
+        return True
+
+    for row in delivery_paths:
+        if not isinstance(row, dict):
+            continue
+        if row.get("controller") != "jenkins":
+            return False
+        if any(row.get(key) for key in (
+            "automation_repositories",
+            "deployment_sources",
+            "config_sources",
+            "provisioning_repositories",
+            "platform_kinds",
+            "platforms",
+            "environments",
+        )):
+            return False
+    return True
 
 
 def _controller_label(value: str) -> str:

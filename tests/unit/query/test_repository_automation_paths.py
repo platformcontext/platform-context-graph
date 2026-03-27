@@ -170,3 +170,58 @@ def test_build_controller_driven_paths_resolves_ansible_entry_points_from_jenkin
             ),
         }
     ]
+
+
+def test_build_controller_driven_paths_supports_nested_jenkins_groovy_entrypoints(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "automation-repo"
+    (repo_root / "roles" / "websites_list").mkdir(parents=True)
+    (repo_root / "group_vars").mkdir()
+    (repo_root / "host_vars").mkdir()
+    (repo_root / "roles" / "websites_list" / "jenkins.groovy").write_text(
+        "// Jenkins helper script used to retrieve website inventory\n",
+        encoding="utf-8",
+    )
+    (repo_root / "deploy.yml").write_text(
+        "- hosts: mws\n  roles:\n    - portal-websites\n",
+        encoding="utf-8",
+    )
+    (repo_root / "group_vars" / "all.yml").write_text(
+        "runtime_hints:\n  - wordpress_website_fleet\n",
+        encoding="utf-8",
+    )
+    (repo_root / "host_vars" / "prod.yml").write_text(
+        "environment: prod\n",
+        encoding="utf-8",
+    )
+
+    delivery_workflows = extract_delivery_workflows(
+        repository={"local_path": str(repo_root)},
+        resolve_repository=lambda _ref: None,
+    )
+    ansible_hints = extract_ansible_automation_evidence(repo_root)
+
+    assert build_controller_driven_paths(
+        workflow_hints=delivery_workflows,
+        ansible_hints=ansible_hints,
+        platforms=[],
+        provisioned_by=["terraform-stack-mws"],
+    ) == [
+        {
+            "controller_kind": "jenkins",
+            "controller_repository": None,
+            "automation_kind": "ansible",
+            "automation_repository": None,
+            "entry_points": ["deploy.yml"],
+            "target_descriptors": ["mws", "prod"],
+            "runtime_family": "wordpress_website_fleet",
+            "supporting_repositories": ["terraform-stack-mws"],
+            "confidence": "high",
+            "explanation": (
+                "jenkins controller roles/websites_list/jenkins.groovy invokes "
+                "ansible entry points deploy.yml targeting mws, prod for "
+                "wordpress_website_fleet with support from terraform-stack-mws."
+            ),
+        }
+    ]

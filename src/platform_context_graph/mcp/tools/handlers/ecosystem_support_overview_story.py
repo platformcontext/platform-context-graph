@@ -124,7 +124,10 @@ def build_controller_driven_story(
         if not entry_points:
             continue
 
-        line = f"{controller} invokes {automation_kind} entry points {', '.join(entry_points)}"
+        line = (
+            f"{controller} invokes {automation_kind} entry points "
+            f"{_human_join(entry_points)}"
+        )
         if target_descriptors:
             line += f" targeting {_human_join(target_descriptors)}"
         if runtime_family:

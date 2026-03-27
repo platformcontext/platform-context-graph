@@ -174,3 +174,40 @@ def test_build_deployment_overview_falls_back_to_controller_driven_paths() -> No
     assert overview["topology_story"] == [
         "Jenkins invokes Ansible entry points deploy.yml targeting mws and prod for wordpress website fleets with support from terraform-stack-mws."
     ]
+
+
+def test_build_deployment_overview_prefers_richer_controller_driven_story_over_generic_jenkins_path() -> (
+    None
+):
+    """Generic Jenkins delivery summaries should yield to richer controller-driven evidence."""
+
+    overview = build_deployment_overview(
+        hostnames=[],
+        api_surface={},
+        platforms=[],
+        delivery_paths=[
+            {
+                "controller": "jenkins",
+                "automation_repositories": [],
+                "deployment_sources": [],
+                "provisioning_repositories": [],
+                "platform_kinds": [],
+                "environments": [],
+            }
+        ],
+        controller_driven_paths=[
+            {
+                "controller_kind": "jenkins",
+                "automation_kind": "ansible",
+                "entry_points": ["deploy.yml", "local.yml"],
+                "target_descriptors": ["server-dmmwebsites", "localhost"],
+                "runtime_family": "wordpress_website_fleet",
+                "supporting_repositories": [],
+                "confidence": "high",
+            }
+        ],
+    )
+
+    assert overview["deployment_story"] == [
+        "Jenkins invokes Ansible entry points deploy.yml and local.yml targeting server-dmmwebsites and localhost for wordpress website fleets."
+    ]

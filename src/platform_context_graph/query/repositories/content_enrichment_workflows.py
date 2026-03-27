@@ -292,20 +292,37 @@ def _extract_jenkinsfiles(repo_root: Path) -> list[dict[str, Any]]:
     """Extract Jenkins pipeline hints from Jenkinsfile-style files."""
 
     rows: list[dict[str, Any]] = []
+    for file_path in _iter_jenkins_entrypoint_files(repo_root):
+        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        metadata = extract_jenkins_pipeline_metadata(content)
+        # Keep all Jenkins controller hints together so later enrichment can correlate them.
+        jenkins_row = {
+            "relative_path": str(file_path.relative_to(repo_root)),
+            **metadata,
+        }
+        rows.append(jenkins_row)
+    return _dedupe_rows(rows)
+
+
+def _iter_jenkins_entrypoint_files(repo_root: Path) -> list[Path]:
+    """Return repo-local Jenkins entrypoint files, including nested Groovy helpers."""
+
+    candidates: dict[str, Path] = {}
     patterns = ("Jenkinsfile", "Jenkinsfile.*", "jenkinsfile", "jenkinsfile.*")
     for pattern in patterns:
         for file_path in sorted(repo_root.glob(pattern)):
-            if not file_path.is_file():
-                continue
-            content = file_path.read_text(encoding="utf-8", errors="ignore")
-            metadata = extract_jenkins_pipeline_metadata(content)
-            # Keep all Jenkins controller hints together so later enrichment can correlate them.
-            jenkins_row = {
-                "relative_path": str(file_path.relative_to(repo_root)),
-                **metadata,
-            }
-            rows.append(jenkins_row)
-    return _dedupe_rows(rows)
+            if file_path.is_file():
+                candidates[str(file_path.relative_to(repo_root))] = file_path
+
+    for file_path in sorted(repo_root.rglob("*.groovy")):
+        if not file_path.is_file():
+            continue
+        normalized_name = file_path.name.strip().lower()
+        if "jenkins" not in normalized_name:
+            continue
+        candidates[str(file_path.relative_to(repo_root))] = file_path
+
+    return [candidates[key] for key in sorted(candidates)]
 
 
 def _parse_reusable_workflow_ref(value: str) -> dict[str, str] | None:
