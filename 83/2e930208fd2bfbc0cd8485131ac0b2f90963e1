@@ -1,0 +1,23 @@
+docs/superpowers/specs/2026-03-27-jenkins-ansible-automation-path-design.md
+  a4e1723fe675d245 1-370
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "832e930208fd2bfbc0cd8485131ac0b2f90963e1",
+  "prompts": {
+    "a4e1723fe675d245": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2d90-8a28-7323-a8de-741eaa7ef69e",
+        "model": "unknown"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 370,
+      "total_deletions": 0,
+      "accepted_lines": 370,
+      "overriden_lines": 0
+    }
+  }
+}
