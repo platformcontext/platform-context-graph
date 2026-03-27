@@ -73,6 +73,28 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "values.yaml"
     )
     values_path.parent.mkdir(parents=True)
+    config_path = (
+        helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "config.yaml"
+    )
+    config_path.write_text(
+        "\n".join(
+            [
+                "addon: api-node-boats",
+                "environment: bg-qa",
+                "git:",
+                "  repoURL: https://github.com/boatsgroup/helm-charts",
+                "  overlayPath: argocd/api-node-boats/overlays/bg-qa",
+                "helm:",
+                "  repoURL: boatsgroup.pe.jfrog.io",
+                "  chart: bg-helm/api-node-template",
+                '  version: "0.2.1"',
+                "  namespace: api-node",
+                "  releaseName: api-node-boats",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     values_path.write_text(
         "\n".join(
             [
@@ -384,6 +406,18 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         },
     ]
     assert result["deployment_artifacts"] == {
+        "charts": [
+            {
+                "repo_url": "boatsgroup.pe.jfrog.io",
+                "chart": "bg-helm/api-node-template",
+                "version": "0.2.1",
+                "release_name": "api-node-boats",
+                "namespace": "api-node",
+                "source_repo": "helm-charts",
+                "relative_path": "argocd/api-node-boats/overlays/bg-qa/config.yaml",
+                "environment": "bg-qa",
+            }
+        ],
         "images": [
             {
                 "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",

@@ -21,6 +21,7 @@ def extract_related_deployment_artifacts(
 ) -> dict[str, list[dict[str, Any]]]:
     """Extract deployment artifacts from related values-style config files."""
 
+    charts: list[dict[str, Any]] = []
     images: list[dict[str, Any]] = []
     service_ports: list[dict[str, Any]] = []
     gateways: list[dict[str, Any]] = []
@@ -40,6 +41,24 @@ def extract_related_deployment_artifacts(
             repo_root = Path(local_path)
             source_repo_name = str(resolved_repo.get("name") or "")
             for source_path in split_csv(row.get("source_paths")):
+                direct_path = repo_root / source_path
+                if direct_path.is_file():
+                    parsed_direct = _load_yaml_file(direct_path)
+                    if parsed_direct is not None:
+                        relative_direct_path = str(
+                            direct_path.resolve().relative_to(repo_root.resolve())
+                        )
+                        direct_environment = infer_environment_from_path(
+                            relative_direct_path
+                        )
+                        charts.extend(
+                            _extract_chart_rows(
+                                parsed_direct,
+                                source_repo_name=source_repo_name,
+                                relative_path=relative_direct_path,
+                                environment=direct_environment,
+                            )
+                        )
                 for candidate_pattern in values_path_patterns(source_path):
                     for file_path in sorted(glob(str(repo_root / candidate_pattern))):
                         relative_path = str(
@@ -75,6 +94,7 @@ def extract_related_deployment_artifacts(
                         )
 
     return {
+        "charts": _dedupe_rows(charts),
         "images": _dedupe_rows(images),
         "service_ports": _dedupe_rows(service_ports),
         "gateways": _dedupe_rows(gateways),
@@ -111,6 +131,36 @@ def _extract_image_rows(
         {
             "repository": repository.strip(),
             "tag": str(tag).strip() if tag is not None else "",
+            "source_repo": source_repo_name,
+            "relative_path": relative_path,
+            "environment": environment,
+        }
+    ]
+
+
+def _extract_chart_rows(
+    parsed: dict[str, Any],
+    *,
+    source_repo_name: str,
+    relative_path: str,
+    environment: str | None,
+) -> list[dict[str, Any]]:
+    """Extract Helm chart source rows from one config-style document."""
+
+    helm = parsed.get("helm")
+    if not isinstance(helm, dict):
+        return []
+    chart = helm.get("chart")
+    repo_url = helm.get("repoURL")
+    if not isinstance(chart, str) or not chart.strip():
+        return []
+    return [
+        {
+            "repo_url": str(repo_url).strip() if repo_url is not None else "",
+            "chart": chart.strip(),
+            "version": str(helm.get("version") or "").strip(),
+            "release_name": str(helm.get("releaseName") or "").strip(),
+            "namespace": str(helm.get("namespace") or "").strip(),
             "source_repo": source_repo_name,
             "relative_path": relative_path,
             "environment": environment,

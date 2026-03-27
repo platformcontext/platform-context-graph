@@ -64,6 +64,7 @@ def build_deployment_overview(
         overview["service_variants"] = service_variants
     if deployment_artifacts:
         compact_artifacts = {
+            "charts": list(deployment_artifacts.get("charts") or []),
             "images": list(deployment_artifacts.get("images") or []),
             "service_ports": list(deployment_artifacts.get("service_ports") or []),
             "gateways": list(deployment_artifacts.get("gateways") or []),

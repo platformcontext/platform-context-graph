@@ -458,6 +458,18 @@ class TestRepoSummary:
                     }
                 ],
                 "deployment_artifacts": {
+                    "charts": [
+                        {
+                            "repo_url": "boatsgroup.pe.jfrog.io",
+                            "chart": "bg-helm/api-node-template",
+                            "version": "0.2.1",
+                            "release_name": "api-node-boats",
+                            "namespace": "api-node",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/config.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
                     "images": [
                         {
                             "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
@@ -551,6 +563,18 @@ class TestRepoSummary:
                 }
             ],
             "deployment_artifacts": {
+                "charts": [
+                    {
+                        "repo_url": "boatsgroup.pe.jfrog.io",
+                        "chart": "bg-helm/api-node-template",
+                        "version": "0.2.1",
+                        "release_name": "api-node-boats",
+                        "namespace": "api-node",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/config.yaml",
+                        "environment": "bg-qa",
+                    }
+                ],
                 "images": [
                     {
                         "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
