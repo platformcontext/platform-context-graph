@@ -83,6 +83,28 @@ _TREE_SITTER_PARSER_EXTENSIONS: tuple[tuple[str, str], ...] = (
     (".exs", "elixir"),
     (".groovy", "groovy"),
 )
+_PRE_SCAN_HANDLER_GROUPS: tuple[tuple[tuple[str, ...], tuple[str, str]], ...] = (
+    ((".py", ".pyw", ".ipynb"), (".languages.python", "pre_scan_python")),
+    (
+        (".js", ".jsx", ".mjs", ".cjs"),
+        (".languages.javascript", "pre_scan_javascript"),
+    ),
+    ((".go",), (".languages.go", "pre_scan_go")),
+    ((".ts", ".cts", ".mts"), (".languages.typescript", "pre_scan_typescript")),
+    ((".tsx",), (".languages.typescriptjsx", "pre_scan_typescript")),
+    ((".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh"), (".languages.cpp", "pre_scan_cpp")),
+    ((".rs",), (".languages.rust", "pre_scan_rust")),
+    ((".c",), (".languages.c", "pre_scan_c")),
+    ((".java",), (".languages.java", "pre_scan_java")),
+    ((".rb",), (".languages.ruby", "pre_scan_ruby")),
+    ((".cs", ".csx"), (".languages.csharp", "pre_scan_csharp")),
+    ((".kt",), (".languages.kotlin", "pre_scan_kotlin")),
+    ((".scala", ".sc"), (".languages.scala", "pre_scan_scala")),
+    ((".swift",), (".languages.swift", "pre_scan_swift")),
+    ((".dart",), (".languages.dart", "pre_scan_dart")),
+    ((".pl", ".pm"), (".languages.perl", "pre_scan_perl")),
+    ((".ex", ".exs"), (".languages.elixir", "pre_scan_elixir")),
+)
 
 
 def _load_attribute(module_name: str, attribute_name: str) -> Any:
@@ -256,207 +278,19 @@ def pre_scan_for_imports(builder: Any, files: list[Path]) -> dict[str, Any]:
 
     for file in files:
         if file.suffix in builder.parsers:
-            lang_ext = file.suffix
-            if lang_ext not in files_by_lang:
-                files_by_lang[lang_ext] = []
-            files_by_lang[lang_ext].append(file)
+            files_by_lang.setdefault(file.suffix, []).append(file)
 
-    if ".py" in files_by_lang:
-        from .languages import python as python_lang_module
-
-        imports_map.update(
-            python_lang_module.pre_scan_python(
-                files_by_lang[".py"], builder.parsers[".py"]
+    for extensions, parser_spec in _PRE_SCAN_HANDLER_GROUPS:
+        pre_scan = None
+        for extension in extensions:
+            files_for_extension = files_by_lang.get(extension)
+            if not files_for_extension:
+                continue
+            if pre_scan is None:
+                pre_scan = _load_attribute(*parser_spec)
+            imports_map.update(
+                pre_scan(files_for_extension, builder.parsers[extension])
             )
-        )
-    if ".ipynb" in files_by_lang:
-        from .languages import python as python_lang_module
-
-        imports_map.update(
-            python_lang_module.pre_scan_python(
-                files_by_lang[".ipynb"], builder.parsers[".ipynb"]
-            )
-        )
-    if ".js" in files_by_lang:
-        from .languages import javascript as js_lang_module
-
-        imports_map.update(
-            js_lang_module.pre_scan_javascript(
-                files_by_lang[".js"], builder.parsers[".js"]
-            )
-        )
-    if ".jsx" in files_by_lang:
-        from .languages import javascript as js_lang_module
-
-        imports_map.update(
-            js_lang_module.pre_scan_javascript(
-                files_by_lang[".jsx"], builder.parsers[".jsx"]
-            )
-        )
-    if ".mjs" in files_by_lang:
-        from .languages import javascript as js_lang_module
-
-        imports_map.update(
-            js_lang_module.pre_scan_javascript(
-                files_by_lang[".mjs"], builder.parsers[".mjs"]
-            )
-        )
-    if ".cjs" in files_by_lang:
-        from .languages import javascript as js_lang_module
-
-        imports_map.update(
-            js_lang_module.pre_scan_javascript(
-                files_by_lang[".cjs"], builder.parsers[".cjs"]
-            )
-        )
-    if ".go" in files_by_lang:
-        from .languages import go as go_lang_module
-
-        imports_map.update(
-            go_lang_module.pre_scan_go(files_by_lang[".go"], builder.parsers[".go"])
-        )
-    if ".ts" in files_by_lang:
-        from .languages import typescript as ts_lang_module
-
-        imports_map.update(
-            ts_lang_module.pre_scan_typescript(
-                files_by_lang[".ts"], builder.parsers[".ts"]
-            )
-        )
-    if ".tsx" in files_by_lang:
-        from .languages import typescriptjsx as tsx_lang_module
-
-        imports_map.update(
-            tsx_lang_module.pre_scan_typescript(
-                files_by_lang[".tsx"], builder.parsers[".tsx"]
-            )
-        )
-    if ".cpp" in files_by_lang:
-        from .languages import cpp as cpp_lang_module
-
-        imports_map.update(
-            cpp_lang_module.pre_scan_cpp(files_by_lang[".cpp"], builder.parsers[".cpp"])
-        )
-    if ".h" in files_by_lang:
-        from .languages import cpp as cpp_lang_module
-
-        imports_map.update(
-            cpp_lang_module.pre_scan_cpp(files_by_lang[".h"], builder.parsers[".h"])
-        )
-    if ".hpp" in files_by_lang:
-        from .languages import cpp as cpp_lang_module
-
-        imports_map.update(
-            cpp_lang_module.pre_scan_cpp(files_by_lang[".hpp"], builder.parsers[".hpp"])
-        )
-    if ".hh" in files_by_lang:
-        from .languages import cpp as cpp_lang_module
-
-        imports_map.update(
-            cpp_lang_module.pre_scan_cpp(files_by_lang[".hh"], builder.parsers[".hh"])
-        )
-    if ".rs" in files_by_lang:
-        from .languages import rust as rust_lang_module
-
-        imports_map.update(
-            rust_lang_module.pre_scan_rust(files_by_lang[".rs"], builder.parsers[".rs"])
-        )
-    if ".c" in files_by_lang:
-        from .languages import c as c_lang_module
-
-        imports_map.update(
-            c_lang_module.pre_scan_c(files_by_lang[".c"], builder.parsers[".c"])
-        )
-    if ".java" in files_by_lang:
-        from .languages import java as java_lang_module
-
-        imports_map.update(
-            java_lang_module.pre_scan_java(
-                files_by_lang[".java"], builder.parsers[".java"]
-            )
-        )
-    if ".rb" in files_by_lang:
-        from .languages import ruby as ruby_lang_module
-
-        imports_map.update(
-            ruby_lang_module.pre_scan_ruby(files_by_lang[".rb"], builder.parsers[".rb"])
-        )
-    if ".cs" in files_by_lang:
-        from .languages import csharp as csharp_lang_module
-
-        imports_map.update(
-            csharp_lang_module.pre_scan_csharp(
-                files_by_lang[".cs"], builder.parsers[".cs"]
-            )
-        )
-    if ".kt" in files_by_lang:
-        from .languages import kotlin as kotlin_lang_module
-
-        imports_map.update(
-            kotlin_lang_module.pre_scan_kotlin(
-                files_by_lang[".kt"], builder.parsers[".kt"]
-            )
-        )
-    if ".scala" in files_by_lang:
-        from .languages import scala as scala_lang_module
-
-        imports_map.update(
-            scala_lang_module.pre_scan_scala(
-                files_by_lang[".scala"], builder.parsers[".scala"]
-            )
-        )
-    if ".sc" in files_by_lang:
-        from .languages import scala as scala_lang_module
-
-        imports_map.update(
-            scala_lang_module.pre_scan_scala(
-                files_by_lang[".sc"], builder.parsers[".sc"]
-            )
-        )
-    if ".swift" in files_by_lang:
-        from .languages import swift as swift_lang_module
-
-        imports_map.update(
-            swift_lang_module.pre_scan_swift(
-                files_by_lang[".swift"], builder.parsers[".swift"]
-            )
-        )
-    if ".dart" in files_by_lang:
-        from .languages import dart as dart_lang_module
-
-        imports_map.update(
-            dart_lang_module.pre_scan_dart(
-                files_by_lang[".dart"], builder.parsers[".dart"]
-            )
-        )
-    if ".pl" in files_by_lang:
-        from .languages import perl as perl_lang_module
-
-        imports_map.update(
-            perl_lang_module.pre_scan_perl(files_by_lang[".pl"], builder.parsers[".pl"])
-        )
-    if ".pm" in files_by_lang:
-        from .languages import perl as perl_lang_module
-
-        imports_map.update(
-            perl_lang_module.pre_scan_perl(files_by_lang[".pm"], builder.parsers[".pm"])
-        )
-    if ".ex" in files_by_lang:
-        from .languages import elixir as elixir_lang_module
-
-        imports_map.update(
-            elixir_lang_module.pre_scan_elixir(
-                files_by_lang[".ex"], builder.parsers[".ex"]
-            )
-        )
-    if ".exs" in files_by_lang:
-        from .languages import elixir as elixir_lang_module
-
-        imports_map.update(
-            elixir_lang_module.pre_scan_elixir(
-                files_by_lang[".exs"], builder.parsers[".exs"]
-            )
-        )
 
     return imports_map
 
