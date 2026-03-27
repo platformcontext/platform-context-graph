@@ -52,14 +52,12 @@ Do not correlate repos while indexing is still in flight. Resolve only after the
 
 Do not flatten every mapping to `DEPENDS_ON`.
 
-Current repo-to-repo types:
+Current canonical relationship types:
 
 - `DEPENDS_ON`
 - `DISCOVERS_CONFIG_IN`
 - `DEPLOYS_FROM`
 - `PROVISIONS_DEPENDENCY_FOR`
-
-Preferred graph-side runtime types:
 
 - `PROVISIONS_PLATFORM`
 - `RUNS_ON`
@@ -130,13 +128,14 @@ Use this quick rule of thumb when adding support for more tools:
 
 ## Platform Modeling In This Slice
 
-The Postgres relationship resolver is still repo-to-repo. Platform/runtime semantics are materialized on the graph/workload side, so the repo mapping layer does not need to widen its canonical schema yet.
+The Postgres relationship resolver is now mixed-entity. Canonical rows can point at repository ids or platform entity ids through `source_entity_id` and `target_entity_id`, while still carrying repository ids when those are known.
 
 That means:
 
-- repo-to-repo canonical truth still lives in the relationship tables
-- `Platform` stays graph-internal for now
-- ECS and EKS runtime/platform semantics are visible in Neo4j without widening the Postgres relationship schema yet
+- repository and platform relationships both resolve canonically before projection
+- `PROVISIONS_PLATFORM` and `RUNS_ON` are not query-only hints anymore
+- compatibility `DEPENDS_ON` edges can be derived from typed platform chains
+- query-layer repository summaries still add read-side context like deployment artifacts, consumer-only repositories, and shared-config-path summaries on top of the canonical relationships
 
 ## Observability Requirements
 

@@ -46,14 +46,12 @@ Each evidence fact stores the relationship type, confidence, rationale, and deta
 
 The resolver deduplicates evidence, applies assertions and rejections, and chooses the most truthful relationship type available. This is where precedence matters.
 
-Canonical repo-to-repo relationship types today are:
+Canonical relationship types today are:
 
 - `DEPENDS_ON`
 - `DISCOVERS_CONFIG_IN`
 - `DEPLOYS_FROM`
 - `PROVISIONS_DEPENDENCY_FOR`
-
-Graph-side runtime semantics are modeled separately:
 
 - `PROVISIONS_PLATFORM`
 - `RUNS_ON`
@@ -69,6 +67,8 @@ The current derived summaries include:
 - `deployment_artifacts`
 - `delivery_workflows`
 - `delivery_paths`
+- `consumer_repositories`
+- `shared_config_paths`
 - hostnames
 - API surface hints
 
@@ -128,9 +128,9 @@ The current mapping and enrichment flow understands these families:
 | ArgoCD | ApplicationSet discovery targets, deploy-source repo URLs, destination clusters | `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, and `RUNS_ON` |
 | Helm | chart metadata, values files, chart dependency references | `DEPLOYS_FROM` |
 | Kustomize | `resources`, Helm blocks, image references, overlays | `DEPLOYS_FROM` |
-| Platform / runtime context | workload and platform modeling on the graph side | `PROVISIONS_PLATFORM` and `RUNS_ON` |
+| Platform / runtime context | workload and platform modeling resolved through mixed entity ids | `PROVISIONS_PLATFORM` and `RUNS_ON` |
 
-The important constraint is not the tool name itself. The important constraint is whether the tool gives you a truthful, explainable source of repo-to-repo meaning.
+The important constraint is not the tool name itself. The important constraint is whether the tool gives you a truthful, explainable source of repository or platform meaning.
 
 ## Deployment Artifacts
 
@@ -144,6 +144,8 @@ Examples include:
 - image repositories and tags
 - service ports and gateway hints
 - Kustomize resources and patches
+- shared config paths across multiple deployment sources
+- consumer-only repositories that call or reference the service without deploying it
 - workflow refs that help explain the delivery path
 
 Use deployment artifacts to enrich answers and summaries. Do not treat them as a replacement for the underlying relationship edge.
