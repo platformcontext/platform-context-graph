@@ -16,6 +16,7 @@ _KUBERNETES_PLATFORM_KINDS = frozenset({"eks", "kubernetes"})
 def summarize_delivery_paths(
     *,
     delivery_workflows: dict[str, Any],
+    controller_driven_paths: list[dict[str, Any]],
     platforms: list[dict[str, Any]],
     deploys_from: list[dict[str, Any]],
     discovers_config_in: list[dict[str, Any]],
@@ -133,6 +134,7 @@ def summarize_delivery_paths(
         paths.append(
             _build_jenkins_delivery_path(
                 jenkins_rows=jenkins_rows,
+                controller_driven_paths=controller_driven_paths,
                 platforms=_filter_platforms(
                     platforms, exclude_kinds=_KUBERNETES_PLATFORM_KINDS
                 ),
@@ -203,6 +205,7 @@ def _build_delivery_path(
 def _build_jenkins_delivery_path(
     *,
     jenkins_rows: list[dict[str, Any]],
+    controller_driven_paths: list[dict[str, Any]],
     platforms: list[dict[str, Any]],
     provisioning_repositories: list[str],
 ) -> dict[str, Any]:
@@ -217,6 +220,14 @@ def _build_jenkins_delivery_path(
     environments = _ordered_unique(
         str(row.get("environment") or "").strip() for row in platforms
     )
+    controller_supporting_repositories = _ordered_unique(
+        repository
+        for row in controller_driven_paths
+        if isinstance(row, dict) and str(row.get("controller_kind") or "") == "jenkins"
+        for repository in row.get("supporting_repositories", [])
+    )
+    if controller_supporting_repositories:
+        provisioning_repositories = controller_supporting_repositories
     return {
         "path_kind": "direct",
         "controller": "jenkins",

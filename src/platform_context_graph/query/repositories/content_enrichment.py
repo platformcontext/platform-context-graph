@@ -17,6 +17,8 @@ from .content_enrichment_deployment_artifacts import (
     extract_related_deployment_artifacts,
 )
 from .content_enrichment_consumers import extract_consumer_repositories
+from .content_enrichment_ansible import extract_ansible_automation_evidence
+from .content_enrichment_automation_paths import build_controller_driven_paths
 from .content_enrichment_delivery_paths import summarize_delivery_paths
 from .content_enrichment_openapi import dedupe_endpoint_rows, extract_openapi_endpoints
 from .content_enrichment_support import (
@@ -112,10 +114,25 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
         repository=repository,
         resolve_repository=_resolve_repo,
     )
+    repo_root = _repo_root(repository)
+    ansible_hints = (
+        extract_ansible_automation_evidence(repo_root) if repo_root is not None else {}
+    )
     if delivery_workflows:
         context["delivery_workflows"] = delivery_workflows
+    if ansible_hints:
+        controller_driven_paths = build_controller_driven_paths(
+            workflow_hints=delivery_workflows,
+            ansible_hints=ansible_hints,
+            platforms=list(context.get("platforms") or []),
+            provisioned_by=list(context.get("provisioned_by") or []),
+        )
+        if controller_driven_paths:
+            context["controller_driven_paths"] = controller_driven_paths
+    if delivery_workflows:
         delivery_paths = summarize_delivery_paths(
             delivery_workflows=delivery_workflows,
+            controller_driven_paths=list(context.get("controller_driven_paths") or []),
             platforms=list(context.get("platforms") or []),
             deploys_from=list(context.get("deploys_from") or []),
             discovers_config_in=list(context.get("discovers_config_in") or []),
@@ -124,6 +141,18 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
         if delivery_paths:
             context["delivery_paths"] = delivery_paths
     return context
+
+
+def _repo_root(repository: dict[str, Any]) -> Path | None:
+    """Return the local repository root when it exists on disk."""
+
+    raw_path = repository.get("local_path") or repository.get("path")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return None
+    repo_root = Path(raw_path)
+    if not repo_root.exists() or not repo_root.is_dir():
+        return None
+    return repo_root
 
 
 def _extract_api_surface(database: Any, *, repo_id: str) -> dict[str, Any]:

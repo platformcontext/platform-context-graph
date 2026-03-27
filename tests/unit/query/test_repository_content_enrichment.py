@@ -725,6 +725,8 @@ def test_enrich_repository_context_extracts_jenkins_pipeline_hints(
             "relative_path": "Jenkinsfile",
             "shared_libraries": ["pipelines"],
             "pipeline_calls": ["pipelinePM2"],
+            "shell_commands": ["echo migrate"],
+            "ansible_playbook_hints": [],
             "entry_points": ["dist/api-node-whisper.js"],
             "use_configd": True,
             "has_pre_deploy": True,
@@ -838,4 +840,96 @@ def test_enrich_repository_context_extracts_nested_workflow_command_metadata(
             "delivery_mode": "eks_gitops_rollback",
             "automation_repository": "boatsgroup/core-engineering-automation",
         },
+    ]
+
+
+def test_enrich_repository_context_adds_controller_driven_paths(
+    monkeypatch,
+    fixture_repo: Path,
+) -> None:
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
+        lambda _database, *, repo_id, relative_path: {
+            "available": False,
+            "content": None,
+        },
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.content_queries.search_file_content",
+        lambda _database, **_kwargs: {"matches": []},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.resolve_repository",
+        lambda _session, candidate: None,
+    )
+
+    result = enrich_repository_context(
+        _DummyDB(),
+        {
+            "repository": {
+                "id": "repository:r_ansible_jenkins_automation",
+                "name": "ansible-jenkins-automation",
+                "path": str(fixture_repo),
+                "local_path": str(fixture_repo),
+            },
+            "platforms": [
+                {
+                    "id": "platform:vmware:none:mws:prod:none",
+                    "kind": "vm",
+                    "environment": "prod",
+                }
+            ],
+            "provisioned_by": [{"name": "terraform-stack-mws"}],
+        },
+    )
+
+    assert result["delivery_workflows"]["jenkins"] == [
+        {
+            "relative_path": "Jenkinsfile",
+            "shared_libraries": [],
+            "pipeline_calls": ["pipelineDeploy"],
+            "shell_commands": ["./scripts/deploy.sh"],
+            "ansible_playbook_hints": [],
+            "entry_points": [],
+            "use_configd": None,
+            "has_pre_deploy": False,
+        }
+    ]
+    assert result["controller_driven_paths"] == [
+        {
+            "controller_kind": "jenkins",
+            "controller_repository": None,
+            "automation_kind": "ansible",
+            "automation_repository": None,
+            "entry_points": ["deploy.yml"],
+            "target_descriptors": ["mws", "prod"],
+            "runtime_family": "wordpress_website_fleet",
+            "supporting_repositories": ["terraform-stack-mws"],
+            "confidence": "high",
+            "explanation": (
+                "jenkins controller Jenkinsfile invokes ansible entry points "
+                "deploy.yml targeting mws, prod for wordpress_website_fleet "
+                "with support from terraform-stack-mws."
+            ),
+        }
+    ]
+    assert result["delivery_paths"] == [
+        {
+            "path_kind": "direct",
+            "controller": "jenkins",
+            "delivery_mode": "jenkins_pipeline",
+            "commands": [],
+            "supporting_workflows": ["Jenkinsfile"],
+            "automation_repositories": [],
+            "platform_kinds": ["vm"],
+            "platforms": ["platform:vmware:none:mws:prod:none"],
+            "deployment_sources": [],
+            "config_sources": [],
+            "provisioning_repositories": ["terraform-stack-mws"],
+            "environments": ["prod"],
+            "summary": (
+                "Jenkins drives a direct deployment path through "
+                "terraform-stack-mws onto VM platforms."
+            ),
+        }
     ]
