@@ -1,0 +1,41 @@
+src/platform_context_graph/query/repositories/context_data.py
+  6882d3d2eec12f97 248-254
+src/platform_context_graph/mcp/tools/handlers/ecosystem_support_overview.py
+  6882d3d2eec12f97 180,188-193,196-206,210-228,232-244
+tests/unit/mcp/test_cypher_schema_docs.py
+  6882d3d2eec12f97 24-34
+docs/docs/reference/relationship-mapping.md
+  6882d3d2eec12f97 143-177
+tests/unit/parsers/test_hcl_terraform_parser.py
+  6882d3d2eec12f97 97-135
+src/platform_context_graph/mcp/tools/handlers/ecosystem_support.py
+  6882d3d2eec12f97 353-358,394-399
+src/platform_context_graph/tools/languages/hcl_terraform_support.py
+  6882d3d2eec12f97 158-162,168-173,370-387
+src/platform_context_graph/prompts.py
+  6882d3d2eec12f97 131
+tests/unit/handlers/test_repo_context.py
+  6882d3d2eec12f97 1459-1464,1471-1476,1526-1531,1538-1543,1632-1637,1644-1649
+src/platform_context_graph/relationships/README.md
+  6882d3d2eec12f97 95-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "87662e8ace507a88da7b2c74c858ae15559500a4",
+  "prompts": {
+    "6882d3d2eec12f97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2691-3500-7b53-9c25-c8cceb54b51a",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 248,
+      "total_deletions": 12,
+      "accepted_lines": 248,
+      "overriden_lines": 0
+    }
+  }
+}
