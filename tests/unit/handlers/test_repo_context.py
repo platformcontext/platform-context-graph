@@ -613,12 +613,16 @@ class TestRepoSummary:
                     "automation_repositories": [
                         "boatsgroup/core-engineering-automation"
                     ],
+                    "platform_kinds": ["eks"],
                     "deployment_sources": ["helm-charts"],
                     "config_sources": [],
                     "provisioning_repositories": [],
                     "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
                     "environments": ["bg-qa"],
                 }
+            ],
+            "deployment_story": [
+                "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa."
             ],
             "consumer_repositories": [
                 {
@@ -1173,6 +1177,7 @@ class TestTraceDeploymentChain:
                     "automation_repositories": [
                         "boatsgroup/core-engineering-automation"
                     ],
+                    "platform_kinds": ["ecs"],
                     "deployment_sources": [],
                     "config_sources": [],
                     "provisioning_repositories": ["terraform-stack-ecs"],
@@ -1181,6 +1186,9 @@ class TestTraceDeploymentChain:
                     ],
                     "environments": ["prod"],
                 }
+            ],
+            "deployment_story": [
+                "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod."
             ],
             "deployment_artifacts": {
                 "images": [

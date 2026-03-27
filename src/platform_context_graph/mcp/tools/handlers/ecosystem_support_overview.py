@@ -46,6 +46,7 @@ def build_deployment_overview(
                 "automation_repositories": list(
                     row.get("automation_repositories") or []
                 ),
+                "platform_kinds": list(row.get("platform_kinds") or []),
                 "deployment_sources": list(row.get("deployment_sources") or []),
                 "config_sources": list(row.get("config_sources") or []),
                 "provisioning_repositories": list(
@@ -58,6 +59,9 @@ def build_deployment_overview(
             if isinstance(row, dict)
         ],
     }
+    deployment_story = _build_deployment_story(overview["delivery_paths"])
+    if deployment_story:
+        overview["deployment_story"] = deployment_story
     if provisioning_source_chains:
         overview["provisioning_source_chains"] = list(provisioning_source_chains)
     if consumer_repositories:
@@ -281,6 +285,48 @@ def _build_deployment_controllers(
             add("codedeploy")
         add("terraform")
     return controllers
+
+
+def _build_deployment_story(delivery_paths: list[dict[str, Any]]) -> list[str]:
+    """Render short human-readable end-to-end deployment story lines."""
+
+    lines: list[str] = []
+    for row in delivery_paths:
+        if not isinstance(row, dict):
+            continue
+        controller = _controller_label(str(row.get("controller") or ""))
+        automation = list(row.get("automation_repositories") or [])
+        deployment_sources = list(row.get("deployment_sources") or [])
+        provisioning_repositories = list(row.get("provisioning_repositories") or [])
+        platform_kinds = [str(value).strip().upper() for value in row.get("platform_kinds") or [] if str(value).strip()]
+        environments = [str(value).strip() for value in row.get("environments") or [] if str(value).strip()]
+
+        line = controller
+        if automation:
+            line += f" via {', '.join(automation)}"
+        if deployment_sources:
+            line += f" deploys from {', '.join(deployment_sources)}"
+        elif provisioning_repositories:
+            line += f" deploys through {', '.join(provisioning_repositories)}"
+        else:
+            line += " deploys"
+        if platform_kinds:
+            line += f" onto {'/'.join(platform_kinds)}"
+        if environments:
+            line += f" in {', '.join(environments)}"
+        lines.append(line + ".")
+    return lines
+
+
+def _controller_label(value: str) -> str:
+    """Return a display label for one deployment controller."""
+
+    normalized = value.strip().lower()
+    if normalized == "github_actions":
+        return "GitHub Actions"
+    if normalized == "jenkins":
+        return "Jenkins"
+    return value.replace("_", " ").strip() or "Unknown controller"
 
 
 def _build_shared_config_paths(
