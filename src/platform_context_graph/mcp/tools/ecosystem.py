@@ -125,7 +125,7 @@ ECOSYSTEM_TOOLS = {
     },
     "trace_deployment_chain": {
         "name": "trace_deployment_chain",
-        "description": "Trace the full deployment chain for a service across ArgoCD Applications and ApplicationSets, then surface the related K8s, Crossplane, and Terraform resources. Useful for incident investigation and impact analysis.",
+        "description": "Trace the full deployment chain for a service across ArgoCD Applications and ApplicationSets, then surface the related K8s, Crossplane, and Terraform resources. Start with the top-level `story` field for the concise deployment narrative, then use `deployment_overview` and the detailed fields for drill-down. Useful for incident investigation and impact analysis.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -203,7 +203,7 @@ ECOSYSTEM_TOOLS = {
     },
     "get_repo_summary": {
         "name": "get_repo_summary",
-        "description": "Get a structured summary of a repository: files, code entities, infrastructure resources, canonical platform/runtime relationships, deploy/config sources, ecosystem connections, dependencies, environments, tier info, repository coverage, and stable limitation codes. If completeness_state is not complete, report the missing graph/content coverage and any limitation codes instead of implying those files or entities do not exist.",
+        "description": "Get a structured summary of a repository: files, code entities, infrastructure resources, canonical platform/runtime relationships, deploy/config sources, ecosystem connections, dependencies, environments, tier info, repository coverage, and stable limitation codes. Start with the top-level `story` field for the concise repo and deployment narrative, then use `deployment_overview` and the detailed fields for drill-down. If completeness_state is not complete, report the missing graph/content coverage and any limitation codes instead of implying those files or entities do not exist.",
         "inputSchema": {
             "type": "object",
             "properties": {

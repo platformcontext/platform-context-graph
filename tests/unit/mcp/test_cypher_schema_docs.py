@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from platform_context_graph.mcp.tools.codebase import CODEBASE_TOOLS
+from platform_context_graph.mcp.tools.ecosystem import ECOSYSTEM_TOOLS
 from platform_context_graph.prompts import LLM_SYSTEM_PROMPT
 
 
@@ -32,3 +33,22 @@ def test_llm_prompt_schema_reference_mentions_terraform_module_attributes() -> N
     assert "create_deploy" in LLM_SYSTEM_PROMPT
     assert "cluster_name" in LLM_SYSTEM_PROMPT
     assert "deploy_entry_point" in LLM_SYSTEM_PROMPT
+
+
+def test_ecosystem_tool_docs_prefer_top_level_story_fields() -> None:
+    """Summary and deployment-chain tools should advertise story-first reading."""
+
+    summary_description = ECOSYSTEM_TOOLS["get_repo_summary"]["description"]
+    trace_description = ECOSYSTEM_TOOLS["trace_deployment_chain"]["description"]
+
+    assert "story" in summary_description
+    assert "story" in trace_description
+    assert "top-level" in summary_description
+    assert "top-level" in trace_description
+
+
+def test_llm_prompt_repository_sop_prefers_story_before_detail() -> None:
+    """The prompt should steer callers toward the top-level story first."""
+
+    assert "story" in LLM_SYSTEM_PROMPT
+    assert "top-level `story`" in LLM_SYSTEM_PROMPT

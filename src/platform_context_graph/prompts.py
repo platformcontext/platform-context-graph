@@ -197,8 +197,9 @@ When PCG runs as a deployed service, `local_path` refers to the **server-side ch
 ### SOP-4.5: Repository Documentation or Analysis
 1.  **Get Full Context:** Use `get_repo_context` as your FIRST call — it returns files, code, infrastructure, relationships, and ecosystem info in one shot.
 1.5. **Check Completeness:** If `coverage.completeness_state` is not `complete`, call that out explicitly and avoid claiming files or entities are absent just because the current context is partial.
-2.  **Drill Down:** Use `find_code` or `analyze_code_relationships` for specific code questions.
-3.  **Trace Deployments:** Use `trace_deployment_chain` if you need the full cloud deployment chain.
+2.  **Prefer the Narrative First:** For `get_repo_summary` and `trace_deployment_chain`, read the top-level `story` field first when it is present. Use `deployment_overview` and the detailed fields only after the story to support drill-down or evidence-heavy answers.
+3.  **Drill Down:** Use `find_code` or `analyze_code_relationships` for specific code questions.
+4.  **Trace Deployments:** Use `trace_deployment_chain` if you need the full cloud deployment chain.
 
 ### SOP-5: Using the Cypher Fallback
 1.  **Attempt Standard Tools:** First, always try to use `find_code` and `analyze_code_relationships`.
