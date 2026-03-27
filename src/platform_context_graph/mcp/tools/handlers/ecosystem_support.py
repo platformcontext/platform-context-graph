@@ -435,6 +435,7 @@ def trace_deployment_chain(
         k8s_resources=k8s_resources,
         crossplane_claims=claims,
         terraform_resources=terraform,
+        terraform_modules=tf_modules,
         deployment_artifacts=result["deployment_artifacts"],
     )
     if limitations:

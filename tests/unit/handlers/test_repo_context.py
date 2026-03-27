@@ -577,6 +577,7 @@ class TestRepoSummary:
                     }
                 ],
             },
+            "deployment_controllers": ["github_actions"],
         }
         assert result["api_surface"]["docs_routes"] == ["/_specs"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
@@ -1054,6 +1055,7 @@ class TestTraceDeploymentChain:
                     }
                 ]
             },
+            "deployment_controllers": ["github_actions"],
         }
         assert result["api_surface"]["api_versions"] == ["v3"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
@@ -1291,6 +1293,12 @@ class TestTraceDeploymentChain:
                             "resource_type": "aws_route53_record",
                             "file": "shared/resources.tf",
                             "repository": "terraform-stack-node10",
+                        },
+                        {
+                            "name": "aws_codedeploy_deployment_group.api_node_boats",
+                            "resource_type": "aws_codedeploy_deployment_group",
+                            "file": "shared/ecs.tf",
+                            "repository": "terraform-stack-node10",
                         }
                     ]
                 ),
@@ -1308,6 +1316,12 @@ class TestTraceDeploymentChain:
                     records=[
                         {
                             "name": "api_node_boats",
+                            "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                            "version": "~> 3.0",
+                            "repository": "terraform-stack-node10",
+                        },
+                        {
+                            "name": "api_node_boats_batch",
                             "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
                             "version": "~> 3.0",
                             "repository": "terraform-stack-node10",
@@ -1346,11 +1360,23 @@ class TestTraceDeploymentChain:
                 "resource_type": "aws_route53_record",
                 "file": "shared/resources.tf",
                 "repository": "terraform-stack-node10",
+            },
+            {
+                "name": "aws_codedeploy_deployment_group.api_node_boats",
+                "resource_type": "aws_codedeploy_deployment_group",
+                "file": "shared/ecs.tf",
+                "repository": "terraform-stack-node10",
             }
         ]
         assert result["terraform_modules"] == [
             {
                 "name": "api_node_boats",
+                "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                "version": "~> 3.0",
+                "repository": "terraform-stack-node10",
+            },
+            {
+                "name": "api_node_boats_batch",
                 "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
                 "version": "~> 3.0",
                 "repository": "terraform-stack-node10",
@@ -1374,6 +1400,12 @@ class TestTraceDeploymentChain:
                         "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
                         "version": "~> 3.0",
                         "source_repository": None,
+                    },
+                    {
+                        "name": "api_node_boats_batch",
+                        "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                        "version": "~> 3.0",
+                        "source_repository": None,
                     }
                 ],
                 "terragrunt_configs": [
@@ -1393,6 +1425,12 @@ class TestTraceDeploymentChain:
                     "resource_type": "aws_route53_record",
                     "repository": "terraform-stack-node10",
                     "file": "shared/resources.tf",
+                },
+                {
+                    "name": "aws_codedeploy_deployment_group.api_node_boats",
+                    "resource_type": "aws_codedeploy_deployment_group",
+                    "repository": "terraform-stack-node10",
+                    "file": "shared/ecs.tf",
                 }
             ]
         }
@@ -1402,6 +1440,12 @@ class TestTraceDeploymentChain:
                 "terraform_modules": [
                     {
                         "name": "api_node_boats",
+                        "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                        "version": "~> 3.0",
+                        "source_repository": None,
+                    },
+                    {
+                        "name": "api_node_boats_batch",
                         "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
                         "version": "~> 3.0",
                         "source_repository": None,
@@ -1416,4 +1460,22 @@ class TestTraceDeploymentChain:
                     }
                 ],
             }
+        ]
+        assert result["deployment_overview"]["service_variants"] == [
+            {
+                "name": "api_node_boats",
+                "repository": "terraform-stack-node10",
+                "module_source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                "version": "~> 3.0",
+            },
+            {
+                "name": "api_node_boats_batch",
+                "repository": "terraform-stack-node10",
+                "module_source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                "version": "~> 3.0",
+            },
+        ]
+        assert result["deployment_overview"]["deployment_controllers"] == [
+            "codedeploy",
+            "terraform",
         ]

@@ -13,6 +13,7 @@ def build_deployment_overview(
     k8s_resources: list[dict[str, Any]] | None = None,
     crossplane_claims: list[dict[str, Any]] | None = None,
     terraform_resources: list[dict[str, Any]] | None = None,
+    terraform_modules: list[dict[str, Any]] | None = None,
     deployment_artifacts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a compact deployment overview for MCP-friendly answer shaping."""
@@ -58,6 +59,9 @@ def build_deployment_overview(
     }
     if provisioning_source_chains:
         overview["provisioning_source_chains"] = list(provisioning_source_chains)
+    service_variants = _build_service_variants(terraform_modules or [])
+    if service_variants:
+        overview["service_variants"] = service_variants
     if deployment_artifacts:
         compact_artifacts = {
             "images": list(deployment_artifacts.get("images") or []),
@@ -76,6 +80,14 @@ def build_deployment_overview(
     )
     if network_signals:
         overview["network_signals"] = network_signals
+    deployment_controllers = _build_deployment_controllers(
+        delivery_paths=delivery_paths,
+        terraform_resources=terraform_resources or [],
+        terraform_modules=terraform_modules or [],
+        provisioning_source_chains=provisioning_source_chains or [],
+    )
+    if deployment_controllers:
+        overview["deployment_controllers"] = deployment_controllers
     return overview
 
 
@@ -137,3 +149,71 @@ def _build_network_signals(
             if isinstance(row, dict)
         ]
     return signals
+
+
+def _build_service_variants(terraform_modules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build compact service-variant rows from Terraform module matches."""
+
+    variants: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for row in terraform_modules:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()
+        repository = str(row.get("repository") or "").strip()
+        module_source = str(row.get("source") or "").strip()
+        version = str(row.get("version") or "").strip()
+        if not name or not repository:
+            continue
+        key = (name, repository, module_source, version)
+        if key in seen:
+            continue
+        seen.add(key)
+        variants.append(
+            {
+                "name": name,
+                "repository": repository,
+                "module_source": module_source,
+                "version": version,
+            }
+        )
+    return variants
+
+
+def _build_deployment_controllers(
+    *,
+    delivery_paths: list[dict[str, Any]],
+    terraform_resources: list[dict[str, Any]],
+    terraform_modules: list[dict[str, Any]],
+    provisioning_source_chains: list[dict[str, Any]],
+) -> list[str]:
+    """Return ordered deployment-controller hints from delivery and infra signals."""
+
+    controllers: list[str] = []
+    seen: set[str] = set()
+
+    def add(value: str) -> None:
+        """Append one normalized controller hint once."""
+
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            return
+        seen.add(normalized)
+        controllers.append(normalized)
+
+    for row in delivery_paths:
+        if not isinstance(row, dict):
+            continue
+        controller = str(row.get("controller") or "").strip()
+        if controller:
+            add(controller)
+    if terraform_resources or terraform_modules or provisioning_source_chains:
+        terraform_types = {
+            str(row.get("resource_type") or "").strip().lower()
+            for row in terraform_resources
+            if isinstance(row, dict)
+        }
+        if any(resource_type.startswith("aws_codedeploy_") for resource_type in terraform_types):
+            add("codedeploy")
+        add("terraform")
+    return controllers
