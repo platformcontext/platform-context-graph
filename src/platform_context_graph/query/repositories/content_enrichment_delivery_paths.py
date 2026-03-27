@@ -29,6 +29,8 @@ def summarize_delivery_paths(
         if isinstance(delivery_workflows.get("github_actions"), dict)
         else {}
     )
+    github_actions_automation = _github_actions_automation_repositories(github_actions)
+    github_actions_supporting = _github_actions_supporting_workflows(github_actions)
     command_rows = [
         row for row in github_actions.get("commands", []) if isinstance(row, dict)
     ]
@@ -44,16 +46,40 @@ def summarize_delivery_paths(
                 path_kind="gitops",
                 delivery_mode="eks_gitops",
                 command_rows=gitops_rows,
+                supporting_workflows=None,
                 platforms=_filter_platforms(
                     platforms, include_kinds=_KUBERNETES_PLATFORM_KINDS
                 ),
                 deployment_sources=_repository_names(deploys_from),
                 config_sources=_repository_names(discovers_config_in),
                 provisioning_repositories=[],
-                automation_repositories=_automation_repository_names(gitops_rows),
+                automation_repositories=(
+                    _automation_repository_names(gitops_rows)
+                    or github_actions_automation
+                ),
                 summary_prefix="GitHub Actions drives a GitOps deployment path",
             )
         )
+    elif github_actions_automation and deploys_from:
+        gitops_platforms = _filter_platforms(
+            platforms, include_kinds=_KUBERNETES_PLATFORM_KINDS
+        )
+        if gitops_platforms:
+            paths.append(
+                _build_delivery_path(
+                    controller="github_actions",
+                    path_kind="gitops",
+                    delivery_mode="eks_gitops",
+                    command_rows=[],
+                    supporting_workflows=github_actions_supporting,
+                    platforms=gitops_platforms,
+                    deployment_sources=_repository_names(deploys_from),
+                    config_sources=_repository_names(discovers_config_in),
+                    provisioning_repositories=[],
+                    automation_repositories=github_actions_automation,
+                    summary_prefix="GitHub Actions drives a GitOps deployment path",
+                )
+            )
     direct_rows = [
         row
         for row in command_rows
@@ -66,16 +92,40 @@ def summarize_delivery_paths(
                 path_kind="direct",
                 delivery_mode="continuous_deployment",
                 command_rows=direct_rows,
+                supporting_workflows=None,
                 platforms=_filter_platforms(
                     platforms, exclude_kinds=_KUBERNETES_PLATFORM_KINDS
                 ),
                 deployment_sources=[],
                 config_sources=[],
                 provisioning_repositories=_repository_names(provisioned_by),
-                automation_repositories=_automation_repository_names(direct_rows),
+                automation_repositories=(
+                    _automation_repository_names(direct_rows)
+                    or github_actions_automation
+                ),
                 summary_prefix="GitHub Actions drives a direct deployment path",
             )
         )
+    elif github_actions_automation and provisioned_by:
+        direct_platforms = _filter_platforms(
+            platforms, exclude_kinds=_KUBERNETES_PLATFORM_KINDS
+        )
+        if direct_platforms:
+            paths.append(
+                _build_delivery_path(
+                    controller="github_actions",
+                    path_kind="direct",
+                    delivery_mode="continuous_deployment",
+                    command_rows=[],
+                    supporting_workflows=github_actions_supporting,
+                    platforms=direct_platforms,
+                    deployment_sources=[],
+                    config_sources=[],
+                    provisioning_repositories=_repository_names(provisioned_by),
+                    automation_repositories=github_actions_automation,
+                    summary_prefix="GitHub Actions drives a direct deployment path",
+                )
+            )
     jenkins_rows = [
         row for row in delivery_workflows.get("jenkins", []) if isinstance(row, dict)
     ]
@@ -98,6 +148,7 @@ def _build_delivery_path(
     path_kind: str,
     delivery_mode: str,
     command_rows: list[dict[str, Any]],
+    supporting_workflows: list[str] | None,
     platforms: list[dict[str, Any]],
     deployment_sources: list[str],
     config_sources: list[str],
@@ -110,8 +161,12 @@ def _build_delivery_path(
     commands = _ordered_unique(
         str(row.get("command") or "").strip() for row in command_rows
     )
-    supporting_workflows = _ordered_unique(
-        str(row.get("workflow") or "").strip() for row in command_rows
+    supporting_workflows = (
+        _ordered_unique(supporting_workflows)
+        if supporting_workflows is not None
+        else _ordered_unique(
+            str(row.get("workflow") or "").strip() for row in command_rows
+        )
     )
     platform_kinds = _ordered_unique(
         str(row.get("kind") or "").strip() for row in platforms
@@ -216,6 +271,26 @@ def _automation_repository_names(rows: list[dict[str, Any]]) -> list[str]:
 
     return _ordered_unique(
         str(row.get("automation_repository") or "").strip() for row in rows
+    )
+
+
+def _github_actions_automation_repositories(github_actions: dict[str, Any]) -> list[str]:
+    """Return ordered unique automation repositories from a GitHub Actions block."""
+
+    return _ordered_unique(
+        str(row.get("repository") or "").strip()
+        for row in github_actions.get("automation_repositories", [])
+        if isinstance(row, dict)
+    )
+
+
+def _github_actions_supporting_workflows(github_actions: dict[str, Any]) -> list[str]:
+    """Return repo-local workflow filenames that hand off to automation repos."""
+
+    return _ordered_unique(
+        str(row.get("relative_path") or "").strip().split("/")[-1]
+        for row in github_actions.get("workflows", [])
+        if isinstance(row, dict)
     )
 
 
