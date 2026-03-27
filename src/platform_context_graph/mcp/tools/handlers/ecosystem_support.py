@@ -5,6 +5,7 @@ from typing import Any
 from ....core.database import DatabaseManager
 from ....query import repositories as repository_queries
 from ....utils.debug_log import emit_log_call, warning_logger
+from .ecosystem_support_provisioning import group_provisioning_source_chains
 
 
 def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -332,9 +333,10 @@ def trace_deployment_chain(
             service_name_tokens=service_name_tokens,
         ).data()
 
-        tf_modules = session.run(
+        tf_modules_raw = session.run(
             """
             MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(mod:TerraformModule)
+            OPTIONAL MATCH (mod)-[:USES_MODULE]->(source_repo:Repository)
             WHERE r.name CONTAINS $name
                OR (
                     r.id IN $provisioned_repo_ids
@@ -347,6 +349,7 @@ def trace_deployment_chain(
             RETURN mod.name as name,
                    mod.source as source,
                    mod.version as version,
+                   source_repo.name as source_repository,
                    r.name as repository
             ORDER BY r.name, mod.name
             LIMIT 100
@@ -356,7 +359,40 @@ def trace_deployment_chain(
             service_name_tokens=service_name_tokens,
         ).data()
 
+        terragrunt_configs = session.run(
+            """
+            MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tg:TerragruntConfig)
+            OPTIONAL MATCH (tg)-[:USES_MODULE]->(source_repo:Repository)
+            WHERE r.name CONTAINS $name
+               OR r.id IN $provisioned_repo_ids
+            RETURN tg.name as name,
+                   tg[$terraform_source_key] as terraform_source,
+                   f.relative_path as file,
+                   r.name as repository,
+                   source_repo.name as source_repository
+            ORDER BY r.name, f.relative_path, tg.name
+            LIMIT 100
+        """,
+            name=canonical_name,
+            provisioned_repo_ids=provisioned_repo_ids,
+            terraform_source_key="terraform_source",
+        ).data()
+
     k8s_resources = _dedupe_rows(repo_k8s_resources + deployed_k8s_resources)
+    tf_modules = [
+        {
+            "name": row.get("name"),
+            "source": row.get("source"),
+            "version": row.get("version"),
+            "repository": row.get("repository"),
+        }
+        for row in _dedupe_rows(tf_modules_raw)
+    ]
+    terragrunt_configs = _dedupe_rows(terragrunt_configs)
+    provisioning_source_chains = group_provisioning_source_chains(
+        terraform_modules=tf_modules_raw,
+        terragrunt_configs=terragrunt_configs,
+    )
 
     limitations = list(context.get("limitations") or [])
     result = {
@@ -367,6 +403,8 @@ def trace_deployment_chain(
         "crossplane_claims": claims,
         "terraform_resources": terraform,
         "terraform_modules": tf_modules,
+        "terragrunt_configs": terragrunt_configs,
+        "provisioning_source_chains": provisioning_source_chains,
         "coverage": context.get("coverage"),
         "platforms": context.get("platforms", []),
         "deploys_from": context.get("deploys_from", []),
