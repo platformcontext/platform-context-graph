@@ -16,7 +16,7 @@ _KUBERNETES_PLATFORM_KINDS = frozenset({"eks", "kubernetes"})
 def summarize_delivery_paths(
     *,
     delivery_workflows: dict[str, Any],
-    controller_driven_paths: list[dict[str, Any]],
+    controller_driven_paths: list[dict[str, Any]] | None = None,
     platforms: list[dict[str, Any]],
     deploys_from: list[dict[str, Any]],
     discovers_config_in: list[dict[str, Any]],
@@ -25,6 +25,7 @@ def summarize_delivery_paths(
     """Summarize workflow hints into higher-level delivery paths."""
 
     paths: list[dict[str, Any]] = []
+    controller_driven_paths = list(controller_driven_paths or [])
     github_actions = (
         delivery_workflows.get("github_actions")
         if isinstance(delivery_workflows.get("github_actions"), dict)

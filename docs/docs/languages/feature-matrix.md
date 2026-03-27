@@ -12,7 +12,7 @@ This file is auto-generated. Do not edit manually.
 | Dart | `DartTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | Y | - | 11/11 | 11/11 | `tests/fixtures/ecosystems/dart_comprehensive/` |
 | Elixir | `ElixirTreeSitterParser` | Y | Y | - | - | Y | Y | P | - | - | - | 7/7 | 7/7 | `tests/fixtures/ecosystems/elixir_comprehensive/` |
 | Go | `GoTreeSitterParser` | Y | - | Y | - | Y | Y | Y | Y | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/go_comprehensive/` |
-| Groovy | `GroovyTreeSitterParser` | - | - | - | - | - | - | - | - | - | - | 4/4 | 4/4 | `tests/fixtures/ecosystems/groovy_comprehensive/` |
+| Groovy | `GroovyTreeSitterParser` | - | - | - | - | - | - | - | - | - | - | 6/6 | 6/6 | `tests/fixtures/ecosystems/groovy_comprehensive/` |
 | Haskell | `HaskellTreeSitterParser` | Y | - | - | Y | Y | Y | Y | Y | Y | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/haskell_comprehensive/` |
 | Java | `JavaTreeSitterParser` | Y | Y | Y | - | Y | Y | Y | - | Y | - | 11/11 | 11/11 | `tests/fixtures/ecosystems/java_comprehensive/` |
 | JavaScript | `JavascriptTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/javascript_comprehensive/` |

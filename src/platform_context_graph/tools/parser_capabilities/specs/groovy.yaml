@@ -53,6 +53,30 @@ capabilities:
     target: File
   unit_test: tests/unit/parsers/test_groovy_parser.py::test_parse_jenkinsfile_extracts_pipeline_metadata
   integration_test: tests/integration/mcp/test_repository_runtime_context.py::test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations
+- id: jenkins-shell-commands
+  name: Jenkins shell command hints
+  status: supported
+  extracted_bucket: shell_commands
+  required_fields:
+  - shell_commands
+  graph_surface:
+    kind: property
+    target: File.shell_commands
+  unit_test: tests/unit/parsers/test_groovy_parser.py::test_parse_jenkinsfile_extracts_ansible_and_shell_hints
+  integration_test: tests/integration/mcp/test_repository_runtime_context.py::test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations
+- id: jenkins-ansible-hints
+  name: Jenkins Ansible playbook hints
+  status: supported
+  extracted_bucket: ansible_playbook_hints
+  required_fields:
+  - playbook
+  - command
+  graph_surface:
+    kind: property
+    target: File.ansible_playbook_hints
+  unit_test: tests/unit/parsers/test_groovy_parser.py::test_parse_jenkinsfile_extracts_ansible_and_shell_hints
+  integration_test: tests/integration/mcp/test_repository_runtime_context.py::test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations
 known_limitations:
 - Generic Groovy source is indexed conservatively; the current parser focuses on Jenkins pipeline metadata rather than broad class and method extraction
 - Jenkins metadata is strongest for Jenkinsfile-style entrypoints and may not detect custom shared-library DSLs that hide deployment semantics behind opaque helper calls
+- Jenkins controller hints are intentionally shallow; deeper controller-driven automation meaning is assembled later from Ansible, inventory, vars, and runtime-family enrichment

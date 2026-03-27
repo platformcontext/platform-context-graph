@@ -91,6 +91,54 @@ def build_deployment_story_fallback(
     return [line + "."]
 
 
+def build_controller_driven_story(
+    *,
+    controller_driven_paths: list[dict[str, Any]],
+) -> list[str]:
+    """Return a compact deployment story from controller-driven automation paths."""
+
+    lines: list[str] = []
+    seen: set[str] = set()
+    for row in controller_driven_paths:
+        if not isinstance(row, dict):
+            continue
+        controller = _controller_label(str(row.get("controller_kind") or ""))
+        automation_kind = _automation_label(str(row.get("automation_kind") or ""))
+        entry_points = [
+            str(value).strip()
+            for value in row.get("entry_points") or []
+            if str(value).strip()
+        ]
+        target_descriptors = [
+            str(value).strip()
+            for value in row.get("target_descriptors") or []
+            if str(value).strip()
+        ]
+        runtime_family = _runtime_family_label(str(row.get("runtime_family") or ""))
+        supporting_repositories = [
+            str(value).strip()
+            for value in row.get("supporting_repositories") or []
+            if str(value).strip()
+        ]
+
+        if not entry_points:
+            continue
+
+        line = f"{controller} invokes {automation_kind} entry points {', '.join(entry_points)}"
+        if target_descriptors:
+            line += f" targeting {_human_join(target_descriptors)}"
+        if runtime_family:
+            line += f" for {runtime_family}"
+        if supporting_repositories:
+            line += f" with support from {_human_join(supporting_repositories)}"
+        line += "."
+        if line in seen:
+            continue
+        seen.add(line)
+        lines.append(line)
+    return lines
+
+
 def build_network_access_story(
     *,
     gateways: list[dict[str, Any]],
@@ -145,6 +193,41 @@ def _runtime_platform_summary(runtime_platforms: list[dict[str, Any]]) -> str:
             detail += f" in {environment}"
         rendered.append(detail)
     return _human_join(rendered)
+
+
+def _automation_label(value: str) -> str:
+    """Return a display label for one automation family."""
+
+    normalized = value.strip().lower()
+    if normalized == "ansible":
+        return "Ansible"
+    return value.replace("_", " ").strip() or "automation"
+
+
+def _runtime_family_label(value: str) -> str:
+    """Return a display label for one automation runtime family."""
+
+    normalized = value.strip().lower()
+    labels = {
+        "wordpress_website_fleet": "wordpress website fleets",
+        "php_web_platform": "PHP web platforms",
+        "ecs_service": "ECS services",
+        "kubernetes_gitops": "Kubernetes GitOps workloads",
+    }
+    if normalized in labels:
+        return labels[normalized]
+    return value.replace("_", " ").strip()
+
+
+def _controller_label(value: str) -> str:
+    """Return a display label for one deployment controller."""
+
+    normalized = value.strip().lower()
+    if normalized == "github_actions":
+        return "GitHub Actions"
+    if normalized == "jenkins":
+        return "Jenkins"
+    return value.replace("_", " ").strip() or "Unknown controller"
 
 
 def _human_join(values: list[str]) -> str:
@@ -272,6 +355,7 @@ def _consumer_evidence_label(row: dict[str, Any]) -> str:
 
 __all__ = [
     "build_consumer_story",
+    "build_controller_driven_story",
     "build_deployment_story_fallback",
     "build_network_access_story",
     "build_shared_config_story",

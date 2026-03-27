@@ -360,7 +360,8 @@ That order matters. For example, shared config hints should not appear before th
 
 1. workflow- and delivery-path-derived deployment lines
 2. reusable-workflow handoff plus canonical deploy/provision/runtime context when explicit command rows are missing
-3. controller/runtime fallback lines built from deployment controllers, runtime platforms, and service variants
+3. controller-driven automation lines built from Jenkins or other controllers plus Ansible-style automation evidence
+4. controller/runtime fallback lines built from deployment controllers, runtime platforms, and service variants
 
 The reusable-workflow tier matters for repos that hand off deployment to a centralized automation repository. In that case PCG may still emit truthful `delivery_paths` when all of these are already known:
 
@@ -369,7 +370,35 @@ The reusable-workflow tier matters for repos that hand off deployment to a centr
 - canonical repo relationships already show provisioning sources such as `PROVISIONS_DEPENDENCY_FOR`
 - runtime platforms already show where the workload runs
 
-Only after those two tiers fail should PCG fall back to controller/runtime summaries such as Terraform, CodeDeploy, or service-variant evidence.
+The controller-driven automation tier is for estates where deployment meaning is carried more by controllers and automation entrypoints than by GitHub Actions delivery rows. Jenkins and Ansible are the first example, but the pattern should stay generic:
+
+- controller evidence identifies who starts the automation
+- automation evidence identifies what runs, where it targets, and which runtime family it implies
+- the resulting path is surfaced as read-side context and story shaping, not as a new canonical relationship family
+
+Only after those three tiers fail should PCG fall back to controller/runtime summaries such as Terraform, CodeDeploy, or service-variant evidence.
+
+### Controller-Driven Automation Extension Pattern
+
+Controller-driven automation should follow the same staged ownership model as the Terraform runtime-family work:
+
+```mermaid
+flowchart LR
+    A[Controller evidence\nJenkinsfile or Groovy pipeline] --> B[Automation evidence\nplaybooks inventory vars role entrypoints]
+    B --> C[Runtime automation family]
+    C --> D[controller_driven_paths]
+    D --> E[delivery_paths and deployment_overview]
+    E --> F[story]
+```
+
+Rules:
+
+- controller extraction should stay tool-semantic and portable
+- automation extraction should focus on high-signal surfaces first
+- runtime-family inference should stay centralized
+- answer shaping should consume the normalized path, not raw repo-specific heuristics
+
+Do not collapse controller-driven automation directly into canonical `DEPLOYS_FROM` or `PROVISIONS_DEPENDENCY_FOR` edges unless the underlying canonical evidence really exists.
 
 ## Safe Extension
 

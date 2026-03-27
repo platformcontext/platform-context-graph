@@ -195,6 +195,7 @@ def get_repo_summary(
         ),
         "delivery_workflows": context.get("delivery_workflows", {}),
         "delivery_paths": context.get("delivery_paths", []),
+        "controller_driven_paths": context.get("controller_driven_paths", []),
         "deployment_artifacts": context.get("deployment_artifacts", {}),
         "consumer_repositories": context.get("consumer_repositories", []),
         "api_surface": context.get("api_surface", {}),
@@ -206,6 +207,7 @@ def get_repo_summary(
         api_surface=summary["api_surface"],
         platforms=summary["platforms"],
         delivery_paths=summary["delivery_paths"],
+        controller_driven_paths=summary["controller_driven_paths"],
         deployment_artifacts=summary["deployment_artifacts"],
         consumer_repositories=summary["consumer_repositories"],
     )

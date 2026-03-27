@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from .ecosystem_support_overview_story import build_controller_driven_story
 from .ecosystem_support_overview_story import build_deployment_story_fallback
 from .ecosystem_support_overview_story import build_topology_story
 
@@ -12,6 +13,7 @@ def build_deployment_overview(
     api_surface: dict[str, Any],
     platforms: list[dict[str, Any]],
     delivery_paths: list[dict[str, Any]],
+    controller_driven_paths: list[dict[str, Any]] | None = None,
     provisioning_source_chains: list[dict[str, Any]] | None = None,
     k8s_resources: list[dict[str, Any]] | None = None,
     crossplane_claims: list[dict[str, Any]] | None = None,
@@ -62,6 +64,23 @@ def build_deployment_overview(
             if isinstance(row, dict)
         ],
     }
+    if controller_driven_paths:
+        overview["controller_driven_paths"] = [
+            {
+                "controller_kind": row.get("controller_kind"),
+                "automation_kind": row.get("automation_kind"),
+                "entry_points": list(row.get("entry_points") or []),
+                "target_descriptors": list(row.get("target_descriptors") or []),
+                "runtime_family": row.get("runtime_family"),
+                "supporting_repositories": list(
+                    row.get("supporting_repositories") or []
+                ),
+                "confidence": row.get("confidence"),
+                "explanation": row.get("explanation"),
+            }
+            for row in controller_driven_paths
+            if isinstance(row, dict)
+        ]
     if provisioning_source_chains:
         overview["provisioning_source_chains"] = list(provisioning_source_chains)
     if consumer_repositories:
@@ -115,6 +134,10 @@ def build_deployment_overview(
     if deployment_controllers:
         overview["deployment_controllers"] = deployment_controllers
     deployment_story = _build_deployment_story(overview["delivery_paths"])
+    if not deployment_story:
+        deployment_story = build_controller_driven_story(
+            controller_driven_paths=list(overview.get("controller_driven_paths") or [])
+        )
     if not deployment_story:
         deployment_story = build_deployment_story_fallback(
             runtime_platforms=overview["runtime_platforms"],

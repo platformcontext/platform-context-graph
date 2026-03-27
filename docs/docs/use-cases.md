@@ -38,6 +38,8 @@ A database is unhealthy. Which services use it, and how are they deployed?
 
 For MCP and API callers, start with the top-level `story` field from `trace_deployment_chain` or `get_repo_summary`, then drill into `deployment_overview` and the detailed fields if you need the exact evidence rows.
 
+That applies to controller-driven automation estates too. If a platform uses Jenkins plus Ansible, start with `story`, then inspect `deployment_overview`, `delivery_paths`, and `controller_driven_paths` before dropping to raw workflow, playbook, or inventory evidence.
+
 ## Onboarding a new engineer
 
 Day one. A new engineer needs to understand how the payment service fits into the platform.

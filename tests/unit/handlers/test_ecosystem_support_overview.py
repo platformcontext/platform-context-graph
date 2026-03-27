@@ -145,3 +145,32 @@ def test_build_deployment_overview_falls_back_to_controller_story() -> None:
     assert overview["topology_story"] == [
         "Deployment controllers codedeploy and terraform manage variants api_node_boats and api_node_boats_batch on ECS node10 in prod."
     ]
+
+
+def test_build_deployment_overview_falls_back_to_controller_driven_paths() -> None:
+    """Controller-driven automation paths should shape a story before generic fallback."""
+
+    overview = build_deployment_overview(
+        hostnames=[],
+        api_surface={},
+        platforms=[],
+        delivery_paths=[],
+        controller_driven_paths=[
+            {
+                "controller_kind": "jenkins",
+                "automation_kind": "ansible",
+                "entry_points": ["deploy.yml"],
+                "target_descriptors": ["mws", "prod"],
+                "runtime_family": "wordpress_website_fleet",
+                "supporting_repositories": ["terraform-stack-mws"],
+                "confidence": "high",
+            }
+        ],
+    )
+
+    assert overview["deployment_story"] == [
+        "Jenkins invokes Ansible entry points deploy.yml targeting mws and prod for wordpress website fleets with support from terraform-stack-mws."
+    ]
+    assert overview["topology_story"] == [
+        "Jenkins invokes Ansible entry points deploy.yml targeting mws and prod for wordpress website fleets with support from terraform-stack-mws."
+    ]

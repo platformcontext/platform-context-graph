@@ -1015,6 +1015,103 @@ class TestRepoSummary:
             "Confirmed runtime environments: prod. Configuration also references: bg-qa.",
         ]
 
+    def test_repo_summary_story_surfaces_controller_driven_paths(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_mws123",
+                    "name": "automate-mws",
+                    "path": "/repos/automate-mws",
+                    "file_count": 48,
+                    "discovered_file_count": 48,
+                    "files_by_extension": {"yml": 31, "groovy": 2, "py": 1},
+                },
+                "code": {"functions": 2, "classes": 0},
+                "infrastructure": {},
+                "ecosystem": {"dependencies": ["terraform-stack-mws"], "dependents": []},
+                "coverage": {
+                    "completeness_state": "complete",
+                    "discovered_file_count": 48,
+                    "graph_recursive_file_count": 48,
+                    "content_file_count": 48,
+                    "content_entity_count": 140,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [
+                    {
+                        "id": "repository:r_tf_mws",
+                        "name": "terraform-stack-mws",
+                        "relationship_type": "PROVISIONED_BY",
+                    }
+                ],
+                "provisions_dependencies_for": [],
+                "environments": [],
+                "observed_config_environments": ["prod"],
+                "delivery_workflows": {
+                    "jenkins": [
+                        {
+                            "relative_path": "Jenkinsfile",
+                            "pipeline_calls": ["pipeline"],
+                        }
+                    ]
+                },
+                "delivery_paths": [],
+                "controller_driven_paths": [
+                    {
+                        "controller_kind": "jenkins",
+                        "automation_kind": "ansible",
+                        "entry_points": ["deploy.yml"],
+                        "target_descriptors": ["mws", "prod"],
+                        "runtime_family": "wordpress_website_fleet",
+                        "supporting_repositories": ["terraform-stack-mws"],
+                        "confidence": "high",
+                        "explanation": (
+                            "jenkins controller Jenkinsfile invokes ansible entry points "
+                            "deploy.yml targeting mws, prod for wordpress_website_fleet "
+                            "with support from terraform-stack-mws."
+                        ),
+                    }
+                ],
+                "deployment_artifacts": {},
+                "api_surface": {},
+                "hostnames": [],
+                "consumer_repositories": [],
+                "limitations": [],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "automate-mws")
+
+        assert result["controller_driven_paths"] == [
+            {
+                "controller_kind": "jenkins",
+                "automation_kind": "ansible",
+                "entry_points": ["deploy.yml"],
+                "target_descriptors": ["mws", "prod"],
+                "runtime_family": "wordpress_website_fleet",
+                "supporting_repositories": ["terraform-stack-mws"],
+                "confidence": "high",
+                "explanation": (
+                    "jenkins controller Jenkinsfile invokes ansible entry points "
+                    "deploy.yml targeting mws, prod for wordpress_website_fleet "
+                    "with support from terraform-stack-mws."
+                ),
+            }
+        ]
+        assert result["story"] == [
+            "Jenkins invokes Ansible entry points deploy.yml targeting mws and prod for wordpress website fleets with support from terraform-stack-mws.",
+            "Configuration references environments prod, but runtime evidence has not confirmed deployed environments.",
+        ]
+
     def test_repo_summary_notes_config_environments_beyond_runtime(
         self, monkeypatch
     ):

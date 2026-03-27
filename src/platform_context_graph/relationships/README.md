@@ -145,6 +145,13 @@ If explicit command rows are absent, there is still an intermediate safe fallbac
 
 That tier is what allows a repo to keep a truthful GitOps or direct-delivery story even when the centralized automation repository is not indexed deeply enough to expose command-level workflow rows.
 
+If that still is not enough, there is one more read-side tier for controller-driven automation:
+
+1. controller evidence such as Jenkins or other pipeline controllers
+2. automation evidence such as Ansible playbooks, inventory, vars, and role entrypoints
+3. centralized runtime automation-family inference
+4. normalized `controller_driven_paths`
+
 Only after that should it fall back to a controller/runtime summary built from deployment controllers, runtime platforms, and service variants. The controller/runtime fallback should only appear when it still describes a real deployment shape, not just loose infrastructure context.
 
 Current `topology_story` ordering is intentional:
@@ -157,6 +164,24 @@ Current `topology_story` ordering is intentional:
 6. consumer-only repositories
 
 If you add a new story line, document where it belongs in that sequence and why.
+
+## Controller-Driven Automation Rules
+
+Controller-driven automation is intentionally a read-side enrichment layer, not a new canonical relationship family.
+
+Current example:
+
+- Jenkins controller evidence from Groovy or `Jenkinsfile`
+- Ansible automation evidence from playbooks, dynamic inventory, `group_vars`, `host_vars`, and targeted role tasks
+- runtime automation families such as `wordpress_website_fleet`, `php_web_platform`, `ecs_service`, and `kubernetes_gitops`
+
+Rules:
+
+1. keep controller extraction generic and tool-semantic
+2. keep automation extraction focused on high-signal files before deeper role internals
+3. keep runtime-family matching centralized in the shared automation-family registry
+4. feed normalized controller-driven paths into `delivery_paths`, `deployment_overview`, and `story`
+5. do not invent canonical deployment or provisioning edges from controller-driven paths alone
 
 ## Terraform Runtime Extension Rules
 
