@@ -25,6 +25,8 @@ def extract_related_deployment_artifacts(
     images: list[dict[str, Any]] = []
     service_ports: list[dict[str, Any]] = []
     gateways: list[dict[str, Any]] = []
+    kustomize_resources: list[dict[str, Any]] = []
+    kustomize_patches: list[dict[str, Any]] = []
 
     related_rows = list(deploys_from) + list(discovers_config_in)
     for row in related_rows:
@@ -59,6 +61,14 @@ def extract_related_deployment_artifacts(
                                 environment=direct_environment,
                             )
                         )
+                    resources, patches = _extract_kustomize_rows(
+                        repo_root=repo_root,
+                        overlay_directory=direct_path.parent,
+                        source_repo_name=source_repo_name,
+                        infer_environment_from_path=infer_environment_from_path,
+                    )
+                    kustomize_resources.extend(resources)
+                    kustomize_patches.extend(patches)
                 for candidate_pattern in values_path_patterns(source_path):
                     for file_path in sorted(glob(str(repo_root / candidate_pattern))):
                         relative_path = str(
@@ -98,6 +108,8 @@ def extract_related_deployment_artifacts(
         "images": _dedupe_rows(images),
         "service_ports": _dedupe_rows(service_ports),
         "gateways": _dedupe_rows(gateways),
+        "kustomize_resources": _dedupe_rows(kustomize_resources),
+        "kustomize_patches": _dedupe_rows(kustomize_patches),
     }
 
 
@@ -166,6 +178,154 @@ def _extract_chart_rows(
             "environment": environment,
         }
     ]
+
+
+def _extract_kustomize_rows(
+    *,
+    repo_root: Path,
+    overlay_directory: Path,
+    source_repo_name: str,
+    infer_environment_from_path: Callable[[str], str | None],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Extract Kustomize resource and patch rows near one overlay directory."""
+
+    kustomization_path = overlay_directory / "kustomization.yaml"
+    if not kustomization_path.is_file():
+        return [], []
+    resource_rows = _extract_kustomize_resource_rows(
+        repo_root=repo_root,
+        kustomization_path=kustomization_path,
+        source_repo_name=source_repo_name,
+        infer_environment_from_path=infer_environment_from_path,
+        visited=set(),
+    )
+    patch_rows = _extract_kustomize_patch_rows(
+        repo_root=repo_root,
+        kustomization_path=kustomization_path,
+        source_repo_name=source_repo_name,
+        infer_environment_from_path=infer_environment_from_path,
+    )
+    return resource_rows, patch_rows
+
+
+def _extract_kustomize_resource_rows(
+    *,
+    repo_root: Path,
+    kustomization_path: Path,
+    source_repo_name: str,
+    infer_environment_from_path: Callable[[str], str | None],
+    visited: set[Path],
+) -> list[dict[str, Any]]:
+    """Extract resource rows from one Kustomize file, following nested bases."""
+
+    resolved_kustomization = kustomization_path.resolve()
+    if resolved_kustomization in visited:
+        return []
+    visited.add(resolved_kustomization)
+    parsed = _load_yaml_file(kustomization_path)
+    if parsed is None:
+        return []
+    resources = parsed.get("resources")
+    if not isinstance(resources, list):
+        return []
+    relative_kustomization_path = str(
+        resolved_kustomization.relative_to(repo_root.resolve())
+    )
+    environment = infer_environment_from_path(relative_kustomization_path)
+    rows: list[dict[str, Any]] = []
+    for resource in resources:
+        if not isinstance(resource, str) or not resource.strip():
+            continue
+        resource_path = (kustomization_path.parent / resource).resolve()
+        if not _is_within_repo_root(resource_path, repo_root):
+            continue
+        if resource_path.is_dir():
+            nested_kustomization_path = resource_path / "kustomization.yaml"
+            if nested_kustomization_path.is_file():
+                rows.extend(
+                    _extract_kustomize_resource_rows(
+                        repo_root=repo_root,
+                        kustomization_path=nested_kustomization_path,
+                        source_repo_name=source_repo_name,
+                        infer_environment_from_path=infer_environment_from_path,
+                        visited=visited,
+                    )
+                )
+            continue
+        if not resource_path.is_file():
+            continue
+        parsed_resource = _load_yaml_file(resource_path)
+        if parsed_resource is None:
+            continue
+        metadata = parsed_resource.get("metadata")
+        rows.append(
+            {
+                "resource_path": str(resource_path.relative_to(repo_root.resolve())),
+                "kind": str(parsed_resource.get("kind") or "").strip(),
+                "name": str((metadata or {}).get("name") or "").strip()
+                if isinstance(metadata, dict)
+                else "",
+                "source_repo": source_repo_name,
+                "relative_path": relative_kustomization_path,
+                "environment": environment,
+            }
+        )
+    return rows
+
+
+def _extract_kustomize_patch_rows(
+    *,
+    repo_root: Path,
+    kustomization_path: Path,
+    source_repo_name: str,
+    infer_environment_from_path: Callable[[str], str | None],
+) -> list[dict[str, Any]]:
+    """Extract patch target rows from one Kustomize file."""
+
+    parsed = _load_yaml_file(kustomization_path)
+    if parsed is None:
+        return []
+    patches = parsed.get("patches")
+    if not isinstance(patches, list):
+        return []
+    relative_kustomization_path = str(
+        kustomization_path.resolve().relative_to(repo_root.resolve())
+    )
+    environment = infer_environment_from_path(relative_kustomization_path)
+    rows: list[dict[str, Any]] = []
+    for patch in patches:
+        if not isinstance(patch, dict):
+            continue
+        target = patch.get("target")
+        if not isinstance(target, dict):
+            continue
+        patch_path = patch.get("path")
+        if not isinstance(patch_path, str) or not patch_path.strip():
+            continue
+        resolved_patch_path = (kustomization_path.parent / patch_path).resolve()
+        if not _is_within_repo_root(resolved_patch_path, repo_root):
+            continue
+        rows.append(
+            {
+                "patch_path": str(resolved_patch_path.relative_to(repo_root.resolve())),
+                "target_kind": str(target.get("kind") or "").strip(),
+                "target_name": str(target.get("name") or "").strip(),
+                "source_repo": source_repo_name,
+                "relative_path": relative_kustomization_path,
+                "environment": environment,
+            }
+        )
+    return rows
+
+
+def _is_within_repo_root(path: Path, repo_root: Path) -> bool:
+    """Return whether a resolved path stays within the repository root."""
+
+    try:
+        path.relative_to(repo_root.resolve())
+    except ValueError:
+        return False
+    return True
 
 
 def _extract_service_port_rows(

@@ -479,6 +479,26 @@ class TestRepoSummary:
                             "environment": "bg-qa",
                         }
                     ],
+                    "kustomize_resources": [
+                        {
+                            "resource_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "kind": "XIRSARole",
+                            "name": "api-node-boats",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/kustomization.yaml",
+                            "environment": None,
+                        }
+                    ],
+                    "kustomize_patches": [
+                        {
+                            "patch_path": "argocd/api-node-boats/overlays/bg-qa/xirsarole-patch.yaml",
+                            "target_kind": "XIRSARole",
+                            "target_name": "api-node-boats",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/kustomization.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
                     "service_ports": [
                         {
                             "port": "3081",
@@ -562,10 +582,10 @@ class TestRepoSummary:
                     "environments": ["bg-qa"],
                 }
             ],
-            "deployment_artifacts": {
-                "charts": [
-                    {
-                        "repo_url": "boatsgroup.pe.jfrog.io",
+                "deployment_artifacts": {
+                    "charts": [
+                        {
+                            "repo_url": "boatsgroup.pe.jfrog.io",
                         "chart": "bg-helm/api-node-template",
                         "version": "0.2.1",
                         "release_name": "api-node-boats",
@@ -579,14 +599,34 @@ class TestRepoSummary:
                     {
                         "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
                         "tag": "3.21.0",
-                        "source_repo": "helm-charts",
-                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
-                        "environment": "bg-qa",
-                    }
-                ],
-                "service_ports": [
-                    {
-                        "port": "3081",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                    "kustomize_resources": [
+                        {
+                            "resource_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "kind": "XIRSARole",
+                            "name": "api-node-boats",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/kustomization.yaml",
+                            "environment": None,
+                        }
+                    ],
+                    "kustomize_patches": [
+                        {
+                            "patch_path": "argocd/api-node-boats/overlays/bg-qa/xirsarole-patch.yaml",
+                            "target_kind": "XIRSARole",
+                            "target_name": "api-node-boats",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/kustomization.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                    "service_ports": [
+                        {
+                            "port": "3081",
                         "source_repo": "helm-charts",
                         "relative_path": "argocd/api-node-boats/base/values.yaml",
                         "environment": None,

@@ -119,8 +119,53 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         helm_repo / "argocd" / "api-node-boats" / "base" / "values.yaml"
     )
     base_values_path.parent.mkdir(parents=True)
+    (helm_repo / "argocd" / "api-node-boats" / "base" / "kustomization.yaml").write_text(
+        "\n".join(
+            [
+                "apiVersion: kustomize.config.k8s.io/v1beta1",
+                "kind: Kustomization",
+                "resources:",
+                "  - xirsarole.yaml",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (helm_repo / "argocd" / "api-node-boats" / "base" / "xirsarole.yaml").write_text(
+        "\n".join(
+            [
+                "apiVersion: aws.bgrp.io/v1alpha1",
+                "kind: XIRSARole",
+                "metadata:",
+                "  name: api-node-boats",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     base_values_path.write_text(
         "service:\n  port: 3081\n",
+        encoding="utf-8",
+    )
+    (helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "kustomization.yaml").write_text(
+        "\n".join(
+            [
+                "apiVersion: kustomize.config.k8s.io/v1beta1",
+                "kind: Kustomization",
+                "resources:",
+                "  - ../../base",
+                "patches:",
+                "  - path: xirsarole-patch.yaml",
+                "    target:",
+                "      kind: XIRSARole",
+                "      name: api-node-boats",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "xirsarole-patch.yaml").write_text(
+        "spec:\n  clusterName: bg-qa\n",
         encoding="utf-8",
     )
     automation_repo = tmp_path / "core-engineering-automation"
@@ -446,6 +491,26 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
                 "name": "envoy-internal",
                 "source_repo": "helm-charts",
                 "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                "environment": "bg-qa",
+            }
+        ],
+        "kustomize_resources": [
+            {
+                "resource_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                "kind": "XIRSARole",
+                "name": "api-node-boats",
+                "source_repo": "helm-charts",
+                "relative_path": "argocd/api-node-boats/base/kustomization.yaml",
+                "environment": None,
+            }
+        ],
+        "kustomize_patches": [
+            {
+                "patch_path": "argocd/api-node-boats/overlays/bg-qa/xirsarole-patch.yaml",
+                "target_kind": "XIRSARole",
+                "target_name": "api-node-boats",
+                "source_repo": "helm-charts",
+                "relative_path": "argocd/api-node-boats/overlays/bg-qa/kustomization.yaml",
                 "environment": "bg-qa",
             }
         ],

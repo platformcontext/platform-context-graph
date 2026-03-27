@@ -68,6 +68,12 @@ def build_deployment_overview(
             "images": list(deployment_artifacts.get("images") or []),
             "service_ports": list(deployment_artifacts.get("service_ports") or []),
             "gateways": list(deployment_artifacts.get("gateways") or []),
+            "kustomize_resources": list(
+                deployment_artifacts.get("kustomize_resources") or []
+            ),
+            "kustomize_patches": list(
+                deployment_artifacts.get("kustomize_patches") or []
+            ),
         }
         compact_artifacts = {
             key: value for key, value in compact_artifacts.items() if value
