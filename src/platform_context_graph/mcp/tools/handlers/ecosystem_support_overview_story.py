@@ -8,6 +8,8 @@ def build_topology_story(
     hostnames: list[dict[str, Any]],
     api_surface: dict[str, Any],
     deployment_story: list[str],
+    gateways: list[dict[str, Any]],
+    service_ports: list[dict[str, Any]],
     shared_config_paths: list[dict[str, Any]],
     consumer_repositories: list[dict[str, Any]],
 ) -> list[str]:
@@ -41,6 +43,12 @@ def build_topology_story(
         lines.append(f"API surface exposes {' and '.join(details)}.")
 
     lines.extend(deployment_story)
+    access_story = build_network_access_story(
+        gateways=gateways,
+        service_ports=service_ports,
+    )
+    if access_story:
+        lines.append(access_story)
     shared_config_story = build_shared_config_story(shared_config_paths)
     if shared_config_story:
         lines.append(shared_config_story)
@@ -49,6 +57,41 @@ def build_topology_story(
         lines.append(consumer_story)
 
     return lines
+
+
+def build_network_access_story(
+    *,
+    gateways: list[dict[str, Any]],
+    service_ports: list[dict[str, Any]],
+) -> str:
+    """Return one line describing ingress gateways and service ports."""
+
+    gateway_names = limited_list(
+        [
+            str(row.get("name") or "").strip()
+            for row in gateways
+            if isinstance(row, dict) and str(row.get("name") or "").strip()
+        ],
+        2,
+    )
+    port_values = limited_list(
+        [
+            str(row.get("port") or "").strip()
+            for row in service_ports
+            if isinstance(row, dict) and str(row.get("port") or "").strip()
+        ],
+        3,
+    )
+    if not gateway_names and not port_values:
+        return ""
+    if gateway_names and port_values:
+        return (
+            f"Traffic enters through gateways {gateway_names} on service ports "
+            f"{port_values}."
+        )
+    if gateway_names:
+        return f"Traffic enters through gateways {gateway_names}."
+    return f"Service traffic listens on ports {port_values}."
 
 
 def build_shared_config_story(rows: list[dict[str, Any]]) -> str:
@@ -163,6 +206,7 @@ def _consumer_evidence_label(row: dict[str, Any]) -> str:
 
 __all__ = [
     "build_consumer_story",
+    "build_network_access_story",
     "build_shared_config_story",
     "build_topology_story",
     "limited_list",

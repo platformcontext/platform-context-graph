@@ -36,7 +36,13 @@ def test_build_deployment_overview_ranks_and_truncates_low_signal_story_lines() 
                     "path": "/secrets/api-node-boats/*",
                     "source_repo": "terraform-stack-node10",
                 },
-            ]
+            ],
+            "service_ports": [
+                {"port": "3081", "source_repo": "helm-charts"},
+            ],
+            "gateways": [
+                {"name": "envoy-internal", "source_repo": "helm-charts"},
+            ],
         },
         consumer_repositories=[
             {
@@ -54,6 +60,7 @@ def test_build_deployment_overview_ranks_and_truncates_low_signal_story_lines() 
         "Public entrypoints: api-node-boats.qa.bgrp.io.",
         "API surface exposes versions v3 and docs routes /_specs.",
         "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
+        "Traffic enters through gateways envoy-internal on service ports 3081.",
         "Shared config families span helm-charts, terraform-stack-node10: /api/api-node-boats/*, /configd/api-node-boats/*, and 1 more.",
         "Top consumer-only repository automate-yachtworld references this service via hostname references in group_vars/qa/api.yml. Additional consumers: broker-ui, boats-admin, and 1 more.",
     ]

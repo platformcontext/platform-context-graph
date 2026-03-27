@@ -83,6 +83,8 @@ def build_deployment_overview(
         hostnames=overview["internet_entrypoints"],
         api_surface=overview["api_surface"],
         deployment_story=deployment_story,
+        gateways=list((deployment_artifacts or {}).get("gateways") or []),
+        service_ports=list((deployment_artifacts or {}).get("service_ports") or []),
         shared_config_paths=shared_config_paths,
         consumer_repositories=overview.get("consumer_repositories", []),
     )
