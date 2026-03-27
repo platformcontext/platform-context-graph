@@ -70,6 +70,9 @@ def build_deployment_overview(
             for row in consumer_repositories
             if isinstance(row, dict)
         ]
+    shared_config_paths = _build_shared_config_paths(deployment_artifacts or {})
+    if shared_config_paths:
+        overview["shared_config_paths"] = shared_config_paths
     service_variants = _build_service_variants(terraform_modules or [])
     if service_variants:
         overview["service_variants"] = service_variants
@@ -236,3 +239,27 @@ def _build_deployment_controllers(
             add("codedeploy")
         add("terraform")
     return controllers
+
+
+def _build_shared_config_paths(
+    deployment_artifacts: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return config paths that appear across multiple source repositories."""
+
+    grouped: dict[str, set[str]] = {}
+    for row in deployment_artifacts.get("config_paths") or []:
+        if not isinstance(row, dict):
+            continue
+        path = str(row.get("path") or "").strip()
+        source_repo = str(row.get("source_repo") or "").strip()
+        if not path or not source_repo:
+            continue
+        grouped.setdefault(path, set()).add(source_repo)
+    return [
+        {
+            "path": path,
+            "source_repositories": sorted(source_repositories),
+        }
+        for path, source_repositories in sorted(grouped.items())
+        if len(source_repositories) > 1
+    ]

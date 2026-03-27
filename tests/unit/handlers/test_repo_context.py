@@ -512,6 +512,12 @@ class TestRepoSummary:
                             "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
                             "environment": None,
                         },
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "terraform-stack-node10",
+                            "relative_path": "shared/iam.tf",
+                            "environment": None,
+                        },
                     ],
                     "service_ports": [
                         {
@@ -621,6 +627,15 @@ class TestRepoSummary:
                     "sample_paths": ["group_vars/qa/api.yml"],
                 }
             ],
+            "shared_config_paths": [
+                {
+                    "path": "/configd/api-node-boats/*",
+                    "source_repositories": [
+                        "helm-charts",
+                        "terraform-stack-node10",
+                    ],
+                }
+            ],
                 "deployment_artifacts": {
                     "charts": [
                         {
@@ -674,6 +689,12 @@ class TestRepoSummary:
                             "path": "/api/api-node-boats/*",
                             "source_repo": "helm-charts",
                             "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "environment": None,
+                        },
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "terraform-stack-node10",
+                            "relative_path": "shared/iam.tf",
                             "environment": None,
                         },
                     ],
