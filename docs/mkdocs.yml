@@ -40,6 +40,7 @@ nav:
     - MCP Guide: guides/mcp-guide.md
     - Neo4j Setup: guides/neo4j-setup.md
     - Shared Infra Trace: guides/shared-infra-trace.md
+    - Relationship Graph Examples: guides/relationship-graphs.md
     - Fixture Ecosystems: guides/fixture-ecosystems.md
     - Visualization: guides/visualization.md
     - Bundles: guides/bundles.md

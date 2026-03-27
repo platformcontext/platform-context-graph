@@ -27,6 +27,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/guides/fixture-ecosystems.md` | Fixture ecosystems | active |
 | `docs/docs/guides/mcp-guide.md` | MCP usage guide | active |
 | `docs/docs/guides/neo4j-setup.md` | Neo4j setup | active |
+| `docs/docs/guides/relationship-graphs.md` | Public relationship graph examples and capability showcase | active |
 | `docs/docs/guides/shared-infra-trace.md` | Shared infra tracing walkthrough | active |
 | `docs/docs/guides/visualization.md` | Visualization guide | active |
 | `docs/docs/license.md` | License page | active |

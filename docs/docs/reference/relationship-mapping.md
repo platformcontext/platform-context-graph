@@ -2,6 +2,8 @@
 
 PlatformContextGraph resolves repository-to-repository relationships in a dynamic, evidence-backed flow. The important part is not just what edges exist, but when each stage runs, which stage owns truth, and which results are only derived summaries for answering questions.
 
+If you want public, example-driven diagrams of the relationship shapes this produces, see the [Relationship Graph Examples guide](../guides/relationship-graphs.md).
+
 The rule of thumb is:
 
 - index first
