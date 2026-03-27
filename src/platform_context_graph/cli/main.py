@@ -75,7 +75,9 @@ def _structured_json_logs_enabled() -> bool:
     configured = os.environ.get("PCG_LOG_FORMAT")
     if configured is None:
         try:
-            configured = str(config_manager.get_config_value("PCG_LOG_FORMAT") or "json")
+            configured = str(
+                config_manager.get_config_value("PCG_LOG_FORMAT") or "json"
+            )
         except Exception:
             configured = "json"
     return configured.strip().lower() == "json"
@@ -120,8 +122,12 @@ def start_http_api(
         port: The TCP port to bind.
         reload: Whether to enable Uvicorn reload mode.
     """
+    from platform_context_graph.api.http_auth import ensure_http_api_key
+
     import uvicorn
 
+    os.environ.setdefault("PCG_RUNTIME_ROLE", "api")
+    ensure_http_api_key()
     uvicorn.run(
         "platform_context_graph.api.app:create_app",
         host=host,
@@ -143,10 +149,14 @@ def start_service(
         port: The TCP port to bind.
         reload: Whether to enable Uvicorn reload mode.
     """
+    from platform_context_graph.api.http_auth import ensure_http_api_key
+
     import uvicorn
 
     from platform_context_graph.api.app import create_service_app
 
+    os.environ.setdefault("PCG_RUNTIME_ROLE", "api")
+    ensure_http_api_key()
     mcp_server = MCPServer()
     service_app = create_service_app(mcp_server_dependency=lambda: mcp_server)
     uvicorn.run(
@@ -209,7 +219,9 @@ def _load_credentials() -> None:
                 config_source_names.append("mcp.json")
         except Exception as exc:
             if _console_output_enabled():
-                console.print(f"[yellow]Warning: Could not load mcp.json: {exc}[/yellow]")
+                console.print(
+                    f"[yellow]Warning: Could not load mcp.json: {exc}[/yellow]"
+                )
 
     merged_config: dict[str, str | None] = {}
     for config in config_sources:

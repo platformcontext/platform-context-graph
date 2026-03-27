@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 import subprocess
 from dataclasses import asdict, dataclass
@@ -51,11 +52,34 @@ def git_token(config: RepoSyncConfig) -> str | None:
     return None
 
 
-def git_env(config: RepoSyncConfig) -> dict[str, str]:
+def _append_git_config_env(env: dict[str, str], key: str, value: str) -> None:
+    """Append one Git config override to a subprocess environment."""
+
+    raw_count = env.get("GIT_CONFIG_COUNT", "0")
+    try:
+        config_count = int(raw_count)
+    except ValueError:
+        config_count = 0
+    env["GIT_CONFIG_COUNT"] = str(config_count + 1)
+    env[f"GIT_CONFIG_KEY_{config_count}"] = key
+    env[f"GIT_CONFIG_VALUE_{config_count}"] = value
+
+
+def _github_http_extraheader(token: str) -> str:
+    """Return the GitHub HTTPS authorization header for Git subprocesses."""
+
+    encoded = base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode(
+        "ascii"
+    )
+    return f"AUTHORIZATION: basic {encoded}"
+
+
+def git_env(config: RepoSyncConfig, token: str | None = None) -> dict[str, str]:
     """Build the subprocess environment for Git operations.
 
     Args:
         config: Repo sync configuration.
+        token: Optional pre-resolved GitHub token.
 
     Returns:
         Process environment with SSH configuration when needed.
@@ -63,6 +87,13 @@ def git_env(config: RepoSyncConfig) -> dict[str, str]:
 
     env = dict(os.environ)
     if config.git_auth_method != "ssh":
+        resolved_token = token if token is not None else git_token(config)
+        if config.git_auth_method in {"githubApp", "token"} and resolved_token:
+            _append_git_config_env(
+                env,
+                "http.https://github.com/.extraheader",
+                _github_http_extraheader(resolved_token),
+            )
         return env
 
     private_key_path = os.getenv(
@@ -269,8 +300,6 @@ def repo_remote_url(config: RepoSyncConfig, repo_id: str, token: str | None) -> 
 
     if config.git_auth_method == "ssh":
         return f"git@github.com:{slug}.git"
-    if token:
-        return f"https://x-access-token:{token}@github.com/{slug}.git"
     return f"https://github.com/{slug}.git"
 
 
@@ -351,7 +380,10 @@ def filesystem_sync_all(config: RepoSyncConfig) -> list[str]:
 
 
 def update_existing_repositories(
-    config: RepoSyncConfig, token: str | None, *, force_default_branch_refresh: bool = False
+    config: RepoSyncConfig,
+    token: str | None,
+    *,
+    force_default_branch_refresh: bool = False,
 ) -> tuple[int, int]:
     """Fetch and hard-reset repositories that changed upstream."""
 

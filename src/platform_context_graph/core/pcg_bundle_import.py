@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import tempfile
 import zipfile
 from pathlib import Path
@@ -14,6 +16,13 @@ from platform_context_graph.utils.debug_log import (
     info_logger,
     warning_logger,
 )
+
+MAX_BUNDLE_ARCHIVE_BYTES = int(
+    os.getenv("PCG_MAX_BUNDLE_ARCHIVE_BYTES", str(256 * 1024 * 1024))
+)
+MAX_BUNDLE_ARCHIVE_ENTRIES = int(os.getenv("PCG_MAX_BUNDLE_ARCHIVE_ENTRIES", "32"))
+_CYPHER_LABEL_TOKEN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_CYPHER_RELATIONSHIP_TYPE_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 class _BundleImportMixin:
@@ -55,7 +64,9 @@ class _BundleImportMixin:
                 with tempfile.TemporaryDirectory() as temp_dir:
                     temp_path = Path(temp_dir)
                     with zipfile.ZipFile(bundle_path, "r") as bundle_zip:
-                        bundle_zip.extractall(temp_path)
+                        self._validate_bundle_archive(bundle_zip)
+                        for member in bundle_zip.infolist():
+                            bundle_zip.extract(member, temp_path)
 
                     is_valid, validation_msg = self._validate_bundle(temp_path)
                     if not is_valid:
@@ -115,6 +126,54 @@ class _BundleImportMixin:
                 exc_info=exc,
             )
             return False, error_msg
+
+    def _validate_bundle_archive(self, bundle_zip: zipfile.ZipFile) -> None:
+        """Reject archive shapes that exceed the configured extraction budget."""
+
+        members = bundle_zip.infolist()
+        if len(members) > MAX_BUNDLE_ARCHIVE_ENTRIES:
+            raise ValueError(
+                "Bundle archive has too many entries "
+                f"({len(members)} > {MAX_BUNDLE_ARCHIVE_ENTRIES})"
+            )
+
+        total_uncompressed_bytes = 0
+        for member in members:
+            member_path = Path(member.filename)
+            if member_path.is_absolute() or ".." in member_path.parts:
+                raise ValueError(
+                    f"Bundle archive contains unsafe path: {member.filename}"
+                )
+
+            total_uncompressed_bytes += member.file_size
+            if total_uncompressed_bytes > MAX_BUNDLE_ARCHIVE_BYTES:
+                raise ValueError(
+                    "Bundle archive exceeds maximum extracted size "
+                    f"({total_uncompressed_bytes} > {MAX_BUNDLE_ARCHIVE_BYTES} bytes)"
+                )
+
+    def _validate_label_tokens(self, labels: list[str]) -> None:
+        """Ensure bundle-provided labels are safe to interpolate into Cypher."""
+
+        invalid_labels = [
+            label
+            for label in labels
+            if not isinstance(label, str)
+            or _CYPHER_LABEL_TOKEN_RE.fullmatch(label) is None
+        ]
+        if invalid_labels:
+            raise ValueError(
+                "Invalid Cypher label token(s): " + ", ".join(map(str, invalid_labels))
+            )
+
+    def _validate_relationship_type(self, rel_type: Any) -> str:
+        """Ensure bundle-provided relationship types are safe Cypher tokens."""
+
+        if not isinstance(rel_type, str) or (
+            _CYPHER_RELATIONSHIP_TYPE_RE.fullmatch(rel_type) is None
+        ):
+            raise ValueError(f"Invalid Cypher relationship type: {rel_type}")
+        return rel_type
 
     def _validate_bundle(self, bundle_dir: Path) -> tuple[bool, str]:
         """Validate that a bundle directory has the expected files and metadata.
@@ -293,6 +352,7 @@ class _BundleImportMixin:
         for labels, properties, old_id in batch:
             if not labels:
                 continue
+            self._validate_label_tokens(labels)
             label_str = ":".join(labels)
             query = (
                 f"CREATE (n:{label_str}) SET n = $props "
@@ -345,7 +405,7 @@ class _BundleImportMixin:
         for edge in batch:
             old_from = edge.get("from")
             old_to = edge.get("to")
-            rel_type = edge.get("type")
+            rel_type = self._validate_relationship_type(edge.get("type"))
             properties = edge.get("properties", {})
             new_from = id_mapping.get(old_from)
             new_to = id_mapping.get(old_to)

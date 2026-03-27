@@ -43,12 +43,20 @@ CONTENT_ENTITY_BUCKETS: tuple[tuple[str, str], ...] = (
     ("crossplane_xrds", "CrossplaneXRD"),
     ("crossplane_compositions", "CrossplaneComposition"),
     ("crossplane_claims", "CrossplaneClaim"),
+    ("kustomize_overlays", "KustomizeOverlay"),
     ("helm_charts", "HelmChart"),
+    ("helm_values", "HelmValues"),
     ("terraform_resources", "TerraformResource"),
     ("terraform_variables", "TerraformVariable"),
     ("terraform_outputs", "TerraformOutput"),
     ("terraform_modules", "TerraformModule"),
     ("terraform_data_sources", "TerraformDataSource"),
+    ("terraform_providers", "TerraformProvider"),
+    ("terraform_locals", "TerraformLocal"),
+    ("terragrunt_configs", "TerragruntConfig"),
+    ("cloudformation_resources", "CloudFormationResource"),
+    ("cloudformation_parameters", "CloudFormationParameter"),
+    ("cloudformation_outputs", "CloudFormationOutput"),
 )
 CONTENT_ENTITY_LABELS = frozenset(label for _, label in CONTENT_ENTITY_BUCKETS)
 
@@ -73,12 +81,20 @@ _TRAILING_NEWLINE_LABELS = _SOURCE_FIELD_CONTAINS_CODE | {
     "CrossplaneComposition",
     "CrossplaneXRD",
     "HelmChart",
+    "HelmValues",
     "K8sResource",
+    "KustomizeOverlay",
+    "CloudFormationOutput",
+    "CloudFormationParameter",
+    "CloudFormationResource",
     "TerraformDataSource",
+    "TerraformLocal",
     "TerraformModule",
     "TerraformOutput",
+    "TerraformProvider",
     "TerraformResource",
     "TerraformVariable",
+    "TerragruntConfig",
 }
 
 
@@ -130,10 +146,14 @@ def prepare_content_entries(
         of entity-content rows derived from the file payload.
     """
 
-    file_path = Path(file_data["path"]).resolve()
+    file_path = Path(file_data["path"])
     repo_local_path = repository.get("local_path")
+    resolved_file_path = _resolve_repo_contained_path(file_path, repo_local_path)
+    if resolved_file_path is None:
+        return None, []
+
     relative_path = _portable_relative_path(file_path, repo_local_path)
-    file_content = _read_text(file_path)
+    file_content = _read_text(resolved_file_path)
     file_lines = file_content.splitlines() if file_content is not None else []
     metadata = infer_content_metadata(
         relative_path=Path(relative_path),
@@ -162,6 +182,23 @@ def prepare_content_entries(
         )
 
     return file_entry, entities
+
+
+def _resolve_repo_contained_path(
+    file_path: Path, repo_local_path: str | None
+) -> Path | None:
+    """Resolve a file path only when it stays inside the repository root."""
+
+    resolved_file_path = file_path.resolve()
+    if repo_local_path is None:
+        return resolved_file_path
+
+    repo_root = Path(repo_local_path).expanduser().resolve()
+    try:
+        resolved_file_path.relative_to(repo_root)
+    except ValueError:
+        return None
+    return resolved_file_path
 
 
 def _build_entity_entries(
@@ -235,6 +272,16 @@ def _build_entity_entries(
 def _portable_relative_path(file_path: Path, repo_local_path: str | None) -> str:
     """Return a repo-relative path suitable for portable API responses."""
 
+    if file_path.is_absolute() and repo_local_path is not None:
+        try:
+            return (
+                file_path.expanduser()
+                .relative_to(Path(repo_local_path).expanduser().resolve())
+                .as_posix()
+            )
+        except ValueError:
+            pass
+
     relative_path = relative_path_from_local(file_path, repo_local_path)
     if relative_path is None:
         return file_path.name
@@ -249,7 +296,7 @@ def _read_text(file_path: Path) -> str | None:
 
     try:
         return read_source_text(file_path)
-    except OSError:
+    except (OSError, ValueError):
         return None
 
 

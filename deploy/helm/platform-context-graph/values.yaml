@@ -11,10 +11,32 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
 service:
   type: ClusterIP
   port: 8080
   annotations: {}
+
+networkPolicy:
+  enabled: true
+
+apiAuth:
+  secretName: pcg-api-auth
+  key: api-key
 
 api:
   replicas: 1
@@ -60,6 +82,7 @@ env:
   NEO4J_DATABASE: neo4j
   PCG_LOG_FORMAT: json
   LIBRARY_LOG_LEVEL: WARNING
+  PCG_ENABLE_PUBLIC_DOCS: "false"
 
 contentStore:
   dsn: ""

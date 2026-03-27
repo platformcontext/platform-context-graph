@@ -46,16 +46,16 @@ COPY --from=builder /usr/local/bin/pcg /usr/local/bin/pcg
 # Copy source code
 COPY --from=builder /app/src /app/src
 
-# Create directory for code to be indexed
-RUN mkdir -p /workspace
-
-# Create directory for database and config
-RUN mkdir -p /root/.platform-context-graph
+# Create the runtime user and writable working directories.
+RUN useradd --create-home --uid 10001 --user-group pcg \
+    && mkdir -p /workspace /data/.platform-context-graph \
+    && chown -R pcg:pcg /app /workspace /data
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV PCG_HOME=/root/.platform-context-graph
+ENV HOME=/data
+ENV PCG_HOME=/data/.platform-context-graph
 
 # Remote FalkorDB connection (set at runtime via docker run -e or docker-compose)
 # ENV DATABASE_TYPE=falkordb-remote
@@ -71,6 +71,7 @@ EXPOSE 8080
 
 # Default working directory for repo data
 WORKDIR /data
+USER pcg
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

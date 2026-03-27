@@ -82,7 +82,7 @@ _NEO4J_FULLTEXT_STATEMENTS = [
     """,
     """
         CREATE FULLTEXT INDEX infra_search_index IF NOT EXISTS
-        FOR (n:K8sResource|TerraformResource|ArgoCDApplication|CrossplaneXRD|CloudFormationResource)
+        FOR (n:K8sResource|TerraformResource|ArgoCDApplication|ArgoCDApplicationSet|CrossplaneXRD|CrossplaneComposition|CrossplaneClaim|KustomizeOverlay|HelmChart|HelmValues|TerraformVariable|TerraformOutput|TerraformModule|TerraformDataSource|TerraformProvider|TerraformLocal|TerragruntConfig|CloudFormationResource|CloudFormationParameter|CloudFormationOutput)
         ON EACH [n.name, n.kind, n.resource_type]
     """,
 ]

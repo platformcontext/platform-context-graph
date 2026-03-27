@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import threading
 import time
 import traceback
@@ -11,6 +10,8 @@ import uuid
 import webbrowser
 from pathlib import Path
 from typing import Any
+
+from ..visualization.core import _json_for_inline_script, escape_html
 
 
 def _api():
@@ -54,11 +55,18 @@ def _write_legacy_visualization(
     """
     api = _api()
     filename = "codegraph_viz.html"
+    safe_nodes = []
+    for node in data_nodes:
+        node_copy = dict(node)
+        if "title" in node_copy:
+            node_copy["title"] = escape_html(node_copy.get("title", ""))
+        safe_nodes.append(node_copy)
+    safe_edges = [dict(edge) for edge in data_edges]
     html_content = f"""
 <!DOCTYPE html>
 <html>
 <head>
-  <title>{title}</title>
+  <title>{escape_html(title)}</title>
   <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
   <style type="text/css">
     #mynetwork {{
@@ -71,8 +79,8 @@ def _write_legacy_visualization(
 <body>
   <div id="mynetwork"></div>
   <script type="text/javascript">
-    var nodes = new vis.DataSet({json.dumps(data_nodes)});
-    var edges = new vis.DataSet({json.dumps(data_edges)});
+    var nodes = new vis.DataSet({_json_for_inline_script(safe_nodes)});
+    var edges = new vis.DataSet({_json_for_inline_script(safe_edges)});
     var container = document.getElementById('mynetwork');
     var data = {{ nodes: nodes, edges: edges }};
     var options = {{

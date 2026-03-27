@@ -25,6 +25,8 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "pcg.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -42,11 +44,15 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["pcg", "internal", "repo-sync-loop"]
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           env:
             - name: PCG_RUNTIME_ROLE
               value: "ingester"
             - name: PCG_HOME
               value: /data/.platform-context-graph
+            - name: HOME
+              value: /data
             - name: PYTHONUNBUFFERED
               value: "1"
             - name: PCG_REPOS_DIR
@@ -112,6 +118,8 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
             - name: pcgignore
               mountPath: /data/repos/.pcgignore
               subPath: .pcgignore
@@ -124,6 +132,8 @@ spec:
           resources:
             {{- toYaml .Values.ingester.resources | nindent 12 }}
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: pcgignore
           configMap:
             name: {{ include "pcg.fullname" . }}-pcgignore

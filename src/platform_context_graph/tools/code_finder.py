@@ -28,6 +28,7 @@ class CodeFinder(
         self._is_falkordb = (
             getattr(db_manager, "get_backend_type", lambda: "neo4j")() != "neo4j"
         )
+        self._search_warnings: list[str] = []
 
 
 __all__ = ["CodeFinder"]

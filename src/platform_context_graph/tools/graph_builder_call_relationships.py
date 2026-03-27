@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins as py_builtins
 import re
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ from .graph_builder_call_batches import (
 
 _CALL_RELATIONSHIP_BUFFER_FLUSH_ROWS = 2000
 _CALL_RELATIONSHIP_BATCH_SIZE = 250
+_PYTHON_BUILTIN_NAMES = frozenset(dir(py_builtins))
 
 
 def safe_run_create(session: Any, query: str, params: dict[str, Any]) -> bool:
@@ -132,13 +134,15 @@ def create_all_function_calls(
                     f"{file_data.get('path', 'unknown')}"
                 )
             caller_file_path = str(Path(file_data["path"]).resolve())
-            file_contextual_rows, file_level_batch_rows, next_row_id = _prepare_call_rows(
-                file_data,
-                imports_map,
-                caller_file_path=caller_file_path,
-                get_config_value_fn=resolved_get_config_value_fn,
-                warning_logger_fn=resolved_warning_logger_fn,
-                start_row_id=next_row_id,
+            file_contextual_rows, file_level_batch_rows, next_row_id = (
+                _prepare_call_rows(
+                    file_data,
+                    imports_map,
+                    caller_file_path=caller_file_path,
+                    get_config_value_fn=resolved_get_config_value_fn,
+                    warning_logger_fn=resolved_warning_logger_fn,
+                    start_row_id=next_row_id,
+                )
             )
             if file_contextual_rows:
                 contextual_buffer.extend(file_contextual_rows)
@@ -207,7 +211,7 @@ def _prepare_call_rows(
 
     for call in file_data.get("function_calls", []):
         called_name = call["name"]
-        if called_name in __builtins__:
+        if called_name in _PYTHON_BUILTIN_NAMES:
             continue
 
         resolved_path = None

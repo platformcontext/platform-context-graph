@@ -27,6 +27,8 @@ DASHBOARD_FILE = (
     / "platform-context-graph-observability.json"
 )
 MCP_EXAMPLE_FILE = REPO_ROOT / ".mcp.json.example"
+DOCKERFILE = REPO_ROOT / "Dockerfile"
+ENV_EXAMPLE_FILE = REPO_ROOT / ".env.example"
 
 
 def _render_chart(*args: str) -> list[dict]:
@@ -66,6 +68,18 @@ def test_public_deployment_layout_exists() -> None:
     assert ARGOCD_BASE_DIR.exists()
     assert ARGOCD_AWS_DIR.exists()
     assert MCP_EXAMPLE_FILE.exists()
+    assert DOCKERFILE.exists()
+    assert ENV_EXAMPLE_FILE.exists()
+
+
+def test_runtime_dockerfile_uses_non_root_data_home() -> None:
+    dockerfile = DOCKERFILE.read_text()
+
+    assert "useradd --create-home --uid 10001 --user-group pcg" in dockerfile
+    assert "ENV HOME=/data" in dockerfile
+    assert "ENV PCG_HOME=/data/.platform-context-graph" in dockerfile
+    assert "USER pcg" in dockerfile
+    assert "ENV PCG_HOME=/root/.platform-context-graph" not in dockerfile
 
 
 def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
@@ -75,6 +89,7 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert "StatefulSet" in kinds
     assert "Deployment" in kinds
     assert "Service" in kinds
+    assert "NetworkPolicy" in kinds
     assert "Ingress" not in kinds
     assert "HTTPRoute" not in kinds
     metadata_names = {doc.get("metadata", {}).get("name", "") for doc in docs}
@@ -108,7 +123,9 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         "8080",
     ]
     assert worker_container["command"] == ["pcg", "internal", "repo-sync-loop"]
-    assert worker_statefulset["spec"]["serviceName"] == "platform-context-graph-ingester"
+    assert (
+        worker_statefulset["spec"]["serviceName"] == "platform-context-graph-ingester"
+    )
     assert worker_statefulset["spec"]["selector"]["matchLabels"] == {
         "app.kubernetes.io/name": "platform-context-graph",
         "app.kubernetes.io/instance": "platform-context-graph",
@@ -130,6 +147,9 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
 
     api_env_names = {env["name"] for env in deployment_container.get("env", [])}
     worker_env_names = {env["name"] for env in worker_container.get("env", [])}
+    api_env_items = {
+        env["name"]: env for env in deployment_container.get("env", []) if "name" in env
+    }
     api_volume_mounts = {
         volume_mount["mountPath"]
         for volume_mount in deployment_container.get("volumeMounts", [])
@@ -141,10 +161,122 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
 
     assert "PCG_REPOSITORY_RULES_JSON" not in api_env_names
     assert "PCG_REPOS_DIR" not in api_env_names
+    assert api_env_items["PCG_RUNTIME_ROLE"]["value"] == "api"
+    assert api_env_items["PCG_ENABLE_PUBLIC_DOCS"]["value"] == "false"
+    assert (
+        api_env_items["PCG_API_KEY"]["valueFrom"]["secretKeyRef"]["name"]
+        == "pcg-api-auth"
+    )
+    assert api_env_items["PCG_API_KEY"]["valueFrom"]["secretKeyRef"]["key"] == "api-key"
     assert "PCG_REPOSITORY_RULES_JSON" in worker_env_names
     assert "PCG_REPOS_DIR" in worker_env_names
     assert "/data" not in api_volume_mounts
     assert "/data" in worker_volume_mounts
+
+
+def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> None:
+    docs = _render_chart()
+
+    deployment = next(doc for doc in docs if doc["kind"] == "Deployment")
+    deployment_pod_spec = deployment["spec"]["template"]["spec"]
+    deployment_container = next(
+        container
+        for container in deployment_pod_spec["containers"]
+        if container["name"] == "platform-context-graph"
+    )
+
+    statefulset = next(doc for doc in docs if doc["kind"] == "StatefulSet")
+    worker_pod_spec = statefulset["spec"]["template"]["spec"]
+    worker_container = next(
+        container
+        for container in worker_pod_spec["containers"]
+        if container["name"] == "repo-sync"
+    )
+
+    expected_pod_security = {
+        "runAsNonRoot": True,
+        "runAsUser": 10001,
+        "runAsGroup": 10001,
+        "fsGroup": 10001,
+        "seccompProfile": {"type": "RuntimeDefault"},
+    }
+    expected_container_security = {
+        "allowPrivilegeEscalation": False,
+        "readOnlyRootFilesystem": True,
+        "capabilities": {"drop": ["ALL"]},
+    }
+
+    assert deployment_pod_spec["securityContext"] == expected_pod_security
+    assert worker_pod_spec["securityContext"] == expected_pod_security
+    assert deployment_container["securityContext"] == expected_container_security
+    assert worker_container["securityContext"] == expected_container_security
+
+    api_env = {
+        env["name"]: env["value"]
+        for env in deployment_container.get("env", [])
+        if "name" in env and "value" in env
+    }
+    worker_env = {
+        env["name"]: env["value"]
+        for env in worker_container.get("env", [])
+        if "name" in env and "value" in env
+    }
+    api_volume_mounts = {
+        volume_mount["mountPath"]
+        for volume_mount in deployment_container.get("volumeMounts", [])
+    }
+    worker_volume_mounts = {
+        volume_mount["mountPath"]
+        for volume_mount in worker_container.get("volumeMounts", [])
+    }
+    api_volumes = {
+        volume["name"]: volume
+        for volume in deployment_pod_spec.get("volumes", [])
+        if "name" in volume
+    }
+    worker_volumes = {
+        volume["name"]: volume
+        for volume in worker_pod_spec.get("volumes", [])
+        if "name" in volume
+    }
+
+    assert api_env["PCG_HOME"] == "/tmp/.platform-context-graph"
+    assert api_env["HOME"] == "/tmp"
+    assert worker_env["HOME"] == "/data"
+    assert "/tmp" in api_volume_mounts
+    assert "/tmp" in worker_volume_mounts
+    assert api_volumes["tmp"]["emptyDir"] == {}
+    assert worker_volumes["tmp"]["emptyDir"] == {}
+
+
+def test_default_chart_renders_network_policies_for_api_and_ingester() -> None:
+    docs = _render_chart()
+    policies = [doc for doc in docs if doc["kind"] == "NetworkPolicy"]
+
+    assert len(policies) == 2
+
+    api_policy = next(
+        policy
+        for policy in policies
+        if policy["spec"]["podSelector"]["matchLabels"]["app.kubernetes.io/component"]
+        == "api"
+    )
+    ingester_policy = next(
+        policy
+        for policy in policies
+        if policy["spec"]["podSelector"]["matchLabels"]["app.kubernetes.io/component"]
+        == "ingester"
+    )
+
+    assert api_policy["spec"]["policyTypes"] == ["Ingress", "Egress"]
+    assert api_policy["spec"]["ingress"] == [
+        {"ports": [{"protocol": "TCP", "port": 8080}]}
+    ]
+    assert api_policy["spec"]["egress"] == [{}]
+
+    assert ingester_policy["spec"]["policyTypes"] == ["Ingress", "Egress"]
+    assert ingester_policy["spec"]["ingress"] == []
+    assert ingester_policy["spec"]["egress"] == [{}]
 
 
 def test_chart_can_render_ingress() -> None:
@@ -236,6 +368,10 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
         assert envs["PCG_PARSE_WORKERS"] == "${PCG_PARSE_WORKERS:-4}"
         assert envs["PCG_INDEX_QUEUE_DEPTH"] == "${PCG_INDEX_QUEUE_DEPTH:-8}"
 
+    service_envs = _compose_service_envs(services["platform-context-graph"])
+    assert service_envs["PCG_RUNTIME_ROLE"] == "api"
+    assert service_envs["PCG_AUTO_GENERATE_API_KEY"] == "true"
+
 
 @pytest.mark.parametrize("compose_file", [COMPOSE_FILE, COMPOSE_TEMPLATE_FILE])
 def test_compose_stack_includes_local_otel_collector_and_jaeger(
@@ -291,14 +427,48 @@ def test_compose_stack_propagates_worker_tuning_envs(
     assert collector_config["receivers"]["otlp"]["protocols"]["grpc"]["endpoint"] == (
         "0.0.0.0:4317"
     )
-    assert collector_config["exporters"]["otlp/jaeger"]["endpoint"] == (
-        "jaeger:4317"
-    )
+    assert collector_config["exporters"]["otlp/jaeger"]["endpoint"] == ("jaeger:4317")
     assert collector_config["exporters"]["prometheus"]["endpoint"] == "0.0.0.0:9464"
     assert collector_config["service"]["pipelines"]["metrics"]["receivers"] == ["otlp"]
     assert collector_config["service"]["pipelines"]["metrics"]["exporters"] == [
         "prometheus"
     ]
+
+
+@pytest.mark.parametrize("compose_file", [COMPOSE_FILE, COMPOSE_TEMPLATE_FILE])
+def test_compose_stack_parameterizes_local_passwords(compose_file: Path) -> None:
+    rendered = compose_file.read_text()
+    assert "testpassword" not in rendered
+
+    data = yaml.safe_load(rendered)
+    services = data["services"]
+
+    assert _compose_service_envs(services["neo4j"])["NEO4J_AUTH"] == (
+        "neo4j/${PCG_NEO4J_PASSWORD:-change-me}"
+    )
+    assert _compose_service_envs(services["postgres"])["POSTGRES_PASSWORD"] == (
+        "${PCG_POSTGRES_PASSWORD:-change-me}"
+    )
+
+    for service_name in ["bootstrap-index", "platform-context-graph", "repo-sync"]:
+        envs = _compose_service_envs(services[service_name])
+        assert envs["NEO4J_PASSWORD"] == "${PCG_NEO4J_PASSWORD:-change-me}"
+        assert (
+            envs["PCG_CONTENT_STORE_DSN"]
+            == "postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-me}@postgres:5432/platform_context_graph"
+        )
+        assert (
+            envs["PCG_POSTGRES_DSN"]
+            == "postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-me}@postgres:5432/platform_context_graph"
+        )
+
+
+def test_env_example_documents_local_compose_secret_placeholders() -> None:
+    env_example = ENV_EXAMPLE_FILE.read_text()
+
+    assert "PCG_NEO4J_PASSWORD=" in env_example
+    assert "PCG_POSTGRES_PASSWORD=" in env_example
+    assert "PCG_API_KEY=" in env_example
 
 
 def test_compose_stack_includes_service_and_external_test_database() -> None:
@@ -334,7 +504,9 @@ def test_chart_renders_otel_env_for_all_runtime_containers_when_enabled() -> Non
         "platform-context-graph-ingester",
     ]
 
-    for pod_spec, expected_service_name in zip(pod_specs, expected_service_names, strict=True):
+    for pod_spec, expected_service_name in zip(
+        pod_specs, expected_service_names, strict=True
+    ):
         for container in [
             *pod_spec.get("initContainers", []),
             *pod_spec.get("containers", []),

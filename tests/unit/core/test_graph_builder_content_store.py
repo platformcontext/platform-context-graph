@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from platform_context_graph.tools.graph_builder_persistence import (
+    BatchCommitResult,
     _begin_transaction,
     add_file_to_graph,
     commit_file_batch_to_graph,
@@ -604,3 +605,120 @@ def test_begin_transaction_falls_back_when_driver_raises_not_implemented() -> No
 
     assert tx is session
     assert is_explicit is False
+
+
+def test_commit_file_batch_returns_partial_result_after_single_file_fallback(
+    tmp_path, monkeypatch
+) -> None:
+    """Chunk rollback should retry per-file and report committed vs failed paths."""
+
+    repo_path = tmp_path / "batch-repo"
+    repo_path.mkdir()
+    file_paths = []
+    files = []
+    for name in ("a.py", "b.py", "c.py"):
+        path = repo_path / "src" / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(f"def {path.stem}(): pass\n", encoding="utf-8")
+        file_paths.append(str(path.resolve()))
+        files.append(
+            {
+                "path": str(path),
+                "repo_path": str(repo_path),
+                "lang": "python",
+                "functions": [{"name": path.stem, "line_number": 1, "args": []}],
+                "imports": [],
+                "function_calls": [],
+            }
+        )
+
+    repo_row = {
+        "id": "repository:r_batch",
+        "name": "batch-repo",
+        "path": str(repo_path.resolve()),
+        "local_path": str(repo_path.resolve()),
+        "remote_url": "https://github.com/platformcontext/batch-repo",
+        "repo_slug": "platformcontext/batch-repo",
+        "has_remote": True,
+    }
+
+    class _Result:
+        def __init__(self, row=None) -> None:
+            self._row = row
+
+        def single(self):
+            if self._row is None:
+                return None
+            return SimpleNamespace(data=lambda: self._row)
+
+        def consume(self):
+            return None
+
+    class _Tx:
+        def __init__(self, failure_suffixes: tuple[str, ...]) -> None:
+            self.failure_suffixes = failure_suffixes
+            self.committed = False
+            self.rolled_back = False
+
+        def run(self, query, parameters=None, **kwargs):
+            merged = dict(parameters or {}, **kwargs)
+            file_path = merged.get("file_path")
+            if isinstance(file_path, str) and file_path.endswith(self.failure_suffixes):
+                raise RuntimeError(f"boom:{file_path}")
+            return _Result()
+
+        def commit(self):
+            self.committed = True
+
+        def rollback(self):
+            self.rolled_back = True
+
+    class _Session:
+        def __init__(self) -> None:
+            self._transactions = iter(
+                [
+                    _Tx(("b.py",)),
+                    _Tx(()),
+                    _Tx(("b.py",)),
+                    _Tx(()),
+                ]
+            )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def run(self, query, parameters=None, **kwargs):
+            _ = dict(parameters or {}, **kwargs)
+            return _Result(repo_row)
+
+        def begin_transaction(self):
+            return next(self._transactions)
+
+    session = _Session()
+    builder = SimpleNamespace(
+        driver=SimpleNamespace(session=MagicMock(return_value=session)),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
+        lambda: None,
+    )
+    monkeypatch.setenv("PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE", "3")
+
+    warnings: list[str] = []
+    result = commit_file_batch_to_graph(
+        builder,
+        files,
+        Path(repo_path),
+        debug_log_fn=lambda *_a, **_kw: None,
+        info_logger_fn=lambda *_a, **_kw: None,
+        warning_logger_fn=warnings.append,
+    )
+
+    assert result == BatchCommitResult(
+        committed_file_paths=(file_paths[0], file_paths[2]),
+        failed_file_paths=(file_paths[1],),
+    )
+    assert any("retrying files individually" in message.lower() for message in warnings)

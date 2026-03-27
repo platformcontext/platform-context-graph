@@ -70,6 +70,7 @@ def create_inheritance_links(
         imp.get("alias") or imp["name"].split(".")[-1]: imp["name"]
         for imp in file_data.get("imports", [])
     }
+    rows: list[dict[str, str]] = []
 
     for class_item in file_data.get("classes", []):
         if not class_item.get("bases"):
@@ -92,17 +93,27 @@ def create_inheritance_links(
             if not resolved_path:
                 continue
 
-            session.run(
-                """
-                MATCH (child:Class {name: $child_name, path: $file_path})
-                MATCH (parent:Class {name: $parent_name, path: $resolved_parent_file_path})
-                MERGE (child)-[:INHERITS]->(parent)
-                """,
-                child_name=class_item["name"],
-                file_path=caller_file_path,
-                parent_name=target_class_name,
-                resolved_parent_file_path=resolved_path,
+            rows.append(
+                {
+                    "child_name": class_item["name"],
+                    "file_path": caller_file_path,
+                    "parent_name": target_class_name,
+                    "resolved_parent_file_path": resolved_path,
+                }
             )
+
+    if not rows:
+        return
+
+    session.run(
+        """
+        UNWIND $rows AS row
+        MATCH (child:Class {name: row.child_name, path: row.file_path})
+        MATCH (parent:Class {name: row.parent_name, path: row.resolved_parent_file_path})
+        MERGE (child)-[:INHERITS]->(parent)
+        """,
+        rows=rows,
+    )
 
 
 def create_csharp_inheritance_and_interfaces(

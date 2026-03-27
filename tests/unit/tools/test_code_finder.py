@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from platform_context_graph.tools.code_finder import CodeFinder
+from platform_context_graph.tools import code_finder_search
 
 
 @pytest.fixture
@@ -106,9 +107,7 @@ def test_find_related_code_escapes_lucene_special_characters_for_neo4j() -> None
     finder.find_by_class_name.assert_called_once_with(
         "@dmm\\/lib\\-node\\-search~2", True, None
     )
-    finder.find_by_content.assert_called_once_with(
-        "@dmm\\/lib\\-node\\-search~2", None
-    )
+    finder.find_by_content.assert_called_once_with("@dmm\\/lib\\-node\\-search~2", None)
 
 
 def test_analyze_code_relationships_normalizes_aliases(
@@ -200,7 +199,9 @@ class RecordingSession:
         return RecordingResult()
 
 
-def _make_recording_finder(*, backend_type: str = "neo4j") -> tuple[CodeFinder, RecordingSession]:
+def _make_recording_finder(
+    *, backend_type: str = "neo4j"
+) -> tuple[CodeFinder, RecordingSession]:
     session = RecordingSession()
     driver = MagicMock()
     driver.session.return_value = session
@@ -258,7 +259,101 @@ def test_find_module_dependencies_uses_dynamic_import_matching() -> None:
     assert "type(imp) = 'IMPORTS'" in importers_query
     assert "file[$is_dependency_key] as file_is_dependency" in importers_query
     assert "[imp:IMPORTS]" not in importers_query
-    assert "MATCH (file:File)-[target_rel]->(target_module:Module {name: $module_name})" in imports_query
+    assert (
+        "MATCH (file:File)-[target_rel]->(target_module:Module {name: $module_name})"
+        in imports_query
+    )
     assert "WHERE type(target_rel) = 'IMPORTS'" in imports_query
     assert "MATCH (file)-[imp]->(other_module:Module)" in imports_query
     assert "[imp:IMPORTS]" not in imports_query
+
+
+def test_find_by_content_falkordb_logs_warning_and_returns_partial_results(
+    caplog,
+) -> None:
+    """Falkor substring search failures should warn while preserving partial matches."""
+
+    class _Result:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def data(self) -> list[dict[str, object]]:
+            return list(self._rows)
+
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def run(self, query: str, **_kwargs):
+            if "MATCH (node:Function)" in query:
+                raise RuntimeError("function search exploded")
+            return _Result(
+                [
+                    {
+                        "type": "class",
+                        "name": "PaymentsService",
+                        "path": "/repo/payments.py",
+                        "line_number": 8,
+                        "source": "class PaymentsService: ...",
+                        "docstring": None,
+                        "is_dependency": False,
+                    }
+                ]
+            )
+
+    driver = MagicMock()
+    driver.session.return_value = _Session()
+    db_manager = MagicMock()
+    db_manager.get_driver.return_value = driver
+    db_manager.get_backend_type.return_value = "falkordb"
+    finder = CodeFinder(db_manager)
+
+    caplog.set_level("WARNING", logger=code_finder_search.__name__)
+    results = finder.find_by_content("payments")
+
+    assert results == [
+        {
+            "type": "class",
+            "name": "PaymentsService",
+            "path": "/repo/payments.py",
+            "line_number": 8,
+            "source": "class PaymentsService: ...",
+            "docstring": None,
+            "is_dependency": False,
+        }
+    ]
+    assert "FalkorDB content query failed for label Function" in caplog.text
+
+
+def test_find_related_code_surfaces_partial_content_search_warnings() -> None:
+    """Aggregated code search should expose partial-result warnings to callers."""
+
+    finder, _session = _make_recording_finder(backend_type="falkordb")
+    finder.find_by_function_name = MagicMock(return_value=[])
+    finder.find_by_class_name = MagicMock(return_value=[])
+    finder.find_by_variable_name = MagicMock(return_value=[])
+    finder.find_by_content = MagicMock(
+        return_value=[
+            {
+                "type": "class",
+                "name": "PaymentsService",
+                "path": "/repo/payments.py",
+                "line_number": 8,
+                "source": "class PaymentsService: ...",
+                "docstring": None,
+                "is_dependency": False,
+            }
+        ]
+    )
+    finder._search_warnings = [
+        "Content search returned partial results after FalkorDB query failure for label Function"
+    ]
+
+    result = finder.find_related_code(
+        user_query="payments", fuzzy_search=False, edit_distance=2
+    )
+
+    assert result["warnings"] == finder._search_warnings

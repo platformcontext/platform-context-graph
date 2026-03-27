@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import importlib
 import json
 from contextlib import contextmanager
@@ -345,6 +346,7 @@ def test_repo_sync_cycle_indexes_only_changed_and_resumable_repositories(
         lambda _workspace: [repo_c.resolve()],
         raising=False,
     )
+
     def _index_workspace(
         workspace: Path,
         *,
@@ -448,6 +450,7 @@ def test_repo_sync_cycle_repeated_syncs_keep_repo_batches_partitioned(
         lambda _workspace: [],
         raising=False,
     )
+
     def _index_workspace(
         workspace: Path,
         *,
@@ -1050,7 +1053,9 @@ def test_repo_sync_loop_logs_startup_diagnostics(
     monkeypatch.setenv("PCG_REPO_SYNC_INITIAL_DELAY_SECONDS", "0")
 
     captured_logs: list[str] = []
-    monkeypatch.setattr(sync, "log", lambda _component, message: captured_logs.append(message))
+    monkeypatch.setattr(
+        sync, "log", lambda _component, message: captured_logs.append(message)
+    )
     monkeypatch.setattr(sync, "content_store_dsn_resolution_active", lambda: True)
     monkeypatch.setattr(sync, "runtime_status_persistence_active", lambda: False)
     monkeypatch.setattr(
@@ -1224,7 +1229,7 @@ def test_update_existing_repositories_refreshes_https_origin_with_fresh_token(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Existing HTTPS remotes should be rewritten with a fresh token before fetch."""
+    """Existing HTTPS remotes should be rewritten to a clean GitHub origin."""
 
     git_module = importlib.import_module("platform_context_graph.runtime.ingester.git")
     repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
@@ -1247,9 +1252,11 @@ def test_update_existing_repositories_refreshes_https_origin_with_fresh_token(
     )
 
     calls: list[list[str]] = []
+    envs_by_command: dict[tuple[str, ...], dict[str, str]] = {}
 
     def _run(command, **_kwargs):
         calls.append(command)
+        envs_by_command[tuple(command)] = dict(_kwargs.get("env", {}))
         if command[3:5] == ["remote", "get-url"]:
             return SimpleNamespace(
                 returncode=0,
@@ -1297,7 +1304,7 @@ def test_update_existing_repositories_refreshes_https_origin_with_fresh_token(
         "remote",
         "set-url",
         "origin",
-        "https://x-access-token:fresh-token@github.com/boatsgroup/api-node-boattrader.git",
+        "https://github.com/boatsgroup/api-node-boattrader.git",
     ]
     fetch_call = [
         "git",
@@ -1314,6 +1321,9 @@ def test_update_existing_repositories_refreshes_https_origin_with_fresh_token(
     assert (
         calls.index(get_url_call) < calls.index(set_url_call) < calls.index(fetch_call)
     )
+    fetch_env = envs_by_command[tuple(fetch_call)]
+    assert fetch_env["GIT_CONFIG_KEY_0"] == "http.https://github.com/.extraheader"
+    assert fetch_env["GIT_CONFIG_VALUE_0"].startswith("AUTHORIZATION: basic ")
 
 
 def test_update_existing_repositories_skips_origin_refresh_without_token(
@@ -1367,6 +1377,61 @@ def test_update_existing_repositories_skips_origin_refresh_without_token(
     assert (updated, failed) == (0, 0)
     assert all(command[3:5] != ["remote", "get-url"] for command in calls)
     assert all(command[3:5] != ["remote", "set-url"] for command in calls)
+
+
+def test_git_env_uses_extraheader_for_github_tokens() -> None:
+    """GitHub token auth should travel via Git config env, not remote URLs."""
+
+    git_module = importlib.import_module("platform_context_graph.runtime.ingester.git")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=Path("/tmp/repos"),
+        source_mode="githubOrg",
+        git_auth_method="token",
+        github_org="boatsgroup",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=Path("/tmp/repos/.pcg-sync.lock"),
+        component="repository",
+    )
+
+    env = git_module.git_env(config, "fresh-token")
+
+    assert env["GIT_CONFIG_COUNT"] == "1"
+    assert env["GIT_CONFIG_KEY_0"] == "http.https://github.com/.extraheader"
+    auth_header = env["GIT_CONFIG_VALUE_0"]
+    assert auth_header.startswith("AUTHORIZATION: basic ")
+    encoded = auth_header.removeprefix("AUTHORIZATION: basic ")
+    assert base64.b64decode(encoded).decode("utf-8") == "x-access-token:fresh-token"
+
+
+def test_repo_remote_url_keeps_https_origin_clean_for_token_auth() -> None:
+    """Token-backed sync should keep the stored remote free of embedded secrets."""
+
+    git_module = importlib.import_module("platform_context_graph.runtime.ingester.git")
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=Path("/tmp/repos"),
+        source_mode="githubOrg",
+        git_auth_method="token",
+        github_org="boatsgroup",
+        repositories=[],
+        filesystem_root=None,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=Path("/tmp/repos/.pcg-sync.lock"),
+        component="repository",
+    )
+
+    remote_url = git_module.repo_remote_url(
+        config, "api-node-boattrader", "fresh-token"
+    )
+
+    assert remote_url == "https://github.com/boatsgroup/api-node-boattrader.git"
 
 
 def test_update_existing_repositories_skips_repo_without_default_branch(
@@ -1473,9 +1538,7 @@ def test_update_existing_repositories_retries_after_stale_shallow_lock(
                 return SimpleNamespace(
                     returncode=128,
                     stdout="",
-                    stderr=(
-                        f"fatal: Unable to create '{shallow_lock}': File exists"
-                    ),
+                    stderr=(f"fatal: Unable to create '{shallow_lock}': File exists"),
                 )
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if command[3:] == ["rev-parse", "HEAD"]:

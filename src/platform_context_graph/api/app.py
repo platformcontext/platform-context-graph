@@ -5,21 +5,33 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError, version as pkg_version
+import os
 from pathlib import Path
 import tempfile
 from typing import Any
 
-from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.responses import Response
 
+from ..cli.config_manager import get_config_value
 from ..core.pcg_bundle import PCGBundle
 from ..observability import initialize_observability
 from ..domain.responses import IngesterScanRequestResponse, IngesterStatusResponse
 from ..indexing.coordinator import describe_index_run
 from ..query import status as status_queries
 from .dependencies import get_database, get_query_services
+from .http_auth import http_auth_middleware
 from .routers import (
     code_router,
     content_router,
@@ -40,6 +52,9 @@ API_V0_PREFIX = "/api/v0"
 API_V0_OPENAPI_URL = f"{API_V0_PREFIX}/openapi.json"
 API_V0_DOCS_URL = f"{API_V0_PREFIX}/docs"
 API_V0_REDOC_URL = f"{API_V0_PREFIX}/redoc"
+MAX_BUNDLE_UPLOAD_BYTES = int(
+    os.getenv("PCG_MAX_BUNDLE_UPLOAD_BYTES", str(64 * 1024 * 1024))
+)
 
 _WORKLOAD_CONTEXT_EXAMPLE = {
     "workload": {
@@ -180,6 +195,17 @@ def _build_openapi(app: FastAPI) -> dict[str, Any]:
     return app.openapi_schema
 
 
+def _public_docs_enabled() -> bool:
+    """Return whether OpenAPI and interactive docs should be exposed."""
+
+    configured = os.getenv("PCG_ENABLE_PUBLIC_DOCS")
+    if configured is None:
+        configured = get_config_value("PCG_ENABLE_PUBLIC_DOCS")
+    if configured is None or not str(configured).strip():
+        return True
+    return str(configured).strip().lower() == "true"
+
+
 def _import_uploaded_bundle(
     database: Any,
     bundle_path: Path,
@@ -214,13 +240,15 @@ def create_app(
         A configured FastAPI application.
     """
 
+    public_docs_enabled = _public_docs_enabled()
     app = FastAPI(
         title=API_TITLE,
         version=_get_api_version(),
-        openapi_url=API_V0_OPENAPI_URL,
-        docs_url=API_V0_DOCS_URL,
-        redoc_url=API_V0_REDOC_URL,
+        openapi_url=API_V0_OPENAPI_URL if public_docs_enabled else None,
+        docs_url=API_V0_DOCS_URL if public_docs_enabled else None,
+        redoc_url=API_V0_REDOC_URL if public_docs_enabled else None,
     )
+    app.middleware("http")(http_auth_middleware)
     initialize_observability(component="api", app=app)
 
     if database_dependency is not None:
@@ -284,7 +312,14 @@ def create_app(
             suffix = Path(bundle.filename or "uploaded-bundle.pcg").suffix or ".pcg"
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as handle:
                 temp_path = Path(handle.name)
+                bytes_written = 0
                 while chunk := await bundle.read(1024 * 1024):
+                    bytes_written += len(chunk)
+                    if bytes_written > MAX_BUNDLE_UPLOAD_BYTES:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="Bundle upload exceeds maximum allowed size.",
+                        )
                     handle.write(chunk)
 
             result = _import_uploaded_bundle(

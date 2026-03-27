@@ -231,3 +231,26 @@ def test_schema_statements_follow_graph_store_capabilities() -> None:
     assert any(
         "CREATE CONSTRAINT variable_uid_unique" in stmt for stmt in neo4j_statements
     )
+
+
+def test_infra_fulltext_index_covers_supported_infra_labels() -> None:
+    neo4j_statements = _schema_statements_for_capabilities(
+        GraphStoreCapabilities(
+            backend_type="neo4j",
+            fulltext_index_strategy="neo4j_fulltext",
+        )
+    )
+
+    infra_statement = next(
+        stmt for stmt in neo4j_statements if "infra_search_index" in stmt
+    )
+
+    assert "ArgoCDApplicationSet" in infra_statement
+    assert "HelmChart" in infra_statement
+    assert "HelmValues" in infra_statement
+    assert "KustomizeOverlay" in infra_statement
+    assert "TerragruntConfig" in infra_statement
+    assert "TerraformProvider" in infra_statement
+    assert "TerraformLocal" in infra_statement
+    assert "CloudFormationParameter" in infra_statement
+    assert "CloudFormationOutput" in infra_statement

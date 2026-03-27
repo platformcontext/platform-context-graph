@@ -21,6 +21,7 @@ from .support import (
     save_default_branch_retry_cache,
 )
 
+
 @dataclass(frozen=True, slots=True)
 class DefaultBranchResolution:
     """Resolved default-branch state for one repository checkout."""
@@ -207,7 +208,7 @@ def _set_remote_head_branch(
 
 
 def refreshed_origin_url(remote_url: str, token: str | None) -> str | None:
-    """Return an HTTPS origin URL with the current token injected."""
+    """Return a clean HTTPS GitHub origin URL without embedded credentials."""
 
     if not token:
         return None
@@ -220,7 +221,7 @@ def refreshed_origin_url(remote_url: str, token: str | None) -> str | None:
     if not path:
         return None
 
-    return f"https://x-access-token:{token}@github.com/{path}"
+    return f"https://github.com/{path}"
 
 
 def refresh_repository_origin_url(
@@ -276,7 +277,7 @@ def clone_missing_repositories_detailed_impl(
     cloned_paths: list[Path] = []
     skipped = 0
     failed = 0
-    env = git_env_fn(config)
+    env = git_env_fn(config, token)
     telemetry = get_observability()
 
     with telemetry.start_span(
@@ -374,7 +375,7 @@ def update_existing_repositories_detailed_impl(
 
     updated_paths: list[Path] = []
     failed = 0
-    env = git_env_fn(config)
+    env = git_env_fn(config, token)
     retry_cache = load_default_branch_retry_cache(config)
     branchless_repos: list[str] = []
     now = time.time()

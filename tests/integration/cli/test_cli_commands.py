@@ -124,11 +124,13 @@ class TestCLICommands:
         mock_server.run_sse.assert_awaited_once_with(host="127.0.0.1", port=8123)
         mock_server.shutdown.assert_called_once()
 
-    def test_start_http_api_uses_factory_mode_for_reload(self):
+    def test_start_http_api_uses_factory_mode_for_reload(self, monkeypatch):
         """Test the HTTP startup helper uses Uvicorn factory mode."""
         with patch("uvicorn.run") as mock_run:
             from platform_context_graph.cli.main import start_http_api
 
+            monkeypatch.setenv("PCG_API_KEY", "test-api-key")
+            monkeypatch.delenv("PCG_RUNTIME_ROLE", raising=False)
             start_http_api(host="0.0.0.0", port=9000, reload=True)
 
         mock_run.assert_called_once_with(
@@ -141,7 +143,7 @@ class TestCLICommands:
             access_log=False,
         )
 
-    def test_start_service_uses_combined_app(self):
+    def test_start_service_uses_combined_app(self, monkeypatch):
         """Test the combined service startup helper wires the service app into Uvicorn."""
         with (
             patch("platform_context_graph.cli.main.MCPServer") as mock_server_cls,
@@ -149,10 +151,13 @@ class TestCLICommands:
         ):
             from platform_context_graph.cli.main import start_service
 
+            monkeypatch.setenv("PCG_API_KEY", "test-api-key")
+            monkeypatch.delenv("PCG_RUNTIME_ROLE", raising=False)
             mock_server = mock_server_cls.return_value
             start_service(host="0.0.0.0", port=9000, reload=False)
 
         assert mock_server is mock_server_cls.return_value
+        assert os.environ["PCG_RUNTIME_ROLE"] == "api"
         app_obj = mock_run.call_args.args[0]
         assert app_obj.title == "PlatformContextGraph HTTP API"
         mock_run.assert_called_once_with(
@@ -163,6 +168,20 @@ class TestCLICommands:
             log_config=None,
             access_log=False,
         )
+
+    def test_start_service_preserves_explicit_runtime_role(self, monkeypatch):
+        """Explicit runtime-role settings should win over the safe default."""
+        with (
+            patch("platform_context_graph.cli.main.MCPServer"),
+            patch("uvicorn.run"),
+        ):
+            from platform_context_graph.cli.main import start_service
+
+            monkeypatch.setenv("PCG_API_KEY", "test-api-key")
+            monkeypatch.setenv("PCG_RUNTIME_ROLE", "combined")
+            start_service(host="0.0.0.0", port=9000, reload=False)
+
+        assert os.environ["PCG_RUNTIME_ROLE"] == "combined"
 
     @patch("platform_context_graph.cli.main.run_bootstrap_index")
     def test_internal_bootstrap_index_command_uses_python_runtime(

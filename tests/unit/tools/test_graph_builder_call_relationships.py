@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+import builtins as py_builtins
 
 import platform_context_graph.tools.graph_builder_call_relationships as call_relationships
 from platform_context_graph.tools.graph_builder_call_relationships import (
@@ -421,6 +422,38 @@ def test_filter_fallback_candidate_rows_skips_known_php_builtins() -> None:
     assert [row["row_id"] for row in filtered] == [3]
 
 
+def test_prepare_call_rows_handles_module_form_builtins_without_type_error(
+    monkeypatch,
+) -> None:
+    """Builtin skipping should not depend on `__builtins__` being a dict."""
+
+    monkeypatch.setattr(call_relationships, "__builtins__", py_builtins)
+
+    contextual_rows, file_level_rows, next_row_id = (
+        call_relationships._prepare_call_rows(
+            {
+                "functions": [],
+                "classes": [],
+                "imports": [],
+                "function_calls": [
+                    {"name": "print", "line_number": 1},
+                    {"name": "helper", "line_number": 2},
+                ],
+            },
+            {"helper": ["/tmp/repo/helpers.py"]},
+            caller_file_path="/tmp/repo/main.py",
+            get_config_value_fn=lambda _key: "false",
+            warning_logger_fn=lambda *_args, **_kwargs: None,
+            start_row_id=1,
+        )
+    )
+
+    resolved_rows = contextual_rows + file_level_rows
+    assert len(resolved_rows) == 1
+    assert resolved_rows[0]["called_name"] == "helper"
+    assert next_row_id == 2
+
+
 def test_create_all_function_calls_does_not_special_case_vendored_files() -> None:
     """CALLS finalization should assume discovery already excluded vendored files."""
 
@@ -476,7 +509,9 @@ def test_create_all_function_calls_does_not_report_vendored_skip_metrics() -> No
                 "functions": [{"name": "vendoredFn"}],
                 "classes": [],
                 "imports": [],
-                "function_calls": [{"name": "dependencyCall", "line_number": 5, "args": []}],
+                "function_calls": [
+                    {"name": "dependencyCall", "line_number": 5, "args": []}
+                ],
             },
             {
                 "path": "/tmp/repo/app.js",

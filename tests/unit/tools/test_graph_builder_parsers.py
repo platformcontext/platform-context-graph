@@ -52,6 +52,25 @@ def test_build_parser_registry_uses_dedicated_tsx_parser() -> None:
     )
 
 
+def test_build_parser_registry_registers_common_extension_aliases(monkeypatch) -> None:
+    """Common extension aliases should resolve to the expected parser language."""
+
+    class FakeTreeSitterParser:
+        def __init__(self, language_name: str) -> None:
+            self.language_name = language_name
+
+    monkeypatch.setattr(graph_builder_parsers, "TreeSitterParser", FakeTreeSitterParser)
+
+    registry = graph_builder_parsers.build_parser_registry(lambda _key: "false")
+
+    assert registry[".cc"].language_name == "cpp"
+    assert registry[".cxx"].language_name == "cpp"
+    assert registry[".mts"].language_name == "typescript"
+    assert registry[".cts"].language_name == "typescript"
+    assert registry[".pyw"].language_name == "python"
+    assert registry[".csx"].language_name == "c_sharp"
+
+
 def test_tree_sitter_parser_creates_distinct_parsers_per_thread(
     monkeypatch,
 ) -> None:
@@ -240,3 +259,51 @@ def test_parse_file_uses_raw_text_parser_for_conf_j2(tmp_path: Path) -> None:
     assert result["path"] == str(file_path)
     assert result["lang"] == "config_template"
     assert "error" not in result
+
+
+def test_pre_scan_for_imports_includes_c_java_ruby_and_csharp_together(
+    monkeypatch,
+) -> None:
+    """Mixed-language repos should not let C files short-circuit other prescans."""
+
+    c_file = Path("hello.c")
+    java_file = Path("Main.java")
+    ruby_file = Path("app.rb")
+    csharp_file = Path("Program.cs")
+    builder = SimpleNamespace(
+        parsers={
+            ".c": object(),
+            ".java": object(),
+            ".rb": object(),
+            ".cs": object(),
+        }
+    )
+
+    monkeypatch.setattr(
+        "platform_context_graph.tools.languages.c.pre_scan_c",
+        lambda files, _parser: {"c": [str(path) for path in files]},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.languages.java.pre_scan_java",
+        lambda files, _parser: {"java": [str(path) for path in files]},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.languages.ruby.pre_scan_ruby",
+        lambda files, _parser: {"ruby": [str(path) for path in files]},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.tools.languages.csharp.pre_scan_csharp",
+        lambda files, _parser: {"csharp": [str(path) for path in files]},
+    )
+
+    imports_map = graph_builder_parsers.pre_scan_for_imports(
+        builder,
+        [c_file, java_file, ruby_file, csharp_file],
+    )
+
+    assert imports_map == {
+        "c": ["hello.c"],
+        "java": ["Main.java"],
+        "ruby": ["app.rb"],
+        "csharp": ["Program.cs"],
+    }

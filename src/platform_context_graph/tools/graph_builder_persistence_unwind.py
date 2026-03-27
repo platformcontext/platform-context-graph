@@ -52,6 +52,27 @@ DEFAULT_MAX_ENTITY_VALUE_LENGTH = 200
 CYPHER_PROPERTY_KEY_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
+def validate_cypher_label(label: str) -> str:
+    """Return a label only when it is safe to interpolate into Cypher."""
+
+    if CYPHER_PROPERTY_KEY_PATTERN.fullmatch(label) is None:
+        raise ValueError(f"Invalid Cypher label: {label}")
+    return label
+
+
+def validate_cypher_property_keys(keys: list[str]) -> list[str]:
+    """Return property keys only when all are safe for Cypher interpolation."""
+
+    invalid_keys = [
+        key for key in keys if CYPHER_PROPERTY_KEY_PATTERN.fullmatch(key) is None
+    ]
+    if invalid_keys:
+        raise ValueError(
+            "Invalid Cypher property key(s): " + ", ".join(sorted(invalid_keys))
+        )
+    return keys
+
+
 def _consume_write_result(result: Any) -> None:
     """Eagerly consume Neo4j write results to release transaction buffers."""
 
@@ -159,6 +180,7 @@ def run_entity_unwind(
         label: Node label for the MERGE clause.
         rows: List of property dicts built by ``entity_props_for_unwind``.
     """
+    validate_cypher_label(label)
     if not rows:
         return {
             "total_rows": 0,
@@ -180,13 +202,7 @@ def run_entity_unwind(
         all_keys.update(row.keys())
     reserved = {"file_path", "name", "line_number", "use_uid_identity", "uid"}
     extra_keys = sorted(all_keys - reserved)
-    invalid_keys = [
-        key for key in extra_keys if CYPHER_PROPERTY_KEY_PATTERN.fullmatch(key) is None
-    ]
-    if invalid_keys:
-        raise ValueError(
-            "Invalid Cypher property key(s): " + ", ".join(sorted(invalid_keys))
-        )
+    validate_cypher_property_keys(extra_keys)
 
     for row in rows:
         for key in extra_keys:
@@ -198,7 +214,9 @@ def run_entity_unwind(
         for row in rows
         if isinstance((file_path := row.get("file_path")), str) and file_path
     }
-    single_file_path = next(iter(unique_file_paths)) if len(unique_file_paths) == 1 else None
+    single_file_path = (
+        next(iter(unique_file_paths)) if len(unique_file_paths) == 1 else None
+    )
 
     started = time.perf_counter()
     set_parts = [
