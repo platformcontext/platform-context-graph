@@ -117,7 +117,17 @@ Rules:
 3. do not put a fact in `story` unless the lower layers can already explain it
 4. keep the raw evidence-heavy fields intact for drill-down
 
-`deployment_story` should prefer explicit workflow- or delivery-path rows when they exist. If those are absent, it may fall back to a controller/runtime summary built from deployment controllers, runtime platforms, and service variants. The fallback should only appear when it still describes a real deployment shape, not just loose infrastructure context.
+`deployment_story` should prefer explicit workflow- or delivery-path rows when they exist.
+
+If explicit command rows are absent, there is still an intermediate safe fallback:
+
+1. reusable-workflow handoff or automation-repo evidence
+2. canonical deploy/provision relationships such as `DEPLOYS_FROM` and `PROVISIONS_DEPENDENCY_FOR`
+3. canonical runtime platforms such as `RUNS_ON`
+
+That tier is what allows a repo to keep a truthful GitOps or direct-delivery story even when the centralized automation repository is not indexed deeply enough to expose command-level workflow rows.
+
+Only after that should it fall back to a controller/runtime summary built from deployment controllers, runtime platforms, and service variants. The controller/runtime fallback should only appear when it still describes a real deployment shape, not just loose infrastructure context.
 
 Current `topology_story` ordering is intentional:
 

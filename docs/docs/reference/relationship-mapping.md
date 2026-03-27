@@ -332,9 +332,17 @@ That order matters. For example, shared config hints should not appear before th
 `deployment_story` itself has an internal preference order:
 
 1. workflow- and delivery-path-derived deployment lines
-2. controller/runtime fallback lines built from deployment controllers, runtime platforms, and service variants
+2. reusable-workflow handoff plus canonical deploy/provision/runtime context when explicit command rows are missing
+3. controller/runtime fallback lines built from deployment controllers, runtime platforms, and service variants
 
-That fallback exists for repos whose deployment shape is visible through Terraform, CodeDeploy, or similar controller signals even when a reusable workflow or explicit delivery-path row is missing.
+The reusable-workflow tier matters for repos that hand off deployment to a centralized automation repository. In that case PCG may still emit truthful `delivery_paths` when all of these are already known:
+
+- the repo references a reusable workflow or automation repository
+- canonical repo relationships already show deployment sources such as `DEPLOYS_FROM`
+- canonical repo relationships already show provisioning sources such as `PROVISIONS_DEPENDENCY_FOR`
+- runtime platforms already show where the workload runs
+
+Only after those two tiers fail should PCG fall back to controller/runtime summaries such as Terraform, CodeDeploy, or service-variant evidence.
 
 ## Safe Extension
 
