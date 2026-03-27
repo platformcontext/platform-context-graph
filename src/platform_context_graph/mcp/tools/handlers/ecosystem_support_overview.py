@@ -77,6 +77,15 @@ def build_deployment_overview(
     shared_config_paths = _build_shared_config_paths(deployment_artifacts or {})
     if shared_config_paths:
         overview["shared_config_paths"] = shared_config_paths
+    topology_story = _build_topology_story(
+        hostnames=overview["internet_entrypoints"],
+        api_surface=overview["api_surface"],
+        deployment_story=deployment_story,
+        shared_config_paths=shared_config_paths,
+        consumer_repositories=overview.get("consumer_repositories", []),
+    )
+    if topology_story:
+        overview["topology_story"] = topology_story
     service_variants = _build_service_variants(terraform_modules or [])
     if service_variants:
         overview["service_variants"] = service_variants
@@ -327,6 +336,72 @@ def _controller_label(value: str) -> str:
     if normalized == "jenkins":
         return "Jenkins"
     return value.replace("_", " ").strip() or "Unknown controller"
+
+
+def _build_topology_story(
+    *,
+    hostnames: list[dict[str, Any]],
+    api_surface: dict[str, Any],
+    deployment_story: list[str],
+    shared_config_paths: list[dict[str, Any]],
+    consumer_repositories: list[dict[str, Any]],
+) -> list[str]:
+    """Build a compact internet-to-cloud-to-code narrative from derived facts."""
+
+    lines: list[str] = []
+    public_hostnames = [
+        str(row.get("hostname") or "").strip()
+        for row in hostnames
+        if isinstance(row, dict) and str(row.get("hostname") or "").strip()
+    ]
+    if public_hostnames:
+        lines.append(f"Public entrypoints: {', '.join(public_hostnames)}.")
+
+    api_versions = [
+        str(value).strip()
+        for value in api_surface.get("api_versions") or []
+        if str(value).strip()
+    ]
+    docs_routes = [
+        str(value).strip()
+        for value in api_surface.get("docs_routes") or []
+        if str(value).strip()
+    ]
+    if api_versions or docs_routes:
+        details: list[str] = []
+        if api_versions:
+            details.append(f"versions {', '.join(api_versions)}")
+        if docs_routes:
+            details.append(f"docs routes {', '.join(docs_routes)}")
+        lines.append(f"API surface exposes {' and '.join(details)}.")
+
+    lines.extend(deployment_story)
+
+    for row in shared_config_paths:
+        if not isinstance(row, dict):
+            continue
+        path = str(row.get("path") or "").strip()
+        repositories = [
+            str(value).strip()
+            for value in row.get("source_repositories") or []
+            if str(value).strip()
+        ]
+        if path and repositories:
+            lines.append(
+                f"Shared config paths include {path} across {', '.join(repositories)}."
+            )
+
+    consumer_names = [
+        str(row.get("repository") or "").strip()
+        for row in consumer_repositories
+        if isinstance(row, dict) and str(row.get("repository") or "").strip()
+    ]
+    if consumer_names:
+        lines.append(
+            f"Consumer-only repositories include {', '.join(consumer_names)}."
+        )
+
+    return lines
 
 
 def _build_shared_config_paths(

@@ -624,6 +624,13 @@ class TestRepoSummary:
             "deployment_story": [
                 "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa."
             ],
+            "topology_story": [
+                "Public entrypoints: api-node-boats.qa.bgrp.io.",
+                "API surface exposes versions v3 and docs routes /_specs.",
+                "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
+                "Shared config paths include /configd/api-node-boats/* across helm-charts, terraform-stack-node10.",
+                "Consumer-only repositories include automate-yachtworld.",
+            ],
             "consumer_repositories": [
                 {
                     "repository": "automate-yachtworld",
@@ -1189,6 +1196,11 @@ class TestTraceDeploymentChain:
             ],
             "deployment_story": [
                 "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod."
+            ],
+            "topology_story": [
+                "Public entrypoints: api-node-boats.qa.bgrp.io.",
+                "API surface exposes versions v3 and docs routes /_specs.",
+                "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod.",
             ],
             "deployment_artifacts": {
                 "images": [
