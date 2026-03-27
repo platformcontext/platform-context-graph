@@ -316,8 +316,8 @@ def _fetch_iac_relationships(
 
     rows = session.run(
         f"""
-        MATCH (r:Repository)-[:CONTAINS*]->(f1:File)-[:CONTAINS]->(n1)
-              -[rel]->(n2)<-[:CONTAINS]-(f2:File)<-[:CONTAINS*]-(r)
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(f1:File)-[:CONTAINS]->(n1)
+              -[rel]->(n2)<-[:CONTAINS]-(f2:File)<-[:REPO_CONTAINS]-(r)
         WHERE {repository_scope_predicate()}
           AND type(rel) IN [
             'SELECTS', 'CONFIGURES', 'PATCHES', 'ROUTES_TO',

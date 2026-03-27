@@ -288,6 +288,33 @@ def test_trace_deployment_chain_uses_repo_contains_for_repo_to_file_lookups(
     )
 
 
+def test_find_blast_radius_uses_repo_contains_for_flat_repo_file_lookups():
+    """Blast-radius lookups for infra nodes should use REPO_CONTAINS."""
+
+    recorded_queries: list[str] = []
+
+    class RecordingSession:
+        def run(self, query, **kwargs):
+            del kwargs
+            recorded_queries.append(query)
+            return MockResult(records=[])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    db = MagicMock()
+    db.get_driver.return_value.session.return_value = RecordingSession()
+
+    find_blast_radius(db, "terraform-aws-vpc", "terraform_module")
+    find_blast_radius(db, "composite-postgres", "crossplane_xrd")
+
+    assert any("MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)" in q for q in recorded_queries)
+    assert not any("MATCH (repo:Repository)-[:CONTAINS*]->(f)" in q for q in recorded_queries)
+
+
 
 class TestRepoSummary:
     """Test repo summary shaping and truthfulness notes."""

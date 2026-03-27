@@ -172,7 +172,7 @@ def get_infra_relationships(
                    OR xrd.name CONTAINS $target_name
                 MATCH (claim:CrossplaneClaim)-[:SATISFIED_BY]->(xrd)
                 MATCH (f:File)-[:CONTAINS]->(claim)
-                MATCH (repo:Repository)-[:CONTAINS*]->(f)
+                MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)
                 RETURN DISTINCT
                     repo.name as repo,
                     claim.name as claim,
@@ -187,7 +187,7 @@ def get_infra_relationships(
                 WHERE mod.name CONTAINS $target_name
                    OR mod.source CONTAINS $target_name
                 MATCH (f:File)-[:CONTAINS]->(mod)
-                MATCH (repo:Repository)-[:CONTAINS*]->(f)
+                MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)
                 RETURN DISTINCT
                     repo.name as repo,
                     mod.name as module_name,
@@ -236,7 +236,7 @@ def get_ecosystem_overview(database: Any) -> dict[str, Any]:
 
             repo_stats = session.run("""
             MATCH (r:Repository)
-            OPTIONAL MATCH (r)-[:CONTAINS*]->(f:File)
+            OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)
             OPTIONAL MATCH (r)-[rel]->(dep:Repository)
             WHERE dep IS NULL OR type(rel) = $depends_on_type
             RETURN r.name as name,

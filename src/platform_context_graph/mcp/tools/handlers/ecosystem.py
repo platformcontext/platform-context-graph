@@ -65,7 +65,7 @@ def find_blast_radius(
                 WHERE mod.name CONTAINS $target_name
                    OR mod.source CONTAINS $target_name
                 MATCH (f:File)-[:CONTAINS]->(mod)
-                MATCH (repo:Repository)-[:CONTAINS*]->(f)
+                MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)
                 OPTIONAL MATCH path = (repo)<-[rels*0..5]-(affected:Repository)
                 WHERE all(rel IN rels WHERE type(rel) = $depends_on_type)
                 OPTIONAL MATCH (affected)<-[:CONTAINS]-(tier:Tier)
@@ -87,7 +87,7 @@ def find_blast_radius(
                    OR xrd.name CONTAINS $target_name
                 OPTIONAL MATCH (claim:CrossplaneClaim)-[:SATISFIED_BY]->(xrd)
                 MATCH (f:File)-[:CONTAINS]->(claim)
-                MATCH (repo:Repository)-[:CONTAINS*]->(f)
+                MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)
                 OPTIONAL MATCH (affected)<-[:CONTAINS]-(tier:Tier)
                 RETURN DISTINCT
                     repo.name as repo,

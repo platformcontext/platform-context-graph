@@ -132,7 +132,7 @@ def db_workload_entities(database: Any, *, query: str, repo_id: str | None) -> l
     with driver.session() as session:
         resource_rows = session.run(
             f"""
-            MATCH (repo:Repository)-[:CONTAINS*]->(:File)-[:CONTAINS]->(k:K8sResource)
+            MATCH (repo:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(k:K8sResource)
             WHERE {_name_match('k.name')} AND ($repo_id IS NULL OR repo.id = $repo_id)
             RETURN k.name as name,
                    collect(DISTINCT toLower(coalesce(k.kind, ''))) as resource_kinds,
