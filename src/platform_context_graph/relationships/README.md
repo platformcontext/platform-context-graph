@@ -134,6 +134,12 @@ These fields are currently useful for ECS-oriented summaries, but they are delib
 
 Runtime-family matching should stay centralized. Terraform resource types and module source patterns that identify one runtime family belong in the shared Terraform runtime-family registry, not in scattered ECS-only or EKS-only conditionals.
 
+That shared registry now supports more than Terraform parsing. It is also used by:
+
+- infrastructure platform inference for `PROVISIONS_PLATFORM`
+- Terraform service evidence for `RUNS_ON`
+- GitOps repo/slug hints before generic Kubernetes fallback
+
 Rules:
 
 1. add new Terraform module attributes only when they describe a portable deployment concept
@@ -149,9 +155,10 @@ For Terraform-managed runtimes such as ECS today and Fargate or Elastic Beanstal
 
 1. extend the shared runtime-family registry when the runtime needs new family signals
 2. add or reuse generic module attributes
-3. resolve `Platform` identity and typed edges
-4. enrich repo context with deployment artifacts and runtime summaries
-5. update the MCP `story` only after the typed and derived layers are correct
+3. route Terraform and GitOps family detection through that shared registry
+4. resolve `Platform` identity and typed edges
+5. enrich repo context with deployment artifacts and runtime summaries
+6. update the MCP `story` only after the typed and derived layers are correct
 
 Do not skip directly from parser fields to user-facing prose.
 

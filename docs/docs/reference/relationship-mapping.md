@@ -216,8 +216,15 @@ The runtime-specific decision point now lives in a shared Terraform runtime-fami
 - cluster module source patterns
 - service module source patterns
 - non-cluster support module patterns
+- repo-name and slug hints used by GitOps control-plane repositories
 
 ECS and EKS are the first registered families. Future families such as Fargate or Elastic Beanstalk should extend that registry instead of introducing ad hoc checks in multiple layers.
+
+That registry is intentionally shared across more than one stage:
+
+- Terraform evidence extraction uses it to decide which module sources imply `RUNS_ON`
+- infrastructure platform inference uses it to decide which repos `PROVISIONS_PLATFORM`
+- GitOps platform inference uses it to interpret repo names and slugs before falling back to generic Kubernetes controller hints
 
 ### ECS As The First Example, Not The Final Shape
 
@@ -237,10 +244,12 @@ The sequence is:
 
 ```mermaid
 flowchart LR
-    A[Parse generic module metadata] --> B[Resolve platform identity]
-    B --> C[Emit typed canonical edges]
-    C --> D[Derive repo summaries]
-    D --> E[Shape story-first answer]
+    A[Parse generic module metadata] --> B[Runtime-family registry]
+    A2[GitOps repo and slug hints] --> B
+    B --> C[Resolve platform identity]
+    C --> D[Emit typed canonical edges]
+    D --> E[Derive repo summaries]
+    E --> F[Shape story-first answer]
 
     A1[deployment_name\nrepo_name\ncreate_deploy\ncluster_name\nzone_id\ndeploy_entry_point]
     A -.-> A1
