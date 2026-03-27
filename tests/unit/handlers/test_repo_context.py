@@ -457,6 +457,33 @@ class TestRepoSummary:
                         "summary": "GitHub Actions drives a GitOps deployment path through helm-charts onto EKS platforms.",
                     }
                 ],
+                "deployment_artifacts": {
+                    "images": [
+                        {
+                            "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
+                            "tag": "3.21.0",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                    "service_ports": [
+                        {
+                            "port": "3081",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/values.yaml",
+                            "environment": None,
+                        }
+                    ],
+                    "gateways": [
+                        {
+                            "name": "envoy-internal",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                },
                 "api_surface": {
                     "spec_files": [{"relative_path": "specs/index.yaml"}],
                     "docs_routes": ["/_specs"],
@@ -485,6 +512,7 @@ class TestRepoSummary:
         ]
         assert result["delivery_paths"][0]["path_kind"] == "gitops"
         assert result["delivery_paths"][0]["deployment_sources"] == ["helm-charts"]
+        assert result["deployment_artifacts"]["images"][0]["tag"] == "3.21.0"
         assert result["deployment_overview"] == {
             "internet_entrypoints": [
                 {
@@ -522,6 +550,33 @@ class TestRepoSummary:
                     "environments": ["bg-qa"],
                 }
             ],
+            "deployment_artifacts": {
+                "images": [
+                    {
+                        "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
+                        "tag": "3.21.0",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                        "environment": "bg-qa",
+                    }
+                ],
+                "service_ports": [
+                    {
+                        "port": "3081",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/base/values.yaml",
+                        "environment": None,
+                    }
+                ],
+                "gateways": [
+                    {
+                        "name": "envoy-internal",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                        "environment": "bg-qa",
+                    }
+                ],
+            },
         }
         assert result["api_surface"]["docs_routes"] == ["/_specs"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
@@ -887,6 +942,17 @@ class TestTraceDeploymentChain:
                         "summary": "GitHub Actions drives a direct deployment path through terraform-stack-ecs onto ECS platforms.",
                     }
                 ],
+                "deployment_artifacts": {
+                    "images": [
+                        {
+                            "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
+                            "tag": "3.21.0",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ]
+                },
                 "api_surface": {"docs_routes": ["/_specs"], "api_versions": ["v3"]},
                 "hostnames": [
                     {"hostname": "api-node-boats.qa.bgrp.io", "visibility": "public"}
@@ -935,6 +1001,9 @@ class TestTraceDeploymentChain:
         assert result["delivery_paths"][0]["provisioning_repositories"] == [
             "terraform-stack-ecs"
         ]
+        assert result["deployment_artifacts"]["images"][0]["repository"].endswith(
+            "/api-node-boats"
+        )
         assert result["deployment_overview"] == {
             "internet_entrypoints": [
                 {
@@ -974,6 +1043,17 @@ class TestTraceDeploymentChain:
                     "environments": ["prod"],
                 }
             ],
+            "deployment_artifacts": {
+                "images": [
+                    {
+                        "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
+                        "tag": "3.21.0",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                        "environment": "bg-qa",
+                    }
+                ]
+            },
         }
         assert result["api_surface"]["api_versions"] == ["v3"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"

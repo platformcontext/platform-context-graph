@@ -13,8 +13,16 @@ import yaml
 
 from ...query import content as content_queries
 from .common import get_db_manager, resolve_repository
+from .content_enrichment_deployment_artifacts import (
+    extract_related_deployment_artifacts,
+)
 from .content_enrichment_delivery_paths import summarize_delivery_paths
 from .content_enrichment_openapi import dedupe_endpoint_rows, extract_openapi_endpoints
+from .content_enrichment_support import (
+    infer_environment_from_path,
+    split_csv,
+    values_path_patterns,
+)
 from .content_enrichment_workflows import extract_delivery_workflows
 
 _SPEC_CANDIDATES = (
@@ -73,6 +81,18 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
 
         with db_manager.get_driver().session() as session:
             return _resolve_related_repo(session, candidate)
+
+    deployment_artifacts = extract_related_deployment_artifacts(
+        repo_name=str(repository.get("name") or ""),
+        deploys_from=list(context.get("deploys_from") or []),
+        discovers_config_in=list(context.get("discovers_config_in") or []),
+        resolve_related_repo=_resolve_repo,
+        values_path_patterns=values_path_patterns,
+        infer_environment_from_path=infer_environment_from_path,
+        split_csv=split_csv,
+    )
+    if any(deployment_artifacts.values()):
+        context["deployment_artifacts"] = deployment_artifacts
 
     delivery_workflows = extract_delivery_workflows(
         repository=repository,
@@ -191,7 +211,7 @@ def _extract_related_config_hostnames(
     related_rows = list(deploys_from) + list(discovers_config_in)
     with db_manager.get_driver().session() as session:
         for row in related_rows:
-            repo_candidates = _split_csv(row.get("source_repos"))
+            repo_candidates = split_csv(row.get("source_repos"))
             if not repo_candidates and isinstance(row.get("name"), str):
                 repo_candidates = [str(row["name"])]
             for source_repo in repo_candidates:
@@ -201,10 +221,10 @@ def _extract_related_config_hostnames(
                 local_path = resolved_repo.get("local_path") or resolved_repo.get("path")
                 if not isinstance(local_path, str) or not local_path:
                     continue
-                for source_path in _split_csv(row.get("source_paths")):
+                for source_path in split_csv(row.get("source_paths")):
                     if not source_path:
                         continue
-                    candidate_patterns = _values_path_patterns(source_path)
+                    candidate_patterns = values_path_patterns(source_path)
                     for candidate_pattern in candidate_patterns:
                         for file_path in sorted(glob(str(Path(local_path) / candidate_pattern))):
                             file_content = Path(file_path).read_text(encoding="utf-8")
@@ -296,7 +316,7 @@ def _hostname_records_from_yaml(
         parsed = yaml.safe_load(content)
     except yaml.YAMLError:
         return []
-    environment = _infer_environment_from_path(relative_path)
+    environment = infer_environment_from_path(relative_path)
     values = _collect_key_values(parsed, key="hostnames")
     records: list[dict[str, Any]] = []
     for value in values:
@@ -349,33 +369,6 @@ def _resolve_related_repo(session: Any, source_repo: str) -> dict[str, Any] | No
     return None
 
 
-def _values_path_patterns(source_path: str) -> list[str]:
-    """Return related values-file glob patterns for one source path hint."""
-
-    normalized = source_path.strip()
-    if not normalized:
-        return []
-    if normalized.endswith("config.yaml"):
-        return [normalized[:-len("config.yaml")] + "values.yaml"]
-    if normalized.endswith("config.yml"):
-        return [normalized[:-len("config.yml")] + "values.yaml"]
-    if normalized.endswith(".yaml") or normalized.endswith(".yml"):
-        return [normalized]
-    return [str(Path(normalized) / "values.yaml")]
-
-
-def _infer_environment_from_path(relative_path: str) -> str | None:
-    """Infer environment name from a repo-relative path."""
-
-    for part in Path(relative_path).parts:
-        normalized = part.strip()
-        if normalized in {"dev", "development", "prod", "production", "qa", "staging"}:
-            return normalized
-        if normalized.startswith("bg-"):
-            return normalized
-    return None
-
-
 def _normalize_hostname(value: Any) -> str | None:
     """Normalize one hostname-like value."""
 
@@ -388,14 +381,6 @@ def _normalize_hostname(value: Any) -> str | None:
         parsed = urlparse(candidate)
         candidate = parsed.netloc or parsed.path
     return candidate or None
-
-
-def _split_csv(value: Any) -> list[str]:
-    """Split a comma-delimited string field into trimmed items."""
-
-    if not isinstance(value, str):
-        return []
-    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _dedupe_strings(values: list[str]) -> list[str]:

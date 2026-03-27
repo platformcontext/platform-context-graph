@@ -421,6 +421,7 @@ def trace_deployment_chain(
         ),
         "delivery_workflows": context.get("delivery_workflows", {}),
         "delivery_paths": context.get("delivery_paths", []),
+        "deployment_artifacts": context.get("deployment_artifacts", {}),
         "api_surface": context.get("api_surface", {}),
         "hostnames": context.get("hostnames", []),
         "limitations": limitations,
@@ -434,6 +435,7 @@ def trace_deployment_chain(
         k8s_resources=k8s_resources,
         crossplane_claims=claims,
         terraform_resources=terraform,
+        deployment_artifacts=result["deployment_artifacts"],
     )
     if limitations:
         result["note"] = repo_summary_note(

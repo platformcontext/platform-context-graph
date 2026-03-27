@@ -13,6 +13,7 @@ def build_deployment_overview(
     k8s_resources: list[dict[str, Any]] | None = None,
     crossplane_claims: list[dict[str, Any]] | None = None,
     terraform_resources: list[dict[str, Any]] | None = None,
+    deployment_artifacts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a compact deployment overview for MCP-friendly answer shaping."""
 
@@ -57,6 +58,17 @@ def build_deployment_overview(
     }
     if provisioning_source_chains:
         overview["provisioning_source_chains"] = list(provisioning_source_chains)
+    if deployment_artifacts:
+        compact_artifacts = {
+            "images": list(deployment_artifacts.get("images") or []),
+            "service_ports": list(deployment_artifacts.get("service_ports") or []),
+            "gateways": list(deployment_artifacts.get("gateways") or []),
+        }
+        compact_artifacts = {
+            key: value for key, value in compact_artifacts.items() if value
+        }
+        if compact_artifacts:
+            overview["deployment_artifacts"] = compact_artifacts
     network_signals = _build_network_signals(
         k8s_resources=k8s_resources or [],
         crossplane_claims=crossplane_claims or [],

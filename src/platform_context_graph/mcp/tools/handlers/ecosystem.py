@@ -192,6 +192,7 @@ def get_repo_summary(
         ),
         "delivery_workflows": context.get("delivery_workflows", {}),
         "delivery_paths": context.get("delivery_paths", []),
+        "deployment_artifacts": context.get("deployment_artifacts", {}),
         "api_surface": context.get("api_surface", {}),
         "hostnames": context.get("hostnames", []),
         "limitations": limitations,
@@ -201,6 +202,7 @@ def get_repo_summary(
         api_surface=summary["api_surface"],
         platforms=summary["platforms"],
         delivery_paths=summary["delivery_paths"],
+        deployment_artifacts=summary["deployment_artifacts"],
     )
     note = repo_summary_note(
         limitations=limitations,

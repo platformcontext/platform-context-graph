@@ -74,7 +74,31 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
     )
     values_path.parent.mkdir(parents=True)
     values_path.write_text(
-        "ingress:\n  hostnames:\n    - api-node-boats.qa.svc.bgrp.io\n",
+        "\n".join(
+            [
+                "image:",
+                "  repository: 048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
+                "  tag: 3.21.0",
+                "service:",
+                "  port: 3081",
+                "exposure:",
+                "  gateway:",
+                "    enabled: true",
+                "    hostnames:",
+                "      - api-node-boats.qa.svc.bgrp.io",
+                "    parentRefs:",
+                "      - name: envoy-internal",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    base_values_path = (
+        helm_repo / "argocd" / "api-node-boats" / "base" / "values.yaml"
+    )
+    base_values_path.parent.mkdir(parents=True)
+    base_values_path.write_text(
+        "service:\n  port: 3081\n",
         encoding="utf-8",
     )
     automation_repo = tmp_path / "core-engineering-automation"
@@ -359,6 +383,39 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             ),
         },
     ]
+    assert result["deployment_artifacts"] == {
+        "images": [
+            {
+                "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
+                "tag": "3.21.0",
+                "source_repo": "helm-charts",
+                "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                "environment": "bg-qa",
+            }
+        ],
+        "service_ports": [
+            {
+                "port": "3081",
+                "source_repo": "helm-charts",
+                "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                "environment": "bg-qa",
+            },
+            {
+                "port": "3081",
+                "source_repo": "helm-charts",
+                "relative_path": "argocd/api-node-boats/base/values.yaml",
+                "environment": None,
+            },
+        ],
+        "gateways": [
+            {
+                "name": "envoy-internal",
+                "source_repo": "helm-charts",
+                "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                "environment": "bg-qa",
+            }
+        ],
+    }
 
 
 def test_enrich_repository_context_extracts_jenkins_pipeline_hints(
