@@ -1,14 +1,21 @@
 # Relationships Package
 
-This package owns evidence-backed repository relationship discovery, resolution, persistence, and projection.
+This package owns the post-index relationship pipeline: checkout identity, evidence discovery, typed resolution, Postgres persistence, and Neo4j projection.
 
-The current design is:
+For the public explanation of the flow and relationship semantics, see [Relationship Mapping](../../../docs/docs/reference/relationship-mapping.md).
 
-1. build checkout identities for the committed repos
+## Pipeline
+
+The dynamic mapping flow is ordered:
+
+1. build stable checkout identities for committed repos
 2. collect graph-derived and raw file-based evidence
 3. resolve evidence plus assertions into canonical relationships
 4. persist a generation in Postgres
 5. project the active resolved generation into Neo4j
+6. feed repo-context enrichment and answer shaping from the resolved data
+
+The package should remain truthful about what is canonical versus what is derived later for presentation.
 
 ## Module Map
 
@@ -16,7 +23,7 @@ The current design is:
 | :--- | :--- |
 | `models.py` | Dataclasses for checkouts, evidence, candidates, assertions, resolved relationships, and generations |
 | `identity.py` | Stable checkout identity helpers |
-| `file_evidence.py` | Raw file-based extractors for Terraform, Helm, Kustomize, and ArgoCD ApplicationSets |
+| `file_evidence.py` | Raw file-based extractors for Terraform, Helm, Kustomize, and ArgoCD |
 | `execution.py` | Checkout discovery, graph-derived evidence, and Neo4j projection |
 | `resolver.py` | Evidence dedupe, candidate building, assertion application, suppression rules, and end-to-end resolution orchestration |
 | `postgres.py` | Read and write APIs for assertions, candidates, generations, and resolved relationships |
@@ -26,7 +33,7 @@ The current design is:
 
 ## Design Rules
 
-### Postgres is canonical
+### Postgres Is Canonical
 
 Postgres stores:
 
@@ -37,75 +44,82 @@ Postgres stores:
 
 Neo4j is the projected read model used by the existing query surfaces.
 
-### Resolution is post-index
+### Resolution Is Post-Index
 
-Relationship resolution is a post-index step. We do not try to correlate repos while a repo is only partially indexed.
+Do not correlate repos while indexing is still in flight. Resolve only after the repos in scope are committed and the evidence set is stable.
 
-### Preserve semantics
+### Preserve Semantics
 
 Do not flatten every mapping to `DEPENDS_ON`.
 
-Current types:
+Current repo-to-repo types:
 
 - `DEPENDS_ON`
 - `DISCOVERS_CONFIG_IN`
 - `DEPLOYS_FROM`
 - `PROVISIONS_DEPENDENCY_FOR`
 
-Preferred future vocabulary:
+Preferred graph-side runtime types:
 
 - `PROVISIONS_PLATFORM`
 - `RUNS_ON`
 
-If a typed relationship exists for the same implied dependency pair, the resolver suppresses the generic inferred `DEPENDS_ON` candidate for that pair.
-After typed resolution, the resolver derives a compatibility `DEPENDS_ON` edge in the dependency direction implied by the typed relationship unless that generic edge was explicitly rejected.
+Typed canonical relationships beat the generic compatibility edge. The resolver should suppress the generic `DEPENDS_ON` candidate for the same implied pair, then derive a compatibility `DEPENDS_ON` edge from the typed result unless that generic edge was explicitly rejected.
 
-`DEPLOYS_FROM` is now implemented for deployable repos and config subjects when the evidence clearly identifies the repo that supplies manifests, charts, overlays, or release artifacts. The same semantic should be reused for future FluxCD and GitHub Actions mappings when the deployed repo or workflow subject clearly sources deployment artifacts from another repo.
+### Keep Direction Honest
 
-`PROVISIONS_DEPENDENCY_FOR` is now implemented for Terraform/Terragrunt repo mappings where the infra repo clearly provisions resources or deploy-config dependencies for an application repo without being the service deployer itself.
+Write the edge from the actor or subject to the source of config, artifacts, or runtime support.
+
+- ArgoCD control plane discovers config in another repo
+- deployable workloads deploy from charts or manifests owned by another repo
+- Terraform/Terragrunt repos provision dependency resources for downstream workloads
+
+### Deployment Artifacts Are Derived
+
+Deployment artifacts are not the canonical relationship itself. They are the read-side summaries built after resolution so repository context can explain what the source repo deploys from and what related files matter.
+
+That makes them useful for answer shaping, but they should never override the underlying typed edge.
 
 ## Where To Add New Mappings
 
-### Raw file mappings
+### Raw File Mappings
 
-If the source of truth is checked-in config, add a focused extractor to `file_evidence.py` and call it from `discover_checkout_file_evidence(...)`.
+If the source of truth is checked-in config, add a focused extractor to `file_evidence.py` and call it from the file-evidence discovery path.
 
-Use this path for things like:
+Use this path for:
 
 - Terraform or Terragrunt configuration
 - Helm chart metadata and values
 - Kustomize resources and image references
 - ArgoCD ApplicationSets
-- future GitHub Actions or FluxCD config files
+- GitHub Actions and Jenkins/Groovy delivery-path hints when the repo link is explicit enough to be explainable
 
-For future deploy-control mappings, do not stop at a generic extractor that emits only `DEPENDS_ON` if the evidence clearly distinguishes config discovery from deployment source selection.
+### Graph-Derived Mappings
 
-### Graph-derived mappings
+If the signal already exists in the graph and is trustworthy, extend the graph-derived evidence path in `execution.py`.
 
-If the signal already exists in the graph and is trustworthy, extend `discover_repository_dependency_evidence(...)` in `execution.py`.
-
-### Resolver behavior
+### Resolver Behavior
 
 If a new typed relationship needs precedence or conflict rules, change `resolver.py` and add tests that prove the intended suppression or coexistence behavior.
 
-### CLI review flows
+### Repo Context Enrichment
 
-If users need to inspect or override the new mapping from the CLI, update `cli/commands/ecosystem_relationships.py`.
+If the new mapping should influence deployment-artifact summaries or delivery-path answers, update the repository context enrichment helpers so the derived data stays consistent with the canonical edge.
 
 ## Checklist For A New Mapping
 
 1. Pick the right relationship type before writing extraction code.
 2. Emit a stable `evidence_kind`.
-3. Include explainable `details` with path, matched value, extractor name, and tool context.
+3. Include explainable details with path, matched value, extractor name, and tool context.
 4. Add OTEL spans around the extractor or evidence source.
 5. Emit JSON logs with stable `event_name` values and mapping counts under `extra_keys`.
 6. Add positive and negative tests.
 7. Validate the mapping on a mixed local corpus, not just a synthetic one-repo fixture.
-8. Decide explicitly whether the new mapping should emit `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, or a generic fallback.
+8. Decide explicitly whether the new mapping should emit `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, `RUNS_ON`, or a generic fallback.
 
 ## Choosing The Next Type
 
-Use this quick rule of thumb when we add support for more tools:
+Use this quick rule of thumb when adding support for more tools:
 
 - choose `DISCOVERS_CONFIG_IN` when the source watches or scans another repo for config
 - choose `DEPLOYS_FROM` when the source repo or deployable subject is deployed from artifacts, manifests, charts, or overlays owned by another repo
@@ -116,7 +130,7 @@ Use this quick rule of thumb when we add support for more tools:
 
 ## Platform Modeling In This Slice
 
-The Postgres relationship resolver is still repo-to-repo. For this slice, generic `Platform` nodes and `RUNS_ON` / `PROVISIONS_PLATFORM` edges are materialized on the graph/workload side in `tools/graph_builder_workloads.py`.
+The Postgres relationship resolver is still repo-to-repo. Platform/runtime semantics are materialized on the graph/workload side, so the repo mapping layer does not need to widen its canonical schema yet.
 
 That means:
 
@@ -139,6 +153,7 @@ Rules:
 Useful existing events:
 
 - `relationships.discover_file_evidence.completed`
+- `relationships.discover_gitops_evidence.completed`
 - `relationships.discover_evidence.completed`
 - `relationships.persist_generation.completed`
 - `relationships.project.completed`
@@ -152,8 +167,25 @@ Useful existing span names:
 - `pcg.relationships.discover_evidence.terraform`
 - `pcg.relationships.discover_evidence.helm`
 - `pcg.relationships.discover_evidence.kustomize`
+- `pcg.relationships.discover_evidence.gitops`
+- `pcg.relationships.discover_evidence.argocd`
 - `pcg.relationships.resolve_repository_dependencies`
 - `pcg.relationships.project`
+
+## Verification Expectations
+
+Before trusting a new mapping, run:
+
+- focused unit tests for evidence extraction
+- focused unit tests for resolver precedence and projection behavior
+- a mixed-corpus validation when the family changes answer shape
+
+The main relationship test files are:
+
+- `tests/unit/relationships/test_file_evidence.py`
+- `tests/unit/relationships/test_resolver.py`
+
+If the new mapping changes repo-context enrichment, also check the query-side summaries that consume `deploys_from` and `discovers_config_in`.
 
 ## Current Example
 
