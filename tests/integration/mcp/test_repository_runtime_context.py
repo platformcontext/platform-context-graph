@@ -13,6 +13,10 @@ def test_get_repo_summary_tool_surfaces_platforms_and_limitations() -> None:
         "platform_context_graph.mcp.query_tools.ecosystem.get_repo_summary",
         return_value={
             "name": "api-node-boats",
+            "story": [
+                "Public entrypoints: api-node-boats.qa.bgrp.io.",
+                "GitHub Actions deploy from helm-charts onto EKS.",
+            ],
             "platforms": [
                 {"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}
             ],
@@ -37,6 +41,10 @@ def test_get_repo_summary_tool_surfaces_platforms_and_limitations() -> None:
         result = server.get_repo_summary_tool(repo_name="api-node-boats")
 
     mock_summary.assert_called_once_with(server.db_manager, "api-node-boats")
+    assert result["story"] == [
+        "Public entrypoints: api-node-boats.qa.bgrp.io.",
+        "GitHub Actions deploy from helm-charts onto EKS.",
+    ]
     assert result["platforms"] == [
         {"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}
     ]
@@ -59,6 +67,10 @@ def test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations() 
         "platform_context_graph.mcp.query_tools.ecosystem.trace_deployment_chain",
         return_value={
             "repository": {"name": "api-node-boats"},
+            "story": [
+                "Public entrypoints: api-node-boats.qa.bgrp.io.",
+                "GitHub Actions deploy through terraform-stack-node10 onto ECS.",
+            ],
             "platforms": [{"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}],
             "deploys_from": [{"name": "helm-charts"}],
             "delivery_workflows": {
@@ -80,6 +92,10 @@ def test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations() 
         result = server.trace_deployment_chain_tool(service_name="api-node-boats")
 
     mock_trace.assert_called_once_with(server.db_manager, "api-node-boats")
+    assert result["story"] == [
+        "Public entrypoints: api-node-boats.qa.bgrp.io.",
+        "GitHub Actions deploy through terraform-stack-node10 onto ECS.",
+    ]
     assert result["platforms"] == [
         {"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}
     ]

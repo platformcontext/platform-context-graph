@@ -126,6 +126,35 @@ def build_deployment_overview(
     return overview
 
 
+def build_story_lines(
+    *,
+    deployment_overview: dict[str, Any] | None,
+    note: str = "",
+) -> list[str]:
+    """Return a top-level MCP-friendly story derived from overview and notes."""
+
+    if not isinstance(deployment_overview, dict):
+        deployment_overview = {}
+
+    candidates = deployment_overview.get("topology_story")
+    if not candidates:
+        candidates = deployment_overview.get("deployment_story")
+
+    lines: list[str] = []
+    seen: set[str] = set()
+    for value in list(candidates or []):
+        line = str(value).strip()
+        if not line or line in seen:
+            continue
+        seen.add(line)
+        lines.append(line)
+
+    normalized_note = str(note).strip()
+    if normalized_note and normalized_note not in seen:
+        lines.append(normalized_note)
+    return lines
+
+
 def _entrypoints_for_visibility(
     hostnames: list[dict[str, Any]],
     visibility: str,

@@ -5,7 +5,10 @@ from typing import Any
 from ....core.database import DatabaseManager
 from ....query import repositories as repository_queries
 from ....utils.debug_log import emit_log_call, warning_logger
-from .ecosystem_support_overview import build_deployment_overview
+from .ecosystem_support_overview import (
+    build_deployment_overview,
+    build_story_lines,
+)
 from .ecosystem_support_provisioning import group_provisioning_source_chains
 
 
@@ -479,4 +482,10 @@ def trace_deployment_chain(
         )
         if note:
             result["note"] = note
+    story = build_story_lines(
+        deployment_overview=result["deployment_overview"],
+        note=result.get("note", ""),
+    )
+    if story:
+        result["story"] = story
     return result

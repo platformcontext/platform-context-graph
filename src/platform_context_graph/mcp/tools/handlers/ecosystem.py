@@ -7,7 +7,10 @@ from ....query import infra as infra_queries
 from ....query import repositories as repository_queries
 from ....utils.debug_log import emit_log_call, warning_logger
 from .ecosystem_support import repo_summary_note, trace_deployment_chain
-from .ecosystem_support_overview import build_deployment_overview
+from .ecosystem_support_overview import (
+    build_deployment_overview,
+    build_story_lines,
+)
 
 
 def get_ecosystem_overview(
@@ -214,6 +217,12 @@ def get_repo_summary(
     )
     if note:
         summary["note"] = note
+    story = build_story_lines(
+        deployment_overview=summary["deployment_overview"],
+        note=summary.get("note", ""),
+    )
+    if story:
+        summary["story"] = story
     if limitations:
         emit_log_call(
             warning_logger,

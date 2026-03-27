@@ -395,6 +395,7 @@ class TestRepoSummary:
         assert result["coverage"]["completeness_state"] == "graph_partial"
         assert result["coverage"]["graph_gap_count"] == 184
         assert "partial" in result["note"].lower()
+        assert result["story"] == [result["note"]]
 
     def test_repo_summary_surfaces_runtime_context_and_limitation_codes(
         self, monkeypatch
@@ -755,6 +756,14 @@ class TestRepoSummary:
             },
             "deployment_controllers": ["github_actions"],
         }
+        assert result["story"] == [
+            "Public entrypoints: api-node-boats.qa.bgrp.io.",
+            "API surface exposes versions v3 and docs routes /_specs.",
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
+            "Shared config paths include /configd/api-node-boats/* across helm-charts, terraform-stack-node10.",
+            "Consumer-only repositories include automate-yachtworld.",
+            "DNS and entrypoint evidence are currently unavailable for this repository.",
+        ]
         assert result["api_surface"]["docs_routes"] == ["/_specs"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
         assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]
@@ -1242,6 +1251,12 @@ class TestTraceDeploymentChain:
             },
             "deployment_controllers": ["github_actions"],
         }
+        assert result["story"] == [
+            "Public entrypoints: api-node-boats.qa.bgrp.io.",
+            "API surface exposes versions v3 and docs routes /_specs.",
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod.",
+            "DNS and entrypoint evidence are currently unavailable for this repository.",
+        ]
         assert result["api_surface"]["api_versions"] == ["v3"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
         assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]
