@@ -5,6 +5,7 @@ from typing import Any
 from ....core.database import DatabaseManager
 from ....query import repositories as repository_queries
 from ....utils.debug_log import emit_log_call, warning_logger
+from .ecosystem_support_overview import build_deployment_overview
 from .ecosystem_support_provisioning import group_provisioning_source_chains
 
 
@@ -424,6 +425,13 @@ def trace_deployment_chain(
         "hostnames": context.get("hostnames", []),
         "limitations": limitations,
     }
+    result["deployment_overview"] = build_deployment_overview(
+        hostnames=result["hostnames"],
+        api_surface=result["api_surface"],
+        platforms=result["platforms"],
+        delivery_paths=result["delivery_paths"],
+        provisioning_source_chains=provisioning_source_chains,
+    )
     if limitations:
         result["note"] = repo_summary_note(
             limitations=limitations,

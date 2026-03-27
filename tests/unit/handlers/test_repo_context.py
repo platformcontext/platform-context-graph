@@ -445,6 +445,9 @@ class TestRepoSummary:
                         "delivery_mode": "eks_gitops",
                         "commands": ["deploy-eks"],
                         "supporting_workflows": ["node-api-deploy-eks.yml"],
+                        "automation_repositories": [
+                            "boatsgroup/core-engineering-automation"
+                        ],
                         "platform_kinds": ["eks"],
                         "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
                         "deployment_sources": ["helm-charts"],
@@ -482,6 +485,44 @@ class TestRepoSummary:
         ]
         assert result["delivery_paths"][0]["path_kind"] == "gitops"
         assert result["delivery_paths"][0]["deployment_sources"] == ["helm-charts"]
+        assert result["deployment_overview"] == {
+            "internet_entrypoints": [
+                {
+                    "hostname": "api-node-boats.qa.bgrp.io",
+                    "visibility": "public",
+                }
+            ],
+            "internal_entrypoints": [],
+            "api_surface": {
+                "docs_routes": ["/_specs"],
+                "api_versions": ["v3"],
+            },
+            "runtime_platforms": [
+                {
+                    "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    "kind": "ecs",
+                    "provider": "aws",
+                    "environment": "prod",
+                    "name": "node10",
+                }
+            ],
+            "delivery_paths": [
+                {
+                    "path_kind": "gitops",
+                    "controller": "github_actions",
+                    "delivery_mode": "eks_gitops",
+                    "summary": "GitHub Actions drives a GitOps deployment path through helm-charts onto EKS platforms.",
+                    "automation_repositories": [
+                        "boatsgroup/core-engineering-automation"
+                    ],
+                    "deployment_sources": ["helm-charts"],
+                    "config_sources": [],
+                    "provisioning_repositories": [],
+                    "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+                    "environments": ["bg-qa"],
+                }
+            ],
+        }
         assert result["api_surface"]["docs_routes"] == ["/_specs"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
         assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]
@@ -834,6 +875,9 @@ class TestTraceDeploymentChain:
                         "delivery_mode": "continuous_deployment",
                         "commands": ["deploy"],
                         "supporting_workflows": ["node-api-cd.yml"],
+                        "automation_repositories": [
+                            "boatsgroup/core-engineering-automation"
+                        ],
                         "platform_kinds": ["ecs"],
                         "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
                         "deployment_sources": [],
@@ -891,6 +935,46 @@ class TestTraceDeploymentChain:
         assert result["delivery_paths"][0]["provisioning_repositories"] == [
             "terraform-stack-ecs"
         ]
+        assert result["deployment_overview"] == {
+            "internet_entrypoints": [
+                {
+                    "hostname": "api-node-boats.qa.bgrp.io",
+                    "visibility": "public",
+                }
+            ],
+            "internal_entrypoints": [],
+            "api_surface": {
+                "docs_routes": ["/_specs"],
+                "api_versions": ["v3"],
+            },
+            "runtime_platforms": [
+                {
+                    "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    "kind": "ecs",
+                    "provider": "aws",
+                    "environment": "prod",
+                    "name": "node10",
+                }
+            ],
+            "delivery_paths": [
+                {
+                    "path_kind": "direct",
+                    "controller": "github_actions",
+                    "delivery_mode": "continuous_deployment",
+                    "summary": "GitHub Actions drives a direct deployment path through terraform-stack-ecs onto ECS platforms.",
+                    "automation_repositories": [
+                        "boatsgroup/core-engineering-automation"
+                    ],
+                    "deployment_sources": [],
+                    "config_sources": [],
+                    "provisioning_repositories": ["terraform-stack-ecs"],
+                    "platforms": [
+                        "platform:ecs:aws:cluster/node10:prod:us-east-1"
+                    ],
+                    "environments": ["prod"],
+                }
+            ],
+        }
         assert result["api_surface"]["api_versions"] == ["v3"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
         assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]

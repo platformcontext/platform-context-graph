@@ -7,6 +7,7 @@ from ....query import infra as infra_queries
 from ....query import repositories as repository_queries
 from ....utils.debug_log import emit_log_call, warning_logger
 from .ecosystem_support import repo_summary_note, trace_deployment_chain
+from .ecosystem_support_overview import build_deployment_overview
 
 
 def get_ecosystem_overview(
@@ -195,6 +196,12 @@ def get_repo_summary(
         "hostnames": context.get("hostnames", []),
         "limitations": limitations,
     }
+    summary["deployment_overview"] = build_deployment_overview(
+        hostnames=summary["hostnames"],
+        api_surface=summary["api_surface"],
+        platforms=summary["platforms"],
+        delivery_paths=summary["delivery_paths"],
+    )
     note = repo_summary_note(
         limitations=limitations,
         coverage=coverage,
