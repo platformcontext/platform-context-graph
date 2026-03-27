@@ -329,6 +329,13 @@ The top-level repository `story` is intentionally assembled in a fixed order so 
 
 That order matters. For example, shared config hints should not appear before the deployment path, and consumer-only repos should not crowd out ingress or platform context.
 
+`deployment_story` itself has an internal preference order:
+
+1. workflow- and delivery-path-derived deployment lines
+2. controller/runtime fallback lines built from deployment controllers, runtime platforms, and service variants
+
+That fallback exists for repos whose deployment shape is visible through Terraform, CodeDeploy, or similar controller signals even when a reusable workflow or explicit delivery-path row is missing.
+
 ## Safe Extension
 
 When adding a new mapping family, follow this order:

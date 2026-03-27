@@ -76,6 +76,8 @@ The current story order is:
 6. consumer-only repositories
 7. limitation notes
 
+`deployment_story` usually comes from explicit delivery paths. When those are missing, PCG can fall back to controller/runtime evidence such as Terraform, CodeDeploy, runtime platforms, and service variants, as long as the lower layers still support that narrative.
+
 ## Repository access handoff
 
 When PCG is deployed remotely, the server may not have local access to every repository. Content retrieval follows a fallback chain:

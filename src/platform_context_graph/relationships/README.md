@@ -117,6 +117,8 @@ Rules:
 3. do not put a fact in `story` unless the lower layers can already explain it
 4. keep the raw evidence-heavy fields intact for drill-down
 
+`deployment_story` should prefer explicit workflow- or delivery-path rows when they exist. If those are absent, it may fall back to a controller/runtime summary built from deployment controllers, runtime platforms, and service variants. The fallback should only appear when it still describes a real deployment shape, not just loose infrastructure context.
+
 Current `topology_story` ordering is intentional:
 
 1. public entrypoints
