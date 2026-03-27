@@ -431,6 +431,9 @@ def trace_deployment_chain(
         platforms=result["platforms"],
         delivery_paths=result["delivery_paths"],
         provisioning_source_chains=provisioning_source_chains,
+        k8s_resources=k8s_resources,
+        crossplane_claims=claims,
+        terraform_resources=terraform,
     )
     if limitations:
         result["note"] = repo_summary_note(

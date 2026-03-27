@@ -1306,3 +1306,34 @@ class TestTraceDeploymentChain:
                 ],
             }
         ]
+        assert result["deployment_overview"]["network_signals"] == {
+            "terraform": [
+                {
+                    "name": "aws_route53_record.api_node_boats",
+                    "resource_type": "aws_route53_record",
+                    "repository": "terraform-stack-node10",
+                    "file": "shared/resources.tf",
+                }
+            ]
+        }
+        assert result["deployment_overview"]["provisioning_source_chains"] == [
+            {
+                "repository": "terraform-stack-node10",
+                "terraform_modules": [
+                    {
+                        "name": "api_node_boats",
+                        "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                        "version": "~> 3.0",
+                        "source_repository": None,
+                    }
+                ],
+                "terragrunt_configs": [
+                    {
+                        "name": "terragrunt",
+                        "terraform_source": "git::ssh://git@github.com/platformcontext/terraform-platform-modules.git//ecs/service?ref=v1.2.3",
+                        "file": "terragrunt.hcl",
+                        "source_repository": "terraform-platform-modules",
+                    }
+                ],
+            }
+        ]

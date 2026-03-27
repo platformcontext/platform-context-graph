@@ -10,6 +10,9 @@ def build_deployment_overview(
     platforms: list[dict[str, Any]],
     delivery_paths: list[dict[str, Any]],
     provisioning_source_chains: list[dict[str, Any]] | None = None,
+    k8s_resources: list[dict[str, Any]] | None = None,
+    crossplane_claims: list[dict[str, Any]] | None = None,
+    terraform_resources: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build a compact deployment overview for MCP-friendly answer shaping."""
 
@@ -54,6 +57,13 @@ def build_deployment_overview(
     }
     if provisioning_source_chains:
         overview["provisioning_source_chains"] = list(provisioning_source_chains)
+    network_signals = _build_network_signals(
+        k8s_resources=k8s_resources or [],
+        crossplane_claims=crossplane_claims or [],
+        terraform_resources=terraform_resources or [],
+    )
+    if network_signals:
+        overview["network_signals"] = network_signals
     return overview
 
 
@@ -71,3 +81,47 @@ def _entrypoints_for_visibility(
         for row in hostnames
         if isinstance(row, dict) and str(row.get("visibility") or "").strip() == visibility
     ]
+
+
+def _build_network_signals(
+    *,
+    k8s_resources: list[dict[str, Any]],
+    crossplane_claims: list[dict[str, Any]],
+    terraform_resources: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build compact network and infrastructure routing signals."""
+
+    signals: dict[str, Any] = {}
+    if k8s_resources:
+        signals["kubernetes"] = [
+            {
+                "name": row.get("name"),
+                "kind": row.get("kind"),
+                "repository": row.get("repository"),
+                "file": row.get("file"),
+            }
+            for row in k8s_resources
+            if isinstance(row, dict)
+        ]
+    if crossplane_claims:
+        signals["crossplane"] = [
+            {
+                "claim_name": row.get("claim_name"),
+                "claim_kind": row.get("claim_kind"),
+                "file": row.get("file"),
+            }
+            for row in crossplane_claims
+            if isinstance(row, dict)
+        ]
+    if terraform_resources:
+        signals["terraform"] = [
+            {
+                "name": row.get("name"),
+                "resource_type": row.get("resource_type"),
+                "repository": row.get("repository"),
+                "file": row.get("file"),
+            }
+            for row in terraform_resources
+            if isinstance(row, dict)
+        ]
+    return signals
