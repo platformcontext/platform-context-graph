@@ -197,10 +197,30 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             "path": str(service_repo),
             "local_path": str(service_repo),
         },
+        "platforms": [
+            {
+                "id": "platform:eks:aws:cluster/bg-qa:bg-qa:none",
+                "kind": "eks",
+                "environment": "bg-qa",
+            },
+            {
+                "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                "kind": "ecs",
+                "environment": "prod",
+            },
+        ],
         "deploys_from": [
             {
                 "source_repos": "https://github.com/boatsgroup/helm-charts",
                 "source_paths": "argocd/api-node-boats/overlays/bg-qa/config.yaml",
+                "name": "helm-charts",
+            }
+        ],
+        "provisioned_by": [
+            {
+                "id": "repository:r_terraform123",
+                "name": "terraform-stack-node10",
+                "relationship_type": "PROVISIONED_BY",
             }
         ],
         "limitations": ["dns_unknown"],
@@ -296,6 +316,45 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             "workflow_path": ".github/workflows/node-api-ecr-push.yml",
             "delivery_mode": "image_build_push",
             "automation_repository": "boatsgroup/core-engineering-automation",
+        },
+    ]
+    assert result["delivery_paths"] == [
+        {
+            "path_kind": "gitops",
+            "controller": "github_actions",
+            "delivery_mode": "eks_gitops",
+            "commands": ["deploy-eks"],
+            "supporting_workflows": ["node-api-deploy-eks.yml"],
+            "platform_kinds": ["eks"],
+            "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+            "deployment_sources": ["helm-charts"],
+            "config_sources": [],
+            "provisioning_repositories": [],
+            "environments": ["bg-qa"],
+            "summary": (
+                "GitHub Actions drives a GitOps deployment path through helm-charts "
+                "onto EKS platforms."
+            ),
+        },
+        {
+            "path_kind": "direct",
+            "controller": "github_actions",
+            "delivery_mode": "continuous_deployment",
+            "commands": ["deploy", "push-ecr"],
+            "supporting_workflows": [
+                "node-api-cd.yml",
+                "node-api-ecr-push.yml",
+            ],
+            "platform_kinds": ["ecs"],
+            "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
+            "deployment_sources": [],
+            "config_sources": [],
+            "provisioning_repositories": ["terraform-stack-node10"],
+            "environments": ["prod"],
+            "summary": (
+                "GitHub Actions drives a direct deployment path through "
+                "terraform-stack-node10 onto ECS platforms."
+            ),
         },
     ]
 

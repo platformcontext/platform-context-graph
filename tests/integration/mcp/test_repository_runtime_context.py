@@ -26,6 +26,9 @@ def test_get_repo_summary_tool_surfaces_platforms_and_limitations() -> None:
                     ]
                 }
             },
+            "delivery_paths": [
+                {"path_kind": "gitops", "delivery_mode": "eks_gitops"}
+            ],
             "api_surface": {"docs_routes": ["/_specs"], "api_versions": ["v3"]},
             "hostnames": [{"hostname": "api-node-boats.qa.bgrp.io"}],
             "limitations": ["dns_unknown", "entrypoint_unknown"],
@@ -39,6 +42,9 @@ def test_get_repo_summary_tool_surfaces_platforms_and_limitations() -> None:
     ]
     assert result["delivery_workflows"]["github_actions"]["commands"] == [
         {"command": "deploy-eks", "workflow": "node-api-deploy-eks.yml"}
+    ]
+    assert result["delivery_paths"] == [
+        {"path_kind": "gitops", "delivery_mode": "eks_gitops"}
     ]
     assert result["api_surface"]["docs_routes"] == ["/_specs"]
     assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
@@ -63,6 +69,9 @@ def test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations() 
                     }
                 ]
             },
+            "delivery_paths": [
+                {"path_kind": "direct", "controller": "jenkins"}
+            ],
             "api_surface": {"api_versions": ["v3"]},
             "hostnames": [{"hostname": "api-node-boats.qa.bgrp.io"}],
             "limitations": ["dns_unknown", "entrypoint_unknown"],
@@ -76,6 +85,9 @@ def test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations() 
     ]
     assert result["delivery_workflows"]["jenkins"] == [
         {"relative_path": "Jenkinsfile", "pipeline_calls": ["pipelinePM2"]}
+    ]
+    assert result["delivery_paths"] == [
+        {"path_kind": "direct", "controller": "jenkins"}
     ]
     assert result["api_surface"]["api_versions"] == ["v3"]
     assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
