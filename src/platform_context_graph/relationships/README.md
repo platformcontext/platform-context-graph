@@ -8,6 +8,21 @@ For the public explanation of the flow and relationship semantics, see [Relation
 
 The dynamic mapping flow is ordered:
 
+```mermaid
+flowchart TD
+    A[Committed repo checkouts] --> B[Graph-derived and file-derived evidence]
+    B --> C[Typed mixed-entity resolution]
+    C --> D[Postgres generation persistence]
+    D --> E[Neo4j projection]
+    D --> F[Repo-context enrichment]
+    F --> G[MCP / API answer shaping]
+
+    classDef canonical fill:#e8f3ff,stroke:#2563eb,color:#0f172a;
+    classDef derived fill:#ecfdf3,stroke:#059669,color:#052e16;
+    class C,D,E canonical;
+    class F,G derived;
+```
+
 1. build stable checkout identities for committed repos
 2. collect graph-derived and raw file-based evidence
 3. resolve evidence plus assertions into canonical relationships
@@ -58,7 +73,6 @@ Current canonical relationship types:
 - `DISCOVERS_CONFIG_IN`
 - `DEPLOYS_FROM`
 - `PROVISIONS_DEPENDENCY_FOR`
-
 - `PROVISIONS_PLATFORM`
 - `RUNS_ON`
 

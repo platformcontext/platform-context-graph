@@ -15,14 +15,22 @@ The rule of thumb is:
 ## End-To-End Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
     A[Index committed repos] --> B[Cross-repo linking]
     B --> C[Evidence extraction]
     C --> D[Typed resolution]
-    D --> E[Derived summaries]
-    E --> F[Repo context enrichment]
-    F --> G[MCP / API answer shaping]
-    G --> H[Truthfulness and completeness notes]
+    D --> E[Canonical resolved relationships]
+    E --> F[Neo4j projection]
+    E --> G[Derived summaries]
+    G --> H[Repo context enrichment]
+    F --> H
+    H --> I[MCP / API answer shaping]
+    I --> J[Truthfulness and completeness notes]
+
+    classDef canonical fill:#e8f3ff,stroke:#2563eb,color:#0f172a;
+    classDef derived fill:#ecfdf3,stroke:#059669,color:#052e16;
+    class D,E,F canonical;
+    class G,H,I,J derived;
 ```
 
 ### 1. Index
