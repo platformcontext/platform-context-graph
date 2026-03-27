@@ -92,60 +92,6 @@ def _get_git_head_sha(repo_path: str) -> str:
     return ""
 
 
-def _get_changed_files(repo_path: str, since_commit: str) -> dict[str, list[str]]:
-    """Get files changed since a commit.
-
-    Args:
-        repo_path: Path to a git repository.
-        since_commit: Git SHA to diff against HEAD.
-
-    Returns:
-        Dict with 'added', 'modified', 'deleted' lists of
-        relative file paths.
-    """
-    changes: dict[str, list[str]] = {
-        "added": [],
-        "modified": [],
-        "deleted": [],
-    }
-
-    try:
-        result = subprocess.run(
-            [
-                "git",
-                "diff",
-                "--name-status",
-                since_commit,
-                "HEAD",
-            ],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            return changes
-
-        for line in result.stdout.strip().splitlines():
-            parts = line.split("\t", 1)
-            if len(parts) < 2:
-                continue
-            status = parts[0][0]
-            filepath = parts[1]
-
-            if status == "A":
-                changes["added"].append(filepath)
-            elif status in ("M", "R"):
-                changes["modified"].append(filepath)
-            elif status == "D":
-                changes["deleted"].append(filepath)
-
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-
-    return changes
-
-
 class EcosystemIndexer:
     """Orchestrates ecosystem-wide indexing.
 
