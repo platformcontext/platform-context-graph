@@ -15,6 +15,7 @@ def build_deployment_overview(
     terraform_resources: list[dict[str, Any]] | None = None,
     terraform_modules: list[dict[str, Any]] | None = None,
     deployment_artifacts: dict[str, Any] | None = None,
+    consumer_repositories: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build a compact deployment overview for MCP-friendly answer shaping."""
 
@@ -59,6 +60,16 @@ def build_deployment_overview(
     }
     if provisioning_source_chains:
         overview["provisioning_source_chains"] = list(provisioning_source_chains)
+    if consumer_repositories:
+        overview["consumer_repositories"] = [
+            {
+                "repository": row.get("repository"),
+                "evidence_kinds": list(row.get("evidence_kinds") or []),
+                "sample_paths": list(row.get("sample_paths") or []),
+            }
+            for row in consumer_repositories
+            if isinstance(row, dict)
+        ]
     service_variants = _build_service_variants(terraform_modules or [])
     if service_variants:
         overview["service_variants"] = service_variants

@@ -16,6 +16,7 @@ from .common import get_db_manager, resolve_repository
 from .content_enrichment_deployment_artifacts import (
     extract_related_deployment_artifacts,
 )
+from .content_enrichment_consumers import extract_consumer_repositories
 from .content_enrichment_delivery_paths import summarize_delivery_paths
 from .content_enrichment_openapi import dedupe_endpoint_rows, extract_openapi_endpoints
 from .content_enrichment_support import (
@@ -93,6 +94,18 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
     )
     if any(deployment_artifacts.values()):
         context["deployment_artifacts"] = deployment_artifacts
+    consumer_repositories = extract_consumer_repositories(
+        database,
+        repository=repository,
+        hostnames=hostnames,
+        deployment_artifacts=deployment_artifacts,
+        deploys_from=list(context.get("deploys_from") or []),
+        discovers_config_in=list(context.get("discovers_config_in") or []),
+        provisioned_by=list(context.get("provisioned_by") or []),
+        resolve_related_repo=_resolve_repo,
+    )
+    if consumer_repositories:
+        context["consumer_repositories"] = consumer_repositories
 
     delivery_workflows = extract_delivery_workflows(
         repository=repository,

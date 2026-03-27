@@ -258,6 +258,50 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
         _fake_get_file_content,
     )
+
+    def _fake_search_file_content(_database, *, pattern: str, **_kwargs):
+        if pattern == "api-node-boats":
+            return {
+                "matches": [
+                    {
+                        "repo_id": "repository:r_platform123",
+                        "relative_path": "server/resources/listing/index.js",
+                        "snippet": "const boatsApiClient = require('@dmm/api-node-boats-client');",
+                    },
+                    {
+                        "repo_id": "repository:r_brochure123",
+                        "relative_path": "server/resources/listings/index.js",
+                        "snippet": "const boatsApi = require('@dmm/dmm-clients/lib/api-node-boats');",
+                    },
+                ]
+            }
+        if pattern == "api-node-boats.qa.bgrp.io":
+            return {
+                "matches": [
+                    {
+                        "repo_id": "repository:r_yachtworld123",
+                        "relative_path": "group_vars/qa/api.yml",
+                        "snippet": "listing_api_hostname: https://api-node-boats.qa.bgrp.io",
+                    }
+                ]
+            }
+        if pattern == "/configd/api-node-boats/":
+            return {
+                "matches": [
+                    {
+                        "repo_id": "repository:r_boattrader123",
+                        "relative_path": "shared/iam.tf",
+                        "snippet": 'values = ["/configd/api-node-boats/*"]',
+                    }
+                ]
+            }
+        return {"matches": []}
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.content_queries.search_file_content",
+        _fake_search_file_content,
+    )
+
     def _resolve_repository(_session, candidate: str):
         if candidate in {
             "https://github.com/boatsgroup/core-engineering-automation",
@@ -279,6 +323,34 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
                 "name": "helm-charts",
                 "path": str(helm_repo),
                 "local_path": str(helm_repo),
+            }
+        if candidate in {"repository:r_platform123", "api-node-platform"}:
+            return {
+                "id": "repository:r_platform123",
+                "name": "api-node-platform",
+                "path": str(tmp_path / "api-node-platform"),
+                "local_path": str(tmp_path / "api-node-platform"),
+            }
+        if candidate in {"repository:r_brochure123", "api-node-brochure"}:
+            return {
+                "id": "repository:r_brochure123",
+                "name": "api-node-brochure",
+                "path": str(tmp_path / "api-node-brochure"),
+                "local_path": str(tmp_path / "api-node-brochure"),
+            }
+        if candidate in {"repository:r_yachtworld123", "automate-yachtworld"}:
+            return {
+                "id": "repository:r_yachtworld123",
+                "name": "automate-yachtworld",
+                "path": str(tmp_path / "automate-yachtworld"),
+                "local_path": str(tmp_path / "automate-yachtworld"),
+            }
+        if candidate in {"repository:r_boattrader123", "terraform-stack-boattrader"}:
+            return {
+                "id": "repository:r_boattrader123",
+                "name": "terraform-stack-boattrader",
+                "path": str(tmp_path / "terraform-stack-boattrader"),
+                "local_path": str(tmp_path / "terraform-stack-boattrader"),
             }
         return None
 
@@ -454,6 +526,36 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
                 "GitHub Actions drives a direct deployment path through "
                 "terraform-stack-node10 onto ECS platforms."
             ),
+        },
+    ]
+    assert result["consumer_repositories"] == [
+        {
+            "repository": "api-node-brochure",
+            "repo_id": "repository:r_brochure123",
+            "evidence_kinds": ["repository_reference"],
+            "matched_values": ["api-node-boats"],
+            "sample_paths": ["server/resources/listings/index.js"],
+        },
+        {
+            "repository": "api-node-platform",
+            "repo_id": "repository:r_platform123",
+            "evidence_kinds": ["repository_reference"],
+            "matched_values": ["api-node-boats"],
+            "sample_paths": ["server/resources/listing/index.js"],
+        },
+        {
+            "repository": "automate-yachtworld",
+            "repo_id": "repository:r_yachtworld123",
+            "evidence_kinds": ["hostname_reference"],
+            "matched_values": ["api-node-boats.qa.bgrp.io"],
+            "sample_paths": ["group_vars/qa/api.yml"],
+        },
+        {
+            "repository": "terraform-stack-boattrader",
+            "repo_id": "repository:r_boattrader123",
+            "evidence_kinds": ["config_path_reference"],
+            "matched_values": ["/configd/api-node-boats/"],
+            "sample_paths": ["shared/iam.tf"],
         },
     ]
     assert result["deployment_artifacts"] == {

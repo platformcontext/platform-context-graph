@@ -538,6 +538,15 @@ class TestRepoSummary:
                 "hostnames": [
                     {"hostname": "api-node-boats.qa.bgrp.io", "visibility": "public"}
                 ],
+                "consumer_repositories": [
+                    {
+                        "repository": "automate-yachtworld",
+                        "repo_id": "repository:r_yachtworld123",
+                        "evidence_kinds": ["hostname_reference"],
+                        "matched_values": ["api-node-boats.qa.bgrp.io"],
+                        "sample_paths": ["group_vars/qa/api.yml"],
+                    }
+                ],
                 "limitations": ["dns_unknown", "entrypoint_unknown"],
                 "relationships": [],
             },
@@ -559,6 +568,15 @@ class TestRepoSummary:
         assert result["delivery_paths"][0]["path_kind"] == "gitops"
         assert result["delivery_paths"][0]["deployment_sources"] == ["helm-charts"]
         assert result["deployment_artifacts"]["images"][0]["tag"] == "3.21.0"
+        assert result["consumer_repositories"] == [
+            {
+                "repository": "automate-yachtworld",
+                "repo_id": "repository:r_yachtworld123",
+                "evidence_kinds": ["hostname_reference"],
+                "matched_values": ["api-node-boats.qa.bgrp.io"],
+                "sample_paths": ["group_vars/qa/api.yml"],
+            }
+        ]
         assert result["deployment_overview"] == {
             "internet_entrypoints": [
                 {
@@ -594,6 +612,13 @@ class TestRepoSummary:
                     "provisioning_repositories": [],
                     "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
                     "environments": ["bg-qa"],
+                }
+            ],
+            "consumer_repositories": [
+                {
+                    "repository": "automate-yachtworld",
+                    "evidence_kinds": ["hostname_reference"],
+                    "sample_paths": ["group_vars/qa/api.yml"],
                 }
             ],
                 "deployment_artifacts": {

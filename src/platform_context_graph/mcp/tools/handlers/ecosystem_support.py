@@ -422,6 +422,7 @@ def trace_deployment_chain(
         "delivery_workflows": context.get("delivery_workflows", {}),
         "delivery_paths": context.get("delivery_paths", []),
         "deployment_artifacts": context.get("deployment_artifacts", {}),
+        "consumer_repositories": context.get("consumer_repositories", []),
         "api_surface": context.get("api_surface", {}),
         "hostnames": context.get("hostnames", []),
         "limitations": limitations,
@@ -437,6 +438,7 @@ def trace_deployment_chain(
         terraform_resources=terraform,
         terraform_modules=tf_modules,
         deployment_artifacts=result["deployment_artifacts"],
+        consumer_repositories=result["consumer_repositories"],
     )
     if limitations:
         result["note"] = repo_summary_note(
