@@ -54,6 +54,31 @@ def test_build_deployment_overview_ranks_and_truncates_low_signal_story_lines() 
         "Public entrypoints: api-node-boats.qa.bgrp.io.",
         "API surface exposes versions v3 and docs routes /_specs.",
         "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
-        "Shared config families include /api/api-node-boats/* across helm-charts, terraform-stack-node10; /configd/api-node-boats/* across helm-charts, terraform-stack-node10; and 1 more.",
-        "Consumer-only repositories include automate-yachtworld, broker-ui, boats-admin, and 1 more.",
+        "Shared config families span helm-charts, terraform-stack-node10: /api/api-node-boats/*, /configd/api-node-boats/*, and 1 more.",
+        "Top consumer-only repository automate-yachtworld references this service via hostname references in group_vars/qa/api.yml. Additional consumers: broker-ui, boats-admin, and 1 more.",
+    ]
+
+
+def test_build_deployment_overview_separates_distinct_shared_config_groups() -> None:
+    """Different shared-config repo sets should render as separate ranked groups."""
+
+    overview = build_deployment_overview(
+        hostnames=[],
+        api_surface={},
+        platforms=[],
+        delivery_paths=[],
+        deployment_artifacts={
+            "config_paths": [
+                {"path": "/configd/api-node-boats/*", "source_repo": "helm-charts"},
+                {"path": "/configd/api-node-boats/*", "source_repo": "terraform-stack-node10"},
+                {"path": "/api/api-node-boats/*", "source_repo": "helm-charts"},
+                {"path": "/api/api-node-boats/*", "source_repo": "terraform-stack-node10"},
+                {"path": "/secrets/api-node-boats/*", "source_repo": "iac-eks-observability"},
+                {"path": "/secrets/api-node-boats/*", "source_repo": "helm-charts"},
+            ]
+        },
+    )
+
+    assert overview["topology_story"] == [
+        "Shared config families span helm-charts, terraform-stack-node10: /api/api-node-boats/*, /configd/api-node-boats/*; and helm-charts, iac-eks-observability: /secrets/api-node-boats/*."
     ]

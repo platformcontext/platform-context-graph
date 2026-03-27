@@ -656,7 +656,7 @@ class TestRepoSummary:
                 "Public entrypoints: api-node-boats.qa.bgrp.io.",
                 "API surface exposes versions v3 and docs routes /_specs.",
                 "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
-                "Shared config families include /configd/api-node-boats/* across helm-charts, terraform-stack-node10.",
+                "Shared config families span helm-charts, terraform-stack-node10: /configd/api-node-boats/*.",
                 "Consumer-only repository automate-yachtworld references this service via hostname references in group_vars/qa/api.yml.",
             ],
             "consumer_repositories": [
@@ -760,7 +760,7 @@ class TestRepoSummary:
             "Public entrypoints: api-node-boats.qa.bgrp.io.",
             "API surface exposes versions v3 and docs routes /_specs.",
             "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
-            "Shared config families include /configd/api-node-boats/* across helm-charts, terraform-stack-node10.",
+            "Shared config families span helm-charts, terraform-stack-node10: /configd/api-node-boats/*.",
             "Consumer-only repository automate-yachtworld references this service via hostname references in group_vars/qa/api.yml.",
             "DNS and entrypoint evidence are currently unavailable for this repository.",
         ]
