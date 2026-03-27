@@ -315,6 +315,20 @@ They should help answer:
 
 They should not be used to invent deployment or provisioning relationships by themselves.
 
+### Story Ordering
+
+The top-level repository `story` is intentionally assembled in a fixed order so users get the highest-signal narrative first:
+
+1. public entrypoints
+2. API surface
+3. deployment path
+4. ingress or service-port cues
+5. shared config families
+6. consumer-only repositories
+7. completeness or limitation notes
+
+That order matters. For example, shared config hints should not appear before the deployment path, and consumer-only repos should not crowd out ingress or platform context.
+
 ## Safe Extension
 
 When adding a new mapping family, follow this order:

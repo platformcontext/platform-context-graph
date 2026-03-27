@@ -117,6 +117,17 @@ Rules:
 3. do not put a fact in `story` unless the lower layers can already explain it
 4. keep the raw evidence-heavy fields intact for drill-down
 
+Current `topology_story` ordering is intentional:
+
+1. public entrypoints
+2. API surface
+3. deployment path
+4. ingress or service-port hints
+5. shared config families
+6. consumer-only repositories
+
+If you add a new story line, document where it belongs in that sequence and why.
+
 ## Terraform Runtime Extension Rules
 
 When Terraform or Terragrunt module blocks carry deployment-oriented metadata, keep the parser contract generic so it can support more than one runtime family.
