@@ -284,6 +284,11 @@ def test_build_repository_context_uses_repo_contains_for_file_queries(
         in q
         for q in recorded_queries
     )
+    assert any(
+        "MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(n1)-[rel]->(n2)"
+        in q
+        for q in recorded_queries
+    )
 
 
 def test_get_repository_context_returns_current_context_shape(monkeypatch):

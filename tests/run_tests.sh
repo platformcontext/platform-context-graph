@@ -47,9 +47,10 @@ case "$TEST_TYPE" in
         ;;
     
     "e2e"|"3")
-        echo -e "${YELLOW}Running E2E User Journeys (Slow)...${NC}"
+        E2E_WORKERS="${PCG_E2E_PYTEST_WORKERS:-4}"
+        echo -e "${YELLOW}Running E2E User Journeys (Slow, workers=${E2E_WORKERS})...${NC}"
         run_repository_checks
-        pytest tests/e2e/ -v
+        pytest tests/e2e/ -n "${E2E_WORKERS}" -v
         ;;
     
     "fast")

@@ -70,4 +70,4 @@ Found a bug or have a feature request? Open an issue on [GitHub](https://github.
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+Apache License 2.0 — see [LICENSE](LICENSE) for details.

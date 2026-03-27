@@ -1,12 +1,13 @@
 """Tree-sitter parser support for Dart."""
 
-from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, List
 import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 from platform_context_graph.utils.debug_log import (
     debug_log,
-    info_logger,
     error_logger,
+    info_logger,
     warning_logger,
 )
 from platform_context_graph.utils.tree_sitter_manager import execute_query
@@ -25,7 +26,7 @@ DART_QUERIES = {
     "classes": """
         [
             (class_definition name: (identifier) @name)
-            (mixin_declaration name: (identifier) @name)
+            (mixin_declaration (identifier) @name)
             (extension_declaration name: (identifier) @name)
             (enum_declaration name: (identifier) @name)
         ] @class
@@ -87,11 +88,59 @@ class DartTreeSitterParser:
             return ""
         return node.text.decode("utf-8")
 
+    def _get_declaration_name(self, node):
+        """Return the declared identifier for class-like Dart nodes."""
+        if node is None:
+            return None
+
+        name_node = node.child_by_field_name("name")
+        if name_node is not None:
+            return name_node
+
+        return next((child for child in node.children if child.type == "identifier"), None)
+
+    def _get_signature_context(self, node):
+        """Return the callable declaration metadata for one signature node."""
+        if node is None:
+            return None, None, None
+
+        candidate = node
+        if node.type == "method_signature":
+            candidate = next(
+                (
+                    child
+                    for child in node.children
+                    if child.type
+                    in ("function_signature", "constructor_signature", "getter_signature")
+                ),
+                node,
+            )
+
+        if candidate.type not in (
+            "function_signature",
+            "constructor_signature",
+            "getter_signature",
+        ):
+            return None, None, None
+
+        name_node = self._get_declaration_name(candidate)
+        if name_node is None:
+            return None, None, None
+
+        return (
+            self._get_node_text(name_node),
+            candidate.type,
+            candidate.start_point[0] + 1,
+        )
+
     def _get_parent_context(
         self,
         node,
         types=(
             "function_signature",
+            "method_signature",
+            "constructor_signature",
+            "getter_signature",
             "class_definition",
             "mixin_declaration",
             "extension_declaration",
@@ -100,8 +149,24 @@ class DartTreeSitterParser:
         """Return the nearest enclosing Dart declaration."""
         curr = node.parent
         while curr:
+            if curr.type == "function_body" and curr.parent is not None:
+                named_siblings = [child for child in curr.parent.children if child.is_named]
+                try:
+                    curr_index = named_siblings.index(curr)
+                except ValueError:
+                    curr_index = -1
+                if curr_index > 0:
+                    for sibling in reversed(named_siblings[:curr_index]):
+                        signature_context = self._get_signature_context(sibling)
+                        if signature_context[0] is not None:
+                            return signature_context
+
             if curr.type in types:
-                name_node = curr.child_by_field_name("name")
+                signature_context = self._get_signature_context(curr)
+                if signature_context[0] is not None:
+                    return signature_context
+
+                name_node = self._get_declaration_name(curr)
                 return (
                     self._get_node_text(name_node) if name_node else None,
                     curr.type,
@@ -189,6 +254,11 @@ class DartTreeSitterParser:
                 seen_nodes.add(node_id)
 
                 name_node = node.child_by_field_name("name")
+                if name_node is None and node.type == "mixin_declaration":
+                    name_node = next(
+                        (child for child in node.children if child.type == "identifier"),
+                        None,
+                    )
                 if not name_node:
                     continue
 
@@ -287,7 +357,7 @@ class DartTreeSitterParser:
         query_str = DART_QUERIES["classes"]
         for node, capture_name in execute_query(self.language, query_str, root_node):
             if capture_name == "class":
-                name_node = node.child_by_field_name("name")
+                name_node = self._get_declaration_name(node)
                 if not name_node:
                     continue
 
@@ -366,45 +436,128 @@ class DartTreeSitterParser:
         """Find Dart call expressions."""
         calls = []
         seen_calls = set()
-        query_str = DART_QUERIES["calls"]
 
-        for node, capture_name in execute_query(self.language, query_str, root_node):
-            if capture_name in ("name", "call"):
-                # Ensure we are at the right node level
-                target_node = node
-                if capture_name == "call":
-                    # For call capture, find the name identifier
-                    # selector -> argument_part -> arguments
-                    # we want the name before this selector
-                    pass
+        def extract_arguments(selector_node):
+            """Return argument texts from a selector that carries call arguments."""
 
-                # Deduplicate by start byte
-                node_id = target_node.start_byte
-                if node_id in seen_calls:
-                    continue
-                seen_calls.add(node_id)
-
-                name = self._get_node_text(target_node)
-
-                # Find arguments
-                args = []
-                # Logic to find arguments node from selector or expression_statement
-
-                context, context_type, context_line = self._get_parent_context(
-                    target_node
+            argument_part = next(
+                (child for child in selector_node.children if child.type == "argument_part"),
+                None,
+            )
+            arguments_node = None
+            if argument_part is not None:
+                arguments_node = next(
+                    (child for child in argument_part.children if child.type == "arguments"),
+                    None,
                 )
+            elif selector_node.type == "arguments":
+                arguments_node = selector_node
 
-                calls.append(
-                    {
-                        "name": name,
-                        "full_name": name,  # Simplified for now
-                        "line_number": target_node.start_point[0] + 1,
-                        "args": args,
-                        "context": (context, context_type, context_line),
-                        "lang": self.language_name,
-                        "is_dependency": False,
-                    }
-                )
+            args = []
+            if arguments_node is None:
+                return args
+
+            for child in arguments_node.children:
+                if child.type not in ("(", ")", ","):
+                    args.append(self._get_node_text(child))
+            return args
+
+        def selector_member_name(selector_node):
+            """Return the member name from a dotted selector like `.map`."""
+
+            for child in selector_node.children:
+                if child.type == "unconditional_assignable_selector":
+                    for sub in child.children:
+                        if sub.type == "identifier":
+                            return sub
+            return None
+
+        def maybe_record_call(name_node, *, full_name, selector_node):
+            """Record one Dart call if it has not been seen yet."""
+
+            name = self._get_node_text(name_node)
+            line_number = name_node.start_point[0] + 1
+            call_key = (name, full_name, line_number)
+            if call_key in seen_calls:
+                return
+            seen_calls.add(call_key)
+
+            context, context_type, context_line = self._get_parent_context(name_node)
+            class_context = None
+            curr = name_node.parent
+            while curr:
+                if curr.type in (
+                    "class_definition",
+                    "mixin_declaration",
+                    "extension_declaration",
+                ):
+                    class_name_node = self._get_declaration_name(curr)
+                    class_context = (
+                        self._get_node_text(class_name_node)
+                        if class_name_node is not None
+                        else None
+                    )
+                    break
+                curr = curr.parent
+
+            calls.append(
+                {
+                    "name": name,
+                    "full_name": full_name,
+                    "line_number": line_number,
+                    "args": extract_arguments(selector_node),
+                    "context": (context, context_type, context_line),
+                    "class_context": class_context,
+                    "lang": self.language_name,
+                    "is_dependency": False,
+                }
+            )
+
+        def walk(node):
+            """Traverse the Dart tree and collect function-style calls."""
+
+            children = [child for child in node.children if child.is_named]
+            for idx, child in enumerate(children):
+                if child.type == "identifier":
+                    if (
+                        idx + 1 < len(children)
+                        and children[idx + 1].type == "selector"
+                        and extract_arguments(children[idx + 1]) is not None
+                        and extract_arguments(children[idx + 1]) is not None
+                    ):
+                        args = extract_arguments(children[idx + 1])
+                        if args or any(
+                            grandchild.type == "arguments"
+                            for grandchild in children[idx + 1].children
+                        ):
+                            maybe_record_call(
+                                child,
+                                full_name=self._get_node_text(child),
+                                selector_node=children[idx + 1],
+                            )
+                    if idx + 2 < len(children):
+                        member_name_node = selector_member_name(children[idx + 1])
+                        if (
+                            children[idx + 1].type == "selector"
+                            and member_name_node is not None
+                            and children[idx + 2].type == "selector"
+                        ):
+                            args = extract_arguments(children[idx + 2])
+                            if args or any(
+                                grandchild.type == "arguments"
+                                for grandchild in children[idx + 2].children
+                            ):
+                                maybe_record_call(
+                                    member_name_node,
+                                    full_name=(
+                                        f"{self._get_node_text(child)}."
+                                        f"{self._get_node_text(member_name_node)}"
+                                    ),
+                                    selector_node=children[idx + 2],
+                                )
+                walk(child)
+
+        walk(root_node)
         return calls
 
     def _find_variables(self, root_node):
