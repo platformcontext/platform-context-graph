@@ -48,6 +48,7 @@ def summarize_delivery_paths(
                 deployment_sources=_repository_names(deploys_from),
                 config_sources=_repository_names(discovers_config_in),
                 provisioning_repositories=[],
+                automation_repositories=_automation_repository_names(gitops_rows),
                 summary_prefix="GitHub Actions drives a GitOps deployment path",
             )
         )
@@ -69,6 +70,7 @@ def summarize_delivery_paths(
                 deployment_sources=[],
                 config_sources=[],
                 provisioning_repositories=_repository_names(provisioned_by),
+                automation_repositories=_automation_repository_names(direct_rows),
                 summary_prefix="GitHub Actions drives a direct deployment path",
             )
         )
@@ -98,6 +100,7 @@ def _build_delivery_path(
     deployment_sources: list[str],
     config_sources: list[str],
     provisioning_repositories: list[str],
+    automation_repositories: list[str],
     summary_prefix: str,
 ) -> dict[str, Any]:
     """Build one normalized delivery-path payload."""
@@ -129,6 +132,7 @@ def _build_delivery_path(
         "delivery_mode": delivery_mode,
         "commands": commands,
         "supporting_workflows": supporting_workflows,
+        "automation_repositories": automation_repositories,
         "platform_kinds": platform_kinds,
         "platforms": platform_ids,
         "deployment_sources": deployment_sources,
@@ -164,6 +168,7 @@ def _build_jenkins_delivery_path(
         "supporting_workflows": _ordered_unique(
             str(row.get("relative_path") or "").strip() for row in jenkins_rows
         ),
+        "automation_repositories": [],
         "platform_kinds": platform_kinds,
         "platforms": platform_ids,
         "deployment_sources": [],
@@ -202,6 +207,14 @@ def _repository_names(rows: list[dict[str, Any]]) -> list[str]:
     """Return ordered unique repository names from relationship rows."""
 
     return _ordered_unique(str(row.get("name") or "").strip() for row in rows)
+
+
+def _automation_repository_names(rows: list[dict[str, Any]]) -> list[str]:
+    """Return ordered unique automation repository names from workflow rows."""
+
+    return _ordered_unique(
+        str(row.get("automation_repository") or "").strip() for row in rows
+    )
 
 
 def _delivery_path_summary(
