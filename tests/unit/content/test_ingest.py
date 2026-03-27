@@ -186,6 +186,50 @@ def test_prepare_content_entries_reads_cp1252_source_text(
     assert entity_entries[0].source_cache == "$price = '£9';\n"
 
 
+def test_prepare_content_entries_strips_nul_bytes_for_content_store(
+    tmp_path: Path,
+) -> None:
+    """Embedded NUL bytes should be stripped before building content-store rows."""
+
+    repo_path = tmp_path / "legacy-php"
+    repo_path.mkdir()
+    file_path = repo_path / "timthumb.php"
+    file_path.write_bytes(
+        b"<?php\nfunction thumbnail() {\n    return \"A\x00B\";\n}\n"
+    )
+
+    repository = repository_metadata(
+        name="legacy-php",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/legacy-php.git",
+    )
+    file_data = {
+        "path": str(file_path),
+        "repo_path": str(repo_path),
+        "lang": "php",
+        "functions": [
+            {
+                "name": "thumbnail",
+                "line_number": 2,
+                "end_line": 4,
+                "source": 'function thumbnail() {\n    return "A\x00B";\n}\n',
+            }
+        ],
+    }
+
+    file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert file_entry is not None
+    assert "\x00" not in file_entry.content
+    assert 'return "AB";' in file_entry.content
+    assert len(entity_entries) == 1
+    assert "\x00" not in entity_entries[0].source_cache
+    assert 'return "AB";' in entity_entries[0].source_cache
+
+
 def test_prepare_content_entries_skips_symlink_targets_outside_repository(
     tmp_path: Path,
 ) -> None:

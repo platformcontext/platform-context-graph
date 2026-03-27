@@ -12,6 +12,12 @@ __all__ = [
 ]
 
 
+def _strip_nul_bytes(value: str) -> str:
+    """Return content-store text with PostgreSQL-incompatible NUL bytes removed."""
+
+    return value.replace("\x00", "")
+
+
 @dataclass(frozen=True, slots=True)
 class ContentFileEntry:
     """Canonical stored content for one repository file."""
@@ -27,6 +33,12 @@ class ContentFileEntry:
     indexed_at: datetime = field(
         default_factory=lambda: datetime.now(tz=timezone.utc)
     )
+
+    def __post_init__(self) -> None:
+        """Normalize stored file content for PostgreSQL text columns."""
+
+        if "\x00" in self.content:
+            object.__setattr__(self, "content", _strip_nul_bytes(self.content))
 
     @property
     def content_hash(self) -> str:
@@ -64,3 +76,13 @@ class ContentEntityEntry:
     indexed_at: datetime = field(
         default_factory=lambda: datetime.now(tz=timezone.utc)
     )
+
+    def __post_init__(self) -> None:
+        """Normalize cached entity snippets for PostgreSQL text columns."""
+
+        if "\x00" in self.source_cache:
+            object.__setattr__(
+                self,
+                "source_cache",
+                _strip_nul_bytes(self.source_cache),
+            )
