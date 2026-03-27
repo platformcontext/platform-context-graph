@@ -1,0 +1,23 @@
+tests/unit/query/test_repository_ansible_enrichment.py
+  fa0d12ca8636a40b 6-11,21-29,34-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.20",
+  "base_commit_sha": "62aa02a64ec298862e6249c97fd2d9a233a02fee",
+  "prompts": {
+    "fa0d12ca8636a40b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2daa-d8d2-7651-a6f5-ed3bbc34be1b",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 26,
+      "total_deletions": 3,
+      "accepted_lines": 26,
+      "overriden_lines": 0
+    }
+  }
+}
