@@ -44,3 +44,12 @@ def temp_test_dir():
     temp_dir = tempfile.mkdtemp(prefix="pcg_test_unit_")
     yield Path(temp_dir)
     shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@pytest.fixture(scope="session")
+def fixture_repo():
+    """Returns the portable Jenkins + Ansible fixture corpus root."""
+    path = FIXTURES_DIR / "ecosystems" / "ansible_jenkins_automation"
+    if not path.exists():
+        pytest.fail(f"Fixture repo not found at {path}")
+    return path
