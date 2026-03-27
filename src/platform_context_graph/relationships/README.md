@@ -46,6 +46,24 @@ Keep each stage doing one job:
 
 If a change crosses those boundaries, document why. Most bugs in this system come from skipping straight to summary logic or from letting a parser embed provider-specific semantic meaning.
 
+## Graph Traversal Rules
+
+Use the flat repo-to-file edge whenever the tree is not part of the question.
+
+- prefer `REPO_CONTAINS` for `Repository -> File`
+- keep `CONTAINS*` for:
+  - directory ancestry
+  - `File -> descendant entity` walks
+  - repo-to-arbitrary-descendant traversals where the target is not known to be a file
+
+The common safe query shape is:
+
+```text
+Repository -[:REPO_CONTAINS]-> File -[:CONTAINS*]-> entity
+```
+
+Do not write new flat file-discovery queries as `Repository -[:CONTAINS*]-> File` unless the directory tree itself is part of the query semantics.
+
 ## Module Map
 
 | Module | Responsibility |

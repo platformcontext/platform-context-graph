@@ -48,6 +48,33 @@ flowchart TD
     class G,H,I,J derived;
 ```
 
+## Traversal Rules
+
+The repo-to-file traversal rule is now explicit:
+
+- use `REPO_CONTAINS` for flat `Repository -> File` lookups
+- use `CONTAINS*` only when you genuinely need directory ancestry, file-descendant entities, or arbitrary descendant traversal
+
+That distinction matters because a lot of dynamic mapping work starts from repo-local files:
+
+- Terraform and Terragrunt evidence often starts as `Repository -> File -> TerraformModule`
+- GitOps and workflow evidence often starts as `Repository -> File -> K8sResource` or `Repository -> File -> workflow/config entity`
+- MCP and query hot paths often need file counts, entrypoint scans, or content discovery without walking the directory tree
+
+The safe pattern is:
+
+```text
+Repository -[:REPO_CONTAINS]-> File -[:CONTAINS*]-> entity
+```
+
+The unsafe pattern for flat lookups is:
+
+```text
+Repository -[:CONTAINS*]-> File
+```
+
+Keep `CONTAINS*` when the query is actually about the tree, not just about locating files inside a repo.
+
 ## Story-First Answer Contract
 
 MCP and HTTP responses now intentionally expose a top-level `story` field on `get_repo_summary` and `trace_deployment_chain`.
