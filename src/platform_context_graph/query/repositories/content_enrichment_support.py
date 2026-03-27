@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 
 def values_path_patterns(source_path: str) -> list[str]:
@@ -53,3 +56,46 @@ def split_csv(value: Any) -> list[str]:
     if not isinstance(value, str):
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def ordered_unique_strings(values: Iterable[Any]) -> list[str]:
+    """Return ordered unique non-empty string values."""
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        normalized = str(value).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+    return ordered
+
+
+def load_yaml_path(path: Path) -> Any | None:
+    """Load one YAML file from disk, returning ``None`` on parse errors."""
+
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+
+
+def flatten_string_values(value: Any) -> list[str]:
+    """Flatten nested scalar values into a simple list of strings."""
+
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        flattened: list[str] = []
+        for key, child in value.items():
+            flattened.extend(flatten_string_values(key))
+            flattened.extend(flatten_string_values(child))
+        return flattened
+    if isinstance(value, (list, tuple, set)):
+        flattened = []
+        for child in value:
+            flattened.extend(flatten_string_values(child))
+        return flattened
+    normalized = str(value).strip()
+    return [normalized] if normalized else []

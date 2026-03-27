@@ -3,7 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def test_extract_ansible_automation_evidence_recognizes_playbook_inventory_and_vars(
+from platform_context_graph.tools.runtime_automation_families import (
+    infer_automation_runtime_families,
+)
+
+
+def test_extract_ansible_automation_evidence_reads_playbooks_and_dynamic_inventory(
     fixture_repo: Path,
 ) -> None:
     assert (fixture_repo / "deploy.yml").exists()
@@ -13,9 +18,27 @@ def test_extract_ansible_automation_evidence_recognizes_playbook_inventory_and_v
     )
 
     evidence = extract_ansible_automation_evidence(fixture_repo)
-    assert evidence["playbooks"][0]["relative_path"] == "deploy.yml"
-    assert evidence["inventory_targets"][0]["group"] == "mws"
+    assert evidence["playbooks"] == [
+        {
+            "relative_path": "deploy.yml",
+            "hosts": ["mws"],
+            "roles": ["nginx", "php", "portal-websites"],
+            "tags": ["deploy-portal", "nginx", "php"],
+        }
+    ]
+    assert evidence["inventory_targets"][0]["environment"] == "prod"
     assert evidence["runtime_hints"] == [
         "wordpress_website_fleet",
         "php_web_platform",
     ]
+
+
+def test_infer_automation_runtime_families_prefers_wordpress_over_generic_php() -> None:
+    assert infer_automation_runtime_families(
+        [
+            "wp --allow-root db import dump.sql",
+            "wp-content/uploads",
+            "nginx",
+            "php",
+        ]
+    ) == ["wordpress_website_fleet", "php_web_platform"]
