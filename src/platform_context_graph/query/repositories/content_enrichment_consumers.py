@@ -9,6 +9,16 @@ from ...query import content as content_queries
 _MAX_CONSUMER_REPOSITORIES = 12
 _MAX_SAMPLE_PATHS = 3
 _MAX_MATCHED_VALUES = 3
+_CONTROL_PLANE_PATH_HINTS = (
+    ".github/workflows/",
+    "applicationsets/",
+    "argocd/",
+    "helm/",
+    "charts/",
+    "kustomize/",
+    "k8s/",
+    "kubernetes/",
+)
 
 
 def extract_consumer_repositories(
@@ -58,13 +68,16 @@ def extract_consumer_repositories(
                 continue
             if repo_id and consumer_id == repo_id:
                 continue
+            relative_path = str(match.get("relative_path") or "").strip()
+            if _is_control_plane_match(relative_path):
+                continue
             _merge_consumer_match(
                 aggregated=aggregated,
                 repo_id=consumer_id or consumer_name,
                 repo_name=consumer_name,
                 evidence_kind=pattern_kind,
                 matched_value=pattern,
-                relative_path=str(match.get("relative_path") or "").strip(),
+                relative_path=relative_path,
             )
     consumers = list(aggregated.values())
     consumers.sort(
@@ -135,3 +148,15 @@ def _merge_consumer_match(
     if relative_path and relative_path not in row["sample_paths"]:
         row["sample_paths"].append(relative_path)
         row["sample_paths"] = row["sample_paths"][:_MAX_SAMPLE_PATHS]
+
+
+def _is_control_plane_match(relative_path: str) -> bool:
+    """Return whether a content match comes from deployment-control-plane paths."""
+
+    normalized = relative_path.strip().lower().replace("\\", "/")
+    if not normalized:
+        return False
+    return any(
+        normalized.startswith(hint) or f"/{hint}" in normalized
+        for hint in _CONTROL_PLANE_PATH_HINTS
+    )
