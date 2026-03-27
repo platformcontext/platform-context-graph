@@ -6,6 +6,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from platform_context_graph.tools.graph_builder_platforms import (
+    infer_gitops_platform_id,
+    infer_gitops_platform_kind,
     infer_infrastructure_platform_descriptor,
 )
 from platform_context_graph.tools.graph_builder_workloads import materialize_workloads
@@ -324,6 +326,33 @@ def test_infer_infrastructure_platform_descriptor_ignores_eks_support_modules() 
     )
 
     assert descriptor is None
+
+
+def test_infer_gitops_platform_kind_uses_runtime_family_registry() -> None:
+    """GitOps platform hints should share the runtime-family registry logic."""
+
+    assert infer_gitops_platform_kind(
+        repo_name="iac-eks-argocd",
+        repo_slug="boatsgroup/iac-eks-argocd",
+        content="spec: {}",
+    ) == "eks"
+    assert infer_gitops_platform_kind(
+        repo_name="terraform-stack-ecs",
+        repo_slug=None,
+        content="spec: {}",
+    ) == "ecs"
+
+
+def test_infer_gitops_platform_id_uses_family_provider() -> None:
+    """GitOps platform ids should inherit provider data from the runtime family."""
+
+    assert infer_gitops_platform_id(
+        repo_name="iac-eks-argocd",
+        repo_slug="boatsgroup/iac-eks-argocd",
+        content="spec: {}",
+        platform_name="bg-qa",
+        environment="bg-qa",
+    ) == "platform:eks:aws:bg-qa:bg-qa:none"
 
 
 def test_materialize_workloads_skips_platform_edges_for_cluster_references_only() -> None:

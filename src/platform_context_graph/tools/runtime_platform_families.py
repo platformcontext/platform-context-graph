@@ -13,6 +13,7 @@ class TerraformRuntimeFamily:
     kind: str
     provider: str | None
     display_name: str
+    name_hints: tuple[str, ...]
     cluster_module_patterns: tuple[str, ...]
     cluster_resource_types: tuple[str, ...]
     service_module_patterns: tuple[str, ...]
@@ -24,6 +25,7 @@ _RUNTIME_FAMILIES: tuple[TerraformRuntimeFamily, ...] = (
         kind="ecs",
         provider="aws",
         display_name="ECS",
+        name_hints=("ecs", "fargate"),
         cluster_module_patterns=("batch-compute-resource/aws", "ecs-cluster/aws"),
         cluster_resource_types=("aws_ecs_cluster",),
         service_module_patterns=("ecs-application/aws",),
@@ -33,6 +35,7 @@ _RUNTIME_FAMILIES: tuple[TerraformRuntimeFamily, ...] = (
         kind="eks",
         provider="aws",
         display_name="EKS",
+        name_hints=("eks",),
         cluster_module_patterns=(
             "terraform-aws-modules/eks/aws",
             "eks-blueprints",
@@ -73,6 +76,22 @@ def infer_terraform_runtime_family_kind(content: str) -> str | None:
             return family.kind
         if any(
             pattern in lower_content for pattern in family.cluster_module_patterns
+        ):
+            return family.kind
+    return None
+
+
+def infer_runtime_family_kind_from_identifiers(values: Iterable[str | None]) -> str | None:
+    """Infer a runtime family kind from repo names, slugs, or other identifiers."""
+
+    normalized_values = [
+        str(value).strip().lower() for value in values if str(value).strip()
+    ]
+    for family in _RUNTIME_FAMILIES:
+        if any(
+            hint in normalized_value
+            for normalized_value in normalized_values
+            for hint in family.name_hints
         ):
             return family.kind
     return None
@@ -146,6 +165,7 @@ __all__ = [
     "TerraformRuntimeFamily",
     "format_platform_kind_label",
     "infer_infrastructure_runtime_family_kind",
+    "infer_runtime_family_kind_from_identifiers",
     "infer_terraform_runtime_family_kind",
     "iter_runtime_families",
     "lookup_runtime_family",

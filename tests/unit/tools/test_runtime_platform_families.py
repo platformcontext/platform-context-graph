@@ -2,6 +2,7 @@
 
 from platform_context_graph.tools.runtime_platform_families import (
     format_platform_kind_label,
+    infer_runtime_family_kind_from_identifiers,
     infer_terraform_runtime_family_kind,
     lookup_runtime_family,
     matches_service_module_source,
@@ -71,3 +72,10 @@ def test_format_platform_kind_label_prefers_registered_display_names() -> None:
     assert format_platform_kind_label("eks") == "EKS"
     assert format_platform_kind_label("kubernetes") == "Kubernetes"
     assert format_platform_kind_label("nomad") == "NOMAD"
+
+
+def test_infer_runtime_family_kind_from_identifiers_uses_family_hints() -> None:
+    """Repo-name and slug hints should use the same runtime-family registry."""
+
+    assert infer_runtime_family_kind_from_identifiers(["iac-eks-argocd"]) == "eks"
+    assert infer_runtime_family_kind_from_identifiers(["terraform-stack-ecs"]) == "ecs"

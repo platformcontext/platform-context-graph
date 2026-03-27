@@ -6,6 +6,7 @@ import re
 from typing import Any, Iterable
 
 from .runtime_platform_families import infer_infrastructure_runtime_family_kind
+from .runtime_platform_families import infer_runtime_family_kind_from_identifiers
 from .runtime_platform_families import infer_terraform_runtime_family_kind
 from .runtime_platform_families import lookup_runtime_family
 
@@ -197,13 +198,10 @@ def extract_terraform_platform_name(content: str) -> str | None:
 def infer_gitops_platform_kind(*, repo_name: str, repo_slug: str | None, content: str) -> str | None:
     """Infer a platform kind from portable GitOps control-plane signals."""
 
-    normalized_name = repo_name.lower()
-    normalized_slug = (repo_slug or "").lower()
+    hinted_kind = infer_runtime_family_kind_from_identifiers((repo_name, repo_slug))
+    if hinted_kind is not None:
+        return hinted_kind
     lower_content = content.lower()
-    if "eks" in normalized_name or "eks" in normalized_slug:
-        return "eks"
-    if "ecs" in normalized_name or "ecs" in normalized_slug:
-        return "ecs"
     if any(key.lower() in lower_content for key in _GITOPS_EXPLICIT_PLATFORM_KEYS):
         return "kubernetes"
     return None
@@ -228,9 +226,10 @@ def infer_gitops_platform_id(
     )
     if platform_kind is None:
         return None
+    family = lookup_runtime_family(platform_kind)
     return canonical_platform_id(
         kind=platform_kind,
-        provider="aws" if platform_kind in {"ecs", "eks"} else None,
+        provider=family.provider if family is not None else None,
         name=platform_name,
         environment=environment,
         region=region,
