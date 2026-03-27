@@ -823,6 +823,198 @@ class TestRepoSummary:
         assert "bg-qa, prod" in result["note"]
         assert "runtime evidence" in result["note"].lower()
 
+    def test_repo_summary_story_surfaces_dual_delivery_paths_without_control_plane_consumers(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 199,
+                    "discovered_file_count": 199,
+                    "files_by_extension": {"yaml": 84, "js": 251},
+                },
+                "code": {"functions": 347, "classes": 0},
+                "infrastructure": {"terraform_modules": []},
+                "ecosystem": {
+                    "dependencies": [
+                        "helm-charts",
+                        "terraform-stack-node10",
+                    ],
+                    "dependents": [],
+                },
+                "coverage": {
+                    "completeness_state": "complete",
+                    "discovered_file_count": 199,
+                    "graph_recursive_file_count": 199,
+                    "content_file_count": 199,
+                    "content_entity_count": 3106,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [
+                    {
+                        "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                        "name": "node10",
+                        "kind": "ecs",
+                        "provider": "aws",
+                        "environment": "prod",
+                        "relationship_type": "RUNS_ON",
+                    },
+                    {
+                        "id": "platform:eks:aws:cluster/bg-qa:bg-qa:none",
+                        "name": "bg-qa",
+                        "kind": "eks",
+                        "provider": "aws",
+                        "environment": "bg-qa",
+                        "relationship_type": "RUNS_ON",
+                    },
+                ],
+                "deploys_from": [
+                    {
+                        "id": "repository:r_helm123",
+                        "name": "helm-charts",
+                        "relationship_type": "DEPLOYS_FROM",
+                    }
+                ],
+                "discovers_config_in": [
+                    {
+                        "id": "repository:r_obs123",
+                        "name": "iac-eks-observability",
+                        "relationship_type": "DISCOVERS_CONFIG_IN",
+                    }
+                ],
+                "provisioned_by": [
+                    {
+                        "id": "repository:r_terraform123",
+                        "name": "terraform-stack-node10",
+                        "relationship_type": "PROVISIONED_BY",
+                    }
+                ],
+                "provisions_dependencies_for": [],
+                "environments": ["prod"],
+                "observed_config_environments": ["bg-qa", "prod"],
+                "delivery_workflows": {
+                    "github_actions": {
+                        "commands": [
+                            {
+                                "command": "deploy",
+                                "workflow": "node-api-cd.yml",
+                                "delivery_mode": "ecs_direct",
+                            },
+                            {
+                                "command": "deploy-eks",
+                                "workflow": "node-api-deploy-eks.yml",
+                                "delivery_mode": "eks_gitops",
+                            },
+                        ]
+                    }
+                },
+                "delivery_paths": [
+                    {
+                        "path_kind": "gitops",
+                        "controller": "github_actions",
+                        "delivery_mode": "eks_gitops",
+                        "commands": ["deploy-eks"],
+                        "supporting_workflows": ["node-api-deploy-eks.yml"],
+                        "automation_repositories": [
+                            "boatsgroup/core-engineering-automation"
+                        ],
+                        "platform_kinds": ["eks"],
+                        "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+                        "deployment_sources": ["helm-charts"],
+                        "config_sources": ["iac-eks-observability"],
+                        "provisioning_repositories": [],
+                        "environments": ["bg-qa"],
+                        "summary": "GitHub Actions drives a GitOps deployment path through helm-charts onto EKS platforms.",
+                    },
+                    {
+                        "path_kind": "direct",
+                        "controller": "github_actions",
+                        "delivery_mode": "ecs_direct",
+                        "commands": ["deploy"],
+                        "supporting_workflows": ["node-api-cd.yml"],
+                        "automation_repositories": [
+                            "boatsgroup/core-engineering-automation"
+                        ],
+                        "platform_kinds": ["ecs"],
+                        "platforms": [
+                            "platform:ecs:aws:cluster/node10:prod:us-east-1"
+                        ],
+                        "deployment_sources": [],
+                        "config_sources": [],
+                        "provisioning_repositories": ["terraform-stack-node10"],
+                        "environments": ["prod"],
+                        "summary": "GitHub Actions drives a direct deployment path through terraform-stack-node10 onto ECS platforms.",
+                    },
+                ],
+                "deployment_artifacts": {
+                    "config_paths": [
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                            "environment": None,
+                        },
+                        {
+                            "path": "/configd/api-node-boats/*",
+                            "source_repo": "terraform-stack-node10",
+                            "relative_path": "shared/iam.tf",
+                            "environment": None,
+                        },
+                    ],
+                    "service_ports": [
+                        {
+                            "port": "3081",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/base/values.yaml",
+                            "environment": None,
+                        }
+                    ],
+                    "gateways": [
+                        {
+                            "name": "envoy-internal",
+                            "source_repo": "helm-charts",
+                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                            "environment": "bg-qa",
+                        }
+                    ],
+                },
+                "api_surface": {
+                    "spec_files": [{"relative_path": "specs/index.yaml"}],
+                    "docs_routes": ["/_specs"],
+                    "api_versions": ["v3"],
+                },
+                "hostnames": [
+                    {
+                        "hostname": "api-node-boats.qa.bgrp.io",
+                        "visibility": "public",
+                    }
+                ],
+                "consumer_repositories": [],
+                "limitations": [],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+
+        assert result["consumer_repositories"] == []
+        assert len(result["delivery_paths"]) == 2
+        assert result["story"] == [
+            "Public entrypoints: api-node-boats.qa.bgrp.io.",
+            "API surface exposes versions v3 and docs routes /_specs.",
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-node10 onto ECS in prod.",
+            "Traffic enters through gateways envoy-internal on service ports 3081.",
+            "Shared config families span helm-charts, terraform-stack-node10: /configd/api-node-boats/*.",
+            "Confirmed runtime environments: prod. Configuration also references: bg-qa.",
+        ]
+
     def test_repo_summary_notes_config_environments_beyond_runtime(
         self, monkeypatch
     ):

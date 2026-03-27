@@ -49,7 +49,7 @@ def test_index_helper_skips_when_nested_files_already_exist(
     index_helper(str(repo_path))
 
     query = session.run.call_args.args[0]
-    assert "[:CONTAINS*]->(f:File)" in query
+    assert "[:REPO_CONTAINS]->(f:File)" in query
     assert any("already indexed with 3 files" in message for message in prints)
     graph_builder.build_graph_from_path_async.assert_not_called()
     db_manager.close_driver.assert_called_once()

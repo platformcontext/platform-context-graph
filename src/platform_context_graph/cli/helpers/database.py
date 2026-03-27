@@ -263,19 +263,21 @@ def stats_helper(path: str | None = None) -> None:
                     return
 
                 file_query = (
-                    "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(f:File) "
+                    "MATCH (r:Repository {path: $path})-[:REPO_CONTAINS]->(f:File) "
                     "RETURN count(f) as c"
                 )
                 func_query = (
-                    "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(func:Function) "
+                    "MATCH (r:Repository {path: $path})-[:REPO_CONTAINS]->(:File)"
+                    "-[:CONTAINS*]->(func:Function) "
                     "RETURN count(func) as c"
                 )
                 class_query = (
-                    "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(c:Class) "
+                    "MATCH (r:Repository {path: $path})-[:REPO_CONTAINS]->(:File)"
+                    "-[:CONTAINS*]->(c:Class) "
                     "RETURN count(c) as c"
                 )
                 module_query = (
-                    "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(f:File)"
+                    "MATCH (r:Repository {path: $path})-[:REPO_CONTAINS]->(f:File)"
                     "-[:IMPORTS]->(m:Module) RETURN count(DISTINCT m) as c"
                 )
 

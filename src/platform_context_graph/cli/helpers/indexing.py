@@ -79,7 +79,7 @@ def _index_helper(
         try:
             with db_manager.get_driver().session() as session:
                 result = session.run(
-                    "MATCH (r:Repository {path: $path})-[:CONTAINS*]->(f:File) "
+                    "MATCH (r:Repository {path: $path})-[:REPO_CONTAINS]->(f:File) "
                     "RETURN count(DISTINCT f) as file_count",
                     path=str(path_obj),
                 )
