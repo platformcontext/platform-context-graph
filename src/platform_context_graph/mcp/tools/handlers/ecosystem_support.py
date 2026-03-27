@@ -350,6 +350,12 @@ def trace_deployment_chain(
             RETURN mod.name as name,
                    mod.source as source,
                    mod.version as version,
+                   mod.deployment_name as deployment_name,
+                   mod.repo_name as repo_name,
+                   mod.create_deploy as create_deploy,
+                   mod.cluster_name as cluster_name,
+                   mod.zone_id as zone_id,
+                   mod.deploy_entry_point as deploy_entry_point,
                    source_repo.name as source_repository,
                    r.name as repository
             ORDER BY r.name, mod.name
@@ -385,6 +391,12 @@ def trace_deployment_chain(
             "name": row.get("name"),
             "source": row.get("source"),
             "version": row.get("version"),
+            "deployment_name": row.get("deployment_name"),
+            "repo_name": row.get("repo_name"),
+            "create_deploy": row.get("create_deploy"),
+            "cluster_name": row.get("cluster_name"),
+            "zone_id": row.get("zone_id"),
+            "deploy_entry_point": row.get("deploy_entry_point"),
             "repository": row.get("repository"),
         }
         for row in _dedupe_rows(tf_modules_raw)

@@ -128,7 +128,7 @@ When PCG runs as a deployed service, `local_path` refers to the **server-side ch
 * **`TerraformResource`**: `name`, `resource_type`, `resource_name`
 * **`TerraformVariable`**: `name`, `var_type`, `default`, `description`
 * **`TerraformOutput`**: `name`, `description`, `value`
-* **`TerraformModule`**: `name`, `source`, `version`
+* **`TerraformModule`**: `name`, `source`, `version`, `deployment_name`, `repo_name`, `create_deploy`, `cluster_name`, `zone_id`, `deploy_entry_point`
 * **`TerraformDataSource`**: `name`, `data_type`, `data_name`
 * **`TerragruntConfig`**: `name`, `terraform_source`, `includes`
 * **`Platform`**: `id`, `name`, `kind`, `provider`, `environment`

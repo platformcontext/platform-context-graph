@@ -21,3 +21,14 @@ def test_llm_prompt_schema_reference_mentions_repo_contains() -> None:
 
     assert "Directory" in LLM_SYSTEM_PROMPT
     assert "REPO_CONTAINS" in LLM_SYSTEM_PROMPT
+
+
+def test_llm_prompt_schema_reference_mentions_terraform_module_attributes() -> None:
+    """The system prompt should expose richer Terraform module properties."""
+
+    assert "TerraformModule" in LLM_SYSTEM_PROMPT
+    assert "deployment_name" in LLM_SYSTEM_PROMPT
+    assert "repo_name" in LLM_SYSTEM_PROMPT
+    assert "create_deploy" in LLM_SYSTEM_PROMPT
+    assert "cluster_name" in LLM_SYSTEM_PROMPT
+    assert "deploy_entry_point" in LLM_SYSTEM_PROMPT

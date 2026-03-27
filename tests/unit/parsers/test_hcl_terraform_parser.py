@@ -94,6 +94,45 @@ class TestHCLTerraformParser:
         assert mod["source"] == "terraform-aws-modules/s3-bucket/aws"
         assert mod["version"] == "3.15.1"
 
+    def test_parse_terraform_module_deployment_attributes(self, parser, temp_test_dir):
+        """Parse generic deployment-oriented attributes from Terraform modules."""
+
+        f = temp_test_dir / "ecs_module.tf"
+        f.write_text(
+            'module "api_node_boats" {\n'
+            '  source = "example/ecs-service/aws"\n'
+            '  version = "~> 3.0"\n'
+            '  name = "api-node-boats"\n'
+            '  repo_name = "api-node-boats"\n'
+            "  create_deploy = true\n"
+            '  cluster_name = "node10"\n'
+            '  zone_id = "Z123456"\n'
+            "  deploy_conf = {\n"
+            '    ENTRY_POINT = "api-node-boats.js"\n'
+            "  }\n"
+            "}\n"
+        )
+
+        result = parser.parse(str(f))
+
+        assert "terraform_modules" in result
+        modules = result["terraform_modules"]
+        assert len(modules) == 1
+        assert modules[0] == {
+            "name": "api_node_boats",
+            "line_number": 1,
+            "source": "example/ecs-service/aws",
+            "version": "~> 3.0",
+            "deployment_name": "api-node-boats",
+            "repo_name": "api-node-boats",
+            "create_deploy": "true",
+            "cluster_name": "node10",
+            "zone_id": "Z123456",
+            "deploy_entry_point": "api-node-boats.js",
+            "path": str(f),
+            "lang": "hcl",
+        }
+
     # --- Data Sources ---
 
     def test_parse_terraform_data_sources(self, parser, tf_fixtures):

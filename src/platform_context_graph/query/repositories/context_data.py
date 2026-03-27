@@ -245,7 +245,13 @@ def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:
             """
             RETURN n.name as name,
                    n.source as source,
-                   n.version as version
+                   n.version as version,
+                   n.deployment_name as deployment_name,
+                   n.repo_name as repo_name,
+                   n.create_deploy as create_deploy,
+                   n.cluster_name as cluster_name,
+                   n.zone_id as zone_id,
+                   n.deploy_entry_point as deploy_entry_point
             """,
         ),
         "terraform_variables": (

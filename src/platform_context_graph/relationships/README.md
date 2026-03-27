@@ -92,6 +92,30 @@ Deployment artifacts are not the canonical relationship itself. They are the rea
 
 That makes them useful for answer shaping, but they should never override the underlying typed edge.
 
+## Terraform Runtime Extension Rules
+
+When Terraform or Terragrunt module blocks carry deployment-oriented metadata, keep the parser contract generic so it can support more than one runtime family.
+
+Current `TerraformModule` deployment attributes include:
+
+- `deployment_name`
+- `repo_name`
+- `create_deploy`
+- `cluster_name`
+- `zone_id`
+- `deploy_entry_point`
+
+These fields are currently useful for ECS-oriented summaries, but they are deliberately not named as ECS-only fields. The goal is to let future contributors extend the same flow for Fargate, Elastic Beanstalk, or another cloud/provider runtime without introducing a second parser contract.
+
+Rules:
+
+1. add new Terraform module attributes only when they describe a portable deployment concept
+2. keep provider- or runtime-specific interpretation in resolver or read-side summary code, not in the parser itself
+3. document each new attribute in the public mapping reference and the prompt schema
+4. add tests that prove the attribute is parsed, persisted, and surfaced through repo-context summaries
+
+Treat ECS as the first example of this extension pattern, not the only intended consumer.
+
 ## Where To Add New Mappings
 
 ### Raw File Mappings

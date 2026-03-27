@@ -140,6 +140,41 @@ The current mapping and enrichment flow understands these families:
 
 The important constraint is not the tool name itself. The important constraint is whether the tool gives you a truthful, explainable source of repository or platform meaning.
 
+## Terraform-Managed Runtime Variants
+
+Terraform-managed runtime summaries need to stay broader than ECS, even when ECS is the first concrete example in our corpus. The parser and summary layers should capture generic deployment-oriented module attributes first, then let the mapping and answer-shaping layers decide whether those attributes describe ECS, Fargate, Elastic Beanstalk, Kubernetes, or another provider/runtime combination.
+
+Today the `TerraformModule` entity exposes portable attributes such as:
+
+- `deployment_name`
+- `repo_name`
+- `create_deploy`
+- `cluster_name`
+- `zone_id`
+- `deploy_entry_point`
+
+Those attributes are intentionally not ECS-only. They are a generic contract for Terraform module blocks that describe deployable workloads or runtime variants.
+
+Use that contract in this order:
+
+1. parse the module attributes as-is from Terraform or Terragrunt-managed HCL
+2. preserve them on the `TerraformModule` entity
+3. resolve canonical platform relationships separately
+4. derive repo-context summaries such as `service_variants` from the enriched module metadata
+5. only then explain ECS-specific, Fargate-specific, or provider-specific meaning in the answer layer
+
+This keeps the parser portable and makes it safe for contributors to add future runtime families without rewriting the semantic contract.
+
+### ECS As The First Example, Not The Final Shape
+
+ECS currently uses these attributes to explain variants like direct CodeDeploy-backed services and background jobs. The same pattern should be used for future Terraform-managed deployment targets:
+
+- Fargate or ECS variants can reuse `cluster_name`, `repo_name`, and `create_deploy`
+- Elastic Beanstalk style modules can still use `deployment_name` and `deploy_entry_point`
+- non-AWS runtimes can map their platform identifiers into the same canonical relationship flow, then optionally surface provider-specific details in the read-side summary
+
+If a future runtime needs new module attributes, add them as generic deployment metadata first, document them here, and only then teach the answer-shaping layer how to describe them.
+
 ## Deployment Artifacts
 
 Deployment artifacts are the derived pieces of repository context that help answer "what deploys from here?" after the canonical mapping has been resolved.

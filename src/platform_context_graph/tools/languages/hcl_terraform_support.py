@@ -155,11 +155,22 @@ def _parse_module_block(block: Any, source_bytes: bytes, path: str) -> dict[str,
     if not labels:
         return None
     attrs = _attribute_map(block, source_bytes)
+    deploy_conf = _nested_object_attribute_map(
+        block,
+        source_bytes,
+        attribute_name="deploy_conf",
+    )
     return {
         "name": labels[0],
         "line_number": block.start_point.row + 1,
         "source": attrs.get("source", ""),
         "version": attrs.get("version", ""),
+        "deployment_name": attrs.get("name", ""),
+        "repo_name": attrs.get("repo_name", ""),
+        "create_deploy": attrs.get("create_deploy", ""),
+        "cluster_name": attrs.get("cluster_name", ""),
+        "zone_id": attrs.get("zone_id", ""),
+        "deploy_entry_point": deploy_conf.get("ENTRY_POINT", ""),
         "path": path,
         "lang": "hcl",
     }
@@ -354,6 +365,26 @@ def _attribute_map(block: Any, source_bytes: bytes) -> dict[str, str]:
         if name:
             result[name] = value
     return result
+
+
+def _nested_object_attribute_map(
+    block: Any,
+    source_bytes: bytes,
+    *,
+    attribute_name: str,
+) -> dict[str, str]:
+    """Return key/value pairs from one object-valued attribute inside a block."""
+
+    body = _body_node(block)
+    if body is None:
+        return {}
+    for child in body.children:
+        if child.type != "attribute":
+            continue
+        name, _ = _attribute_pair(child, source_bytes)
+        if name == attribute_name:
+            return _object_attribute_map(child, source_bytes)
+    return {}
 
 
 def _attribute_pair(attribute: Any, source_bytes: bytes) -> tuple[str, str]:

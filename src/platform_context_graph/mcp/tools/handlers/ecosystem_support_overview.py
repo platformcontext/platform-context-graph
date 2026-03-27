@@ -177,7 +177,7 @@ def _build_service_variants(terraform_modules: list[dict[str, Any]]) -> list[dic
     """Build compact service-variant rows from Terraform module matches."""
 
     variants: list[dict[str, Any]] = []
-    seen: set[tuple[str, str, str, str]] = set()
+    seen: set[tuple[str, str, str, str, str, str, str, str, str]] = set()
     for row in terraform_modules:
         if not isinstance(row, dict):
             continue
@@ -185,21 +185,63 @@ def _build_service_variants(terraform_modules: list[dict[str, Any]]) -> list[dic
         repository = str(row.get("repository") or "").strip()
         module_source = str(row.get("source") or "").strip()
         version = str(row.get("version") or "").strip()
+        deployment_name = str(row.get("deployment_name") or "").strip()
+        repo_name = str(row.get("repo_name") or "").strip()
+        create_deploy = _normalize_optional_bool(row.get("create_deploy"))
+        cluster_name = str(row.get("cluster_name") or "").strip()
+        zone_id = str(row.get("zone_id") or "").strip()
+        entry_point = str(row.get("deploy_entry_point") or "").strip()
         if not name or not repository:
             continue
-        key = (name, repository, module_source, version)
+        key = (
+            name,
+            repository,
+            module_source,
+            version,
+            deployment_name,
+            repo_name,
+            str(create_deploy),
+            cluster_name,
+            entry_point,
+        )
         if key in seen:
             continue
         seen.add(key)
-        variants.append(
-            {
-                "name": name,
-                "repository": repository,
-                "module_source": module_source,
-                "version": version,
-            }
-        )
+        variant = {
+            "name": name,
+            "repository": repository,
+            "module_source": module_source,
+            "version": version,
+        }
+        if deployment_name:
+            variant["deployment_name"] = deployment_name
+        if repo_name:
+            variant["repo_name"] = repo_name
+        if create_deploy is not None:
+            variant["create_deploy"] = create_deploy
+        if cluster_name:
+            variant["cluster_name"] = cluster_name
+        if zone_id:
+            variant["zone_id"] = zone_id
+        if entry_point:
+            variant["entry_point"] = entry_point
+        variants.append(variant)
     return variants
+
+
+def _normalize_optional_bool(value: Any) -> bool | None:
+    """Return a normalized bool for Terraform-style truthy values when possible."""
+
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if not normalized:
+        return None
+    if normalized in {"true", "1", "yes"}:
+        return True
+    if normalized in {"false", "0", "no"}:
+        return False
+    return None
 
 
 def _build_deployment_controllers(
