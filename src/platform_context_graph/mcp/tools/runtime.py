@@ -31,7 +31,7 @@ RUNTIME_TOOLS = {
             "properties": {
                 "target": {
                     "type": "string",
-                    "description": "Optional workspace path, repository path, repository name, or checkpoint run ID. Defaults to the current working directory.",
+                    "description": "Optional workspace path, repository path, repository name, or checkpoint run ID. Defaults to the configured checkpoint root for the repository ingester.",
                 }
             },
         },

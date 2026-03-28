@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from platform_context_graph.mcp import runtime_tools
+from platform_context_graph.mcp.tools.runtime import RUNTIME_TOOLS
 
 
 class _Server(runtime_tools.RuntimeStatusToolMixin):
@@ -63,3 +64,14 @@ def test_get_index_status_tool_resolves_repo_names_before_lookup(
 
     assert captured_target["value"] == Path("/srv/repos/api-node-boats")
     assert result == {"run_id": "run-456", "status": "completed"}
+
+
+def test_get_index_status_schema_describes_checkpoint_root_default() -> None:
+    """Tool schema should match the checkpoint-root default behavior."""
+
+    description = RUNTIME_TOOLS["get_index_status"]["inputSchema"]["properties"][
+        "target"
+    ]["description"]
+
+    assert "checkpoint root" in description
+    assert "current working directory" not in description
