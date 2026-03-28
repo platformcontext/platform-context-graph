@@ -279,6 +279,7 @@ def test_trace_deployment_chain_defaults_to_a_direct_focused_view(
             "deployment_chain",
             "terraform_resources",
             "terraform_modules",
+            "terragrunt_configs",
             "provisioning_source_chains",
         ],
     }

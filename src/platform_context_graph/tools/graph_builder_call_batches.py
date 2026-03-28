@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import time
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 _CALL_RELATIONSHIP_BATCH_SIZE = 250
 _LOW_SIGNAL_JS_FALLBACK_NAMES = frozenset(
@@ -125,6 +129,19 @@ def create_call_relationships_batched(
                 fallback_duration=0.0,
             )
     exact_duration = time.monotonic() - exact_started
+
+    _global_fallback_enabled = (
+        os.environ.get("PCG_FUNCTION_CALL_GLOBAL_FALLBACK", "false").lower() == "true"
+    )
+    if not _global_fallback_enabled:
+        return call_resolution_metrics(
+            rows=rows,
+            fallback_rows=0,
+            unresolved_rows=remaining_rows,
+            exact_duration=exact_duration,
+            fallback_duration=0.0,
+        )
+
     fallback_candidates = filter_fallback_candidate_rows(remaining_rows)
     fallback_rows = len(fallback_candidates)
     if not fallback_candidates:
@@ -236,6 +253,11 @@ def run_call_batch_query(
             result = session.run(query, {"rows": chunk})
             row = result.single()
         except Exception:
+            logger.warning(
+                "Neo4j query failed during call resolution",
+                exc_info=True,
+                extra={"batch_size": len(chunk)},
+            )
             unresolved_rows.extend(chunk)
             continue
         matched_row_ids = set()

@@ -73,7 +73,22 @@ def build_controller_driven_paths(
                 ),
             }
         )
-    return [path for path in paths if path.get("entry_points")]
+    seen: set[tuple[str, ...]] = set()
+    deduped: list[dict[str, Any]] = []
+    for path in paths:
+        if not path.get("entry_points"):
+            continue
+        key = (
+            path.get("controller_kind", ""),
+            path.get("automation_kind", ""),
+            ",".join(path.get("entry_points", [])),
+            ",".join(path.get("target_descriptors", [])),
+            path.get("runtime_family", ""),
+        )
+        if key not in seen:
+            seen.add(key)
+            deduped.append(path)
+    return deduped
 
 
 def _resolve_ansible_entry_points(

@@ -16,6 +16,7 @@ from .otel import (
     ActiveStateKey,
     FastAPI,
     FastAPIInstrumentor,
+    Observation,
     REQUEST_CONTEXT_UNSET,
     MeterProvider,
     MetricReader,
@@ -75,6 +76,9 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         init=False,
         default_factory=dict,
     )
+    _process_rss_bytes: int = field(init=False, default=-1)
+    _cgroup_memory_bytes: int = field(init=False, default=-1)
+    _cgroup_memory_limit_bytes: int = field(init=False, default=-1)
     http_requests_total: Any = field(init=False, default=None)
     http_request_duration: Any = field(init=False, default=None)
     http_request_errors_total: Any = field(init=False, default=None)
@@ -254,6 +258,29 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
             "pcg_index_parse_tasks_active",
             callbacks=[self._observe_index_parse_tasks_active],
         )
+        for gauge_name, attr_name, description in (
+            (
+                "pcg_process_rss_bytes",
+                "_process_rss_bytes",
+                "Process RSS memory in bytes",
+            ),
+            (
+                "pcg_cgroup_memory_bytes",
+                "_cgroup_memory_bytes",
+                "Cgroup current memory in bytes",
+            ),
+            (
+                "pcg_cgroup_memory_limit_bytes",
+                "_cgroup_memory_limit_bytes",
+                "Cgroup memory limit in bytes",
+            ),
+        ):
+            self.meter.create_observable_gauge(
+                gauge_name,
+                callbacks=[self._make_memory_observer(attr_name)],
+                unit="By",
+                description=description,
+            )
 
     def shutdown(self) -> None:
         """Shut down the configured meter and tracer providers."""

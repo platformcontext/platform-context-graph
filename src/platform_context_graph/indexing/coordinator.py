@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from concurrent.futures import ProcessPoolExecutor
+import logging
 import multiprocessing
 import os
 from pathlib import Path
@@ -11,10 +12,13 @@ import sys
 from typing import Any
 
 from platform_context_graph.observability import get_observability
+
+logger = logging.getLogger(__name__)
 from platform_context_graph.repository_identity import (
     git_remote_for_path,
     repository_metadata,
 )
+from platform_context_graph.utils.debug_log import emit_log_call, warning_logger
 from platform_context_graph.tools.graph_builder_indexing import (
     finalize_index_batch,
     parse_repository_snapshot_async,
@@ -225,13 +229,20 @@ def _commit_repository_snapshot(
         content_provider = get_postgres_content_provider()
         builder._content_provider = content_provider
 
-    if content_provider is not None and content_provider.enabled:
-        content_provider.delete_repository_content(metadata["id"])
-
     try:
         graph_store.delete_repository(metadata["id"])
-    except Exception:
-        pass
+    except Exception as exc:
+        emit_log_call(
+            warning_logger,
+            "Failed to delete repository from graph store",
+            event_name="index.commit.graph_delete_failed",
+            extra_keys={"repo_id": metadata["id"], "error": str(exc)},
+            exc_info=exc,
+        )
+        raise
+
+    if content_provider is not None and content_provider.enabled:
+        content_provider.delete_repository_content(metadata["id"])
 
     builder.add_repository_to_graph(repo_path, is_dependency=is_dependency)
     batch_size = _positive_int_env("PCG_FILE_BATCH_SIZE", 50, maximum=512)

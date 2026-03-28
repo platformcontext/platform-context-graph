@@ -111,7 +111,7 @@ def discover_repository_dependency_evidence(
                 if _CROSS_REPO_RELATIONSHIP_TYPE_MAP:
                     cross_repo_rows = session.run(
                         """
-                        MATCH (source_repo:Repository)-[:CONTAINS*]->(source_node)-[rel]->(target_node)<-[:CONTAINS*]-(target_repo:Repository)
+                        MATCH (source_repo:Repository)-[:REPO_CONTAINS]->(sf:File)-[:CONTAINS*]->(source_node)-[rel]->(target_node)<-[:CONTAINS*]-(tf:File)<-[:REPO_CONTAINS]-(target_repo:Repository)
                         WHERE source_repo.id <> target_repo.id
                           AND type(rel) IN $relationship_types
                         RETURN source_repo.id AS source_repo_id,

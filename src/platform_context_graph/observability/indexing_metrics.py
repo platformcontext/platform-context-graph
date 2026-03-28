@@ -8,6 +8,9 @@ from typing import Any
 from .otel import Observation
 
 
+_MEMORY_UNSET = -1
+
+
 class RuntimeIndexMetricsMixin:
     """Provide indexing metric helpers for :class:`ObservabilityRuntime`."""
 
@@ -18,6 +21,9 @@ class RuntimeIndexMetricsMixin:
     _checkpoint_pending_repositories: dict[tuple[tuple[str, str], ...], int]
     _index_snapshot_queue_depth: dict[tuple[tuple[str, str], ...], int]
     _index_parse_tasks_active: dict[tuple[tuple[str, str], ...], int]
+    _process_rss_bytes: int
+    _cgroup_memory_bytes: int
+    _cgroup_memory_limit_bytes: int
     index_repositories_total: Any
     index_checkpoints_total: Any
     index_repository_duration: Any
@@ -268,3 +274,22 @@ class RuntimeIndexMetricsMixin:
                 Observation(value, dict(key))
                 for key, value in sorted(self._index_parse_tasks_active.items())
             ]
+
+    def record_memory_usage(self, sample: Any) -> None:
+        """Store the latest memory sample for gauge observation."""
+
+        if sample.rss_bytes is not None:
+            self._process_rss_bytes = sample.rss_bytes
+        if sample.cgroup_memory_bytes is not None:
+            self._cgroup_memory_bytes = sample.cgroup_memory_bytes
+        if getattr(sample, "cgroup_memory_limit_bytes", None) is not None:
+            self._cgroup_memory_limit_bytes = sample.cgroup_memory_limit_bytes
+
+    def _make_memory_observer(self, attr_name: str) -> Any:
+        """Return a gauge callback that reads one memory field by attribute name."""
+
+        def _observe(_options: Any) -> list[Observation]:
+            value = getattr(self, attr_name, _MEMORY_UNSET)
+            return [] if value == _MEMORY_UNSET else [Observation(value, {})]
+
+        return _observe
