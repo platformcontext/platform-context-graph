@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import os
 from pathlib import Path
 import time
 from typing import Any
@@ -69,7 +70,11 @@ def collect_file_write_data(
     js_import_rows: list[dict[str, Any]] = []
     generic_import_rows: list[dict[str, Any]] = []
 
+    _skip_variables = os.environ.get("INDEX_VARIABLES", "true").lower() == "false"
+
     for field_key, label in ITEM_MAPPINGS_KEYS:
+        if _skip_variables and label == "Variable":
+            continue
         for item in file_data.get(field_key, []):
             if label == "Function" and "cyclomatic_complexity" not in item:
                 item["cyclomatic_complexity"] = 1
@@ -216,9 +221,7 @@ def flush_write_batches(
                     "name_rows": summary["name_rows"],
                     "chunk_count": summary["chunk_count"],
                     "max_chunk_rows": summary["max_chunk_rows"],
-                    "duration_seconds": round(
-                        float(summary["duration_seconds"]), 6
-                    ),
+                    "duration_seconds": round(float(summary["duration_seconds"]), 6),
                 },
             )
 
@@ -299,9 +302,6 @@ def log_prepared_entity_batches(
 ) -> None:
     """Emit pre-flush entity summaries for the current write accumulator."""
 
-    _ = info_logger_fn
-    if not callable(debug_logger_fn):
-        return
     entity_counts = {
         label: len(rows)
         for label, rows in sorted(batches["entities_by_label"].items())
@@ -312,15 +312,26 @@ def log_prepared_entity_batches(
     entity_summary = ", ".join(
         f"{label}={count}" for label, count in entity_counts.items()
     )
-    emit_log_call(
-        debug_logger_fn,
-        f"Prepared graph entity batches for {repo_path_str}: {entity_summary}",
-        event_name="graph.batch.prepared",
-        extra_keys={
-            "repo_path": repo_path_str,
-            "entity_counts": entity_counts,
-        },
-    )
+    if callable(info_logger_fn):
+        emit_log_call(
+            info_logger_fn,
+            f"Graph entity batch ready for {repo_path_str}: {entity_summary}",
+            event_name="graph.batch.prepared",
+            extra_keys={
+                "repo_path": repo_path_str,
+                "entity_counts": entity_counts,
+            },
+        )
+    elif callable(debug_logger_fn):
+        emit_log_call(
+            debug_logger_fn,
+            f"Prepared graph entity batches for {repo_path_str}: {entity_summary}",
+            event_name="graph.batch.prepared",
+            extra_keys={
+                "repo_path": repo_path_str,
+                "entity_counts": entity_counts,
+            },
+        )
     for label, rows in sorted(batches["entities_by_label"].items()):
         if len(rows) < _LARGE_LABEL_SUMMARY_THRESHOLD:
             continue
@@ -444,9 +455,7 @@ def _flush_entity_label_batches(
                 "chunk_number": chunk_number,
                 "total_chunks": total_chunks,
                 "rows": len(chunk),
-                "duration_seconds": round(
-                    float(chunk_summary["duration_seconds"]), 6
-                ),
+                "duration_seconds": round(float(chunk_summary["duration_seconds"]), 6),
             },
         )
 

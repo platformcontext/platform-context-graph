@@ -94,6 +94,7 @@ def _content_dual_write(
             exc_info=exc,
         )
 
+
 def _begin_transaction(session: Any) -> tuple[Any, bool]:
     """Begin an explicit transaction if the backend supports it.
 
@@ -264,6 +265,25 @@ def add_file_to_graph(
             raise
 
 
+def _accumulate_entity_totals(
+    totals: dict[str, int],
+    flush_metrics: dict[str, Any],
+) -> None:
+    """Add entity row counts from one flush into a mutable aggregate.
+
+    Args:
+        totals: Mutable dict accumulating per-label entity row counts.
+        flush_metrics: Metrics dict returned by ``flush_write_batches``.
+    """
+
+    for key, summary in flush_metrics.items():
+        if not key.startswith("entity:"):
+            continue
+        label = key[len("entity:") :]
+        row_count = int(summary.get("total_rows", 0))
+        totals[label] = totals.get(label, 0) + row_count
+
+
 def commit_file_batch_to_graph(
     builder: Any,
     file_data_list: list[dict[str, Any]],
@@ -318,6 +338,7 @@ def commit_file_batch_to_graph(
         total_files = len(file_data_list)
         committed_files = 0
         committed_file_paths: list[str] = []
+        repo_entity_totals: dict[str, int] = {}
 
         for start in range(0, total_files, tx_file_limit):
             tx_chunk = file_data_list[start : start + tx_file_limit]
@@ -361,12 +382,13 @@ def commit_file_batch_to_graph(
                                 info_logger_fn=info_logger_fn,
                                 debug_logger_fn=debug_log_fn,
                             )
-                            flush_write_batches(
+                            flush_metrics = flush_write_batches(
                                 tx,
                                 accumulator,
                                 info_logger_fn=info_logger_fn,
                                 debug_logger_fn=debug_log_fn,
                             )
+                            _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                             accumulator = empty_accumulator()
 
                     if has_pending_rows(accumulator):
@@ -376,12 +398,13 @@ def commit_file_batch_to_graph(
                             info_logger_fn=info_logger_fn,
                             debug_logger_fn=debug_log_fn,
                         )
-                        flush_write_batches(
+                        flush_metrics = flush_write_batches(
                             tx,
                             accumulator,
                             info_logger_fn=info_logger_fn,
                             debug_logger_fn=debug_log_fn,
                         )
+                        _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                     if is_explicit:
                         tx.commit()
             except Exception as exc:
@@ -417,12 +440,13 @@ def commit_file_batch_to_graph(
                             info_logger_fn=info_logger_fn,
                             debug_logger_fn=debug_log_fn,
                         )
-                        flush_write_batches(
+                        flush_metrics = flush_write_batches(
                             tx,
                             file_batches,
                             info_logger_fn=info_logger_fn,
                             debug_logger_fn=debug_log_fn,
                         )
+                        _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                         if is_explicit:
                             tx.commit()
                         committed_files += 1
@@ -465,6 +489,22 @@ def commit_file_batch_to_graph(
                     current_file=str(Path(tx_chunk[-1]["path"]).resolve()),
                     committed=True,
                 )
+        if repo_entity_totals and callable(info_logger_fn):
+            entity_summary = ", ".join(
+                f"{label}={count}"
+                for label, count in sorted(repo_entity_totals.items())
+                if count > 0
+            )
+            emit_log_call(
+                info_logger_fn,
+                f"Committed graph entities for {repo_path_str}: {entity_summary}",
+                event_name="graph.batch.commit.entity_summary",
+                extra_keys={
+                    "repo_path": repo_path_str,
+                    "file_count": len(file_data_list),
+                    "entity_totals": repo_entity_totals,
+                },
+            )
         return BatchCommitResult(committed_file_paths=tuple(committed_file_paths))
 
 
