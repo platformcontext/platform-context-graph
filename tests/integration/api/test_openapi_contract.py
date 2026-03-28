@@ -30,7 +30,6 @@ WORKLOAD_CONTEXT = {
             "name": "payments-api",
             "repo_slug": "platformcontext/payments-api",
             "remote_url": "https://github.com/platformcontext/payments-api",
-            "local_path": "/srv/repos/payments-api",
             "has_remote": True,
         }
     ],

@@ -82,6 +82,7 @@ These settings are the public knobs for the checkpointed Python indexing pipelin
 | **`PCG_PARSE_WORKERS`** | `4` | Number of concurrent repository parse workers used by checkpointed indexing. |
 | **`PCG_REPO_FILE_PARSE_MULTIPROCESS`** | `false` | When `true`, file parsing inside a repository snapshot uses a process pool instead of the threaded path. |
 | **`PCG_MULTIPROCESS_START_METHOD`** | `spawn` | Process start method for parse workers. `spawn` is the safe default for host and container runtimes; override only after verifying another mode on your exact platform. |
+| **`PCG_WORKER_MAX_TASKS`** | unset | Optional per-worker recycle threshold for the multiprocess parser. Leave unset to keep workers alive for the whole run; set it only if you need explicit worker recycling for a known memory issue. |
 | **`PCG_INDEX_QUEUE_DEPTH`** | `8` | Maximum number of parsed repositories allowed to wait for commit/finalization. |
 | **`PCG_WATCH_DEBOUNCE_SECONDS`** | `2.0` | Debounce interval for batching file-system events before incremental updates run. |
 
@@ -90,6 +91,7 @@ Notes:
 - `PCG_PARSE_WORKERS` is the primary worker control for modern multi-repo indexing.
 - `PCG_REPO_FILE_PARSE_MULTIPROCESS` enables the process-pool parse engine; leave it `false` until you want the heavier worker-process path.
 - `PCG_MULTIPROCESS_START_METHOD` now defaults to `spawn` because it is the most reliable choice for the parser-heavy process-pool path across local macOS and Linux containers.
+- `PCG_WORKER_MAX_TASKS` is now opt-in. The default leaves parse workers alive for the whole run because recycling long-lived parser workers can stall large local and containerized indexing jobs.
 - `PARALLEL_WORKERS` is still honored as a backward-compatible fallback when `PCG_PARSE_WORKERS` is not set.
 - `pcg index` and `pcg watch` now print the effective worker/debounce values they are using so local runs match the documented configuration.
 

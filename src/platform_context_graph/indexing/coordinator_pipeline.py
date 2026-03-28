@@ -226,56 +226,154 @@ async def process_repository_snapshots(
                         "pcg.index.parse_workers": parse_workers,
                     },
                 ):
-                    async with parse_semaphore:
-                        queue_wait_duration = time.perf_counter() - queue_wait_started
-                if hasattr(telemetry, "record_index_stage_duration"):
-                    telemetry.record_index_stage_duration(
-                        component=component,
-                        mode=family,
-                        source=source,
-                        stage="repository_queue_wait",
-                        duration_seconds=queue_wait_duration,
-                        parse_strategy=parse_strategy,
-                        parse_workers=parse_workers,
+                    await parse_semaphore.acquire()
+                queue_wait_duration = time.perf_counter() - queue_wait_started
+                try:
+                    if hasattr(telemetry, "record_index_stage_duration"):
+                        telemetry.record_index_stage_duration(
+                            component=component,
+                            mode=family,
+                            source=source,
+                            stage="repository_queue_wait",
+                            duration_seconds=queue_wait_duration,
+                            parse_strategy=parse_strategy,
+                            parse_workers=parse_workers,
+                        )
+                    emit_log_call(
+                        info_logger_fn,
+                        f"Repository parse slot acquired for {repo_path.resolve()} after "
+                        f"{queue_wait_duration:.3f}s",
+                        event_name="index.repository.queue_wait.completed",
+                        extra_keys={
+                            "run_id": run_state.run_id,
+                            "repo_path": str(repo_path.resolve()),
+                            "duration_seconds": round(queue_wait_duration, 6),
+                            "parse_strategy": parse_strategy,
+                            "parse_workers": parse_workers,
+                        },
                     )
-                emit_log_call(
-                    info_logger_fn,
-                    f"Repository parse slot acquired for {repo_path.resolve()} after "
-                    f"{queue_wait_duration:.3f}s",
-                    event_name="index.repository.queue_wait.completed",
-                    extra_keys={
-                        "run_id": run_state.run_id,
-                        "repo_path": str(repo_path.resolve()),
-                        "duration_seconds": round(queue_wait_duration, 6),
-                        "parse_strategy": parse_strategy,
-                        "parse_workers": parse_workers,
-                    },
-                )
-                with telemetry.start_span(
-                    "pcg.index.repository.parse",
-                    component=component,
-                    attributes={
-                        "pcg.index.run_id": run_state.run_id,
-                        "pcg.index.repo_path": repo_key,
-                        "pcg.index.file_count": len(repo_file_sets[repo_path]),
-                        "pcg.index.parse_strategy": parse_strategy,
-                        "pcg.index.parse_workers": parse_workers,
-                    },
-                ):
-                    started = time.perf_counter()
-                    repo_state.started_at = utc_now_fn()
-                    repo_state.finished_at = None
-                    repo_state.error = None
-                    repo_state.commit_started_at = None
-                    repo_state.commit_finished_at = None
-                    repo_state.commit_duration_seconds = None
+                    with telemetry.start_span(
+                        "pcg.index.repository.parse",
+                        component=component,
+                        attributes={
+                            "pcg.index.run_id": run_state.run_id,
+                            "pcg.index.repo_path": repo_key,
+                            "pcg.index.file_count": len(repo_file_sets[repo_path]),
+                            "pcg.index.parse_strategy": parse_strategy,
+                            "pcg.index.parse_workers": parse_workers,
+                        },
+                    ):
+                        started = time.perf_counter()
+                        repo_state.started_at = utc_now_fn()
+                        repo_state.finished_at = None
+                        repo_state.error = None
+                        repo_state.commit_started_at = None
+                        repo_state.commit_finished_at = None
+                        repo_state.commit_duration_seconds = None
+                        _update_repo_progress(
+                            repo_state,
+                            status="running",
+                            phase="parsing",
+                            clear_current_file=True,
+                            persist=True,
+                        )
+                        record_checkpoint_metric_fn(
+                            component=component,
+                            mode=family,
+                            source=source,
+                            operation="save",
+                            status="completed",
+                        )
+                        telemetry.record_index_repositories(
+                            component=component,
+                            phase="started",
+                            count=1,
+                            mode=family,
+                            source=source,
+                        )
+                        if resume_candidate:
+                            telemetry.record_index_repositories(
+                                component=component,
+                                phase="resumed",
+                                count=1,
+                                mode=family,
+                                source=source,
+                            )
+                        emit_log_call(
+                            info_logger_fn,
+                            f"Starting repository parse for {repo_path.resolve()}",
+                            event_name="index.repository.parse.started",
+                            extra_keys={
+                                "run_id": run_state.run_id,
+                                "repo_path": str(repo_path.resolve()),
+                                "file_count": len(repo_file_sets[repo_path]),
+                                "parse_strategy": parse_strategy,
+                                "parse_workers": parse_workers,
+                            },
+                        )
+                        parse_started = time.perf_counter()
+                        snapshot = await parse_repository_snapshot_async_fn(
+                            builder,
+                            repo_path,
+                            repo_file_sets[repo_path],
+                            is_dependency=is_dependency,
+                            job_id=job_id,
+                            asyncio_module=asyncio_module,
+                            info_logger_fn=info_logger_fn,
+                            progress_callback=_progress_callback,
+                            parse_executor=parse_executor,
+                            component=component,
+                            mode=family,
+                            source=source,
+                            parse_workers=parse_workers,
+                        )
+                        parse_duration = time.perf_counter() - parse_started
+                        if hasattr(telemetry, "record_index_stage_duration"):
+                            telemetry.record_index_stage_duration(
+                                component=component,
+                                mode=family,
+                                source=source,
+                                stage="repository_parse",
+                                duration_seconds=parse_duration,
+                                parse_strategy=parse_strategy,
+                                parse_workers=parse_workers,
+                            )
+                        emit_log_call(
+                            info_logger_fn,
+                            f"Finished repository parse for {repo_path.resolve()} in "
+                            f"{parse_duration:.3f}s",
+                            event_name="index.repository.parse.completed",
+                            extra_keys={
+                                "run_id": run_state.run_id,
+                                "repo_path": str(repo_path.resolve()),
+                                "file_count": snapshot.file_count,
+                                "duration_seconds": round(parse_duration, 6),
+                                "parse_strategy": parse_strategy,
+                                "parse_workers": parse_workers,
+                            },
+                        )
+                        _progress_callback(force=True)
+                    repo_state.file_count = snapshot.file_count
                     _update_repo_progress(
                         repo_state,
-                        status="running",
-                        phase="parsing",
-                        clear_current_file=True,
-                        persist=True,
+                        status="parsed",
+                        phase="parsed",
+                        persist=False,
                     )
+                    save_snapshot_file_data_fn(
+                        run_state.run_id,
+                        Path(snapshot.repo_path),
+                        snapshot.file_data,
+                    )
+                    save_snapshot_metadata_fn(
+                        run_state.run_id,
+                        RepositorySnapshotMetadata(
+                            repo_path=snapshot.repo_path,
+                            file_count=snapshot.file_count,
+                            imports_map=snapshot.imports_map,
+                        ),
+                    )
+                    snapshot.file_data = []
                     record_checkpoint_metric_fn(
                         component=component,
                         mode=family,
@@ -283,136 +381,41 @@ async def process_repository_snapshots(
                         operation="save",
                         status="completed",
                     )
-                    telemetry.record_index_repositories(
-                        component=component,
-                        phase="started",
-                        count=1,
-                        mode=family,
-                        source=source,
+                    persist_run_state_fn(run_state)
+                    _publish_runtime_state()
+                    publish_run_repository_coverage_fn(
+                        builder=builder,
+                        run_state=run_state,
+                        repo_paths=[repo_path],
+                        include_graph_counts=False,
+                        include_content_counts=False,
                     )
-                    if resume_candidate:
-                        telemetry.record_index_repositories(
-                            component=component,
-                            phase="resumed",
-                            count=1,
-                            mode=family,
-                            source=source,
-                        )
-                    emit_log_call(
-                        info_logger_fn,
-                        f"Starting repository parse for {repo_path.resolve()}",
-                        event_name="index.repository.parse.started",
-                        extra_keys={
-                            "run_id": run_state.run_id,
-                            "repo_path": str(repo_path.resolve()),
-                            "file_count": len(repo_file_sets[repo_path]),
-                            "parse_strategy": parse_strategy,
-                            "parse_workers": parse_workers,
+                    commit_wait_started = time.perf_counter()
+                    with telemetry.start_span(
+                        "pcg.index.repository.commit_wait",
+                        component=component,
+                        attributes={
+                            "pcg.index.run_id": run_state.run_id,
+                            "pcg.index.repo_path": repo_key,
+                            "pcg.index.parse_strategy": parse_strategy,
+                            "pcg.index.parse_workers": parse_workers,
                         },
-                    )
-                    parse_started = time.perf_counter()
-                    snapshot = await parse_repository_snapshot_async_fn(
-                        builder,
-                        repo_path,
-                        repo_file_sets[repo_path],
-                        is_dependency=is_dependency,
-                        job_id=job_id,
-                        asyncio_module=asyncio_module,
-                        info_logger_fn=info_logger_fn,
-                        progress_callback=_progress_callback,
-                        parse_executor=parse_executor,
-                        component=component,
-                        mode=family,
-                        source=source,
-                        parse_workers=parse_workers,
-                    )
-                    parse_duration = time.perf_counter() - parse_started
-                    if hasattr(telemetry, "record_index_stage_duration"):
-                        telemetry.record_index_stage_duration(
+                    ):
+                        await snapshot_queue.put(
+                            (repo_path, snapshot, started, commit_wait_started)
+                        )
+                    if hasattr(telemetry, "set_index_snapshot_queue_depth"):
+                        telemetry.set_index_snapshot_queue_depth(
                             component=component,
                             mode=family,
                             source=source,
-                            stage="repository_parse",
-                            duration_seconds=parse_duration,
+                            depth=snapshot_queue.qsize(),
                             parse_strategy=parse_strategy,
                             parse_workers=parse_workers,
                         )
-                    emit_log_call(
-                        info_logger_fn,
-                        f"Finished repository parse for {repo_path.resolve()} in "
-                        f"{parse_duration:.3f}s",
-                        event_name="index.repository.parse.completed",
-                        extra_keys={
-                            "run_id": run_state.run_id,
-                            "repo_path": str(repo_path.resolve()),
-                            "file_count": snapshot.file_count,
-                            "duration_seconds": round(parse_duration, 6),
-                            "parse_strategy": parse_strategy,
-                            "parse_workers": parse_workers,
-                        },
-                    )
-                    _progress_callback(force=True)
-                repo_state.file_count = snapshot.file_count
-                _update_repo_progress(
-                    repo_state,
-                    status="parsed",
-                    phase="parsed",
-                    persist=False,
-                )
-                save_snapshot_file_data_fn(
-                    run_state.run_id,
-                    Path(snapshot.repo_path),
-                    snapshot.file_data,
-                )
-                save_snapshot_metadata_fn(
-                    run_state.run_id,
-                    RepositorySnapshotMetadata(
-                        repo_path=snapshot.repo_path,
-                        file_count=snapshot.file_count,
-                        imports_map=snapshot.imports_map,
-                    ),
-                )
-                snapshot.file_data = []
-                record_checkpoint_metric_fn(
-                    component=component,
-                    mode=family,
-                    source=source,
-                    operation="save",
-                    status="completed",
-                )
-                persist_run_state_fn(run_state)
-                _publish_runtime_state()
-                publish_run_repository_coverage_fn(
-                    builder=builder,
-                    run_state=run_state,
-                    repo_paths=[repo_path],
-                    include_graph_counts=False,
-                    include_content_counts=False,
-                )
-                commit_wait_started = time.perf_counter()
-                with telemetry.start_span(
-                    "pcg.index.repository.commit_wait",
-                    component=component,
-                    attributes={
-                        "pcg.index.run_id": run_state.run_id,
-                        "pcg.index.repo_path": repo_key,
-                        "pcg.index.parse_strategy": parse_strategy,
-                        "pcg.index.parse_workers": parse_workers,
-                    },
-                ):
-                    await snapshot_queue.put(
-                        (repo_path, snapshot, started, commit_wait_started)
-                    )
-                if hasattr(telemetry, "set_index_snapshot_queue_depth"):
-                    telemetry.set_index_snapshot_queue_depth(
-                        component=component,
-                        mode=family,
-                        source=source,
-                        depth=snapshot_queue.qsize(),
-                        parse_strategy=parse_strategy,
-                        parse_workers=parse_workers,
-                    )
-                return
+                    return
+                finally:
+                    parse_semaphore.release()
         except Exception as exc:
             repo_state = run_state.repositories.get(repo_key)
             if repo_state is not None:

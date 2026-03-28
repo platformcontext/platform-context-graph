@@ -1,13 +1,32 @@
 """Tests for get_repo_context handler and degradation behavior."""
 
+import importlib
 from unittest.mock import MagicMock
 
+import platform_context_graph
+import platform_context_graph.mcp  # noqa: F401
+import platform_context_graph.mcp.tools.handlers.ecosystem  # noqa: F401
+import platform_context_graph.mcp.tools.handlers.ecosystem_support  # noqa: F401
 from platform_context_graph.mcp.tools.handlers.ecosystem import (
     find_blast_radius,
     get_ecosystem_overview,
     get_repo_context,
     get_repo_summary,
     trace_deployment_chain,
+)
+
+platform_context_graph.mcp = importlib.import_module("platform_context_graph.mcp")
+platform_context_graph.mcp.tools = importlib.import_module(
+    "platform_context_graph.mcp.tools"
+)
+platform_context_graph.mcp.tools.handlers = importlib.import_module(
+    "platform_context_graph.mcp.tools.handlers"
+)
+platform_context_graph.mcp.tools.handlers.ecosystem = importlib.import_module(
+    "platform_context_graph.mcp.tools.handlers.ecosystem"
+)
+platform_context_graph.mcp.tools.handlers.ecosystem_support = importlib.import_module(
+    "platform_context_graph.mcp.tools.handlers.ecosystem_support"
 )
 
 
@@ -286,6 +305,53 @@ def test_trace_deployment_chain_uses_repo_contains_for_repo_to_file_lookups(
         in q
         for q in recorded_queries
     )
+
+
+def test_trace_deployment_chain_strips_server_local_repository_paths(monkeypatch):
+    """Deployment traces should not surface server-local checkout paths."""
+
+    monkeypatch.setattr(
+        "platform_context_graph.mcp.tools.handlers.ecosystem_support.repository_queries.get_repository_context",
+        lambda *_args, **_kwargs: {
+            "repository": {
+                "id": "repository:r_api_node_boats",
+                "name": "api-node-boats",
+                "path": "/repos/api-node-boats",
+                "local_path": "/repos/api-node-boats",
+            },
+            "deploys_from": [],
+            "discovers_config_in": [],
+            "provisioned_by": [],
+            "platforms": [],
+            "summary": {},
+            "coverage": None,
+            "limitations": [],
+        },
+    )
+
+    db = make_mock_db({})
+    session = db.get_driver.return_value.session.return_value
+
+    def repo_only_run(query, **kwargs):
+        del kwargs
+        if "RETURN r.id as id, r.name as name" in query:
+            return MockResult(
+                single_record={
+                    "id": "repository:r_api_node_boats",
+                    "name": "api-node-boats",
+                }
+            )
+        return MockResult(records=[])
+
+    session.run = repo_only_run
+
+    result = trace_deployment_chain(db, "api-node-boats")
+
+    assert result["repository"] == {
+        "id": "repository:r_api_node_boats",
+        "name": "api-node-boats",
+    }
+    assert "local_path" not in str(result)
 
 
 def test_find_blast_radius_uses_repo_contains_for_flat_repo_file_lookups():
@@ -1252,7 +1318,11 @@ class TestRepoSummary:
         assert "finalization" in result["note"].lower()
         assert "incomplete" in result["note"].lower()
 
-    def test_blast_radius_adds_note_when_tier_null(self):
+    def test_blast_radius_adds_note_when_tier_null(self, monkeypatch):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {"error": "not found"},
+        )
         db = make_mock_db(
             {
                 "Repository": MockResult(
@@ -1264,7 +1334,7 @@ class TestRepoSummary:
         )
         result = find_blast_radius(db, "my-lib", "repository")
         assert "note" in result
-        assert "ecosystem manifest" in result["note"]
+        assert "tier and risk metadata" in result["note"].lower()
 
 
 class TestTraceDeploymentChain:
@@ -1323,22 +1393,22 @@ class TestTraceDeploymentChain:
                         }
                     ]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
                     records=[]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
                     records=[]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
                     records=[]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
                     records=[]
                 ),
             }
         )
 
-        result = trace_deployment_chain(db, "api-node-search")
+        result = trace_deployment_chain(db, "api-node-search", direct_only=False)
 
         assert result["repository"]["name"] == "api-node-search"
         assert result["argocd_applications"] == []
@@ -1470,16 +1540,16 @@ class TestTraceDeploymentChain:
                 ),
                 "MATCH (app:ArgoCDApplication)": MockResult(records=[]),
                 "MATCH (app:ArgoCDApplicationSet)": MockResult(records=[]),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
                     records=[]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
                     records=[]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
                     records=[]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
                     records=[]
                 ),
             }
@@ -1554,24 +1624,13 @@ class TestTraceDeploymentChain:
                 "API surface exposes versions v3 and docs routes /_specs.",
                 "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod.",
             ],
-            "deployment_artifacts": {
-                "images": [
-                    {
-                        "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
-                        "tag": "3.21.0",
-                        "source_repo": "helm-charts",
-                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
-                        "environment": "bg-qa",
-                    }
-                ]
-            },
             "deployment_controllers": ["github_actions"],
         }
         assert result["story"] == [
             "Public entrypoints: api-node-boats.qa.bgrp.io.",
             "API surface exposes versions v3 and docs routes /_specs.",
             "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod.",
-            "DNS and entrypoint evidence are currently unavailable for this repository.",
+            "Focused trace shows direct deployment evidence only. Related module usage is omitted. DNS and entrypoint evidence are currently unavailable for this repository.",
         ]
         assert result["api_surface"]["api_versions"] == ["v3"]
         assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
@@ -1657,19 +1716,24 @@ class TestTraceDeploymentChain:
                         }
                     ]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
                     records=[]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
                     records=[]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
                     records=[]
                 ),
             }
         )
 
-        result = trace_deployment_chain(db, "api-node-boats")
+        result = trace_deployment_chain(
+            db,
+            "api-node-boats",
+            direct_only=False,
+            include_related_module_usage=True,
+        )
 
         assert result["argocd_applications"] == []
         assert result["argocd_applicationsets"] == [
@@ -1759,6 +1823,84 @@ class TestTraceDeploymentChain:
 
         assert result["argocd_applications"] == []
 
+    def test_trace_deployment_chain_omits_terragrunt_configs_in_focused_mode(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                },
+                "coverage": None,
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [
+                    {
+                        "id": "repository:r_tf123",
+                        "name": "terraform-stack-node10",
+                        "relationship_type": "PROVISIONED_BY",
+                    }
+                ],
+                "provisions_dependencies_for": [],
+                "deployment_chain": [],
+                "environments": [],
+                "limitations": [],
+            },
+        )
+        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        db = make_mock_db(
+            {
+                "RETURN r.name as name, r.path as path": MockResult(
+                    single_record=repo_record
+                ),
+                "MATCH (app:ArgoCDApplication)": MockResult(records=[]),
+                "MATCH (app:ArgoCDApplicationSet)": MockResult(records=[]),
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
+                    records=[]
+                ),
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tg:TerragruntConfig)": MockResult(
+                    records=[
+                        {
+                            "name": "terragrunt",
+                            "terraform_source": "git::ssh://git@github.com/platformcontext/terraform-platform-modules.git//ecs/service?ref=v1.2.3",
+                            "file": "terragrunt.hcl",
+                            "repository": "terraform-stack-node10",
+                            "source_repository": "terraform-platform-modules",
+                        }
+                    ]
+                ),
+            }
+        )
+
+        result = trace_deployment_chain(db, "api-node-boats")
+
+        assert result["trace_controls"] == {
+            "direct_only": True,
+            "max_depth": None,
+            "include_related_module_usage": False,
+        }
+        assert result["terragrunt_configs"] == []
+        assert result["truncation"]["omitted_sections"] == [
+            "deployment_chain",
+            "terraform_resources",
+            "terraform_modules",
+            "terragrunt_configs",
+            "provisioning_source_chains",
+        ]
+
     def test_trace_deployment_chain_filters_provisioning_repo_to_service_relevant_terraform(
         self, monkeypatch
     ):
@@ -1796,13 +1938,13 @@ class TestTraceDeploymentChain:
                 ),
                 "MATCH (app:ArgoCDApplication)": MockResult(records=[]),
                 "MATCH (app:ArgoCDApplicationSet)": MockResult(records=[]),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
                     records=[]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
                     records=[]
                 ),
-                "WHERE toLower(coalesce(tf.name, '')) CONTAINS token": MockResult(
+                "toLower(coalesce(tf.name, '')) CONTAINS token": MockResult(
                     records=[
                         {
                             "name": "aws_route53_record.api_node_boats",
@@ -1818,7 +1960,7 @@ class TestTraceDeploymentChain:
                         }
                     ]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
                     records=[
                         {
                             "name": "aws_route53_record.api_node_forex",
@@ -1828,7 +1970,7 @@ class TestTraceDeploymentChain:
                         }
                     ]
                 ),
-                "WHERE toLower(coalesce(mod.name, '')) CONTAINS token": MockResult(
+                "toLower(coalesce(mod.name, '')) CONTAINS token": MockResult(
                     records=[
                         {
                             "name": "api_node_boats",
@@ -1856,7 +1998,7 @@ class TestTraceDeploymentChain:
                         }
                     ]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
                     records=[
                         {
                             "name": "api_node_forex",
@@ -1880,7 +2022,12 @@ class TestTraceDeploymentChain:
             }
         )
 
-        result = trace_deployment_chain(db, "api-node-boats")
+        result = trace_deployment_chain(
+            db,
+            "api-node-boats",
+            direct_only=False,
+            include_related_module_usage=True,
+        )
 
         assert result["terraform_resources"] == [
             {
@@ -1908,6 +2055,7 @@ class TestTraceDeploymentChain:
                 "zone_id": "Z123456",
                 "deploy_entry_point": "api-node-boats.js",
                 "repository": "terraform-stack-node10",
+                "source_repository": None,
             },
             {
                 "name": "api_node_boats_batch",
@@ -1920,6 +2068,7 @@ class TestTraceDeploymentChain:
                 "zone_id": "Z123456",
                 "deploy_entry_point": "api-node-boats-batch.js",
                 "repository": "terraform-stack-node10",
+                "source_repository": None,
             }
         ]
         assert result["terragrunt_configs"] == [
@@ -2044,13 +2193,13 @@ class TestTraceDeploymentChain:
                 ),
                 "MATCH (app:ArgoCDApplication)": MockResult(records=[]),
                 "MATCH (app:ArgoCDApplicationSet)": MockResult(records=[]),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)": MockResult(
                     records=[]
                 ),
-                "MATCH (r:Repository)-[:CONTAINS*]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
+                "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(claim:CrossplaneClaim)": MockResult(
                     records=[]
                 ),
-                "WHERE toLower(coalesce(tf.name, '')) CONTAINS token": MockResult(
+                "toLower(coalesce(tf.name, '')) CONTAINS token": MockResult(
                     records=[
                         {
                             "name": "aws_route53_record.api_node_boats",
@@ -2060,7 +2209,7 @@ class TestTraceDeploymentChain:
                         }
                     ]
                 ),
-                "WHERE toLower(coalesce(mod.name, '')) CONTAINS token": MockResult(
+                "toLower(coalesce(mod.name, '')) CONTAINS token": MockResult(
                     records=[
                         {
                             "name": "api_node_boats",
@@ -2091,7 +2240,12 @@ class TestTraceDeploymentChain:
             }
         )
 
-        result = trace_deployment_chain(db, "api-node-boats")
+        result = trace_deployment_chain(
+            db,
+            "api-node-boats",
+            direct_only=False,
+            include_related_module_usage=True,
+        )
 
         assert result["terragrunt_configs"] == [
             {

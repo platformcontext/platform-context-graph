@@ -34,6 +34,7 @@ The indexing services also honor worker-tuning controls from the environment:
 - `PCG_REPO_FILE_PARSE_MULTIPROCESS`
 - `PCG_MULTIPROCESS_START_METHOD`
 - `PCG_PARSE_WORKERS`
+- `PCG_WORKER_MAX_TASKS`
 - `PCG_INDEX_QUEUE_DEPTH`
 
 Compose passes those values through to `bootstrap-index`, `repo-sync`, and

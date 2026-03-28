@@ -424,6 +424,61 @@ def test_pipeline_does_not_set_running_before_semaphore(tmp_path: Path) -> None:
         ), f"Expected at most 1 repo running at a time, got {running_count}: {snap}"
 
 
+def test_pipeline_limits_concurrent_repository_parses_to_worker_count(
+    tmp_path: Path,
+) -> None:
+    """Repository parsing must honor the configured parse-worker bound."""
+
+    repos = [tmp_path / f"repo-{idx}" for idx in range(4)]
+    for repo in repos:
+        repo.mkdir()
+        (repo / "main.py").write_text("print('ok')\n", encoding="utf-8")
+
+    repo_file_sets = {repo: [repo / "main.py"] for repo in repos}
+    active_parses = 0
+    max_active_parses = 0
+    enough_started = asyncio.Event()
+    release_parses = asyncio.Event()
+
+    async def blocking_parse(_builder, repo_path, repo_files, **_kw):
+        nonlocal active_parses
+        nonlocal max_active_parses
+        active_parses += 1
+        max_active_parses = max(max_active_parses, active_parses)
+        if active_parses >= 2:
+            enough_started.set()
+        try:
+            await release_parses.wait()
+        finally:
+            active_parses -= 1
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={},
+            file_data=[],
+        )
+
+    async def run() -> None:
+        pipeline_task = asyncio.create_task(
+            _run_pipeline(
+                repos,
+                repo_file_sets,
+                blocking_parse,
+                parse_worker_count=2,
+            )
+        )
+        try:
+            await asyncio.wait_for(enough_started.wait(), timeout=1.0)
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            assert max_active_parses <= 2
+        finally:
+            release_parses.set()
+            await pipeline_task
+
+    asyncio.run(run())
+
+
 def test_pipeline_marks_repo_failed_when_span_setup_raises(tmp_path: Path) -> None:
     """Escaped setup errors should be attributed to the repository as failures."""
 
@@ -489,15 +544,21 @@ def test_pipeline_duration_excludes_time_waiting_for_parse_semaphore(
             self._semaphore = asyncio.Semaphore(value)
             self._acquire_count = 0
 
-        async def __aenter__(self):
+        async def acquire(self) -> None:
             await self._semaphore.acquire()
             self._acquire_count += 1
             if self._acquire_count == 2:
                 current_time["value"] += 5.0
+
+        def release(self) -> None:
+            self._semaphore.release()
+
+        async def __aenter__(self):
+            await self.acquire()
             return self
 
         async def __aexit__(self, exc_type, exc, tb):
-            self._semaphore.release()
+            self.release()
 
     telemetry = SimpleNamespace(
         start_span=_span_scope,

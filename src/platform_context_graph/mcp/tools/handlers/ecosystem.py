@@ -5,6 +5,7 @@ from typing import Any
 from ....core.database import DatabaseManager
 from ....query import infra as infra_queries
 from ....query import repositories as repository_queries
+from ....query.story_shared import portable_story_value
 from ....utils.debug_log import emit_log_call, warning_logger
 from .ecosystem_support import repo_summary_note, trace_deployment_chain
 from .ecosystem_support_overview import (
@@ -191,8 +192,8 @@ def get_repo_summary(
     coverage = context.get("coverage")
     limitations = list(context.get("limitations") or [])
     summary: dict[str, Any] = {
+        "repo_id": repository.get("id"),
         "name": repository.get("name"),
-        "path": repository.get("local_path") or repository.get("path"),
         "file_count": repository.get("discovered_file_count")
         or repository.get("file_count")
         or 0,
@@ -258,7 +259,7 @@ def get_repo_summary(
             "tier": ecosystem.get("tier"),
             "risk_level": ecosystem.get("risk_level"),
         }
-    return summary
+    return portable_story_value(summary)
 
 
 def get_repo_context(

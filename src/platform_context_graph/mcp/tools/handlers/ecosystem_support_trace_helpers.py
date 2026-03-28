@@ -213,6 +213,7 @@ def _trace_truncation(
             "deployment_chain",
             "terraform_resources",
             "terraform_modules",
+            "terragrunt_configs",
             "provisioning_source_chains",
         ],
     }

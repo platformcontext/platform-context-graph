@@ -195,3 +195,47 @@ def test_describe_run_state_includes_finalization_diagnostics() -> None:
     assert summary["finalization_stage_details"] == {
         "function_calls": {"fallback_duration_seconds": 9.0}
     }
+
+
+def test_parse_worker_recycling_is_opt_in_by_default(monkeypatch) -> None:
+    """Parse workers should not recycle unless the operator opts in."""
+
+    coordinator = importlib.import_module("platform_context_graph.indexing.coordinator")
+
+    monkeypatch.delenv("PCG_WORKER_MAX_TASKS", raising=False)
+
+    assert coordinator._parse_worker_max_tasks_per_child() is None
+
+
+def test_parse_executor_scope_omits_recycle_threshold_when_unset(
+    monkeypatch,
+) -> None:
+    """The process pool should not receive a recycle threshold unless configured."""
+
+    coordinator = importlib.import_module("platform_context_graph.indexing.coordinator")
+    captured: dict[str, object] = {}
+
+    class _FakeExecutor:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+        def shutdown(self, wait: bool = True, cancel_futures: bool = True) -> None:
+            captured["shutdown"] = {
+                "wait": wait,
+                "cancel_futures": cancel_futures,
+            }
+
+    monkeypatch.setenv("PCG_REPO_FILE_PARSE_MULTIPROCESS", "true")
+    monkeypatch.setenv("PCG_PARSE_WORKERS", "3")
+    monkeypatch.delenv("PCG_WORKER_MAX_TASKS", raising=False)
+    monkeypatch.setattr(coordinator.multiprocessing, "get_context", lambda method: method)
+    monkeypatch.setattr(coordinator, "ProcessPoolExecutor", _FakeExecutor)
+
+    with coordinator._parse_executor_scope():
+        pass
+
+    assert captured["max_workers"] == 3
+    assert captured["mp_context"] == "spawn"
+    assert captured["initializer"] is coordinator.init_parse_worker
+    assert "max_tasks_per_child" not in captured
+    assert captured["shutdown"] == {"wait": True, "cancel_futures": True}

@@ -4,6 +4,7 @@ from typing import Any
 
 from ....core.database import DatabaseManager
 from ....query import repositories as repository_queries
+from ....query.story_shared import portable_story_value
 from ....utils.debug_log import emit_log_call, warning_logger
 from .ecosystem_support_overview import (
     build_deployment_overview,
@@ -56,16 +57,15 @@ def trace_deployment_chain(
         repo = session.run(
             "MATCH (r:Repository) "
             "WHERE r.name CONTAINS $name "
-            "RETURN r.name as name, r.path as path "
+            "RETURN r.id as id, r.name as name "
             "LIMIT 1",
             name=canonical_name,
         ).single()
 
         if not repo:
             repo = {
+                "id": canonical_repository.get("id"),
                 "name": canonical_name,
-                "path": canonical_repository.get("local_path")
-                or canonical_repository.get("path"),
             }
 
         argocd_apps = session.run(
@@ -278,6 +278,8 @@ def trace_deployment_chain(
             if str(row.get("repository") or "").strip()
             in relevant_provisioning_repositories
         ]
+    elif direct_only and not include_related_module_usage:
+        terragrunt_configs = []
     provisioning_source_chains = group_provisioning_source_chains(
         terraform_modules=tf_modules_raw, terragrunt_configs=terragrunt_configs
     )
@@ -385,4 +387,4 @@ def trace_deployment_chain(
     )
     if story:
         result["story"] = story
-    return result
+    return portable_story_value(result)

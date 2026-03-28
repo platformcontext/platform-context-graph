@@ -371,6 +371,7 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
             == "${PCG_REPO_FILE_PARSE_MULTIPROCESS:-false}"
         )
         assert envs["PCG_PARSE_WORKERS"] == "${PCG_PARSE_WORKERS:-4}"
+        assert envs["PCG_WORKER_MAX_TASKS"] == "${PCG_WORKER_MAX_TASKS:-}"
         assert envs["PCG_INDEX_QUEUE_DEPTH"] == "${PCG_INDEX_QUEUE_DEPTH:-8}"
 
     service_envs = _compose_service_envs(services["platform-context-graph"])
@@ -413,6 +414,7 @@ def test_compose_stack_propagates_worker_tuning_envs(
         envs = _compose_service_envs(services[service_name])
         assert "PCG_REPO_FILE_PARSE_MULTIPROCESS" in envs
         assert "PCG_PARSE_WORKERS" in envs
+        assert "PCG_WORKER_MAX_TASKS" in envs
         assert "PCG_INDEX_QUEUE_DEPTH" in envs
 
     for service_name in [

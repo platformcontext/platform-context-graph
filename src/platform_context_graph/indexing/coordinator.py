@@ -163,11 +163,11 @@ def _parse_worker_max_tasks_per_child() -> int | None:
 
     raw_value = os.getenv("PCG_WORKER_MAX_TASKS")
     if raw_value is None or not raw_value.strip():
-        return 1000
+        return None
     try:
-        return max(1, min(int(raw_value), 10000))
+        return max(1, int(raw_value))
     except ValueError:
-        return 1000
+        return None
 
 
 @contextlib.contextmanager

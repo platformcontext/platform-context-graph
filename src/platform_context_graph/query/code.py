@@ -8,6 +8,7 @@ from typing import Any, Literal, Sequence
 from ..observability import trace_query
 from ..repository_identity import build_repo_access, relative_path_from_local
 from ..tools.code_finder import CodeFinder
+from .story_shared import portable_story_value
 from .repositories import (
     _canonical_repository_ref,
     _get_db_manager,
@@ -268,10 +269,10 @@ def _portable_result(
 
     if resolved_repo is not None and saw_path:
         portable["repo_id"] = resolved_repo["id"]
-        portable["repo_access"] = build_repo_access(
-            resolved_repo, interaction_mode="conversational"
+        portable["repo_access"] = portable_story_value(
+            build_repo_access(resolved_repo, interaction_mode="conversational")
         )
-    return portable
+    return portable_story_value(portable)
 
 
 def _normalize_module_dependency_result(result: Any) -> Any:
