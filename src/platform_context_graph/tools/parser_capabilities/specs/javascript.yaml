@@ -118,19 +118,19 @@ capabilities:
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_runtime_surface
 - id: jsdoc-comments
   name: JSDoc comments
-  status: unsupported
+  status: partial
   extracted_bucket: functions
   required_fields:
   - name
   - line_number
   - docstring
   graph_surface:
-    kind: none
-    target: not_persisted
+    kind: property
+    target: Function.docstring
   unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface
-  integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_jsdoc_metadata_not_persisted
-  rationale: The parser leaves JavaScript `docstring` fields empty, so JSDoc comments
-    are not extracted or persisted as graph metadata.
+  integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_jsdoc_metadata_persisted
+  rationale: The parser still leaves JavaScript `docstring` fields empty, but indexed
+    graph nodes now surface docstrings via content enrichment during ingest.
 - id: method-kind-get-set-async
   name: Method kind (get/set/async)
   status: partial

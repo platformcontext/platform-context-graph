@@ -54,7 +54,7 @@ _Infrastructure & deployment tracing:_
 - **Architects & tech leads** — ecosystem overview, cross-repo dependency health, complexity hotspots, change surface analysis.
 - **New engineers** — repo and service context, dependency explanations, deployment topology without tribal knowledge.
 
-Open source. MIT licensed. Self-hosted. No telemetry. [30+ language parsers](docs/docs/contributing-language-support.md), first-class IaC support, extensible by design.
+Open source. Apache 2.0 licensed. Self-hosted. No telemetry. [30+ language parsers](docs/docs/contributing-language-support.md), first-class IaC support, extensible by design.
 
 [Why PCG →](docs/docs/why-pcg.md) · [Quickstart →](docs/docs/getting-started/quickstart.md) · [MCP Guide →](docs/docs/guides/mcp-guide.md) · [Relationship Graph Examples →](docs/docs/guides/relationship-graphs.md)
 

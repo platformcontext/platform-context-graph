@@ -96,7 +96,8 @@ class Service with Loggable {
 
     classes = result.get("classes", [])
     names = [c["name"] for c in classes]
-    assert "Loggable" in names or "Service" in names
+    assert "Loggable" in names
+    assert "Service" in names
 
 
 def test_parse_extensions(dart_parser, temp_test_dir):
@@ -187,6 +188,32 @@ def test_parse_function_calls(dart_parser, temp_test_dir):
 
     calls = result.get("function_calls", [])
     assert len(calls) >= 1
+    call_names = [call["name"] for call in calls]
+    assert "print" in call_names or "map" in call_names or "where" in call_names
+    assert any(call["context"][0] == "demo" for call in calls)
+
+
+def test_parse_method_call_context(dart_parser, temp_test_dir):
+    code = """mixin Loggable {
+  void log(String message) {
+    print(message);
+  }
+}
+
+class Service with Loggable {
+  void start() {
+    log('Starting');
+  }
+}
+"""
+    f = temp_test_dir / "method_calls.dart"
+    f.write_text(code)
+    result = dart_parser.parse(f)
+
+    log_calls = [call for call in result.get("function_calls", []) if call["name"] == "log"]
+    assert len(log_calls) == 1
+    assert log_calls[0]["context"][0] == "start"
+    assert log_calls[0]["class_context"] == "Service"
 
 
 def test_result_structure(dart_parser, temp_test_dir):

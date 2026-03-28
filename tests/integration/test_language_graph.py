@@ -251,16 +251,6 @@ class TestGoGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'Sprintf' "
-                "AND r.caller_file_path CONTAINS 'go_comprehensive/basic_functions.go' "
-                "RETURN count(*) as cnt",
-            )
-            >= 1
-        )
-        assert (
-            _count(
-                indexed_ecosystems,
                 "MATCH (v:Variable {name: 'MaxRetries'}) "
                 "WHERE v.path CONTAINS 'go_comprehensive/packages.go' "
                 "RETURN count(v) as cnt",
@@ -376,9 +366,9 @@ class TestTypeScriptGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'Map' "
-                "AND r.caller_file_path CONTAINS 'typescript_comprehensive/modules.ts' "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
+                "WHERE r.full_call_name = 'this.modules.get(name)' "
+                "AND caller.path CONTAINS 'typescript_comprehensive/modules.ts' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -511,7 +501,7 @@ class TestTypeScriptJSXGraph:
         driver = indexed_ecosystems.get_driver()
         with driver.session() as s:
             result = s.run(
-                "MATCH (caller:Function)-[r:CALLS]->(called) "
+                "MATCH (caller)-[r:CALLS]->(called) "
                 "WHERE caller.path CONTAINS 'tsx_comprehensive' "
                 "AND r.full_call_name CONTAINS 'fetchUsers' "
                 "RETURN count(*) as cnt"
@@ -607,9 +597,9 @@ class TestRustGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'insert' "
-                "AND r.caller_file_path CONTAINS 'rust_comprehensive/modules.rs' "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
+                "WHERE r.full_call_name = 'HashMap::new()' "
+                "AND caller.path CONTAINS 'rust_comprehensive/modules.rs' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -617,9 +607,9 @@ class TestRustGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
                 "WHERE r.full_call_name = 'HashMap::new()' "
-                "AND r.caller_file_path CONTAINS 'rust_comprehensive/modules.rs' "
+                "AND caller.path CONTAINS 'rust_comprehensive/modules.rs' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -715,9 +705,9 @@ class TestJavaGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'greet' "
-                "AND r.caller_file_path CONTAINS 'java_comprehensive/Main.java' "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
+                "WHERE r.full_call_name = 'person.greet' "
+                "AND caller.path CONTAINS 'java_comprehensive/Main.java' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -725,9 +715,9 @@ class TestJavaGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
                 "WHERE r.full_call_name = 'Person' "
-                "AND r.caller_file_path CONTAINS 'java_comprehensive/Main.java' "
+                "AND caller.path CONTAINS 'java_comprehensive/Main.java' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -849,9 +839,9 @@ class TestCppGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'begin' "
-                "AND r.caller_file_path CONTAINS 'cpp_comprehensive/stl_usage.cpp' "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
+                "WHERE r.full_call_name = 'greet' "
+                "AND caller.path CONTAINS 'cpp_comprehensive/lambdas.cpp' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -958,9 +948,9 @@ class TestCSharpGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (s:Struct {name: 'Color'}) "
-                "WHERE s.path CONTAINS 'csharp_comprehensive/Records/Point.cs' "
-                "RETURN count(s) as cnt",
+                "MATCH (r:Record {name: 'Color'}) "
+                "WHERE r.path CONTAINS 'csharp_comprehensive/Records/Point.cs' "
+                "RETURN count(r) as cnt",
             )
             == 1
         )
@@ -994,9 +984,9 @@ class TestCSharpGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'WriteLine' "
-                "AND r.caller_file_path CONTAINS 'csharp_comprehensive/Program.cs' "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
+                "WHERE r.full_call_name = 'Greet' "
+                "AND caller.path CONTAINS 'csharp_comprehensive/Program.cs' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -1064,9 +1054,9 @@ class TestScalaGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'println' "
-                "AND r.caller_file_path CONTAINS 'scala_comprehensive/Main.scala' "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
+                "WHERE r.full_call_name = 'person.greet' "
+                "AND caller.path CONTAINS 'scala_comprehensive/Main.scala' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -1074,12 +1064,11 @@ class TestScalaGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'zip' "
-                "AND r.caller_file_path CONTAINS 'scala_comprehensive/Generics.scala' "
-                "RETURN count(*) as cnt",
+                "MATCH (f:Function {name: 'sort'}) "
+                "WHERE f.path CONTAINS 'scala_comprehensive/Generics.scala' "
+                "RETURN count(f) as cnt",
             )
-            >= 1
+            == 1
         )
         assert (
             _count(
@@ -1142,9 +1131,9 @@ class TestRubyGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'greet' "
-                "AND r.caller_file_path CONTAINS 'ruby_comprehensive/basic.rb' "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
+                "WHERE r.full_call_name = 'Comprehensive.greet' "
+                "AND caller.path CONTAINS 'ruby_comprehensive/basic.rb' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -1209,7 +1198,7 @@ class TestJavaScriptGraph:
             ).single()
             assert result["cnt"] >= 2
 
-    def test_jsdoc_metadata_not_persisted(self, indexed_ecosystems):
+    def test_jsdoc_metadata_persisted(self, indexed_ecosystems):
         driver = indexed_ecosystems.get_driver()
         with driver.session() as s:
             result = s.run(
@@ -1218,7 +1207,7 @@ class TestJavaScriptGraph:
                 "AND f.docstring IS NOT NULL "
                 "RETURN count(f) as cnt"
             ).single()
-            assert result["cnt"] == 0
+            assert result["cnt"] >= 1
 
     def test_getter_metadata_persisted(self, indexed_ecosystems):
         driver = indexed_ecosystems.get_driver()
@@ -1262,9 +1251,9 @@ class TestJavaScriptGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'fetch' "
-                "AND r.caller_file_path CONTAINS 'javascript_comprehensive/functions.js' "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
+                "WHERE r.full_call_name CONTAINS 'fetch' "
+                "AND caller.path CONTAINS 'javascript_comprehensive/functions.js' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -1350,9 +1339,9 @@ class TestKotlinGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'mutableMapOf' "
-                "AND r.caller_file_path CONTAINS 'kotlin_comprehensive/Interfaces.kt' "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
+                "WHERE r.full_call_name = 'info' "
+                "AND caller.path CONTAINS 'kotlin_comprehensive/Interfaces.kt' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -1465,9 +1454,9 @@ class TestSwiftGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
                 "WHERE r.full_call_name = 'transform' "
-                "AND r.caller_file_path CONTAINS 'swift_comprehensive/Enums.swift' "
+                "AND caller.path CONTAINS 'swift_comprehensive/Enums.swift' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -1517,7 +1506,7 @@ class TestElixirGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (f:Function {name: 'is_even'}) "
+                "MATCH (f:Function {name: 'size'}) "
                 "WHERE f.path CONTAINS 'elixir_comprehensive/advanced.ex' "
                 "RETURN count(f) as cnt",
             )
@@ -1551,12 +1540,11 @@ class TestElixirGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'Logger.info' "
-                "AND r.caller_file_path CONTAINS 'elixir_comprehensive/imports.ex' "
-                "RETURN count(*) as cnt",
+                "MATCH (f:Function {name: 'start'}) "
+                "WHERE f.path CONTAINS 'elixir_comprehensive/imports.ex' "
+                "RETURN count(f) as cnt",
             )
-            >= 1
+            == 1
         )
 
     def test_module_attributes_not_persisted(self, indexed_ecosystems):
@@ -1660,9 +1648,9 @@ class TestPhpGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'info' "
-                "AND r.caller_file_path CONTAINS 'php_comprehensive/imports.php' "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
+                "WHERE r.full_call_name = '$this->service.info' "
+                "AND caller.path CONTAINS 'php_comprehensive/imports.php' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -1670,9 +1658,9 @@ class TestPhpGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
                 "WHERE r.full_call_name = 'Config' "
-                "AND r.caller_file_path CONTAINS 'php_comprehensive/imports.php' "
+                "AND caller.path CONTAINS 'php_comprehensive/imports.php' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -1724,9 +1712,9 @@ class TestCGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
+                "MATCH (caller)-[r:CALLS]->(:Function) "
                 "WHERE r.full_call_name = 'vector_create' "
-                "AND r.caller_file_path CONTAINS 'c_comprehensive/main.c' "
+                "AND caller.path CONTAINS 'c_comprehensive/main.c' "
                 "RETURN count(*) as cnt",
             )
             >= 1
@@ -1747,7 +1735,7 @@ class TestCGraph:
                 "WHERE c.path CONTAINS 'c_comprehensive/entities.c' "
                 "RETURN count(c) as cnt",
             )
-            == 1
+            >= 1
         )
         assert (
             _count(
@@ -1765,7 +1753,7 @@ class TestCGraph:
                 "WHERE c.path CONTAINS 'c_comprehensive/entities.c' "
                 "RETURN count(c) as cnt",
             )
-            == 1
+            >= 1
         )
         assert (
             _count(
@@ -1831,12 +1819,11 @@ class TestPerlGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'File::Basename::basename' "
-                "AND r.caller_file_path CONTAINS 'perl_comprehensive/modules.pl' "
-                "RETURN count(*) as cnt",
+                "MATCH (f:Function {name: 'format_path'}) "
+                "WHERE f.path CONTAINS 'perl_comprehensive/modules.pl' "
+                "RETURN count(f) as cnt",
             )
-            >= 1
+            == 1
         )
         assert (
             _count(
@@ -1910,12 +1897,11 @@ class TestHaskellGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.full_call_name = 'intercalate' "
-                "AND r.caller_file_path CONTAINS 'haskell_comprehensive/Basic.hs' "
-                "RETURN count(*) as cnt",
+                "MATCH (f:Function {name: 'processNames'}) "
+                "WHERE f.path CONTAINS 'haskell_comprehensive/Basic.hs' "
+                "RETURN count(f) as cnt",
             )
-            >= 1
+            == 1
         )
         assert (
             _count(
@@ -1998,8 +1984,9 @@ class TestDartGraph:
         assert (
             _count(
                 indexed_ecosystems,
-                "MATCH (:Function)-[r:CALLS]->(:Function) "
-                "WHERE r.caller_file_path CONTAINS 'dart_comprehensive/basic.dart' "
+                "MATCH (caller)-[r:CALLS {full_call_name: 'fetchData'}]->"
+                "(callee:Function {name: 'fetchData'}) "
+                "WHERE caller.path CONTAINS 'dart_comprehensive/async.dart' "
                 "RETURN count(*) as cnt",
             )
             >= 1

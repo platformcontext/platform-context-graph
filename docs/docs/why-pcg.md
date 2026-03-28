@@ -88,7 +88,7 @@ Questions that work today:
 
 ## Open Source
 
-PCG is MIT licensed, self-hosted, and does not phone home. The graph runs on Neo4j (production), FalkorDB, or KuzuDB (local). Language parsers are spec-driven — add a new language by writing a YAML spec and tree-sitter queries.
+PCG is Apache 2.0 licensed, self-hosted, and does not phone home. The graph runs on Neo4j (production), FalkorDB, or KuzuDB (local). Language parsers are spec-driven — add a new language by writing a YAML spec and tree-sitter queries.
 
 Contributions welcome: new language parsers, IaC formats, query capabilities, and deployment patterns.
 

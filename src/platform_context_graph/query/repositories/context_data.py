@@ -92,8 +92,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
     infrastructure = _fetch_infrastructure(session, repo)
     relationships = session.run(
         f"""
-        MATCH (r:Repository)-[:REPO_CONTAINS]->(f1:File)-[:CONTAINS]->(n1)
-              -[rel]->(n2)<-[:CONTAINS]-(f2:File)<-[:REPO_CONTAINS]-(r)
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(n1)-[rel]->(n2)
         WHERE {repository_scope_predicate()}
           AND type(rel) IN [
             'SELECTS', 'CONFIGURES', 'PATCHES', 'ROUTES_TO',

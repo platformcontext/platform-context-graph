@@ -92,6 +92,7 @@ class TestMCPServer:
                 "platform_context_graph.mcp.server.indexing.add_code_to_graph"
             ) as mock_handler:
                 mock_handler.return_value = {"job_id": "123"}
+                mock_server.tools["add_code_to_graph"] = TOOLS["add_code_to_graph"]
 
                 # The tool on the server instance simply calls this handler
                 # We must ensure the arguments are passed correctly (including wrappers)

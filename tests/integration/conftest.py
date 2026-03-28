@@ -8,6 +8,7 @@ Run with:
 
 import asyncio
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -52,7 +53,18 @@ def graph_builder(db):
 
 
 @pytest.fixture(scope="session")
-def indexed_ecosystems(db, graph_builder):
+def staged_ecosystems_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Copy ecosystem fixtures outside the git worktree for stable indexing IDs."""
+
+    staged_root = tmp_path_factory.mktemp("staged-ecosystems")
+    for repo_dir in sorted(ECOSYSTEMS_DIR.iterdir()):
+        if repo_dir.is_dir() and not repo_dir.name.startswith("."):
+            shutil.copytree(repo_dir, staged_root / repo_dir.name)
+    return staged_root
+
+
+@pytest.fixture(scope="session")
+def indexed_ecosystems(db, graph_builder, staged_ecosystems_dir: Path):
     """Index all ecosystem fixture repos and return the db manager.
 
     This fixture indexes every directory under tests/fixtures/ecosystems/
@@ -62,7 +74,7 @@ def indexed_ecosystems(db, graph_builder):
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n")
 
-    for repo_dir in sorted(ECOSYSTEMS_DIR.iterdir()):
+    for repo_dir in sorted(staged_ecosystems_dir.iterdir()):
         if repo_dir.is_dir() and not repo_dir.name.startswith("."):
             asyncio.run(
                 graph_builder.build_graph_from_path_async(

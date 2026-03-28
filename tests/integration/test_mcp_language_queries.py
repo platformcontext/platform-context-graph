@@ -12,6 +12,7 @@ Run with:
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -104,12 +105,17 @@ class TestEcosystemOverview:
 
     def test_repos_exist_in_graph(self, indexed_ecosystems):
         """Verify Repository nodes exist for indexed fixtures."""
+        expected_count = len(
+            [
+                path
+                for path in (Path(__file__).parent.parent / "fixtures" / "ecosystems").iterdir()
+                if path.is_dir() and not path.name.startswith(".")
+            ]
+        )
         driver = indexed_ecosystems.get_driver()
         with driver.session() as s:
-            result = s.run(
-                "MATCH (r:Repository) RETURN count(r) as cnt"
-            ).single()
-            assert result["cnt"] >= 1
+            result = s.run("MATCH (r:Repository) RETURN count(r) as cnt").single()
+            assert result["cnt"] == expected_count
 
     def test_multiple_languages_indexed(self, indexed_ecosystems):
         """Verify functions from multiple languages exist in the graph."""
