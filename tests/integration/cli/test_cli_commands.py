@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from types import SimpleNamespace
+import pytest
 from typer.testing import CliRunner
 from unittest.mock import AsyncMock, MagicMock, patch
 from platform_context_graph.cli.main import app
@@ -182,6 +183,56 @@ class TestCLICommands:
             start_service(host="0.0.0.0", port=9000, reload=False)
 
         assert os.environ["PCG_RUNTIME_ROLE"] == "combined"
+
+    def test_start_service_bootstraps_local_http_api_key_for_interactive_cli(
+        self, monkeypatch, tmp_path
+    ):
+        """Interactive local combined-service starts should generate a token once."""
+        with (
+            patch("platform_context_graph.cli.main.MCPServer"),
+            patch("uvicorn.run"),
+        ):
+            from platform_context_graph.cli.main import start_service
+
+            monkeypatch.chdir(tmp_path)
+            monkeypatch.setenv("PCG_HOME", str(tmp_path))
+            monkeypatch.delenv("PCG_API_KEY", raising=False)
+            monkeypatch.delenv("PCG_AUTO_GENERATE_API_KEY", raising=False)
+            monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+            monkeypatch.setattr(
+                "platform_context_graph.cli.main._interactive_terminal_attached",
+                lambda: True,
+            )
+
+            start_service(host="127.0.0.1", port=9000, reload=False)
+
+        generated = os.environ.get("PCG_API_KEY")
+        assert generated
+        assert (tmp_path / ".env").exists()
+        assert f"PCG_API_KEY={generated}" in (tmp_path / ".env").read_text(
+            encoding="utf-8"
+        )
+
+    def test_start_service_keeps_kubernetes_starts_fail_closed_without_token(
+        self, monkeypatch
+    ):
+        """Non-local Kubernetes starts should still require an explicit bearer token."""
+        with (
+            patch("platform_context_graph.cli.main.MCPServer"),
+            patch("uvicorn.run"),
+        ):
+            from platform_context_graph.cli.main import start_service
+
+            monkeypatch.delenv("PCG_API_KEY", raising=False)
+            monkeypatch.delenv("PCG_AUTO_GENERATE_API_KEY", raising=False)
+            monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
+            monkeypatch.setattr(
+                "platform_context_graph.cli.main._interactive_terminal_attached",
+                lambda: True,
+            )
+
+            with pytest.raises(ValueError, match="PCG_API_KEY"):
+                start_service(host="127.0.0.1", port=9000, reload=False)
 
     @patch("platform_context_graph.cli.main.run_bootstrap_index")
     def test_internal_bootstrap_index_command_uses_python_runtime(

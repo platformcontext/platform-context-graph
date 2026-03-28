@@ -56,3 +56,33 @@ def test_ensure_http_api_key_requires_explicit_token_when_autogeneration_is_disa
 
     with pytest.raises(ValueError, match="PCG_API_KEY"):
         auth.ensure_http_api_key()
+
+
+def test_interactive_cli_bootstrap_enables_local_http_api_key_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cli_main = importlib.import_module("platform_context_graph.cli.main")
+
+    monkeypatch.delenv("PCG_API_KEY", raising=False)
+    monkeypatch.delenv("PCG_AUTO_GENERATE_API_KEY", raising=False)
+    monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+    monkeypatch.setattr(cli_main, "_interactive_terminal_attached", lambda: True)
+
+    cli_main._enable_local_http_auth_bootstrap_if_interactive()
+
+    assert os.environ["PCG_AUTO_GENERATE_API_KEY"] == "true"
+
+
+def test_interactive_cli_bootstrap_skips_kubernetes_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cli_main = importlib.import_module("platform_context_graph.cli.main")
+
+    monkeypatch.delenv("PCG_API_KEY", raising=False)
+    monkeypatch.delenv("PCG_AUTO_GENERATE_API_KEY", raising=False)
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
+    monkeypatch.setattr(cli_main, "_interactive_terminal_attached", lambda: True)
+
+    cli_main._enable_local_http_auth_bootstrap_if_interactive()
+
+    assert "PCG_AUTO_GENERATE_API_KEY" not in os.environ

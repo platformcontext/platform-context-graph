@@ -112,6 +112,41 @@ def get_version() -> str:
         return "0.0.0 (dev)"
 
 
+def _interactive_terminal_attached() -> bool:
+    """Report whether the CLI is running with an attached interactive terminal."""
+
+    try:
+        return bool(sys.stdin.isatty() and sys.stdout.isatty())
+    except Exception:
+        return False
+
+
+def _enable_local_http_auth_bootstrap_if_interactive() -> None:
+    """Allow explicit local CLI startup flows to bootstrap a bearer token once.
+
+    This keeps local `pcg api start` / `pcg serve start` first runs usable without
+    weakening non-interactive or Kubernetes startup, which should still fail closed
+    unless an explicit token or explicit auto-generation setting is present.
+    """
+
+    existing_token = str(os.environ.get("PCG_API_KEY") or "").strip()
+    if existing_token:
+        return
+    if os.environ.get("PCG_AUTO_GENERATE_API_KEY") is not None:
+        return
+    if os.environ.get("KUBERNETES_SERVICE_HOST"):
+        return
+    if not _interactive_terminal_attached():
+        return
+
+    os.environ["PCG_AUTO_GENERATE_API_KEY"] = "true"
+    if _console_output_enabled():
+        console.print(
+            "[yellow]No PCG_API_KEY configured; generating a local bearer token "
+            "under PCG_HOME for this interactive startup.[/yellow]"
+        )
+
+
 def start_http_api(
     *, host: str = "127.0.0.1", port: int = 8000, reload: bool = False
 ) -> None:
@@ -127,6 +162,7 @@ def start_http_api(
     import uvicorn
 
     os.environ.setdefault("PCG_RUNTIME_ROLE", "api")
+    _enable_local_http_auth_bootstrap_if_interactive()
     ensure_http_api_key()
     uvicorn.run(
         "platform_context_graph.api.app:create_app",
@@ -156,6 +192,7 @@ def start_service(
     from platform_context_graph.api.app import create_service_app
 
     os.environ.setdefault("PCG_RUNTIME_ROLE", "api")
+    _enable_local_http_auth_bootstrap_if_interactive()
     ensure_http_api_key()
     mcp_server = MCPServer()
     service_app = create_service_app(mcp_server_dependency=lambda: mcp_server)
