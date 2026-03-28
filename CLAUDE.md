@@ -34,16 +34,37 @@ src/platform_context_graph/
 
 ### Full stack (docker-compose)
 
+**IMPORTANT:** Use `docker-compose` (hyphenated), not `docker compose` (space). The project uses Docker Compose v5.
+
 ```bash
-docker compose up --build
+# Default: indexes tests/fixtures/ecosystems/
+docker-compose up --build -d
+
+# With real repos: use absolute paths (not $HOME or ~), Docker can't resolve them
+PCG_FILESYSTEM_HOST_ROOT=/Users/allen/pcg-test-workspace docker-compose up --build -d
+
+# Force clean start (wipes Neo4j, Postgres, checkpoints):
+docker-compose down -v
+PCG_FILESYSTEM_HOST_ROOT=/Users/allen/pcg-test-workspace docker-compose up --build --force-recreate -d
+
+# Check bootstrap progress:
+docker-compose logs bootstrap-index 2>&1 | rg "Finalization timings|supported=|entity_counts"
+
+# Check API is up:
+curl -s http://localhost:8080/api/v0/health
+
+# Read auto-generated API key:
+docker exec platform-context-graph-platform-context-graph-1 cat /data/.platform-context-graph/.env
 ```
 
-Starts: Neo4j (7474/7687), Postgres (5432), bootstrap-index, API (8080), repo-sync.
+Starts: Neo4j (7474/7687), Postgres (5432), bootstrap-index (one-shot), API (8080), repo-sync (loop).
 
-Port overrides:
+Port overrides if ports conflict:
 ```bash
-NEO4J_HTTP_PORT=17474 NEO4J_BOLT_PORT=17687 PCG_HTTP_PORT=18080 docker compose up --build
+NEO4J_HTTP_PORT=17474 NEO4J_BOLT_PORT=17687 PCG_HTTP_PORT=18080 docker-compose up --build -d
 ```
+
+**Docker gotcha:** `/tmp` paths don't mount into Docker Desktop on macOS. Use paths under `~/` or `/Users/`. Symlinks to host paths don't work inside containers -- copy repos to a flat directory instead.
 
 ### Environment for direct commands
 
@@ -52,12 +73,14 @@ When running tests or scripts outside docker against the docker-compose stack:
 ```bash
 export NEO4J_URI=bolt://localhost:7687
 export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=testpassword
+export NEO4J_PASSWORD=change-me
 export DATABASE_TYPE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:testpassword@localhost:5432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:testpassword@localhost:5432/platform_context_graph
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph
 export PYTHONPATH=src
 ```
+
+Default passwords are `change-me` for both Neo4j and Postgres (from `.env.example` / `docker-compose.yaml`). The API auto-generates a bearer token at startup -- read it with `cat /data/.platform-context-graph/.env` inside the API container.
 
 ### Tests
 
@@ -69,10 +92,10 @@ PYTHONPATH=src uv run python -m pytest tests/unit/ -q --tb=short
 PYTHONPATH=src uv run python -m pytest tests/unit/parsers/ -q --tb=line
 
 # Integration tests (needs docker-compose stack)
-NEO4J_URI=bolt://localhost:7687 NEO4J_USERNAME=neo4j NEO4J_PASSWORD=testpassword \
+NEO4J_URI=bolt://localhost:7687 NEO4J_USERNAME=neo4j NEO4J_PASSWORD=change-me \
   DATABASE_TYPE=neo4j \
-  PCG_CONTENT_STORE_DSN=postgresql://pcg:testpassword@localhost:5432/platform_context_graph \
-  PCG_POSTGRES_DSN=postgresql://pcg:testpassword@localhost:5432/platform_context_graph \
+  PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph \
+  PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph \
   PYTHONPATH=src uv run python -m pytest tests/integration/ -v --tb=short
 
 # Specific integration suites
@@ -112,10 +135,10 @@ ln -sf ~/repos/services/api-node-bw-home       /tmp/pcg-test-workspace/api-node-
 ln -sf ~/repos/terraform-stacks/terraform-stack-boattrader /tmp/pcg-test-workspace/terraform-stack-boattrader
 
 # Index against running docker-compose stack
-NEO4J_URI=bolt://localhost:7687 NEO4J_USERNAME=neo4j NEO4J_PASSWORD=testpassword \
+NEO4J_URI=bolt://localhost:7687 NEO4J_USERNAME=neo4j NEO4J_PASSWORD=change-me \
   DATABASE_TYPE=neo4j \
-  PCG_CONTENT_STORE_DSN=postgresql://pcg:testpassword@localhost:5432/platform_context_graph \
-  PCG_POSTGRES_DSN=postgresql://pcg:testpassword@localhost:5432/platform_context_graph \
+  PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph \
+  PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph \
   PYTHONPATH=src uv run pcg index /tmp/pcg-test-workspace
 ```
 
