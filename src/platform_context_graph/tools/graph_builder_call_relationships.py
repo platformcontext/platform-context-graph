@@ -22,6 +22,16 @@ _CALL_RELATIONSHIP_BUFFER_FLUSH_ROWS = 2000
 _CALL_RELATIONSHIP_BATCH_SIZE = 250
 _PYTHON_BUILTIN_NAMES = frozenset(dir(py_builtins))
 
+_MINIFIED_SUFFIXES = (".min.js", ".min.css", ".bundle.js", ".chunk.js")
+_MAX_CALLS_PER_FILE = 500
+
+
+def _is_minified_or_bundled(file_path: str) -> bool:
+    """Return whether a file is minified or bundled and should skip call resolution."""
+
+    lower = file_path.lower()
+    return any(lower.endswith(suffix) for suffix in _MINIFIED_SUFFIXES)
+
 
 def safe_run_create(session: Any, query: str, params: dict[str, Any]) -> bool:
     """Run a relationship creation query and report whether it created a row."""
@@ -123,15 +133,18 @@ def create_all_function_calls(
     with builder.driver.session() as session:
         for file_data in all_file_data:
             processed_files += 1
+            file_path_str = file_data.get("path", "")
+            if _is_minified_or_bundled(file_path_str):
+                continue
             if file_count is None:
                 debug_log_fn(
                     "Processing streamed file "
-                    f"{processed_files}: {file_data.get('path', 'unknown')}"
+                    f"{processed_files}: {file_path_str}"
                 )
             else:
                 debug_log_fn(
                     f"Processing file {processed_files}/{file_count}: "
-                    f"{file_data.get('path', 'unknown')}"
+                    f"{file_path_str}"
                 )
             caller_file_path = str(Path(file_data["path"]).resolve())
             file_contextual_rows, file_level_batch_rows, next_row_id = (
@@ -144,6 +157,12 @@ def create_all_function_calls(
                     start_row_id=next_row_id,
                 )
             )
+            total_rows = len(file_contextual_rows) + len(file_level_batch_rows)
+            if total_rows > _MAX_CALLS_PER_FILE:
+                file_contextual_rows = file_contextual_rows[:_MAX_CALLS_PER_FILE]
+                file_level_batch_rows = file_level_batch_rows[
+                    : max(0, _MAX_CALLS_PER_FILE - len(file_contextual_rows))
+                ]
             if file_contextual_rows:
                 contextual_buffer.extend(file_contextual_rows)
                 if len(contextual_buffer) >= _CALL_RELATIONSHIP_BUFFER_FLUSH_ROWS:
