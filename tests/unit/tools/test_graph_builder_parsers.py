@@ -138,6 +138,31 @@ def test_build_parser_registry_registers_raw_text_search_parsers() -> None:
     assert registry["__jenkinsfile__"].language_name == "groovy"
 
 
+def test_parse_file_for_indexing_worker_uses_local_parser_registry(
+    tmp_path: Path,
+) -> None:
+    """The worker entrypoint should parse without needing a GraphBuilder instance."""
+
+    repo_path = tmp_path / "service"
+    repo_path.mkdir()
+    dockerfile = repo_path / "Dockerfile"
+    dockerfile.write_text("FROM python:3.12-slim\n", encoding="utf-8")
+
+    result = graph_builder_parsers.parse_file_for_indexing_worker(
+        repo_path,
+        dockerfile,
+        False,
+        get_config_value_fn=lambda _key: "false",
+        debug_log_fn=lambda *_args, **_kwargs: None,
+        error_logger_fn=lambda *_args, **_kwargs: None,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert result["path"] == str(dockerfile)
+    assert result["repo_path"] == str(repo_path)
+    assert result["lang"] == "dockerfile"
+
+
 def test_build_parser_registry_uses_tree_sitter_for_hcl() -> None:
     """Terraform files should be registered through the tree-sitter wrapper."""
 

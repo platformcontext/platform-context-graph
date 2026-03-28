@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..repositories import _canonical_repository_ref, _repository_projection
+from ..repositories import _repository_projection
 from .support import (
     build_fixture_indexes,
     canonical_ref,
@@ -13,6 +13,27 @@ from .support import (
     parse_workload_id,
     record_to_dict,
 )
+
+
+def _portable_repository_ref(row: dict[str, Any]) -> dict[str, Any]:
+    """Return a repository reference without server-local path fields."""
+
+    name = row.get("name") or row.get("repo_slug") or row["id"]
+    ref = canonical_ref(
+        {
+            "id": row["id"],
+            "type": "repository",
+            "name": name,
+            "repo_slug": row.get("repo_slug"),
+            "remote_url": row.get("remote_url"),
+            "has_remote": row.get("has_remote"),
+        }
+    )
+    ref.pop("path", None)
+    ref.pop("local_path", None)
+    ref.pop("repo_path", None)
+    ref.pop("repo_local_path", None)
+    return ref
 
 
 def db_workload_context(
@@ -108,13 +129,10 @@ def db_workload_context(
     if workload_dict:
         repo_ref = None
         if workload_dict.get("repo_id"):
-            repo_ref = canonical_ref(
+            repo_ref = _portable_repository_ref(
                 {
                     "id": workload_dict["repo_id"],
-                    "type": "repository",
                     "name": workload_dict.get("repo_name") or workload_name,
-                    "path": workload_dict.get("repo_path"),
-                    "local_path": workload_dict.get("repo_local_path"),
                     "repo_slug": workload_dict.get("repo_slug") or None,
                     "remote_url": workload_dict.get("repo_remote_url") or None,
                     "has_remote": workload_dict.get("repo_has_remote"),
@@ -137,7 +155,9 @@ def db_workload_context(
             )
             for row in instance_rows
         ]
-        selected_instance = instances[0] if effective_environment is not None and instances else None
+        selected_instance = (
+            instances[0] if effective_environment is not None and instances else None
+        )
         if effective_environment is not None and selected_instance is None:
             return {
                 "error": (
@@ -213,7 +233,7 @@ def db_workload_context(
 
     response: dict[str, Any] = {
         "workload": workload_ref,
-        "repositories": ([_canonical_repository_ref(repo_dict)] if repo_dict else []),
+        "repositories": ([_portable_repository_ref(repo_dict)] if repo_dict else []),
         "cloud_resources": [],
         "shared_resources": [],
         "dependencies": [],
@@ -301,7 +321,7 @@ def fixture_workload_context(
 
     response: dict[str, Any] = {
         "workload": canonical_ref(workload),
-        "repositories": [canonical_ref(repo)] if repo else [],
+        "repositories": [_portable_repository_ref(repo)] if repo else [],
         "cloud_resources": cloud_resources,
         "shared_resources": shared_resources,
         "dependencies": [],

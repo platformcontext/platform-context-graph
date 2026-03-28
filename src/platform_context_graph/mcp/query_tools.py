@@ -30,15 +30,28 @@ class QueryToolMixin:
 
         return infra_queries.get_ecosystem_overview(self.db_manager)
 
-    def trace_deployment_chain_tool(
-        self: _QueryRuntime, **args: Any
-    ) -> dict[str, Any]:
+    def trace_deployment_chain_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
         """Trace deployment relationships across the indexed ecosystem."""
 
         service_name = require_str_argument(args, "service_name")
         if service_name is None:
             return {"error": "The 'service_name' argument is required."}
-        return ecosystem.trace_deployment_chain(self.db_manager, service_name)
+        direct_only = args.get("direct_only")
+        if not isinstance(direct_only, bool):
+            direct_only = True
+        max_depth = args.get("max_depth")
+        if not isinstance(max_depth, int):
+            max_depth = None
+        include_related_module_usage = args.get("include_related_module_usage")
+        if not isinstance(include_related_module_usage, bool):
+            include_related_module_usage = False
+        return ecosystem.trace_deployment_chain(
+            self.db_manager,
+            service_name,
+            direct_only=direct_only,
+            max_depth=max_depth,
+            include_related_module_usage=include_related_module_usage,
+        )
 
     def find_blast_radius_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
         """Compute blast radius for an infrastructure change."""
@@ -227,9 +240,7 @@ class QueryToolMixin:
         except context_queries.ServiceAliasError as exc:
             return {"error": str(exc)}
 
-    def trace_resource_to_code_tool(
-        self: _QueryRuntime, **args: Any
-    ) -> dict[str, Any]:
+    def trace_resource_to_code_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
         """Trace a cloud resource back to related code."""
 
         start = require_str_argument(args, "start")

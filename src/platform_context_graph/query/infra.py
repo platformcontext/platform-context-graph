@@ -28,6 +28,17 @@ def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return deduped
 
 
+def _row_identity(row: dict[str, Any]) -> tuple[str, str, str, str]:
+    """Return a stable identity tuple for infra search rows."""
+
+    return (
+        str(row.get("name") or ""),
+        str(row.get("kind") or ""),
+        str(row.get("namespace") or ""),
+        str(row.get("file") or ""),
+    )
+
+
 def search_infra_resources(
     database: Any,
     *,
@@ -174,6 +185,15 @@ def search_infra_resources(
                 results["crossplane_claims"] = _dedupe_rows(
                     stored_claims + k8s_claim_fallback
                 )[:limit]
+                claim_keys = {
+                    _row_identity(row) for row in results["crossplane_claims"]
+                }
+                if claim_keys and results.get("k8s_resources"):
+                    results["k8s_resources"] = [
+                        row
+                        for row in results["k8s_resources"]
+                        if _row_identity(row) not in claim_keys
+                    ]
 
             if enabled("helm"):
                 results["helm_charts"] = session.run(
@@ -287,7 +307,8 @@ def get_ecosystem_overview(database: Any) -> dict[str, Any]:
             LIMIT 1
         """).single()
 
-            tiers = session.run("""
+            tiers = session.run(
+                """
             MATCH (t:Tier)
             OPTIONAL MATCH (t)-[:CONTAINS]->(r:Repository)
             RETURN t.name as tier,
@@ -300,9 +321,12 @@ def get_ecosystem_overview(database: Any) -> dict[str, Any]:
                          WHEN 'low' THEN 1
                          ELSE 0
                      END DESC
-        """, risk_level_key="risk_level").data()
+        """,
+                risk_level_key="risk_level",
+            ).data()
 
-            repo_stats = session.run("""
+            repo_stats = session.run(
+                """
             MATCH (r:Repository)
             OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)
             OPTIONAL MATCH (r)-[rel]->(dep:Repository)
@@ -312,7 +336,9 @@ def get_ecosystem_overview(database: Any) -> dict[str, Any]:
                    count(DISTINCT f) as files,
                    collect(DISTINCT dep.name) as depends_on
             ORDER BY r.name
-        """, depends_on_type="DEPENDS_ON").data()
+        """,
+                depends_on_type="DEPENDS_ON",
+            ).data()
 
             infra_counts = session.run("""
             OPTIONAL MATCH (k:K8sResource) WITH count(k) as k8s
@@ -323,7 +349,8 @@ def get_ecosystem_overview(database: Any) -> dict[str, Any]:
             RETURN k8s, argocd, xrds, terraform, helm
         """).single()
 
-            rel_counts = session.run("""
+            rel_counts = session.run(
+                """
             OPTIONAL MATCH ()-[s:SOURCES_FROM]->() WITH count(s) as sources_from
             OPTIONAL MATCH ()-[d:DEPLOYS]->() WITH sources_from, count(d) as deploys
             OPTIONAL MATCH ()-[sat:SATISFIED_BY]->() WITH sources_from, deploys, count(sat) as satisfied_by
@@ -331,7 +358,9 @@ def get_ecosystem_overview(database: Any) -> dict[str, Any]:
             WHERE type(dep) = $depends_on_type
             WITH sources_from, deploys, satisfied_by, count(dep) as depends_on
             RETURN sources_from, deploys, satisfied_by, depends_on
-        """, depends_on_type="DEPENDS_ON").single()
+        """,
+                depends_on_type="DEPENDS_ON",
+            ).single()
 
         eco_name = eco_result["name"] if eco_result else None
         eco_org = eco_result["org"] if eco_result else None

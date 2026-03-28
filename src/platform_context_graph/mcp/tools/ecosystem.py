@@ -132,7 +132,21 @@ ECOSYSTEM_TOOLS = {
                 "service_name": {
                     "type": "string",
                     "description": "Name of the service/repository to trace.",
-                }
+                },
+                "direct_only": {
+                    "type": "boolean",
+                    "description": "Keep the trace focused on direct deployment evidence by default.",
+                    "default": True,
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "description": "Optional maximum depth for retained trace branches.",
+                },
+                "include_related_module_usage": {
+                    "type": "boolean",
+                    "description": "Include related Terraform module usage even when it is not direct service evidence.",
+                    "default": False,
+                },
             },
             "required": ["service_name"],
         },

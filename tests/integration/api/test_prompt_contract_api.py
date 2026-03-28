@@ -28,17 +28,25 @@ def _repository_story(*_args, **_kwargs) -> dict[str, object]:
             "type": "repository",
             "name": "api-node-boats",
         },
-        "story": ["Structured repository story."],
+        "story": [
+            "Structured repository story.",
+            "Traffic enters through api-node-boats.qa.bgrp.io and deploys via GitOps.",
+        ],
         "story_sections": [
+            {
+                "id": "internet",
+                "title": "Internet",
+                "summary": "Traffic enters through api-node-boats.qa.bgrp.io.",
+            },
             {
                 "id": "deployment",
                 "title": "Deployment",
                 "summary": "GitOps deploys onto EKS.",
-            }
+            },
         ],
         "deployment_overview": {"internet_entrypoints": ["api-node-boats.qa.bgrp.io"]},
         "evidence": [{"source": "hostnames", "detail": "api-node-boats.qa.bgrp.io"}],
-        "limitations": [],
+        "limitations": ["finalization_incomplete"],
         "coverage": {"completeness_state": "partial"},
         "drilldowns": {"repo_context": {"repo_id": "repository:r_api_node_boats"}},
     }
@@ -122,12 +130,66 @@ def _complexity(*_args, **kwargs) -> dict[str, object]:
     }
 
 
+def _get_file_content(*_args, **kwargs) -> dict[str, object]:
+    return {
+        "available": True,
+        "repo_id": kwargs["repo_id"],
+        "relative_path": kwargs["relative_path"],
+        "content": "def process_payment():\n    return True\n",
+        "line_count": 2,
+        "language": "python",
+        "artifact_type": "python",
+        "template_dialect": None,
+        "iac_relevant": False,
+        "source_backend": "workspace",
+    }
+
+
 def _call_case(client: TestClient, case: dict[str, object]):
     request = case["http"]
     method = request["method"].lower()
     if method == "get":
         return client.get(request["path"], params=request.get("params"))
     return client.post(request["path"], json=request.get("json"))
+
+
+def _assert_story_contract(
+    body: dict[str, object],
+    case: dict[str, object],
+) -> None:
+    assert body["story"], case["prompt"]
+    assert body["story_sections"], case["prompt"]
+    assert body["drilldowns"], case["prompt"]
+    assert isinstance(body["limitations"], list), case["prompt"]
+    for section in body["story_sections"]:
+        assert section["id"], case["prompt"]
+        assert section["title"], case["prompt"]
+        assert section["summary"], case["prompt"]
+    expected_section_ids = set(case.get("expected_story_section_ids", []))
+    if expected_section_ids:
+        section_ids = {section["id"] for section in body["story_sections"]}
+        assert expected_section_ids.issubset(section_ids), case["prompt"]
+    coverage = body.get("coverage")
+    if isinstance(coverage, dict) and coverage.get("completeness_state") == "partial":
+        assert body["limitations"], case["prompt"]
+
+
+def _assert_search_round_trip(client: TestClient, body: dict[str, object]) -> None:
+    ranked = body["ranked_results"]
+    assert ranked, "search should yield at least one drill-down candidate"
+    first_result = ranked[0]
+    response = client.post(
+        "/api/v0/content/files/read",
+        json={
+            "repo_id": first_result["repo_id"],
+            "relative_path": first_result["relative_path"],
+        },
+    )
+    assert response.status_code == 200
+    content = response.json()
+    assert content["repo_id"] == first_result["repo_id"]
+    assert content["relative_path"] == first_result["relative_path"]
+    assert "local_path" not in content
 
 
 def test_story_prompt_suite_routes_through_structured_story_http_surfaces() -> None:
@@ -145,14 +207,13 @@ def test_story_prompt_suite_routes_through_structured_story_http_surfaces() -> N
             response = _call_case(client, case)
             assert response.status_code == 200, case["prompt"]
             body = response.json()
-            assert body["story"], case["prompt"]
-            assert body["story_sections"], case["prompt"]
-            assert body["drilldowns"], case["prompt"]
+            _assert_story_contract(body, case)
 
 
 def test_programming_prompt_suite_routes_through_http_code_surfaces() -> None:
     services = SimpleNamespace(
         database=object(),
+        content=SimpleNamespace(get_file_content=_get_file_content),
         code=SimpleNamespace(
             search_code=_search_code,
             get_code_relationships=_relationships,
@@ -168,6 +229,8 @@ def test_programming_prompt_suite_routes_through_http_code_surfaces() -> None:
             body = response.json()
             if case["kind"] == "search":
                 assert body["ranked_results"], case["prompt"]
+                if case.get("round_trip"):
+                    _assert_search_round_trip(client, body)
                 continue
             if case["kind"] == "dead_code":
                 assert body["potentially_unused_functions"], case["prompt"]

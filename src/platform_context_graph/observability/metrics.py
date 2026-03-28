@@ -5,10 +5,11 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from .indexing_metrics import RuntimeIndexMetricsMixin
 from .otel import Observation, current_component, status_class
 
 
-class RuntimeMetricsMixin:
+class RuntimeMetricsMixin(RuntimeIndexMetricsMixin):
     """Provide metric-recording helpers for :class:`ObservabilityRuntime`."""
 
     enabled: bool
@@ -17,6 +18,8 @@ class RuntimeMetricsMixin:
     _active_runs: dict[tuple[tuple[str, str], ...], int]
     _active_repositories: dict[tuple[tuple[str, str], ...], int]
     _checkpoint_pending_repositories: dict[tuple[tuple[str, str], ...], int]
+    _index_snapshot_queue_depth: dict[tuple[tuple[str, str], ...], int]
+    _index_parse_tasks_active: dict[tuple[tuple[str, str], ...], int]
     http_requests_total: Any
     http_request_duration: Any
     http_request_errors_total: Any
@@ -31,6 +34,7 @@ class RuntimeMetricsMixin:
     index_repositories_total: Any
     index_checkpoints_total: Any
     index_repository_duration: Any
+    index_stage_duration: Any
     hidden_dirs_skipped_total: Any
     index_lock_contention_skips_total: Any
     neo4j_query_duration: Any
@@ -136,84 +140,6 @@ class RuntimeMetricsMixin:
         if not success and self.mcp_tool_errors_total is not None:
             self.mcp_tool_errors_total.add(1, attrs)
 
-    def record_index_repositories(
-        self,
-        *,
-        component: str,
-        phase: str,
-        count: int,
-        mode: str,
-        source: str,
-    ) -> None:
-        """Record repository counts for a phase of an index run.
-
-        Args:
-            component: The component label for the metric.
-            phase: The indexing phase being measured.
-            count: The repository count to add.
-            mode: The indexing mode being executed.
-            source: The request source for the indexing run.
-        """
-
-        if not self.enabled or self.index_repositories_total is None:
-            return
-        self.index_repositories_total.add(
-            count,
-            {
-                "component": component,
-                "phase": phase,
-                "mode": mode,
-                "source": source,
-            },
-        )
-
-    def record_index_checkpoint(
-        self,
-        *,
-        component: str,
-        mode: str,
-        source: str,
-        operation: str,
-        status: str,
-    ) -> None:
-        """Record a checkpoint lifecycle event for an index run."""
-
-        if not self.enabled or self.index_checkpoints_total is None:
-            return
-        self.index_checkpoints_total.add(
-            1,
-            {
-                "component": component,
-                "mode": mode,
-                "source": source,
-                "operation": operation,
-                "status": status,
-            },
-        )
-
-    def record_index_repository_duration(
-        self,
-        *,
-        component: str,
-        mode: str,
-        source: str,
-        status: str,
-        duration_seconds: float,
-    ) -> None:
-        """Record the duration of one repository parse/commit attempt."""
-
-        if not self.enabled or self.index_repository_duration is None:
-            return
-        self.index_repository_duration.record(
-            duration_seconds,
-            {
-                "component": component,
-                "mode": mode,
-                "source": source,
-                "status": status,
-            },
-        )
-
     def record_hidden_directory_skip(
         self,
         kind: str,
@@ -235,32 +161,6 @@ class RuntimeMetricsMixin:
             {
                 "component": component or current_component() or self.component,
                 "kind": kind,
-            },
-        )
-
-    def record_lock_contention_skip(
-        self,
-        *,
-        component: str,
-        mode: str,
-        source: str,
-    ) -> None:
-        """Record a skipped index run due to lock contention.
-
-        Args:
-            component: The component label for the metric.
-            mode: The indexing mode being executed.
-            source: The request source for the indexing run.
-        """
-
-        if not self.enabled or self.index_lock_contention_skips_total is None:
-            return
-        self.index_lock_contention_skips_total.add(
-            1,
-            {
-                "component": component,
-                "mode": mode,
-                "source": source,
             },
         )
 
@@ -391,75 +291,3 @@ class RuntimeMetricsMixin:
                 "pcg.content.operation": operation,
             },
         )
-
-    def _adjust_active_state(
-        self,
-        key: tuple[tuple[str, str], ...],
-        *,
-        runs_delta: int = 0,
-        repos_delta: int = 0,
-    ) -> None:
-        """Update the active-run and active-repository gauge state.
-
-        Args:
-            key: The metric attribute key for the active state bucket.
-            runs_delta: The amount to add to the active-run count.
-            repos_delta: The amount to add to the active-repository count.
-        """
-
-        with self._lock:
-            if runs_delta:
-                new_runs = self._active_runs.get(key, 0) + runs_delta
-                if new_runs <= 0:
-                    self._active_runs.pop(key, None)
-                else:
-                    self._active_runs[key] = new_runs
-            if repos_delta:
-                new_repos = self._active_repositories.get(key, 0) + repos_delta
-                if new_repos <= 0:
-                    self._active_repositories.pop(key, None)
-                else:
-                    self._active_repositories[key] = new_repos
-
-    def _observe_active_runs(self, _options: Any) -> list[Observation]:
-        """Produce current active-run gauge observations.
-
-        Args:
-            _options: The OpenTelemetry callback options.
-
-        Returns:
-            The active-run observations for the runtime.
-        """
-
-        with self._lock:
-            return [
-                Observation(value, dict(key))
-                for key, value in sorted(self._active_runs.items())
-            ]
-
-    def _observe_active_repositories(self, _options: Any) -> list[Observation]:
-        """Produce current active-repository gauge observations.
-
-        Args:
-            _options: The OpenTelemetry callback options.
-
-        Returns:
-            The active-repository observations for the runtime.
-        """
-
-        with self._lock:
-            return [
-                Observation(value, dict(key))
-                for key, value in sorted(self._active_repositories.items())
-            ]
-
-    def _observe_pending_checkpoint_repositories(
-        self, _options: Any
-    ) -> list[Observation]:
-        """Produce current pending-checkpoint repository gauge observations."""
-
-        with self._lock:
-            return [
-                Observation(value, dict(key))
-                for key, value in sorted(self._checkpoint_pending_repositories.items())
-            ]

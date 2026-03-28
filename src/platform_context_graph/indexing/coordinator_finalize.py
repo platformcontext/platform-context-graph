@@ -32,6 +32,8 @@ def finalize_repository_batch(
     utc_now_fn: Any,
     publish_run_repository_coverage_fn: Any,
     publish_runtime_progress_fn: Any,
+    parse_strategy: str = "threaded",
+    parse_workers: int = 1,
 ) -> None:
     """Finalize one successful repo batch or mark the run as partial failure."""
 
@@ -120,6 +122,12 @@ def finalize_repository_batch(
                     info_logger_fn=info_logger_fn,
                     stage_progress_callback=_stage_progress_callback,
                     run_id=run_state.run_id,
+                    telemetry=telemetry,
+                    component=component,
+                    mode=family,
+                    source=source,
+                    parse_strategy=parse_strategy,
+                    parse_workers=parse_workers,
                 )
                 run_state.finalization_finished_at = utc_now_fn()
                 run_state.finalization_duration_seconds = time.perf_counter() - started

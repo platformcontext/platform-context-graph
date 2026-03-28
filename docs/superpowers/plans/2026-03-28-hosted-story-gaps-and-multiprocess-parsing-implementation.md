@@ -4,7 +4,7 @@
 
 **Goal:** Close the remaining hosted MCP/API story-completeness gaps while adding a feature-flagged multiprocess parse engine that improves CPU-bound indexing throughput without changing graph correctness.
 
-**Architecture:** Keep this as two coordinated workstreams. Workstream A extends the shared query and enrichment layer so hosted investigations can stay inside PCG surfaces. Workstream B swaps the parse execution engine behind a flag while preserving the async coordinator, checkpointing, commit pipeline, and finalization behavior.
+**Architecture:** Keep this as two coordinated workstreams. Workstream A extends the shared query and enrichment layer so hosted investigations can stay inside PCG surfaces. Workstream B preserves the single-writer coordinator and bounded snapshot queue while swapping only the parse execution engine behind a flag.
 
 **Tech Stack:** Python 3.12, FastAPI, MCP server mixins, Neo4j-backed query layer, asyncio coordinator pipeline, tree-sitter parsers, pytest, docker-backed e2e verification.
 
@@ -265,7 +265,7 @@ git add src/platform_context_graph/mcp/tools/handlers/ecosystem_support.py \
 git commit -m "feat: add focused deployment trace controls"
 ```
 
-## Chunk 5: Multiprocess Parse Engine Skeleton
+## Chunk 5: Multiprocess Parse Engine And Bounded Queue
 
 **Files:**
 - Create: `src/platform_context_graph/tools/parse_worker.py`
@@ -285,6 +285,7 @@ Cover:
 
 - process engine config selection
 - worker init builds parser registry once per worker
+- parse snapshots enter a bounded queue and commit in order
 - standalone parse entrypoint returns the same payload shape as current parsing
 
 - [ ] **Step 2: Run focused tests to verify failure**
@@ -307,6 +308,7 @@ Implement:
 - process worker initializer
 - standalone parse entrypoint
 - coordinator wiring for a process pool
+- bounded queue/backpressure in the coordinator remains the single-writer handoff
 
 Do not remove the thread engine.
 
@@ -355,6 +357,7 @@ Create a script that records:
 - repo name
 - engine
 - worker count
+- queue depth
 - elapsed parse time
 - elapsed pre-scan time
 - output counts

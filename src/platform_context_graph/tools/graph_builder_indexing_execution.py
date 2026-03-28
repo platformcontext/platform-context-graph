@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import inspect
 import time
@@ -15,6 +16,7 @@ from platform_context_graph.utils.debug_log import emit_log_call
 
 from .graph_builder_indexing_discovery import resolve_repository_file_sets
 from .graph_builder_indexing_types import RepositoryParseSnapshot
+from .parse_worker import parse_file_in_worker
 from .repository_display import repository_display_name
 
 _REPO_PARSE_PROGRESS_MIN_FILES = 250
@@ -23,16 +25,20 @@ _SLOW_PARSE_FILE_THRESHOLD_SECONDS = 1.0
 _SLOW_PARSE_TOP_FILES = 5
 
 
-def _repo_file_parse_concurrency() -> int:
+def _repo_file_parse_concurrency(
+    *,
+    multiprocess_enabled: bool = False,
+    parse_workers: int = 1,
+) -> int:
     """Return the opt-in file-level parse concurrency for one repository."""
 
     raw_value = os.getenv("PCG_REPO_FILE_PARSE_CONCURRENCY")
     if raw_value is None or not raw_value.strip():
-        return 1
+        return max(1, parse_workers) if multiprocess_enabled else 1
     try:
         return max(1, min(int(raw_value), 64))
     except ValueError:
-        return 1
+        return max(1, parse_workers) if multiprocess_enabled else 1
 
 
 def _repo_relative_path(repo_path: Path, file_path: Path) -> str:
@@ -57,6 +63,21 @@ def _record_slow_parse_file(
         heappushpop(slow_files, entry)
 
 
+def _repo_file_parse_multiprocess_enabled() -> bool:
+    """Return whether the opt-in multiprocess parser skeleton is enabled."""
+
+    raw_value = os.getenv("PCG_REPO_FILE_PARSE_MULTIPROCESS")
+    return bool(raw_value and raw_value.strip().lower() == "true")
+
+
+def _repo_file_parse_strategy(*, parse_executor: Any | None) -> str:
+    """Return the effective parse strategy label for telemetry."""
+
+    if _repo_file_parse_multiprocess_enabled() and parse_executor is not None:
+        return "multiprocess"
+    return "threaded"
+
+
 async def parse_repository_snapshot_async(
     builder: Any,
     repo_path: Path,
@@ -67,12 +88,31 @@ async def parse_repository_snapshot_async(
     asyncio_module: Any,
     info_logger_fn: Any,
     progress_callback: Any | None = None,
+    parse_executor: Any | None = None,
+    component: str | None = None,
+    mode: str | None = None,
+    source: str | None = None,
+    parse_workers: int = 1,
 ) -> RepositoryParseSnapshot:
     """Parse one repository into an in-memory snapshot without writing state."""
 
     repo_path = repo_path.resolve()
     repo_label = repository_display_name(repo_path)
     telemetry = get_observability()
+    file_parse_strategy = _repo_file_parse_strategy(parse_executor=parse_executor)
+    multiprocess_requested = _repo_file_parse_multiprocess_enabled()
+    if multiprocess_requested and parse_executor is None:
+        emit_log_call(
+            info_logger_fn,
+            f"Repo {repo_label} requested multiprocess parsing but no parse executor "
+            "was configured; falling back to the threaded path.",
+            event_name="index.parse.multiprocess.fallback",
+            extra_keys={
+                "repo_path": str(repo_path),
+                "file_count": len(repo_files),
+                "parse_strategy": file_parse_strategy,
+            },
+        )
     emit_log_call(
         info_logger_fn,
         f"Starting repo {repo_label} ({len(repo_files)} files)",
@@ -89,6 +129,7 @@ async def parse_repository_snapshot_async(
         attributes={
             "pcg.index.repo_path": str(repo_path),
             "pcg.index.file_count": len(repo_files),
+            "pcg.index.file_parse_strategy": file_parse_strategy,
         },
     ):
         emit_log_call(
@@ -130,8 +171,30 @@ async def parse_repository_snapshot_async(
             max(1, len(repo_files) // _REPO_PARSE_PROGRESS_TARGET_STEPS),
         ),
     )
-    file_parse_concurrency = _repo_file_parse_concurrency()
+    file_parse_concurrency = _repo_file_parse_concurrency(
+        multiprocess_enabled=file_parse_strategy == "multiprocess",
+        parse_workers=parse_workers,
+    )
     processed_files = 0
+    active_parse_tasks = 0
+
+    def _set_active_parse_tasks(count: int) -> None:
+        """Update the observable count of in-flight file parse tasks."""
+
+        if (
+            hasattr(telemetry, "set_index_parse_tasks_active")
+            and component
+            and mode
+            and source
+        ):
+            telemetry.set_index_parse_tasks_active(
+                component=component,
+                mode=mode,
+                source=source,
+                active_count=count,
+                parse_strategy=file_parse_strategy,
+                parse_workers=parse_workers,
+            )
 
     async def _parse_one(
         index: int, file_path: Path
@@ -145,7 +208,33 @@ async def parse_repository_snapshot_async(
         if job_id:
             builder.job_manager.update_job(job_id, current_file=str(file_path))
         file_parse_start = time.monotonic()
-        if callable(to_thread):
+        if file_parse_strategy == "multiprocess" and parse_executor is not None:
+            emit_log_call(
+                info_logger_fn,
+                f"Dispatching {file_path.name} to the process-pool parser",
+                event_name="index.parse.worker_handoff",
+                extra_keys={
+                    "repo_path": str(repo_path),
+                    "file_path": str(file_path),
+                    "parse_strategy": file_parse_strategy,
+                    "parse_workers": parse_workers,
+                    "file_parse_concurrency": file_parse_concurrency,
+                },
+            )
+            get_running_loop = getattr(asyncio_module, "get_running_loop", None)
+            running_loop = (
+                get_running_loop()
+                if callable(get_running_loop)
+                else asyncio.get_running_loop()
+            )
+            file_data = await running_loop.run_in_executor(
+                parse_executor,
+                parse_file_in_worker,
+                str(repo_path),
+                str(file_path),
+                is_dependency,
+            )
+        elif callable(to_thread):
             file_data = await to_thread(
                 builder.parse_file,
                 repo_path,
@@ -199,8 +288,24 @@ async def parse_repository_snapshot_async(
                 },
             )
 
+    emit_log_call(
+        info_logger_fn,
+        f"Repository parse dispatch configured for {repo_label}: "
+        f"strategy={file_parse_strategy}, max_in_flight={file_parse_concurrency}, "
+        f"workers={parse_workers}",
+        event_name="index.parse.dispatch.configured",
+        extra_keys={
+            "repo_path": str(repo_path),
+            "parse_strategy": file_parse_strategy,
+            "file_parse_concurrency": file_parse_concurrency,
+            "parse_workers": parse_workers,
+            "file_count": len(repo_files),
+        },
+    )
+    _set_active_parse_tasks(0)
+
     if (
-        callable(to_thread)
+        (callable(to_thread) or file_parse_strategy == "multiprocess")
         and file_parse_concurrency > 1
         and hasattr(asyncio_module, "Semaphore")
         and hasattr(asyncio_module, "create_task")
@@ -213,8 +318,15 @@ async def parse_repository_snapshot_async(
         ) -> tuple[int, Path | None, dict[str, Any] | None, float]:
             """Bound per-repo file parsing with the configured semaphore."""
 
+            nonlocal active_parse_tasks
             async with semaphore:
-                return await _parse_one(index, file_path)
+                active_parse_tasks += 1
+                _set_active_parse_tasks(active_parse_tasks)
+                try:
+                    return await _parse_one(index, file_path)
+                finally:
+                    active_parse_tasks -= 1
+                    _set_active_parse_tasks(active_parse_tasks)
 
         tasks = [
             asyncio_module.create_task(_parse_with_semaphore(index, file_path))
@@ -230,8 +342,15 @@ async def parse_repository_snapshot_async(
                     task.cancel()
     else:
         for index, file_path in enumerate(repo_files):
-            _record_parse_result(*(await _parse_one(index, file_path)))
-            await asyncio_module.sleep(0)
+            active_parse_tasks = 1
+            _set_active_parse_tasks(active_parse_tasks)
+            try:
+                _record_parse_result(*(await _parse_one(index, file_path)))
+                await asyncio_module.sleep(0)
+            finally:
+                active_parse_tasks = 0
+                _set_active_parse_tasks(active_parse_tasks)
+    _set_active_parse_tasks(0)
 
     file_data_items = [item for item in parsed_file_data if item is not None]
     if slow_files:
@@ -266,6 +385,8 @@ async def parse_repository_snapshot_async(
             "repo_path": str(repo_path),
             "parsed_file_count": len(file_data_items),
             "duration_seconds": round(total_elapsed, 6),
+            "parse_strategy": file_parse_strategy,
+            "parse_workers": parse_workers,
         },
     )
     return RepositoryParseSnapshot(
@@ -326,6 +447,12 @@ def finalize_index_batch(
     info_logger_fn: Any,
     stage_progress_callback: Any | None = None,
     run_id: str | None = None,
+    telemetry: Any | None = None,
+    component: str | None = None,
+    mode: str | None = None,
+    source: str | None = None,
+    parse_strategy: str = "threaded",
+    parse_workers: int = 1,
 ) -> dict[str, float]:
     """Create cross-file and cross-repo relationships after repo commits finish."""
 
@@ -417,9 +544,43 @@ def finalize_index_batch(
             context=f"Before finalization stage {stage_name}",
         )
         stage_start = time.monotonic()
-        stage_fn()
+        stage_span = (
+            telemetry.start_span(
+                "pcg.index.finalize.stage",
+                component=component,
+                attributes={
+                    "pcg.index.run_id": run_id,
+                    "pcg.index.stage": stage_name,
+                    "pcg.index.parse_strategy": parse_strategy,
+                    "pcg.index.parse_workers": parse_workers,
+                },
+            )
+            if telemetry is not None
+            else None
+        )
+        if stage_span is None:
+            stage_fn()
+        else:
+            with stage_span:
+                stage_fn()
         elapsed = time.monotonic() - stage_start
         stage_timings[stage_name] = elapsed
+        if (
+            telemetry is not None
+            and component is not None
+            and mode is not None
+            and source is not None
+            and hasattr(telemetry, "record_index_stage_duration")
+        ):
+            telemetry.record_index_stage_duration(
+                component=component,
+                mode=mode,
+                source=source,
+                stage=f"finalize_{stage_name}",
+                duration_seconds=elapsed,
+                parse_strategy=parse_strategy,
+                parse_workers=parse_workers,
+            )
         log_memory_usage(
             info_logger_fn,
             context=f"After finalization stage {stage_name}",

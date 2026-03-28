@@ -10,178 +10,28 @@ from .ecosystem_support_overview import (
     build_story_lines,
 )
 from .ecosystem_support_provisioning import group_provisioning_source_chains
-
-def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return rows with duplicates removed while preserving order."""
-    seen: set[tuple[tuple[str, str], ...]] = set()
-    deduped: list[dict[str, Any]] = []
-    for row in rows:
-        key = tuple(sorted((str(k), repr(v)) for k, v in row.items()))
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(row)
-    return deduped
-
-
-def _canonical_source_repositories(context: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return the deduplicated config and deployment source repositories."""
-
-    rows = [
-        *list(context.get("deploys_from") or []),
-        *list(context.get("discovers_config_in") or []),
-    ]
-    deduped: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for row in rows:
-        identity = str(row.get("id") or row.get("name") or "").strip()
-        if not identity or identity in seen:
-            continue
-        seen.add(identity)
-        deduped.append(row)
-    return deduped
-
-def _split_csv(value: Any) -> list[str]:
-    """Return non-empty trimmed CSV tokens from one raw value."""
-
-    if not value:
-        return []
-    return [part.strip() for part in str(value).split(",") if part.strip()]
-
-def _source_repo_name_hints(
-    *,
-    source_repositories: list[dict[str, Any]],
-    argocd_apps: list[dict[str, Any]],
-    argocd_appsets: list[dict[str, Any]],
-) -> list[str]:
-    """Return portable repository-name hints from canonical and ArgoCD context."""
-
-    names = {
-        str(row["name"]).strip()
-        for row in source_repositories
-        if row.get("name")
-    }
-    for row in [*argocd_apps, *argocd_appsets]:
-        for raw_repo in _split_csv(row.get("source_repos")):
-            candidate = raw_repo.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
-            if candidate:
-                names.add(candidate)
-    return sorted(names)
-
-
-def _service_name_tokens(service_name: str) -> list[str]:
-    """Return stable service-name tokens for cross-tool matching."""
-
-    canonical = service_name.lower().strip()
-    variants = {
-        canonical,
-        canonical.replace("-", "_"),
-        canonical.replace("_", "-"),
-    }
-    return sorted(token for token in variants if token)
-
-
-def _normalized_environment_names(values: list[str] | None) -> list[str]:
-    """Return ordered unique environment names."""
-
-    if not values:
-        return []
-    ordered: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        normalized = str(value).strip()
-        if not normalized or normalized in seen:
-            continue
-        seen.add(normalized)
-        ordered.append(normalized)
-    return ordered
-
-
-def _environment_truthfulness_note(
-    *,
-    environments: list[str] | None,
-    observed_config_environments: list[str] | None,
-) -> str:
-    """Return a note that distinguishes runtime-confirmed and config-only envs."""
-
-    runtime = _normalized_environment_names(environments)
-    observed = _normalized_environment_names(observed_config_environments)
-    if not observed:
-        return ""
-    if not runtime:
-        observed_phrase = ", ".join(observed)
-        return (
-            f"Configuration references environments {observed_phrase}, "
-            "but runtime evidence has not confirmed deployed environments."
-        )
-
-    runtime_set = set(runtime)
-    extra_config = [name for name in observed if name not in runtime_set]
-    if not extra_config:
-        return ""
-
-    runtime_phrase = ", ".join(runtime)
-    extra_phrase = ", ".join(extra_config)
-    return (
-        f"Confirmed runtime environments: {runtime_phrase}. "
-        f"Configuration also references: {extra_phrase}."
-    )
-
-
-def repo_summary_note(
-    *,
-    limitations: list[str],
-    coverage: dict[str, Any] | None,
-    environments: list[str] | None = None,
-    observed_config_environments: list[str] | None = None,
-) -> str:
-    """Return a short human-readable note for coverage and environment gaps."""
-
-    base_note = ""
-    if "graph_partial" in limitations or "content_partial" in limitations:
-        base_note = (
-            "Repository coverage is partial; graph/content counts may be incomplete."
-        )
-    elif "dns_unknown" in limitations and "entrypoint_unknown" in limitations:
-        base_note = (
-            "DNS and entrypoint evidence are currently unavailable for this repository."
-        )
-    elif "dns_unknown" in limitations:
-        base_note = "DNS evidence is currently unavailable for this repository."
-    elif "entrypoint_unknown" in limitations:
-        base_note = (
-            "Entrypoint evidence is currently unavailable for this repository."
-        )
-    elif "finalization_incomplete" in limitations:
-        finalization_status = str(
-            (coverage or {}).get("finalization_status") or ""
-        ).strip()
-        status_phrase = finalization_status or "pending"
-        base_note = (
-            f"Repository finalization is {status_phrase}; deployment and relationship "
-            "summaries may still be incomplete."
-        )
-    elif coverage and coverage.get("completeness_state") == "failed":
-        base_note = (
-            "Repository coverage failed; runtime and deployment summaries may be incomplete."
-        )
-    elif limitations:
-        base_note = "Repository context has known limitations."
-
-    env_note = _environment_truthfulness_note(
-        environments=environments,
-        observed_config_environments=observed_config_environments,
-    )
-    if base_note and env_note:
-        return f"{base_note} {env_note}"
-    return base_note or env_note
+from .ecosystem_support_trace_helpers import (
+    _canonical_source_repositories,
+    _dedupe_rows,
+    _direct_deployment_chain_rows,
+    _direct_repo_rows,
+    _focused_trace_note,
+    _service_name_tokens,
+    _source_repo_name_hints,
+    _trace_truncation,
+    repo_summary_note,
+)
 
 
 def trace_deployment_chain(
     db_manager: DatabaseManager,
     service_name: str,
+    *,
+    direct_only: bool = True,
+    max_depth: int | None = None,
+    include_related_module_usage: bool = False,
 ) -> dict[str, Any]:
-    """Trace the full deployment chain for a service."""
+    """Trace the deployment chain for a service."""
     context = repository_queries.get_repository_context(
         db_manager,
         repo_id=service_name,
@@ -199,9 +49,7 @@ def trace_deployment_chain(
     ]
     service_name_tokens = _service_name_tokens(canonical_name)
     provisioned_by = list(context.get("provisioned_by") or [])
-    provisioned_repo_ids = [
-        str(row["id"]) for row in provisioned_by if row.get("id")
-    ]
+    provisioned_repo_ids = [str(row["id"]) for row in provisioned_by if row.get("id")]
     driver = db_manager.get_driver()
 
     with driver.session() as session:
@@ -386,6 +234,8 @@ def trace_deployment_chain(
         ).data()
 
     k8s_resources = _dedupe_rows(repo_k8s_resources + deployed_k8s_resources)
+    if direct_only:
+        k8s_resources = _dedupe_rows(repo_k8s_resources)
     tf_modules = [
         {
             "name": row.get("name"),
@@ -398,24 +248,44 @@ def trace_deployment_chain(
             "zone_id": row.get("zone_id"),
             "deploy_entry_point": row.get("deploy_entry_point"),
             "repository": row.get("repository"),
+            "source_repository": row.get("source_repository"),
         }
         for row in _dedupe_rows(tf_modules_raw)
     ]
+    if include_related_module_usage:
+        tf_modules = _dedupe_rows(tf_modules)
+    else:
+        tf_modules = _direct_repo_rows(
+            tf_modules,
+            repository_name=canonical_name,
+        )
+    terraform_resources = _dedupe_rows(terraform)
+    if direct_only or not include_related_module_usage:
+        terraform_resources = _direct_repo_rows(
+            terraform_resources,
+            repository_name=canonical_name,
+        )
     terragrunt_configs = _dedupe_rows(terragrunt_configs)
     relevant_provisioning_repositories = {
         repository
-        for row in [*terraform, *tf_modules]
+        for row in [*terraform_resources, *tf_modules]
         if (repository := str(row.get("repository") or "").strip())
     }
     if relevant_provisioning_repositories:
         terragrunt_configs = [
-            row for row in terragrunt_configs
+            row
+            for row in terragrunt_configs
             if str(row.get("repository") or "").strip()
             in relevant_provisioning_repositories
         ]
     provisioning_source_chains = group_provisioning_source_chains(
         terraform_modules=tf_modules_raw, terragrunt_configs=terragrunt_configs
     )
+    deployment_chain = list(context.get("deployment_chain") or [])
+    if direct_only:
+        deployment_chain = _direct_deployment_chain_rows(deployment_chain)
+    if max_depth is not None:
+        deployment_chain = deployment_chain[:max_depth]
 
     limitations = list(context.get("limitations") or [])
     result = {
@@ -424,7 +294,7 @@ def trace_deployment_chain(
         "argocd_applicationsets": argocd_appsets,
         "k8s_resources": k8s_resources,
         "crossplane_claims": claims,
-        "terraform_resources": terraform,
+        "terraform_resources": terraform_resources,
         "terraform_modules": tf_modules,
         "terragrunt_configs": terragrunt_configs,
         "provisioning_source_chains": provisioning_source_chains,
@@ -433,14 +303,10 @@ def trace_deployment_chain(
         "deploys_from": context.get("deploys_from", []),
         "discovers_config_in": context.get("discovers_config_in", []),
         "provisioned_by": context.get("provisioned_by", []),
-        "provisions_dependencies_for": context.get(
-            "provisions_dependencies_for", []
-        ),
-        "deployment_chain": context.get("deployment_chain", []),
+        "provisions_dependencies_for": context.get("provisions_dependencies_for", []),
+        "deployment_chain": deployment_chain,
         "environments": context.get("environments", []),
-        "observed_config_environments": context.get(
-            "observed_config_environments", []
-        ),
+        "observed_config_environments": context.get("observed_config_environments", []),
         "delivery_workflows": context.get("delivery_workflows", {}),
         "delivery_paths": context.get("delivery_paths", []),
         "controller_driven_paths": context.get("controller_driven_paths", []),
@@ -449,28 +315,59 @@ def trace_deployment_chain(
         "api_surface": context.get("api_surface", {}),
         "hostnames": context.get("hostnames", []),
         "limitations": limitations,
+        "trace_controls": {
+            "direct_only": direct_only,
+            "max_depth": max_depth,
+            "include_related_module_usage": include_related_module_usage,
+        },
     }
+    trace_truncation = _trace_truncation(
+        direct_only=direct_only,
+        max_depth=max_depth,
+        include_related_module_usage=include_related_module_usage,
+    )
+    if trace_truncation is not None:
+        result["truncation"] = trace_truncation
     result["deployment_overview"] = build_deployment_overview(
         hostnames=result["hostnames"],
         api_surface=result["api_surface"],
         platforms=result["platforms"],
         delivery_paths=result["delivery_paths"],
         controller_driven_paths=result["controller_driven_paths"],
-        provisioning_source_chains=provisioning_source_chains,
-        k8s_resources=k8s_resources,
+        provisioning_source_chains=(
+            provisioning_source_chains if not direct_only else []
+        ),
+        k8s_resources=(k8s_resources if not direct_only else repo_k8s_resources),
         crossplane_claims=claims,
-        terraform_resources=terraform,
-        terraform_modules=tf_modules,
-        deployment_artifacts=result["deployment_artifacts"],
-        consumer_repositories=result["consumer_repositories"],
+        terraform_resources=terraform_resources,
+        terraform_modules=tf_modules if include_related_module_usage else [],
+        deployment_artifacts=(
+            result["deployment_artifacts"] if not direct_only else {}
+        ),
+        consumer_repositories=(
+            result["consumer_repositories"] if not direct_only else []
+        ),
     )
+    note_parts = [
+        note
+        for note in [
+            _focused_trace_note(
+                direct_only=direct_only,
+                max_depth=max_depth,
+                include_related_module_usage=include_related_module_usage,
+            ),
+            repo_summary_note(
+                limitations=limitations,
+                coverage=context.get("coverage"),
+                environments=result["environments"],
+                observed_config_environments=result["observed_config_environments"],
+            ),
+        ]
+        if note
+    ]
+    if note_parts:
+        result["note"] = " ".join(note_parts)
     if limitations:
-        result["note"] = repo_summary_note(
-            limitations=limitations,
-            coverage=context.get("coverage"),
-            environments=result["environments"],
-            observed_config_environments=result["observed_config_environments"],
-        )
         emit_log_call(
             warning_logger,
             "Deployment chain assembled with known limitations",
@@ -482,15 +379,6 @@ def trace_deployment_chain(
                 "deployment_chain_length": len(result["deployment_chain"]),
             },
         )
-    else:
-        note = repo_summary_note(
-            limitations=[],
-            coverage=context.get("coverage"),
-            environments=result["environments"],
-            observed_config_environments=result["observed_config_environments"],
-        )
-        if note:
-            result["note"] = note
     story = build_story_lines(
         deployment_overview=result["deployment_overview"],
         note=result.get("note", ""),

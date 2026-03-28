@@ -35,6 +35,9 @@ def db():
         pytest.skip("NEO4J_URI not set")
 
     os.environ.setdefault("DATABASE_TYPE", "neo4j")
+    # Keep integration fixture indexing deterministic even when a developer's
+    # local app config enables the large-codebase optimization.
+    os.environ["SKIP_EXTERNAL_RESOLUTION"] = "false"
     from platform_context_graph.core import get_database_manager
 
     mgr = get_database_manager()

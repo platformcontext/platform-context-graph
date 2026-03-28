@@ -31,6 +31,8 @@ failing with `UNIMPLEMENTED`.
 
 The indexing services also honor worker-tuning controls from the environment:
 
+- `PCG_REPO_FILE_PARSE_MULTIPROCESS`
+- `PCG_MULTIPROCESS_START_METHOD`
 - `PCG_PARSE_WORKERS`
 - `PCG_INDEX_QUEUE_DEPTH`
 
@@ -54,6 +56,7 @@ override the published host ports:
 ```bash
 NEO4J_HTTP_PORT=17474 \
 NEO4J_BOLT_PORT=17687 \
+PCG_POSTGRES_PORT=15432 \
 PCG_HTTP_PORT=18080 \
 JAEGER_UI_PORT=26686 \
 OTEL_COLLECTOR_OTLP_GRPC_PORT=24317 \
@@ -72,6 +75,7 @@ This stack is intended for:
 It also exercises the content-store contract:
 
 - `PCG_CONTENT_STORE_DSN` and `PCG_POSTGRES_DSN` are wired by default
+- host-side e2e runs can reach the bundled Postgres content store through `PCG_POSTGRES_PORT` (default `15432`)
 - file and entity content reads prefer Postgres and fall back to the server workspace
 - `PCG_REPOSITORY_RULES_JSON` can be set to structured exact or regex include rules for Git-backed sync
 - the bundled local Postgres enables `pg_trgm` automatically through the content-store schema bootstrap

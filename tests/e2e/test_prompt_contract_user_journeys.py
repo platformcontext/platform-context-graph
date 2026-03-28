@@ -88,6 +88,59 @@ PROGRAMMING_PROMPTS = [
 ]
 
 
+def _assert_story_payload(payload: dict[str, object], prompt: str) -> None:
+    assert payload["story"], prompt
+    assert payload["story_sections"], prompt
+    assert payload["drilldowns"], prompt
+    assert isinstance(payload["limitations"], list), prompt
+    for section in payload["story_sections"]:
+        assert section["id"], prompt
+        assert section["title"], prompt
+        assert section["summary"], prompt
+    coverage = payload.get("coverage")
+    if isinstance(coverage, dict) and coverage.get("completeness_state") == "partial":
+        assert payload["limitations"], prompt
+
+
+def _assert_search_round_trip_http(
+    live_http_client: TestClient, result: dict[str, object], prompt: str
+) -> None:
+    ranked = result["ranked_results"]
+    assert ranked, prompt
+    first_result = ranked[0]
+    response = live_http_client.post(
+        "/api/v0/content/files/read",
+        json={
+            "repo_id": first_result["repo_id"],
+            "relative_path": first_result["relative_path"],
+        },
+    )
+    assert response.status_code == 200, prompt
+    payload = response.json()
+    assert payload["repo_id"] == first_result["repo_id"], prompt
+    assert payload["relative_path"] == first_result["relative_path"], prompt
+    assert "local_path" not in payload, prompt
+
+
+async def _assert_search_round_trip_mcp(
+    live_mcp_server: MCPServer, result: dict[str, object], prompt: str
+) -> None:
+    ranked = result["ranked_results"]
+    assert ranked, prompt
+    first_result = ranked[0]
+    payload = await live_mcp_server.handle_tool_call(
+        "get_file_content",
+        {
+            "repo_id": first_result["repo_id"],
+            "relative_path": first_result["relative_path"],
+        },
+    )
+    assert payload["available"] is True, prompt
+    assert payload["repo_id"] == first_result["repo_id"], prompt
+    assert payload["relative_path"] == first_result["relative_path"], prompt
+    assert "local_path" not in payload, prompt
+
+
 def _repository_id(server: MCPServer, repo_name: str) -> str:
     driver = server.db_manager.get_driver()
     with driver.session() as session:
@@ -116,10 +169,13 @@ def live_http_client() -> TestClient:
 
 
 def test_story_and_programming_prompt_journeys_against_live_graph(
+    seeded_e2e_graph: None,
     live_mcp_server: MCPServer,
     live_http_client: TestClient,
 ) -> None:
     """Exercise flagship story and programming prompts against the live graph."""
+
+    del seeded_e2e_graph
 
     for case in STORY_PROMPTS:
         if case["surface"] == "mcp":
@@ -137,9 +193,7 @@ def test_story_and_programming_prompt_journeys_against_live_graph(
             payload = response.json()
 
         assert payload["subject"]["type"] == "repository", case["prompt"]
-        assert payload["story"], case["prompt"]
-        assert payload["story_sections"], case["prompt"]
-        assert payload["drilldowns"], case["prompt"]
+        _assert_story_payload(payload, case["prompt"])
         assert "local_path" not in json.dumps(payload), case["prompt"]
 
     for case in PROGRAMMING_PROMPTS:
@@ -168,6 +222,18 @@ def test_story_and_programming_prompt_journeys_against_live_graph(
             assert isinstance(ranked, list) and ranked, case["prompt"]
             assert ranked[0]["repo_id"].startswith("repository:"), case["prompt"]
             assert ranked[0]["relative_path"], case["prompt"]
+            if case["surface"] == "mcp":
+                asyncio.run(
+                    _assert_search_round_trip_mcp(
+                        live_mcp_server,
+                        payload,
+                        case["prompt"],
+                    )
+                )
+            else:
+                _assert_search_round_trip_http(
+                    live_http_client, payload, case["prompt"]
+                )
             continue
         if case.get("kind") == "complexity":
             functions = (

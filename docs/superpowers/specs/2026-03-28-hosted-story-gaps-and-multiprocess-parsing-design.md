@@ -258,21 +258,40 @@ Implement a feature-flagged process-pool parse engine that coexists with the
 current thread-based engine until correctness and operational behavior are
 proven.
 
-#### B1. Keep the current async coordinator model
+#### B1. Keep the coordinator in the main process
 
-Do not rewrite the entire indexing coordinator. The main process should still
-own:
+Do not rewrite the entire indexing coordinator. The main process still owns
+the mutable control plane:
 
 - run-state checkpoints
-- queueing and backpressure
+- bounded queue creation and backpressure
 - commit orchestration
 - finalization
+- coverage publication
 - telemetry aggregation
 
-Only the file parse and, later, pre-scan execution engine should move to worker
-processes.
+Parse workers should only return serializable repository snapshots. They should
+not write graph state, finalize runs, or decide when a run has completed.
 
-#### B2. Add process-local parser initialization
+#### B2. Model the queue explicitly
+
+The queue shape we are documenting is:
+
+1. repository discovery and run setup
+2. worker-side repository parse and snapshot creation
+3. bounded queue of parsed snapshots waiting to commit
+4. serialized commit of one snapshot at a time
+5. finalization and coverage publication
+
+The first slice keeps pre-scan adjacent to parse work inside the worker so the
+worker can return a complete snapshot. Pre-scan is not a separate queue stage
+yet.
+
+The queue should be bounded by `PCG_INDEX_QUEUE_DEPTH`; worker fanout should be
+bounded by `PCG_PARSE_WORKERS`; the per-repository file parse knob can stay
+opt-in under `PCG_REPO_FILE_PARSE_CONCURRENCY`.
+
+#### B3. Add process-local parser initialization
 
 Worker processes cannot reuse the live `GraphBuilder` object directly.
 Introduce a standalone worker module that:
@@ -282,7 +301,7 @@ Introduce a standalone worker module that:
 - returns serializable parse results
 - hides non-picklable parser/runtime details inside the worker process
 
-#### B3. Gate the engine
+#### B4. Gate the engine
 
 Do not remove the current thread path in phase 1.
 
@@ -294,7 +313,7 @@ and keep the existing file-concurrency knob as a fallback until the process
 path is proven. The repo-level parse worker count can continue to exist, but
 its meaning must be clearly documented for both engines.
 
-#### B4. Separate measurement from implementation
+#### B5. Separate measurement from implementation
 
 The first multiprocess slice must add a repeatable measurement harness and
 baseline capture rather than encode guessed thresholds into tests.
@@ -305,17 +324,11 @@ Acceptance for phase 1 should be:
 - no deadlocks or orphaned workers
 - stable checkpoint/resume behavior
 - measured improvement on at least one CPU-heavy corpus
+- stable span, metric, and log names for Grafana/Loki correlation
 
 It should not be:
 
 - "must be exactly 3.2x faster"
-
-#### B5. Stage pre-scan later
-
-Keep pre-scan sequential in the first implementation slice unless measurement
-shows it is a significant part of end-to-end parse cost. The multiprocess PRD
-is right to propose parallel pre-scan eventually, but that is a second-stage
-optimization, not a phase-1 requirement.
 
 #### B6. Preserve output equivalence
 

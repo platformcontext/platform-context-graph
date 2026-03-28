@@ -16,6 +16,23 @@ from platform_context_graph.tools.graph_builder_indexing_execution import (
 )
 
 
+class _NullSpan:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeObservability:
+    def __init__(self) -> None:
+        self.spans: list[tuple[str, dict[str, object]]] = []
+
+    def start_span(self, name: str, *, attributes: dict[str, object] | None = None):
+        self.spans.append((name, dict(attributes or {})))
+        return _NullSpan()
+
+
 def test_finalize_index_batch_streams_committed_repo_file_data() -> None:
     """Finalize should stream file data from committed repo paths."""
     recorded: dict[str, object] = {}
@@ -24,7 +41,9 @@ def test_finalize_index_batch_streams_committed_repo_file_data() -> None:
     def _record_inheritance(file_data: object, imports_map: object) -> None:
         recorded["inheritance"] = (list(file_data), imports_map)
 
-    def _record_function_calls(file_data: object, imports_map: object) -> dict[str, float]:
+    def _record_function_calls(
+        file_data: object, imports_map: object
+    ) -> dict[str, float]:
         recorded["function_calls"] = (list(file_data), imports_map)
         return {"total_duration_seconds": 0.5}
 
@@ -66,7 +85,110 @@ def test_finalize_index_batch_streams_committed_repo_file_data() -> None:
     ]
     assert recorded["workloads"] is True
     assert recorded["relationships"] == ([Path("/tmp/example")], None)
-    assert load_calls == [Path("/tmp/example"), Path("/tmp/example"), Path("/tmp/example")]
+    assert load_calls == [
+        Path("/tmp/example"),
+        Path("/tmp/example"),
+        Path("/tmp/example"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_parse_repository_snapshot_falls_back_to_threaded_mode_without_executor(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The feature flag alone should not claim multiprocess execution."""
+
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    file_path = repo_path / "alpha.py"
+    file_path.write_text("print('ok')\n", encoding="utf-8")
+
+    fake_observability = _FakeObservability()
+    messages: list[str] = []
+
+    monkeypatch.setenv("PCG_REPO_FILE_PARSE_MULTIPROCESS", "true")
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_indexing_execution.get_observability",
+        lambda: fake_observability,
+    )
+
+    async def _sleep(_seconds: float) -> None:
+        return None
+
+    builder = SimpleNamespace(
+        _pre_scan_for_imports=lambda _files: {},
+        parse_file=lambda *_args, **_kwargs: {
+            "path": str(file_path),
+            "functions": [],
+        },
+        job_manager=SimpleNamespace(update_job=lambda *_args, **_kwargs: None),
+    )
+
+    snapshot = await parse_repository_snapshot_async(
+        builder,
+        repo_path,
+        [file_path],
+        is_dependency=False,
+        job_id=None,
+        asyncio_module=SimpleNamespace(sleep=_sleep),
+        info_logger_fn=messages.append,
+        progress_callback=None,
+    )
+
+    assert snapshot.file_count == 1
+    assert snapshot.file_data[0]["path"] == str(file_path)
+    assert fake_observability.spans[0][1]["pcg.index.file_parse_strategy"] == "threaded"
+    assert any("falling back to the threaded path" in message for message in messages)
+
+
+@pytest.mark.asyncio
+async def test_parse_repository_snapshot_defaults_to_threaded_strategy_when_flag_is_off(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The default parse path should stay in-process when the feature flag is off."""
+
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    file_path = repo_path / "alpha.py"
+    file_path.write_text("print('ok')\n", encoding="utf-8")
+
+    fake_observability = _FakeObservability()
+    messages: list[str] = []
+
+    monkeypatch.delenv("PCG_REPO_FILE_PARSE_MULTIPROCESS", raising=False)
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder_indexing_execution.get_observability",
+        lambda: fake_observability,
+    )
+
+    async def _sleep(_seconds: float) -> None:
+        return None
+
+    builder = SimpleNamespace(
+        _pre_scan_for_imports=lambda _files: {},
+        parse_file=lambda *_args, **_kwargs: {
+            "path": str(file_path),
+            "functions": [],
+        },
+        job_manager=SimpleNamespace(update_job=lambda *_args, **_kwargs: None),
+    )
+
+    snapshot = await parse_repository_snapshot_async(
+        builder,
+        repo_path,
+        [file_path],
+        is_dependency=False,
+        job_id=None,
+        asyncio_module=SimpleNamespace(sleep=_sleep),
+        info_logger_fn=messages.append,
+        progress_callback=None,
+    )
+
+    assert snapshot.file_count == 1
+    assert snapshot.file_data[0]["path"] == str(file_path)
+    assert fake_observability.spans[0][0] == "pcg.index.parse_repository"
+    assert fake_observability.spans[0][1]["pcg.index.file_parse_strategy"] == "threaded"
+    assert not any("multiprocess parse skeleton" in message for message in messages)
 
 
 def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:

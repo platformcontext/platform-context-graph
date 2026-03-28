@@ -6,6 +6,7 @@ import importlib
 import logging
 from pathlib import Path
 import threading
+from types import SimpleNamespace
 from typing import Any
 from tree_sitter import Language, Parser
 from .graph_builder_raw_text import (
@@ -355,9 +356,35 @@ def parse_file(
         return {"path": str(path), "error": str(exc)}
 
 
+def parse_file_for_indexing_worker(
+    repo_path: Path,
+    path: Path,
+    is_dependency: bool,
+    *,
+    get_config_value_fn: Any,
+    debug_log_fn: Any,
+    error_logger_fn: Any,
+    warning_logger_fn: Any,
+) -> dict[str, Any]:
+    """Parse one file in a worker-friendly context with a local parser registry."""
+
+    worker_builder = SimpleNamespace(parsers=build_parser_registry(get_config_value_fn))
+    return parse_file(
+        worker_builder,
+        repo_path,
+        path,
+        is_dependency,
+        get_config_value_fn=get_config_value_fn,
+        debug_log_fn=debug_log_fn,
+        error_logger_fn=error_logger_fn,
+        warning_logger_fn=warning_logger_fn,
+    )
+
+
 __all__ = [
     "TreeSitterParser",
     "build_parser_registry",
+    "parse_file_for_indexing_worker",
     "parse_file",
     "pre_scan_for_imports",
 ]

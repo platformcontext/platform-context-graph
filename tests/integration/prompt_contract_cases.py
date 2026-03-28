@@ -12,6 +12,7 @@ STORY_PROMPT_CASES = [
         "prompt": "What can you tell me about api-node-boats: API endpoints, DNS, AWS resources it depends on, what environments it is deployed to, what repos it depends on, and what Terraform or IaC repos are related to it? I want the end-to-end flow from Internet to cloud to code.",
         "mcp": {"tool_name": "get_repo_story", "args": {"repo_id": "api-node-boats"}},
         "http": {"method": "GET", "path": f"/api/v0/repositories/{REPO_ID}/story"},
+        "expected_story_section_ids": ["internet", "deployment"],
     },
     {
         "prompt": "Show me the Internet-to-code request path for api-node-boats in QA, from DNS and gateway routing down to the service, container, and code entrypoints.",
@@ -172,6 +173,7 @@ PROGRAMMING_PROMPT_CASES = [
             "json": {"query": "process_payment"},
         },
         "kind": "search",
+        "round_trip": True,
     },
     {
         "prompt": "Who calls process_payment?",

@@ -43,17 +43,20 @@ def test_workload_and_service_story_tools_route_through_context_queries() -> Non
     server = MCPServer.__new__(MCPServer)
     server.db_manager = object()
 
-    with patch(
-        "platform_context_graph.mcp.query_tools.context_queries.get_workload_story",
-        return_value={"subject": {"id": "workload:payments-api"}, "story": []},
-    ) as mock_workload_story, patch(
-        "platform_context_graph.mcp.query_tools.context_queries.get_service_story",
-        return_value={
-            "subject": {"id": "workload:payments-api"},
-            "story": [],
-            "requested_as": "service",
-        },
-    ) as mock_service_story:
+    with (
+        patch(
+            "platform_context_graph.mcp.query_tools.context_queries.get_workload_story",
+            return_value={"subject": {"id": "workload:payments-api"}, "story": []},
+        ) as mock_workload_story,
+        patch(
+            "platform_context_graph.mcp.query_tools.context_queries.get_service_story",
+            return_value={
+                "subject": {"id": "workload:payments-api"},
+                "story": [],
+                "requested_as": "service",
+            },
+        ) as mock_service_story,
+    ):
         workload_result = server.get_workload_story_tool(
             workload_id="payments-api",
             environment="prod",
@@ -89,9 +92,7 @@ def test_get_repo_summary_tool_surfaces_platforms_and_limitations() -> None:
                 "Public entrypoints: api-node-boats.qa.bgrp.io.",
                 "GitHub Actions deploy from helm-charts onto EKS.",
             ],
-            "platforms": [
-                {"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}
-            ],
+            "platforms": [{"id": "platform:ecs:aws:cluster/node10", "kind": "ecs"}],
             "delivery_workflows": {
                 "github_actions": {
                     "commands": [
@@ -102,9 +103,7 @@ def test_get_repo_summary_tool_surfaces_platforms_and_limitations() -> None:
                     ]
                 }
             },
-            "delivery_paths": [
-                {"path_kind": "gitops", "delivery_mode": "eks_gitops"}
-            ],
+            "delivery_paths": [{"path_kind": "gitops", "delivery_mode": "eks_gitops"}],
             "controller_driven_paths": [],
             "api_surface": {"docs_routes": ["/_specs"], "api_versions": ["v3"]},
             "hostnames": [{"hostname": "api-node-boats.qa.bgrp.io"}],
@@ -155,9 +154,7 @@ def test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations() 
                     }
                 ]
             },
-            "delivery_paths": [
-                {"path_kind": "direct", "controller": "jenkins"}
-            ],
+            "delivery_paths": [{"path_kind": "direct", "controller": "jenkins"}],
             "controller_driven_paths": [
                 {
                     "controller_kind": "jenkins",
@@ -168,11 +165,31 @@ def test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations() 
             "api_surface": {"api_versions": ["v3"]},
             "hostnames": [{"hostname": "api-node-boats.qa.bgrp.io"}],
             "limitations": ["dns_unknown", "entrypoint_unknown"],
+            "trace_controls": {
+                "direct_only": True,
+                "max_depth": None,
+                "include_related_module_usage": False,
+            },
+            "truncation": {
+                "applied": True,
+                "omitted_sections": [
+                    "deployment_chain",
+                    "terraform_resources",
+                    "terraform_modules",
+                    "provisioning_source_chains",
+                ],
+            },
         },
     ) as mock_trace:
         result = server.trace_deployment_chain_tool(service_name="api-node-boats")
 
-    mock_trace.assert_called_once_with(server.db_manager, "api-node-boats")
+    mock_trace.assert_called_once_with(
+        server.db_manager,
+        "api-node-boats",
+        direct_only=True,
+        max_depth=None,
+        include_related_module_usage=False,
+    )
     assert result["story"] == [
         "Public entrypoints: api-node-boats.qa.bgrp.io.",
         "GitHub Actions deploy through terraform-stack-node10 onto ECS.",
@@ -196,3 +213,17 @@ def test_trace_deployment_chain_tool_surfaces_runtime_context_and_limitations() 
     assert result["api_surface"]["api_versions"] == ["v3"]
     assert result["hostnames"][0]["hostname"] == "api-node-boats.qa.bgrp.io"
     assert result["limitations"] == ["dns_unknown", "entrypoint_unknown"]
+    assert result["trace_controls"] == {
+        "direct_only": True,
+        "max_depth": None,
+        "include_related_module_usage": False,
+    }
+    assert result["truncation"] == {
+        "applied": True,
+        "omitted_sections": [
+            "deployment_chain",
+            "terraform_resources",
+            "terraform_modules",
+            "provisioning_source_chains",
+        ],
+    }

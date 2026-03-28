@@ -20,6 +20,7 @@ def _make_server() -> MCPServer:
             "get_repo_story",
             "get_workload_story",
             "get_service_story",
+            "get_file_content",
             "find_code",
             "analyze_code_relationships",
             "calculate_cyclomatic_complexity",
@@ -34,16 +35,24 @@ def _make_server() -> MCPServer:
                 "type": "repository",
                 "name": "api-node-boats",
             },
-            "story": ["Structured repository story."],
+            "story": [
+                "Structured repository story.",
+                "Traffic enters through api-node-boats.qa.bgrp.io and deploys via GitOps.",
+            ],
             "story_sections": [
+                {
+                    "id": "internet",
+                    "title": "Internet",
+                    "summary": "Traffic enters through api-node-boats.qa.bgrp.io.",
+                },
                 {
                     "id": "deployment",
                     "title": "Deployment",
                     "summary": "GitOps deploys onto EKS.",
-                }
+                },
             ],
             "drilldowns": {"repo_context": {"repo_id": "repository:r_api_node_boats"}},
-            "limitations": [],
+            "limitations": ["finalization_incomplete"],
             "coverage": {"completeness_state": "partial"},
         }
     )
@@ -66,7 +75,7 @@ def _make_server() -> MCPServer:
             "drilldowns": {
                 "workload_context": {"workload_id": "workload:api-node-boats"}
             },
-            "limitations": [],
+            "limitations": ["finalization_incomplete"],
             "coverage": {"completeness_state": "partial"},
         }
     )
@@ -94,8 +103,22 @@ def _make_server() -> MCPServer:
                 "service_context": {"workload_id": "workload:api-node-boats"}
             },
             "requested_as": "service",
-            "limitations": [],
+            "limitations": ["finalization_incomplete"],
             "coverage": {"completeness_state": "partial"},
+        }
+    )
+    server.get_file_content_tool = MagicMock(
+        side_effect=lambda **kwargs: {
+            "available": True,
+            "repo_id": kwargs["repo_id"],
+            "relative_path": kwargs["relative_path"],
+            "content": "def process_payment():\n    return True\n",
+            "line_count": 2,
+            "language": "python",
+            "artifact_type": "python",
+            "template_dialect": None,
+            "iac_relevant": False,
+            "source_backend": "workspace",
         }
     )
     server.find_code_tool = MagicMock(
@@ -190,6 +213,43 @@ def _assert_programming_result(
     raise AssertionError(f"Unhandled programming case kind: {kind}")
 
 
+def _assert_story_contract(result: dict[str, object], case: dict[str, object]) -> None:
+    assert result["story"], case["prompt"]
+    assert result["story_sections"], case["prompt"]
+    assert result["drilldowns"], case["prompt"]
+    assert isinstance(result["limitations"], list), case["prompt"]
+    for section in result["story_sections"]:
+        assert section["id"], case["prompt"]
+        assert section["title"], case["prompt"]
+        assert section["summary"], case["prompt"]
+    expected_section_ids = set(case.get("expected_story_section_ids", []))
+    if expected_section_ids:
+        section_ids = {section["id"] for section in result["story_sections"]}
+        assert expected_section_ids.issubset(section_ids), case["prompt"]
+    coverage = result.get("coverage")
+    if isinstance(coverage, dict) and coverage.get("completeness_state") == "partial":
+        assert result["limitations"], case["prompt"]
+
+
+async def _assert_search_round_trip(
+    server: MCPServer, result: dict[str, object]
+) -> None:
+    ranked = result["results"]["ranked_results"]
+    assert ranked, "search should yield at least one drill-down candidate"
+    first_result = ranked[0]
+    drilldown = await server.handle_tool_call(
+        "get_file_content",
+        {
+            "repo_id": first_result["repo_id"],
+            "relative_path": first_result["relative_path"],
+        },
+    )
+    assert drilldown["available"] is True
+    assert drilldown["repo_id"] == first_result["repo_id"]
+    assert drilldown["relative_path"] == first_result["relative_path"]
+    assert "local_path" not in drilldown
+
+
 def test_story_prompt_suite_routes_through_structured_story_surfaces() -> None:
     server = _make_server()
 
@@ -199,9 +259,7 @@ def test_story_prompt_suite_routes_through_structured_story_surfaces() -> None:
                 case["mcp"]["tool_name"],
                 case["mcp"]["args"],
             )
-            assert result["story"], case["prompt"]
-            assert result["story_sections"], case["prompt"]
-            assert result["drilldowns"], case["prompt"]
+            _assert_story_contract(result, case)
 
     asyncio.run(run_cases())
 
@@ -216,5 +274,7 @@ def test_programming_prompt_suite_routes_through_code_contract_surfaces() -> Non
                 case["mcp"]["args"],
             )
             _assert_programming_result(case, result)
+            if case.get("round_trip"):
+                await _assert_search_round_trip(server, result)
 
     asyncio.run(run_cases())
