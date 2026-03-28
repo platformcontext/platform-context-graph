@@ -1,0 +1,36 @@
+CLAUDE.md
+  171ca78060f03490 1-198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "d72cd0b2536fc3dbe7374d7aede11bc67c3da1a5",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 205,
+      "total_deletions": 7,
+      "accepted_lines": 198,
+      "overriden_lines": 0
+    },
+    "81593b4ccd5630b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d2f9f-46fd-7ef3-9b79-e7d5f322917f",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 735,
+      "total_deletions": 38,
+      "accepted_lines": 734,
+      "overriden_lines": 0
+    }
+  }
+}
