@@ -20,7 +20,7 @@ DEFAULT_CONFIG = {
     "DEFAULT_DATABASE": "falkordb",
     "FALKORDB_PATH": str(CONFIG_DIR / "falkordb.db"),
     "FALKORDB_SOCKET_PATH": str(CONFIG_DIR / "falkordb.sock"),
-    "INDEX_VARIABLES": "true",
+    "INDEX_VARIABLES": "false",
     "ALLOW_DB_DELETION": "false",
     "DEBUG_LOGS": "false",
     "DEBUG_LOG_PATH": str(Path.home() / "mcp_debug.log"),

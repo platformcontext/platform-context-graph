@@ -84,6 +84,7 @@ env:
   LIBRARY_LOG_LEVEL: WARNING
   LOG_FILE_PATH: ""
   PCG_ENABLE_PUBLIC_DOCS: "false"
+  INDEX_VARIABLES: "false"
 
 contentStore:
   dsn: ""

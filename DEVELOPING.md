@@ -57,7 +57,7 @@ When a file is parsed, the registry resolves its extension to a `TreeSitterParse
 
 These parse infrastructure files — Terraform, Kubernetes manifests, Helm charts, ArgoCD, Crossplane, CloudFormation, Kustomize. They don't use tree-sitter. Instead:
 
-- **Terraform/HCL**: `HCLTerraformParser` uses regex-based block extraction with brace matching
+- **Terraform/HCL**: `HCLTerraformParser` uses tree-sitter with the HCL grammar to extract resources, modules, variables, and outputs
 - **Everything YAML-based**: `InfraYAMLParser` acts as a dispatcher, routing YAML documents to the correct semantic parser based on content detection (apiVersion, kind, filename patterns)
 
 The YAML dispatch chain:
