@@ -1,10 +1,13 @@
 """Standalone FalkorDB graph visualizer generation utility."""
 
 import os
-import json
 import platform
 from pathlib import Path
 
+from platform_context_graph.cli.visualization.core import (
+    _json_for_inline_script,
+    escape_html,
+)
 from platform_context_graph.paths import get_app_home
 
 if platform.system() == "Windows":
@@ -50,6 +53,13 @@ def generate_visualization():
         source, rel_type, target = row
         edges.append({"from": source, "to": target, "label": rel_type, "arrows": "to"})
 
+    safe_nodes = []
+    for node in nodes:
+        node_copy = dict(node)
+        if "title" in node_copy:
+            node_copy["title"] = escape_html(node_copy.get("title", ""))
+        safe_nodes.append(node_copy)
+
     html_content = f"""
 <!DOCTYPE html>
 <html>
@@ -93,8 +103,8 @@ def generate_visualization():
     <div id="mynetwork"></div>
 
     <script type="text/javascript">
-        var nodes = new vis.DataSet({json.dumps(nodes)});
-        var edges = new vis.DataSet({json.dumps(edges)});
+        var nodes = new vis.DataSet({_json_for_inline_script(safe_nodes)});
+        var edges = new vis.DataSet({_json_for_inline_script(edges)});
 
         var container = document.getElementById('mynetwork');
         var data = {{

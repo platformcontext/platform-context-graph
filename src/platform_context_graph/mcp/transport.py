@@ -37,9 +37,7 @@ class _TransportRuntime(Protocol):
         """Execute one MCP tool call and return the JSON-serializable result."""
         ...
 
-    async def _apply_repo_access_handoff(
-        self, payload: Any, *, transport: str
-    ) -> Any:
+    async def _apply_repo_access_handoff(self, payload: Any, *, transport: str) -> Any:
         """Attach repo-access handoff metadata for the active transport when needed."""
         ...
 
@@ -96,7 +94,9 @@ class ServerTransportMixin:
         request_id = body.get("id")
         request_started = time.perf_counter()
         request_success = False
-        request_id_value = str(request_id) if request_id is not None else new_request_id()
+        request_id_value = (
+            str(request_id) if request_id is not None else new_request_id()
+        )
         correlation_id = (
             (params.get("correlation_id") if isinstance(params, dict) else None)
             or (
@@ -372,8 +372,8 @@ class ServerTransportMixin:
                         "id": request_id,
                         "error": {
                             "code": -32603,
-                            "message": f"Internal error: {exc}",
-                            "data": traceback.format_exc(),
+                            "message": "Internal error",
+                            "data": {"request_id": request_id},
                         },
                     }
                     await self._send_stdio_message(error_response)

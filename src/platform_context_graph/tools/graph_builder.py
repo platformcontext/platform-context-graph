@@ -134,7 +134,7 @@ class GraphBuilder:
         repo_path: Path,
         *,
         progress_callback: Any | None = None,
-    ) -> None:
+    ) -> Any:
         """Persist a batch of parsed files in a single Neo4j transaction.
 
         Args:
@@ -142,7 +142,7 @@ class GraphBuilder:
             repo_path: Repository root path for the batch.
             progress_callback: Optional heartbeat callback invoked per file.
         """
-        _commit_file_batch_to_graph(
+        return _commit_file_batch_to_graph(
             self,
             file_data_list,
             repo_path,

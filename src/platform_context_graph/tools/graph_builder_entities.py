@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from .graph_builder_persistence_unwind import (
+    validate_cypher_label,
+    validate_cypher_property_keys,
+)
+
 
 def build_entity_merge_statement(
     *,
@@ -23,6 +28,7 @@ def build_entity_merge_statement(
     Returns:
         Tuple of ``(query, params)`` ready for ``session.run``.
     """
+    validate_cypher_label(label)
 
     params: dict[str, Any] = {
         "file_path": file_path,
@@ -30,6 +36,7 @@ def build_entity_merge_statement(
         "line_number": item["line_number"],
     }
     extra_keys = [key for key in item if key not in {"name", "line_number", "path"}]
+    validate_cypher_property_keys(extra_keys)
     params.update({key: item[key] for key in extra_keys})
 
     if use_uid_identity and item.get("uid"):

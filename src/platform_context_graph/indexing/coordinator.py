@@ -110,6 +110,20 @@ def _positive_int_env(name: str, default: int, *, maximum: int = 128) -> int:
         return default
 
 
+def _normalize_batch_commit_result(
+    commit_result: Any,
+    batch: list[dict[str, Any]],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return committed and failed file paths from one builder batch result."""
+
+    if commit_result is None:
+        return tuple(str(Path(item["path"]).resolve()) for item in batch), ()
+
+    committed = tuple(getattr(commit_result, "committed_file_paths", ()) or ())
+    failed = tuple(getattr(commit_result, "failed_file_paths", ()) or ())
+    return committed, failed
+
+
 def _parse_worker_count() -> int:
     """Return the configured repository-parse concurrency."""
 
@@ -186,25 +200,37 @@ def _commit_repository_snapshot(
             commit_kwargs: dict[str, Any] = {}
             if callable(progress_callback):
                 commit_kwargs["progress_callback"] = (
-                    lambda *,
-                    processed_files,
-                    total_files,
-                    current_file=None,
-                    committed=False: _relay_batch_progress(
+                    lambda *, processed_files, total_files, current_file=None, committed=False: _relay_batch_progress(
                         committed_offset=committed_offset,
                         batch_processed_files=processed_files,
                         current_file=current_file,
                         committed=committed,
                     )
                 )
-            builder.commit_file_batch_to_graph(batch, repo_path, **commit_kwargs)
-            committed_files += len(batch)
-            if batch:
+            commit_result = builder.commit_file_batch_to_graph(
+                batch, repo_path, **commit_kwargs
+            )
+            committed_paths, failed_paths = _normalize_batch_commit_result(
+                commit_result, batch
+            )
+            committed_files += len(committed_paths)
+            if committed_paths:
                 _relay_batch_progress(
                     committed_offset=committed_offset,
-                    batch_processed_files=len(batch),
-                    current_file=str(Path(batch[-1]["path"]).resolve()),
+                    batch_processed_files=len(committed_paths),
+                    current_file=committed_paths[-1],
                     committed=True,
+                )
+            if failed_paths:
+                failed_set = set(failed_paths)
+                snapshot.file_data[:0] = [
+                    file_data
+                    for file_data in batch
+                    if str(Path(file_data["path"]).resolve()) in failed_set
+                ]
+                raise RuntimeError(
+                    f"Failed to persist {len(failed_paths)} files for repository "
+                    f"{repo_path}: {', '.join(failed_paths)}"
                 )
         return
 
@@ -220,25 +246,32 @@ def _commit_repository_snapshot(
         commit_kwargs = {}
         if callable(progress_callback):
             commit_kwargs["progress_callback"] = (
-                lambda *,
-                processed_files,
-                total_files,
-                current_file=None,
-                committed=False: _relay_batch_progress(
+                lambda *, processed_files, total_files, current_file=None, committed=False: _relay_batch_progress(
                     committed_offset=committed_offset,
                     batch_processed_files=processed_files,
                     current_file=current_file,
                     committed=committed,
                 )
             )
-        builder.commit_file_batch_to_graph(batch, repo_path, **commit_kwargs)
-        committed_files += len(batch)
-        _relay_batch_progress(
-            committed_offset=committed_offset,
-            batch_processed_files=len(batch),
-            current_file=str(Path(batch[-1]["path"]).resolve()),
-            committed=True,
+        commit_result = builder.commit_file_batch_to_graph(
+            batch, repo_path, **commit_kwargs
         )
+        committed_paths, failed_paths = _normalize_batch_commit_result(
+            commit_result, batch
+        )
+        committed_files += len(committed_paths)
+        if committed_paths:
+            _relay_batch_progress(
+                committed_offset=committed_offset,
+                batch_processed_files=len(committed_paths),
+                current_file=committed_paths[-1],
+                committed=True,
+            )
+        if failed_paths:
+            raise RuntimeError(
+                f"Failed to persist {len(failed_paths)} files for repository "
+                f"{repo_path}: {', '.join(failed_paths)}"
+            )
 
 
 async def execute_index_run(

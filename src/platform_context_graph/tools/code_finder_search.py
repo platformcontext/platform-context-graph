@@ -210,6 +210,7 @@ class CodeFinderSearchMixin:
         Returns:
             Matching code rows.
         """
+        self._search_warnings = []
         if self._is_falkordb:
             return self._find_by_content_falkordb(search_term, repo_path)
 
@@ -276,11 +277,12 @@ class CodeFinderSearchMixin:
                     )
                     all_results.extend(result.data())
                 except Exception:
-                    logger.debug(
-                        "FalkorDB content query failed for label %s",
-                        label,
-                        exc_info=True,
+                    warning_message = (
+                        f"FalkorDB content query failed for label {label}; "
+                        "returning partial results"
                     )
+                    self._search_warnings.append(warning_message)
+                    logger.warning(warning_message, exc_info=True)
         return all_results[:20]
 
     def find_by_module_name(self, search_term: str) -> list[dict[str, Any]]:
@@ -417,6 +419,8 @@ class CodeFinderSearchMixin:
         )
         ranked_results.sort(key=lambda item: item["relevance_score"], reverse=True)
 
+        if self._search_warnings:
+            results["warnings"] = list(self._search_warnings)
         results["ranked_results"] = ranked_results[:15]
         results["total_matches"] = len(ranked_results)
         return results

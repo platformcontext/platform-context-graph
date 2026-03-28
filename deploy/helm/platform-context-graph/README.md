@@ -6,6 +6,7 @@ This chart deploys PlatformContextGraph as separate API and ingester workloads w
 - A stateless API `Deployment` for HTTP API + MCP
 - A stateful repository ingester `StatefulSet` for repo sync and indexing
 - Flexible service exposure (ClusterIP, LoadBalancer, Ingress, Gateway API)
+- Hardened defaults such as public API docs disabled unless explicitly re-enabled
 
 ## Render locally
 
@@ -18,6 +19,10 @@ helm template platform-context-graph ./deploy/helm/platform-context-graph
 ```yaml
 contentStore:
   dsn: postgresql://pcg:secret@postgres:5432/pcg
+
+apiAuth:
+  secretName: pcg-api-auth
+  key: api-key
 
 api:
   replicas: 2
@@ -42,6 +47,7 @@ repoSync:
 
 env:
   PCG_LOG_FORMAT: json
+  PCG_ENABLE_PUBLIC_DOCS: "true"
 
 observability:
   environment: dev

@@ -6,10 +6,12 @@ supporting incremental updates via git change detection.
 """
 
 import asyncio
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from .ecosystem import (
     EcosystemManifest,
@@ -28,6 +30,42 @@ from ..utils.debug_log import (
     info_logger,
     warning_logger,
 )
+
+_GITHUB_SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_GITHUB_SSH_PATTERN = re.compile(
+    r"^git@github\.com:(?P<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:\.git)?$"
+)
+
+
+def _github_clone_target(*, github_url: str, org: str, repo_name: str) -> str:
+    """Return a validated GitHub clone target suitable for ``gh repo clone``."""
+
+    candidate = github_url.strip() or f"{org}/{repo_name}"
+    if _GITHUB_SLUG_PATTERN.fullmatch(candidate):
+        return candidate
+
+    ssh_match = _GITHUB_SSH_PATTERN.fullmatch(candidate)
+    if ssh_match is not None:
+        return ssh_match.group("slug")
+
+    parsed = urlsplit(candidate)
+    if parsed.hostname != "github.com":
+        raise ValueError(f"Unsupported GitHub clone target: {candidate}")
+    if parsed.scheme not in {"https", "ssh"}:
+        raise ValueError(f"Unsupported GitHub clone target: {candidate}")
+    if parsed.query or parsed.fragment or parsed.password:
+        raise ValueError(f"Unsupported GitHub clone target: {candidate}")
+    if parsed.scheme == "https" and parsed.username:
+        raise ValueError(f"Unsupported GitHub clone target: {candidate}")
+    if parsed.scheme == "ssh" and parsed.username not in {None, "git"}:
+        raise ValueError(f"Unsupported GitHub clone target: {candidate}")
+
+    slug = parsed.path.lstrip("/")
+    if slug.endswith(".git"):
+        slug = slug[:-4]
+    if _GITHUB_SLUG_PATTERN.fullmatch(slug):
+        return slug
+    raise ValueError(f"Unsupported GitHub clone target: {candidate}")
 
 
 def _get_git_head_sha(repo_path: str) -> str:
@@ -158,14 +196,16 @@ class EcosystemIndexer:
         if missing and clone_missing:
             for repo_name in missing:
                 repo = manifest.repos[repo_name]
-                url = repo.github_url or (
-                    f"https://github.com/{manifest.org}/{repo_name}.git"
+                clone_target = _github_clone_target(
+                    github_url=repo.github_url,
+                    org=manifest.org,
+                    repo_name=repo_name,
                 )
                 clone_path = Path(base_path) / repo_name
                 info_logger(f"Cloning {repo_name} -> {clone_path}")
                 try:
                     subprocess.run(
-                        ["gh", "repo", "clone", url, str(clone_path)],
+                        ["gh", "repo", "clone", clone_target, str(clone_path)],
                         capture_output=True,
                         text=True,
                         timeout=120,

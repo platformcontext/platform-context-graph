@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from platform_context_graph.content.identity import is_content_entity_id
 from platform_context_graph.content.ingest import (
     CONTENT_ENTITY_BUCKETS,
@@ -184,6 +186,47 @@ def test_prepare_content_entries_reads_cp1252_source_text(
     assert entity_entries[0].source_cache == "$price = '£9';\n"
 
 
+def test_prepare_content_entries_skips_symlink_targets_outside_repository(
+    tmp_path: Path,
+) -> None:
+    """Content ingest should not follow repository symlinks outside the repo root."""
+
+    repo_path = tmp_path / "service"
+    repo_path.mkdir()
+    external_path = tmp_path / "external" / "secrets.py"
+    external_path.parent.mkdir()
+    external_path.write_text(
+        "def leak_secret():\n    return 'nope'\n", encoding="utf-8"
+    )
+
+    symlink_path = repo_path / "src" / "secrets.py"
+    symlink_path.parent.mkdir()
+    try:
+        symlink_path.symlink_to(external_path)
+    except OSError as exc:
+        pytest.skip(f"symlinks unavailable in test environment: {exc}")
+
+    repository = repository_metadata(
+        name="service",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/service.git",
+    )
+    file_data = {
+        "path": str(symlink_path),
+        "repo_path": str(repo_path),
+        "lang": "python",
+        "functions": [{"name": "leak_secret", "line_number": 1}],
+    }
+
+    file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert file_entry is None
+    assert entity_entries == []
+
+
 def test_prepare_content_entries_stamps_file_metadata_onto_entities(
     tmp_path: Path,
 ) -> None:
@@ -267,3 +310,11 @@ def test_content_entity_bucket_labels_include_expected_infra_and_code_types() ->
     assert "Class" in bucket_labels
     assert "K8sResource" in bucket_labels
     assert "TerraformModule" in bucket_labels
+    assert "KustomizeOverlay" in bucket_labels
+    assert "HelmValues" in bucket_labels
+    assert "TerraformProvider" in bucket_labels
+    assert "TerraformLocal" in bucket_labels
+    assert "TerragruntConfig" in bucket_labels
+    assert "CloudFormationResource" in bucket_labels
+    assert "CloudFormationParameter" in bucket_labels
+    assert "CloudFormationOutput" in bucket_labels

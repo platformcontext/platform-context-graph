@@ -84,6 +84,34 @@ def test_run_entity_unwind_rejects_invalid_extra_property_keys() -> None:
     assert tx.calls == []
 
 
+def test_run_entity_unwind_rejects_invalid_label() -> None:
+    """Dynamic Cypher labels must be validated before interpolation."""
+
+    class _Tx:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        def run(self, query: str, **kwargs) -> None:
+            self.calls.append((query, kwargs))
+
+    tx = _Tx()
+
+    with pytest.raises(ValueError, match="Invalid Cypher label"):
+        graph_builder_persistence_unwind.run_entity_unwind(
+            tx,
+            "Variable:Injected",
+            [
+                {
+                    "file_path": "/tmp/example.py",
+                    "name": "handler",
+                    "line_number": 12,
+                }
+            ],
+        )
+
+    assert tx.calls == []
+
+
 def test_run_entity_unwind_returns_batch_summary(monkeypatch) -> None:
     """Entity unwind should report row counts and elapsed time for diagnostics."""
 

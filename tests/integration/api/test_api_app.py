@@ -30,6 +30,92 @@ def test_create_app_exposes_versioned_docs_endpoints() -> None:
     assert client.get("/api/v0/redoc").status_code == 200
 
 
+def test_create_app_requires_bearer_auth_for_non_public_routes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    monkeypatch.setenv("PCG_API_KEY", "test-api-key")
+    monkeypatch.setattr(
+        api_app,
+        "describe_index_run",
+        lambda target=None: {
+            "run_id": "run-123",
+            "root_path": str(target or "/srv/repos"),
+            "status": "indexing",
+        },
+    )
+
+    app = api_app.create_app(
+        query_services_dependency=lambda: SimpleNamespace(database=object())
+    )
+
+    with TestClient(app) as client:
+        unauthorized = client.get("/api/v0/index-status")
+        wrong_token = client.get(
+            "/api/v0/index-status",
+            headers={"Authorization": "Bearer wrong-token"},
+        )
+        authorized = client.get(
+            "/api/v0/index-status",
+            headers={"Authorization": "Bearer test-api-key"},
+        )
+
+    assert unauthorized.status_code == 401
+    assert unauthorized.headers["www-authenticate"] == "Bearer"
+    assert wrong_token.status_code == 401
+    assert authorized.status_code == 200
+    assert authorized.json()["run_id"] == "run-123"
+
+
+def test_create_app_keeps_health_and_docs_public_when_bearer_auth_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    monkeypatch.setenv("PCG_API_KEY", "test-api-key")
+
+    app = api_app.create_app(
+        query_services_dependency=lambda: SimpleNamespace(database=object())
+    )
+
+    with TestClient(app) as client:
+        assert client.get("/api/v0/health").status_code == 200
+        assert client.get("/api/v0/openapi.json").status_code == 200
+        assert client.get("/api/v0/docs").status_code == 200
+        assert client.get("/api/v0/redoc").status_code == 200
+
+
+def test_create_app_can_disable_public_docs_endpoints(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    monkeypatch.setenv("PCG_ENABLE_PUBLIC_DOCS", "false")
+
+    app = api_app.create_app(
+        query_services_dependency=lambda: SimpleNamespace(database=object())
+    )
+
+    with TestClient(app) as client:
+        assert app.openapi_url is None
+        assert app.docs_url is None
+        assert app.redoc_url is None
+        assert client.get("/api/v0/health").status_code == 200
+        assert client.get("/api/v0/openapi.json").status_code == 404
+        assert client.get("/api/v0/docs").status_code == 404
+        assert client.get("/api/v0/redoc").status_code == 404
+
+
 def test_create_app_database_only_override_isolates_health_route() -> None:
     pytest.importorskip("httpx")
     from starlette.testclient import TestClient
@@ -188,6 +274,47 @@ def test_create_service_app_exposes_http_api_and_mcp_routes() -> None:
             ).status_code
             == 503
         )
+
+
+def test_create_service_app_requires_bearer_auth_for_http_mcp_routes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+    from unittest.mock import AsyncMock
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    monkeypatch.setenv("PCG_API_KEY", "test-api-key")
+    server = SimpleNamespace(
+        code_watcher=None,
+        shutdown=lambda: None,
+        _handle_jsonrpc_request=AsyncMock(
+            return_value=({"jsonrpc": "2.0", "id": 1, "result": {"tools": []}}, 200)
+        ),
+    )
+
+    app = api_app.create_service_app(
+        query_services_dependency=lambda: {"query": "services"},
+        mcp_server_dependency=lambda: server,
+    )
+
+    with TestClient(app) as client:
+        unauthorized_message = client.post(
+            "/mcp/message",
+            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+        )
+        authorized_message = client.post(
+            "/mcp/message",
+            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+            headers={"Authorization": "Bearer test-api-key"},
+        )
+        unauthorized_sse = client.get("/mcp/sse")
+
+    assert unauthorized_message.status_code == 401
+    assert authorized_message.status_code == 200
+    assert authorized_message.json()["result"] == {"tools": []}
+    assert unauthorized_sse.status_code == 401
 
 
 def test_create_service_app_starts_without_code_watcher_for_api_role() -> None:
@@ -428,6 +555,7 @@ def test_index_status_route_defaults_to_checkpoint_target(
         "default_index_status_target",
         lambda _ingester="repository": "/srv/repos",
     )
+
     def fake_describe_index_run(target=None):
         captured_target["value"] = target
         return {
@@ -463,7 +591,9 @@ def test_service_app_factory_is_exported() -> None:
     assert hasattr(api_app, "create_service_app")
 
 
-def test_create_app_exposes_bundle_import_route(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_app_exposes_bundle_import_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     pytest.importorskip("httpx")
     from starlette.testclient import TestClient
 
@@ -525,3 +655,36 @@ def test_bundle_import_route_returns_bad_request_for_invalid_bundle(
 
     assert response.status_code == 400
     assert response.json()["detail"] == "corrupt bundle"
+
+
+def test_bundle_import_route_rejects_oversized_upload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(api_app, "MAX_BUNDLE_UPLOAD_BYTES", 4, raising=False)
+    monkeypatch.setattr(
+        api_app,
+        "_import_uploaded_bundle",
+        lambda *_args, **_kwargs: {
+            "success": bool(captured.setdefault("called", True)),
+            "message": "imported",
+        },
+        raising=False,
+    )
+
+    app = api_app.create_app(database_dependency=lambda: object())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v0/bundles/import",
+            files={"bundle": ("large.pcg", b"12345", "application/octet-stream")},
+        )
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == "Bundle upload exceeds maximum allowed size."
+    assert "called" not in captured

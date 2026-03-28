@@ -28,7 +28,6 @@ dependencies = [
     "tree-sitter-language-pack==0.13.0",
     "tree-sitter-c-sharp>=0.23.1",
     "pyyaml",
-    "pytest",
     "nbformat",
     "nbconvert>=7.16.6",
     "pathspec>=0.12.1",

@@ -8,9 +8,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import importlib
+import pytest
 
 from platform_context_graph.indexing.coordinator import execute_index_run
 from platform_context_graph.indexing.coordinator_models import RepositorySnapshot
+from platform_context_graph.tools.graph_builder_persistence import BatchCommitResult
 
 
 def test_execute_index_run_parses_multiple_repositories_concurrently(
@@ -419,4 +421,72 @@ def test_commit_repository_snapshot_relays_intra_batch_heartbeats(
             "current_file": str((repo_path / "c.py").resolve()),
             "committed": True,
         },
+    ]
+
+
+def test_commit_repository_snapshot_requeues_failed_files_from_partial_batch_result(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Partial batch failures should keep failed files in the snapshot for retry."""
+
+    coordinator = importlib.import_module("platform_context_graph.indexing.coordinator")
+    repo_path = tmp_path / "payments-api"
+    snapshot = RepositorySnapshot(
+        repo_path=str(repo_path),
+        file_count=3,
+        imports_map={},
+        file_data=[
+            {"path": str(repo_path / "a.py")},
+            {"path": str(repo_path / "b.py")},
+            {"path": str(repo_path / "c.py")},
+        ],
+    )
+
+    monkeypatch.setattr(
+        coordinator,
+        "_graph_store_adapter",
+        lambda _builder: SimpleNamespace(delete_repository=lambda _repo_id: None),
+    )
+    monkeypatch.setattr(
+        coordinator,
+        "repository_metadata",
+        lambda **_kwargs: {"id": "repository:r_12345678"},
+    )
+    monkeypatch.setattr(coordinator, "git_remote_for_path", lambda _path: None)
+    monkeypatch.setenv("PCG_FILE_BATCH_SIZE", "3")
+
+    progress_updates: list[dict[str, object]] = []
+
+    builder = SimpleNamespace(
+        _content_provider=SimpleNamespace(enabled=False),
+        add_repository_to_graph=lambda *_args, **_kwargs: None,
+        commit_file_batch_to_graph=lambda batch, _repo_path, **_kwargs: BatchCommitResult(
+            committed_file_paths=(str((repo_path / "a.py").resolve()),),
+            failed_file_paths=(
+                str((repo_path / "b.py").resolve()),
+                str((repo_path / "c.py").resolve()),
+            ),
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to persist 2 files"):
+        coordinator._commit_repository_snapshot(
+            builder,
+            snapshot,
+            is_dependency=False,
+            progress_callback=lambda **kwargs: progress_updates.append(kwargs),
+        )
+
+    assert snapshot.file_data == [
+        {"path": str(repo_path / "b.py")},
+        {"path": str(repo_path / "c.py")},
+    ]
+    assert progress_updates == [
+        {
+            "processed_files": 1,
+            "total_files": 3,
+            "current_file": str((repo_path / "a.py").resolve()),
+            "committed": True,
+        }
     ]

@@ -8,9 +8,73 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from neo4j import READ_ACCESS
 from neo4j.exceptions import CypherSyntaxError
 
 from ....utils.debug_log import debug_log
+
+_READ_ONLY_QUERY_ERROR = (
+    "This tool only supports read-only queries. Prohibited clauses like CREATE, "
+    "MERGE, DELETE, CALL, FOREACH, and LOAD CSV are not allowed."
+)
+_READ_ONLY_BLOCKED_PATTERNS = (
+    r"\bCREATE\b",
+    r"\bMERGE\b",
+    r"\bDELETE\b",
+    r"\bSET\b",
+    r"\bREMOVE\b",
+    r"\bDROP\b",
+    r"\bFOREACH\b",
+    r"\bLOAD\s+CSV\b",
+    r"\bCALL\b",
+)
+_STRING_LITERAL_PATTERN = r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\''  # noqa: W605
+_COMMENT_PATTERN = r"//.*?$|/\*.*?\*/"
+
+
+def _query_is_read_only(cypher_query: str) -> bool:
+    """Return `True` when a Cypher statement stays within the read-only contract."""
+
+    query_without_strings = re.sub(_STRING_LITERAL_PATTERN, "", cypher_query)
+    sanitized_query = re.sub(
+        _COMMENT_PATTERN,
+        "",
+        query_without_strings,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    return not any(
+        re.search(pattern, sanitized_query, re.IGNORECASE)
+        for pattern in _READ_ONLY_BLOCKED_PATTERNS
+    )
+
+
+def _read_only_query_error() -> dict[str, str]:
+    """Return the standard error payload for blocked Cypher queries."""
+
+    return {"error": _READ_ONLY_QUERY_ERROR}
+
+
+def _open_read_session(db_manager):
+    """Open the safest available read-oriented session for the active backend."""
+
+    driver = db_manager.get_driver()
+    backend_type = getattr(db_manager, "get_backend_type", lambda: "")().lower()
+    if backend_type == "neo4j":
+        return driver.session(default_access_mode=READ_ACCESS)
+    return driver.session()
+
+
+def _serialize_json_for_inline_script(value: object) -> str:
+    """Serialize JSON safely for embedding inside an inline HTML script block."""
+
+    return (
+        json.dumps(value)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
 
 
 def execute_cypher_query(db_manager, **args: Any) -> dict[str, Any]:
@@ -24,34 +88,12 @@ def execute_cypher_query(db_manager, **args: Any) -> dict[str, Any]:
     if not cypher_query:
         return {"error": "Cypher query cannot be empty."}
 
-    # Safety Check: Prevent any write operations to the database.
-    # This check first removes all string literals and then checks for forbidden keywords.
-    forbidden_keywords = [
-        "CREATE",
-        "MERGE",
-        "DELETE",
-        "SET",
-        "REMOVE",
-        "DROP",
-        "CALL apoc",
-    ]
-
-    # Regex to match single or double quoted strings, handling escaped quotes.
-    string_literal_pattern = r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\''
-
-    # Remove all string literals from the query.
-    query_without_strings = re.sub(string_literal_pattern, "", cypher_query)
-
-    # Now, check for forbidden keywords in the query without strings.
-    for keyword in forbidden_keywords:
-        if re.search(r"\b" + keyword + r"\b", query_without_strings, re.IGNORECASE):
-            return {
-                "error": "This tool only supports read-only queries. Prohibited keywords like CREATE, MERGE, DELETE, SET, etc., are not allowed."
-            }
+    if not _query_is_read_only(cypher_query):
+        return _read_only_query_error()
 
     try:
         debug_log(f"Executing Cypher query: {cypher_query}")
-        with db_manager.get_driver().session() as session:
+        with _open_read_session(db_manager) as session:
             result = session.run(cypher_query)
             # Convert results to a list of dictionaries for clean JSON serialization.
             records = [record.data() for record in result]
@@ -83,6 +125,8 @@ def visualize_graph_query(db_manager, **args: Any) -> dict[str, Any]:
     cypher_query = args.get("cypher_query")
     if not cypher_query:
         return {"error": "Cypher query cannot be empty."}
+    if not _query_is_read_only(cypher_query):
+        return _read_only_query_error()
 
     # Check DB Type: FalkorDBManager vs DatabaseManager vs KuzuDBManager
     is_falkor = "FalkorDB" in db_manager.__class__.__name__
@@ -94,7 +138,7 @@ def visualize_graph_query(db_manager, **args: Any) -> dict[str, Any]:
             data_edges = []
             seen_nodes = set()
 
-            with db_manager.get_driver().session() as session:
+            with _open_read_session(db_manager) as session:
                 result = session.run(cypher_query)
                 for record in result:
                     # Iterate all values in the record to find Nodes and Relationships
@@ -146,6 +190,9 @@ def visualize_graph_query(db_manager, **args: Any) -> dict[str, Any]:
                                 {"from": src, "to": dst, "label": lbl, "arrows": "to"}
                             )
 
+            nodes_json = _serialize_json_for_inline_script(data_nodes)
+            edges_json = _serialize_json_for_inline_script(data_edges)
+
             # Generate HTML
             html_content = f"""
 <!DOCTYPE html>
@@ -160,8 +207,8 @@ def visualize_graph_query(db_manager, **args: Any) -> dict[str, Any]:
 <body>
   <div id="mynetwork"></div>
   <script type="text/javascript">
-    var nodes = new vis.DataSet({json.dumps(data_nodes)});
-    var edges = new vis.DataSet({json.dumps(data_edges)});
+    var nodes = new vis.DataSet({nodes_json});
+    var edges = new vis.DataSet({edges_json});
     var container = document.getElementById('mynetwork');
     var data = {{ nodes: nodes, edges: edges }};
     var options = {{

@@ -50,3 +50,42 @@ def test_visualize_helper_uses_packaged_viz_dist_directory(
         static_dir=str(dist_dir),
     )
     db_manager.close_driver.assert_called_once()
+
+
+def test_write_legacy_visualization_escapes_script_breakout_payloads(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Legacy visualization HTML should escape inline-script and tooltip payloads."""
+
+    fake_console = MagicMock()
+    fake_api = SimpleNamespace(console=fake_console)
+    opened_urls: list[str] = []
+    payload = "</script><script>alert(1)</script>"
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(visualization, "_api", lambda: fake_api)
+    monkeypatch.setattr(
+        visualization.webbrowser,
+        "open",
+        lambda url: opened_urls.append(url),
+    )
+
+    visualization._write_legacy_visualization(
+        [
+            {
+                "id": "n-1",
+                "label": payload,
+                "group": "Repository",
+                "title": payload,
+            }
+        ],
+        [],
+        "Test Viz",
+    )
+
+    html = (tmp_path / "codegraph_viz.html").read_text(encoding="utf-8")
+
+    assert payload not in html
+    assert r"<\/script><script>alert(1)<\/script>" in html
+    assert "&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert opened_urls == [f"file://{(tmp_path / 'codegraph_viz.html').resolve()}"]

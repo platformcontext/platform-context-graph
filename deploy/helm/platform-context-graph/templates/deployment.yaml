@@ -23,6 +23,8 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "pcg.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -40,9 +42,15 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["pcg", "serve", "start", "--host", "0.0.0.0", "--port", {{ .Values.service.port | quote }}]
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           env:
             - name: PCG_RUNTIME_ROLE
               value: "api"
+            - name: PCG_HOME
+              value: /tmp/.platform-context-graph
+            - name: HOME
+              value: /tmp
             - name: PYTHONUNBUFFERED
               value: "1"
             - name: NEO4J_URI
@@ -59,6 +67,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.neo4j.auth.secretName }}
                   key: {{ .Values.neo4j.auth.passwordKey }}
+            - name: PCG_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.apiAuth.secretName }}
+                  key: {{ .Values.apiAuth.key }}
             {{- include "pcg.renderEnvMap" .Values.env | nindent 12 }}
           ports:
             - name: http
@@ -78,3 +91,9 @@ spec:
             periodSeconds: 15
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

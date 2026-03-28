@@ -47,7 +47,9 @@ def _make_builder() -> GraphBuilder:
 
 def _config_value(key: str) -> str | None:
     if key == "IGNORE_DIRS":
-        return "venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__"
+        return (
+            "venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__"
+        )
     if key == "PCG_IGNORE_DEPENDENCY_DIRS":
         return "true"
     if key == "PCG_HONOR_GITIGNORE":
@@ -646,6 +648,7 @@ def test_add_repository_to_graph_persists_remote_first_repository_metadata(
     session = MagicMock()
     session.__enter__ = MagicMock(return_value=session)
     session.__exit__ = MagicMock(return_value=False)
+    session.execute_write.side_effect = lambda callback: callback(session)
     session.run.side_effect = [
         MagicMock(single=MagicMock(return_value=None)),
         MagicMock(single=MagicMock(return_value=None)),
@@ -666,8 +669,9 @@ def test_add_repository_to_graph_persists_remote_first_repository_metadata(
     query = session.run.call_args_list[-1].args[0]
     params = session.run.call_args_list[-1].kwargs["parameters"]
 
-    assert "CREATE (r:Repository {path: $repo_path})" in query
-    assert "SET r.id = $repo_id" in query
+    assert "MERGE (r:Repository {id: $repo_id})" in query
+    assert "ON CREATE SET r.path = $repo_path" in query
+    assert "ON MATCH SET r.path = $repo_path" in query
     assert params["repo_id"].startswith("repository:r_")
     assert params["name"] == "payments-api"
     assert params["local_path"] == str(repo_path.resolve())
@@ -686,8 +690,10 @@ def test_add_repository_to_graph_adopts_existing_path_only_repository(
     session = MagicMock()
     session.__enter__ = MagicMock(return_value=session)
     session.__exit__ = MagicMock(return_value=False)
+    session.execute_write.side_effect = lambda callback: callback(session)
     session.run.side_effect = [
-        MagicMock(single=MagicMock(return_value={"id": None})),
+        MagicMock(single=MagicMock(return_value={"existing_id": None})),
+        MagicMock(single=MagicMock(return_value=None)),
         None,
     ]
     builder.driver = MagicMock()
@@ -702,12 +708,92 @@ def test_add_repository_to_graph_adopts_existing_path_only_repository(
 
     builder.add_repository_to_graph(repo_path)
 
-    assert session.run.call_count == 2
+    assert session.run.call_count == 3
     lookup_query = session.run.call_args_list[0].args[0]
-    update_query = session.run.call_args_list[1].args[0]
-    params = session.run.call_args_list[1].kwargs["parameters"]
+    update_query = session.run.call_args_list[2].args[0]
+    params = session.run.call_args_list[2].kwargs["parameters"]
 
     assert "MATCH (r:Repository {path: $repo_path})" in lookup_query
-    assert "WHERE r.path = $repo_path OR r.id = $repo_id" in update_query
+    assert "MATCH (r:Repository {path: $repo_path})" in update_query
+    assert "SET r.id = $repo_id" in update_query
     assert params["repo_id"].startswith("repository:r_")
     assert params["repo_path"] == str(repo_path.resolve())
+
+
+def test_add_repository_to_graph_reconciles_legacy_path_only_repository_conflict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Legacy path-only repository nodes should be merged into the canonical node."""
+
+    builder = GraphBuilder.__new__(GraphBuilder)
+    session = MagicMock()
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+    session.execute_write.side_effect = lambda callback: callback(session)
+    session.run.side_effect = [
+        MagicMock(single=MagicMock(return_value={"existing_id": None})),
+        MagicMock(
+            single=MagicMock(
+                return_value={"existing_path": str((tmp_path / "other").resolve())}
+            )
+        ),
+        *([None] * 32),
+    ]
+    builder.driver = MagicMock()
+    builder.driver.session.return_value = session
+
+    repo_path = tmp_path / "payments-api"
+    repo_path.mkdir()
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.git_remote_for_path",
+        lambda _path: "git@github.com:platformcontext/payments-api.git",
+    )
+
+    builder.add_repository_to_graph(repo_path)
+
+    queries = [call.args[0] for call in session.run.call_args_list]
+
+    assert any(
+        "MERGE (winner)-[merged:REPO_CONTAINS]->(target)" in query for query in queries
+    )
+    assert any(
+        "MERGE (winner)-[merged:CONTAINS]->(target)" in query for query in queries
+    )
+    assert any("DETACH DELETE loser" in query for query in queries)
+    assert any("SET winner.path = $repo_path" in query for query in queries)
+
+
+def test_add_repository_to_graph_rejects_path_and_id_conflict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Conflicting canonical identities should still fail with a clear error."""
+
+    builder = GraphBuilder.__new__(GraphBuilder)
+    session = MagicMock()
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+    session.execute_write.side_effect = lambda callback: callback(session)
+    session.run.side_effect = [
+        MagicMock(
+            single=MagicMock(
+                return_value={"existing_id": "repository:r_previous_checkout"}
+            )
+        ),
+        MagicMock(
+            single=MagicMock(
+                return_value={"existing_path": str((tmp_path / "other").resolve())}
+            )
+        ),
+    ]
+    builder.driver = MagicMock()
+    builder.driver.session.return_value = session
+
+    repo_path = tmp_path / "payments-api"
+    repo_path.mkdir()
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.git_remote_for_path",
+        lambda _path: "git@github.com:platformcontext/payments-api.git",
+    )
+
+    with pytest.raises(RuntimeError, match="Repository identity conflict"):
+        builder.add_repository_to_graph(repo_path)
