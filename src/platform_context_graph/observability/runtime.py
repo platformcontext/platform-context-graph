@@ -16,6 +16,7 @@ from .otel import (
     ActiveStateKey,
     FastAPI,
     FastAPIInstrumentor,
+    Observation,
     REQUEST_CONTEXT_UNSET,
     MeterProvider,
     MetricReader,
@@ -27,6 +28,8 @@ from .otel import (
     current_transport,
     request_context_scope,
 )
+
+_MEMORY_UNSET = -1
 
 
 @dataclass(slots=True)
@@ -75,6 +78,9 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         init=False,
         default_factory=dict,
     )
+    _process_rss_bytes: int = field(init=False, default=_MEMORY_UNSET)
+    _cgroup_memory_bytes: int = field(init=False, default=_MEMORY_UNSET)
+    _cgroup_memory_limit_bytes: int = field(init=False, default=_MEMORY_UNSET)
     http_requests_total: Any = field(init=False, default=None)
     http_request_duration: Any = field(init=False, default=None)
     http_request_errors_total: Any = field(init=False, default=None)
@@ -254,6 +260,56 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
             "pcg_index_parse_tasks_active",
             callbacks=[self._observe_index_parse_tasks_active],
         )
+        for gauge_name, attr_name, description in (
+            (
+                "pcg_process_rss_bytes",
+                "_process_rss_bytes",
+                "Process RSS memory in bytes",
+            ),
+            (
+                "pcg_cgroup_memory_bytes",
+                "_cgroup_memory_bytes",
+                "Cgroup current memory in bytes",
+            ),
+            (
+                "pcg_cgroup_memory_limit_bytes",
+                "_cgroup_memory_limit_bytes",
+                "Cgroup memory limit in bytes",
+            ),
+        ):
+            self.meter.create_observable_gauge(
+                gauge_name,
+                callbacks=[self._make_memory_observer(attr_name)],
+                unit="By",
+                description=description,
+            )
+
+    def record_memory_usage(self, sample: Any) -> None:
+        """Store the latest memory sample for gauge observation.
+
+        Args:
+            sample: A ``MemoryUsageSample`` instance from memory_diagnostics.
+        """
+
+        if sample.rss_bytes is not None:
+            self._process_rss_bytes = sample.rss_bytes
+        if sample.cgroup_memory_bytes is not None:
+            self._cgroup_memory_bytes = sample.cgroup_memory_bytes
+        if getattr(sample, "cgroup_memory_limit_bytes", None) is not None:
+            self._cgroup_memory_limit_bytes = sample.cgroup_memory_limit_bytes
+
+    def _make_memory_observer(self, attr_name: str) -> Any:
+        """Return a gauge callback that reads one memory field by attribute name."""
+
+        def _observe(_options: Any) -> list[Observation]:
+            """Yield a single observation for the named memory gauge field."""
+
+            value = getattr(self, attr_name, _MEMORY_UNSET)
+            if value == _MEMORY_UNSET:
+                return []
+            return [Observation(value, {})]
+
+        return _observe
 
     def shutdown(self) -> None:
         """Shut down the configured meter and tracer providers."""
