@@ -217,13 +217,27 @@ ECOSYSTEM_TOOLS = {
     },
     "get_repo_context": {
         "name": "get_repo_context",
-        "description": "Get complete context for a repository in a single call: recursive file counts, code entities, infrastructure resources, canonical platform/runtime relationships, deployment chains, ecosystem info, and a concise coverage summary with stable limitation codes. Use canonical repository IDs only. If completeness_state is not complete, report the missing coverage instead of implying the repo lacks those files or entities.",
+        "description": "Get complete context for a repository in a single call: recursive file counts, code entities, infrastructure resources, canonical platform/runtime relationships, deployment chains, ecosystem info, and a concise coverage summary with stable limitation codes. Accepts either a canonical repository ID or a plain repository name/slug. If completeness_state is not complete, report the missing coverage instead of implying the repo lacks those files or entities.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "repo_id": {
                     "type": "string",
-                    "description": "Canonical repository identifier.",
+                    "description": "Canonical repository identifier or plain repository name.",
+                }
+            },
+            "required": ["repo_id"],
+        },
+    },
+    "get_repo_story": {
+        "name": "get_repo_story",
+        "description": "Get a structured story for a repository: subject, story lines, story sections, deployment or code overviews, evidence, limitations, coverage, and drill-down handles. Accepts either a canonical repository ID or a plain repository name/slug.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "repo_id": {
+                    "type": "string",
+                    "description": "Canonical repository identifier or plain repository name.",
                 }
             },
             "required": ["repo_id"],

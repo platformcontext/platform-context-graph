@@ -182,10 +182,10 @@ class CodeFinderDispatchMixin:
             elif query_type in ["module_deps", "module_dependencies", "module_usage"]:
                 results = self.find_module_dependencies(target, repo_path=repo_path)
                 return {
-                    "query_type": "module_dependencies",
+                    "query_type": "module_deps",
                     "target": target,
                     "results": results,
-                    "summary": f"Module '{target}' is imported by {len(results['imported_by_files'])} files",
+                    "summary": f"Module '{target}' is imported by {len(results['importers'])} files",
                 }
 
             elif query_type in ["variable_scope", "var_scope", "variable_usage_scope"]:

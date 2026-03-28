@@ -5,6 +5,78 @@ from unittest.mock import patch
 from platform_context_graph.mcp import MCPServer
 
 
+def test_get_repo_story_tool_surfaces_story_contract() -> None:
+    server = MCPServer.__new__(MCPServer)
+    server.db_manager = object()
+
+    with patch(
+        "platform_context_graph.mcp.query_tools.repository_queries.get_repository_story",
+        return_value={
+            "subject": {
+                "id": "repository:r_api_node_boats",
+                "type": "repository",
+                "name": "api-node-boats",
+            },
+            "story": ["api-node-boats is exposed through api-node-boats.qa.bgrp.io."],
+            "story_sections": [
+                {
+                    "id": "internet",
+                    "title": "Internet",
+                    "summary": "Traffic enters through api-node-boats.qa.bgrp.io.",
+                }
+            ],
+            "deployment_overview": {"platforms": [{"kind": "eks"}]},
+            "evidence": [],
+            "limitations": ["dns_unknown"],
+            "coverage": {"completeness_state": "partial"},
+            "drilldowns": {"repo_context": {"repo_id": "repository:r_api_node_boats"}},
+        },
+    ) as mock_story:
+        result = server.get_repo_story_tool(repo_id="api-node-boats")
+
+    mock_story.assert_called_once_with(server.db_manager, repo_id="api-node-boats")
+    assert result["subject"]["name"] == "api-node-boats"
+    assert result["story_sections"][0]["id"] == "internet"
+
+
+def test_workload_and_service_story_tools_route_through_context_queries() -> None:
+    server = MCPServer.__new__(MCPServer)
+    server.db_manager = object()
+
+    with patch(
+        "platform_context_graph.mcp.query_tools.context_queries.get_workload_story",
+        return_value={"subject": {"id": "workload:payments-api"}, "story": []},
+    ) as mock_workload_story, patch(
+        "platform_context_graph.mcp.query_tools.context_queries.get_service_story",
+        return_value={
+            "subject": {"id": "workload:payments-api"},
+            "story": [],
+            "requested_as": "service",
+        },
+    ) as mock_service_story:
+        workload_result = server.get_workload_story_tool(
+            workload_id="payments-api",
+            environment="prod",
+        )
+        service_result = server.get_service_story_tool(
+            workload_id="payments-api",
+            environment="prod",
+        )
+
+    mock_workload_story.assert_called_once_with(
+        server.db_manager,
+        workload_id="payments-api",
+        environment="prod",
+    )
+    mock_service_story.assert_called_once_with(
+        server.db_manager,
+        workload_id="payments-api",
+        environment="prod",
+    )
+    assert workload_result["subject"]["id"] == "workload:payments-api"
+    assert service_result["requested_as"] == "service"
+
+
 def test_get_repo_summary_tool_surfaces_platforms_and_limitations() -> None:
     server = MCPServer.__new__(MCPServer)
     server.db_manager = object()

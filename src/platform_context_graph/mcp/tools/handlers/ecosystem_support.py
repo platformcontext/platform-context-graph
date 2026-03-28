@@ -11,7 +11,6 @@ from .ecosystem_support_overview import (
 )
 from .ecosystem_support_provisioning import group_provisioning_source_chains
 
-
 def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return rows with duplicates removed while preserving order."""
     seen: set[tuple[tuple[str, str], ...]] = set()
@@ -42,14 +41,12 @@ def _canonical_source_repositories(context: dict[str, Any]) -> list[dict[str, An
         deduped.append(row)
     return deduped
 
-
 def _split_csv(value: Any) -> list[str]:
     """Return non-empty trimmed CSV tokens from one raw value."""
 
     if not value:
         return []
     return [part.strip() for part in str(value).split(",") if part.strip()]
-
 
 def _source_repo_name_hints(
     *,
@@ -405,9 +402,19 @@ def trace_deployment_chain(
         for row in _dedupe_rows(tf_modules_raw)
     ]
     terragrunt_configs = _dedupe_rows(terragrunt_configs)
+    relevant_provisioning_repositories = {
+        repository
+        for row in [*terraform, *tf_modules]
+        if (repository := str(row.get("repository") or "").strip())
+    }
+    if relevant_provisioning_repositories:
+        terragrunt_configs = [
+            row for row in terragrunt_configs
+            if str(row.get("repository") or "").strip()
+            in relevant_provisioning_repositories
+        ]
     provisioning_source_chains = group_provisioning_source_chains(
-        terraform_modules=tf_modules_raw,
-        terragrunt_configs=terragrunt_configs,
+        terraform_modules=tf_modules_raw, terragrunt_configs=terragrunt_configs
     )
 
     limitations = list(context.get("limitations") or [])

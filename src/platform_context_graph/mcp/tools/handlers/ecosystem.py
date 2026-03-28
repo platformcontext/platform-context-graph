@@ -102,6 +102,8 @@ def find_blast_radius(
         else:
             return {"error": f"Unknown target_type: {target_type}"}
 
+    affected = [row for row in affected if row.get("repo") is not None]
+
     result: dict[str, Any] = {
         "target": target,
         "target_type": target_type,

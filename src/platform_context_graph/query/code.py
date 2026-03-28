@@ -22,7 +22,6 @@ __all__ = [
     "find_dead_code",
     "get_complexity",
 ]
-
 _LEGACY_DEFAULT_EDIT_DISTANCE = 2
 _QUERY_SCOPES = {"repo", "workspace", "ecosystem", "auto"}
 _QUERY_TYPE_ALIASES = {
@@ -161,7 +160,8 @@ def _repository_root_candidates(
 
     db_manager = _get_db_manager(database)
     with db_manager.get_driver().session() as session:
-        repositories = session.run(f"""
+        repositories = session.run(
+            f"""
             MATCH (r:Repository)
             RETURN {_repository_projection()}
             ORDER BY r.name
@@ -274,6 +274,36 @@ def _portable_result(
     return portable
 
 
+def _normalize_module_dependency_result(result: Any) -> Any:
+    """Add canonical drill-down aliases to module dependency query results."""
+
+    if not isinstance(result, dict):
+        return result
+
+    importers = result.get("importers")
+    if not isinstance(importers, list):
+        return result
+
+    normalized_importers: list[Any] = []
+    for importer in importers:
+        if not isinstance(importer, dict):
+            normalized_importers.append(importer)
+            continue
+
+        normalized_importer = dict(importer)
+        if "relative_path" not in normalized_importer:
+            relative_path = normalized_importer.get("importer_file_relative_path")
+            if isinstance(relative_path, str):
+                normalized_importer["relative_path"] = relative_path
+            else:
+                path_value = normalized_importer.get("importer_file_path")
+                if isinstance(path_value, str):
+                    normalized_importer["relative_path"] = path_value
+        normalized_importers.append(normalized_importer)
+
+    return {**result, "importers": normalized_importers}
+
+
 def search_code(
     database: Any,
     *,
@@ -368,7 +398,7 @@ def get_code_relationships(
             context,
             repo_path=_legacy_repo_path(finder, scope_repo_id),
         )
-        return _portable_result(
+        portable_result = _portable_result(
             result,
             (
                 _resolve_repo_metadata(finder, scope_repo_id)
@@ -377,23 +407,32 @@ def get_code_relationships(
             ),
             database=finder,
         )
+        if normalized_query_type in {"module_deps", "module_dependencies"}:
+            portable_result = _normalize_module_dependency_result(portable_result)
+        return portable_result
 
 
 def find_dead_code(
     database: Any,
     *,
-    repo_path: str | None = None,
+    repo_id: str | None = None,
+    scope: Literal["repo", "workspace", "ecosystem", "auto"] | str = "auto",
     exclude_decorated_with: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Find potentially unused code within an optional repository scope."""
     with trace_query("dead_code"):
         finder = _get_code_finder(database, "find_dead_code")
+        scope_repo_id = _resolve_query_scope(repo_id=repo_id, scope=scope)
         return _portable_result(
             finder.find_dead_code(
                 exclude_decorated_with=list(exclude_decorated_with or []),
-                repo_path=repo_path,
+                repo_path=_legacy_repo_path(finder, scope_repo_id),
             ),
-            None,
+            (
+                _resolve_repo_metadata(finder, scope_repo_id)
+                if scope_repo_id is not None
+                else None
+            ),
             database=finder,
         )
 

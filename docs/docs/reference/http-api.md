@@ -82,6 +82,55 @@ This is an alias route. It still accepts a canonical workload ID:
 
 Service alias responses include `requested_as=service`.
 
+## Story API
+
+Use the story routes when the caller wants a structured narrative first and
+evidence second.
+
+Story responses are shaped around:
+
+- `subject`
+- `story`
+- `story_sections`
+- `deployment_overview` or `code_overview`
+- `evidence`
+- `limitations`
+- `coverage`
+- `drilldowns`
+
+HTTP story routes stay canonical-ID based. If the caller starts with a fuzzy
+name or alias, resolve first and then call the story route.
+
+### Get repository story
+
+`GET /api/v0/repositories/{id}/story`
+
+Example:
+
+- `GET /api/v0/repositories/repository:r_ab12cd34/story`
+
+### Get workload story
+
+`GET /api/v0/workloads/{id}/story`
+
+Examples:
+
+- `GET /api/v0/workloads/workload:payments-api/story`
+- `GET /api/v0/workloads/workload:payments-api/story?environment=prod`
+
+### Get service story
+
+`GET /api/v0/services/{id}/story`
+
+Examples:
+
+- `GET /api/v0/services/workload:payments-api/story`
+- `GET /api/v0/services/workload:payments-api/story?environment=prod`
+
+Treat the story routes as the top-level contract for repo/service/workload
+narratives. Use the context routes, trace routes, and content routes named in
+`drilldowns` for follow-up evidence.
+
 ## Code API
 
 Use these routes when you only need code relationships and do not need the full code-to-cloud graph.
@@ -90,6 +139,10 @@ Use these routes when you only need code relationships and do not need the full 
 - `POST /api/v0/code/relationships`
 - `POST /api/v0/code/dead-code`
 - `POST /api/v0/code/complexity`
+
+Public code-query requests use canonical `repo_id` whenever a repository scope
+is part of the request. Results should be interpreted using `repo_id +
+relative_path`, not absolute server-local paths.
 
 Example code-only workflow:
 
@@ -101,6 +154,17 @@ Example code-only workflow:
   "repo_id": "repository:r_ab12cd34",
   "exact": false,
   "limit": 10
+}
+```
+
+Example dead-code workflow:
+
+`POST /api/v0/code/dead-code`
+
+```json
+{
+  "repo_id": "repository:r_ab12cd34",
+  "scope": "repo"
 }
 ```
 
@@ -167,6 +231,7 @@ These routes are for tracing shared infrastructure, blast radius, dependency exp
 
 - `GET /api/v0/repositories`
 - `GET /api/v0/repositories/{id}/context`
+- `GET /api/v0/repositories/{id}/story`
 - `GET /api/v0/repositories/{id}/stats`
 
 Repository routes also require canonical repository IDs.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 
 from ...domain.entities import EntityType
+from ...domain.responses import StoryResponse
 from ..dependencies import QueryServices, get_query_services
 from ._shared import (
     invalid_canonical_id_response,
@@ -42,6 +43,33 @@ def get_repository_context(
         return invalid_canonical_id_response(request, kind="repository")
 
     result = services.repositories.get_repository_context(
+        services.database,
+        repo_id=repo_id,
+    )
+    if service_result_has_error(result):
+        return service_error_response(
+            request, detail=result["error"], not_found_title="Repository not found"
+        )
+    return result
+
+
+@router.get(
+    "/{repo_id:path}/story",
+    response_model=StoryResponse,
+    response_model_exclude_none=True,
+    responses=problem_detail_responses(400, 404),
+)
+def get_repository_story(
+    repo_id: str,
+    request: Request,
+    services: QueryServices = Depends(get_query_services),
+):
+    """Return a structured story for a canonical repository identifier."""
+
+    if not is_canonical_id_for_type(repo_id, EntityType.repository):
+        return invalid_canonical_id_response(request, kind="repository")
+
+    result = services.repositories.get_repository_story(
         services.database,
         repo_id=repo_id,
     )

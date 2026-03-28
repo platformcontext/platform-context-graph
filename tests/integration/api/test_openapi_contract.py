@@ -49,6 +49,24 @@ SERVICE_CONTEXT = {
     "requested_as": "service",
 }
 
+STORY_RESPONSE = {
+    "subject": WORKLOAD_CONTEXT["workload"],
+    "story": ["payments-api serves card-present transactions in prod."],
+    "story_sections": [
+        {
+            "id": "runtime",
+            "title": "Runtime",
+            "summary": "prod instance runs in EKS.",
+            "items": [WORKLOAD_CONTEXT["instance"]],
+        }
+    ],
+    "deployment_overview": {"instances": [WORKLOAD_CONTEXT["instance"]]},
+    "evidence": [],
+    "limitations": [],
+    "coverage": None,
+    "drilldowns": {"workload_context": {"workload_id": "workload:payments-api"}},
+}
+
 ENTITY_CONTEXT = {
     "entity": WORKLOAD_CONTEXT["workload"],
     **WORKLOAD_CONTEXT,
@@ -74,6 +92,11 @@ def _make_query_services() -> object:
             get_entity_context=lambda *_args, **_kwargs: ENTITY_CONTEXT,
             get_workload_context=lambda *_args, **_kwargs: WORKLOAD_CONTEXT,
             get_service_context=lambda *_args, **_kwargs: SERVICE_CONTEXT,
+            get_workload_story=lambda *_args, **_kwargs: STORY_RESPONSE,
+            get_service_story=lambda *_args, **_kwargs: {
+                **STORY_RESPONSE,
+                "requested_as": "service",
+            },
         ),
         impact=SimpleNamespace(
             trace_resource_to_code=lambda *_args, **_kwargs: {"paths": []},
@@ -104,6 +127,17 @@ def _make_query_services() -> object:
             list_repositories=lambda *_args, **_kwargs: {"repositories": []},
             get_repository_context=lambda *_args, **_kwargs: {
                 "repository": {"name": "payments-api"}
+            },
+            get_repository_story=lambda *_args, **_kwargs: {
+                **STORY_RESPONSE,
+                "subject": {
+                    "id": "repository:r_ab12cd34",
+                    "type": "repository",
+                    "name": "payments-api",
+                },
+                "drilldowns": {
+                    "repo_context": {"repo_id": "repository:r_ab12cd34"}
+                },
             },
             get_repository_stats=lambda *_args, **_kwargs: {
                 "success": True,
@@ -136,11 +170,23 @@ def test_openapi_uses_typed_response_models_for_context_and_resolve_routes() -> 
     service_schema = schema["paths"]["/api/v0/services/{workload_id}/context"]["get"][
         "responses"
     ]["200"]["content"]["application/json"]["schema"]
+    workload_story_schema = schema["paths"]["/api/v0/workloads/{workload_id}/story"][
+        "get"
+    ]["responses"]["200"]["content"]["application/json"]["schema"]
+    service_story_schema = schema["paths"]["/api/v0/services/{workload_id}/story"][
+        "get"
+    ]["responses"]["200"]["content"]["application/json"]["schema"]
+    repository_story_schema = schema["paths"]["/api/v0/repositories/{repo_id}/story"][
+        "get"
+    ]["responses"]["200"]["content"]["application/json"]["schema"]
 
     assert resolve_schema["$ref"] == "#/components/schemas/ResolveEntityResponse"
     assert entity_schema["$ref"] == "#/components/schemas/EntityContextResponse"
     assert workload_schema["$ref"] == "#/components/schemas/WorkloadContextResponse"
     assert service_schema["$ref"] == "#/components/schemas/WorkloadContextResponse"
+    assert workload_story_schema["$ref"] == "#/components/schemas/StoryResponse"
+    assert service_story_schema["$ref"] == "#/components/schemas/StoryResponse"
+    assert repository_story_schema["$ref"] == "#/components/schemas/StoryResponse"
 
 
 def test_service_and_workload_routes_stay_aligned_for_environment_context() -> None:
@@ -176,6 +222,9 @@ def test_openapi_examples_cover_service_alias_and_code_only_workflows() -> None:
     code_search_examples = schema["paths"]["/api/v0/code/search"]["post"][
         "requestBody"
     ]["content"]["application/json"]["examples"]
+    repo_story_examples = schema["paths"]["/api/v0/repositories/{repo_id}/story"][
+        "get"
+    ]["responses"]["200"]["content"]["application/json"]["examples"]
 
     assert service_examples["service_alias"]["value"]["requested_as"] == "service"
     assert (
@@ -196,6 +245,10 @@ def test_openapi_examples_cover_service_alias_and_code_only_workflows() -> None:
         "exact": False,
         "limit": 10,
     }
+    assert (
+        repo_story_examples["repository_story"]["value"]["subject"]["id"]
+        == "repository:r_ab12cd34"
+    )
 
 
 def test_openapi_examples_match_live_service_alias_response_shape() -> None:
@@ -219,7 +272,10 @@ def test_openapi_exposes_query_routes_without_deployment_control_endpoints() -> 
     paths = schema["paths"]
     assert "/api/v0/repositories" in paths
     assert "/api/v0/repositories/{repo_id}/context" in paths
+    assert "/api/v0/repositories/{repo_id}/story" in paths
     assert "/api/v0/repositories/{repo_id}/stats" in paths
+    assert "/api/v0/workloads/{workload_id}/story" in paths
+    assert "/api/v0/services/{workload_id}/story" in paths
     assert "/api/v0/index" not in paths
     assert "/api/v0/watch" not in paths
     assert "/api/v0/jobs" not in paths

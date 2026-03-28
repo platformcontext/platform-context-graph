@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 
 from ...domain.entities import EntityType
-from ...domain.responses import WorkloadContextResponse
+from ...domain.responses import StoryResponse, WorkloadContextResponse
 from ..dependencies import QueryServices, get_query_services
 from ._shared import (
     invalid_canonical_id_response,
@@ -45,6 +45,35 @@ def get_workload_context(
         return invalid_canonical_id_response(request, kind="workload")
 
     result = services.context.get_workload_context(
+        services.database,
+        workload_id=workload_id,
+        environment=environment,
+    )
+    if service_result_has_error(result):
+        return service_error_response(
+            request, detail=result["error"], not_found_title="Workload not found"
+        )
+    return result
+
+
+@router.get(
+    "/{workload_id:path}/story",
+    response_model=StoryResponse,
+    response_model_exclude_none=True,
+    responses=problem_detail_responses(400, 404),
+)
+def get_workload_story(
+    workload_id: str,
+    request: Request,
+    environment: str | None = None,
+    services: QueryServices = Depends(get_query_services),
+):
+    """Return a structured story for a canonical workload."""
+
+    if not is_canonical_id_for_type(workload_id, EntityType.workload):
+        return invalid_canonical_id_response(request, kind="workload")
+
+    result = services.context.get_workload_story(
         services.database,
         workload_id=workload_id,
         environment=environment,

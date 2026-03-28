@@ -7,6 +7,7 @@ HOME_DOC = DOCS_ROOT / "docs" / "index.md"
 QUICKSTART_DOC = DOCS_ROOT / "docs" / "getting-started" / "quickstart.md"
 DEPLOY_OVERVIEW_DOC = DOCS_ROOT / "docs" / "deployment" / "overview.md"
 MCP_GUIDE_DOC = DOCS_ROOT / "docs" / "guides" / "mcp-guide.md"
+MCP_REFERENCE_DOC = DOCS_ROOT / "docs" / "reference" / "mcp-reference.md"
 HTTP_API_DOC = DOCS_ROOT / "docs" / "reference" / "http-api.md"
 SHARED_INFRA_GUIDE = DOCS_ROOT / "docs" / "guides" / "shared-infra-trace.md"
 MKDOCS_CONFIG = DOCS_ROOT / "mkdocs.yml"
@@ -44,6 +45,9 @@ def test_docs_pages_and_nav_cover_http_api_and_shared_infra() -> None:
     assert "/api/v0/entities/resolve" in http_api
     assert "/api/v0/workloads/{id}/context" in http_api
     assert "/api/v0/services/{id}/context" in http_api
+    assert "/api/v0/repositories/{id}/story" in http_api
+    assert "/api/v0/workloads/{id}/story" in http_api
+    assert "/api/v0/services/{id}/story" in http_api
     assert "/api/v0/code/search" in http_api
     assert "/api/v0/infra/resources/search" in http_api
     assert "/api/v0/repositories" in http_api
@@ -63,3 +67,26 @@ def test_prompt_guidance_mentions_http_api_and_context_queries() -> None:
     assert "get_workload_context" in prompts
     assert "get_service_context" in prompts
     assert "HTTP API" in prompts
+
+
+def test_prompt_suite_docs_remain_portable_and_structured() -> None:
+    guide = MCP_GUIDE_DOC.read_text()
+    reference = MCP_REFERENCE_DOC.read_text()
+
+    assert "Prompt-suite guardrails" in guide
+    assert "repo-relative identifiers and paths" in guide
+    assert "server-local filesystem paths" in guide
+    assert "structured MCP or HTTP tools before any expert fallback" in guide
+    assert "raw Cypher" in guide
+    assert "get_repo_story" in guide
+    assert "get_workload_story" in guide
+    assert "get_service_story" in guide
+
+    assert "Prompt-suite and docs examples should stay portable too" in reference
+    assert "repo_id + relative_path" in reference
+    assert "structured query tools before `execute_cypher_query`" in reference
+    assert "manual diagnostic tool" in reference
+    assert "server-local filesystem paths" in reference
+    assert "get_repo_story" in reference
+    assert "get_workload_story" in reference
+    assert "get_service_story" in reference

@@ -122,7 +122,8 @@ class MCPServer(
         try:
             results = code_queries.find_dead_code(
                 self.code_finder,
-                repo_path=args.get("repo_path"),
+                repo_id=args.get("repo_id") or args.get("repo_path"),
+                scope=args.get("scope", "auto"),
                 exclude_decorated_with=args.get("exclude_decorated_with", []),
             )
         except Exception as exc:
@@ -133,13 +134,14 @@ class MCPServer(
         """Calculate cyclomatic complexity for a specific function."""
         function_name = args.get("function_name")
         path = args.get("path")
+        repo_id = args.get("repo_id") or args.get("repo_path")
         try:
             results = code_queries.get_complexity(
                 self.code_finder,
                 mode="function",
                 function_name=function_name,
                 path=path,
-                repo_id=args.get("repo_path"),
+                repo_id=repo_id,
                 scope=args.get("scope", "auto"),
             )
         except Exception as exc:
@@ -156,12 +158,13 @@ class MCPServer(
     def find_most_complex_functions_tool(self, **args: Any) -> dict[str, Any]:
         """List the highest-complexity indexed functions."""
         limit = args.get("limit", 10)
+        repo_id = args.get("repo_id") or args.get("repo_path")
         try:
             results = code_queries.get_complexity(
                 self.code_finder,
                 mode="top",
                 limit=limit,
-                repo_id=args.get("repo_path"),
+                repo_id=repo_id,
                 scope=args.get("scope", "auto"),
             )
         except Exception as exc:
@@ -195,12 +198,13 @@ class MCPServer(
             }
 
         try:
+            repo_id = args.get("repo_id") or args.get("repo_path")
             results = code_queries.get_code_relationships(
                 self.code_finder,
                 query_type=query_type,
                 target=target,
                 context=args.get("context"),
-                repo_id=args.get("repo_path"),
+                repo_id=repo_id,
                 scope=args.get("scope", "auto"),
             )
         except Exception as exc:
@@ -218,20 +222,32 @@ class MCPServer(
         query = require_str_argument(args, "query")
         if query is None:
             return {"error": "The 'query' argument is required."}
-        fuzzy_search = args.get("fuzzy_search", DEFAULT_FUZZY_SEARCH)
-        edit_distance = args.get("edit_distance", DEFAULT_EDIT_DISTANCE)
-        if fuzzy_search and isinstance(query, str):
-            query = query.lower().replace("_", " ").strip()
+        repo_id = args.get("repo_id") or args.get("repo_path")
+        exact_arg = args.get("exact")
+        fuzzy_search = args.get("fuzzy_search")
+        if exact_arg is None and "fuzzy_search" in args:
+            fuzzy_search = bool(fuzzy_search)
+            exact = not fuzzy_search
+            limit = int(args.get("limit", 15))
+            edit_distance = args.get("edit_distance", DEFAULT_EDIT_DISTANCE)
+            if fuzzy_search and isinstance(query, str):
+                query = query.lower().replace("_", " ").strip()
+            if not fuzzy_search:
+                edit_distance = None
+        else:
+            exact = bool(exact_arg) if exact_arg is not None else False
+            limit = int(args.get("limit", 10))
+            edit_distance = args.get("edit_distance")
 
         try:
             results = code_queries.search_code(
                 self.code_finder,
                 query=query,
-                repo_id=args.get("repo_path"),
+                repo_id=repo_id,
                 scope=args.get("scope", "auto"),
-                exact=not fuzzy_search,
-                limit=15,
-                edit_distance=edit_distance if fuzzy_search else None,
+                exact=exact,
+                limit=limit,
+                edit_distance=edit_distance if not exact else None,
             )
         except Exception as exc:
             return {"error": f"Failed to find code: {exc}"}

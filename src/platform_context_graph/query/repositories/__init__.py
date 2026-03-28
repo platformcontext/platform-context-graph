@@ -21,11 +21,13 @@ from .content_enrichment import enrich_repository_context
 from .context_data import build_repository_context
 from .listing import list_repositories_rows
 from .stats_data import build_repository_stats
+from ..story import build_repository_story_response
 
 __all__ = [
     "_canonical_repository_id",
     "list_repositories",
     "get_repository_context",
+    "get_repository_story",
     "get_repository_stats",
     "get_repository_coverage",
     "list_repository_coverage",
@@ -65,6 +67,16 @@ def get_repository_context(database: Any, *, repo_id: str) -> dict[str, Any]:
         if "error" in context:
             return context
         return enrich_repository_context(database, context)
+
+
+def get_repository_story(database: Any, *, repo_id: str) -> dict[str, Any]:
+    """Return a structured story response for a repository."""
+
+    with trace_query("repository_story"):
+        context = get_repository_context(database, repo_id=repo_id)
+        if "error" in context:
+            return context
+        return build_repository_story_response(context)
 
 
 def get_repository_stats(

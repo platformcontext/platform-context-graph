@@ -16,6 +16,13 @@ Content-oriented tools use the same rule:
 - content search tools require the PostgreSQL content store and return an error when it is disabled
 - `repo_access` prompting is only for workflows that truly need the user's local machine
 
+Prompt-suite and docs examples should stay portable too:
+
+- use `repo_id + relative_path` for file-shaped answers
+- prefer structured query tools before `execute_cypher_query`
+- treat raw Cypher as a manual diagnostic tool, not a fallback path for prompt coverage
+- avoid teaching prompt tests to depend on server-local filesystem paths
+
 !!! tip "File Exclusion"
     You can control what gets indexed using `.pcgignore`.
     [**📄 Read the Guide**](pcgignore.md)
@@ -30,7 +37,21 @@ These are the most commonly used tools for understanding code.
 | **`analyze_code_relationships`** | The swiss-army knife for call graphs and dependencies. | "Find all callers of `process_payment`." |
 | **`calculate_cyclomatic_complexity`** | Measure function complexity. | "What is the complexity of `main`?" |
 | **`find_most_complex_functions`** | List the hardest-to-maintain functions. | "Show me the 5 most complex functions." |
-| **`find_dead_code`** | Identify unused functions. | "Find dead code, but ignore `@route`." |
+| **`find_dead_code`** | Identify unused functions, optionally scoped by canonical `repo_id`. | "Find dead code in this repo, but ignore `@route`." |
+
+## Story & Context
+
+Use these tools when the user is asking for a narrative answer such as
+"Internet to cloud to code" or "tell me everything about this service."
+
+| Tool Name | Description | Natural Language Example |
+| :--- | :--- | :--- |
+| **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for api-node-boats." |
+| **`get_workload_story`** | Return a structured workload story using canonical workload identity, optionally scoped to one environment. | "Show me how payments-api is deployed in prod." |
+| **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. | "What can you tell me about api-node-boats in QA?" |
+| **`get_repo_context`** | Durable drill-down for repository details after the story answer. | "Show me the full repo context behind that story." |
+| **`get_workload_context`** | Durable drill-down for workload details after the story answer. | "Show me the workload context behind that story." |
+| **`get_service_context`** | Service alias drill-down for service-shaped prompts. | "Show me the service context behind that story." |
 
 ## Content Retrieval & Search
 

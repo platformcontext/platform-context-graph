@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from platform_context_graph.query import status as status_queries
 
@@ -252,3 +253,35 @@ def test_get_ingester_status_falls_back_to_checkpointed_finalization_progress(
     assert result["active_phase_started_at"] == "2026-03-25T12:01:00Z"
     assert result["active_current_file"] == "/tmp/repos/repo-a/lib/security.php"
     assert result["active_last_progress_at"] == "2026-03-25T12:02:00Z"
+
+
+def test_resolve_index_status_target_maps_repo_name_to_local_path(
+    monkeypatch,
+) -> None:
+    """Index-status target resolution should accept repository names."""
+
+    database = MagicMock()
+    driver = MagicMock()
+    session = MagicMock()
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+    driver.session.return_value = session
+    database.get_driver.return_value = driver
+
+    monkeypatch.setattr(
+        status_queries,
+        "resolve_repository",
+        lambda _session, _target: {
+            "id": "repository:r_20871f7f",
+            "name": "api-node-boats",
+            "path": "/data/repos/api-node-boats",
+            "local_path": "/data/repos/api-node-boats",
+        },
+    )
+
+    resolved = status_queries.resolve_index_status_target(
+        database,
+        target="api-node-boats",
+    )
+
+    assert resolved == Path("/data/repos/api-node-boats")

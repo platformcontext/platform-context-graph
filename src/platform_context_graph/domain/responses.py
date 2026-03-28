@@ -282,6 +282,34 @@ class WorkloadContextResponse(BaseModel):
     requested_as: Literal["service"] | None = None
 
 
+class StorySection(BaseModel):
+    """One named story section in a higher-level narrative response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    title: str
+    summary: str
+    items: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class StoryResponse(BaseModel):
+    """Structured story response shared by MCP and HTTP story surfaces."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    subject: EntityRef
+    story: list[str] = Field(default_factory=list)
+    story_sections: list[StorySection] = Field(default_factory=list)
+    deployment_overview: dict[str, Any] | None = None
+    code_overview: dict[str, Any] | None = None
+    evidence: list[EvidenceItem] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    coverage: dict[str, Any] | None = None
+    drilldowns: dict[str, Any] = Field(default_factory=dict)
+    requested_as: Literal["service"] | None = None
+
+
 class EntityContextResponse(BaseModel):
     """Generic context response for any canonical entity type."""
 

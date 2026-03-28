@@ -6,6 +6,7 @@ from typing import Any
 
 from ..content.state import get_content_service
 from ..observability import trace_query
+from .repositories.common import get_db_manager, resolve_repository
 
 __all__ = [
     "get_entity_content",
@@ -14,6 +15,23 @@ __all__ = [
     "search_entity_content",
     "search_file_content",
 ]
+
+
+def _resolve_repo_identifier(database: Any, repo_id: str) -> str:
+    """Return a canonical repository ID when the caller passed a repo name."""
+
+    if repo_id.startswith("repository:"):
+        return repo_id
+
+    db_manager = get_db_manager(database)
+    if not callable(getattr(db_manager, "get_driver", None)):
+        return repo_id
+
+    with db_manager.get_driver().session() as session:
+        repo = resolve_repository(session, repo_id)
+    if repo is None:
+        return repo_id
+    return str(repo.get("id") or repo_id)
 
 
 def get_file_content(database: Any, *, repo_id: str, relative_path: str) -> dict[str, Any]:
@@ -30,7 +48,7 @@ def get_file_content(database: Any, *, repo_id: str, relative_path: str) -> dict
 
     with trace_query("content_file"):
         return get_content_service(database).get_file_content(
-            repo_id=repo_id,
+            repo_id=_resolve_repo_identifier(database, repo_id),
             relative_path=relative_path,
         )
 
@@ -58,7 +76,7 @@ def get_file_lines(
 
     with trace_query("content_file_lines"):
         return get_content_service(database).get_file_lines(
-            repo_id=repo_id,
+            repo_id=_resolve_repo_identifier(database, repo_id),
             relative_path=relative_path,
             start_line=start_line,
             end_line=end_line,

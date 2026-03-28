@@ -101,6 +101,17 @@ class QueryToolMixin:
             repo_id=repo_id,
         )
 
+    def get_repo_story_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
+        """Return a structured story for one repository."""
+
+        repo_id = require_str_argument(args, "repo_id")
+        if repo_id is None:
+            return {"error": "The 'repo_id' argument is required."}
+        return repository_queries.get_repository_story(
+            self.db_manager,
+            repo_id=repo_id,
+        )
+
     def get_repository_coverage_tool(
         self: _QueryRuntime, **args: Any
     ) -> dict[str, Any]:
@@ -174,6 +185,18 @@ class QueryToolMixin:
             environment=args.get("environment"),
         )
 
+    def get_workload_story_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
+        """Return a structured story for one workload identifier."""
+
+        workload_id = require_str_argument(args, "workload_id")
+        if workload_id is None:
+            return {"error": "The 'workload_id' argument is required."}
+        return context_queries.get_workload_story(
+            self.db_manager,
+            workload_id=workload_id,
+            environment=args.get("environment"),
+        )
+
     def get_service_context_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
         """Return service context or a structured alias error."""
 
@@ -182,6 +205,21 @@ class QueryToolMixin:
             return {"error": "The 'workload_id' argument is required."}
         try:
             return context_queries.get_service_context(
+                self.db_manager,
+                workload_id=workload_id,
+                environment=args.get("environment"),
+            )
+        except context_queries.ServiceAliasError as exc:
+            return {"error": str(exc)}
+
+    def get_service_story_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
+        """Return a structured service story or a structured alias error."""
+
+        workload_id = require_str_argument(args, "workload_id")
+        if workload_id is None:
+            return {"error": "The 'workload_id' argument is required."}
+        try:
+            return context_queries.get_service_story(
                 self.db_manager,
                 workload_id=workload_id,
                 environment=args.get("environment"),
