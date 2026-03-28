@@ -1,0 +1,29 @@
+scripts/benchmark_phase1b.sh
+  171ca78060f03490 1-128
+tests/unit/tools/test_graph_builder_call_relationships.py
+  171ca78060f03490 491-493
+scripts/local-integration-test.sh
+  171ca78060f03490 1-242
+src/platform_context_graph/tools/graph_builder_call_relationships.py
+  171ca78060f03490 25-34,136-138,142,147,160-165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "606a555bc0e66bead842fe1a6814242d3ec583cc",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 394,
+      "total_deletions": 3,
+      "accepted_lines": 394,
+      "overriden_lines": 0
+    }
+  }
+}
