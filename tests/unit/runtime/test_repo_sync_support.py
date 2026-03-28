@@ -95,6 +95,26 @@ def test_is_stale_lock_reaps_pid1_lock_from_prior_container_boot(
     assert support._is_stale_lock(config) is True
 
 
+def test_workspace_lock_reaps_stale_file_lock_and_acquires(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale file at the lock path should not block future sync cycles."""
+
+    support = importlib.import_module("platform_context_graph.runtime.ingester.support")
+    config = _config_for_lock(tmp_path)
+    config.repos_dir.mkdir(parents=True, exist_ok=True)
+    config.sync_lock_dir.write_text("stale lock file", encoding="utf-8")
+
+    monkeypatch.setattr(support, "_is_stale_lock", lambda _config: True)
+
+    with support.workspace_lock(config) as acquired:
+        assert acquired is True
+        assert config.sync_lock_dir.is_dir()
+
+    assert not config.sync_lock_dir.exists()
+
+
 def test_managed_repository_roots_ignores_nested_git_directories(
     tmp_path: Path,
 ) -> None:
