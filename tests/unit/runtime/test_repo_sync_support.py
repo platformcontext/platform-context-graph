@@ -95,6 +95,113 @@ def test_is_stale_lock_reaps_pid1_lock_from_prior_container_boot(
     assert support._is_stale_lock(config) is True
 
 
+def test_workspace_lock_reaps_stale_file_lock_and_acquires(
+    tmp_path: Path,
+) -> None:
+    """A stale file at the lock path should not block future sync cycles."""
+
+    support = importlib.import_module("platform_context_graph.runtime.ingester.support")
+    config = _config_for_lock(tmp_path)
+    config.repos_dir.mkdir(parents=True, exist_ok=True)
+    config.sync_lock_dir.write_text("stale lock file", encoding="utf-8")
+
+    with support.workspace_lock(config) as acquired:
+        assert acquired is True
+        assert config.sync_lock_dir.is_dir()
+
+    assert not config.sync_lock_dir.exists()
+
+
+def test_workspace_lock_warns_with_error_when_stale_lock_cleanup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stale lock cleanup failures should surface the underlying OSError."""
+
+    support = importlib.import_module("platform_context_graph.runtime.ingester.support")
+    config = _config_for_lock(tmp_path)
+    config.repos_dir.mkdir(parents=True, exist_ok=True)
+    config.sync_lock_dir.mkdir(parents=True)
+
+    warning_calls: list[dict[str, object]] = []
+    cleanup_error = PermissionError("permission denied")
+
+    monkeypatch.setattr(support, "_is_stale_lock", lambda _config: True)
+    monkeypatch.setattr(
+        support.shutil,
+        "rmtree",
+        lambda _path: (_ for _ in ()).throw(cleanup_error),
+    )
+    monkeypatch.setattr(
+        support,
+        "warning_logger",
+        lambda msg, *, event_name=None, extra_keys=None, exc_info=None: warning_calls.append(
+            {
+                "msg": msg,
+                "event_name": event_name,
+                "extra_keys": extra_keys,
+                "exc_info": exc_info,
+            }
+        ),
+    )
+
+    with support.workspace_lock(config) as acquired:
+        assert acquired is False
+
+    assert len(warning_calls) == 1
+    assert "Failed to remove stale workspace lock" in str(warning_calls[0]["msg"])
+    assert "permission denied" in str(warning_calls[0]["msg"])
+    assert warning_calls[0]["event_name"] == "ingester.lifecycle"
+    assert warning_calls[0]["extra_keys"] == {"ingester_component": config.component}
+    assert warning_calls[0]["exc_info"] is cleanup_error
+
+
+def test_workspace_lock_warns_when_release_cleanup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Release cleanup failures should be logged instead of claiming success."""
+
+    support = importlib.import_module("platform_context_graph.runtime.ingester.support")
+    config = _config_for_lock(tmp_path)
+    config.repos_dir.mkdir(parents=True, exist_ok=True)
+
+    warning_calls: list[dict[str, object]] = []
+    info_messages: list[str] = []
+    cleanup_error = PermissionError("release denied")
+
+    monkeypatch.setattr(
+        support, "_remove_workspace_lock_path", lambda _lock_path: cleanup_error
+    )
+    monkeypatch.setattr(
+        support,
+        "warning_logger",
+        lambda msg, *, event_name=None, extra_keys=None, exc_info=None: warning_calls.append(
+            {
+                "msg": msg,
+                "event_name": event_name,
+                "extra_keys": extra_keys,
+                "exc_info": exc_info,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        support, "log", lambda _component, message: info_messages.append(message)
+    )
+
+    with support.workspace_lock(config) as acquired:
+        assert acquired is True
+
+    assert any("Acquired workspace lock" in message for message in info_messages)
+    assert not any("Released workspace lock" in message for message in info_messages)
+    assert len(warning_calls) == 1
+    assert "Failed to remove workspace lock" in str(warning_calls[0]["msg"])
+    assert "release denied" in str(warning_calls[0]["msg"])
+    assert warning_calls[0]["event_name"] == "ingester.lifecycle"
+    assert warning_calls[0]["extra_keys"] == {"ingester_component": config.component}
+    assert warning_calls[0]["exc_info"] is cleanup_error
+
+
 def test_managed_repository_roots_ignores_nested_git_directories(
     tmp_path: Path,
 ) -> None:

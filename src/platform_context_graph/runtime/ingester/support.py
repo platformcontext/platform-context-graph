@@ -19,7 +19,7 @@ from platform_context_graph.observability import (
     get_observability,
     initialize_observability,
 )
-from platform_context_graph.utils.debug_log import info_logger
+from platform_context_graph.utils.debug_log import info_logger, warning_logger
 
 from .config import RepoSyncConfig, RepoSyncResult
 
@@ -375,6 +375,26 @@ def _start_lock_heartbeat(
     return stop_event, thread
 
 
+def _remove_workspace_lock_path(lock_path: Path) -> OSError | None:
+    """Remove a workspace lock path whether it is a directory or a file.
+
+    Returns:
+        ``None`` when the path was removed successfully or did not exist.
+        The underlying ``OSError`` when cleanup fails.
+    """
+
+    try:
+        if lock_path.is_dir() and not lock_path.is_symlink():
+            shutil.rmtree(lock_path)
+        else:
+            lock_path.unlink()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        return exc
+    return None if not lock_path.exists() else OSError("workspace lock still exists")
+
+
 @contextlib.contextmanager
 def workspace_lock(config: RepoSyncConfig) -> Iterator[bool]:
     """Acquire the repo workspace lock for a sync or bootstrap cycle.
@@ -391,7 +411,17 @@ def workspace_lock(config: RepoSyncConfig) -> Iterator[bool]:
             config.component,
             f"Reaping stale workspace lock at {config.sync_lock_dir}",
         )
-        shutil.rmtree(config.sync_lock_dir, ignore_errors=True)
+        cleanup_error = _remove_workspace_lock_path(config.sync_lock_dir)
+        if cleanup_error is not None:
+            warning_logger(
+                f"[{config.component}] Failed to remove stale workspace lock at "
+                f"{config.sync_lock_dir}: {cleanup_error}; skipping cycle",
+                event_name="ingester.lifecycle",
+                extra_keys={"ingester_component": config.component},
+                exc_info=cleanup_error,
+            )
+            yield False
+            return
 
     try:
         config.sync_lock_dir.mkdir(parents=True)
@@ -411,8 +441,17 @@ def workspace_lock(config: RepoSyncConfig) -> Iterator[bool]:
     finally:
         stop_event.set()
         heartbeat_thread.join(timeout=_lock_heartbeat_seconds())
-        shutil.rmtree(config.sync_lock_dir, ignore_errors=True)
-        log(config.component, f"Released workspace lock at {config.sync_lock_dir}")
+        cleanup_error = _remove_workspace_lock_path(config.sync_lock_dir)
+        if cleanup_error is not None:
+            warning_logger(
+                f"[{config.component}] Failed to remove workspace lock at "
+                f"{config.sync_lock_dir}: {cleanup_error}",
+                event_name="ingester.lifecycle",
+                extra_keys={"ingester_component": config.component},
+                exc_info=cleanup_error,
+            )
+        else:
+            log(config.component, f"Released workspace lock at {config.sync_lock_dir}")
 
 
 def begin_index_cycle(
