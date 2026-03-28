@@ -17,10 +17,36 @@ from platform_context_graph.utils.debug_log import (
     warning_logger,
 )
 
-MAX_BUNDLE_ARCHIVE_BYTES = int(
-    os.getenv("PCG_MAX_BUNDLE_ARCHIVE_BYTES", str(256 * 1024 * 1024))
+
+def _safe_env_int(name: str, default: int) -> int:
+    """Return a non-negative integer env var or the provided default."""
+
+    raw_value = os.getenv(name)
+    if raw_value in (None, ""):
+        return default
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        warning_logger(
+            f"Invalid integer for {name}: {raw_value!r}; using default {default}",
+            event_name="bundle.import.invalid_env",
+            extra_keys={"env_var": name, "raw_value": raw_value, "default": default},
+        )
+        return default
+    if parsed < 0:
+        warning_logger(
+            f"Negative integer for {name}: {raw_value!r}; using default {default}",
+            event_name="bundle.import.invalid_env",
+            extra_keys={"env_var": name, "raw_value": raw_value, "default": default},
+        )
+        return default
+    return parsed
+
+
+MAX_BUNDLE_ARCHIVE_BYTES = _safe_env_int(
+    "PCG_MAX_BUNDLE_ARCHIVE_BYTES", 256 * 1024 * 1024
 )
-MAX_BUNDLE_ARCHIVE_ENTRIES = int(os.getenv("PCG_MAX_BUNDLE_ARCHIVE_ENTRIES", "32"))
+MAX_BUNDLE_ARCHIVE_ENTRIES = _safe_env_int("PCG_MAX_BUNDLE_ARCHIVE_ENTRIES", 32)
 _CYPHER_LABEL_TOKEN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _CYPHER_RELATIONSHIP_TYPE_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 

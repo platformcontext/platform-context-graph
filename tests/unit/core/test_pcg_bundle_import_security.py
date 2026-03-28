@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import zipfile
 from pathlib import Path
@@ -109,6 +110,22 @@ def test_import_from_bundle_rejects_archives_with_excessive_uncompressed_size(
 
     assert not success
     assert "maximum extracted size" in message.lower()
+
+
+def test_bundle_import_env_defaults_when_invalid(monkeypatch) -> None:
+    """Invalid archive-limit env vars should fall back instead of crashing import."""
+
+    monkeypatch.setenv("PCG_MAX_BUNDLE_ARCHIVE_BYTES", "not-a-number")
+    monkeypatch.setenv("PCG_MAX_BUNDLE_ARCHIVE_ENTRIES", "-2")
+
+    reloaded = importlib.reload(pcg_bundle_import)
+    try:
+        assert reloaded.MAX_BUNDLE_ARCHIVE_BYTES == 256 * 1024 * 1024
+        assert reloaded.MAX_BUNDLE_ARCHIVE_ENTRIES == 32
+    finally:
+        monkeypatch.delenv("PCG_MAX_BUNDLE_ARCHIVE_BYTES", raising=False)
+        monkeypatch.delenv("PCG_MAX_BUNDLE_ARCHIVE_ENTRIES", raising=False)
+        importlib.reload(reloaded)
 
 
 def test_import_node_batch_rejects_invalid_label_tokens() -> None:

@@ -25,7 +25,7 @@ from .content_tools import ContentToolMixin
 from .query_tools import QueryToolMixin
 from .repo_access import ServerRepoAccessMixin
 from .runtime_tools import RuntimeStatusToolMixin
-from .tool_args import require_str_argument
+from .tool_args import require_int_argument, require_str_argument
 from .tool_dispatch import build_async_tool_map, build_sync_tool_map
 from .tool_registry import tools_for_runtime_role
 from .tools.handlers import (
@@ -228,7 +228,7 @@ class MCPServer(
         if exact_arg is None and "fuzzy_search" in args:
             fuzzy_search = bool(fuzzy_search)
             exact = not fuzzy_search
-            limit = int(args.get("limit", 15))
+            limit = require_int_argument(args, "limit", default=15, minimum=1)
             edit_distance = args.get("edit_distance", DEFAULT_EDIT_DISTANCE)
             if fuzzy_search and isinstance(query, str):
                 query = query.lower().replace("_", " ").strip()
@@ -236,7 +236,7 @@ class MCPServer(
                 edit_distance = None
         else:
             exact = bool(exact_arg) if exact_arg is not None else False
-            limit = int(args.get("limit", 10))
+            limit = require_int_argument(args, "limit", default=10, minimum=1)
             edit_distance = args.get("edit_distance")
 
         try:

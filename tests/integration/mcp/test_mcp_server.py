@@ -22,7 +22,7 @@ for module_name, module_path in [
         module.__path__ = [str(module_path)]
         sys.modules[module_name] = module
 
-from platform_context_graph.mcp.server import MCPServer
+from platform_context_graph.mcp.server import DEFAULT_EDIT_DISTANCE, MCPServer
 from platform_context_graph.mcp.tool_registry import TOOLS
 from platform_context_graph.query.context import ServiceAliasError
 from platform_context_graph.repository_identity import canonical_repository_id
@@ -263,6 +263,57 @@ class TestMCPServer:
             "query": "Payment_API",
             "results": {"ranked_results": []},
         }
+
+    def test_find_code_wrapper_falls_back_to_default_limit_for_invalid_canonical_value(
+        self, mock_server
+    ):
+        with patch(
+            "platform_context_graph.mcp.server.code_queries.search_code"
+        ) as mock_search:
+            mock_search.return_value = {"ranked_results": []}
+
+            result = mock_server.find_code_tool(
+                query="Payment_API",
+                repo_id="repository:r_ab12cd34",
+                limit="not-a-number",
+            )
+
+        mock_search.assert_called_once_with(
+            mock_server.code_finder,
+            query="Payment_API",
+            repo_id="repository:r_ab12cd34",
+            scope="auto",
+            exact=False,
+            limit=10,
+            edit_distance=None,
+        )
+        assert result["success"] is True
+
+    def test_find_code_wrapper_falls_back_to_legacy_limit_for_invalid_fuzzy_value(
+        self, mock_server
+    ):
+        with patch(
+            "platform_context_graph.mcp.server.code_queries.search_code"
+        ) as mock_search:
+            mock_search.return_value = {"ranked_results": []}
+
+            result = mock_server.find_code_tool(
+                query="Payment_API",
+                fuzzy_search=True,
+                repo_path="/repo",
+                limit=None,
+            )
+
+        mock_search.assert_called_once_with(
+            mock_server.code_finder,
+            query="payment api",
+            repo_id="/repo",
+            scope="auto",
+            exact=False,
+            limit=15,
+            edit_distance=DEFAULT_EDIT_DISTANCE,
+        )
+        assert result["success"] is True
 
     def test_find_code_wrapper_returns_repo_identity_for_workspace_results(
         self, mock_server

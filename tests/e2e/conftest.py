@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fcntl
 import os
 import subprocess
 import sys
@@ -8,6 +7,11 @@ import tempfile
 from pathlib import Path
 
 import pytest
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - exercised on non-POSIX platforms
+    fcntl = None
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SEED_SCRIPT = _REPO_ROOT / "scripts" / "seed_e2e_graph.py"
@@ -18,6 +22,8 @@ _GRAPH_LOCK = Path(tempfile.gettempdir()) / "pcg-e2e-graph.lock"
 def exclusive_e2e_graph() -> None:
     """Serialize graph-mutating e2e tests across xdist workers."""
 
+    if fcntl is None:
+        pytest.skip("e2e graph locking requires POSIX file locking support")
     _GRAPH_LOCK.parent.mkdir(parents=True, exist_ok=True)
     with _GRAPH_LOCK.open("w", encoding="utf-8") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
