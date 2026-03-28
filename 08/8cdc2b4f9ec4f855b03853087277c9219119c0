@@ -1,0 +1,25 @@
+src/platform_context_graph/observability/runtime.py
+  171ca78060f03490 19,32,81-83,263-266,268-271,273-276,278-284,286-312
+scripts/python_file_length_exemptions.txt
+  171ca78060f03490 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "088cdc2b4f9ec4f855b03853087277c9219119c0",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 148,
+      "overriden_lines": 0
+    }
+  }
+}
