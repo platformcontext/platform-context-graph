@@ -8,6 +8,7 @@ import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from ...cli.config_manager import get_config_value
 from .config import RepoSyncConfig, RepoSyncRepositoryRule, RepoSyncResult
 from .github_auth import github_api_request, github_app_token, github_headers
 from .git_sync_ops import (
@@ -374,6 +375,7 @@ def filesystem_sync_all(config: RepoSyncConfig) -> list[str]:
 
     return filesystem_sync_all_impl(
         config,
+        get_config_value_fn=get_config_value,
         list_repo_identifiers_fn=list_repo_identifiers,
         repo_checkout_name_fn=repo_checkout_name,
     )

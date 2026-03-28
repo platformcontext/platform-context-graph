@@ -9,6 +9,17 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from platform_context_graph.observability import get_observability
+from platform_context_graph.tools.dependency_catalog import (
+    dependency_ignore_enabled,
+    is_dependency_path,
+)
+from platform_context_graph.tools.graph_builder_gitignore import (
+    honor_gitignore_enabled,
+    is_gitignored_in_repo,
+)
+from platform_context_graph.tools.graph_builder_indexing_discovery import (
+    find_pcgignore,
+)
 from platform_context_graph.utils.debug_log import emit_log_call, warning_logger
 
 from .config import RepoSyncConfig
@@ -336,6 +347,7 @@ def clone_missing_repositories_detailed_impl(
 def filesystem_sync_all_impl(
     config: RepoSyncConfig,
     *,
+    get_config_value_fn,
     list_repo_identifiers_fn,
     repo_checkout_name_fn,
 ) -> list[str]:
@@ -358,8 +370,120 @@ def filesystem_sync_all_impl(
         source_path = config.filesystem_root / repo_id
         target_path = config.repos_dir / repo_checkout_name_fn(repo_id)
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(source_path, target_path, ignore_dangling_symlinks=True)
+        shutil.copytree(
+            source_path,
+            target_path,
+            ignore=_filesystem_copy_ignore(
+                source_path,
+                get_config_value_fn=get_config_value_fn,
+            ),
+            ignore_dangling_symlinks=True,
+        )
     return discovered
+
+
+def _filesystem_copy_ignore(
+    repo_root: Path,
+    *,
+    get_config_value_fn,
+):
+    """Return a copytree ignore callback aligned to repo/workspace indexing."""
+
+    repo_root = repo_root.resolve()
+    ignore_dirs_str = get_config_value_fn("IGNORE_DIRS") or ""
+    ignore_dirs = {
+        directory.strip().lower()
+        for directory in str(ignore_dirs_str).split(",")
+        if directory.strip()
+    }
+    dependency_exclusion_enabled = dependency_ignore_enabled(
+        get_config_value_fn=get_config_value_fn
+    )
+    gitignore_enabled = honor_gitignore_enabled(get_config_value_fn=get_config_value_fn)
+    gitignore_cache: dict[Path, object | None] = {}
+    pcgignore_spec, pcgignore_root = find_pcgignore(
+        repo_root,
+        debug_log_fn=lambda _message: None,
+        pathspec_module=__import__("pathspec"),
+    )
+    resolved_pcgignore_root = Path(pcgignore_root).resolve()
+
+    def _ignored(names_root: str, names: list[str]) -> set[str]:
+        current_root = Path(names_root).resolve()
+        ignored: set[str] = set()
+        for name in names:
+            candidate = current_root / name
+            if gitignore_enabled and _is_gitignored_candidate(
+                repo_root,
+                candidate,
+                spec_cache=gitignore_cache,
+            ):
+                ignored.add(name)
+                continue
+            if pcgignore_spec is not None:
+                try:
+                    relative_path = candidate.resolve().relative_to(resolved_pcgignore_root)
+                except ValueError:
+                    relative_path = None
+                if (
+                    relative_path is not None
+                    and _pcgignore_matches(
+                        pcgignore_spec,
+                        relative_path=relative_path,
+                        is_dir=candidate.is_dir(),
+                    )
+                ):
+                    ignored.add(name)
+                    continue
+            if not candidate.is_dir():
+                continue
+            if dependency_exclusion_enabled and _is_dependency_relative_to(
+                candidate, root=repo_root
+            ):
+                ignored.add(name)
+                continue
+            if name.lower() in ignore_dirs or name.startswith("."):
+                ignored.add(name)
+        return ignored
+
+    return _ignored
+
+
+def _is_dependency_relative_to(candidate: Path, *, root: Path) -> bool:
+    """Return whether a candidate path lives under a dependency/cache root."""
+
+    try:
+        relative_path = candidate.relative_to(root)
+    except ValueError:
+        return is_dependency_path(candidate)
+    if relative_path == Path("."):
+        return False
+    return is_dependency_path(relative_path)
+
+
+def _is_gitignored_candidate(
+    repo_root: Path,
+    candidate: Path,
+    *,
+    spec_cache: dict[Path, object | None],
+) -> bool:
+    """Return whether one filesystem copy candidate is ignored by `.gitignore`."""
+
+    if is_gitignored_in_repo(repo_root, candidate, spec_cache=spec_cache):
+        return True
+    if not candidate.is_dir():
+        return False
+    probe_path = candidate / "__pcg_dir_probe__"
+    return is_gitignored_in_repo(repo_root, probe_path, spec_cache=spec_cache)
+
+
+def _pcgignore_matches(spec: object, *, relative_path: Path, is_dir: bool) -> bool:
+    """Return whether a relative path is ignored by the repo-level `.pcgignore`."""
+
+    match_inputs = [relative_path.as_posix()]
+    if is_dir:
+        match_inputs.append(f"{relative_path.as_posix().rstrip('/')}/")
+    return any(spec.match_file(path_value) for path_value in match_inputs)
 
 
 def update_existing_repositories_detailed_impl(

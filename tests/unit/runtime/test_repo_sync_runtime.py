@@ -169,6 +169,75 @@ def test_bootstrap_index_ignores_dangling_symlinks_in_filesystem_mode(
     assert not (config.repos_dir / "service-a" / "missing.tpl").exists()
 
 
+def test_bootstrap_index_respects_gitignore_and_pcgignore_during_filesystem_sync(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    monkeypatch.setenv("PCG_HONOR_GITIGNORE", "true")
+    monkeypatch.setenv("PCG_IGNORE_DEPENDENCY_DIRS", "true")
+
+    source_root = tmp_path / "fixtures"
+    repo_dir = source_root / "service-a"
+    repo_dir.mkdir(parents=True)
+    (repo_dir / ".gitignore").write_text(
+        ".terraform/\nnode_modules/\nignored-by-git.txt\n",
+        encoding="utf-8",
+    )
+    (repo_dir / ".pcgignore").write_text(
+        "pcg-only/\nignored-by-pcg.txt\n",
+        encoding="utf-8",
+    )
+    (repo_dir / "main.tf").write_text('module "x" {}\n', encoding="utf-8")
+    (repo_dir / ".terraform.lock.hcl").write_text(
+        '# terraform lockfile\n',
+        encoding="utf-8",
+    )
+    (repo_dir / "ignored-by-git.txt").write_text("skip me\n", encoding="utf-8")
+    (repo_dir / "ignored-by-pcg.txt").write_text("skip me too\n", encoding="utf-8")
+    (repo_dir / ".terraform" / "providers").mkdir(parents=True)
+    (repo_dir / ".terraform" / "providers" / "aws.bin").write_text(
+        "provider-binary\n",
+        encoding="utf-8",
+    )
+    (repo_dir / "node_modules" / "left-pad").mkdir(parents=True)
+    (repo_dir / "node_modules" / "left-pad" / "index.js").write_text(
+        "module.exports = {};\n",
+        encoding="utf-8",
+    )
+    (repo_dir / "pcg-only").mkdir()
+    (repo_dir / "pcg-only" / "notes.txt").write_text("notes\n", encoding="utf-8")
+
+    config = repo_sync.RepoSyncConfig(
+        repos_dir=tmp_path / "workspace" / "repos",
+        source_mode="filesystem",
+        git_auth_method="none",
+        github_org=None,
+        repositories=[],
+        filesystem_root=source_root,
+        clone_depth=1,
+        repo_limit=100,
+        sync_lock_dir=tmp_path / "workspace" / "repos" / ".pcg-sync.lock",
+        component="bootstrap-index",
+    )
+
+    result = repo_sync.run_bootstrap_index(
+        config, index_workspace=lambda _workspace: None
+    )
+
+    copied_repo = config.repos_dir / "service-a"
+    assert result.discovered == 1
+    assert result.indexed == 1
+    assert (copied_repo / "main.tf").exists()
+    assert (copied_repo / ".terraform.lock.hcl").exists()
+    assert not (copied_repo / ".terraform").exists()
+    assert not (copied_repo / "node_modules").exists()
+    assert not (copied_repo / "ignored-by-git.txt").exists()
+    assert not (copied_repo / "ignored-by-pcg.txt").exists()
+    assert not (copied_repo / "pcg-only").exists()
+
+
 def test_invoke_index_workspace_falls_back_when_signature_inspection_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

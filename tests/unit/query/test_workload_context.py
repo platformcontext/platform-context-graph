@@ -9,6 +9,7 @@ import pytest
 from platform_context_graph.query.context import (
     ServiceAliasError,
     get_service_context,
+    get_workload_story,
     get_workload_context,
 )
 
@@ -291,3 +292,97 @@ def test_get_workload_context_surfaces_graph_backed_runtime_dependencies():
     assert [item["id"] for item in result["dependencies"]] == [
         "workload:api-node-forex"
     ]
+
+
+def test_get_workload_context_enriches_repo_backed_runtime_and_dependency_data(
+    monkeypatch,
+):
+    db = make_mock_db(
+        {
+            "MATCH (w:Workload)": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "workload:api-node-boats",
+                        "name": "api-node-boats",
+                        "kind": "service",
+                        "repo_id": "repository:r_f9600c28",
+                        "repo_name": "api-node-boats",
+                        "repo_path": "/data/repos/api-node-boats",
+                        "repo_local_path": "/data/repos/api-node-boats",
+                        "repo_slug": "boatsgroup/api-node-boats",
+                        "repo_remote_url": "https://github.com/boatsgroup/api-node-boats",
+                        "repo_has_remote": True,
+                    }
+                )
+            ),
+            "MATCH (i:WorkloadInstance)": MockResult(records=[]),
+            "MATCH (w:Workload)-[rel]->(dep:Workload)": MockResult(records=[]),
+            "MATCH (k:K8sResource)\n            WHERE k.name CONTAINS $name": MockResult(
+                records=[]
+            ),
+        }
+    )
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.get_repository_context",
+        lambda *_args, **_kwargs: {
+            "platforms": [
+                {
+                    "id": "platform:eks:aws:cluster/bg-qa:bg-qa:none",
+                    "name": "bg-qa",
+                    "kind": "eks",
+                    "provider": "aws",
+                    "environment": "bg-qa",
+                }
+            ],
+            "hostnames": [
+                {
+                    "hostname": "api-node-boats.qa.bgrp.io",
+                    "environment": "qa",
+                    "source_repo": "api-node-boats",
+                    "relative_path": "config/qa.json",
+                    "visibility": "public",
+                }
+            ],
+            "deploys_from": [
+                {
+                    "id": "repository:r_66cd2d76",
+                    "type": "repository",
+                    "name": "helm-charts",
+                    "repo_slug": "boatsgroup/helm-charts",
+                    "remote_url": "https://github.com/boatsgroup/helm-charts",
+                    "has_remote": True,
+                    "relationship_type": "DEPLOYS_FROM",
+                }
+            ],
+            "discovers_config_in": [],
+            "provisioned_by": [],
+        },
+    )
+
+    logical = get_workload_context(db, workload_id="workload:api-node-boats")
+    scoped = get_workload_context(
+        db,
+        workload_id="workload:api-node-boats",
+        environment="bg-qa",
+    )
+    story = get_workload_story(db, workload_id="workload:api-node-boats")
+
+    assert [item["id"] for item in logical["instances"]] == [
+        "workload-instance:api-node-boats:bg-qa"
+    ]
+    assert [item["id"] for item in logical["dependencies"]] == [
+        "repository:r_66cd2d76"
+    ]
+    assert logical["entrypoints"] == [
+        {
+            "hostname": "api-node-boats.qa.bgrp.io",
+            "environment": "qa",
+            "source_repo": "api-node-boats",
+            "relative_path": "config/qa.json",
+            "visibility": "public",
+        }
+    ]
+    assert scoped["instance"]["id"] == "workload-instance:api-node-boats:bg-qa"
+    assert "Public entrypoints: api-node-boats.qa.bgrp.io." in story["story"]
+    assert "Depends on helm-charts." in story["story"]

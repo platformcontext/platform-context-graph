@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/platformcontext/platform-context-graph
-  tag: "v0.0.33"
+  tag: "v0.0.34"
   pullPolicy: IfNotPresent
 
 serviceAccount:
@@ -82,6 +82,7 @@ env:
   NEO4J_DATABASE: neo4j
   PCG_LOG_FORMAT: json
   LIBRARY_LOG_LEVEL: WARNING
+  LOG_FILE_PATH: ""
   PCG_ENABLE_PUBLIC_DOCS: "false"
 
 contentStore:
