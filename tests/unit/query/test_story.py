@@ -166,6 +166,42 @@ def test_repository_story_exposes_richer_nested_context_without_server_paths() -
     assert "repo_path" not in overview["coverage"]
 
 
+def test_repository_story_handles_mixed_dependency_shapes() -> None:
+    result = build_repository_story_response(
+        {
+            "repository": {
+                "id": "repository:r_f9600c28",
+                "name": "api-node-boats",
+                "repo_slug": "boatsgroup/api-node-boats",
+                "remote_url": "https://github.com/boatsgroup/api-node-boats",
+                "has_remote": True,
+                "file_count": 42,
+            },
+            "code": {"functions": 10, "classes": 2, "class_methods": 4},
+            "deploys_from": [{"name": "helm-charts"}],
+            "consumer_repositories": [],
+            "ecosystem": {
+                "dependencies": ["helm-charts", {"name": "shared-lib"}, {}],
+            },
+            "limitations": [],
+        }
+    )
+
+    dependency_section = next(
+        section
+        for section in result["story_sections"]
+        if section["id"] == "dependencies"
+    )
+
+    assert dependency_section["summary"] == (
+        "Deploys from helm-charts and depends on helm-charts, shared-lib."
+    )
+    assert dependency_section["items"][-2:] == [
+        {"type": "repository", "name": "helm-charts"},
+        {"type": "repository", "name": "shared-lib"},
+    ]
+
+
 def test_workload_story_exposes_graph_evidence_in_deployment_overview() -> None:
     result = build_workload_story_response(
         {
@@ -205,3 +241,50 @@ def test_workload_story_exposes_graph_evidence_in_deployment_overview() -> None:
 
     assert result["deployment_overview"]["evidence"] == result["evidence"]
     assert result["deployment_overview"]["requested_as"] == "service"
+
+
+def test_workload_story_mentions_entrypoints_and_repository_dependencies() -> None:
+    result = build_workload_story_response(
+        {
+            "workload": {
+                "id": "workload:api-node-boats",
+                "type": "workload",
+                "kind": "service",
+                "name": "api-node-boats",
+            },
+            "instances": [
+                {
+                    "id": "workload-instance:api-node-boats:bg-qa",
+                    "type": "workload_instance",
+                    "kind": "service",
+                    "name": "api-node-boats",
+                    "environment": "bg-qa",
+                    "workload_id": "workload:api-node-boats",
+                }
+            ],
+            "dependencies": [
+                {
+                    "id": "repository:r_66cd2d76",
+                    "type": "repository",
+                    "name": "helm-charts",
+                    "repo_slug": "boatsgroup/helm-charts",
+                    "remote_url": "https://github.com/boatsgroup/helm-charts",
+                    "has_remote": True,
+                }
+            ],
+            "entrypoints": [
+                {
+                    "hostname": "api-node-boats.qa.bgrp.io",
+                    "environment": "qa",
+                    "relative_path": "config/qa.json",
+                    "visibility": "public",
+                }
+            ],
+        }
+    )
+
+    assert "Public entrypoints: api-node-boats.qa.bgrp.io." in result["story"]
+    assert "Depends on helm-charts." in result["story"]
+    assert result["story_sections"][0]["id"] == "runtime"
+    assert result["story_sections"][1]["id"] == "internet"
+    assert result["story_sections"][2]["id"] == "dependencies"

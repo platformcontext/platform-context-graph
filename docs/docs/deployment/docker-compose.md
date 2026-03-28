@@ -51,6 +51,11 @@ docker compose up --build
 Use an absolute host path for `PCG_FILESYSTEM_HOST_ROOT`; do not rely on a literal `~` in Compose
 environment values.
 
+When Docker runs through Colima, prefer a host path under your home directory such as
+`$HOME/temp-repos-mount` or `$HOME/repos/mobius`. Colima does not reliably expose arbitrary `/tmp`
+content into the Linux VM, so a source tree copied to `/tmp/temp-repos` on macOS can appear empty
+inside the Compose containers even though the bind mount renders successfully.
+
 If you already have Neo4j or another copy of PlatformContextGraph bound to the default local ports,
 override the published host ports:
 

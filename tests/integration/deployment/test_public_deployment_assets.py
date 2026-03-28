@@ -163,6 +163,7 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert "PCG_REPOS_DIR" not in api_env_names
     assert api_env_items["PCG_RUNTIME_ROLE"]["value"] == "api"
     assert api_env_items["PCG_ENABLE_PUBLIC_DOCS"]["value"] == "false"
+    assert api_env_items["LOG_FILE_PATH"]["value"] == ""
     assert (
         api_env_items["PCG_API_KEY"]["valueFrom"]["secretKeyRef"]["name"]
         == "pcg-api-auth"
@@ -242,7 +243,9 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
 
     assert api_env["PCG_HOME"] == "/tmp/.platform-context-graph"
     assert api_env["HOME"] == "/tmp"
+    assert api_env["LOG_FILE_PATH"] == ""
     assert worker_env["HOME"] == "/data"
+    assert worker_env["LOG_FILE_PATH"] == ""
     assert "/tmp" in api_volume_mounts
     assert "/tmp" in worker_volume_mounts
     assert api_volumes["tmp"]["emptyDir"] == {}

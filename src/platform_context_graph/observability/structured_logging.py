@@ -317,6 +317,20 @@ def _handler_with_formatter(
     return handler
 
 
+def _optional_file_handler_with_formatter(
+    path: Path,
+) -> tuple[logging.Handler | None, dict[str, str] | None]:
+    """Build an optional file handler, returning warning metadata on failure."""
+
+    try:
+        return _handler_with_formatter(path=path), None
+    except OSError as exc:
+        return None, {
+            "error": str(exc),
+            "path": str(path),
+        }
+
+
 def _configure_library_loggers() -> None:
     """Apply the configured third-party logger threshold."""
 
@@ -350,9 +364,15 @@ def configure_logging(
     handlers: list[logging.Handler] = [
         _handler_with_formatter(stream=_LOGGING_STATE.stream)
     ]
+    deferred_sink_warnings: list[dict[str, str]] = []
     legacy_log_path = app_log_path()
     if legacy_log_path != Path(os.devnull):
-        handlers.append(_handler_with_formatter(path=legacy_log_path))
+        legacy_handler, warning = _optional_file_handler_with_formatter(legacy_log_path)
+        if legacy_handler is not None:
+            handlers.append(legacy_handler)
+        elif warning is not None:
+            warning["sink"] = "app"
+            deferred_sink_warnings.append(warning)
     logging.basicConfig(
         level=logging_level_from_config(),
         handlers=handlers,
@@ -363,8 +383,23 @@ def configure_logging(
     debug_logger.propagate = False
     debug_logger.setLevel(logging.DEBUG)
     if debug_file_logging_enabled():
-        debug_logger.addHandler(_handler_with_formatter(path=debug_log_path()))
+        debug_handler, warning = _optional_file_handler_with_formatter(debug_log_path())
+        if debug_handler is not None:
+            debug_logger.addHandler(debug_handler)
+        elif warning is not None:
+            warning["sink"] = "debug"
+            deferred_sink_warnings.append(warning)
     _configure_library_loggers()
+    if deferred_sink_warnings:
+        logger = logging.getLogger(__name__)
+        for warning in deferred_sink_warnings:
+            emit_structured_log(
+                logger,
+                logging.WARNING,
+                "Optional legacy log file sink unavailable; continuing with stdout logging",
+                event_name="logging.file_sink.unavailable",
+                extra_keys=warning,
+            )
 
 
 def emit_structured_log(

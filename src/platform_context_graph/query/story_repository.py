@@ -7,6 +7,20 @@ from typing import Any
 from .story_shared import human_list, portable_story_value, story_section
 
 
+def _dependency_label(row: Any) -> str:
+    """Return a human-friendly dependency label from mixed response shapes."""
+
+    if isinstance(row, str):
+        return row.strip()
+    if not isinstance(row, dict):
+        return ""
+    for key in ("name", "repository", "repo_name", "label", "id"):
+        value = str(row.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def _subject_from_repository(context: dict[str, Any]) -> dict[str, Any]:
     """Build a portable repository subject from repository context."""
 
@@ -323,26 +337,50 @@ def build_repository_story_response(
 
     if deploys_from or consumer_repositories or dependencies:
         dependency_summary_parts: list[str] = []
-        if deploys_from:
-            dependency_summary_parts.append(
-                f"deploys from {human_list([str(row.get('name') or '') for row in deploys_from if isinstance(row, dict)])}"
-            )
-        if consumer_repositories:
-            dependency_summary_parts.append(
-                f"has consumers {human_list([str(row.get('repository') or row.get('name') or '') for row in consumer_repositories if isinstance(row, dict)])}"
-            )
-        if dependencies:
-            dependency_summary_parts.append(
-                f"depends on {human_list([str(row.get('name') or '') for row in dependencies if isinstance(row, dict)])}"
-            )
-        story_sections.append(
-            story_section(
-                "dependencies",
-                "Dependencies",
-                " and ".join(dependency_summary_parts).capitalize() + ".",
-                items=deploys_from + consumer_repositories,
-            )
+        dependency_items: list[dict[str, Any]] = list(deploys_from) + list(
+            consumer_repositories
         )
+        if deploys_from:
+            deploy_sources = [
+                str(row.get("name") or "").strip()
+                for row in deploys_from
+                if isinstance(row, dict) and str(row.get("name") or "").strip()
+            ]
+            if deploy_sources:
+                dependency_summary_parts.append(
+                    f"deploys from {human_list(deploy_sources)}"
+                )
+        if consumer_repositories:
+            consumer_names = [
+                str(row.get("repository") or row.get("name") or "").strip()
+                for row in consumer_repositories
+                if isinstance(row, dict)
+                and str(row.get("repository") or row.get("name") or "").strip()
+            ]
+            if consumer_names:
+                dependency_summary_parts.append(
+                    f"has consumers {human_list(consumer_names)}"
+                )
+        if dependencies:
+            dependency_names = [
+                label for label in (_dependency_label(row) for row in dependencies) if label
+            ]
+            if dependency_names:
+                dependency_summary_parts.append(
+                    f"depends on {human_list(dependency_names)}"
+                )
+                dependency_items.extend(
+                    [{"type": "repository", "name": label} for label in dependency_names]
+                )
+        if dependency_summary_parts:
+            story_sections.append(
+                story_section(
+                    "dependencies",
+                    "Dependencies",
+                    " and ".join(dependency_summary_parts).capitalize() + ".",
+                    items=dependency_items,
+                )
+            )
 
     evidence: list[dict[str, Any]] = []
     for hostname in public_hostnames[:3]:

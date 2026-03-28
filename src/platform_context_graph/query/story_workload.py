@@ -7,6 +7,24 @@ from typing import Any
 from .story_shared import human_list, portable_story_value, story_section
 
 
+def _entrypoint_labels(entrypoints: list[dict[str, Any]]) -> list[str]:
+    """Return human-friendly labels for workload entrypoints."""
+
+    labels: list[str] = []
+    for row in entrypoints:
+        if not isinstance(row, dict):
+            continue
+        label = (
+            row.get("hostname")
+            or row.get("path")
+            or row.get("url")
+            or row.get("name")
+        )
+        if isinstance(label, str) and label:
+            labels.append(label)
+    return labels
+
+
 def build_workload_story_response(
     context: dict[str, Any],
 ) -> dict[str, Any]:
@@ -40,6 +58,11 @@ def build_workload_story_response(
         story.append(
             f"Owned by repositories {human_list([str(row.get('name') or '') for row in repositories if isinstance(row, dict)])}."
         )
+    entrypoint_labels = _entrypoint_labels(entrypoints)
+    if entrypoint_labels:
+        story.append(
+            f"Public entrypoints: {human_list(entrypoint_labels, limit=5)}."
+        )
     if cloud_resources:
         story.append(
             f"Depends on cloud resources {human_list([str(row.get('name') or '') for row in cloud_resources if isinstance(row, dict)])}."
@@ -50,7 +73,7 @@ def build_workload_story_response(
         )
     if dependencies:
         story.append(
-            f"Depends on workloads {human_list([str(row.get('name') or '') for row in dependencies if isinstance(row, dict)])}."
+            f"Depends on {human_list([str(row.get('name') or '') for row in dependencies if isinstance(row, dict)])}."
         )
     if not story:
         story.append(f"{subject['name']} is available for context lookup.")
@@ -68,6 +91,15 @@ def build_workload_story_response(
                 "Runtime",
                 runtime_summary,
                 items=[selected_instance] if selected_instance else instances,
+            )
+        )
+    if entrypoint_labels:
+        story_sections.append(
+            story_section(
+                "internet",
+                "Internet",
+                f"Public entrypoints include {human_list(entrypoint_labels, limit=5)}.",
+                items=entrypoints,
             )
         )
     if repositories:

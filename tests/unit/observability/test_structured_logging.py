@@ -4,6 +4,7 @@ import importlib
 import io
 import json
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -205,3 +206,79 @@ def test_emit_log_call_reraises_internal_type_errors() -> None:
             "broken message",
             event_name="test.broken",
         )
+
+
+def test_configure_logging_continues_when_legacy_log_file_is_unwritable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unwritable legacy app log path must degrade to stdout-only logging."""
+
+    observability = importlib.import_module("platform_context_graph.observability")
+    observability.reset_observability_for_tests()
+
+    buffer = io.StringIO()
+    monkeypatch.setenv("ENABLE_APP_LOGS", "INFO")
+    monkeypatch.setenv("PCG_LOG_FORMAT", "json")
+    monkeypatch.setenv("LOG_FILE_PATH", "/tmp/blocked/pcg.log")
+
+    file_handler = logging.FileHandler
+
+    def blocked_file_handler(path: str | Path, *args: object, **kwargs: object) -> logging.Handler:
+        if Path(path) == Path("/tmp/blocked/pcg.log"):
+            raise PermissionError("permission denied")
+        return file_handler(path, *args, **kwargs)
+
+    monkeypatch.setattr(logging, "FileHandler", blocked_file_handler)
+
+    observability.configure_logging(component="cli", runtime_role="cli", stream=buffer)
+
+    records = _parse_log_lines(buffer)
+    assert len(records) == 1
+    record = records[0]
+    assert record["severity_text"] == "WARNING"
+    assert record["event_name"] == "logging.file_sink.unavailable"
+    assert record["message"] == "Optional legacy log file sink unavailable; continuing with stdout logging"
+    assert record["extra_keys"] == {
+        "error": "permission denied",
+        "path": "/tmp/blocked/pcg.log",
+        "sink": "app",
+    }
+
+
+def test_configure_logging_continues_when_debug_log_file_is_unwritable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unwritable debug log path must not crash logging bootstrap."""
+
+    observability = importlib.import_module("platform_context_graph.observability")
+    observability.reset_observability_for_tests()
+
+    buffer = io.StringIO()
+    monkeypatch.setenv("ENABLE_APP_LOGS", "INFO")
+    monkeypatch.setenv("PCG_LOG_FORMAT", "json")
+    monkeypatch.setenv("LOG_FILE_PATH", "")
+    monkeypatch.setenv("DEBUG_LOGS", "true")
+    monkeypatch.setenv("DEBUG_LOG_PATH", "/tmp/blocked/mcp_debug.log")
+
+    file_handler = logging.FileHandler
+
+    def blocked_file_handler(path: str | Path, *args: object, **kwargs: object) -> logging.Handler:
+        if Path(path) == Path("/tmp/blocked/mcp_debug.log"):
+            raise PermissionError("permission denied")
+        return file_handler(path, *args, **kwargs)
+
+    monkeypatch.setattr(logging, "FileHandler", blocked_file_handler)
+
+    observability.configure_logging(component="cli", runtime_role="cli", stream=buffer)
+
+    records = _parse_log_lines(buffer)
+    assert len(records) == 1
+    record = records[0]
+    assert record["severity_text"] == "WARNING"
+    assert record["event_name"] == "logging.file_sink.unavailable"
+    assert record["message"] == "Optional legacy log file sink unavailable; continuing with stdout logging"
+    assert record["extra_keys"] == {
+        "error": "permission denied",
+        "path": "/tmp/blocked/mcp_debug.log",
+        "sink": "debug",
+    }
