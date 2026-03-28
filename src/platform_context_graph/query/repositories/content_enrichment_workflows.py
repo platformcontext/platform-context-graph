@@ -312,7 +312,8 @@ def _iter_jenkins_entrypoint_files(repo_root: Path) -> list[Path]:
     for pattern in patterns:
         for file_path in sorted(repo_root.glob(pattern)):
             if file_path.is_file():
-                candidates[str(file_path.relative_to(repo_root))] = file_path
+                key = str(file_path.relative_to(repo_root)).lower()
+                candidates.setdefault(key, file_path)
 
     for file_path in sorted(repo_root.rglob("*.groovy")):
         if not file_path.is_file():

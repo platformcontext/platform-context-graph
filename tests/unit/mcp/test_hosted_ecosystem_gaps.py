@@ -333,6 +333,7 @@ def test_trace_deployment_chain_supports_direct_filters_and_truncation(
             "deployment_chain",
             "terraform_resources",
             "terraform_modules",
+            "terragrunt_configs",
             "provisioning_source_chains",
         ],
     }
