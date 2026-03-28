@@ -1,0 +1,23 @@
+src/platform_context_graph/indexing/coordinator.py
+  171ca78060f03490 7,15-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "550ecaebc01ce0bf3192e21690c1588d5b3a86ac",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 181,
+      "total_deletions": 54,
+      "accepted_lines": 154,
+      "overriden_lines": 3
+    }
+  }
+}
