@@ -203,6 +203,8 @@ def _merge_repository_context_into_workload_response(
             ),
             None,
         )
+        if response.get("instance") is not None:
+            response["instances"] = []
     if response.get("instance") is None:
         existing_instances = list(response.get("instances") or [])
         response["instances"] = _dedupe_entity_refs(existing_instances + derived_instances)
@@ -390,6 +392,8 @@ def db_workload_context(
                     ),
                     None,
                 )
+                if response.get("instance") is not None:
+                    response["instances"] = []
             if response.get("instance") is None:
                 response["instances"] = resource_instances
         if effective_environment is not None and response.get("instance") is None:

@@ -384,5 +384,49 @@ def test_get_workload_context_enriches_repo_backed_runtime_and_dependency_data(
         }
     ]
     assert scoped["instance"]["id"] == "workload-instance:api-node-boats:bg-qa"
+    assert scoped["instances"] == []
     assert "Public entrypoints: api-node-boats.qa.bgrp.io." in story["story"]
     assert "Depends on helm-charts." in story["story"]
+
+
+def test_get_workload_context_clears_instances_when_resource_instance_is_selected():
+    db = make_mock_db(
+        {
+            "MATCH (w:Workload)": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "workload:api-node-boats",
+                        "name": "api-node-boats",
+                        "kind": "service",
+                        "repo_id": None,
+                        "repo_name": None,
+                        "repo_path": None,
+                        "repo_local_path": None,
+                        "repo_slug": None,
+                        "repo_remote_url": None,
+                        "repo_has_remote": False,
+                    }
+                )
+            ),
+            "MATCH (i:WorkloadInstance)": MockResult(records=[]),
+            "MATCH (w:Workload)-[rel]->(dep:Workload)": MockResult(records=[]),
+            "MATCH (k:K8sResource)\n            WHERE k.name CONTAINS $name": MockResult(
+                records=[
+                    {
+                        "name": "api-node-boats",
+                        "kind": "Deployment",
+                        "namespace": "bg-qa",
+                    }
+                ]
+            ),
+        }
+    )
+
+    scoped = get_workload_context(
+        db,
+        workload_id="workload:api-node-boats",
+        environment="bg-qa",
+    )
+
+    assert scoped["instance"]["id"] == "workload-instance:api-node-boats:bg-qa"
+    assert scoped["instances"] == []
