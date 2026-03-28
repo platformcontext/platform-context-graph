@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
+from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
 import os
 from pathlib import Path
+import sys
 from typing import Any
 
 from platform_context_graph.observability import get_observability
@@ -16,6 +20,7 @@ from platform_context_graph.tools.graph_builder_indexing import (
     parse_repository_snapshot_async,
     resolve_repository_file_sets,
 )
+from platform_context_graph.tools.parse_worker import init_parse_worker
 from .coordinator_pipeline import (
     finalize_repository_batch,
     process_repository_snapshots,
@@ -129,6 +134,65 @@ def _parse_worker_count() -> int:
 
     legacy_default = _positive_int_env("PARALLEL_WORKERS", 4)
     return _positive_int_env("PCG_PARSE_WORKERS", legacy_default)
+
+
+def _repo_file_parse_multiprocess_enabled() -> bool:
+    """Return whether file parsing should use the process-pool path."""
+
+    raw_value = os.getenv("PCG_REPO_FILE_PARSE_MULTIPROCESS")
+    return bool(raw_value and raw_value.strip().lower() == "true")
+
+
+def _parse_strategy_label(*, parse_executor: ProcessPoolExecutor | None) -> str:
+    """Return the effective parse strategy label for this run."""
+
+    return "multiprocess" if parse_executor is not None else "threaded"
+
+
+def _multiprocess_start_method() -> str:
+    """Return the process start method for parse workers."""
+
+    configured = os.getenv("PCG_MULTIPROCESS_START_METHOD")
+    if configured and configured.strip():
+        return configured.strip().lower()
+    return "spawn"
+
+
+def _parse_worker_max_tasks_per_child() -> int | None:
+    """Return the optional worker recycle threshold for parse workers."""
+
+    raw_value = os.getenv("PCG_WORKER_MAX_TASKS")
+    if raw_value is None or not raw_value.strip():
+        return None
+    try:
+        return max(1, int(raw_value))
+    except ValueError:
+        return None
+
+
+@contextlib.contextmanager
+def _parse_executor_scope() -> Any:
+    """Yield the shared process pool used for file parsing when enabled."""
+
+    if not _repo_file_parse_multiprocess_enabled():
+        yield None
+        return
+
+    start_method = _multiprocess_start_method()
+    mp_context = multiprocessing.get_context(start_method)
+    max_tasks_per_child = _parse_worker_max_tasks_per_child()
+    executor_kwargs: dict[str, Any] = {
+        "max_workers": _parse_worker_count(),
+        "mp_context": mp_context,
+        "initializer": init_parse_worker,
+    }
+    if start_method != "fork" and max_tasks_per_child is not None:
+        executor_kwargs["max_tasks_per_child"] = max_tasks_per_child
+    executor = ProcessPoolExecutor(**executor_kwargs)
+    try:
+        yield executor
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
 
 
 def _index_queue_depth(parse_workers: int) -> int:
@@ -393,37 +457,44 @@ async def execute_index_run(
         run_id=run_state.run_id,
         resume=resumed,
     ) as run_scope:
-        committed_repo_paths, merged_imports_map = await process_repository_snapshots(
-            builder=builder,
-            run_state=run_state,
-            repo_paths=repo_paths,
-            repo_file_sets=repo_file_sets,
-            resumed=resumed,
-            is_dependency=is_dependency,
-            job_id=job_id,
-            component=component,
-            family=family,
-            source=source,
-            asyncio_module=asyncio_module,
-            info_logger_fn=info_logger_fn,
-            warning_logger_fn=warning_logger_fn,
-            parse_worker_count_fn=_parse_worker_count,
-            index_queue_depth_fn=_index_queue_depth,
-            parse_repository_snapshot_async_fn=parse_repository_snapshot_async,
-            commit_repository_snapshot_fn=_commit_repository_snapshot,
-            iter_snapshot_file_data_batches_fn=_iter_snapshot_file_data_batches,
-            load_snapshot_metadata_fn=_load_snapshot_metadata,
-            snapshot_file_data_exists_fn=_snapshot_file_data_exists,
-            save_snapshot_metadata_fn=_save_snapshot_metadata,
-            save_snapshot_file_data_fn=_save_snapshot_file_data,
-            persist_run_state_fn=_persist_run_state,
-            record_checkpoint_metric_fn=_record_checkpoint_metric,
-            update_pending_repository_gauge_fn=_update_pending_repository_gauge,
-            publish_runtime_progress_fn=_publish_runtime_progress,
-            publish_run_repository_coverage_fn=publish_run_repository_coverage,
-            utc_now_fn=_utc_now,
-            telemetry=telemetry,
-        )
+        with _parse_executor_scope() as parse_executor:
+            parse_strategy = _parse_strategy_label(parse_executor=parse_executor)
+            committed_repo_paths, merged_imports_map = (
+                await process_repository_snapshots(
+                    builder=builder,
+                    run_state=run_state,
+                    repo_paths=repo_paths,
+                    repo_file_sets=repo_file_sets,
+                    resumed=resumed,
+                    is_dependency=is_dependency,
+                    job_id=job_id,
+                    component=component,
+                    family=family,
+                    source=source,
+                    asyncio_module=asyncio_module,
+                    info_logger_fn=info_logger_fn,
+                    warning_logger_fn=warning_logger_fn,
+                    parse_worker_count_fn=_parse_worker_count,
+                    index_queue_depth_fn=_index_queue_depth,
+                    parse_repository_snapshot_async_fn=parse_repository_snapshot_async,
+                    commit_repository_snapshot_fn=_commit_repository_snapshot,
+                    iter_snapshot_file_data_batches_fn=_iter_snapshot_file_data_batches,
+                    load_snapshot_metadata_fn=_load_snapshot_metadata,
+                    snapshot_file_data_exists_fn=_snapshot_file_data_exists,
+                    save_snapshot_metadata_fn=_save_snapshot_metadata,
+                    save_snapshot_file_data_fn=_save_snapshot_file_data,
+                    persist_run_state_fn=_persist_run_state,
+                    record_checkpoint_metric_fn=_record_checkpoint_metric,
+                    update_pending_repository_gauge_fn=_update_pending_repository_gauge,
+                    publish_runtime_progress_fn=_publish_runtime_progress,
+                    publish_run_repository_coverage_fn=publish_run_repository_coverage,
+                    utc_now_fn=_utc_now,
+                    telemetry=telemetry,
+                    parse_executor=parse_executor,
+                    parse_strategy=parse_strategy,
+                    parse_workers=_parse_worker_count(),
+                )
+            )
         finalize_repository_batch(
             builder=builder,
             root_path=root_path,
@@ -446,6 +517,8 @@ async def execute_index_run(
             utc_now_fn=_utc_now,
             publish_run_repository_coverage_fn=publish_run_repository_coverage,
             publish_runtime_progress_fn=_publish_runtime_progress,
+            parse_strategy=parse_strategy,
+            parse_workers=_parse_worker_count(),
         )
 
         run_scope.status = run_state.status

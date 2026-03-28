@@ -25,13 +25,13 @@ RUNTIME_TOOLS = {
     },
     "get_index_status": {
         "name": "get_index_status",
-        "description": "Return the latest checkpointed index status for a workspace path, repository path, or run ID.",
+        "description": "Return the latest checkpointed index status for a workspace path, repository path, repository name, or run ID.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "target": {
                     "type": "string",
-                    "description": "Optional workspace/repository path or checkpoint run ID. Defaults to the current working directory.",
+                    "description": "Optional workspace path, repository path, repository name, or checkpoint run ID. Defaults to the configured checkpoint root for the repository ingester.",
                 }
             },
         },

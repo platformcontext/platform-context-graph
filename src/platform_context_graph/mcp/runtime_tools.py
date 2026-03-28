@@ -42,8 +42,10 @@ class RuntimeStatusToolMixin:
         """Return checkpointed index-run status for a path or run ID."""
 
         target = args.get("target")
-        resolved_target = target or status_queries.default_index_status_target(
-            "repository"
+        resolved_target = status_queries.resolve_index_status_target(
+            self.db_manager,
+            target=target,
+            ingester="repository",
         )
         summary = describe_index_run(resolved_target or ".")
         if summary is None:

@@ -4,16 +4,17 @@ CONTENT_TOOLS = {
     "get_file_content": {
         "name": "get_file_content",
         "description": (
-            "Return source for a repo-relative file using a canonical repository "
-            "identifier. This reads from the server-side content store or "
-            "workspace and does not require a raw filesystem path."
+            "Return source for a repo-relative file using either a canonical "
+            "repository identifier or a plain repository name/slug. This reads "
+            "from the server-side content store or workspace and does not "
+            "require a raw filesystem path."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "repo_id": {
                     "type": "string",
-                    "description": "Canonical repository identifier.",
+                    "description": "Canonical repository identifier or plain repository name.",
                 },
                 "relative_path": {
                     "type": "string",
@@ -26,8 +27,8 @@ CONTENT_TOOLS = {
     "get_file_lines": {
         "name": "get_file_lines",
         "description": (
-            "Return a line range for a repo-relative file using canonical "
-            "repository identity."
+            "Return a line range for a repo-relative file using either "
+            "canonical repository identity or a plain repository name."
         ),
         "inputSchema": {
             "type": "object",

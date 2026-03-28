@@ -48,7 +48,8 @@ class DeadCodeRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    repo_path: str | None = None
+    repo_id: str | None = None
+    scope: str = "auto"
     exclude_decorated_with: list[str] | None = None
 
 
@@ -163,6 +164,7 @@ def code_relationships(
 @router.post("/dead-code", responses=problem_detail_responses(400))
 def dead_code(
     payload: DeadCodeRequest,
+    request: Request,
     services: QueryServices = Depends(get_query_services),
 ):
     """Run dead-code analysis across the indexed graph.
@@ -172,13 +174,26 @@ def dead_code(
         services: Query service container.
 
     Returns:
-        Dead-code analysis results.
+        Dead-code analysis results or a problem response for invalid input.
     """
-    return services.code.find_dead_code(
-        services.database,
-        repo_path=payload.repo_path,
-        exclude_decorated_with=payload.exclude_decorated_with,
-    )
+    invalid = _validate_repo_id(payload.repo_id, request)
+    if invalid is not None:
+        return invalid
+
+    try:
+        return services.code.find_dead_code(
+            services.database,
+            repo_id=payload.repo_id,
+            scope=payload.scope,
+            exclude_decorated_with=payload.exclude_decorated_with,
+        )
+    except ValueError as exc:
+        return problem_response(
+            request,
+            title="Invalid dead-code request",
+            status_code=400,
+            detail=str(exc),
+        )
 
 
 @router.post("/complexity", responses=problem_detail_responses(400))

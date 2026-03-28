@@ -79,6 +79,24 @@ CONTEXT_TOOLS = {
             "required": ["workload_id"],
         },
     },
+    "get_workload_story": {
+        "name": "get_workload_story",
+        "description": "Get a structured story for a workload: subject, story lines, story sections, deployment overview, evidence, limitations, and drill-down handles.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "workload_id": {
+                    "type": "string",
+                    "description": "Canonical workload identifier or plain workload name.",
+                },
+                "environment": {
+                    "type": "string",
+                    "description": "Optional environment to select a workload instance view.",
+                },
+            },
+            "required": ["workload_id"],
+        },
+    },
     "get_service_context": {
         "name": "get_service_context",
         "description": "Alias for workload context that only accepts canonical workload identifiers for service workloads.",
@@ -88,6 +106,24 @@ CONTEXT_TOOLS = {
                 "workload_id": {
                     "type": "string",
                     "description": "Canonical workload identifier for a service workload.",
+                },
+                "environment": {
+                    "type": "string",
+                    "description": "Optional environment to select a service instance view.",
+                },
+            },
+            "required": ["workload_id"],
+        },
+    },
+    "get_service_story": {
+        "name": "get_service_story",
+        "description": "Alias for workload story that accepts service workload identifiers or plain service names and returns a structured story contract.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "workload_id": {
+                    "type": "string",
+                    "description": "Canonical workload identifier or plain service name.",
                 },
                 "environment": {
                     "type": "string",

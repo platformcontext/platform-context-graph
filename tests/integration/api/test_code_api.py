@@ -75,7 +75,8 @@ def test_code_routes_delegate_to_query_services() -> None:
         dead_code_response = client.post(
             "/api/v0/code/dead-code",
             json={
-                "repo_path": "/srv/repos/payments-api",
+                "repo_id": "repository:r_ab12cd34",
+                "scope": "repo",
                 "exclude_decorated_with": ["app.command"],
             },
         )
@@ -112,7 +113,8 @@ def test_code_routes_delegate_to_query_services() -> None:
     assert calls["dead_code"] == [
         {
             "database": services.database,
-            "repo_path": "/srv/repos/payments-api",
+            "repo_id": "repository:r_ab12cd34",
+            "scope": "repo",
             "exclude_decorated_with": ["app.command"],
         }
     ]
@@ -125,6 +127,35 @@ def test_code_routes_delegate_to_query_services() -> None:
             "path": None,
             "repo_id": "repository:r_ab12cd34",
             "scope": "auto",
+        }
+    ]
+
+
+def test_code_search_defaults_match_mcp_contract() -> None:
+    calls: list[dict[str, object]] = []
+
+    def search_code(database: object, **kwargs: object) -> dict[str, object]:
+        calls.append({"database": database, **kwargs})
+        return {"ranked_results": []}
+
+    services = SimpleNamespace(
+        database=object(),
+        code=SimpleNamespace(search_code=search_code),
+    )
+
+    with _make_client(query_services=services) as client:
+        response = client.post("/api/v0/code/search", json={"query": "payments"})
+
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "database": services.database,
+            "query": "payments",
+            "repo_id": None,
+            "scope": "auto",
+            "exact": False,
+            "limit": 10,
+            "edit_distance": None,
         }
     ]
 
@@ -142,6 +173,27 @@ def test_code_search_rejects_non_canonical_repository_ids() -> None:
     with _make_client(query_services=services) as client:
         response = client.post(
             "/api/v0/code/search", json={"query": "payments", "repo_id": "payments-api"}
+        )
+
+    assert response.status_code == 400
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.json()["title"] == "Invalid canonical repository identifier"
+
+
+def test_dead_code_rejects_non_canonical_repository_ids() -> None:
+    services = SimpleNamespace(
+        database=object(),
+        code=SimpleNamespace(
+            find_dead_code=lambda *_args, **_kwargs: pytest.fail(
+                "service should not be called"
+            )
+        ),
+    )
+
+    with _make_client(query_services=services) as client:
+        response = client.post(
+            "/api/v0/code/dead-code",
+            json={"repo_id": "payments-api", "scope": "repo"},
         )
 
     assert response.status_code == 400

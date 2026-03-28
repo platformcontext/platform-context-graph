@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 
 from ...domain.entities import EntityType
-from ...domain.responses import WorkloadContextResponse
+from ...domain.responses import StoryResponse, WorkloadContextResponse
 from ...query.context import ServiceAliasError
 from ..dependencies import QueryServices, get_query_services
 from ._shared import (
@@ -48,6 +48,44 @@ def get_service_context(
 
     try:
         result = services.context.get_service_context(
+            services.database,
+            workload_id=workload_id,
+            environment=environment,
+        )
+    except ServiceAliasError as exc:
+        return problem_response(
+            request,
+            title="Invalid service identifier",
+            status_code=400,
+            detail=str(exc),
+        )
+
+    if service_result_has_error(result):
+        return service_error_response(
+            request, detail=result["error"], not_found_title="Service not found"
+        )
+    return result
+
+
+@router.get(
+    "/{workload_id:path}/story",
+    response_model=StoryResponse,
+    response_model_exclude_none=True,
+    responses=problem_detail_responses(400, 404),
+)
+def get_service_story(
+    workload_id: str,
+    request: Request,
+    environment: str | None = None,
+    services: QueryServices = Depends(get_query_services),
+):
+    """Return story-context data for a service alias."""
+
+    if not is_canonical_id_for_type(workload_id, EntityType.workload):
+        return invalid_canonical_id_response(request, kind="service")
+
+    try:
+        result = services.context.get_service_story(
             services.database,
             workload_id=workload_id,
             environment=environment,

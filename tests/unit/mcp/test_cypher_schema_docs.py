@@ -52,3 +52,33 @@ def test_llm_prompt_repository_sop_prefers_story_before_detail() -> None:
 
     assert "story" in LLM_SYSTEM_PROMPT
     assert "top-level `story`" in LLM_SYSTEM_PROMPT
+
+
+def test_codebase_tool_schemas_use_canonical_repo_id_and_http_search_defaults() -> None:
+    """The MCP code tool schema should mirror the HTTP code search contract."""
+
+    find_code_schema = CODEBASE_TOOLS["find_code"]["inputSchema"]["properties"]
+    relationships_schema = CODEBASE_TOOLS["analyze_code_relationships"]["inputSchema"][
+        "properties"
+    ]
+    dead_code_schema = CODEBASE_TOOLS["find_dead_code"]["inputSchema"]["properties"]
+    complexity_schema = CODEBASE_TOOLS["calculate_cyclomatic_complexity"][
+        "inputSchema"
+    ]["properties"]
+
+    assert "repo_id" in find_code_schema
+    assert "repo_path" not in find_code_schema
+    assert "exact" in find_code_schema
+    assert find_code_schema["exact"]["default"] is False
+    assert "fuzzy_search" not in find_code_schema
+    assert find_code_schema["limit"]["default"] == 10
+
+    assert "repo_id" in relationships_schema
+    assert "repo_path" not in relationships_schema
+
+    assert "repo_id" in dead_code_schema
+    assert "repo_path" not in dead_code_schema
+    assert dead_code_schema["scope"]["default"] == "auto"
+
+    assert "repo_id" in complexity_schema
+    assert "repo_path" not in complexity_schema

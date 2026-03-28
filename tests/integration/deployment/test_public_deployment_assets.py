@@ -359,13 +359,19 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
     assert postgres["image"].startswith("postgres:")
     assert postgres["environment"]["POSTGRES_DB"] == "platform_context_graph"
     assert postgres["environment"]["POSTGRES_USER"] == "pcg"
+    assert postgres["ports"] == ["${PCG_POSTGRES_PORT:-15432}:5432"]
 
     for service_name in ["bootstrap-index", "platform-context-graph", "repo-sync"]:
         envs = _compose_service_envs(services[service_name])
         assert envs["PCG_CONTENT_STORE_DSN"].startswith("postgresql://")
         assert envs["PCG_POSTGRES_DSN"].startswith("postgresql://")
         assert envs["PCG_REPOSITORY_RULES_JSON"] == "[]"
+        assert (
+            envs["PCG_REPO_FILE_PARSE_MULTIPROCESS"]
+            == "${PCG_REPO_FILE_PARSE_MULTIPROCESS:-false}"
+        )
         assert envs["PCG_PARSE_WORKERS"] == "${PCG_PARSE_WORKERS:-4}"
+        assert envs["PCG_WORKER_MAX_TASKS"] == "${PCG_WORKER_MAX_TASKS:-}"
         assert envs["PCG_INDEX_QUEUE_DEPTH"] == "${PCG_INDEX_QUEUE_DEPTH:-8}"
 
     service_envs = _compose_service_envs(services["platform-context-graph"])
@@ -406,7 +412,9 @@ def test_compose_stack_propagates_worker_tuning_envs(
 
     for service_name in ["bootstrap-index", "platform-context-graph", "repo-sync"]:
         envs = _compose_service_envs(services[service_name])
+        assert "PCG_REPO_FILE_PARSE_MULTIPROCESS" in envs
         assert "PCG_PARSE_WORKERS" in envs
+        assert "PCG_WORKER_MAX_TASKS" in envs
         assert "PCG_INDEX_QUEUE_DEPTH" in envs
 
     for service_name in [
@@ -585,6 +593,7 @@ def test_compose_stack_supports_host_port_overrides() -> None:
             **os.environ,
             "NEO4J_HTTP_PORT": "17474",
             "NEO4J_BOLT_PORT": "17687",
+            "PCG_POSTGRES_PORT": "15433",
             "PCG_HTTP_PORT": "18080",
         },
         cwd=REPO_ROOT,
@@ -594,6 +603,7 @@ def test_compose_stack_supports_host_port_overrides() -> None:
     rendered = yaml.safe_load(result.stdout)
     ports = rendered["services"]["neo4j"]["ports"]
     service_ports = rendered["services"]["platform-context-graph"]["ports"]
+    postgres_ports = rendered["services"]["postgres"]["ports"]
 
     assert {
         "published": "17474",
@@ -613,6 +623,12 @@ def test_compose_stack_supports_host_port_overrides() -> None:
         "protocol": "tcp",
         "mode": "ingress",
     } in service_ports
+    assert {
+        "published": "15433",
+        "target": 5432,
+        "protocol": "tcp",
+        "mode": "ingress",
+    } in postgres_ports
 
 
 def test_compose_stack_supports_filesystem_host_root_override() -> None:

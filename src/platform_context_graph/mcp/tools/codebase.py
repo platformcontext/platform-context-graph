@@ -41,7 +41,7 @@ CODEBASE_TOOLS = {
     },
     "find_code": {
         "name": "find_code",
-        "description": "Find relevant code snippets related to a keyword (e.g., function name, class name, or content).",
+        "description": "Find relevant code snippets related to a keyword (e.g., function name, class name, or content) within an optional canonical repository identifier.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -49,9 +49,9 @@ CODEBASE_TOOLS = {
                     "type": "string",
                     "description": "Keyword or phrase to search for",
                 },
-                "fuzzy_search": {
+                "exact": {
                     "type": "boolean",
-                    "description": "Whether to use fuzzy search",
+                    "description": "Whether to require exact matching. Defaults to fuzzy search.",
                     "default": False,
                 },
                 "edit_distance": {
@@ -59,9 +59,14 @@ CODEBASE_TOOLS = {
                     "description": "Edit distance for fuzzy search (between 0-2)",
                     "default": 2,
                 },
-                "repo_path": {
+                "repo_id": {
                     "type": "string",
-                    "description": "Optional: Path to the repository to restrict the search to.",
+                    "description": "Optional canonical repository identifier to restrict the search to.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum ranked results to return.",
+                    "default": 10,
                 },
                 "scope": {
                     "type": "string",
@@ -107,9 +112,9 @@ CODEBASE_TOOLS = {
                     "type": "string",
                     "description": "Optional: specific file path for precise results.",
                 },
-                "repo_path": {
+                "repo_id": {
                     "type": "string",
-                    "description": "Optional: Path to the repository to restrict the search to.",
+                    "description": "Optional canonical repository identifier to restrict the search to.",
                 },
                 "scope": {
                     "type": "string",
@@ -196,7 +201,7 @@ CODEBASE_TOOLS = {
     },
     "find_dead_code": {
         "name": "find_dead_code",
-        "description": "Find potentially unused functions (dead code) across the entire indexed codebase, optionally excluding functions with specific decorators.",
+        "description": "Find potentially unused functions (dead code) across the indexed codebase, optionally scoped to a canonical repository identifier and excluding functions with specific decorators.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -206,9 +211,14 @@ CODEBASE_TOOLS = {
                     "description": "Optional: A list of decorator names (e.g., '@app.route') to exclude from dead code detection.",
                     "default": [],
                 },
-                "repo_path": {
+                "repo_id": {
                     "type": "string",
-                    "description": "Optional: Path to the repository to restrict the search to.",
+                    "description": "Optional canonical repository identifier to restrict the search to.",
+                },
+                "scope": {
+                    "type": "string",
+                    "description": "Optional query scope: auto, repo, workspace, or ecosystem.",
+                    "default": "auto",
                 },
             },
         },
@@ -227,9 +237,9 @@ CODEBASE_TOOLS = {
                     "type": "string",
                     "description": "Optional: The full path to the file containing the function for a more specific query.",
                 },
-                "repo_path": {
+                "repo_id": {
                     "type": "string",
-                    "description": "Optional: Path to the repository to restrict the search to.",
+                    "description": "Optional canonical repository identifier to restrict the search to.",
                 },
                 "scope": {
                     "type": "string",
@@ -251,9 +261,9 @@ CODEBASE_TOOLS = {
                     "description": "The maximum number of complex functions to return.",
                     "default": 10,
                 },
-                "repo_path": {
+                "repo_id": {
                     "type": "string",
-                    "description": "Optional: Path to the repository to restrict the search to.",
+                    "description": "Optional canonical repository identifier to restrict the search to.",
                 },
                 "scope": {
                     "type": "string",

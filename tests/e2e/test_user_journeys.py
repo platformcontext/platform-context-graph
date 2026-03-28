@@ -3,6 +3,8 @@ import shutil
 import subprocess
 import os
 
+pytestmark = pytest.mark.usefixtures("exclusive_e2e_graph")
+
 # We will need the fixtures we defined in conftest.py
 # (python_sample_project, temp_test_dir)
 

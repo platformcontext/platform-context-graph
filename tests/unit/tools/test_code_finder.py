@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from platform_context_graph.tools.code_finder import CodeFinder
+from platform_context_graph.tools.code_finder_dispatch import CodeFinderDispatchMixin
 from platform_context_graph.tools import code_finder_search
 
 
@@ -357,3 +358,46 @@ def test_find_related_code_surfaces_partial_content_search_warnings() -> None:
     )
 
     assert result["warnings"] == finder._search_warnings
+
+
+def test_analyze_code_relationships_preserves_module_deps_drill_down_shape() -> None:
+    """Module dependency results should stay drill-down friendly and canonical."""
+
+    class _Harness(CodeFinderDispatchMixin):
+        def find_module_dependencies(
+            self, module_name: str, repo_path: str | None = None
+        ) -> dict[str, object]:
+            assert module_name == "requests"
+            assert repo_path == "/repos/payments-api"
+            return {
+                "module_name": module_name,
+                "importers": [
+                    {
+                        "importer_file_path": "/repos/payments-api/src/app.py",
+                        "import_line_number": 12,
+                    }
+                ],
+                "imports": [{"imported_module": "urllib3"}],
+            }
+
+    result = _Harness().analyze_code_relationships(
+        query_type="module_deps",
+        target="requests",
+        repo_path="/repos/payments-api",
+    )
+
+    assert result == {
+        "query_type": "module_deps",
+        "target": "requests",
+        "results": {
+            "module_name": "requests",
+            "importers": [
+                {
+                    "importer_file_path": "/repos/payments-api/src/app.py",
+                    "import_line_number": 12,
+                }
+            ],
+            "imports": [{"imported_module": "urllib3"}],
+        },
+        "summary": "Module 'requests' is imported by 1 files",
+    }

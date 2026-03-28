@@ -5,12 +5,16 @@ from typing import Any
 from ....core.database import DatabaseManager
 from ....query import infra as infra_queries
 from ....query import repositories as repository_queries
+from ....query.story_shared import portable_story_value
 from ....utils.debug_log import emit_log_call, warning_logger
 from .ecosystem_support import repo_summary_note, trace_deployment_chain
 from .ecosystem_support_overview import (
     build_deployment_overview,
     build_story_lines,
 )
+
+_BLAST_RADIUS_GRAPH_EVIDENCE_SOURCE = "graph_dependency"
+_BLAST_RADIUS_CONSUMER_EVIDENCE_SOURCE = "consumer_reference"
 
 
 def get_ecosystem_overview(
@@ -102,6 +106,22 @@ def find_blast_radius(
         else:
             return {"error": f"Unknown target_type: {target_type}"}
 
+    affected = _normalize_blast_radius_rows(
+        affected,
+        evidence_source=_BLAST_RADIUS_GRAPH_EVIDENCE_SOURCE,
+        inferred=False,
+    )
+    if target_type == "repository":
+        context = repository_queries.get_repository_context(
+            db_manager,
+            repo_id=target,
+        )
+        if "error" not in context:
+            affected = _merge_consumer_blast_radius_rows(
+                affected,
+                consumer_repositories=list(context.get("consumer_repositories") or []),
+            )
+
     result: dict[str, Any] = {
         "target": target,
         "target_type": target_type,
@@ -109,12 +129,13 @@ def find_blast_radius(
         "affected_count": len(affected),
     }
     has_null_tier = any(
-        a.get("tier") is None or a.get("risk") is None
-        for a in affected
-        if a.get("repo") is not None
+        a.get("tier") is None or a.get("risk") is None for a in affected
     )
     if has_null_tier:
-        result["note"] = "Tier and risk levels require an ecosystem manifest."
+        result["note"] = (
+            "Tier and risk metadata is absent for some affected repos; "
+            "graph dependency and consumer evidence are shown directly."
+        )
     return result
 
 
@@ -171,8 +192,8 @@ def get_repo_summary(
     coverage = context.get("coverage")
     limitations = list(context.get("limitations") or [])
     summary: dict[str, Any] = {
+        "repo_id": repository.get("id"),
         "name": repository.get("name"),
-        "path": repository.get("local_path") or repository.get("path"),
         "file_count": repository.get("discovered_file_count")
         or repository.get("file_count")
         or 0,
@@ -186,13 +207,9 @@ def get_repo_summary(
         "deploys_from": context.get("deploys_from", []),
         "discovers_config_in": context.get("discovers_config_in", []),
         "provisioned_by": context.get("provisioned_by", []),
-        "provisions_dependencies_for": context.get(
-            "provisions_dependencies_for", []
-        ),
+        "provisions_dependencies_for": context.get("provisions_dependencies_for", []),
         "environments": context.get("environments", []),
-        "observed_config_environments": context.get(
-            "observed_config_environments", []
-        ),
+        "observed_config_environments": context.get("observed_config_environments", []),
         "delivery_workflows": context.get("delivery_workflows", {}),
         "delivery_paths": context.get("delivery_paths", []),
         "controller_driven_paths": context.get("controller_driven_paths", []),
@@ -242,7 +259,7 @@ def get_repo_summary(
             "tier": ecosystem.get("tier"),
             "risk_level": ecosystem.get("risk_level"),
         }
-    return summary
+    return portable_story_value(summary)
 
 
 def get_repo_context(
@@ -254,3 +271,64 @@ def get_repo_context(
         db_manager,
         repo_id=repo_name,
     )
+
+
+def _normalize_blast_radius_rows(
+    rows: list[dict[str, Any]],
+    *,
+    evidence_source: str,
+    inferred: bool,
+) -> list[dict[str, Any]]:
+    """Return blast-radius rows with stable evidence metadata attached."""
+
+    normalized: list[dict[str, Any]] = []
+    for row in rows:
+        repo_name = str(row.get("repo") or "").strip()
+        if not repo_name:
+            continue
+        row_copy = dict(row)
+        row_copy["repo"] = repo_name
+        row_copy["tier"] = row_copy.get("tier")
+        row_copy["risk"] = row_copy.get("risk")
+        row_copy["hops"] = row_copy.get("hops")
+        row_copy["evidence_source"] = evidence_source
+        row_copy["inferred"] = inferred
+        normalized.append(row_copy)
+    return normalized
+
+
+def _merge_consumer_blast_radius_rows(
+    affected: list[dict[str, Any]],
+    *,
+    consumer_repositories: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Add consumer-repository evidence without duplicating graph rows."""
+
+    seen = {
+        str(row.get("repo") or "").strip()
+        for row in affected
+        if str(row.get("repo") or "").strip()
+    }
+    merged = list(affected)
+    for row in consumer_repositories:
+        if not isinstance(row, dict):
+            continue
+        repo_name = str(row.get("repository") or row.get("name") or "").strip()
+        if not repo_name or repo_name in seen:
+            continue
+        seen.add(repo_name)
+        merged.append(
+            {
+                "repo": repo_name,
+                "repo_id": row.get("repo_id"),
+                "tier": None,
+                "risk": None,
+                "hops": None,
+                "evidence_source": _BLAST_RADIUS_CONSUMER_EVIDENCE_SOURCE,
+                "evidence_kinds": list(row.get("evidence_kinds") or []),
+                "matched_values": list(row.get("matched_values") or []),
+                "sample_paths": list(row.get("sample_paths") or []),
+                "inferred": True,
+            }
+        )
+    return merged

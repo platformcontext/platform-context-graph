@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-from glob import glob
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -44,9 +43,7 @@ _HOSTNAME_CANDIDATES = (
 )
 _BASE_URL_RE = re.compile(r"baseUrl:\s*['\"]https?://([^/'\"]+)")
 _DOCS_ROUTE_RE = re.compile(r"path:\s*['\"]([^'\"]+)['\"]")
-_DEFAULT_VERSION_RE = re.compile(
-    r"default(?:Api)?Version\s*:\s*['\"]([^'\"]+)['\"]"
-)
+_DEFAULT_VERSION_RE = re.compile(r"default(?:Api)?Version\s*:\s*['\"]([^'\"]+)['\"]")
 _MAX_API_SURFACE_ENDPOINTS = 25
 
 
@@ -123,7 +120,9 @@ def _extract_api_surface(database: Any, *, repo_id: str) -> dict[str, Any]:
     api_versions: list[str] = []
     endpoints: list[dict[str, Any]] = []
     for relative_path in _SPEC_CANDIDATES:
-        content = _load_repo_file(database, repo_id=repo_id, relative_path=relative_path)
+        content = _load_repo_file(
+            database, repo_id=repo_id, relative_path=relative_path
+        )
         if content is None:
             continue
         if "specs/index.yaml" in content:
@@ -133,7 +132,10 @@ def _extract_api_surface(database: Any, *, repo_id: str) -> dict[str, Any]:
                     "discovered_from": relative_path,
                 }
             )
-        if relative_path in {"server/init/plugins/spec.js", "server/init/plugins/spec.ts"}:
+        if relative_path in {
+            "server/init/plugins/spec.js",
+            "server/init/plugins/spec.ts",
+        }:
             docs_routes.extend(_DOCS_ROUTE_RE.findall(content))
         if relative_path.startswith("versioning.config."):
             api_versions.extend(_DEFAULT_VERSION_RE.findall(content))
@@ -170,7 +172,9 @@ def _extract_hostnames(
 
     hostnames: list[dict[str, Any]] = []
     for relative_path in _HOSTNAME_CANDIDATES:
-        content = _load_repo_file(database, repo_id=repo_id, relative_path=relative_path)
+        content = _load_repo_file(
+            database, repo_id=repo_id, relative_path=relative_path
+        )
         if content is None:
             continue
         if relative_path.endswith(".json"):
@@ -207,7 +211,11 @@ def _extract_related_config_hostnames(
     deploys_from: list[dict[str, Any]],
     discovers_config_in: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Extract hostname hints from related config repositories."""
+    """Extract hostname hints from related config repositories.
+
+    Related config files are loaded through the indexed content service so the
+    acceptance path never depends on a server-local checkout.
+    """
 
     related_hostnames: list[dict[str, Any]] = []
     db_manager = get_db_manager(database)
@@ -221,25 +229,29 @@ def _extract_related_config_hostnames(
                 resolved_repo = _resolve_related_repo(session, source_repo)
                 if resolved_repo is None:
                     continue
-                local_path = resolved_repo.get("local_path") or resolved_repo.get("path")
-                if not isinstance(local_path, str) or not local_path:
+                repo_id = str(resolved_repo.get("id") or "").strip()
+                if not repo_id:
                     continue
                 for source_path in split_csv(row.get("source_paths")):
                     if not source_path:
                         continue
                     candidate_patterns = values_path_patterns(source_path)
                     for candidate_pattern in candidate_patterns:
-                        for file_path in sorted(glob(str(Path(local_path) / candidate_pattern))):
-                            file_content = Path(file_path).read_text(encoding="utf-8")
-                            relative_path = str(Path(file_path).resolve().relative_to(Path(local_path).resolve()))
-                            related_hostnames.extend(
-                                _hostname_records_from_yaml(
-                                    repo_name=repo_name,
-                                    source_repo_name=str(resolved_repo.get("name") or ""),
-                                    relative_path=relative_path,
-                                    content=file_content,
-                                )
+                        file_content = _load_repo_file(
+                            database,
+                            repo_id=repo_id,
+                            relative_path=candidate_pattern,
+                        )
+                        if file_content is None:
+                            continue
+                        related_hostnames.extend(
+                            _hostname_records_from_yaml(
+                                repo_name=repo_name,
+                                source_repo_name=str(resolved_repo.get("name") or ""),
+                                relative_path=candidate_pattern,
+                                content=file_content,
                             )
+                        )
     return related_hostnames
 
 
@@ -264,6 +276,7 @@ def _load_repo_file(database: Any, *, repo_id: str, relative_path: str) -> str |
         return None
     content = result.get("content")
     return content if isinstance(content, str) else None
+
 
 def _hostname_records_from_json(
     *, repo_name: str, relative_path: str, content: str

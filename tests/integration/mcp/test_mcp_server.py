@@ -1,12 +1,30 @@
-import pytest
 import asyncio
-import json
-import io
 import importlib
-from unittest.mock import MagicMock, AsyncMock, patch
-from platform_context_graph.mcp import MCPServer
-from platform_context_graph.query.context import ServiceAliasError
+import io
+import json
+import sys
+from pathlib import Path
+from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+_MCP_ROOT = (
+    Path(__file__).resolve().parents[3] / "src" / "platform_context_graph" / "mcp"
+)
+for module_name, module_path in [
+    ("platform_context_graph.mcp", _MCP_ROOT),
+    ("platform_context_graph.mcp.tools", _MCP_ROOT / "tools"),
+    ("platform_context_graph.mcp.tools.handlers", _MCP_ROOT / "tools" / "handlers"),
+]:
+    if module_name not in sys.modules:
+        module = ModuleType(module_name)
+        module.__path__ = [str(module_path)]
+        sys.modules[module_name] = module
+
+from platform_context_graph.mcp.server import DEFAULT_EDIT_DISTANCE, MCPServer
 from platform_context_graph.mcp.tool_registry import TOOLS
+from platform_context_graph.query.context import ServiceAliasError
 from platform_context_graph.repository_identity import canonical_repository_id
 
 
@@ -182,9 +200,7 @@ class TestMCPServer:
             assert request_records[-1]["request_id"] == "rpc-42"
             assert request_records[-1]["correlation_id"] == "rpc-42"
             assert request_records[-1]["transport"] == "jsonrpc-stdio"
-            assert (
-                request_records[-1]["extra_keys"]["jsonrpc_method"] == "tools/call"
-            )
+            assert request_records[-1]["extra_keys"]["jsonrpc_method"] == "tools/call"
             assert "transport" not in request_records[-1]["extra_keys"]
             assert tool_records[-1]["request_id"] == "rpc-42"
             assert tool_records[-1]["extra_keys"]["tool_name"] == "get_index_status"
@@ -219,6 +235,85 @@ class TestMCPServer:
             "query": "payment api",
             "results": {"ranked_results": []},
         }
+
+    def test_find_code_wrapper_defaults_match_http_contract(self, mock_server):
+        """Canonical MCP search defaults should mirror the HTTP code search route."""
+
+        with patch(
+            "platform_context_graph.mcp.server.code_queries.search_code"
+        ) as mock_search:
+            mock_search.return_value = {"ranked_results": []}
+
+            result = mock_server.find_code_tool(
+                query="Payment_API",
+                repo_id="repository:r_ab12cd34",
+            )
+
+        mock_search.assert_called_once_with(
+            mock_server.code_finder,
+            query="Payment_API",
+            repo_id="repository:r_ab12cd34",
+            scope="auto",
+            exact=False,
+            limit=10,
+            edit_distance=None,
+        )
+        assert result == {
+            "success": True,
+            "query": "Payment_API",
+            "results": {"ranked_results": []},
+        }
+
+    def test_find_code_wrapper_falls_back_to_default_limit_for_invalid_canonical_value(
+        self, mock_server
+    ):
+        with patch(
+            "platform_context_graph.mcp.server.code_queries.search_code"
+        ) as mock_search:
+            mock_search.return_value = {"ranked_results": []}
+
+            result = mock_server.find_code_tool(
+                query="Payment_API",
+                repo_id="repository:r_ab12cd34",
+                limit="not-a-number",
+            )
+
+        mock_search.assert_called_once_with(
+            mock_server.code_finder,
+            query="Payment_API",
+            repo_id="repository:r_ab12cd34",
+            scope="auto",
+            exact=False,
+            limit=10,
+            edit_distance=None,
+        )
+        assert result["success"] is True
+
+    def test_find_code_wrapper_falls_back_to_legacy_limit_for_invalid_fuzzy_value(
+        self, mock_server
+    ):
+        with patch(
+            "platform_context_graph.mcp.server.code_queries.search_code"
+        ) as mock_search:
+            mock_search.return_value = {"ranked_results": []}
+
+            result = mock_server.find_code_tool(
+                query="Payment_API",
+                fuzzy_search=True,
+                repo_path="/repo",
+                limit=None,
+            )
+
+        mock_search.assert_called_once_with(
+            mock_server.code_finder,
+            query="payment api",
+            repo_id="/repo",
+            scope="auto",
+            exact=False,
+            limit=15,
+            edit_distance=DEFAULT_EDIT_DISTANCE,
+        )
+        assert result["success"] is True
 
     def test_find_code_wrapper_returns_repo_identity_for_workspace_results(
         self, mock_server
@@ -317,6 +412,30 @@ class TestMCPServer:
             "target": "foo",
             "context": "src/foo.py",
             "results": {"results": []},
+        }
+
+    def test_find_dead_code_wrapper_prefers_repo_id_contract(self, mock_server):
+        with patch(
+            "platform_context_graph.mcp.server.code_queries.find_dead_code"
+        ) as mock_dead_code:
+            mock_dead_code.return_value = {"potentially_unused_functions": []}
+
+            result = mock_server.find_dead_code_tool(
+                repo_id="repository:r_ab12cd34",
+                scope="repo",
+                exclude_decorated_with=["@app.route"],
+            )
+
+        mock_dead_code.assert_called_once_with(
+            mock_server.code_finder,
+            repo_id="repository:r_ab12cd34",
+            scope="repo",
+            exclude_decorated_with=["@app.route"],
+        )
+        assert result == {
+            "success": True,
+            "query_type": "dead_code",
+            "results": {"potentially_unused_functions": []},
         }
 
     def test_repo_and_infra_wrappers_route_through_query_services(self, mock_server):

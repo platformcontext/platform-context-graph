@@ -12,10 +12,12 @@ from ..runtime.status_store import (
     get_runtime_status_store,
     request_ingester_scan,
 )
+from .repositories.common import get_db_manager, resolve_repository
 
 __all__ = [
     "KNOWN_INGESTERS",
     "default_index_status_target",
+    "resolve_index_status_target",
     "get_ingester_status",
     "list_ingesters",
     "request_ingester_scan_control",
@@ -150,6 +152,43 @@ def default_index_status_target(ingester: str = "repository") -> Path | None:
     """Return the default checkpoint target used by index-status surfaces."""
 
     return _checkpoint_target_for_ingester(ingester)
+
+
+def resolve_index_status_target(
+    database: Any,
+    *,
+    target: str | Path | None,
+    ingester: str = "repository",
+) -> str | Path | None:
+    """Resolve a repo name, path, or run ID for index-status lookups."""
+
+    if isinstance(target, Path):
+        return target
+
+    if target is None:
+        return default_index_status_target(ingester)
+
+    candidate = str(target).strip()
+    if not candidate:
+        return default_index_status_target(ingester)
+
+    if all(char in "0123456789abcdef" for char in candidate.lower()):
+        return candidate
+
+    expanded = Path(candidate).expanduser()
+    if expanded.is_absolute():
+        return expanded.resolve()
+
+    db_manager = get_db_manager(database)
+    if callable(getattr(db_manager, "get_driver", None)):
+        with db_manager.get_driver().session() as session:
+            repo = resolve_repository(session, candidate)
+        if repo is not None:
+            local_path = repo.get("local_path") or repo.get("path")
+            if isinstance(local_path, str) and local_path.strip():
+                return Path(local_path).resolve()
+
+    return candidate
 
 
 def _active_repository_from_summary(summary: dict[str, Any]) -> dict[str, Any] | None:

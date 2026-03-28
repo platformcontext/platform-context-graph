@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...observability import trace_query
+from ..story import build_workload_story_response
 from .content_entity import content_entity_context
 from .database import db_workload_context
 from .fixture import fixture_entity_context
@@ -13,7 +14,9 @@ from .support import load_fixture_graph, parse_workload_id
 __all__ = [
     "ServiceAliasError",
     "get_entity_context",
+    "get_service_story",
     "get_workload_context",
+    "get_workload_story",
     "get_service_context",
 ]
 
@@ -91,6 +94,44 @@ def get_service_context(
                 f"Workload '{workload_id}' is not a service and cannot be addressed via service alias"
             )
         return result
+
+
+def get_workload_story(
+    database: Any,
+    *,
+    workload_id: str,
+    environment: str | None = None,
+) -> dict[str, Any]:
+    """Return a structured story for one workload."""
+
+    with trace_query("workload_story"):
+        result = _workload_context(
+            database,
+            workload_id=workload_id,
+            environment=environment,
+        )
+        if "error" in result:
+            return result
+        return build_workload_story_response(result)
+
+
+def get_service_story(
+    database: Any,
+    *,
+    workload_id: str,
+    environment: str | None = None,
+) -> dict[str, Any]:
+    """Return a structured story for one service alias."""
+
+    with trace_query("service_story"):
+        result = get_service_context(
+            database,
+            workload_id=workload_id,
+            environment=environment,
+        )
+        if "error" in result:
+            return result
+        return build_workload_story_response(result)
 
 
 def _entity_context(

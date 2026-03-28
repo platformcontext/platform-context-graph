@@ -30,15 +30,28 @@ class QueryToolMixin:
 
         return infra_queries.get_ecosystem_overview(self.db_manager)
 
-    def trace_deployment_chain_tool(
-        self: _QueryRuntime, **args: Any
-    ) -> dict[str, Any]:
+    def trace_deployment_chain_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
         """Trace deployment relationships across the indexed ecosystem."""
 
         service_name = require_str_argument(args, "service_name")
         if service_name is None:
             return {"error": "The 'service_name' argument is required."}
-        return ecosystem.trace_deployment_chain(self.db_manager, service_name)
+        direct_only = args.get("direct_only")
+        if not isinstance(direct_only, bool):
+            direct_only = True
+        max_depth = args.get("max_depth")
+        if not isinstance(max_depth, int):
+            max_depth = None
+        include_related_module_usage = args.get("include_related_module_usage")
+        if not isinstance(include_related_module_usage, bool):
+            include_related_module_usage = False
+        return ecosystem.trace_deployment_chain(
+            self.db_manager,
+            service_name,
+            direct_only=direct_only,
+            max_depth=max_depth,
+            include_related_module_usage=include_related_module_usage,
+        )
 
     def find_blast_radius_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
         """Compute blast radius for an infrastructure change."""
@@ -97,6 +110,17 @@ class QueryToolMixin:
         if repo_id is None:
             return {"error": "The 'repo_id' argument is required."}
         return repository_queries.get_repository_context(
+            self.db_manager,
+            repo_id=repo_id,
+        )
+
+    def get_repo_story_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
+        """Return a structured story for one repository."""
+
+        repo_id = require_str_argument(args, "repo_id")
+        if repo_id is None:
+            return {"error": "The 'repo_id' argument is required."}
+        return repository_queries.get_repository_story(
             self.db_manager,
             repo_id=repo_id,
         )
@@ -174,6 +198,18 @@ class QueryToolMixin:
             environment=args.get("environment"),
         )
 
+    def get_workload_story_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
+        """Return a structured story for one workload identifier."""
+
+        workload_id = require_str_argument(args, "workload_id")
+        if workload_id is None:
+            return {"error": "The 'workload_id' argument is required."}
+        return context_queries.get_workload_story(
+            self.db_manager,
+            workload_id=workload_id,
+            environment=args.get("environment"),
+        )
+
     def get_service_context_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
         """Return service context or a structured alias error."""
 
@@ -189,9 +225,22 @@ class QueryToolMixin:
         except context_queries.ServiceAliasError as exc:
             return {"error": str(exc)}
 
-    def trace_resource_to_code_tool(
-        self: _QueryRuntime, **args: Any
-    ) -> dict[str, Any]:
+    def get_service_story_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
+        """Return a structured service story or a structured alias error."""
+
+        workload_id = require_str_argument(args, "workload_id")
+        if workload_id is None:
+            return {"error": "The 'workload_id' argument is required."}
+        try:
+            return context_queries.get_service_story(
+                self.db_manager,
+                workload_id=workload_id,
+                environment=args.get("environment"),
+            )
+        except context_queries.ServiceAliasError as exc:
+            return {"error": str(exc)}
+
+    def trace_resource_to_code_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
         """Trace a cloud resource back to related code."""
 
         start = require_str_argument(args, "start")

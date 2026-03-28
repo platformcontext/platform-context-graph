@@ -140,7 +140,14 @@ def test_get_workload_context_has_minimal_db_backed_fallback():
 
     assert logical["workload"]["id"] == "workload:payments-api"
     assert logical["workload"]["kind"] == "service"
-    assert logical["repositories"][0]["type"] == "repository"
+    assert logical["repositories"][0] == {
+        "id": "repository:r_ab12cd34",
+        "type": "repository",
+        "name": "payments-platform",
+        "repo_slug": "platformcontext/payments-platform",
+        "remote_url": "https://github.com/platformcontext/payments-platform",
+        "has_remote": True,
+    }
     assert logical["instances"][0]["id"] == "workload-instance:payments-api:payments"
 
     assert instance["instance"]["id"] == "workload-instance:payments-api:prod"
@@ -150,11 +157,16 @@ def test_get_workload_context_has_minimal_db_backed_fallback():
 def test_get_service_context_has_minimal_db_backed_fallback():
     db = make_mock_db(
         {
-            "MATCH (r:Repository)\n            WHERE r.name CONTAINS $name\n            RETURN r.name as name, r.path as path": MockResult(
+            "coalesce(r[$local_path_key], r.path) as local_path": MockResult(
                 single_record=MockRecord(
                     {
+                        "id": "repository:r_ab12cd34",
                         "name": "payments-platform",
                         "path": "/srv/repos/payments-platform",
+                        "local_path": "/srv/repos/payments-platform",
+                        "remote_url": "https://github.com/platformcontext/payments-platform",
+                        "repo_slug": "platformcontext/payments-platform",
+                        "has_remote": True,
                     }
                 )
             ),
@@ -171,6 +183,14 @@ def test_get_service_context_has_minimal_db_backed_fallback():
     )
 
     assert result["requested_as"] == "service"
+    assert result["repositories"][0] == {
+        "id": "repository:r_ab12cd34",
+        "type": "repository",
+        "name": "payments-platform",
+        "repo_slug": "platformcontext/payments-platform",
+        "remote_url": "https://github.com/platformcontext/payments-platform",
+        "has_remote": True,
+    }
     assert result["instance"]["id"] == "workload-instance:payments-api:prod"
 
 

@@ -187,6 +187,106 @@ async def _run_pipeline(
     return committed_repo_paths, merged, run_state, warnings
 
 
+def test_pipeline_records_repository_stage_telemetry_for_resumed_parse(
+    tmp_path: Path,
+) -> None:
+    """Parse-stage telemetry should expose repository span attrs and lifecycle hooks."""
+
+    repo = tmp_path / "resumed-repo"
+    repo.mkdir()
+    file_path = repo / "main.py"
+    file_path.write_text("print('ok')\n", encoding="utf-8")
+
+    run_state = _make_run_state([repo])
+    run_state.repositories[str(repo.resolve())].status = "running"
+
+    parse_repo_spans: list[tuple[str, str | None, dict[str, object]]] = []
+    repository_events: list[dict[str, object]] = []
+    duration_events: list[dict[str, object]] = []
+
+    @contextmanager
+    def _span_scope(name: str, *, component: str | None = None, attributes=None):
+        parse_repo_spans.append((name, component, dict(attributes or {})))
+        yield SimpleNamespace(record_exception=lambda _exc: None)
+
+    telemetry = SimpleNamespace(
+        start_span=_span_scope,
+        record_index_repositories=lambda **kwargs: repository_events.append(kwargs),
+        record_index_repository_duration=lambda **kwargs: duration_events.append(
+            kwargs
+        ),
+    )
+
+    async def parse_snapshot(_builder, repo_path, repo_files, **_kwargs):
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={},
+            file_data=[{"path": str(repo_files[0].resolve())}],
+        )
+
+    asyncio.run(
+        process_repository_snapshots(
+            builder=SimpleNamespace(),
+            run_state=run_state,
+            repo_paths=[repo],
+            repo_file_sets={repo: [file_path]},
+            resumed=True,
+            is_dependency=False,
+            job_id=None,
+            component="ingester",
+            family="index",
+            source="filesystem",
+            asyncio_module=asyncio,
+            info_logger_fn=lambda *_a, **_kw: None,
+            warning_logger_fn=lambda *_a, **_kw: None,
+            parse_worker_count_fn=lambda: 1,
+            index_queue_depth_fn=lambda _w: 8,
+            parse_repository_snapshot_async_fn=parse_snapshot,
+            commit_repository_snapshot_fn=lambda *_a, **_kw: None,
+            iter_snapshot_file_data_batches_fn=lambda *_a, **_kw: iter(()),
+            load_snapshot_metadata_fn=lambda *_a: None,
+            snapshot_file_data_exists_fn=lambda *_a: False,
+            save_snapshot_metadata_fn=lambda *_a: None,
+            save_snapshot_file_data_fn=lambda *_a: None,
+            persist_run_state_fn=lambda _state: None,
+            record_checkpoint_metric_fn=_noop,
+            update_pending_repository_gauge_fn=_noop,
+            publish_runtime_progress_fn=_noop,
+            publish_run_repository_coverage_fn=_publish_coverage,
+            utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+            telemetry=telemetry,
+        )
+    )
+
+    assert parse_repo_spans[0] == (
+        "pcg.index.repository",
+        "ingester",
+        {
+            "pcg.index.run_id": "test-run",
+            "pcg.index.repo_path": str(repo.resolve()),
+            "pcg.index.resume": True,
+            "pcg.index.parse_strategy": "threaded",
+            "pcg.index.parse_workers": 1,
+        },
+    )
+    assert [name for name, _component, _attrs in parse_repo_spans[1:]] == [
+        "pcg.index.repository.queue_wait",
+        "pcg.index.repository.parse",
+        "pcg.index.repository.commit_wait",
+        "pcg.index.repository.commit",
+    ]
+    assert [event["phase"] for event in repository_events] == [
+        "started",
+        "resumed",
+        "completed",
+    ]
+    assert [event["count"] for event in repository_events] == [1, 1, 1]
+    assert duration_events[-1]["status"] == "completed"
+    assert duration_events[-1]["component"] == "ingester"
+    assert run_state.repositories[str(repo.resolve())].status == "completed"
+
+
 def test_pipeline_completes_when_single_repo_fails(tmp_path: Path) -> None:
     """A single failing repo must not deadlock the pipeline."""
     repo = tmp_path / "bad-repo"
@@ -324,6 +424,61 @@ def test_pipeline_does_not_set_running_before_semaphore(tmp_path: Path) -> None:
         ), f"Expected at most 1 repo running at a time, got {running_count}: {snap}"
 
 
+def test_pipeline_limits_concurrent_repository_parses_to_worker_count(
+    tmp_path: Path,
+) -> None:
+    """Repository parsing must honor the configured parse-worker bound."""
+
+    repos = [tmp_path / f"repo-{idx}" for idx in range(4)]
+    for repo in repos:
+        repo.mkdir()
+        (repo / "main.py").write_text("print('ok')\n", encoding="utf-8")
+
+    repo_file_sets = {repo: [repo / "main.py"] for repo in repos}
+    active_parses = 0
+    max_active_parses = 0
+    enough_started = asyncio.Event()
+    release_parses = asyncio.Event()
+
+    async def blocking_parse(_builder, repo_path, repo_files, **_kw):
+        nonlocal active_parses
+        nonlocal max_active_parses
+        active_parses += 1
+        max_active_parses = max(max_active_parses, active_parses)
+        if active_parses >= 2:
+            enough_started.set()
+        try:
+            await release_parses.wait()
+        finally:
+            active_parses -= 1
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={},
+            file_data=[],
+        )
+
+    async def run() -> None:
+        pipeline_task = asyncio.create_task(
+            _run_pipeline(
+                repos,
+                repo_file_sets,
+                blocking_parse,
+                parse_worker_count=2,
+            )
+        )
+        try:
+            await asyncio.wait_for(enough_started.wait(), timeout=1.0)
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            assert max_active_parses <= 2
+        finally:
+            release_parses.set()
+            await pipeline_task
+
+    asyncio.run(run())
+
+
 def test_pipeline_marks_repo_failed_when_span_setup_raises(tmp_path: Path) -> None:
     """Escaped setup errors should be attributed to the repository as failures."""
 
@@ -389,15 +544,21 @@ def test_pipeline_duration_excludes_time_waiting_for_parse_semaphore(
             self._semaphore = asyncio.Semaphore(value)
             self._acquire_count = 0
 
-        async def __aenter__(self):
+        async def acquire(self) -> None:
             await self._semaphore.acquire()
             self._acquire_count += 1
             if self._acquire_count == 2:
                 current_time["value"] += 5.0
+
+        def release(self) -> None:
+            self._semaphore.release()
+
+        async def __aenter__(self):
+            await self.acquire()
             return self
 
         async def __aexit__(self, exc_type, exc, tb):
-            self._semaphore.release()
+            self.release()
 
     telemetry = SimpleNamespace(
         start_span=_span_scope,

@@ -21,6 +21,7 @@ from ..domain import (
 )
 from ..observability import trace_query
 from ..repository_identity import repository_metadata
+from .story_shared import portable_story_value
 from .entity_resolution_database import db_workload_entities
 from .repositories import _repository_projection
 
@@ -275,7 +276,7 @@ def _build_match(
         match_type=source,
         alias=alias,
     )
-    return match.model_dump(mode="json", exclude_none=True)
+    return portable_story_value(match.model_dump(mode="json", exclude_none=True))
 
 
 def _fixture_matches(

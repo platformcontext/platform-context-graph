@@ -26,6 +26,119 @@ class _DummyDB:
         return _DummyDriver()
 
 
+def test_enrich_repository_context_uses_content_service_for_related_config_files(
+    monkeypatch,
+) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def _fake_get_file_content(_database, *, repo_id: str, relative_path: str):
+        calls.append((repo_id, relative_path))
+        if (repo_id, relative_path) == (
+            "repository:r_api_node_boats",
+            "config/qa.json",
+        ):
+            return {
+                "available": True,
+                "content": '{"server":{"hostname":"api-node-boats.qa.bgrp.io"}}',
+            }
+        if (repo_id, relative_path) == (
+            "repository:r_helm123",
+            "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+        ):
+            return {
+                "available": True,
+                "content": (
+                    "exposure:\n"
+                    "  gateway:\n"
+                    "    hostnames:\n"
+                    "      - api-node-boats.qa.svc.bgrp.io\n"
+                ),
+            }
+        return {"available": False, "content": None}
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
+        _fake_get_file_content,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.extract_related_deployment_artifacts",
+        lambda **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.extract_consumer_repositories",
+        lambda *_args, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.enrich_workflow_paths",
+        lambda **_kwargs: None,
+    )
+
+    def _resolve_repository(_session, candidate: str):
+        if candidate in {
+            "https://github.com/boatsgroup/helm-charts",
+            "helm-charts",
+        }:
+            return {
+                "id": "repository:r_helm123",
+                "name": "helm-charts",
+                "path": "/does/not/matter",
+                "local_path": "/does/not/matter",
+            }
+        return None
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.resolve_repository",
+        _resolve_repository,
+    )
+
+    result = enrich_repository_context(
+        _DummyDB(),
+        {
+            "repository": {
+                "id": "repository:r_api_node_boats",
+                "name": "api-node-boats",
+                "path": "/does/not/matter",
+                "local_path": "/does/not/matter",
+            },
+            "deploys_from": [
+                {
+                    "source_repos": "https://github.com/boatsgroup/helm-charts",
+                    "source_paths": "argocd/api-node-boats/overlays/bg-qa/config.yaml",
+                    "name": "helm-charts",
+                }
+            ],
+            "limitations": ["dns_unknown"],
+        },
+    )
+
+    assert result["hostnames"] == [
+        {
+            "hostname": "api-node-boats.qa.bgrp.io",
+            "environment": "qa",
+            "source_repo": "api-node-boats",
+            "relative_path": "config/qa.json",
+            "visibility": "public",
+        },
+        {
+            "hostname": "api-node-boats.qa.svc.bgrp.io",
+            "environment": "bg-qa",
+            "source_repo": "helm-charts",
+            "service_repo": "api-node-boats",
+            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+            "visibility": "internal",
+        },
+    ]
+    assert result["observed_config_environments"] == ["qa", "bg-qa"]
+    assert (
+        "repository:r_api_node_boats",
+        "config/qa.json",
+    ) in calls
+    assert (
+        "repository:r_helm123",
+        "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+    ) in calls
+
+
 def test_enrich_repository_context_extracts_api_surface_and_hostnames(
     monkeypatch,
     tmp_path: Path,
@@ -115,11 +228,11 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         ),
         encoding="utf-8",
     )
-    base_values_path = (
-        helm_repo / "argocd" / "api-node-boats" / "base" / "values.yaml"
-    )
+    base_values_path = helm_repo / "argocd" / "api-node-boats" / "base" / "values.yaml"
     base_values_path.parent.mkdir(parents=True)
-    (helm_repo / "argocd" / "api-node-boats" / "base" / "kustomization.yaml").write_text(
+    (
+        helm_repo / "argocd" / "api-node-boats" / "base" / "kustomization.yaml"
+    ).write_text(
         "\n".join(
             [
                 "apiVersion: kustomize.config.k8s.io/v1beta1",
@@ -153,7 +266,14 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         "service:\n  port: 3081\n",
         encoding="utf-8",
     )
-    (helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "kustomization.yaml").write_text(
+    (
+        helm_repo
+        / "argocd"
+        / "api-node-boats"
+        / "overlays"
+        / "bg-qa"
+        / "kustomization.yaml"
+    ).write_text(
         "\n".join(
             [
                 "apiVersion: kustomize.config.k8s.io/v1beta1",
@@ -170,7 +290,14 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         ),
         encoding="utf-8",
     )
-    (helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "xirsarole-patch.yaml").write_text(
+    (
+        helm_repo
+        / "argocd"
+        / "api-node-boats"
+        / "overlays"
+        / "bg-qa"
+        / "xirsarole-patch.yaml"
+    ).write_text(
         "spec:\n  clusterName: bg-qa\n",
         encoding="utf-8",
     )
@@ -209,7 +336,7 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
     (terraform_repo / "shared" / "iam.tf").write_text(
         "\n".join(
             [
-                "data \"aws_iam_policy_document\" \"api_node_boats\" {",
+                'data "aws_iam_policy_document" "api_node_boats" {',
                 "  statement {",
                 '    resources = ["/configd/api-node-boats/*", "/api/api-node-boats/*", "/configd/elasticache/*"]',
                 "  }",
@@ -226,9 +353,7 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             "route: { path: '/_specs' }\n"
         ),
         "specs/index.yaml": (
-            "openapi: '3.1.0'\n"
-            "paths:\n"
-            "  $ref: ./paths/index.yaml\n"
+            "openapi: '3.1.0'\n" "paths:\n" "  $ref: ./paths/index.yaml\n"
         ),
         "specs/paths/index.yaml": (
             "/_version:\n"
@@ -237,9 +362,7 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             "  $ref: ./v3/search.yaml\n"
         ),
         "specs/paths/_version.yaml": (
-            "get:\n"
-            "  operationId: getVersion\n"
-            "  summary: Get version\n"
+            "get:\n" "  operationId: getVersion\n" "  summary: Get version\n"
         ),
         "specs/paths/v3/search.yaml": (
             "get:\n"
@@ -260,6 +383,21 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             "baseUrl: 'https://api-node-boats.prod.bgrp.io'\n"
             "baseUrl: 'https://api-node-boats.preview.bgrp.io'\n"
         ),
+        "argocd/api-node-boats/overlays/bg-qa/values.yaml": (
+            "image:\n"
+            "  repository: 048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats\n"
+            "  tag: 3.21.0\n"
+            "service:\n"
+            "  port: 3081\n"
+            "exposure:\n"
+            "  gateway:\n"
+            "    enabled: true\n"
+            "    hostnames:\n"
+            "      - api-node-boats.qa.svc.bgrp.io\n"
+            "    parentRefs:\n"
+            "      - name: envoy-internal\n"
+        ),
+        "argocd/api-node-boats/base/values.yaml": "service:\n  port: 3081\n",
     }
 
     def _fake_get_file_content(_database, *, repo_id: str, relative_path: str):
@@ -475,7 +613,9 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         },
     ]
     assert result["observed_config_environments"] == ["qa", "production", "bg-qa"]
-    assert result["delivery_workflows"]["github_actions"]["automation_repositories"] == [
+    assert result["delivery_workflows"]["github_actions"][
+        "automation_repositories"
+    ] == [
         {
             "repository": "boatsgroup/core-engineering-automation",
             "owner": "boatsgroup",
@@ -705,7 +845,10 @@ def test_enrich_repository_context_extracts_jenkins_pipeline_hints(
 
     monkeypatch.setattr(
         "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
-        lambda _database, *, repo_id, relative_path: {"available": False, "content": None},
+        lambda _database, *, repo_id, relative_path: {
+            "available": False,
+            "content": None,
+        },
     )
 
     context = {

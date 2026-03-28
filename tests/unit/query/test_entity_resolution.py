@@ -123,7 +123,9 @@ def test_shared_service_signatures_stay_keyword_only_and_stable():
         code.get_code_relationships,
         ["query_type", "target", "context", "repo_id", "scope"],
     )
-    assert_kwonly(code.find_dead_code, ["repo_path", "exclude_decorated_with"])
+    assert_kwonly(
+        code.find_dead_code, ["repo_id", "scope", "exclude_decorated_with"]
+    )
     assert_kwonly(
         code.get_complexity,
         ["mode", "limit", "function_name", "path", "repo_id", "scope"],
@@ -280,6 +282,9 @@ def test_resolve_entity_supports_repo_names_hostnames_and_service_aliases():
     assert repo_match["matches"][0]["ref"]["id"] == expected_repo_id
     assert slug_match["matches"][0]["ref"]["id"] == expected_repo_id
     assert remote_match["matches"][0]["ref"]["id"] == expected_repo_id
+    assert "local_path" not in repo_match["matches"][0]["ref"]
+    assert "local_path" not in slug_match["matches"][0]["ref"]
+    assert "local_path" not in remote_match["matches"][0]["ref"]
     assert (
         host_match["matches"][0]["ref"]["id"] == "cloud-resource:shared-payments-prod"
     )

@@ -54,8 +54,24 @@ def test_execute_index_run_parses_multiple_repositories_concurrently(
         asyncio_module,
         info_logger_fn,
         progress_callback=None,
+        parse_executor=None,
+        component=None,
+        mode=None,
+        source=None,
+        parse_workers=1,
     ) -> RepositorySnapshot:
-        del is_dependency, job_id, asyncio_module, info_logger_fn, progress_callback
+        del (
+            is_dependency,
+            job_id,
+            asyncio_module,
+            info_logger_fn,
+            progress_callback,
+            parse_executor,
+            component,
+            mode,
+            source,
+            parse_workers,
+        )
         parse_order.append(repo_path.name)
         if len(parse_order) == 1:
             await asyncio.wait_for(second_started.wait(), timeout=0.5)
@@ -137,6 +153,24 @@ def test_execute_index_run_parses_multiple_repositories_concurrently(
         str(repo_a.resolve()),
     ]
     assert result.status == "completed"
+
+
+def test_multiprocess_start_method_defaults_to_spawn(monkeypatch) -> None:
+    """The parse worker pool should default to the safest cross-platform mode."""
+
+    coordinator = importlib.import_module("platform_context_graph.indexing.coordinator")
+    monkeypatch.delenv("PCG_MULTIPROCESS_START_METHOD", raising=False)
+
+    assert coordinator._multiprocess_start_method() == "spawn"
+
+
+def test_multiprocess_start_method_honors_explicit_override(monkeypatch) -> None:
+    """Operators may still force a specific multiprocessing start method."""
+
+    coordinator = importlib.import_module("platform_context_graph.indexing.coordinator")
+    monkeypatch.setenv("PCG_MULTIPROCESS_START_METHOD", "forkserver")
+
+    assert coordinator._multiprocess_start_method() == "forkserver"
 
 
 def test_commit_repository_snapshot_deletes_by_canonical_repo_id(

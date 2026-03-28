@@ -1,8 +1,25 @@
 from __future__ import annotations
 
+from pathlib import Path
+from types import ModuleType
+import sys
 from unittest.mock import MagicMock
 
+_MCP_ROOT = (
+    Path(__file__).resolve().parents[3] / "src" / "platform_context_graph" / "mcp"
+)
+for module_name, module_path in [
+    ("platform_context_graph.mcp", _MCP_ROOT),
+    ("platform_context_graph.mcp.tools", _MCP_ROOT / "tools"),
+    ("platform_context_graph.mcp.tools.handlers", _MCP_ROOT / "tools" / "handlers"),
+]:
+    if module_name not in sys.modules:
+        module = ModuleType(module_name)
+        module.__path__ = [str(module_path)]
+        sys.modules[module_name] = module
+
 from platform_context_graph.repository_identity import canonical_repository_id
+from platform_context_graph.query import content as content_queries
 from platform_context_graph.query.code import (
     find_dead_code,
     get_code_relationships,
@@ -54,6 +71,30 @@ def test_search_code_workspace_scope_ignores_repository_filter() -> None:
         query="payment",
         repo_id="/repo",
         scope="workspace",
+        exact=False,
+        limit=2,
+    )
+
+    finder.find_related_code.assert_called_once_with(
+        "payment",
+        True,
+        2,
+        repo_path=None,
+    )
+    assert result == {"ranked_results": ["a", "b"]}
+
+
+def test_search_code_ecosystem_scope_matches_workspace_behavior() -> None:
+    """Ecosystem scope should behave like workspace scope for repo filtering."""
+
+    finder = MagicMock()
+    finder.find_related_code.return_value = {"ranked_results": ["a", "b"]}
+
+    result = search_code(
+        finder,
+        query="payment",
+        repo_id="/repo",
+        scope="ecosystem",
         exact=False,
         limit=2,
     )
@@ -135,7 +176,6 @@ def test_search_code_workspace_scope_infers_repo_identity_per_result() -> None:
                 ),
                 "repo_slug": "platformcontext/payments-api",
                 "remote_url": "https://github.com/platformcontext/payments-api",
-                "local_path": "/repos/payments-api",
                 "recommended_action": "ask_user_for_local_path",
                 "interaction_mode": "conversational",
             },
@@ -226,6 +266,28 @@ def test_get_code_relationships_delegates_to_code_finder():
     assert result == {"results": []}
 
 
+def test_get_code_relationships_ecosystem_scope_matches_workspace_behavior():
+    finder = MagicMock()
+    finder.analyze_code_relationships.return_value = {"results": []}
+
+    result = get_code_relationships(
+        finder,
+        query_type="find_callers",
+        target="foo",
+        context="src/foo.py",
+        repo_id="/repo",
+        scope="ecosystem",
+    )
+
+    finder.analyze_code_relationships.assert_called_once_with(
+        "find_callers",
+        "foo",
+        "src/foo.py",
+        repo_path=None,
+    )
+    assert result == {"results": []}
+
+
 def test_get_code_relationships_normalizes_service_friendly_aliases():
     finder = MagicMock()
     finder.analyze_code_relationships.return_value = {"results": []}
@@ -306,17 +368,169 @@ def test_get_code_relationships_workspace_scope_infers_repo_identity() -> None:
     assert result["results"][0]["relative_path"] == "src/payments.py"
 
 
+def test_get_code_relationships_module_deps_supports_repo_relative_drill_down(
+    monkeypatch,
+) -> None:
+    """Module dependency results should round-trip into file-content lookups."""
+
+    class FakeResult:
+        def __init__(self, *, records=None):
+            self._records = records or []
+
+        def data(self):
+            return self._records
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def run(self, query, **_kwargs):
+            if "MATCH (r:Repository)" in query:
+                return FakeResult(
+                    records=[
+                        {
+                            "name": "payments-api",
+                            "path": "/repos/payments-api",
+                            "local_path": "/repos/payments-api",
+                            "remote_url": "https://github.com/platformcontext/payments-api",
+                            "repo_slug": "platformcontext/payments-api",
+                            "has_remote": True,
+                        }
+                    ]
+                )
+            raise AssertionError(f"unexpected query: {query}")
+
+    class _ContentService:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def get_file_content(
+            self, *, repo_id: str, relative_path: str
+        ) -> dict[str, object]:
+            self.calls.append({"repo_id": repo_id, "relative_path": relative_path})
+            return {
+                "available": True,
+                "repo_id": repo_id,
+                "relative_path": relative_path,
+            }
+
+    finder = MagicMock()
+    finder.get_driver.return_value.session.return_value = FakeSession()
+    finder.analyze_code_relationships.return_value = {
+        "module_name": "requests",
+        "importers": [
+            {
+                "importer_file_path": "/repos/payments-api/src/app.py",
+                "import_line_number": 12,
+            }
+        ],
+        "imports": [{"imported_module": "urllib3"}],
+    }
+
+    result = get_code_relationships(
+        finder,
+        query_type="module_deps",
+        target="requests",
+        scope="workspace",
+    )
+
+    importer = result["importers"][0]
+    assert importer["repo_id"] == canonical_repository_id(
+        remote_url="https://github.com/platformcontext/payments-api",
+        local_path="/repos/payments-api",
+    )
+    assert importer["relative_path"] == "src/app.py"
+
+    content_service = _ContentService()
+    monkeypatch.setattr(
+        content_queries,
+        "get_content_service",
+        lambda _database: content_service,
+    )
+    content_result = content_queries.get_file_content(
+        object(),
+        repo_id=importer["repo_id"],
+        relative_path=importer["relative_path"],
+    )
+
+    assert content_service.calls == [
+        {
+            "repo_id": importer["repo_id"],
+            "relative_path": "src/app.py",
+        }
+    ]
+    assert content_result == {
+        "available": True,
+        "repo_id": importer["repo_id"],
+        "relative_path": "src/app.py",
+    }
+
+
 def test_find_dead_code_delegates_to_code_finder():
     finder = MagicMock()
     finder.find_dead_code.return_value = {"potentially_unused_functions": []}
 
     result = find_dead_code(
-        finder, repo_path="/repo", exclude_decorated_with=["@app.route"]
+        finder, repo_id="/repo", exclude_decorated_with=["@app.route"]
     )
 
     finder.find_dead_code.assert_called_once_with(
         exclude_decorated_with=["@app.route"],
         repo_path="/repo",
+    )
+    assert result == {"potentially_unused_functions": []}
+
+
+def test_find_dead_code_uses_repo_id_scope_for_legacy_repo_filter():
+    class FakeResult:
+        def __init__(self, *, records=None):
+            self._records = records or []
+
+        def data(self):
+            return self._records
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def run(self, query, **_kwargs):
+            if "MATCH (r:Repository)" in query:
+                return FakeResult(
+                    records=[
+                        {
+                            "name": "payments-api",
+                            "path": "/repos/payments-api",
+                            "local_path": "/repos/payments-api",
+                            "remote_url": "https://github.com/platformcontext/payments-api",
+                            "repo_slug": "platformcontext/payments-api",
+                            "has_remote": True,
+                        }
+                    ]
+                )
+            raise AssertionError(f"unexpected query: {query}")
+
+    finder = MagicMock()
+    finder.get_driver.return_value.session.return_value = FakeSession()
+    finder.find_dead_code.return_value = {"potentially_unused_functions": []}
+
+    result = find_dead_code(
+        finder,
+        repo_id=canonical_repository_id(
+            remote_url="git@github.com:platformcontext/payments-api.git",
+            local_path="/repos/payments-api",
+        ),
+        scope="repo",
+    )
+
+    finder.find_dead_code.assert_called_once_with(
+        exclude_decorated_with=[],
+        repo_path="/repos/payments-api",
     )
     assert result == {"potentially_unused_functions": []}
 
@@ -585,7 +799,6 @@ def test_search_code_returns_portable_repo_relative_file_references() -> None:
                 ),
                 "repo_slug": "platformcontext/payments-api",
                 "remote_url": "https://github.com/platformcontext/payments-api",
-                "local_path": "/repos/payments-api",
                 "recommended_action": "ask_user_for_local_path",
                 "interaction_mode": "conversational",
             },

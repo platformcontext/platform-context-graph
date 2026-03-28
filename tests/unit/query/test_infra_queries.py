@@ -121,6 +121,83 @@ def test_search_infra_resources_returns_grouped_matches():
     assert "terraform_resources" in result["results"]
 
 
+def test_search_infra_resources_includes_argocd_applicationsets() -> None:
+    """ArgoCD infra search should surface ApplicationSets as first-class results."""
+
+    db = make_mock_db(
+        {
+            "MATCH (a:ArgoCDApplication)": MockResult(records=[]),
+            "MATCH (a:ArgoCDApplicationSet)": MockResult(
+                records=[
+                    {
+                        "name": "api-node-boats",
+                        "project": "default",
+                        "namespace": "argocd",
+                        "dest_namespace": "boats",
+                        "repository": "iac-eks-argocd",
+                        "file": "applicationsets/api-node/api-node-boats.yaml",
+                    }
+                ]
+            ),
+        }
+    )
+
+    result = search_infra_resources(db, query="api-node-boats", types=["argocd"], limit=10)
+
+    assert result["category"] == "argocd"
+    assert result["results"]["argocd_applicationsets"] == [
+        {
+            "name": "api-node-boats",
+            "project": "default",
+            "namespace": "argocd",
+            "dest_namespace": "boats",
+            "repository": "iac-eks-argocd",
+            "file": "applicationsets/api-node/api-node-boats.yaml",
+        }
+    ]
+
+
+def test_search_infra_resources_surfaces_crossplane_claims_from_k8s_fallback() -> None:
+    """Crossplane search should surface claim-like K8s resources tied to known XRDs."""
+
+    db = make_mock_db(
+        {
+            "MATCH (c:CrossplaneClaim)": MockResult(records=[]),
+            "MATCH (k:K8sResource)": MockResult(
+                records=[
+                    {
+                        "name": "api-node-boats",
+                        "kind": "XIRSARole",
+                        "namespace": "",
+                        "api_version": "aws.bgrp.io/v1alpha1",
+                        "repository": "helm-charts",
+                        "file": "argocd/api-node-boats/base/xirsarole.yaml",
+                    }
+                ]
+            ),
+            "MATCH (x:CrossplaneXRD)": MockResult(records=[]),
+        }
+    )
+
+    result = search_infra_resources(
+        db,
+        query="api-node-boats",
+        types=["crossplane"],
+        limit=10,
+    )
+
+    assert result["results"]["crossplane_claims"] == [
+        {
+            "name": "api-node-boats",
+            "kind": "XIRSARole",
+            "namespace": "",
+            "api_version": "aws.bgrp.io/v1alpha1",
+            "repository": "helm-charts",
+            "file": "argocd/api-node-boats/base/xirsarole.yaml",
+        }
+    ]
+
+
 def test_get_infra_relationships_preserves_current_shape():
     db = make_mock_db(
         {

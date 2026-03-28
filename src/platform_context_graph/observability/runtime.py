@@ -28,6 +28,7 @@ from .otel import (
     request_context_scope,
 )
 
+
 @dataclass(slots=True)
 class ObservabilityRuntime(RuntimeMetricsMixin):
     """Hold OpenTelemetry providers, instruments, and request helpers.
@@ -66,6 +67,14 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         init=False,
         default_factory=dict,
     )
+    _index_snapshot_queue_depth: dict[ActiveStateKey, int] = field(
+        init=False,
+        default_factory=dict,
+    )
+    _index_parse_tasks_active: dict[ActiveStateKey, int] = field(
+        init=False,
+        default_factory=dict,
+    )
     http_requests_total: Any = field(init=False, default=None)
     http_request_duration: Any = field(init=False, default=None)
     http_request_errors_total: Any = field(init=False, default=None)
@@ -80,6 +89,7 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
     index_repositories_total: Any = field(init=False, default=None)
     index_checkpoints_total: Any = field(init=False, default=None)
     index_repository_duration: Any = field(init=False, default=None)
+    index_stage_duration: Any = field(init=False, default=None)
     hidden_dirs_skipped_total: Any = field(init=False, default=None)
     index_lock_contention_skips_total: Any = field(init=False, default=None)
     neo4j_query_duration: Any = field(init=False, default=None)
@@ -90,6 +100,8 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
     content_provider_duration: Any = field(init=False, default=None)
     content_workspace_fallback_total: Any = field(init=False, default=None)
     ingester_scan_requests_total: Any = field(init=False, default=None)
+    index_snapshot_queue_depth: Any = field(init=False, default=None)
+    index_parse_tasks_active: Any = field(init=False, default=None)
 
     def __post_init__(self) -> None:
         """Create the tracer, meter, and metric instruments for the runtime."""
@@ -123,6 +135,7 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         self.index_repositories_total = None
         self.index_checkpoints_total = None
         self.index_repository_duration = None
+        self.index_stage_duration = None
         self.hidden_dirs_skipped_total = None
         self.index_lock_contention_skips_total = None
         self.neo4j_query_duration = None
@@ -133,6 +146,8 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         self.content_provider_duration = None
         self.content_workspace_fallback_total = None
         self.ingester_scan_requests_total = None
+        self.index_snapshot_queue_depth = None
+        self.index_parse_tasks_active = None
 
         if not self.enabled or self.meter is None:
             return
@@ -178,6 +193,10 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         )
         self.index_repository_duration = self.meter.create_histogram(
             "pcg_index_repository_duration_seconds",
+            unit="s",
+        )
+        self.index_stage_duration = self.meter.create_histogram(
+            "pcg_index_stage_duration_seconds",
             unit="s",
         )
         self.hidden_dirs_skipped_total = self.meter.create_counter(
@@ -226,6 +245,14 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         self.meter.create_observable_gauge(
             "pcg_index_checkpoint_pending_repositories",
             callbacks=[self._observe_pending_checkpoint_repositories],
+        )
+        self.meter.create_observable_gauge(
+            "pcg_index_snapshot_queue_depth",
+            callbacks=[self._observe_index_snapshot_queue_depth],
+        )
+        self.meter.create_observable_gauge(
+            "pcg_index_parse_tasks_active",
+            callbacks=[self._observe_index_parse_tasks_active],
         )
 
     def shutdown(self) -> None:
