@@ -1,0 +1,33 @@
+tests/unit/tools/test_graph_builder_call_relationships.py
+  171ca78060f03490 457-458
+scripts/benchmark_phase1b.sh
+  171ca78060f03490 4,8-9
+src/platform_context_graph/content/postgres.py
+  171ca78060f03490 5,9-10,175-178,341
+src/platform_context_graph/tools/graph_builder_indexing_finalize.py
+  171ca78060f03490 55,85-86
+src/platform_context_graph/relationships/execution.py
+  171ca78060f03490 275-276
+scripts/local-integration-test.sh
+  171ca78060f03490 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "24906ac272a2918b0e57ea4bc9b5b3174f2d482d",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 19,
+      "total_deletions": 10,
+      "accepted_lines": 19,
+      "overriden_lines": 0
+    }
+  }
+}
