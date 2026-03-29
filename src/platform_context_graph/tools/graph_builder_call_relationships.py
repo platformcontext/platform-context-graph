@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import builtins as py_builtins
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,7 @@ _CALL_RELATIONSHIP_BATCH_SIZE = 250
 _PYTHON_BUILTIN_NAMES = frozenset(dir(py_builtins))
 
 _MINIFIED_SUFFIXES = (".min.js", ".min.css", ".bundle.js", ".chunk.js")
-_MAX_CALLS_PER_FILE = 500
+_MAX_CALLS_PER_FILE = int(os.environ.get("PCG_MAX_CALLS_PER_FILE", "50"))
 
 
 def _is_minified_or_bundled(file_path: str) -> bool:
