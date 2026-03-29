@@ -165,10 +165,11 @@ class PostgresContentProvider:
 
         if psycopg is not None and _ConnectionPool is not None and dsn:
             try:
+                _pool_max = int(os.environ.get("PCG_COMMIT_WORKERS", "1")) + 2
                 self._pool = _ConnectionPool(
                     dsn,
                     min_size=1,
-                    max_size=4,
+                    max_size=max(4, _pool_max),
                     kwargs={"autocommit": True, "row_factory": dict_row},
                 )
             except Exception:
