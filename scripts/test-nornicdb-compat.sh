@@ -100,6 +100,7 @@ export NEO4J_URI=bolt://localhost:${NEO4J_BOLT_PORT:-7687}
 export NEO4J_USERNAME=neo4j
 export NEO4J_PASSWORD=${PCG_NEO4J_PASSWORD:-change-me}
 export DATABASE_TYPE=neo4j
+export NEO4J_DATABASE=nornic
 export PYTHONPATH="$REPO_ROOT/src"
 
 BOLT_RESULT=$(uv run python -c "
@@ -205,7 +206,7 @@ else
 fi
 
 log ""
-log "  NornicDB image:        ${NORNICDB_IMAGE:-timothyswt/nornicdb-arm64-metal:latest}"
+log "  NornicDB image:        ${NORNICDB_IMAGE:-timothyswt/nornicdb-arm64-metal-bge:latest}"
 log "  Bolt URI:              $NEO4J_URI"
 log ""
 
