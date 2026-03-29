@@ -137,3 +137,33 @@ def read_yaml_file(
         )
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def read_yaml_document(
+    database: Any, repo_id: str, relative_path: str
+) -> Any | None:
+    """Read and parse a YAML document of any type from the content store.
+
+    Unlike :func:`read_yaml_file` which only returns dicts, this accepts any
+    valid YAML document type (list, dict, scalar).  Useful for Ansible
+    playbooks which are YAML lists.
+
+    Args:
+        database: Query-layer database dependency.
+        repo_id: Canonical repository identifier.
+        relative_path: Repo-relative YAML file path.
+
+    Returns:
+        Parsed YAML value or ``None`` when unavailable or unparseable.
+    """
+
+    content = read_file_content(database, repo_id, relative_path)
+    if content is None:
+        return None
+    try:
+        return yaml.safe_load(content)
+    except yaml.YAMLError:
+        logger.debug(
+            "Failed to parse YAML file %s in repo %s", relative_path, repo_id
+        )
+        return None
