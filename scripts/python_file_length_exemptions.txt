@@ -13,3 +13,4 @@ src/platform_context_graph/tools/graph_builder_persistence_batch.py
 src/platform_context_graph/content/workspace.py
 src/platform_context_graph/indexing/coordinator.py
 src/platform_context_graph/observability/runtime.py
+src/platform_context_graph/content/postgres.py

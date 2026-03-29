@@ -28,6 +28,11 @@ except ImportError:  # pragma: no cover - exercised when optional dependency mis
     psycopg = None
     dict_row = None
 
+try:
+    from psycopg_pool import ConnectionPool as _ConnectionPool
+except ImportError:  # pragma: no cover - pool is optional; falls back to single conn.
+    _ConnectionPool = None  # type: ignore[assignment,misc]
+
 __all__ = [
     "PostgresContentProvider",
 ]
@@ -89,7 +94,6 @@ SET repo_id = EXCLUDED.repo_id,
 
 def _file_entry_params(entry: ContentFileEntry) -> dict[str, Any]:
     """Return the parameter dict for one file upsert row."""
-
     return {
         "repo_id": entry.repo_id,
         "relative_path": entry.relative_path,
@@ -107,7 +111,6 @@ def _file_entry_params(entry: ContentFileEntry) -> dict[str, Any]:
 
 def _entity_entry_params(entry: ContentEntityEntry) -> dict[str, Any]:
     """Return the parameter dict for one entity upsert row."""
-
     return {
         "entity_id": entry.entity_id,
         "repo_id": entry.repo_id,
@@ -144,16 +147,32 @@ class PostgresContentProvider:
     """Persist and query source content in PostgreSQL."""
 
     def __init__(self, dsn: str) -> None:
-        """Initialize the provider.
+        """Initialize the provider with a connection pool or single-conn fallback.
 
         Args:
             dsn: PostgreSQL DSN used for both reads and writes.
         """
 
         self._dsn = dsn
-        self._lock = threading.Lock()
-        self._conn: Any | None = None
+        self._schema_lock = threading.Lock()
         self._initialized = False
+        self._pool: Any | None = None
+        self._conn: Any | None = None
+        self._conn_lock: threading.Lock | None = None
+
+        if psycopg is not None and _ConnectionPool is not None and dsn:
+            try:
+                self._pool = _ConnectionPool(
+                    dsn,
+                    min_size=1,
+                    max_size=4,
+                    kwargs={"autocommit": True, "row_factory": dict_row},
+                )
+            except Exception:
+                self._pool = None
+                self._conn_lock = threading.Lock()
+        else:
+            self._conn_lock = threading.Lock()
 
     @property
     def enabled(self) -> bool:
@@ -161,26 +180,41 @@ class PostgresContentProvider:
 
         return psycopg is not None and bool(self._dsn)
 
+    def _ensure_schema(self, conn: Any) -> None:
+        """Run schema DDL once across the lifetime of the provider."""
+
+        if self._initialized:
+            return
+        with self._schema_lock:
+            if not self._initialized:
+                with conn.cursor() as cur:
+                    cur.execute(FILE_SCHEMA)
+                self._initialized = True
+
     @contextmanager
     def _cursor(self) -> Any:
-        """Yield a dict-row cursor and ensure schema creation on first use."""
+        """Yield a dict-row cursor, using the pool when available."""
 
         if not self.enabled:
             raise RuntimeError(
                 "psycopg is not installed or the content store DSN is missing"
             )
 
-        with self._lock:
-            if self._conn is None or self._conn.closed:
-                self._conn = psycopg.connect(self._dsn, autocommit=True)
-                self._conn.row_factory = dict_row
-                self._initialized = False
-            if not self._initialized:
+        if self._pool is not None:
+            with self._pool.connection() as conn:
+                self._ensure_schema(conn)
+                with conn.cursor() as cursor:
+                    yield cursor
+        else:
+            assert self._conn_lock is not None
+            with self._conn_lock:
+                if self._conn is None or self._conn.closed:
+                    self._conn = psycopg.connect(self._dsn, autocommit=True)
+                    self._conn.row_factory = dict_row
+                    self._initialized = False
+                self._ensure_schema(self._conn)
                 with self._conn.cursor() as cursor:
-                    cursor.execute(FILE_SCHEMA)
-                self._initialized = True
-            with self._conn.cursor() as cursor:
-                yield cursor
+                    yield cursor
 
     def upsert_file(self, entry: ContentFileEntry) -> None:
         """Insert or update one file-content row.
@@ -200,14 +234,7 @@ class PostgresContentProvider:
                 cursor.execute(_FILE_UPSERT_SQL, _file_entry_params(entry))
 
     def upsert_file_batch(self, entries: Sequence[ContentFileEntry]) -> None:
-        """Insert or update file-content rows in a single batch.
-
-        Uses ``executemany`` so all rows share one cursor round-trip instead
-        of opening/closing a cursor per file.
-
-        Args:
-            entries: File content rows to store.
-        """
+        """Insert or update file-content rows via a single ``executemany`` call."""
 
         if not entries:
             return
@@ -249,18 +276,8 @@ class PostgresContentProvider:
                         _ENTITY_UPSERT_SQL, rows[start : start + batch_size]
                     )
 
-    def upsert_entities_batch(
-        self, entries: Sequence[ContentEntityEntry]
-    ) -> None:
-        """Insert or update entity rows across many files in a single batch.
-
-        Unlike ``upsert_entities`` which is called per-file, this method
-        accepts entities from multiple files and issues one ``executemany``
-        call for the whole batch inside a single cursor context.
-
-        Args:
-            entries: Entity rows from one or more files.
-        """
+    def upsert_entities_batch(self, entries: Sequence[ContentEntityEntry]) -> None:
+        """Insert or update entity rows from multiple files in one batch."""
 
         if not entries:
             return
@@ -478,10 +495,15 @@ class PostgresContentProvider:
             )
 
     def close(self) -> None:
-        """Close the cached PostgreSQL connection when present."""
+        """Close the connection pool or cached connection when present."""
 
-        with self._lock:
-            if self._conn is not None:
-                self._conn.close()
-                self._conn = None
-                self._initialized = False
+        if self._pool is not None:
+            self._pool.close()
+            self._pool = None
+            self._initialized = False
+        elif self._conn_lock is not None:
+            with self._conn_lock:
+                if self._conn is not None:
+                    self._conn.close()
+                    self._conn = None
+                    self._initialized = False
