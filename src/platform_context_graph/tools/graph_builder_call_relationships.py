@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import builtins as py_builtins
+import logging
 import re
 from pathlib import Path
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 from .graph_builder_call_batches import (
     call_resolution_metrics as _call_resolution_metrics,
@@ -138,8 +141,7 @@ def create_all_function_calls(
                 continue
             if file_count is None:
                 debug_log_fn(
-                    "Processing streamed file "
-                    f"{processed_files}: {file_path_str}"
+                    "Processing streamed file " f"{processed_files}: {file_path_str}"
                 )
             else:
                 debug_log_fn(
@@ -189,6 +191,65 @@ def create_all_function_calls(
         f"file_level_fallback={metrics['file_level_fallback_duration_seconds']:.1f}s, "
         f"total={metrics['total_duration_seconds']:.1f}s"
     )
+    _logger.info(
+        "CALLS resolution: total=%.1fs, "
+        "contextual_unmatched=%d, file_level_unmatched=%d",
+        metrics.get("total_duration_seconds", 0),
+        metrics.get("contextual_unmatched_rows", 0),
+        metrics.get("file_level_unmatched_rows", 0),
+    )
+    try:
+        from platform_context_graph.observability import get_observability
+
+        obs = get_observability()
+        if hasattr(obs, "record_index_stage_duration"):
+            obs.record_index_stage_duration(
+                component="indexer",
+                mode="batch",
+                source="finalization",
+                stage="function_calls_contextual_exact",
+                duration_seconds=metrics.get("contextual_exact_duration_seconds", 0),
+                parse_strategy="",
+                parse_workers=0,
+            )
+            obs.record_index_stage_duration(
+                component="indexer",
+                mode="batch",
+                source="finalization",
+                stage="function_calls_contextual_fallback",
+                duration_seconds=metrics.get("contextual_fallback_duration_seconds", 0),
+                parse_strategy="",
+                parse_workers=0,
+            )
+            obs.record_index_stage_duration(
+                component="indexer",
+                mode="batch",
+                source="finalization",
+                stage="function_calls_file_level_exact",
+                duration_seconds=metrics.get("file_level_exact_duration_seconds", 0),
+                parse_strategy="",
+                parse_workers=0,
+            )
+            obs.record_index_stage_duration(
+                component="indexer",
+                mode="batch",
+                source="finalization",
+                stage="function_calls_file_level_fallback",
+                duration_seconds=metrics.get("file_level_fallback_duration_seconds", 0),
+                parse_strategy="",
+                parse_workers=0,
+            )
+            obs.record_index_stage_duration(
+                component="indexer",
+                mode="batch",
+                source="finalization",
+                stage="function_calls_total",
+                duration_seconds=metrics.get("total_duration_seconds", 0),
+                parse_strategy="",
+                parse_workers=0,
+            )
+    except Exception:
+        pass  # Don't fail indexing if metrics emission fails
     return metrics
 
 
