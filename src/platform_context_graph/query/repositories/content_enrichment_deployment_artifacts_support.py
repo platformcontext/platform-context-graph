@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import posixpath
 import re
-from pathlib import Path
 from typing import Any, Callable
+
+from .indexed_file_discovery import (
+    discover_repo_files,
+    file_exists,
+    read_file_content,
+    read_yaml_file,
+)
 
 _TERRAFORM_CONFIG_PATH_RE = re.compile(
     r'(?P<path>/(?:configd|api)/[A-Za-z0-9._/-]+/\*)',
@@ -14,119 +21,117 @@ _TERRAFORM_CONFIG_PATH_RE = re.compile(
 
 def extract_kustomize_rows(
     *,
-    repo_root: Path,
-    overlay_directory: Path,
+    database: Any,
+    repo_id: str,
+    overlay_directory: str,
     source_repo_name: str,
     infer_environment_from_path: Callable[[str], str | None],
-    load_yaml_file: Callable[[Path], dict[str, Any] | None],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Extract Kustomize resource and patch rows near one overlay directory."""
 
-    kustomization_path = overlay_directory / "kustomization.yaml"
-    if not kustomization_path.is_file():
+    kustomization_path = posixpath.join(overlay_directory, "kustomization.yaml")
+    if not file_exists(database, repo_id, kustomization_path):
         return [], []
     resource_rows = _extract_kustomize_resource_rows(
-        repo_root=repo_root,
+        database=database,
+        repo_id=repo_id,
         kustomization_path=kustomization_path,
         source_repo_name=source_repo_name,
         infer_environment_from_path=infer_environment_from_path,
-        load_yaml_file=load_yaml_file,
         visited=set(),
     )
     patch_rows = _extract_kustomize_patch_rows(
-        repo_root=repo_root,
+        database=database,
+        repo_id=repo_id,
         kustomization_path=kustomization_path,
         source_repo_name=source_repo_name,
         infer_environment_from_path=infer_environment_from_path,
-        load_yaml_file=load_yaml_file,
     )
     return resource_rows, patch_rows
 
 
 def extract_config_path_rows_from_kustomize_resources(
     *,
-    repo_root: Path,
-    overlay_directory: Path,
+    database: Any,
+    repo_id: str,
+    overlay_directory: str,
     source_repo_name: str,
     infer_environment_from_path: Callable[[str], str | None],
-    load_yaml_file: Callable[[Path], dict[str, Any] | None],
 ) -> list[dict[str, Any]]:
     """Extract config-path rows from Kustomize-managed resources."""
 
-    kustomization_path = overlay_directory / "kustomization.yaml"
-    if not kustomization_path.is_file():
+    kustomization_path = posixpath.join(overlay_directory, "kustomization.yaml")
+    if not file_exists(database, repo_id, kustomization_path):
         return []
     return _extract_config_path_rows_from_kustomization(
-        repo_root=repo_root,
+        database=database,
+        repo_id=repo_id,
         kustomization_path=kustomization_path,
         source_repo_name=source_repo_name,
         infer_environment_from_path=infer_environment_from_path,
-        load_yaml_file=load_yaml_file,
         visited=set(),
     )
 
 
 def _extract_kustomize_resource_rows(
     *,
-    repo_root: Path,
-    kustomization_path: Path,
+    database: Any,
+    repo_id: str,
+    kustomization_path: str,
     source_repo_name: str,
     infer_environment_from_path: Callable[[str], str | None],
-    load_yaml_file: Callable[[Path], dict[str, Any] | None],
-    visited: set[Path],
+    visited: set[str],
 ) -> list[dict[str, Any]]:
     """Extract resource rows from one Kustomize file, following nested bases."""
 
-    resolved_kustomization = kustomization_path.resolve()
-    if resolved_kustomization in visited:
+    normalized = posixpath.normpath(kustomization_path)
+    if normalized in visited:
         return []
-    visited.add(resolved_kustomization)
-    parsed = load_yaml_file(kustomization_path)
+    visited.add(normalized)
+    parsed = read_yaml_file(database, repo_id, kustomization_path)
     if parsed is None:
         return []
     resources = parsed.get("resources")
     if not isinstance(resources, list):
         return []
-    relative_kustomization_path = str(
-        resolved_kustomization.relative_to(repo_root.resolve())
-    )
-    environment = infer_environment_from_path(relative_kustomization_path)
+    environment = infer_environment_from_path(kustomization_path)
+    parent_dir = posixpath.dirname(kustomization_path)
     rows: list[dict[str, Any]] = []
     for resource in resources:
         if not isinstance(resource, str) or not resource.strip():
             continue
-        resource_path = (kustomization_path.parent / resource).resolve()
-        if not is_within_repo_root(resource_path, repo_root):
+        resource_path = posixpath.normpath(posixpath.join(parent_dir, resource))
+        if not _is_within_repo(resource_path):
             continue
-        if resource_path.is_dir():
-            nested_kustomization_path = resource_path / "kustomization.yaml"
-            if nested_kustomization_path.is_file():
-                rows.extend(
-                    _extract_kustomize_resource_rows(
-                        repo_root=repo_root,
-                        kustomization_path=nested_kustomization_path,
-                        source_repo_name=source_repo_name,
-                        infer_environment_from_path=infer_environment_from_path,
-                        load_yaml_file=load_yaml_file,
-                        visited=visited,
-                    )
+        # Check if resource is a directory by looking for nested kustomization.yaml
+        nested_kustomization = posixpath.join(resource_path, "kustomization.yaml")
+        if file_exists(database, repo_id, nested_kustomization):
+            rows.extend(
+                _extract_kustomize_resource_rows(
+                    database=database,
+                    repo_id=repo_id,
+                    kustomization_path=nested_kustomization,
+                    source_repo_name=source_repo_name,
+                    infer_environment_from_path=infer_environment_from_path,
+                    visited=visited,
                 )
+            )
             continue
-        if not resource_path.is_file():
+        if not file_exists(database, repo_id, resource_path):
             continue
-        parsed_resource = load_yaml_file(resource_path)
+        parsed_resource = read_yaml_file(database, repo_id, resource_path)
         if parsed_resource is None:
             continue
         metadata = parsed_resource.get("metadata")
         rows.append(
             {
-                "resource_path": str(resource_path.relative_to(repo_root.resolve())),
+                "resource_path": resource_path,
                 "kind": str(parsed_resource.get("kind") or "").strip(),
                 "name": str((metadata or {}).get("name") or "").strip()
                 if isinstance(metadata, dict)
                 else "",
                 "source_repo": source_repo_name,
-                "relative_path": relative_kustomization_path,
+                "relative_path": kustomization_path,
                 "environment": environment,
             }
         )
@@ -135,24 +140,22 @@ def _extract_kustomize_resource_rows(
 
 def _extract_kustomize_patch_rows(
     *,
-    repo_root: Path,
-    kustomization_path: Path,
+    database: Any,
+    repo_id: str,
+    kustomization_path: str,
     source_repo_name: str,
     infer_environment_from_path: Callable[[str], str | None],
-    load_yaml_file: Callable[[Path], dict[str, Any] | None],
 ) -> list[dict[str, Any]]:
     """Extract patch target rows from one Kustomize file."""
 
-    parsed = load_yaml_file(kustomization_path)
+    parsed = read_yaml_file(database, repo_id, kustomization_path)
     if parsed is None:
         return []
     patches = parsed.get("patches")
     if not isinstance(patches, list):
         return []
-    relative_kustomization_path = str(
-        kustomization_path.resolve().relative_to(repo_root.resolve())
-    )
-    environment = infer_environment_from_path(relative_kustomization_path)
+    environment = infer_environment_from_path(kustomization_path)
+    parent_dir = posixpath.dirname(kustomization_path)
     rows: list[dict[str, Any]] = []
     for patch in patches:
         if not isinstance(patch, dict):
@@ -163,16 +166,18 @@ def _extract_kustomize_patch_rows(
         patch_path = patch.get("path")
         if not isinstance(patch_path, str) or not patch_path.strip():
             continue
-        resolved_patch_path = (kustomization_path.parent / patch_path).resolve()
-        if not is_within_repo_root(resolved_patch_path, repo_root):
+        resolved_patch_path = posixpath.normpath(
+            posixpath.join(parent_dir, patch_path)
+        )
+        if not _is_within_repo(resolved_patch_path):
             continue
         rows.append(
             {
-                "patch_path": str(resolved_patch_path.relative_to(repo_root.resolve())),
+                "patch_path": resolved_patch_path,
                 "target_kind": str(target.get("kind") or "").strip(),
                 "target_name": str(target.get("name") or "").strip(),
                 "source_repo": source_repo_name,
-                "relative_path": relative_kustomization_path,
+                "relative_path": kustomization_path,
                 "environment": environment,
             }
         )
@@ -181,58 +186,58 @@ def _extract_kustomize_patch_rows(
 
 def _extract_config_path_rows_from_kustomization(
     *,
-    repo_root: Path,
-    kustomization_path: Path,
+    database: Any,
+    repo_id: str,
+    kustomization_path: str,
     source_repo_name: str,
     infer_environment_from_path: Callable[[str], str | None],
-    load_yaml_file: Callable[[Path], dict[str, Any] | None],
-    visited: set[Path],
+    visited: set[str],
 ) -> list[dict[str, Any]]:
     """Extract config-path rows from resources reachable from one Kustomize file."""
 
-    resolved_kustomization = kustomization_path.resolve()
-    if resolved_kustomization in visited:
+    normalized = posixpath.normpath(kustomization_path)
+    if normalized in visited:
         return []
-    visited.add(resolved_kustomization)
-    parsed = load_yaml_file(kustomization_path)
+    visited.add(normalized)
+    parsed = read_yaml_file(database, repo_id, kustomization_path)
     if parsed is None:
         return []
     resources = parsed.get("resources")
     if not isinstance(resources, list):
         return []
+    parent_dir = posixpath.dirname(kustomization_path)
     rows: list[dict[str, Any]] = []
     for resource in resources:
         if not isinstance(resource, str) or not resource.strip():
             continue
-        resource_path = (kustomization_path.parent / resource).resolve()
-        if not is_within_repo_root(resource_path, repo_root):
+        resource_path = posixpath.normpath(posixpath.join(parent_dir, resource))
+        if not _is_within_repo(resource_path):
             continue
-        if resource_path.is_dir():
-            nested_kustomization_path = resource_path / "kustomization.yaml"
-            if nested_kustomization_path.is_file():
-                rows.extend(
-                    _extract_config_path_rows_from_kustomization(
-                        repo_root=repo_root,
-                        kustomization_path=nested_kustomization_path,
-                        source_repo_name=source_repo_name,
-                        infer_environment_from_path=infer_environment_from_path,
-                        load_yaml_file=load_yaml_file,
-                        visited=visited,
-                    )
+        # Check if resource is a directory by looking for nested kustomization.yaml
+        nested_kustomization = posixpath.join(resource_path, "kustomization.yaml")
+        if file_exists(database, repo_id, nested_kustomization):
+            rows.extend(
+                _extract_config_path_rows_from_kustomization(
+                    database=database,
+                    repo_id=repo_id,
+                    kustomization_path=nested_kustomization,
+                    source_repo_name=source_repo_name,
+                    infer_environment_from_path=infer_environment_from_path,
+                    visited=visited,
                 )
+            )
             continue
-        if not resource_path.is_file():
+        if not file_exists(database, repo_id, resource_path):
             continue
-        parsed_resource = load_yaml_file(resource_path)
+        parsed_resource = read_yaml_file(database, repo_id, resource_path)
         if parsed_resource is None:
             continue
-        relative_resource_path = str(resource_path.relative_to(repo_root.resolve()))
-        environment = infer_environment_from_path(relative_resource_path)
+        environment = infer_environment_from_path(resource_path)
         rows.extend(
             extract_config_path_rows_from_resource(
                 parsed_resource,
                 source_repo_name=source_repo_name,
-                relative_path=relative_resource_path,
+                relative_path=resource_path,
                 environment=environment,
             )
         )
@@ -285,23 +290,21 @@ def extract_config_path_rows_from_resource(
 
 def extract_config_path_rows_from_terraform_files(
     *,
-    repo_root: Path,
+    database: Any,
+    repo_id: str,
     source_repo_name: str,
     infer_environment_from_path: Callable[[str], str | None],
 ) -> list[dict[str, Any]]:
     """Extract parameter-path rows from Terraform and Terragrunt text files."""
 
     rows: list[dict[str, Any]] = []
-    for file_path in sorted(repo_root.rglob("*")):
-        if not file_path.is_file():
+    tf_files: list[str] = []
+    for suffix in (".tf", ".tfvars", ".hcl"):
+        tf_files.extend(discover_repo_files(database, repo_id, suffix=suffix))
+    for relative_path in sorted(set(tf_files)):
+        content = read_file_content(database, repo_id, relative_path)
+        if content is None:
             continue
-        if file_path.suffix not in {".tf", ".tfvars", ".hcl"}:
-            continue
-        try:
-            content = file_path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        relative_path = str(file_path.relative_to(repo_root.resolve()))
         environment = infer_environment_from_path(relative_path)
         for match in _TERRAFORM_CONFIG_PATH_RE.finditer(content):
             rows.append(
@@ -328,11 +331,7 @@ def ssm_parameter_path(resource: str) -> str | None:
     return normalized if normalized not in {"/", ""} else None
 
 
-def is_within_repo_root(path: Path, repo_root: Path) -> bool:
-    """Return whether a resolved path stays within the repository root."""
+def _is_within_repo(path: str) -> bool:
+    """Return whether a normalized relative path stays within the repository root."""
 
-    try:
-        path.relative_to(repo_root.resolve())
-    except ValueError:
-        return False
-    return True
+    return not path.startswith("..") and not posixpath.isabs(path)

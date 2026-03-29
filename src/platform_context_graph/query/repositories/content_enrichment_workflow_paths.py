@@ -17,12 +17,14 @@ def enrich_workflow_paths(
     repository: dict[str, Any],
     context: dict[str, Any],
     resolve_repository: Callable[[str], dict[str, Any] | None],
+    database: Any = None,
 ) -> None:
     """Mutate context with workflow, controller-driven, and delivery paths."""
 
     delivery_workflows = extract_delivery_workflows(
         repository=repository,
         resolve_repository=resolve_repository,
+        database=database,
     )
     repo_root = _repo_root(repository)
     ansible_hints = (
@@ -53,7 +55,11 @@ def enrich_workflow_paths(
 
 
 def _repo_root(repository: dict[str, Any]) -> Path | None:
-    """Return the local repository root when it exists on disk."""
+    """Return the local repository root when it exists on disk.
+
+    Retained for backward compatibility with Ansible enrichment which
+    still uses filesystem access.
+    """
 
     raw_path = repository.get("local_path") or repository.get("path")
     if not isinstance(raw_path, str) or not raw_path.strip():

@@ -13,6 +13,12 @@ from .content_enrichment_support import (
     load_yaml_path,
     ordered_unique_strings,
 )
+from .indexed_file_discovery import (
+    discover_repo_files,
+    read_file_content,
+    read_yaml_document,
+    read_yaml_file,
+)
 
 _YAML_SUFFIXES = {".yml", ".yaml"}
 _SHELL_WRAPPER_SUFFIXES = {".sh"}
@@ -21,18 +27,49 @@ _ANSIBLE_PLAYBOOK_RE = re.compile(
 )
 
 
-def extract_ansible_automation_evidence(repo_root: Path) -> dict[str, Any]:
-    """Extract high-signal Ansible evidence from one repository root."""
+def extract_ansible_automation_evidence(
+    repo_root: Path | None = None,
+    *,
+    database: Any = None,
+    repo_id: str | None = None,
+) -> dict[str, Any]:
+    """Extract high-signal Ansible evidence from one repository.
 
-    group_vars = _extract_yaml_var_sets(repo_root / "group_vars", repo_root=repo_root)
-    host_vars = _extract_yaml_var_sets(repo_root / "host_vars", repo_root=repo_root)
-    playbooks = _extract_top_level_playbooks(repo_root)
-    shell_wrappers = _extract_ansible_shell_wrappers(repo_root)
-    role_entrypoints = _extract_role_task_entrypoints(repo_root)
-    inventory_targets = _extract_inventory_targets(
-        repo_root,
-        playbooks=playbooks,
-        host_vars=host_vars,
+    Supports two modes:
+
+    * **Filesystem mode** (legacy/CLI): pass ``repo_root``.
+    * **Indexed mode** (API): pass ``database`` and ``repo_id``.
+
+    When ``database`` is provided the indexed path is used; otherwise the
+    filesystem path is used.
+    """
+
+    use_indexed = database is not None and repo_id is not None
+
+    if use_indexed:
+        group_vars = _extract_yaml_var_sets_indexed(database, repo_id, "group_vars/")
+        host_vars = _extract_yaml_var_sets_indexed(database, repo_id, "host_vars/")
+        playbooks = _extract_top_level_playbooks_indexed(database, repo_id)
+        shell_wrappers = _extract_shell_wrappers_indexed(database, repo_id)
+        role_entrypoints = _extract_role_entrypoints_indexed(database, repo_id)
+        inv_hosts, inv_groups = _extract_inventory_indexed(database, repo_id)
+    elif repo_root is not None:
+        group_vars = _extract_yaml_var_sets_fs(repo_root / "group_vars", repo_root)
+        host_vars = _extract_yaml_var_sets_fs(repo_root / "host_vars", repo_root)
+        playbooks = _extract_top_level_playbooks_fs(repo_root)
+        shell_wrappers = _extract_shell_wrappers_fs(repo_root)
+        role_entrypoints = _extract_role_entrypoints_fs(repo_root)
+        inv_hosts, inv_groups = _extract_inventory_fs(repo_root)
+    else:
+        return {}
+
+    environments = ordered_unique_strings(
+        row.get("values", {}).get("environment")
+        for row in host_vars
+        if isinstance(row.get("values"), dict)
+    )
+    inventory_targets = _build_inventory_target_rows(
+        playbooks, inv_hosts, inv_groups, environments
     )
     runtime_hints = infer_automation_runtime_families(
         _collect_runtime_signals(
@@ -54,51 +91,183 @@ def extract_ansible_automation_evidence(repo_root: Path) -> dict[str, Any]:
     }
 
 
-def _extract_top_level_playbooks(repo_root: Path) -> list[dict[str, Any]]:
+# ── Playbook parsing (shared logic) ────────────────────────────────────
+
+
+def _parse_playbook_row(
+    document: Any, rel_path: str
+) -> dict[str, Any] | None:
+    """Parse a YAML playbook document into a playbook evidence row."""
+
+    if not isinstance(document, list) or not document:
+        return None
+    first_play = document[0]
+    if not isinstance(first_play, dict):
+        return None
+    hosts = first_play.get("hosts")
+    roles = first_play.get("roles")
+    if not isinstance(hosts, str) or not isinstance(roles, list):
+        return None
+    role_names: list[str] = []
+    tags: list[str] = []
+    for role in roles:
+        if isinstance(role, str):
+            role_names.append(role)
+            continue
+        if not isinstance(role, dict):
+            continue
+        role_name = role.get("role")
+        if isinstance(role_name, str) and role_name.strip():
+            role_names.append(role_name.strip())
+        role_tags = role.get("tags")
+        if isinstance(role_tags, str):
+            tags.append(role_tags)
+        elif isinstance(role_tags, list):
+            tags.extend(str(t).strip() for t in role_tags if str(t).strip())
+    return {
+        "relative_path": rel_path,
+        "hosts": [hosts.strip()],
+        "roles": ordered_unique_strings(role_names),
+        "tags": sorted(ordered_unique_strings(tags)),
+    }
+
+
+def _parse_shell_wrapper(source_text: str, rel_path: str) -> dict[str, Any] | None:
+    """Parse a shell script for ansible-playbook invocations."""
+
+    commands = ordered_unique_strings(
+        m.group(0) for m in _ANSIBLE_PLAYBOOK_RE.finditer(source_text)
+    )
+    if not commands:
+        return None
+    playbooks: list[str] = []
+    inventories: list[str] = []
+    for cmd in commands:
+        m = _ANSIBLE_PLAYBOOK_RE.search(cmd)
+        if m is None:
+            continue
+        playbooks.append(str(m.group("playbook") or "").strip())
+        inventories.append(str(m.group("inventory") or "").strip())
+    return {
+        "relative_path": rel_path,
+        "commands": commands,
+        "playbooks": ordered_unique_strings(playbooks),
+        "inventories": ordered_unique_strings(inventories),
+    }
+
+
+# ── Indexed-mode helpers ────────────────────────────────────────────────
+
+
+def _extract_top_level_playbooks_indexed(
+    database: Any, repo_id: str
+) -> list[dict[str, Any]]:
+    """Extract top-level playbooks via indexed reads."""
+
+    rows: list[dict[str, Any]] = []
+    for rp in discover_repo_files(database, repo_id, pattern=r"[^/]+\.ya?ml"):
+        doc = read_yaml_document(database, repo_id, rp)
+        row = _parse_playbook_row(doc, rp)
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
+def _extract_yaml_var_sets_indexed(
+    database: Any, repo_id: str, prefix: str
+) -> list[dict[str, Any]]:
+    """Extract YAML var-set files under a vars directory prefix."""
+
+    rows: list[dict[str, Any]] = []
+    for rp in discover_repo_files(database, repo_id, prefix=prefix):
+        if not rp.lower().endswith((".yml", ".yaml")):
+            continue
+        values = read_yaml_file(database, repo_id, rp)
+        if not isinstance(values, dict):
+            continue
+        rows.append({"relative_path": rp, "name": Path(rp).stem, "values": values})
+    return rows
+
+
+def _extract_shell_wrappers_indexed(
+    database: Any, repo_id: str
+) -> list[dict[str, Any]]:
+    """Extract shell-wrapper commands via indexed reads."""
+
+    rows: list[dict[str, Any]] = []
+    for rp in discover_repo_files(database, repo_id, suffix=".sh"):
+        text = read_file_content(database, repo_id, rp)
+        if text is None:
+            continue
+        row = _parse_shell_wrapper(text, rp)
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
+def _extract_role_entrypoints_indexed(
+    database: Any, repo_id: str
+) -> list[dict[str, Any]]:
+    """Extract role task entrypoints via indexed reads."""
+
+    rows: list[dict[str, Any]] = []
+    pattern = r"roles/[^/]+/tasks/main\.ya?ml"
+    for rp in discover_repo_files(database, repo_id, pattern=pattern):
+        doc = read_yaml_document(database, repo_id, rp)
+        if not isinstance(doc, list):
+            continue
+        task_names = ordered_unique_strings(
+            t.get("name")
+            for t in doc
+            if isinstance(t, dict) and isinstance(t.get("name"), str)
+        )
+        text = read_file_content(database, repo_id, rp) or ""
+        rows.append(
+            {
+                "relative_path": rp,
+                "role": Path(rp).parent.parent.name,
+                "task_names": task_names,
+                "source_text": text,
+            }
+        )
+    return rows
+
+
+def _extract_inventory_indexed(
+    database: Any, repo_id: str
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Extract hosts/groups from Python dynamic inventory via indexed reads."""
+
+    for rp in discover_repo_files(database, repo_id, prefix="inventory/", suffix=".py"):
+        text = read_file_content(database, repo_id, rp)
+        if text is None:
+            continue
+        parsed = _parse_inventory_ast(text)
+        if parsed is not None:
+            return _hosts_and_groups_from_inventory(parsed)
+    return [], {}
+
+
+# ── Filesystem-mode helpers (legacy/CLI) ────────────────────────────────
+
+
+def _extract_top_level_playbooks_fs(repo_root: Path) -> list[dict[str, Any]]:
     """Extract high-signal top-level playbooks from the repo root."""
 
     rows: list[dict[str, Any]] = []
     for candidate in sorted(repo_root.iterdir()):
         if candidate.suffix.lower() not in _YAML_SUFFIXES or not candidate.is_file():
             continue
-        document = load_yaml_path(candidate)
-        if not isinstance(document, list) or not document:
-            continue
-        first_play = document[0]
-        if not isinstance(first_play, dict):
-            continue
-        hosts = first_play.get("hosts")
-        roles = first_play.get("roles")
-        if not isinstance(hosts, str) or not isinstance(roles, list):
-            continue
-        role_names: list[str] = []
-        tags: list[str] = []
-        for role in roles:
-            if isinstance(role, str):
-                role_names.append(role)
-                continue
-            if not isinstance(role, dict):
-                continue
-            role_name = role.get("role")
-            if isinstance(role_name, str) and role_name.strip():
-                role_names.append(role_name.strip())
-            role_tags = role.get("tags")
-            if isinstance(role_tags, str):
-                tags.append(role_tags)
-            elif isinstance(role_tags, list):
-                tags.extend(str(tag).strip() for tag in role_tags if str(tag).strip())
-        rows.append(
-            {
-                "relative_path": str(candidate.relative_to(repo_root)),
-                "hosts": [hosts.strip()],
-                "roles": ordered_unique_strings(role_names),
-                "tags": sorted(ordered_unique_strings(tags)),
-            }
-        )
+        doc = load_yaml_path(candidate)
+        row = _parse_playbook_row(doc, str(candidate.relative_to(repo_root)))
+        if row is not None:
+            rows.append(row)
     return rows
 
 
-def _extract_yaml_var_sets(directory: Path, *, repo_root: Path) -> list[dict[str, Any]]:
+def _extract_yaml_var_sets_fs(
+    directory: Path, repo_root: Path
+) -> list[dict[str, Any]]:
     """Extract YAML var-set files under one vars directory."""
 
     if not directory.exists():
@@ -120,39 +289,21 @@ def _extract_yaml_var_sets(directory: Path, *, repo_root: Path) -> list[dict[str
     return rows
 
 
-def _extract_ansible_shell_wrappers(repo_root: Path) -> list[dict[str, Any]]:
+def _extract_shell_wrappers_fs(repo_root: Path) -> list[dict[str, Any]]:
     """Extract shell-wrapper commands that invoke ansible-playbook."""
 
     rows: list[dict[str, Any]] = []
     for path in sorted(repo_root.rglob("*")):
         if path.suffix.lower() not in _SHELL_WRAPPER_SUFFIXES or not path.is_file():
             continue
-        source_text = path.read_text(encoding="utf-8", errors="ignore")
-        commands = ordered_unique_strings(
-            match.group(0) for match in _ANSIBLE_PLAYBOOK_RE.finditer(source_text)
-        )
-        if not commands:
-            continue
-        playbooks: list[str] = []
-        inventories: list[str] = []
-        for command in commands:
-            match = _ANSIBLE_PLAYBOOK_RE.search(command)
-            if match is None:
-                continue
-            playbooks.append(str(match.group("playbook") or "").strip())
-            inventories.append(str(match.group("inventory") or "").strip())
-        rows.append(
-            {
-                "relative_path": str(path.relative_to(repo_root)),
-                "commands": commands,
-                "playbooks": ordered_unique_strings(playbooks),
-                "inventories": ordered_unique_strings(inventories),
-            }
-        )
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        row = _parse_shell_wrapper(text, str(path.relative_to(repo_root)))
+        if row is not None:
+            rows.append(row)
     return rows
 
 
-def _extract_role_task_entrypoints(repo_root: Path) -> list[dict[str, Any]]:
+def _extract_role_entrypoints_fs(repo_root: Path) -> list[dict[str, Any]]:
     """Extract role task entrypoints from Ansible role task files."""
 
     rows: list[dict[str, Any]] = []
@@ -176,20 +327,36 @@ def _extract_role_task_entrypoints(repo_root: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _extract_inventory_targets(
+def _extract_inventory_fs(
     repo_root: Path,
-    *,
-    playbooks: list[dict[str, Any]],
-    host_vars: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Extract inventory targets from dynamic inventory and host vars."""
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Extract static hosts and groups from Python dynamic inventory."""
 
-    inventory_hosts, inventory_groups = _extract_dynamic_inventory_hosts(repo_root)
-    environments = ordered_unique_strings(
-        row.get("values", {}).get("environment")
-        for row in host_vars
-        if isinstance(row.get("values"), dict)
-    )
+    inventory_dir = repo_root / "inventory"
+    if not inventory_dir.exists():
+        return [], {}
+    for path in sorted(inventory_dir.glob("*.py")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        parsed = _parse_inventory_ast(text)
+        if parsed is not None:
+            return _hosts_and_groups_from_inventory(parsed)
+    return [], {}
+
+
+# ── Shared helpers ──────────────────────────────────────────────────────
+
+
+def _build_inventory_target_rows(
+    playbooks: list[dict[str, Any]],
+    inventory_hosts: list[str],
+    inventory_groups: dict[str, list[str]],
+    environments: list[str],
+) -> list[dict[str, Any]]:
+    """Build deduplicated inventory target rows from playbooks and hosts."""
+
     rows: list[dict[str, Any]] = []
     for playbook in playbooks:
         for group in playbook.get("hosts", []):
@@ -213,44 +380,18 @@ def _extract_inventory_targets(
     return deduped
 
 
-def _extract_dynamic_inventory_hosts(repo_root: Path) -> tuple[list[str], dict[str, list[str]]]:
-    """Extract static hosts and groups from Python dynamic inventory when possible."""
-
-    inventory_dir = repo_root / "inventory"
-    if not inventory_dir.exists():
-        return [], {}
-    for path in sorted(inventory_dir.glob("*.py")):
-        parsed = _extract_static_python_inventory(path)
-        if not isinstance(parsed, dict):
-            continue
-        groups: dict[str, list[str]] = {}
-        all_hosts: list[str] = []
-        for key, value in parsed.items():
-            if key == "_meta" or not isinstance(value, dict):
-                continue
-            hosts = value.get("hosts")
-            if not isinstance(hosts, list):
-                continue
-            normalized_hosts = ordered_unique_strings(hosts)
-            groups[str(key)] = normalized_hosts
-            all_hosts.extend(normalized_hosts)
-        return ordered_unique_strings(all_hosts), groups
-    return [], {}
-
-
-def _extract_static_python_inventory(path: Path) -> dict[str, Any] | None:
-    """Extract a static inventory dict from a simple Python inventory file."""
+def _parse_inventory_ast(source_text: str) -> dict[str, Any] | None:
+    """Parse Python source and extract ``inventory = {...}``."""
 
     try:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(source_text)
     except SyntaxError:
         return None
     for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
         if not any(
-            isinstance(target, ast.Name) and target.id == "inventory"
-            for target in node.targets
+            isinstance(t, ast.Name) and t.id == "inventory" for t in node.targets
         ):
             continue
         try:
@@ -260,6 +401,25 @@ def _extract_static_python_inventory(path: Path) -> dict[str, Any] | None:
         if isinstance(value, dict):
             return value
     return None
+
+
+def _hosts_and_groups_from_inventory(
+    parsed: dict[str, Any],
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Extract hosts list and groups dict from a parsed inventory dict."""
+
+    groups: dict[str, list[str]] = {}
+    all_hosts: list[str] = []
+    for key, value in parsed.items():
+        if key == "_meta" or not isinstance(value, dict):
+            continue
+        hosts = value.get("hosts")
+        if not isinstance(hosts, list):
+            continue
+        normalized = ordered_unique_strings(hosts)
+        groups[str(key)] = normalized
+        all_hosts.extend(normalized)
+    return ordered_unique_strings(all_hosts), groups
 
 
 def _collect_runtime_signals(

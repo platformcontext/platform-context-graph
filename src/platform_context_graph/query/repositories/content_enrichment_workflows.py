@@ -10,8 +10,12 @@ from typing import Any, Callable
 import yaml
 
 from ...tools.languages.groovy_support import extract_jenkins_pipeline_metadata
+from .indexed_file_discovery import (
+    discover_repo_files,
+    read_file_content,
+    read_yaml_file,
+)
 
-_WORKFLOW_SUFFIXES = {".yml", ".yaml"}
 _REUSABLE_WORKFLOW_RE = re.compile(
     r"^(?P<owner>[^/]+)/(?P<repo>[^/]+)/(?P<workflow_path>\.github/workflows/[^@]+)@(?P<ref>.+)$"
 )
@@ -24,18 +28,20 @@ def extract_delivery_workflows(
     *,
     repository: dict[str, Any],
     resolve_repository: Callable[[str], dict[str, Any] | None],
+    database: Any = None,
 ) -> dict[str, Any]:
     """Extract GitHub Actions and Jenkins workflow hints from one repository."""
 
-    repo_root = _repo_root(repository)
-    if repo_root is None:
+    repo_id = _repo_id(repository)
+    if database is None or repo_id is None:
         return {}
 
     github_actions = _extract_github_actions(
-        repo_root=repo_root,
+        database=database,
+        repo_id=repo_id,
         resolve_repository=resolve_repository,
     )
-    jenkins = _extract_jenkinsfiles(repo_root)
+    jenkins = _extract_jenkinsfiles(database=database, repo_id=repo_id)
     if not github_actions and not jenkins:
         return {}
 
@@ -47,45 +53,46 @@ def extract_delivery_workflows(
     return result
 
 
-def _repo_root(repository: dict[str, Any]) -> Path | None:
-    """Return the local repository path when it exists on disk."""
+def _repo_id(repository: dict[str, Any]) -> str | None:
+    """Return the canonical repo_id from a repository dict."""
 
-    raw_path = repository.get("local_path") or repository.get("path")
-    if not isinstance(raw_path, str) or not raw_path.strip():
-        return None
-    repo_root = Path(raw_path)
-    if not repo_root.exists() or not repo_root.is_dir():
-        return None
-    return repo_root
+    repo_id = repository.get("id")
+    if isinstance(repo_id, str) and repo_id.strip():
+        return repo_id.strip()
+    return None
 
 
 def _extract_github_actions(
     *,
-    repo_root: Path,
+    database: Any,
+    repo_id: str,
     resolve_repository: Callable[[str], dict[str, Any] | None],
 ) -> dict[str, Any]:
     """Extract repo-local GitHub Actions workflow and automation handoff hints."""
 
-    workflows_dir = repo_root / ".github" / "workflows"
-    if not workflows_dir.exists():
+    workflow_paths = discover_repo_files(
+        database, repo_id, prefix=".github/workflows/", suffix=".yml"
+    ) + discover_repo_files(
+        database, repo_id, prefix=".github/workflows/", suffix=".yaml"
+    )
+    workflow_paths = sorted(set(workflow_paths))
+    if not workflow_paths:
         return {}
 
     workflow_rows: list[dict[str, Any]] = []
     reusable_rows: list[dict[str, Any]] = []
     command_rows: list[dict[str, Any]] = []
 
-    for workflow_path in sorted(workflows_dir.iterdir()):
-        if workflow_path.suffix.lower() not in _WORKFLOW_SUFFIXES:
-            continue
-        parsed = _load_yaml_file(workflow_path)
+    for relative_path in workflow_paths:
+        parsed = read_yaml_file(database, repo_id, relative_path)
         if not isinstance(parsed, dict):
             continue
 
         reusable_workflows = _extract_reusable_workflows(parsed)
         workflow_rows.append(
             {
-                "name": str(parsed.get("name") or workflow_path.name),
-                "relative_path": str(workflow_path.relative_to(repo_root)),
+                "name": str(parsed.get("name") or Path(relative_path).name),
+                "relative_path": relative_path,
                 "triggers": _extract_trigger_names(parsed),
                 "reusable_workflows": reusable_workflows,
             }
@@ -96,6 +103,7 @@ def _extract_github_actions(
                 _extract_deep_command_rows(
                     reusable_workflow=reusable,
                     resolve_repository=resolve_repository,
+                    database=database,
                 )
             )
 
@@ -156,6 +164,7 @@ def _extract_deep_command_rows(
     *,
     reusable_workflow: dict[str, Any],
     resolve_repository: Callable[[str], dict[str, Any] | None],
+    database: Any,
 ) -> list[dict[str, Any]]:
     """Extract command-to-workflow mappings from a reusable automation workflow."""
 
@@ -169,12 +178,13 @@ def _extract_deep_command_rows(
     resolved = resolve_repository(str(reusable_workflow["repository"]))
     if resolved is None:
         resolved = resolve_repository(repository_name)
-    repo_root = _repo_root(resolved or {})
-    if repo_root is None:
+    if resolved is None:
+        return []
+    resolved_repo_id = _repo_id(resolved)
+    if resolved_repo_id is None:
         return []
 
-    automation_file = repo_root / workflow_path
-    parsed = _load_yaml_file(automation_file)
+    parsed = read_yaml_file(database, resolved_repo_id, workflow_path)
     if not isinstance(parsed, dict):
         return []
 
@@ -288,40 +298,51 @@ def _classify_delivery_mode(workflow_file: str) -> str:
     return "workflow_dispatch"
 
 
-def _extract_jenkinsfiles(repo_root: Path) -> list[dict[str, Any]]:
+def _extract_jenkinsfiles(
+    *, database: Any, repo_id: str
+) -> list[dict[str, Any]]:
     """Extract Jenkins pipeline hints from Jenkinsfile-style files."""
 
     rows: list[dict[str, Any]] = []
-    for file_path in _iter_jenkins_entrypoint_files(repo_root):
-        content = file_path.read_text(encoding="utf-8", errors="ignore")
+    for relative_path in _iter_jenkins_entrypoint_paths(
+        database=database, repo_id=repo_id
+    ):
+        content = read_file_content(database, repo_id, relative_path)
+        if content is None:
+            continue
         metadata = extract_jenkins_pipeline_metadata(content)
-        # Keep all Jenkins controller hints together so later enrichment can correlate them.
         jenkins_row = {
-            "relative_path": str(file_path.relative_to(repo_root)),
+            "relative_path": relative_path,
             **metadata,
         }
         rows.append(jenkins_row)
     return _dedupe_rows(rows)
 
 
-def _iter_jenkins_entrypoint_files(repo_root: Path) -> list[Path]:
-    """Return repo-local Jenkins entrypoint files, including nested Groovy helpers."""
+def _iter_jenkins_entrypoint_paths(
+    *, database: Any, repo_id: str
+) -> list[str]:
+    """Return repo-local Jenkins entrypoint paths, including nested Groovy helpers."""
 
-    candidates: dict[str, Path] = {}
-    patterns = ("Jenkinsfile", "Jenkinsfile.*", "jenkinsfile", "jenkinsfile.*")
-    for pattern in patterns:
-        for file_path in sorted(repo_root.glob(pattern)):
-            if file_path.is_file():
-                key = str(file_path.relative_to(repo_root)).lower()
-                candidates.setdefault(key, file_path)
+    candidates: dict[str, str] = {}
 
-    for file_path in sorted(repo_root.rglob("*.groovy")):
-        if not file_path.is_file():
-            continue
-        normalized_name = file_path.name.strip().lower()
+    jenkinsfile_paths = discover_repo_files(
+        database,
+        repo_id,
+        pattern=r"^[Jj]enkinsfile($|\..*)",
+    )
+    for relative_path in jenkinsfile_paths:
+        key = relative_path.lower()
+        candidates.setdefault(key, relative_path)
+
+    groovy_paths = discover_repo_files(
+        database, repo_id, suffix=".groovy"
+    )
+    for relative_path in groovy_paths:
+        normalized_name = Path(relative_path).name.strip().lower()
         if "jenkins" not in normalized_name:
             continue
-        candidates[str(file_path.relative_to(repo_root))] = file_path
+        candidates[relative_path] = relative_path
 
     return [candidates[key] for key in sorted(candidates)]
 
@@ -356,16 +377,6 @@ def _extract_trigger_names(document: dict[str, Any]) -> list[str]:
     if isinstance(trigger_node, dict):
         return [str(key) for key in trigger_node.keys()]
     return []
-
-
-def _load_yaml_file(path: Path) -> dict[str, Any] | None:
-    """Load one YAML file into a dict when possible."""
-
-    try:
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
-        return None
-    return document if isinstance(document, dict) else None
 
 
 def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
