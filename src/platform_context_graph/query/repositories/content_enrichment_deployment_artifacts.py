@@ -160,31 +160,55 @@ def _resolve_pattern(
     """Resolve a glob-style or exact path pattern to indexed file paths.
 
     If the pattern contains no wildcard characters it is treated as an exact
-    file path and looked up directly.  Otherwise the pattern is decomposed
-    into a directory prefix and file suffix for an indexed discovery query.
+    file path and looked up directly.  Otherwise the glob pattern is converted
+    to a regex for accurate matching via ``discover_repo_files(pattern=...)``.
     """
 
     if "*" not in pattern and "?" not in pattern:
         if file_exists(database, repo_id, pattern):
             return [pattern]
         return []
+    regex = _glob_to_regex(pattern)
     prefix: str | None = None
-    suffix: str | None = None
-    wildcard_pos = len(pattern)
-    for char in ("*", "?"):
-        idx = pattern.find(char)
-        if idx != -1 and idx < wildcard_pos:
-            wildcard_pos = idx
+    wildcard_pos = min(
+        (pattern.find(c) for c in ("*", "?") if c in pattern),
+        default=len(pattern),
+    )
     if wildcard_pos > 0:
         prefix_candidate = pattern[:wildcard_pos]
         last_slash = prefix_candidate.rfind("/")
         if last_slash >= 0:
             prefix = prefix_candidate[: last_slash + 1]
-    after_wildcard = pattern[wildcard_pos:]
-    dot_pos = after_wildcard.rfind(".")
-    if dot_pos >= 0:
-        suffix = after_wildcard[dot_pos:]
-    return discover_repo_files(database, repo_id, prefix=prefix, suffix=suffix)
+    return discover_repo_files(database, repo_id, prefix=prefix, pattern=regex)
+
+
+def _glob_to_regex(glob_pattern: str) -> str:
+    """Convert a filesystem glob pattern to a Neo4j-compatible regex.
+
+    Handles ``*`` (single segment), ``**`` (any depth), and ``?`` (single char).
+    """
+    import re as _re
+
+    parts = []
+    i = 0
+    while i < len(glob_pattern):
+        c = glob_pattern[i]
+        if c == "*":
+            if i + 1 < len(glob_pattern) and glob_pattern[i + 1] == "*":
+                parts.append(".*")
+                i += 2
+                if i < len(glob_pattern) and glob_pattern[i] == "/":
+                    i += 1
+            else:
+                parts.append("[^/]*")
+                i += 1
+        elif c == "?":
+            parts.append("[^/]")
+            i += 1
+        else:
+            parts.append(_re.escape(c))
+            i += 1
+    return "^" + "".join(parts) + "$"
 
 
 def _extract_image_rows(
