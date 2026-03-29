@@ -156,14 +156,19 @@ def build_workload_story_response(
     if subject.get("kind") == "service" or requested_as == "service":
         drilldowns["service_context"] = {"workload_id": subject["id"]}
 
+    coverage = context.get("coverage")
+    limitations = list(context.get("limitations") or [])
+    if coverage is None and not limitations:
+        limitations.append("coverage_unavailable")
+
     response = {
         "subject": subject,
         "story": story,
         "story_sections": story_sections,
         "deployment_overview": deployment_overview,
         "evidence": evidence,
-        "limitations": [],
-        "coverage": None,
+        "limitations": limitations,
+        "coverage": coverage,
         "drilldowns": drilldowns,
     }
     if requested_as:
