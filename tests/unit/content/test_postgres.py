@@ -32,13 +32,13 @@ def test_delete_repository_content_removes_entities_and_files(monkeypatch) -> No
     params = [call.args[1] for call in cursor.execute.call_args_list]
     assert queries == [
         """
-                DELETE FROM content_entities
-                WHERE repo_id = %(repo_id)s
-                """,
+                    DELETE FROM content_entities
+                    WHERE repo_id = %(repo_id)s
+                    """,
         """
-                DELETE FROM content_files
-                WHERE repo_id = %(repo_id)s
-                """,
+                    DELETE FROM content_files
+                    WHERE repo_id = %(repo_id)s
+                    """,
     ]
     assert params == [
         {"repo_id": "repository:r_test"},
