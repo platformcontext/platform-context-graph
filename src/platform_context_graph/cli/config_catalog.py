@@ -55,6 +55,7 @@ DEFAULT_CONFIG = {
     "INDEX_YAML": "true",
     "INDEX_HCL": "true",
     "PCG_IGNORE_DEPENDENCY_DIRS": "true",
+    "PCG_MAX_CALLS_PER_FILE": "50",
     "ECOSYSTEM_MANIFEST_PATH": "",
     "ECOSYSTEM_BASE_PATH": "",
     "ECOSYSTEM_PARALLEL_REPOS": "4",
@@ -92,6 +93,17 @@ CONFIG_DESCRIPTIONS = {
     "CACHE_ENABLED": "Enable caching for faster re-indexing",
     "IGNORE_DIRS": "Comma-separated list of directory names to ignore during indexing",
     "PCG_IGNORE_DEPENDENCY_DIRS": "Exclude built-in vendored/dependency and tool-managed cache directories before parse and storage",
+    "PCG_MAX_CALLS_PER_FILE": (
+        "Maximum function calls per file to resolve during finalization. "
+        "Controls the tradeoff between CALLS edge completeness and finalization speed. "
+        "Lower values (25-50) make finalization fast but may miss some cross-function edges "
+        "in large files. Higher values (200-500) capture more edges but can cause finalization "
+        "to stall on repos with many large JS/PHP files — each call generates a Cypher query "
+        "against Neo4j. Files exceeding this cap have their remaining calls silently dropped. "
+        "The default of 50 covers the high-signal contextual calls (same-file and import-linked) "
+        "for typical source files. Increase for codebases where deep cross-file call graphs "
+        "are critical; decrease for large monorepos with many utility/vendor files."
+    ),
     "INDEX_SOURCE": "Store full source code in graph database (for faster indexing use false, for better performance use true)",
     "SCIP_INDEXER": "Use SCIP-based indexing for higher accuracy call/inheritance resolution (requires scip-<lang> tools installed)",
     "SCIP_LANGUAGES": "Comma-separated languages to index via SCIP when SCIP_INDEXER=true (python,typescript,go,rust,java)",

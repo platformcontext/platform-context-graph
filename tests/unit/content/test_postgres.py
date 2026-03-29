@@ -32,13 +32,13 @@ def test_delete_repository_content_removes_entities_and_files(monkeypatch) -> No
     params = [call.args[1] for call in cursor.execute.call_args_list]
     assert queries == [
         """
-                DELETE FROM content_entities
-                WHERE repo_id = %(repo_id)s
-                """,
+                    DELETE FROM content_entities
+                    WHERE repo_id = %(repo_id)s
+                    """,
         """
-                DELETE FROM content_files
-                WHERE repo_id = %(repo_id)s
-                """,
+                    DELETE FROM content_files
+                    WHERE repo_id = %(repo_id)s
+                    """,
     ]
     assert params == [
         {"repo_id": "repository:r_test"},
@@ -189,9 +189,7 @@ def test_postgres_search_spans_do_not_capture_raw_search_patterns(monkeypatch) -
     assert file_search.attributes["pcg.content.pattern_length"] == len("secret-token")
     assert file_search.attributes["pcg.content.repo_count"] == 1
     assert "pcg.content.pattern" not in file_search.attributes
-    assert entity_search.attributes["pcg.content.pattern_length"] == len(
-        "secret-token"
-    )
+    assert entity_search.attributes["pcg.content.pattern_length"] == len("secret-token")
     assert entity_search.attributes["pcg.content.repo_count"] == 1
     assert "pcg.content.pattern" not in entity_search.attributes
 
@@ -346,7 +344,9 @@ def test_search_file_content_falls_back_to_inferred_metadata(monkeypatch) -> Non
     assert result["matches"][0]["iac_relevant"] is True
 
 
-def test_search_file_content_false_filter_includes_legacy_plain_rows(monkeypatch) -> None:
+def test_search_file_content_false_filter_includes_legacy_plain_rows(
+    monkeypatch,
+) -> None:
     """`iac_relevant=False` searches should still match legacy rows with null metadata."""
 
     provider = PostgresContentProvider("postgresql://example")
@@ -573,6 +573,227 @@ def test_upsert_entities_chunks_large_batches(monkeypatch) -> None:
     last_chunk = cursor.executemany.call_args_list[-1].args[1]
     assert len(first_chunk) == 2
     assert len(last_chunk) == 1
+
+
+def test_upsert_file_batch_uses_executemany(monkeypatch) -> None:
+    """Batch file upserts should persist all rows via a single executemany call."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    entries = [
+        ContentFileEntry(
+            repo_id="repository:r_test",
+            relative_path=f"src/file_{i}.py",
+            content=f"print({i})\n",
+            language="python",
+            indexed_at=datetime.now(tz=timezone.utc),
+        )
+        for i in range(3)
+    ]
+    provider.upsert_file_batch(entries)
+
+    assert cursor.executemany.call_count == 1
+    rows = cursor.executemany.call_args.args[1]
+    assert len(rows) == 3
+    assert rows[0]["relative_path"] == "src/file_0.py"
+    assert rows[2]["relative_path"] == "src/file_2.py"
+
+
+def test_upsert_file_batch_skips_empty_list(monkeypatch) -> None:
+    """Batch file upserts should be a no-op when the entry list is empty."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    provider.upsert_file_batch([])
+
+    assert cursor.executemany.call_count == 0
+
+
+def test_upsert_entities_batch_uses_executemany(monkeypatch) -> None:
+    """Batch entity upserts should persist all rows via executemany."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    entries = [
+        ContentEntityEntry(
+            entity_id=f"content-entity:e_batch_{i}",
+            repo_id="repository:r_test",
+            relative_path=f"src/file_{i}.py",
+            entity_type="Function",
+            entity_name=f"func_{i}",
+            start_line=1,
+            end_line=5,
+            source_cache=f"def func_{i}(): pass\n",
+            language="python",
+            indexed_at=datetime.now(tz=timezone.utc),
+        )
+        for i in range(4)
+    ]
+    provider.upsert_entities_batch(entries)
+
+    assert cursor.executemany.call_count == 1
+    rows = cursor.executemany.call_args.args[1]
+    assert len(rows) == 4
+
+
+def test_upsert_entities_batch_chunks_large_batches(monkeypatch) -> None:
+    """Batch entity upserts should split at the configured batch size."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+    monkeypatch.setenv("PCG_CONTENT_ENTITY_UPSERT_BATCH_SIZE", "3")
+
+    entries = [
+        ContentEntityEntry(
+            entity_id=f"content-entity:e_chunk_{i}",
+            repo_id="repository:r_test",
+            relative_path="app.py",
+            entity_type="Function",
+            entity_name=f"fn_{i}",
+            start_line=i + 1,
+            end_line=i + 1,
+            source_cache=f"def fn_{i}(): ...\n",
+            language="python",
+        )
+        for i in range(7)
+    ]
+    provider.upsert_entities_batch(entries)
+
+    assert cursor.executemany.call_count == 3
+    assert len(cursor.executemany.call_args_list[0].args[1]) == 3
+    assert len(cursor.executemany.call_args_list[2].args[1]) == 1
+
+
+def test_upsert_entities_batch_skips_empty_list(monkeypatch) -> None:
+    """Batch entity upserts should be a no-op when the entry list is empty."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    provider.upsert_entities_batch([])
+
+    assert cursor.executemany.call_count == 0
+
+
+def test_provider_uses_pool_when_available(monkeypatch) -> None:
+    """Provider should create a connection pool when psycopg_pool is available."""
+
+    import platform_context_graph.content.postgres as pg_mod
+
+    mock_pool_instance = MagicMock()
+    mock_pool_class = MagicMock(return_value=mock_pool_instance)
+    original_pool = pg_mod._ConnectionPool
+    monkeypatch.setattr(pg_mod, "_ConnectionPool", mock_pool_class)
+
+    try:
+        provider = PostgresContentProvider("postgresql://example")
+        assert provider._pool is mock_pool_instance
+        assert provider._conn_lock is None
+        mock_pool_class.assert_called_once()
+    finally:
+        monkeypatch.setattr(pg_mod, "_ConnectionPool", original_pool)
+
+
+def test_provider_falls_back_without_pool(monkeypatch) -> None:
+    """Provider should use a single connection when psycopg_pool is missing."""
+
+    import platform_context_graph.content.postgres as pg_mod
+
+    monkeypatch.setattr(pg_mod, "_ConnectionPool", None)
+
+    provider = PostgresContentProvider("postgresql://example")
+
+    assert provider._pool is None
+    assert provider._conn_lock is not None
+
+
+def test_provider_falls_back_on_pool_init_failure(monkeypatch) -> None:
+    """Provider should fall back to single-conn when pool creation raises."""
+
+    import platform_context_graph.content.postgres as pg_mod
+
+    def _raise(*args, **kwargs):
+        raise RuntimeError("pool init failed")
+
+    monkeypatch.setattr(pg_mod, "_ConnectionPool", _raise)
+
+    provider = PostgresContentProvider("postgresql://example")
+
+    assert provider._pool is None
+    assert provider._conn_lock is not None
+
+
+def test_close_with_pool(monkeypatch) -> None:
+    """Closing the provider should close the pool when in pool mode."""
+
+    import platform_context_graph.content.postgres as pg_mod
+
+    mock_pool = MagicMock()
+    mock_pool_class = MagicMock(return_value=mock_pool)
+    monkeypatch.setattr(pg_mod, "_ConnectionPool", mock_pool_class)
+
+    provider = PostgresContentProvider("postgresql://example")
+    provider.close()
+
+    mock_pool.close.assert_called_once()
+    assert provider._pool is None
+
+
+def test_cursor_uses_pool_connection(monkeypatch) -> None:
+    """The cursor context manager should get a connection from the pool."""
+
+    import platform_context_graph.content.postgres as pg_mod
+
+    mock_cursor = MagicMock()
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_pool = MagicMock()
+    mock_pool.connection.return_value.__enter__ = MagicMock(return_value=mock_conn)
+    mock_pool.connection.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_pool_class = MagicMock(return_value=mock_pool)
+    monkeypatch.setattr(pg_mod, "_ConnectionPool", mock_pool_class)
+
+    provider = PostgresContentProvider("postgresql://example")
+    provider._initialized = True  # skip schema init
+
+    with provider._cursor() as cursor:
+        assert cursor is mock_cursor
 
 
 def test_upsert_runtime_status_persists_ingester_status(monkeypatch) -> None:

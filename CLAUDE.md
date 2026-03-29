@@ -188,8 +188,9 @@ Discovery -> Sync -> Parse -> Snapshot -> Queue -> Commit -> Finalization
 | `PCG_REPO_FILE_PARSE_CONCURRENCY` | 1 | Files parsed concurrently in one repo |
 | `PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE` | 5 | Files per Neo4j transaction |
 | `PCG_FILE_BATCH_SIZE` | 50 | Files per commit batch |
-| `INDEX_VARIABLES` | true | Variable node creation |
+| `INDEX_VARIABLES` | false | Variable node creation (disabled — low signal, high volume) |
 | `PCG_IGNORE_DEPENDENCY_DIRS` | true | Exclude vendor/node_modules/etc |
+| `PCG_MAX_CALLS_PER_FILE` | 50 | Max function calls resolved per file during finalization (see below) |
 
 ## API/MCP Surface
 
@@ -211,6 +212,29 @@ See `~/PRD-pcg-ingestion-remediation.md` for the current remediation plan. Execu
 - **Phase 1B (benchmark-gated):** A/B test tx batch size (5/10/25) and multiprocess parsing against Tier 1 numbers. Run Tier 2 stress corpus.
 - **Phase 2 (after numbers):** Batch Postgres writes, scope relationship projection, move per-repo finalization stages to post-commit.
 - **Phase 3 (evidence-gated):** Concurrent commit (needs lock contention data), scope-filter variables, per-repo call resolution, graph DB prototype.
+
+### PCG_MAX_CALLS_PER_FILE tuning guide
+
+During finalization, the `function_calls` stage resolves CALLS edges by running Cypher queries against Neo4j for each function call in each file. This is the most expensive finalization stage.
+
+`PCG_MAX_CALLS_PER_FILE` caps how many calls per file are resolved. Calls beyond the cap are silently dropped — they don't produce CALLS edges but they don't generate Cypher queries either.
+
+**What happens as you increase the cap:**
+- More CALLS edges are created, giving richer cross-function dependency graphs
+- Finalization takes longer — each additional call generates a Cypher round-trip to Neo4j
+- For files with hundreds of calls (vendor JS, minified code, large PHP), the extra edges are overwhelmingly unresolvable (single-letter names, common utility names) and produce no useful graph signal
+- At cap=500 on `websites-php-youboat` (14,615 files), finalization projected ~20 hours
+- At cap=50, the same repo finalizes in ~25 minutes
+
+**What happens as you decrease the cap:**
+- Finalization is faster
+- Some legitimate cross-function edges in large source files may be missed
+- The first N calls in a file are the most likely to resolve (contextual resolution matches by name + file path, and import-linked calls appear early)
+
+**Recommendations:**
+- `50` (default): good for most workloads. Covers same-file and import-linked calls.
+- `25`: aggressive. Use for large monorepos with many utility/vendor files where finalization speed matters more than call graph completeness.
+- `200-500`: use only when deep cross-file call graphs are critical and the repo has few large JS/PHP files.
 
 ## Code Style
 

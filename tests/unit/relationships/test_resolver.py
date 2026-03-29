@@ -659,6 +659,78 @@ def test_project_resolved_relationships_projects_platform_runtime_edges() -> Non
     )
 
 
+def test_project_resolved_relationships_scopes_delete_to_previous_generations() -> None:
+    """Projection should only delete resolver edges from previous generations."""
+
+    class FakeResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def data(self):
+            return self._rows
+
+    class FakeTx:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        def run(self, query: str, **params: object):
+            self.calls.append((query, params))
+            if "UNWIND $repo_ids AS repo_id" in query:
+                return FakeResult(
+                    [{"repo_id": "repository:r_api", "repo_count": 1}]
+                )
+            return FakeResult([])
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.tx = FakeTx()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute_write(self, callback):
+            return callback(self.tx)
+
+    class FakeDriver:
+        def __init__(self) -> None:
+            self.session_instance = FakeSession()
+
+        def session(self):
+            return self.session_instance
+
+    driver = FakeDriver()
+    db_manager = SimpleNamespace(get_driver=lambda: driver)
+
+    project_resolved_relationships(
+        db_manager=db_manager,
+        generation_id="generation_456",
+        resolved=[
+            ResolvedRelationship(
+                source_repo_id="repository:r_api",
+                target_repo_id="repository:r_api",
+                relationship_type="DEPENDS_ON",
+                confidence=0.9,
+                evidence_count=1,
+                rationale="Self dependency",
+                resolution_source="inferred",
+            )
+        ],
+    )
+
+    delete_calls = [
+        (query, params)
+        for query, params in driver.session_instance.tx.calls
+        if "DELETE rel" in query and "evidence_source" in query
+    ]
+    assert len(delete_calls) == 1
+    delete_query, delete_params = delete_calls[0]
+    assert "rel.evidence_generation_id <> $generation_id" in delete_query
+    assert delete_params["generation_id"] == "generation_456"
+
+
 def test_resolve_repository_relationships_for_committed_repositories_persists_platform_entities_from_evidence(
     monkeypatch,
     tmp_path: Path,

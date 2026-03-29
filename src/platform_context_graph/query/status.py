@@ -50,6 +50,7 @@ def _default_status(ingester: str) -> dict[str, Any]:
         "provider": ingester,
         "source_mode": os.getenv("PCG_REPO_SOURCE_MODE"),
         "status": "bootstrap_pending",
+        "finalization_status": None,
         "active_run_id": None,
         "last_attempt_at": None,
         "last_success_at": None,
@@ -241,6 +242,22 @@ def _active_finalization_from_summary(summary: dict[str, Any]) -> dict[str, Any]
     }
 
 
+def _derive_finalization_status(
+    summary: dict[str, Any], public_status: str
+) -> str | None:
+    """Derive the finalization status from run state or active phase signals."""
+
+    explicit = summary.get("finalization_status")
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    active_phase = str(summary.get("active_phase") or "")
+    if active_phase.startswith("finalizing:") or active_phase == "finalizing":
+        return "running"
+    if public_status == "completed":
+        return "completed"
+    return None
+
+
 def _checkpoint_status_payload(
     *, ingester: str, summary: dict[str, Any]
 ) -> dict[str, Any]:
@@ -255,12 +272,14 @@ def _checkpoint_status_payload(
     run_status = str(summary.get("status") or "bootstrap_pending")
     public_status = "indexing" if run_status == "running" else run_status
     updated_at = summary.get("updated_at")
+    finalization_status = _derive_finalization_status(summary, public_status)
     return {
         "runtime_family": "ingester",
         "ingester": ingester,
         "provider": ingester,
         "source_mode": os.getenv("PCG_REPO_SOURCE_MODE"),
         "status": public_status,
+        "finalization_status": finalization_status,
         "active_run_id": summary.get("run_id"),
         "last_attempt_at": summary.get("created_at"),
         "last_success_at": updated_at if public_status == "completed" else None,

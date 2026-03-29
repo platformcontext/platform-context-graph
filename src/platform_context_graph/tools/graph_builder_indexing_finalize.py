@@ -52,6 +52,74 @@ def _supports_keyword_arguments(callback: Any, keyword_names: tuple[str, ...]) -
     return all(name in accepted for name in keyword_names)
 
 
+_PER_REPO_STAGES = frozenset({"inheritance"})
+
+
+def finalize_single_repository(
+    builder: Any,
+    *,
+    repo_path: Path,
+    iter_snapshot_file_data_fn: Any,
+    merged_imports_map: dict[str, list[str]],
+    info_logger_fn: Any,
+) -> dict[str, float]:
+    """Run per-repo finalization stages (inheritance + workloads) for one repository.
+
+    This can be called immediately after a single repo commit to reduce
+    end-of-batch finalization wall time.  The caller is responsible for
+    ensuring the file data snapshot is available via *iter_snapshot_file_data_fn*.
+    """
+
+    stage_timings: dict[str, float] = {}
+
+    def _repo_file_data_iter() -> Iterable[dict[str, Any]]:
+        """Yield file payloads for the single repository."""
+
+        data = iter_snapshot_file_data_fn(repo_path)
+        if data is None:
+            raise FileNotFoundError(
+                f"Missing file data snapshot for repository {repo_path.resolve()}"
+            )
+        yield from data
+
+    # Only inheritance is truly per-repo. Workloads materialization is global
+    # (queries and MERGEs across all repos), so it must stay in batch finalization.
+    for stage_name, stage_fn in (
+        (
+            "inheritance",
+            lambda: builder._create_all_inheritance_links(
+                _repo_file_data_iter(),
+                merged_imports_map,
+            ),
+        ),
+    ):
+        log_memory_usage(
+            info_logger_fn,
+            context=f"Before per-repo finalization stage {stage_name} for {repo_path.name}",
+        )
+        stage_start = time.monotonic()
+        stage_fn()
+        elapsed = time.monotonic() - stage_start
+        stage_timings[stage_name] = elapsed
+        log_memory_usage(
+            info_logger_fn,
+            context=f"After per-repo finalization stage {stage_name} for {repo_path.name}",
+        )
+        emit_log_call(
+            info_logger_fn,
+            f"Per-repo finalization stage {stage_name} for {repo_path.name} "
+            f"done in {elapsed:.1f}s",
+            event_name="index.finalization.per_repo_stage.completed",
+            extra_keys={
+                "stage": stage_name,
+                "repo_path": str(repo_path.resolve()),
+                "duration_seconds": round(elapsed, 3),
+            },
+        )
+
+    return stage_timings
+
+
 def finalize_index_batch(
     builder: Any,
     *,
@@ -67,15 +135,25 @@ def finalize_index_batch(
     source: str | None = None,
     parse_strategy: str = "threaded",
     parse_workers: int = 1,
+    skip_per_repo_stages: bool = False,
 ) -> dict[str, float]:
-    """Create cross-file and cross-repo relationships after repo commits finish."""
+    """Create cross-file and cross-repo relationships after repo commits finish.
+
+    When *skip_per_repo_stages* is ``True`` the ``inheritance`` and
+    ``workloads`` stages are omitted because they were already executed
+    per-repo via :func:`finalize_single_repository`.
+    """
 
     emit_log_call(
         info_logger_fn,
         "Creating inheritance links and function calls for "
         f"{len(committed_repo_paths)} committed repositories...",
         event_name="index.finalization.started",
-        extra_keys={"repository_count": len(committed_repo_paths), "run_id": run_id},
+        extra_keys={
+            "repository_count": len(committed_repo_paths),
+            "run_id": run_id,
+            "skip_per_repo_stages": skip_per_repo_stages,
+        },
     )
     total_start = time.monotonic()
     committed_repo_data_iter = lambda: _iter_repository_file_data(
@@ -130,7 +208,7 @@ def finalize_index_batch(
             )
         setattr(builder, "_last_call_relationship_metrics", aggregated_metrics)
 
-    for stage_name, stage_fn in (
+    all_stages: tuple[tuple[str, Any], ...] = (
         (
             "inheritance",
             lambda: builder._create_all_inheritance_links(
@@ -151,7 +229,21 @@ def finalize_index_batch(
                 run_id=run_id,
             ),
         ),
-    ):
+    )
+
+    for stage_name, stage_fn in all_stages:
+        if skip_per_repo_stages and stage_name in _PER_REPO_STAGES:
+            emit_log_call(
+                info_logger_fn,
+                f"Skipping finalization stage {stage_name} (already run per-repo)",
+                event_name="index.finalization.stage.skipped",
+                extra_keys={
+                    "stage": stage_name,
+                    "run_id": run_id,
+                },
+            )
+            stage_timings[stage_name] = 0.0
+            continue
         _notify_stage_progress(stage_name)
         log_memory_usage(
             info_logger_fn,

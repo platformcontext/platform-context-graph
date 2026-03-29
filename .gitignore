@@ -160,3 +160,6 @@ todo.md
 
 # macOS system files
 .DS_Store
+.omc/
+.serena/
+.superpowers/

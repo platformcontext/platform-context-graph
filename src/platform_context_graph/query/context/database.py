@@ -188,6 +188,11 @@ def _merge_repository_context_into_workload_response(
         if entrypoint not in existing_entrypoints
     ]
 
+    if repo_context.get("coverage") is not None:
+        response["coverage"] = repo_context["coverage"]
+    if repo_context.get("limitations"):
+        response["limitations"] = list(repo_context["limitations"])
+
     derived_instances = _instances_from_platform_rows(
         workload_id=workload_id,
         workload_name=workload_name,
