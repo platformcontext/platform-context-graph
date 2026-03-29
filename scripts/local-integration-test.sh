@@ -23,7 +23,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TIER="tier1"
 WORKSPACE_ONLY=false
 VALIDATE_ONLY=false
-WORKSPACE="${PCG_WORKSPACE:-/Users/allen/pcg-test-workspace}"
+WORKSPACE="${PCG_WORKSPACE:-"$REPO_ROOT/.pcg-test-workspace"}"
 
 # Parse args
 for arg in "$@"; do

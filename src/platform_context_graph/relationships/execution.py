@@ -272,7 +272,8 @@ def project_resolved_relationships(
                     """
                     MATCH ()-[rel]->()
                     WHERE rel.evidence_source = 'resolver'
-                      AND rel.evidence_generation_id <> $generation_id
+                      AND (rel.evidence_generation_id IS NULL
+                           OR rel.evidence_generation_id <> $generation_id)
                     DELETE rel
                     """,
                     generation_id=generation_id,

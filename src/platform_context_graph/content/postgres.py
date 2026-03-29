@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
+
+_logger = logging.getLogger(__name__)
 from collections.abc import Sequence
 from contextlib import contextmanager
 from typing import Any
@@ -169,6 +172,10 @@ class PostgresContentProvider:
                     kwargs={"autocommit": True, "row_factory": dict_row},
                 )
             except Exception:
+                _logger.warning(
+                    "Connection pool initialization failed, falling back to single connection",
+                    exc_info=True,
+                )
                 self._pool = None
                 self._conn_lock = threading.Lock()
         else:
@@ -331,7 +338,7 @@ class PostgresContentProvider:
                 operation="delete_repository_content",
                 backend="postgres",
                 success=success,
-                hit=True,
+                hit=False,
                 duration_seconds=time.monotonic() - started,
             )
 

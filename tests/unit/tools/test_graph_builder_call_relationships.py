@@ -454,8 +454,8 @@ def test_prepare_call_rows_handles_module_form_builtins_without_type_error(
     assert next_row_id == 2
 
 
-def test_create_all_function_calls_does_not_special_case_vendored_files() -> None:
-    """CALLS finalization should assume discovery already excluded vendored files."""
+def test_create_all_function_calls_skips_minified_files() -> None:
+    """CALLS finalization skips .min.js files to avoid expensive queries on minified bundles."""
 
     session = _FakeSession()
     builder = SimpleNamespace(driver=_FakeDriver(session))

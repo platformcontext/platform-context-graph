@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Phase 1B benchmark: A/B test tx batch size, multiprocess parsing, flush/call batch sizes
 # Run from the repo root with docker-compose stack available.
-# Usage: ./scripts/benchmark_phase1b.sh /Users/allen/pcg-test-workspace
+# Usage: ./scripts/benchmark_phase1b.sh <workspace-path> [results-dir]
 
 set -euo pipefail
 
-WORKSPACE="${1:?Usage: $0 <workspace-path>}"
-RESULTS_DIR="/Users/allen/pcg-phase1b-results"
+WORKSPACE="${1:?Usage: $0 <workspace-path> [results-dir]}"
+RESULTS_DIR="${2:-${PCG_PHASE1B_RESULTS_DIR:-./.benchmarks/phase1b-results}}"
 mkdir -p "$RESULTS_DIR"
 
 run_benchmark() {

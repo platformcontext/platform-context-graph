@@ -52,7 +52,7 @@ def _supports_keyword_arguments(callback: Any, keyword_names: tuple[str, ...]) -
     return all(name in accepted for name in keyword_names)
 
 
-_PER_REPO_STAGES = frozenset({"inheritance", "workloads"})
+_PER_REPO_STAGES = frozenset({"inheritance"})
 
 
 def finalize_single_repository(
@@ -82,6 +82,8 @@ def finalize_single_repository(
             )
         yield from data
 
+    # Only inheritance is truly per-repo. Workloads materialization is global
+    # (queries and MERGEs across all repos), so it must stay in batch finalization.
     for stage_name, stage_fn in (
         (
             "inheritance",
@@ -90,7 +92,6 @@ def finalize_single_repository(
                 merged_imports_map,
             ),
         ),
-        ("workloads", builder._materialize_workloads),
     ):
         log_memory_usage(
             info_logger_fn,
