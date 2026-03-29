@@ -85,6 +85,7 @@ env:
   LOG_FILE_PATH: ""
   PCG_ENABLE_PUBLIC_DOCS: "false"
   INDEX_VARIABLES: "false"
+  PCG_MAX_CALLS_PER_FILE: "50"
 
 contentStore:
   dsn: ""
