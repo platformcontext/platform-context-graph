@@ -1,0 +1,37 @@
+src/platform_context_graph/tools/languages/typescript_support.py
+  171ca78060f03490 85-95
+tests/unit/parsers/test_variable_scope.py
+  171ca78060f03490 1-266
+src/platform_context_graph/tools/languages/python_support.py
+  171ca78060f03490 53-59
+tests/unit/parsers/test_typescriptjsx_parser.py
+  171ca78060f03490 101,104
+src/platform_context_graph/tools/languages/go_support.py
+  171ca78060f03490 5,79-82,446-448,451
+src/platform_context_graph/tools/languages/python.py
+  171ca78060f03490 426-430,437-438,441
+src/platform_context_graph/tools/languages/typescript.py
+  171ca78060f03490 445-454,457
+tests/unit/parsers/test_python_parser.py
+  171ca78060f03490 136-138,140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "ecd19f67ca6dd289ede30a7b2d565f78b2a2f381",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 4,
+      "accepted_lines": 318,
+      "overriden_lines": 0
+    }
+  }
+}
