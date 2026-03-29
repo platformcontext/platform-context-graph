@@ -27,6 +27,8 @@ from .graph_builder_persistence_helpers import (
     _run_managed_write,
     _run_write_query,
     add_repository_to_graph,
+    collect_directory_chain_rows,
+    flush_directory_chain_rows,
     read_repository_metadata,
 )
 from .graph_builder_persistence_unwind import resolve_max_entity_value_length
@@ -166,8 +168,15 @@ def _write_one_file_graph(
     repo_path_obj: Path,
     max_entity_value_length: int,
     warning_logger_fn: Any,
+    dir_rows_accumulator: list[dict[str, str]] | None = None,
+    containment_rows_accumulator: list[dict[str, str]] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """Write one file node and return its prepared batch payload."""
+    """Write one file node and return its prepared batch payload.
+
+    When dir_rows_accumulator and containment_rows_accumulator are provided,
+    directory chain data is collected into them for batched UNWIND flush
+    instead of executing per-file queries.
+    """
 
     file_path_str = str(Path(file_data["path"]).resolve())
     file_path_obj = Path(file_path_str)
@@ -192,13 +201,23 @@ def _write_one_file_graph(
         is_dependency=is_dependency,
     )
 
-    _merge_directory_chain(
-        tx,
-        file_path_obj,
-        repo_path_obj,
-        file_path_str,
-        warning_logger_fn=warning_logger_fn,
-    )
+    if dir_rows_accumulator is not None and containment_rows_accumulator is not None:
+        dir_rows, cont_rows = collect_directory_chain_rows(
+            file_path_obj,
+            repo_path_obj,
+            file_path_str,
+            warning_logger_fn=warning_logger_fn,
+        )
+        dir_rows_accumulator.extend(dir_rows)
+        containment_rows_accumulator.extend(cont_rows)
+    else:
+        _merge_directory_chain(
+            tx,
+            file_path_obj,
+            repo_path_obj,
+            file_path_str,
+            warning_logger_fn=warning_logger_fn,
+        )
 
     return file_path_str, collect_file_write_data(
         file_data,
@@ -401,6 +420,8 @@ def commit_file_batch_to_graph(
                     },
                 ):
                     accumulator = empty_accumulator()
+                    chunk_dir_rows: list[dict[str, str]] = []
+                    chunk_containment_rows: list[dict[str, str]] = []
 
                     for chunk_index, file_data in enumerate(tx_chunk, start=1):
                         file_path_str, file_batches = _write_one_file_graph(
@@ -409,6 +430,8 @@ def commit_file_batch_to_graph(
                             max_entity_value_length=max_entity_value_length,
                             repo_path_obj=repo_path_obj,
                             warning_logger_fn=warning_logger_fn,
+                            dir_rows_accumulator=chunk_dir_rows,
+                            containment_rows_accumulator=chunk_containment_rows,
                         )
                         chunk_file_paths.append(file_path_str)
                         merge_batches(accumulator, file_batches)
@@ -434,6 +457,10 @@ def commit_file_batch_to_graph(
                             )
                             _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                             accumulator = empty_accumulator()
+
+                    flush_directory_chain_rows(
+                        tx, chunk_dir_rows, chunk_containment_rows
+                    )
 
                     if has_pending_rows(accumulator):
                         log_prepared_entity_batches(
