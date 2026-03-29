@@ -142,18 +142,21 @@ def entity_props_for_unwind(
     """
     props: dict[str, Any] = {
         "file_path": file_path,
-        "name": item["name"],
+        "name": item["name"] or "",
         "line_number": item["line_number"],
         "use_uid_identity": use_uid_identity,
         "uid": item.get("uid"),
     }
+    # Properties that participate in NODE KEY constraints must never be null.
+    _node_key_props = {"name", "kind", "function_line_number"}
     extra_keys = [k for k in item if k not in {"name", "line_number", "path"}]
     for key in extra_keys:
-        props[key] = (
-            cap_entity_value(item[key], max_entity_value_length=max_entity_value_length)
-            if key == "value"
-            else item[key]
-        )
+        val = item[key]
+        if key == "value":
+            val = cap_entity_value(val, max_entity_value_length=max_entity_value_length)
+        if val is None and key in _node_key_props:
+            val = ""
+        props[key] = val
     return props
 
 
