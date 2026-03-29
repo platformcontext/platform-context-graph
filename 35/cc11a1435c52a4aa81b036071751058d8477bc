@@ -1,0 +1,29 @@
+scripts/python_file_length_exemptions.txt
+  171ca78060f03490 16
+src/platform_context_graph/content/postgres.py
+  171ca78060f03490 31-35,150,157,159-175,183-193,196,203-215,217,237,280,498,500-509
+tests/unit/content/test_postgres.py
+  171ca78060f03490 711-798
+pyproject.toml
+  171ca78060f03490 41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "35cc11a1435c52a4aa81b036071751058d8477bc",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 179,
+      "total_deletions": 76,
+      "accepted_lines": 153,
+      "overriden_lines": 0
+    }
+  }
+}
