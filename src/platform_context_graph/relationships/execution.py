@@ -268,11 +268,15 @@ def project_resolved_relationships(
                             "missing Repository nodes: "
                             + ", ".join(sorted(missing_repo_ids))
                         )
-                tx.run("""
+                tx.run(
+                    """
                     MATCH ()-[rel]->()
                     WHERE rel.evidence_source = 'resolver'
+                      AND rel.evidence_generation_id <> $generation_id
                     DELETE rel
-                    """)
+                    """,
+                    generation_id=generation_id,
+                )
                 if not resolved:
                     return
                 platform_rows = _platform_projection_rows(resolved)
