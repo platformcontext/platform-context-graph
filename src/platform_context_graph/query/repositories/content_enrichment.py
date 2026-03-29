@@ -80,6 +80,7 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
             return _resolve_related_repo(session, candidate)
 
     deployment_artifacts = extract_related_deployment_artifacts(
+        database=database,
         repo_name=str(repository.get("name") or ""),
         deploys_from=list(context.get("deploys_from") or []),
         discovers_config_in=list(context.get("discovers_config_in") or []),
@@ -108,6 +109,7 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
         repository=repository,
         context=context,
         resolve_repository=_resolve_repo,
+        database=database,
     )
     return context
 

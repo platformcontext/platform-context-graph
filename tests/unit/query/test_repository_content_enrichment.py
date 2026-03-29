@@ -1,10 +1,94 @@
 from __future__ import annotations
 
+import posixpath
+import re
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from platform_context_graph.query.repositories.content_enrichment import (
     enrich_repository_context,
 )
+
+
+def _build_indexed_file_mocks(
+    file_store: dict[tuple[str, str], str],
+):
+    """Build mock implementations for the indexed_file_discovery functions.
+
+    Args:
+        file_store: Mapping of ``(repo_id, relative_path)`` to file content.
+
+    Returns:
+        Tuple of ``(discover_repo_files, file_exists, read_file_content,
+        read_yaml_file)`` callables backed by the in-memory store.
+    """
+
+    def _discover_repo_files(
+        _database: Any,
+        repo_id: str,
+        *,
+        prefix: str | None = None,
+        suffix: str | None = None,
+        pattern: str | None = None,
+    ) -> list[str]:
+        paths = []
+        for (rid, rpath) in sorted(file_store):
+            if rid != repo_id:
+                continue
+            if prefix and not rpath.startswith(prefix):
+                continue
+            if suffix and not rpath.endswith(suffix):
+                continue
+            if pattern and not re.search(pattern, rpath):
+                continue
+            paths.append(rpath)
+        return paths
+
+    def _file_exists(
+        _database: Any, repo_id: str, relative_path: str
+    ) -> bool:
+        return (repo_id, relative_path) in file_store
+
+    def _read_file_content(
+        _database: Any, repo_id: str, relative_path: str
+    ) -> str | None:
+        return file_store.get((repo_id, relative_path))
+
+    def _read_yaml_file(
+        _database: Any, repo_id: str, relative_path: str
+    ) -> dict | None:
+        content = file_store.get((repo_id, relative_path))
+        if content is None:
+            return None
+        try:
+            parsed = yaml.safe_load(content)
+        except yaml.YAMLError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+    return _discover_repo_files, _file_exists, _read_file_content, _read_yaml_file
+
+
+def _apply_indexed_file_mocks(monkeypatch, file_store):
+    """Apply indexed_file_discovery mocks to deployment artifact and workflow modules."""
+
+    fns = _build_indexed_file_mocks(file_store)
+    discover, exists, read_content, read_yaml = fns
+    _DA = "platform_context_graph.query.repositories.content_enrichment_deployment_artifacts"
+    _DAS = "platform_context_graph.query.repositories.content_enrichment_deployment_artifacts_support"
+    _WF = "platform_context_graph.query.repositories.content_enrichment_workflows"
+    monkeypatch.setattr(f"{_DA}.discover_repo_files", discover)
+    monkeypatch.setattr(f"{_DA}.file_exists", exists)
+    monkeypatch.setattr(f"{_DA}.read_yaml_file", read_yaml)
+    monkeypatch.setattr(f"{_DAS}.discover_repo_files", discover)
+    monkeypatch.setattr(f"{_DAS}.file_exists", exists)
+    monkeypatch.setattr(f"{_DAS}.read_file_content", read_content)
+    monkeypatch.setattr(f"{_DAS}.read_yaml_file", read_yaml)
+    monkeypatch.setattr(f"{_WF}.discover_repo_files", discover)
+    monkeypatch.setattr(f"{_WF}.read_file_content", read_content)
+    monkeypatch.setattr(f"{_WF}.read_yaml_file", read_yaml)
 
 
 class _DummySession:
@@ -346,6 +430,31 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
         ),
         encoding="utf-8",
     )
+
+    # Build indexed file store for deployment-artifact and workflow enrichment
+    # (replaces filesystem access in the converted modules).
+    _helm_id = "repository:r_helm123"
+    _tf_id = "repository:r_terraform123"
+    _svc_id = "repository:r_api_node_boats"
+    _auto_id = "repository:r_automation123"
+    _indexed_store: dict[tuple[str, str], str] = {}
+    for _repo_path, _repo_id in [
+        (helm_repo, _helm_id),
+        (terraform_repo, _tf_id),
+        (service_repo, _svc_id),
+        (automation_repo, _auto_id),
+    ]:
+        if _repo_path.exists():
+            for _fp in sorted(_repo_path.rglob("*")):
+                if _fp.is_file():
+                    _rel = str(_fp.relative_to(_repo_path))
+                    try:
+                        _indexed_store[(_repo_id, _rel)] = _fp.read_text(
+                            encoding="utf-8"
+                        )
+                    except UnicodeDecodeError:
+                        pass
+    _apply_indexed_file_mocks(monkeypatch, _indexed_store)
 
     file_contents = {
         "server/init/plugins/spec.js": (

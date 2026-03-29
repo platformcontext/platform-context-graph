@@ -2,21 +2,24 @@
 
 from __future__ import annotations
 
-from glob import glob
-from pathlib import Path
+import posixpath
 from typing import Any, Callable
-
-import yaml
 
 from .content_enrichment_deployment_artifacts_support import (
     extract_config_path_rows_from_terraform_files,
     extract_config_path_rows_from_kustomize_resources,
     extract_kustomize_rows,
 )
+from .indexed_file_discovery import (
+    discover_repo_files,
+    file_exists,
+    read_yaml_file,
+)
 
 
 def extract_related_deployment_artifacts(
     *,
+    database: Any,
     repo_name: str,
     deploys_from: list[dict[str, Any]],
     discovers_config_in: list[dict[str, Any]],
@@ -45,54 +48,52 @@ def extract_related_deployment_artifacts(
             resolved_repo = resolve_related_repo(source_repo)
             if resolved_repo is None:
                 continue
-            local_path = resolved_repo.get("local_path") or resolved_repo.get("path")
-            if not isinstance(local_path, str) or not local_path:
+            repo_id = str(resolved_repo.get("id") or "").strip()
+            if not repo_id:
                 continue
-            repo_root = Path(local_path)
             source_repo_name = str(resolved_repo.get("name") or "")
             for source_path in split_csv(row.get("source_paths")):
-                direct_path = repo_root / source_path
-                if direct_path.is_file():
-                    parsed_direct = _load_yaml_file(direct_path)
+                if file_exists(database, repo_id, source_path):
+                    parsed_direct = read_yaml_file(database, repo_id, source_path)
                     if parsed_direct is not None:
-                        relative_direct_path = str(
-                            direct_path.resolve().relative_to(repo_root.resolve())
-                        )
                         direct_environment = infer_environment_from_path(
-                            relative_direct_path
+                            source_path
                         )
                         charts.extend(
                             _extract_chart_rows(
                                 parsed_direct,
                                 source_repo_name=source_repo_name,
-                                relative_path=relative_direct_path,
+                                relative_path=source_path,
                                 environment=direct_environment,
                             )
                         )
+                    overlay_directory = posixpath.dirname(source_path)
                     resources, patches = extract_kustomize_rows(
-                        repo_root=repo_root,
-                        overlay_directory=direct_path.parent,
+                        database=database,
+                        repo_id=repo_id,
+                        overlay_directory=overlay_directory,
                         source_repo_name=source_repo_name,
                         infer_environment_from_path=infer_environment_from_path,
-                        load_yaml_file=_load_yaml_file,
                     )
                     kustomize_resources.extend(resources)
                     kustomize_patches.extend(patches)
                     config_paths.extend(
                         extract_config_path_rows_from_kustomize_resources(
-                            repo_root=repo_root,
-                            overlay_directory=direct_path.parent,
+                            database=database,
+                            repo_id=repo_id,
+                            overlay_directory=overlay_directory,
                             source_repo_name=source_repo_name,
                             infer_environment_from_path=infer_environment_from_path,
-                            load_yaml_file=_load_yaml_file,
                         )
                     )
                 for candidate_pattern in values_path_patterns(source_path):
-                    for file_path in sorted(glob(str(repo_root / candidate_pattern))):
-                        relative_path = str(
-                            Path(file_path).resolve().relative_to(repo_root.resolve())
+                    matched_files = _resolve_pattern(
+                        database, repo_id, candidate_pattern
+                    )
+                    for relative_path in matched_files:
+                        parsed = read_yaml_file(
+                            database, repo_id, relative_path
                         )
-                        parsed = _load_yaml_file(Path(file_path))
                         if parsed is None:
                             continue
                         environment = infer_environment_from_path(relative_path)
@@ -130,12 +131,13 @@ def extract_related_deployment_artifacts(
             resolved_repo = resolve_related_repo(source_repo)
             if resolved_repo is None:
                 continue
-            local_path = resolved_repo.get("local_path") or resolved_repo.get("path")
-            if not isinstance(local_path, str) or not local_path:
+            repo_id = str(resolved_repo.get("id") or "").strip()
+            if not repo_id:
                 continue
             config_paths.extend(
                 extract_config_path_rows_from_terraform_files(
-                    repo_root=Path(local_path),
+                    database=database,
+                    repo_id=repo_id,
                     source_repo_name=str(resolved_repo.get("name") or ""),
                     infer_environment_from_path=infer_environment_from_path,
                 )
@@ -152,14 +154,37 @@ def extract_related_deployment_artifacts(
     }
 
 
-def _load_yaml_file(path: Path) -> dict[str, Any] | None:
-    """Load one YAML file into a mapping when possible."""
+def _resolve_pattern(
+    database: Any, repo_id: str, pattern: str
+) -> list[str]:
+    """Resolve a glob-style or exact path pattern to indexed file paths.
 
-    try:
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
-        return None
-    return document if isinstance(document, dict) else None
+    If the pattern contains no wildcard characters it is treated as an exact
+    file path and looked up directly.  Otherwise the pattern is decomposed
+    into a directory prefix and file suffix for an indexed discovery query.
+    """
+
+    if "*" not in pattern and "?" not in pattern:
+        if file_exists(database, repo_id, pattern):
+            return [pattern]
+        return []
+    prefix: str | None = None
+    suffix: str | None = None
+    wildcard_pos = len(pattern)
+    for char in ("*", "?"):
+        idx = pattern.find(char)
+        if idx != -1 and idx < wildcard_pos:
+            wildcard_pos = idx
+    if wildcard_pos > 0:
+        prefix_candidate = pattern[:wildcard_pos]
+        last_slash = prefix_candidate.rfind("/")
+        if last_slash >= 0:
+            prefix = prefix_candidate[: last_slash + 1]
+    after_wildcard = pattern[wildcard_pos:]
+    dot_pos = after_wildcard.rfind(".")
+    if dot_pos >= 0:
+        suffix = after_wildcard[dot_pos:]
+    return discover_repo_files(database, repo_id, prefix=prefix, suffix=suffix)
 
 
 def _extract_image_rows(
