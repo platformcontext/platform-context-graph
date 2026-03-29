@@ -1,0 +1,35 @@
+src/platform_context_graph/tools/graph_builder_call_batches.py
+  171ca78060f03490 82-84,95,115,154,158-160,162,166,172-173,186,198,208,244-245,254,273-276,282-284
+src/platform_context_graph/tools/languages/typescript_support.py
+  171ca78060f03490 95-97
+src/platform_context_graph/indexing/coordinator_pipeline.py
+  171ca78060f03490 468-474,610-611
+src/platform_context_graph/tools/languages/python.py
+  171ca78060f03490 437-438
+src/platform_context_graph/tools/languages/go_support.py
+  171ca78060f03490 447-448
+tests/unit/tools/test_graph_builder_call_relationships.py
+  171ca78060f03490 212,224,269,275,278,280,616,693
+src/platform_context_graph/tools/languages/typescript.py
+  171ca78060f03490 453-454
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "171b20ef4d6fd0f676deec44406a12c6732139f0",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 53,
+      "total_deletions": 21,
+      "accepted_lines": 52,
+      "overriden_lines": 0
+    }
+  }
+}
