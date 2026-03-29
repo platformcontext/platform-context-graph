@@ -79,7 +79,9 @@ _KNOWN_PHP_BUILTINS = frozenset(
 )
 
 
-_CALL_RESOLUTION_SCOPE = os.environ.get("PCG_CALL_RESOLUTION_SCOPE", "repo").lower()
+def _call_resolution_scope() -> str:
+    """Return the call resolution scope, reading the env var on each call."""
+    return os.environ.get("PCG_CALL_RESOLUTION_SCOPE", "repo").lower()
 
 
 def create_contextual_call_relationships_batched(
@@ -90,7 +92,7 @@ def create_contextual_call_relationships_batched(
 
     repo_scoped = (
         contextual_repo_scoped_batch_query()
-        if _CALL_RESOLUTION_SCOPE == "repo"
+        if _call_resolution_scope() == "repo"
         else None
     )
     return create_call_relationships_batched(
@@ -110,7 +112,7 @@ def create_file_level_call_relationships_batched(
 
     repo_scoped = (
         file_level_repo_scoped_batch_query()
-        if _CALL_RESOLUTION_SCOPE == "repo"
+        if _call_resolution_scope() == "repo"
         else None
     )
     return create_call_relationships_batched(
@@ -149,23 +151,28 @@ def create_call_relationships_batched(
                 fallback_rows=0,
                 unresolved_rows=[],
                 exact_duration=time.monotonic() - exact_started,
+                repo_scoped_duration=0.0,
                 fallback_duration=0.0,
             )
 
+    exact_duration = time.monotonic() - exact_started
+
+    repo_scoped_duration = 0.0
     if repo_scoped_query and remaining_rows:
+        repo_scoped_started = time.monotonic()
         remaining_rows = run_call_batch_query(
             session, repo_scoped_query, remaining_rows
         )
+        repo_scoped_duration = time.monotonic() - repo_scoped_started
         if not remaining_rows:
             return call_resolution_metrics(
                 rows=rows,
                 fallback_rows=0,
                 unresolved_rows=[],
-                exact_duration=time.monotonic() - exact_started,
+                exact_duration=exact_duration,
+                repo_scoped_duration=repo_scoped_duration,
                 fallback_duration=0.0,
             )
-
-    exact_duration = time.monotonic() - exact_started
 
     _global_fallback_enabled = (
         os.environ.get("PCG_FUNCTION_CALL_GLOBAL_FALLBACK", "false").lower() == "true"
@@ -176,6 +183,7 @@ def create_call_relationships_batched(
             fallback_rows=0,
             unresolved_rows=remaining_rows,
             exact_duration=exact_duration,
+            repo_scoped_duration=repo_scoped_duration,
             fallback_duration=0.0,
         )
 
@@ -187,6 +195,7 @@ def create_call_relationships_batched(
             fallback_rows=0,
             unresolved_rows=[],
             exact_duration=exact_duration,
+            repo_scoped_duration=repo_scoped_duration,
             fallback_duration=0.0,
         )
     fallback_started = time.monotonic()
@@ -196,6 +205,7 @@ def create_call_relationships_batched(
         fallback_rows=fallback_rows,
         unresolved_rows=unresolved_rows,
         exact_duration=exact_duration,
+        repo_scoped_duration=repo_scoped_duration,
         fallback_duration=time.monotonic() - fallback_started,
     )
 
@@ -231,7 +241,8 @@ def call_resolution_metrics(
     fallback_rows: int,
     unresolved_rows: list[dict[str, Any]],
     exact_duration: float,
-    fallback_duration: float,
+    repo_scoped_duration: float = 0.0,
+    fallback_duration: float = 0.0,
 ) -> dict[str, float | int]:
     """Return a normalized metric payload for one batched call-resolution pass."""
 
@@ -240,6 +251,7 @@ def call_resolution_metrics(
         "fallback_rows": fallback_rows,
         "unmatched_rows": len(unresolved_rows),
         "exact_duration_seconds": exact_duration,
+        "repo_scoped_duration_seconds": repo_scoped_duration,
         "fallback_duration_seconds": fallback_duration,
     }
 
@@ -258,12 +270,18 @@ def combine_call_relationship_metrics(
         metrics["contextual_exact_duration_seconds"]
         + metrics["file_level_exact_duration_seconds"]
     )
+    metrics["repo_scoped_duration_seconds"] = (
+        metrics["contextual_repo_scoped_duration_seconds"]
+        + metrics["file_level_repo_scoped_duration_seconds"]
+    )
     metrics["fallback_duration_seconds"] = (
         metrics["contextual_fallback_duration_seconds"]
         + metrics["file_level_fallback_duration_seconds"]
     )
     metrics["total_duration_seconds"] = (
-        metrics["exact_duration_seconds"] + metrics["fallback_duration_seconds"]
+        metrics["exact_duration_seconds"]
+        + metrics["repo_scoped_duration_seconds"]
+        + metrics["fallback_duration_seconds"]
     )
     return metrics
 

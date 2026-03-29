@@ -465,7 +465,13 @@ async def process_repository_snapshots(
         finally:
             _publish_runtime_state()
 
-    commit_concurrency = int(os.environ.get("PCG_COMMIT_WORKERS", "1"))
+    raw = os.environ.get("PCG_COMMIT_WORKERS", "1")
+    try:
+        parsed = int(raw)
+    except (TypeError, ValueError):
+        commit_concurrency = 1
+    else:
+        commit_concurrency = max(1, min(parsed, 32))
     commit_state_lock = asyncio.Lock()
 
     async def _commit_snapshots() -> None:
@@ -601,7 +607,8 @@ async def process_repository_snapshots(
                         "pcg.index.parse_workers": parse_workers,
                     },
                 ):
-                    commit_repository_snapshot_fn(
+                    await asyncio.to_thread(
+                        commit_repository_snapshot_fn,
                         builder,
                         snapshot,
                         is_dependency=is_dependency,

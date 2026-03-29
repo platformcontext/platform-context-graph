@@ -450,8 +450,8 @@ class TypescriptTreeSitterParser:
         """
         import os
 
-        scope = os.environ.get("PCG_VARIABLE_SCOPE", "module").lower()
-        query_key = "variables_module" if scope == "module" else "variables"
+        scope = os.environ.get("PCG_VARIABLE_SCOPE", "").strip().lower()
+        query_key = "variables" if scope == "all" else "variables_module"
         variables: list[dict[str, Any]] = []
         for node, capture_name in execute_query(
             self.language, TS_QUERIES[query_key], root_node

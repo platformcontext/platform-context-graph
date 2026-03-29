@@ -92,6 +92,9 @@ TS_QUERIES = {
         (export_statement
             declaration: (lexical_declaration
                 (variable_declarator name: (identifier) @name)))
+        (export_statement
+            declaration: (variable_declaration
+                (variable_declarator name: (identifier) @name)))
     """,
     "enums": """
         (enum_declaration

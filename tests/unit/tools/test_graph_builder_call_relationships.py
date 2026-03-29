@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 import builtins as py_builtins
 
-import platform_context_graph.tools.graph_builder_call_batches as call_batches
 import platform_context_graph.tools.graph_builder_call_relationships as call_relationships
 from platform_context_graph.tools.graph_builder_call_relationships import (
     _contextual_call_batch_queries,
@@ -210,6 +209,7 @@ def test_create_all_function_calls_returns_resolution_metrics(
             "fallback_rows": 1,
             "unmatched_rows": 0,
             "exact_duration_seconds": 2.0,
+            "repo_scoped_duration_seconds": 0.5,
             "fallback_duration_seconds": 3.0,
         },
     )
@@ -221,6 +221,7 @@ def test_create_all_function_calls_returns_resolution_metrics(
             "fallback_rows": 2,
             "unmatched_rows": 1,
             "exact_duration_seconds": 5.0,
+            "repo_scoped_duration_seconds": 1.0,
             "fallback_duration_seconds": 7.0,
         },
     )
@@ -265,15 +266,18 @@ def test_create_all_function_calls_returns_resolution_metrics(
         "contextual_fallback_rows": 1,
         "contextual_unmatched_rows": 0,
         "contextual_exact_duration_seconds": 2.0,
+        "contextual_repo_scoped_duration_seconds": 0.5,
         "contextual_fallback_duration_seconds": 3.0,
         "file_level_rows": 1,
         "file_level_fallback_rows": 2,
         "file_level_unmatched_rows": 1,
         "file_level_exact_duration_seconds": 5.0,
+        "file_level_repo_scoped_duration_seconds": 1.0,
         "file_level_fallback_duration_seconds": 7.0,
         "exact_duration_seconds": 7.0,
+        "repo_scoped_duration_seconds": 1.5,
         "fallback_duration_seconds": 10.0,
-        "total_duration_seconds": 17.0,
+        "total_duration_seconds": 18.5,
     }
     assert builder._last_call_relationship_metrics == metrics
 
@@ -609,7 +613,7 @@ def test_prepare_call_rows_includes_repo_path_in_rows() -> None:
 def test_repo_scope_prevents_cross_repo_call_resolution(monkeypatch) -> None:
     """With scope=repo, calls should not resolve to functions in other repos."""
 
-    monkeypatch.setattr(call_batches, "_CALL_RESOLUTION_SCOPE", "repo")
+    monkeypatch.setenv("PCG_CALL_RESOLUTION_SCOPE", "repo")
 
     # _RepoAwareSession: exact queries (name+path) never match because the
     # call is unresolved (called_file_path == caller_file_path, no function
@@ -686,7 +690,7 @@ def test_repo_scope_prevents_cross_repo_call_resolution(monkeypatch) -> None:
 def test_global_scope_skips_repo_scoped_query(monkeypatch) -> None:
     """With scope=global, repo-scoped queries should not be injected."""
 
-    monkeypatch.setattr(call_batches, "_CALL_RESOLUTION_SCOPE", "global")
+    monkeypatch.setenv("PCG_CALL_RESOLUTION_SCOPE", "global")
 
     session = _FakeSession()
     builder = SimpleNamespace(driver=_FakeDriver(session))

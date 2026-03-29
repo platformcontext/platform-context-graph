@@ -444,8 +444,8 @@ def _find_calls(parser: Any, root_node: Any):
 
 def _find_variables(parser: Any, root_node: Any):
     """Find Go variable declarations, scope-filtered by PCG_VARIABLE_SCOPE."""
-    scope = os.environ.get("PCG_VARIABLE_SCOPE", "module").lower()
-    query_key = "variables_module" if scope == "module" else "variables"
+    scope = os.environ.get("PCG_VARIABLE_SCOPE", "").strip().lower()
+    query_key = "variables" if scope == "all" else "variables_module"
     variables = []
     for node, capture_name in execute_query(
         parser.language, GO_QUERIES[query_key], root_node
