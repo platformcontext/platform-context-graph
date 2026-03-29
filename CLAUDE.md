@@ -183,6 +183,7 @@ Discovery -> Sync -> Parse -> Snapshot -> Queue -> Commit -> Finalization
 | Variable | Default | Purpose |
 |---|---|---|
 | `PCG_PARSE_WORKERS` | 4 | Concurrent repo parse slots |
+| `PCG_COMMIT_WORKERS` | 1 | Concurrent repo commit consumers |
 | `PCG_INDEX_QUEUE_DEPTH` | 8 | Max queued parsed repos |
 | `PCG_REPO_FILE_PARSE_MULTIPROCESS` | false | Process pool for file parsing |
 | `PCG_REPO_FILE_PARSE_CONCURRENCY` | 1 | Files parsed concurrently in one repo |

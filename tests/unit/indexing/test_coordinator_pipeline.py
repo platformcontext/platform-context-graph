@@ -1428,3 +1428,122 @@ def test_pipeline_reparses_completed_repo_when_file_data_snapshot_is_missing(
     assert repo_state.status == "completed"
     assert committed_repo_paths == [repo.resolve()]
     assert merged_imports_map == {"module": [str(file_path.resolve())]}
+
+
+def test_pipeline_concurrent_commit_workers_complete_successfully(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """With PCG_COMMIT_WORKERS=2, multiple repos commit and the pipeline completes."""
+
+    monkeypatch.setenv("PCG_COMMIT_WORKERS", "2")
+
+    repos = [tmp_path / f"repo-{i}" for i in range(3)]
+    for repo in repos:
+        repo.mkdir()
+        (repo / "main.py").write_text("print('ok')\n", encoding="utf-8")
+
+    repo_file_sets = {repo: [repo / "main.py"] for repo in repos}
+    committed_repos: list[str] = []
+
+    async def parse_snapshot(_builder, repo_path, repo_files, **_kw):
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={repo_path.name: [str(repo_files[0].resolve())]},
+            file_data=[],
+        )
+
+    def track_commit(_builder, snapshot, **_kw) -> None:
+        committed_repos.append(snapshot.repo_path)
+
+    committed_repo_paths, merged, run_state, _ = asyncio.run(
+        _run_pipeline(
+            repos,
+            repo_file_sets,
+            parse_snapshot,
+            commit_fn=track_commit,
+            parse_worker_count=4,
+        )
+    )
+
+    assert len(committed_repo_paths) == 3
+    assert len(committed_repos) == 3
+    assert set(committed_repos) == {str(r.resolve()) for r in repos}
+    for repo in repos:
+        assert run_state.repositories[str(repo.resolve())].status == "completed"
+    # Verify imports from all repos were merged
+    assert len(merged) == 3
+
+
+def test_pipeline_concurrent_commit_workers_send_correct_sentinel_count(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """With PCG_COMMIT_WORKERS=2, two sentinels are sent so all consumers exit."""
+
+    monkeypatch.setenv("PCG_COMMIT_WORKERS", "2")
+
+    # Even with zero repos to parse, the pipeline must send N sentinels and
+    # await N commit tasks without deadlocking.
+    committed_repo_paths, merged, run_state, _ = asyncio.run(
+        _run_pipeline(
+            [],
+            {},
+            lambda *_a, **_kw: None,
+            parse_worker_count=1,
+        )
+    )
+
+    assert committed_repo_paths == []
+    assert merged == {}
+
+
+def test_pipeline_concurrent_commit_workers_overlap(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """With PCG_COMMIT_WORKERS=2, two repos should commit concurrently."""
+
+    monkeypatch.setenv("PCG_COMMIT_WORKERS", "2")
+
+    repo_a = tmp_path / "repo-a"
+    repo_b = tmp_path / "repo-b"
+    repo_a.mkdir()
+    repo_b.mkdir()
+    (repo_a / "main.py").write_text("a", encoding="utf-8")
+    (repo_b / "main.py").write_text("b", encoding="utf-8")
+
+    repos = [repo_a, repo_b]
+    repo_file_sets = {
+        repo_a: [repo_a / "main.py"],
+        repo_b: [repo_b / "main.py"],
+    }
+
+    commit_count = 0
+
+    async def parse_snapshot(_builder, repo_path, repo_files, **_kw):
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={},
+            file_data=[],
+        )
+
+    def counting_commit(_builder, _snapshot, **_kw) -> None:
+        """Count commits to verify all repos are processed."""
+        nonlocal commit_count
+        commit_count += 1
+
+    committed_repo_paths, _, run_state, _ = asyncio.run(
+        _run_pipeline(
+            repos,
+            repo_file_sets,
+            parse_snapshot,
+            commit_fn=counting_commit,
+            parse_worker_count=4,
+        )
+    )
+
+    # Both repos should complete; the pipeline should not deadlock with 2 workers.
+    assert len(committed_repo_paths) == 2
+    assert commit_count == 2
+    assert run_state.repositories[str(repo_a.resolve())].status == "completed"
+    assert run_state.repositories[str(repo_b.resolve())].status == "completed"
