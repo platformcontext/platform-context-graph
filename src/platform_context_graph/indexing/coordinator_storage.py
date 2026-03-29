@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
 import time
 from dataclasses import asdict
 from dataclasses import dataclass
@@ -217,7 +218,8 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     """Write JSON atomically using temp-file-plus-rename semantics."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+    tid = threading.current_thread().ident or 0
+    tmp_path = path.with_suffix(f"{path.suffix}.tmp.{tid}")
     tmp_path.write_text(
         json.dumps(payload, indent=2, sort_keys=True, default=_json_default),
         encoding="utf-8",

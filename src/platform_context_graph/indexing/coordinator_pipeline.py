@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+import threading
 import time
 import traceback
 from pathlib import Path
@@ -91,7 +94,7 @@ async def process_repository_snapshots(
     parse_strategy: str = "threaded",
     parse_workers: int = 1,
 ) -> tuple[list[Path], dict[str, list[str]]]:
-    """Parse repositories concurrently and commit them one at a time."""
+    """Parse repositories concurrently and commit via PCG_COMMIT_WORKERS consumers."""
 
     committed_repo_paths, merged_imports_map, parse_targets = (
         prepare_repository_snapshots(
@@ -463,6 +466,21 @@ async def process_repository_snapshots(
         finally:
             _publish_runtime_state()
 
+    raw = os.environ.get("PCG_COMMIT_WORKERS", "1")
+    try:
+        parsed = int(raw)
+    except (TypeError, ValueError):
+        commit_concurrency = 1
+    else:
+        commit_concurrency = max(1, min(parsed, 32))
+    commit_state_lock = asyncio.Lock()
+    _checkpoint_write_lock = threading.Lock()
+
+    def _safe_persist_run_state() -> None:
+        """Serialize checkpoint writes across commit worker threads."""
+        with _checkpoint_write_lock:
+            persist_run_state_fn(run_state)
+
     async def _commit_snapshots() -> None:
         """Commit parsed repository snapshots from the queue in arrival order."""
 
@@ -556,11 +574,12 @@ async def process_repository_snapshots(
                     nonlocal last_commit_progress_publish
                     nonlocal last_commit_coverage_publish
 
-                    _update_repo_progress(
-                        repo_state,
-                        current_file=current_file,
-                        persist=False,
-                    )
+                    with _checkpoint_write_lock:
+                        _update_repo_progress(
+                            repo_state,
+                            current_file=current_file,
+                            persist=False,
+                        )
                     now_monotonic = time.monotonic()
                     is_final_batch = committed and processed_files >= total_files
 
@@ -570,7 +589,7 @@ async def process_repository_snapshots(
                         or now_monotonic - last_commit_progress_publish >= 1.0
                     ):
                         last_commit_progress_publish = now_monotonic
-                        persist_run_state_fn(run_state)
+                        _safe_persist_run_state()
                         _publish_runtime_state()
 
                     if committed and (
@@ -594,9 +613,11 @@ async def process_repository_snapshots(
                         "pcg.index.repo_path": str(repo_path.resolve()),
                         "pcg.index.parse_strategy": parse_strategy,
                         "pcg.index.parse_workers": parse_workers,
+                        "pcg.index.commit_workers": commit_concurrency,
                     },
                 ):
-                    commit_repository_snapshot_fn(
+                    await asyncio.to_thread(
+                        commit_repository_snapshot_fn,
                         builder,
                         snapshot,
                         is_dependency=is_dependency,
@@ -607,25 +628,27 @@ async def process_repository_snapshots(
                             batch_size=batch_size,
                         ),
                     )
-                committed_repo_paths.append(repo_path.resolve())
-                merge_import_maps(merged_imports_map, snapshot.imports_map)
+                async with commit_state_lock:
+                    committed_repo_paths.append(repo_path.resolve())
+                    merge_import_maps(merged_imports_map, snapshot.imports_map)
                 snapshot.file_data = []
                 commit_finished_at = utc_now_fn()
-                _update_repo_progress(
-                    repo_state,
-                    status="completed",
-                    phase="completed",
-                    clear_current_file=True,
-                    persist=False,
-                    finished_at=commit_finished_at,
-                    commit_finished_at=commit_finished_at,
-                    commit_duration_seconds=(
-                        time.perf_counter() - commit_started
-                        if commit_started is not None
-                        else None
-                    ),
-                )
-                persist_run_state_fn(run_state)
+                with _checkpoint_write_lock:
+                    _update_repo_progress(
+                        repo_state,
+                        status="completed",
+                        phase="completed",
+                        clear_current_file=True,
+                        persist=False,
+                        finished_at=commit_finished_at,
+                        commit_finished_at=commit_finished_at,
+                        commit_duration_seconds=(
+                            time.perf_counter() - commit_started
+                            if commit_started is not None
+                            else None
+                        ),
+                    )
+                _safe_persist_run_state()
                 _publish_runtime_state()
                 publish_run_repository_coverage_fn(
                     builder=builder,
@@ -739,7 +762,10 @@ async def process_repository_snapshots(
                     )
                 _publish_runtime_state()
 
-    commit_task = asyncio_module.create_task(_commit_snapshots())
+    commit_tasks = [
+        asyncio_module.create_task(_commit_snapshots())
+        for _ in range(commit_concurrency)
+    ]
     parse_tasks = [
         asyncio_module.create_task(
             _parse_repository(repo_path, resume_candidate=resume_candidate)
@@ -761,8 +787,9 @@ async def process_repository_snapshots(
                     if escaped_parse_exception is None:
                         escaped_parse_exception = result
     finally:
-        await snapshot_queue.put(queue_sentinel)
-        await commit_task
+        for _ in range(commit_concurrency):
+            await snapshot_queue.put(queue_sentinel)
+        await asyncio_module.gather(*commit_tasks)
     if escaped_parse_exception is not None:
         raise escaped_parse_exception
     return committed_repo_paths, merged_imports_map

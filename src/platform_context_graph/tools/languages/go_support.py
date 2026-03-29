@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +75,10 @@ GO_QUERIES = {
                 name: (identifier) @name
             )
         )
+    """,
+    "variables_module": """
+        (source_file (var_declaration (var_spec name: (identifier) @name)))
+        (source_file (const_declaration (const_spec name: (identifier) @name)))
     """,
 }
 
@@ -438,10 +443,12 @@ def _find_calls(parser: Any, root_node: Any):
 
 
 def _find_variables(parser: Any, root_node: Any):
-    """Find Go variable declarations."""
+    """Find Go variable declarations, scope-filtered by PCG_VARIABLE_SCOPE."""
+    scope = os.environ.get("PCG_VARIABLE_SCOPE", "").strip().lower()
+    query_key = "variables" if scope == "all" else "variables_module"
     variables = []
     for node, capture_name in execute_query(
-        parser.language, GO_QUERIES["variables"], root_node
+        parser.language, GO_QUERIES[query_key], root_node
     ):
         if capture_name != "name":
             continue

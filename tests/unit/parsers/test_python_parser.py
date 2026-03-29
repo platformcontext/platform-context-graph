@@ -133,8 +133,11 @@ async def fetch_remote():
         assert imports_map["Greeter"] == [str(source_file.resolve())]
         assert imports_map["greet"] == [str(source_file.resolve())]
 
-    def test_parse_variables_and_omits_decorator_metadata(self, parser, temp_test_dir):
+    def test_parse_variables_and_omits_decorator_metadata(
+        self, parser, temp_test_dir, monkeypatch
+    ):
         """Parse variable assignments while documenting missing decorator metadata."""
+        monkeypatch.setenv("PCG_VARIABLE_SCOPE", "all")
         code = """
 MODULE_LEVEL = 3
 

@@ -21,6 +21,7 @@ DEFAULT_CONFIG = {
     "FALKORDB_PATH": str(CONFIG_DIR / "falkordb.db"),
     "FALKORDB_SOCKET_PATH": str(CONFIG_DIR / "falkordb.sock"),
     "INDEX_VARIABLES": "false",
+    "PCG_VARIABLE_SCOPE": "module",
     "ALLOW_DB_DELETION": "false",
     "DEBUG_LOGS": "false",
     "DEBUG_LOG_PATH": str(Path.home() / "mcp_debug.log"),
@@ -40,6 +41,7 @@ DEFAULT_CONFIG = {
     "PCG_MULTIPROCESS_START_METHOD": "spawn",
     "PCG_WORKER_MAX_TASKS": "",
     "PCG_REPO_FILE_PARSE_CONCURRENCY": "1",
+    "PCG_COMMIT_WORKERS": "1",
     "PCG_INDEX_QUEUE_DEPTH": "8",
     "PCG_MAX_ENTITY_VALUE_LENGTH": "200",
     "PCG_HONOR_GITIGNORE": "true",
@@ -56,6 +58,7 @@ DEFAULT_CONFIG = {
     "INDEX_HCL": "true",
     "PCG_IGNORE_DEPENDENCY_DIRS": "true",
     "PCG_MAX_CALLS_PER_FILE": "50",
+    "PCG_CALL_RESOLUTION_SCOPE": "repo",
     "ECOSYSTEM_MANIFEST_PATH": "",
     "ECOSYSTEM_BASE_PATH": "",
     "ECOSYSTEM_PARALLEL_REPOS": "4",
@@ -66,6 +69,7 @@ CONFIG_DESCRIPTIONS = {
     "FALKORDB_PATH": "Path to FalkorDB database file",
     "FALKORDB_SOCKET_PATH": "Path to FalkorDB Unix socket",
     "INDEX_VARIABLES": "Index variable nodes in the graph (lighter graph if false)",
+    "PCG_VARIABLE_SCOPE": "Scope filter for variable extraction: 'module' (module/class-level only) or 'all' (every assignment)",
     "ALLOW_DB_DELETION": "Allow full database deletion commands",
     "DEBUG_LOGS": "Enable debug logging (for development/troubleshooting)",
     "DEBUG_LOG_PATH": "Legacy path to the structured debug log file when DEBUG_LOGS=true",
@@ -85,6 +89,7 @@ CONFIG_DESCRIPTIONS = {
     "PCG_MULTIPROCESS_START_METHOD": "Multiprocessing start method for parse workers (spawn recommended for local and containerized indexing)",
     "PCG_WORKER_MAX_TASKS": "Optional worker recycle threshold for process-pool file parsers; leave unset to disable recycling",
     "PCG_REPO_FILE_PARSE_CONCURRENCY": "Opt-in number of files to parse concurrently within a single repository snapshot",
+    "PCG_COMMIT_WORKERS": "Number of concurrent commit consumers draining the snapshot queue (each repo commits to its own subgraph; default 1 preserves serial behavior)",
     "PCG_INDEX_QUEUE_DEPTH": "Maximum queued parsed repositories waiting to commit",
     "PCG_MAX_ENTITY_VALUE_LENGTH": "Maximum number of characters preserved for graph entity value previews before truncation",
     "PCG_HONOR_GITIGNORE": "Honor repo-local .gitignore files during repo/workspace indexing and watch scans",
@@ -104,6 +109,14 @@ CONFIG_DESCRIPTIONS = {
         "for typical source files. Increase for codebases where deep cross-file call graphs "
         "are critical; decrease for large monorepos with many utility/vendor files."
     ),
+    "PCG_CALL_RESOLUTION_SCOPE": (
+        "Scope for function-call resolution during finalization (repo|global). "
+        "When 'repo', unresolved calls are matched by name only within the same "
+        "repository (path prefix), preventing cross-repo name-guessing. "
+        "When 'global', unresolved calls fall through to corpus-wide name matching "
+        "(original behavior). The default 'repo' improves both precision and speed "
+        "for multi-repo workspaces."
+    ),
     "INDEX_SOURCE": "Store full source code in graph database (for faster indexing use false, for better performance use true)",
     "SCIP_INDEXER": "Use SCIP-based indexing for higher accuracy call/inheritance resolution (requires scip-<lang> tools installed)",
     "SCIP_LANGUAGES": "Comma-separated languages to index via SCIP when SCIP_INDEXER=true (python,typescript,go,rust,java)",
@@ -119,6 +132,7 @@ CONFIG_DESCRIPTIONS = {
 CONFIG_VALIDATORS = {
     "DEFAULT_DATABASE": ["neo4j", "falkordb", "kuzudb"],
     "INDEX_VARIABLES": ["true", "false"],
+    "PCG_VARIABLE_SCOPE": ["module", "all"],
     "ALLOW_DB_DELETION": ["true", "false"],
     "DEBUG_LOGS": ["true", "false"],
     "ENABLE_APP_LOGS": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "DISABLED"],
@@ -136,6 +150,7 @@ CONFIG_VALIDATORS = {
     "PCG_REPO_FILE_PARSE_MULTIPROCESS": ["true", "false"],
     "PCG_MULTIPROCESS_START_METHOD": ["spawn", "fork", "forkserver"],
     "PCG_IGNORE_DEPENDENCY_DIRS": ["true", "false"],
+    "PCG_CALL_RESOLUTION_SCOPE": ["repo", "global"],
     "INDEX_JSON": ["true", "false"],
     "INDEX_YAML": ["true", "false"],
     "INDEX_HCL": ["true", "false"],

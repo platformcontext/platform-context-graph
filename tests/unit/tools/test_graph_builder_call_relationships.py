@@ -9,7 +9,9 @@ import builtins as py_builtins
 import platform_context_graph.tools.graph_builder_call_relationships as call_relationships
 from platform_context_graph.tools.graph_builder_call_relationships import (
     _contextual_call_batch_queries,
+    _contextual_repo_scoped_batch_query,
     _file_level_call_batch_queries,
+    _file_level_repo_scoped_batch_query,
     create_all_function_calls,
     create_function_calls,
     safe_run_create,
@@ -207,6 +209,7 @@ def test_create_all_function_calls_returns_resolution_metrics(
             "fallback_rows": 1,
             "unmatched_rows": 0,
             "exact_duration_seconds": 2.0,
+            "repo_scoped_duration_seconds": 0.5,
             "fallback_duration_seconds": 3.0,
         },
     )
@@ -218,6 +221,7 @@ def test_create_all_function_calls_returns_resolution_metrics(
             "fallback_rows": 2,
             "unmatched_rows": 1,
             "exact_duration_seconds": 5.0,
+            "repo_scoped_duration_seconds": 1.0,
             "fallback_duration_seconds": 7.0,
         },
     )
@@ -262,15 +266,18 @@ def test_create_all_function_calls_returns_resolution_metrics(
         "contextual_fallback_rows": 1,
         "contextual_unmatched_rows": 0,
         "contextual_exact_duration_seconds": 2.0,
+        "contextual_repo_scoped_duration_seconds": 0.5,
         "contextual_fallback_duration_seconds": 3.0,
         "file_level_rows": 1,
         "file_level_fallback_rows": 2,
         "file_level_unmatched_rows": 1,
         "file_level_exact_duration_seconds": 5.0,
+        "file_level_repo_scoped_duration_seconds": 1.0,
         "file_level_fallback_duration_seconds": 7.0,
         "exact_duration_seconds": 7.0,
+        "repo_scoped_duration_seconds": 1.5,
         "fallback_duration_seconds": 10.0,
-        "total_duration_seconds": 17.0,
+        "total_duration_seconds": 18.5,
     }
     assert builder._last_call_relationship_metrics == metrics
 
@@ -557,3 +564,161 @@ def test_file_level_exact_query_preserves_rows_without_constructor_match() -> No
         'CASE WHEN init.name IN ["__init__", "constructor"] THEN init END AS init'
         in query
     )
+
+
+def test_repo_scoped_queries_restrict_match_to_repo_path() -> None:
+    """Repo-scoped queries should filter called functions by repo path prefix."""
+
+    contextual_query = _contextual_repo_scoped_batch_query()
+    file_level_query = _file_level_repo_scoped_batch_query()
+
+    assert "STARTS WITH row.repo_path" in contextual_query
+    assert "STARTS WITH row.repo_path" in file_level_query
+    assert "COALESCE(called_function, init, called_class)" in contextual_query
+    assert "COALESCE(called_function, init, called_class)" in file_level_query
+
+
+def test_prepare_call_rows_includes_repo_path_in_rows() -> None:
+    """Prepared rows should carry repo_path for repo-scoped resolution."""
+
+    contextual_rows, file_level_rows, _ = call_relationships._prepare_call_rows(
+        {
+            "path": "/tmp/repo-a/main.py",
+            "repo_path": "/tmp/repo-a",
+            "functions": [{"name": "caller"}],
+            "classes": [],
+            "imports": [],
+            "function_calls": [
+                {
+                    "name": "process",
+                    "line_number": 10,
+                    "args": [],
+                    "context": ["caller", 1, 1],
+                },
+                {"name": "transform", "line_number": 20, "args": []},
+            ],
+        },
+        {},
+        caller_file_path="/tmp/repo-a/main.py",
+        get_config_value_fn=lambda _key: None,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+        start_row_id=0,
+    )
+
+    all_rows = contextual_rows + file_level_rows
+    assert len(all_rows) == 2
+    assert all(row["repo_path"] == "/tmp/repo-a" for row in all_rows)
+
+
+def test_repo_scope_prevents_cross_repo_call_resolution(monkeypatch) -> None:
+    """With scope=repo, calls should not resolve to functions in other repos."""
+
+    monkeypatch.setenv("PCG_CALL_RESOLUTION_SCOPE", "repo")
+
+    # _RepoAwareSession: exact queries (name+path) never match because the
+    # call is unresolved (called_file_path == caller_file_path, no function
+    # there).  The repo-scoped query would only match functions whose path
+    # starts with the caller's repo_path.  We simulate this: only rows whose
+    # repo_path matches the called function's repo resolve.
+    class _RepoAwareSession:
+        """Session that matches only when repo_path constraint is satisfied."""
+
+        def __init__(self):
+            self.calls: list[tuple[str, dict]] = []
+
+        def run(self, query: str, params=None):
+            final_params = params or {}
+            self.calls.append((query, final_params))
+            rows = final_params.get("rows", [])
+            if "STARTS WITH row.repo_path" in query:
+                # Simulate: the only function named 'process' lives in
+                # /tmp/repo-b, so repo-scoped match from repo-a fails.
+                matched = [
+                    r["row_id"]
+                    for r in rows
+                    if "/tmp/repo-b".startswith(r.get("repo_path", ""))
+                ]
+                return _FakeResult({"matched_row_ids": matched})
+            if "called_file_path" in query and "STARTS WITH" not in query:
+                # Exact match: never resolves for unresolved calls
+                return _FakeResult({"matched_row_ids": []})
+            matched = [r["row_id"] for r in rows]
+            return _FakeResult({"matched_row_ids": matched})
+
+    session = _RepoAwareSession()
+    builder = SimpleNamespace(driver=_FakeDriver(session))
+
+    all_file_data = [
+        {
+            "path": "/tmp/repo-a/main.py",
+            "repo_path": "/tmp/repo-a",
+            "functions": [],
+            "classes": [],
+            "imports": [],
+            "function_calls": [
+                {"name": "process", "line_number": 10, "args": []},
+            ],
+        },
+    ]
+    # No imports map entry -- the call is unresolved
+    imports_map: dict = {}
+
+    metrics = create_all_function_calls(
+        builder,
+        all_file_data,
+        imports_map,
+        debug_log_fn=lambda *_args, **_kwargs: None,
+    )
+
+    # The call should remain unresolved (NOT matched) because 'process'
+    # only exists in repo-b and scope=repo restricts to repo-a.
+    repo_scoped_queries = [
+        (q, p) for q, p in session.calls if "STARTS WITH row.repo_path" in q
+    ]
+    assert len(repo_scoped_queries) > 0, "Repo-scoped query should have been executed"
+    for _query, params in repo_scoped_queries:
+        for row in params.get("rows", []):
+            assert row["repo_path"] == "/tmp/repo-a"
+
+    # With scope=repo the unresolved count should be > 0 since
+    # 'process' is not in repo-a
+    assert metrics["file_level_unmatched_rows"] > 0 or (
+        metrics["contextual_unmatched_rows"] > 0
+    )
+
+
+def test_global_scope_skips_repo_scoped_query(monkeypatch) -> None:
+    """With scope=global, repo-scoped queries should not be injected."""
+
+    monkeypatch.setenv("PCG_CALL_RESOLUTION_SCOPE", "global")
+
+    session = _FakeSession()
+    builder = SimpleNamespace(driver=_FakeDriver(session))
+
+    all_file_data = [
+        {
+            "path": "/tmp/repo-a/main.py",
+            "repo_path": "/tmp/repo-a",
+            "functions": [],
+            "classes": [],
+            "imports": [],
+            "function_calls": [
+                {"name": "helper_one", "line_number": 10, "args": []},
+            ],
+        },
+    ]
+    imports_map = {"helper_one": ["/tmp/repo-a/helpers.py"]}
+
+    create_all_function_calls(
+        builder,
+        all_file_data,
+        imports_map,
+        debug_log_fn=lambda *_args, **_kwargs: None,
+    )
+
+    repo_scoped_queries = [
+        q for q, _p in session.calls if "STARTS WITH row.repo_path" in q
+    ]
+    assert (
+        len(repo_scoped_queries) == 0
+    ), "Repo-scoped query should NOT run when scope=global"

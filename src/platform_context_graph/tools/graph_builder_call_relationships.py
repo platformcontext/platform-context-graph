@@ -15,9 +15,11 @@ from .graph_builder_call_batches import (
     call_resolution_metrics as _call_resolution_metrics,
     combine_call_relationship_metrics as _combine_call_relationship_metrics,
     contextual_call_batch_queries as _contextual_call_batch_queries,
+    contextual_repo_scoped_batch_query as _contextual_repo_scoped_batch_query,
     create_contextual_call_relationships_batched as _create_contextual_call_relationships_batched,
     create_file_level_call_relationships_batched as _create_file_level_call_relationships_batched,
     file_level_call_batch_queries as _file_level_call_batch_queries,
+    file_level_repo_scoped_batch_query as _file_level_repo_scoped_batch_query,
     filter_fallback_candidate_rows as _filter_fallback_candidate_rows,
     run_call_batch_query as _run_call_batch_query_impl,
 )
@@ -286,6 +288,7 @@ def _prepare_call_rows(
     skip_external = (
         get_config_value_fn("SKIP_EXTERNAL_RESOLUTION") or "false"
     ).lower() == "true"
+    repo_path = file_data.get("repo_path", "")
     contextual_rows: list[dict[str, Any]] = []
     file_level_rows: list[dict[str, Any]] = []
     next_row_id = start_row_id
@@ -366,7 +369,7 @@ def _prepare_call_rows(
             continue
 
         call_params = _build_call_params(
-            call, caller_file_path, called_name, resolved_path
+            call, caller_file_path, called_name, resolved_path, repo_path
         )
         call_params["row_id"] = next_row_id
         next_row_id += 1
@@ -432,6 +435,7 @@ def _build_call_params(
     caller_file_path: str,
     called_name: str,
     resolved_path: str,
+    repo_path: str,
 ) -> dict[str, Any]:
     """Build the common query parameters for function call relationships."""
     return {
@@ -442,6 +446,7 @@ def _build_call_params(
         "args": call.get("args", []),
         "full_call_name": call.get("full_name", called_name),
         "lang": call.get("lang"),
+        "repo_path": repo_path,
     }
 
 
