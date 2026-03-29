@@ -99,6 +99,18 @@ class _DummySession:
         del exc_type, exc, tb
         return False
 
+    def run(self, query, **kwargs):
+        """Return empty results for Neo4j file discovery queries."""
+
+        class _EmptyResult:
+            def data(self):
+                return []
+
+            def single(self):
+                return None
+
+        return _EmptyResult()
+
 
 class _DummyDriver:
     def session(self):
@@ -952,6 +964,17 @@ def test_enrich_repository_context_extracts_jenkins_pipeline_hints(
         encoding="utf-8",
     )
 
+    _svc_id = "repository:r_api_node_whisper"
+    _indexed_store: dict[tuple[str, str], str] = {}
+    for _fp in sorted(service_repo.rglob("*")):
+        if _fp.is_file():
+            _rel = str(_fp.relative_to(service_repo))
+            try:
+                _indexed_store[(_svc_id, _rel)] = _fp.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                pass
+    _apply_indexed_file_mocks(monkeypatch, _indexed_store)
+
     monkeypatch.setattr(
         "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
         lambda _database, *, repo_id, relative_path: {
@@ -1035,6 +1058,24 @@ def test_enrich_repository_context_extracts_nested_workflow_command_metadata(
         encoding="utf-8",
     )
 
+    _svc_id = "repository:r_api_node_boats"
+    _auto_id = "repository:r_automation123"
+    _indexed_store: dict[tuple[str, str], str] = {}
+    for _repo_path, _repo_id in [
+        (service_repo, _svc_id),
+        (automation_repo, _auto_id),
+    ]:
+        for _fp in sorted(_repo_path.rglob("*")):
+            if _fp.is_file():
+                _rel = str(_fp.relative_to(_repo_path))
+                try:
+                    _indexed_store[(_repo_id, _rel)] = _fp.read_text(
+                        encoding="utf-8"
+                    )
+                except UnicodeDecodeError:
+                    pass
+    _apply_indexed_file_mocks(monkeypatch, _indexed_store)
+
     monkeypatch.setattr(
         "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
         lambda _database, *, repo_id, relative_path: {
@@ -1099,6 +1140,17 @@ def test_enrich_repository_context_adds_controller_driven_paths(
     monkeypatch,
     fixture_repo: Path,
 ) -> None:
+    _repo_id = "repository:r_ansible_jenkins_automation"
+    _indexed_store: dict[tuple[str, str], str] = {}
+    for _fp in sorted(fixture_repo.rglob("*")):
+        if _fp.is_file():
+            _rel = str(_fp.relative_to(fixture_repo))
+            try:
+                _indexed_store[(_repo_id, _rel)] = _fp.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                pass
+    _apply_indexed_file_mocks(monkeypatch, _indexed_store)
+
     monkeypatch.setattr(
         "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
         lambda _database, *, repo_id, relative_path: {

@@ -16,7 +16,6 @@ from .indexed_file_discovery import (
     read_yaml_file,
 )
 
-_WORKFLOW_SUFFIXES = {".yml", ".yaml"}
 _REUSABLE_WORKFLOW_RE = re.compile(
     r"^(?P<owner>[^/]+)/(?P<repo>[^/]+)/(?P<workflow_path>\.github/workflows/[^@]+)@(?P<ref>.+)$"
 )
