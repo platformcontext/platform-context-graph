@@ -1,0 +1,33 @@
+src/platform_context_graph/tools/graph_builder_indexing_finalize.py
+  171ca78060f03490 55-121,137,139-144,151-155,210,231-245
+src/platform_context_graph/tools/graph_builder_indexing_execution.py
+  171ca78060f03490 401
+src/platform_context_graph/tools/graph_builder_indexing.py
+  171ca78060f03490 19,33
+tests/unit/content/test_postgres.py
+  171ca78060f03490 578-710
+src/platform_context_graph/tools/graph_builder_persistence.py
+  171ca78060f03490 98-143,391
+src/platform_context_graph/content/postgres.py
+  171ca78060f03490 37-128,130-141,200-224,236,246,248-278,280-282
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "ed2df521fa2817efb3779f5cfe95516dc2dced41",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 443,
+      "overriden_lines": 0
+    }
+  }
+}
