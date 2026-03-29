@@ -1,0 +1,23 @@
+src/platform_context_graph/tools/graph_builder_schema.py
+  171ca78060f03490 28-33,35-46,48,50-56,58-60,76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "074aa84310e07baab215532365880900bfaa4fbc",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 39,
+      "total_deletions": 50,
+      "accepted_lines": 39,
+      "overriden_lines": 0
+    }
+  }
+}
