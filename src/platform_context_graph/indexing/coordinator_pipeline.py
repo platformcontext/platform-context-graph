@@ -607,8 +607,7 @@ async def process_repository_snapshots(
                         "pcg.index.parse_workers": parse_workers,
                     },
                 ):
-                    await asyncio.to_thread(
-                        commit_repository_snapshot_fn,
+                    commit_repository_snapshot_fn(
                         builder,
                         snapshot,
                         is_dependency=is_dependency,
