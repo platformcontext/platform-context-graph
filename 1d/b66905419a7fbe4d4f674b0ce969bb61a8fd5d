@@ -1,0 +1,33 @@
+src/platform_context_graph/core/database_falkordb_helpers.py
+  171ca78060f03490 46-48
+src/platform_context_graph/tools/graph_builder_schema.py
+  171ca78060f03490 122-124,126-131
+tests/unit/indexing/test_coordinator_storage.py
+  171ca78060f03490 217-220
+scripts/test-nornicdb-compat.sh
+  171ca78060f03490 75-80,214
+tests/unit/tools/test_graph_builder_persistence_unwind.py
+  171ca78060f03490 58-115
+docker-compose.nornicdb.yml
+  171ca78060f03490 10-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "1db66905419a7fbe4d4f674b0ce969bb61a8fd5d",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 86,
+      "total_deletions": 15,
+      "accepted_lines": 84,
+      "overriden_lines": 0
+    }
+  }
+}
