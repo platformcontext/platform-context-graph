@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from collections.abc import Sequence
 from contextlib import contextmanager
 from typing import Any
@@ -60,7 +61,9 @@ class PostgresContentProvider:
         """Yield a dict-row cursor and ensure schema creation on first use."""
 
         if not self.enabled:
-            raise RuntimeError("psycopg is not installed or the content store DSN is missing")
+            raise RuntimeError(
+                "psycopg is not installed or the content store DSN is missing"
+            )
 
         with self._lock:
             if self._conn is None or self._conn.closed:
@@ -252,20 +255,34 @@ class PostgresContentProvider:
             repo_id: Canonical repository identifier.
         """
 
-        with self._cursor() as cursor:
-            cursor.execute(
-                """
-                DELETE FROM content_entities
-                WHERE repo_id = %(repo_id)s
-                """,
-                {"repo_id": repo_id},
-            )
-            cursor.execute(
-                """
-                DELETE FROM content_files
-                WHERE repo_id = %(repo_id)s
-                """,
-                {"repo_id": repo_id},
+        started = time.monotonic()
+        success = True
+        try:
+            with self._cursor() as cursor:
+                cursor.execute(
+                    """
+                    DELETE FROM content_entities
+                    WHERE repo_id = %(repo_id)s
+                    """,
+                    {"repo_id": repo_id},
+                )
+                cursor.execute(
+                    """
+                    DELETE FROM content_files
+                    WHERE repo_id = %(repo_id)s
+                    """,
+                    {"repo_id": repo_id},
+                )
+        except Exception:
+            success = False
+            raise
+        finally:
+            get_observability().record_content_provider_result(
+                operation="delete_repository_content",
+                backend="postgres",
+                success=success,
+                hit=True,
+                duration_seconds=time.monotonic() - started,
             )
 
     def get_repository_content_counts(self, *, repo_id: str) -> dict[str, int]:
@@ -286,7 +303,9 @@ class PostgresContentProvider:
             "content_entity_count": int(row.get("entity_count") or 0),
         }
 
-    def get_file_content(self, *, repo_id: str, relative_path: str) -> dict[str, Any] | None:
+    def get_file_content(
+        self, *, repo_id: str, relative_path: str
+    ) -> dict[str, Any] | None:
         """Return file content for one repo-relative file path.
 
         Args:
@@ -297,11 +316,27 @@ class PostgresContentProvider:
             Content response mapping when present, otherwise ``None``.
         """
 
-        return postgres_get_file_content(
-            self,
-            repo_id=repo_id,
-            relative_path=relative_path,
-        )
+        started = time.monotonic()
+        success = True
+        result = None
+        try:
+            result = postgres_get_file_content(
+                self,
+                repo_id=repo_id,
+                relative_path=relative_path,
+            )
+            return result
+        except Exception:
+            success = False
+            raise
+        finally:
+            get_observability().record_content_provider_result(
+                operation="get_file_content",
+                backend="postgres",
+                success=success,
+                hit=result is not None,
+                duration_seconds=time.monotonic() - started,
+            )
 
     def get_entity_content(self, *, entity_id: str) -> dict[str, Any] | None:
         """Return source content for one content-bearing entity.
@@ -313,7 +348,23 @@ class PostgresContentProvider:
             Entity content response mapping when present, otherwise ``None``.
         """
 
-        return postgres_get_entity_content(self, entity_id=entity_id)
+        started = time.monotonic()
+        success = True
+        result = None
+        try:
+            result = postgres_get_entity_content(self, entity_id=entity_id)
+            return result
+        except Exception:
+            success = False
+            raise
+        finally:
+            get_observability().record_content_provider_result(
+                operation="get_entity_content",
+                backend="postgres",
+                success=success,
+                hit=result is not None,
+                duration_seconds=time.monotonic() - started,
+            )
 
     def search_file_content(
         self,
@@ -327,15 +378,31 @@ class PostgresContentProvider:
     ) -> dict[str, Any]:
         """Search indexed file content with optional repository/language filters."""
 
-        return postgres_search_file_content(
-            self,
-            pattern=pattern,
-            repo_ids=repo_ids,
-            languages=languages,
-            artifact_types=artifact_types,
-            template_dialects=template_dialects,
-            iac_relevant=iac_relevant,
-        )
+        started = time.monotonic()
+        success = True
+        result: dict[str, Any] = {"matches": []}
+        try:
+            result = postgres_search_file_content(
+                self,
+                pattern=pattern,
+                repo_ids=repo_ids,
+                languages=languages,
+                artifact_types=artifact_types,
+                template_dialects=template_dialects,
+                iac_relevant=iac_relevant,
+            )
+            return result
+        except Exception:
+            success = False
+            raise
+        finally:
+            get_observability().record_content_provider_result(
+                operation="search_file_content",
+                backend="postgres",
+                success=success,
+                hit=bool(result.get("matches")),
+                duration_seconds=time.monotonic() - started,
+            )
 
     def search_entity_content(
         self,
@@ -350,16 +417,32 @@ class PostgresContentProvider:
     ) -> dict[str, Any]:
         """Search cached entity snippets with optional filters."""
 
-        return postgres_search_entity_content(
-            self,
-            pattern=pattern,
-            entity_types=entity_types,
-            repo_ids=repo_ids,
-            languages=languages,
-            artifact_types=artifact_types,
-            template_dialects=template_dialects,
-            iac_relevant=iac_relevant,
-        )
+        started = time.monotonic()
+        success = True
+        result: dict[str, Any] = {"matches": []}
+        try:
+            result = postgres_search_entity_content(
+                self,
+                pattern=pattern,
+                entity_types=entity_types,
+                repo_ids=repo_ids,
+                languages=languages,
+                artifact_types=artifact_types,
+                template_dialects=template_dialects,
+                iac_relevant=iac_relevant,
+            )
+            return result
+        except Exception:
+            success = False
+            raise
+        finally:
+            get_observability().record_content_provider_result(
+                operation="search_entity_content",
+                backend="postgres",
+                success=success,
+                hit=bool(result.get("matches")),
+                duration_seconds=time.monotonic() - started,
+            )
 
     def close(self) -> None:
         """Close the cached PostgreSQL connection when present."""
