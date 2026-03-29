@@ -55,6 +55,64 @@ def test_entity_props_for_unwind_keeps_small_value_preview(monkeypatch) -> None:
     assert row["value"] == "short-value"
 
 
+def test_entity_props_for_unwind_coalesces_null_node_key_properties() -> None:
+    """NULL values in NODE KEY properties must be coalesced to empty string."""
+
+    row = graph_builder_persistence_unwind.entity_props_for_unwind(
+        "K8sResource",
+        {
+            "name": "my-service",
+            "line_number": 5,
+            "kind": None,
+            "namespace": "default",
+        },
+        "/tmp/manifest.yaml",
+        False,
+    )
+
+    assert row["kind"] == ""
+    assert row["namespace"] == "default"
+    assert row["name"] == "my-service"
+
+
+def test_entity_props_for_unwind_coalesces_null_name() -> None:
+    """NULL name should be coalesced to empty string for NODE KEY."""
+
+    row = graph_builder_persistence_unwind.entity_props_for_unwind(
+        "Function",
+        {
+            "name": None,
+            "line_number": 1,
+            "source": "def():",
+        },
+        "/tmp/example.py",
+        False,
+    )
+
+    assert row["name"] == ""
+    assert row["source"] == "def():"
+
+
+def test_entity_props_for_unwind_preserves_non_node_key_nulls() -> None:
+    """Properties not in NODE KEY set should keep None when null."""
+
+    row = graph_builder_persistence_unwind.entity_props_for_unwind(
+        "Function",
+        {
+            "name": "handler",
+            "line_number": 10,
+            "docstring": None,
+            "source": None,
+        },
+        "/tmp/example.py",
+        False,
+    )
+
+    assert row["name"] == "handler"
+    assert row["docstring"] is None
+    assert row["source"] is None
+
+
 def test_run_entity_unwind_rejects_invalid_extra_property_keys() -> None:
     """Dynamic Cypher property keys must be validated before interpolation."""
 

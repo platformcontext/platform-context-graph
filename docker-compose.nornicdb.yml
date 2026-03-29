@@ -1,0 +1,78 @@
+# Docker Compose override: replace Neo4j with NornicDB for local compatibility testing.
+#
+# Usage:
+#   docker-compose -f docker-compose.yaml -f docker-compose.nornicdb.yml up --build
+#
+# NornicDB is a Go-based graph database with Bolt/Cypher compatibility.
+# It exposes the same ports as Neo4j (7474 HTTP, 7687 Bolt) so PCG
+# connects without configuration changes.
+#
+# Image: defaults to nornicdb-patched:latest (local build with low-memory fix).
+# Override via NORNICDB_IMAGE env var for upstream images:
+#   NORNICDB_IMAGE=timothyswt/nornicdb-arm64-metal-bge:latest docker-compose \
+#     -f docker-compose.yaml -f docker-compose.nornicdb.yml up --build
+#
+# IMPORTANT: NornicDB's default database is "nornic", not "neo4j".
+# Set NEO4J_DATABASE=nornic in PCG services (DEFAULT_DATABASE stays "neo4j"
+# since that selects the backend type, not the database name).
+
+services:
+  # Override the neo4j service -- keep the service name so that all
+  # depends_on references and bolt://neo4j:7687 URIs resolve unchanged.
+  neo4j:
+    image: ${NORNICDB_IMAGE:-nornicdb-patched:latest}
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    environment:
+      # Disable auth -- NornicDB accepts any credentials when this is true.
+      NORNICDB_NO_AUTH: "true"
+      NORNICDB_DATA_DIR: /data
+      NORNICDB_HTTP_PORT: "7474"
+      NORNICDB_BOLT_PORT: "7687"
+      # Low-memory mode: reduces BadgerDB from ~1GB to ~50MB (patched image).
+      NORNICDB_LOW_MEMORY: "true"
+      NORNICDB_BADGER_LOW_MEMORY: "true"
+      NORNICDB_BADGER_HIGH_PERFORMANCE: "false"
+      GOGC: "50"
+      GOMEMLIMIT: "3500MiB"
+      # Async writes with conservative cache sizes.
+      NORNICDB_ASYNC_WRITES_ENABLED: "true"
+      NORNICDB_ASYNC_FLUSH_INTERVAL: "50ms"
+      NORNICDB_ASYNC_MAX_NODE_CACHE_SIZE: "5000"
+      NORNICDB_ASYNC_MAX_EDGE_CACHE_SIZE: "10000"
+      # Disable features we don't need.
+      NORNICDB_HEIMDALL_ENABLED: "false"
+      NORNICDB_QDRANT_GRPC_ENABLED: "false"
+      NORNICDB_EMBEDDING_PROVIDER: local
+    volumes:
+      - nornicdb_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:7474/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    # No Docker memory limit — let GOMEMLIMIT handle GC pressure.
+    # Docker Desktop has 8GB total; NornicDB needs ~4GB under batch writes.
+
+  # Patch PCG services: DEFAULT_DATABASE stays "neo4j" (backend type selector),
+  # but NEO4J_DATABASE must be "nornic" (NornicDB's default database name).
+  platform-context-graph:
+    environment:
+      NEO4J_DATABASE: nornic
+
+  bootstrap-index:
+    environment:
+      NEO4J_DATABASE: nornic
+      # Serialize writes to avoid OOM-killing NornicDB under concurrent load.
+      PCG_PARSE_WORKERS: "1"
+      PCG_COMMIT_WORKERS: "1"
+      PCG_INDEX_QUEUE_DEPTH: "1"
+
+  repo-sync:
+    environment:
+      NEO4J_DATABASE: nornic
+
+volumes:
+  nornicdb_data:
