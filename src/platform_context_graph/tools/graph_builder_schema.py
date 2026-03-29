@@ -119,13 +119,17 @@ def create_schema(builder: Any, *, info_logger_fn: Any, warning_logger_fn: Any) 
     )
 
     with builder.driver.session() as session:
-        try:
-            for statement in _schema_statements_for_capabilities(capabilities):
+        failed = 0
+        for statement in _schema_statements_for_capabilities(capabilities):
+            try:
                 session.run(statement)
-
+            except Exception as exc:
+                failed += 1
+                warning_logger_fn(f"Schema statement warning: {exc}")
+        if failed:
+            warning_logger_fn(f"Schema creation completed with {failed} warning(s)")
+        else:
             info_logger_fn("Database schema verified/created successfully")
-        except Exception as exc:
-            warning_logger_fn(f"Schema creation warning: {exc}")
 
 
 __all__ = ["create_schema", "_schema_statements_for_capabilities"]

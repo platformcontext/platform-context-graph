@@ -214,7 +214,10 @@ def test_schema_statements_follow_graph_store_capabilities() -> None:
         )
     )
 
-    assert any("code_search_index" in stmt for stmt in neo4j_statements)
+    assert any(
+        "CALL db.index.fulltext.createNodeIndex('code_search_index'" in stmt
+        for stmt in neo4j_statements
+    )
     assert any(
         "CALL db.idx.fulltext.createNodeIndex('Function'" in stmt
         for stmt in falkordb_statements

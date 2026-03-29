@@ -7,12 +7,9 @@
 # It exposes the same ports as Neo4j (7474 HTTP, 7687 Bolt) so PCG
 # connects without configuration changes.
 #
-# Image selection:
-#   - ARM64 (Apple Silicon): timothyswt/nornicdb-arm64-metal-bge:latest  (default)
-#   - AMD64 (x86/Linux):     timothyswt/nornicdb-amd64-cpu-bge:latest
-#
-# Override the image via environment variable:
-#   NORNICDB_IMAGE=timothyswt/nornicdb-amd64-cpu-bge:latest docker-compose \
+# Image: defaults to nornicdb-patched:latest (local build with low-memory fix).
+# Override via NORNICDB_IMAGE env var for upstream images:
+#   NORNICDB_IMAGE=timothyswt/nornicdb-arm64-metal-bge:latest docker-compose \
 #     -f docker-compose.yaml -f docker-compose.nornicdb.yml up --build
 #
 # IMPORTANT: NornicDB's default database is "nornic", not "neo4j".

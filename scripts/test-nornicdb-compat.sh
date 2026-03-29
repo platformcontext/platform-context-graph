@@ -72,7 +72,12 @@ log "=== Step 2: Waiting for NornicDB to be healthy ==="
 MAX_WAIT=120
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
-    HEALTH=$($COMPOSE ps neo4j --format '{{.Health}}' 2>/dev/null || echo "unknown")
+    CID=$($COMPOSE ps -q neo4j 2>/dev/null || true)
+    if [ -n "$CID" ]; then
+        HEALTH=$(docker inspect --format '{{.State.Health.Status}}' "$CID" 2>/dev/null || echo "unknown")
+    else
+        HEALTH="starting"
+    fi
     if echo "$HEALTH" | grep -qi "healthy"; then
         log "NornicDB is healthy after ${WAITED}s"
         break
@@ -206,7 +211,7 @@ else
 fi
 
 log ""
-log "  NornicDB image:        ${NORNICDB_IMAGE:-timothyswt/nornicdb-arm64-metal-bge:latest}"
+log "  NornicDB image:        ${NORNICDB_IMAGE:-nornicdb-patched:latest}"
 log "  Bolt URI:              $NEO4J_URI"
 log ""
 

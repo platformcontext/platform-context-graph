@@ -43,7 +43,9 @@ def translate_falkordb_schema_query(query: str) -> str:
 
         match_node = re.search(r"FOR\s+(\([^)]+\))", query, flags=re.IGNORECASE)
         match_props_composite = re.search(
-            r"REQUIRE\s+(\([^)]+\))\s+IS UNIQUE", query, flags=re.IGNORECASE
+            r"REQUIRE\s+(\([^)]+\))\s+IS (?:UNIQUE|NODE KEY)",
+            query,
+            flags=re.IGNORECASE,
         )
         if match_node and match_props_composite:
             return (
