@@ -95,6 +95,52 @@ def _content_dual_write(
         )
 
 
+def _content_dual_write_batch(
+    file_data_list: list[dict[str, Any]],
+    repository: dict[str, Any],
+    warning_logger_fn: Any,
+) -> None:
+    """Batch Postgres dual-write for multiple files in one round-trip."""
+
+    content_provider = get_postgres_content_provider()
+    if content_provider is None or not content_provider.enabled:
+        return
+    telemetry = get_observability()
+    try:
+        with telemetry.start_span(
+            "pcg.content.dual_write_batch",
+            attributes={
+                "pcg.content.repo_id": repository.get("id"),
+                "pcg.content.file_count": len(file_data_list),
+            },
+        ):
+            file_entries = []
+            entity_entries = []
+            for file_data in file_data_list:
+                file_entry, entities = prepare_content_entries(
+                    file_data=file_data,
+                    repository=repository,
+                )
+                if file_entry is not None:
+                    file_entries.append(file_entry)
+                entity_entries.extend(entities)
+            if file_entries:
+                content_provider.upsert_file_batch(file_entries)
+            if entity_entries:
+                content_provider.upsert_entities_batch(entity_entries)
+    except Exception as exc:
+        emit_log_call(
+            warning_logger_fn,
+            f"Content store batch dual-write failed for {len(file_data_list)} files: {exc}",
+            event_name="content.dual_write_batch.failed",
+            extra_keys={
+                "file_count": len(file_data_list),
+                "repo_id": repository.get("id"),
+            },
+            exc_info=exc,
+        )
+
+
 def _begin_transaction(session: Any) -> tuple[Any, bool]:
     """Begin an explicit transaction if the backend supports it.
 
@@ -342,9 +388,7 @@ def commit_file_batch_to_graph(
 
         for start in range(0, total_files, tx_file_limit):
             tx_chunk = file_data_list[start : start + tx_file_limit]
-            for file_data in tx_chunk:
-                file_name = Path(file_data["path"]).name
-                _content_dual_write(file_data, file_name, repository, warning_logger_fn)
+            _content_dual_write_batch(tx_chunk, repository, warning_logger_fn)
 
             tx, is_explicit = _begin_transaction(session)
             chunk_file_paths: list[str] = []

@@ -398,6 +398,7 @@ async def parse_repository_snapshot_async(
 
 
 from .graph_builder_indexing_finalize import finalize_index_batch  # noqa: E402
+from .graph_builder_indexing_finalize import finalize_single_repository  # noqa: E402
 
 
 async def build_graph_from_path_async(

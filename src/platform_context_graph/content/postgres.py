@@ -34,6 +34,111 @@ __all__ = [
 
 DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE = 500
 
+_FILE_UPSERT_SQL = """
+INSERT INTO content_files (
+    repo_id, relative_path, commit_sha, content, content_hash,
+    line_count, language, artifact_type, template_dialect,
+    iac_relevant, indexed_at
+) VALUES (
+    %(repo_id)s, %(relative_path)s, %(commit_sha)s, %(content)s,
+    %(content_hash)s, %(line_count)s, %(language)s, %(artifact_type)s,
+    %(template_dialect)s, %(iac_relevant)s, %(indexed_at)s
+)
+ON CONFLICT (repo_id, relative_path) DO UPDATE
+SET commit_sha = EXCLUDED.commit_sha,
+    content = EXCLUDED.content,
+    content_hash = EXCLUDED.content_hash,
+    line_count = EXCLUDED.line_count,
+    language = EXCLUDED.language,
+    artifact_type = EXCLUDED.artifact_type,
+    template_dialect = EXCLUDED.template_dialect,
+    iac_relevant = EXCLUDED.iac_relevant,
+    indexed_at = EXCLUDED.indexed_at
+"""
+
+_ENTITY_UPSERT_SQL = """
+INSERT INTO content_entities (
+    entity_id, repo_id, relative_path, entity_type, entity_name,
+    start_line, end_line, start_byte, end_byte, language,
+    artifact_type, template_dialect, iac_relevant,
+    source_cache, indexed_at
+) VALUES (
+    %(entity_id)s, %(repo_id)s, %(relative_path)s, %(entity_type)s,
+    %(entity_name)s, %(start_line)s, %(end_line)s, %(start_byte)s,
+    %(end_byte)s, %(language)s, %(artifact_type)s,
+    %(template_dialect)s, %(iac_relevant)s, %(source_cache)s,
+    %(indexed_at)s
+)
+ON CONFLICT (entity_id) DO UPDATE
+SET repo_id = EXCLUDED.repo_id,
+    relative_path = EXCLUDED.relative_path,
+    entity_type = EXCLUDED.entity_type,
+    entity_name = EXCLUDED.entity_name,
+    start_line = EXCLUDED.start_line,
+    end_line = EXCLUDED.end_line,
+    start_byte = EXCLUDED.start_byte,
+    end_byte = EXCLUDED.end_byte,
+    language = EXCLUDED.language,
+    artifact_type = EXCLUDED.artifact_type,
+    template_dialect = EXCLUDED.template_dialect,
+    iac_relevant = EXCLUDED.iac_relevant,
+    source_cache = EXCLUDED.source_cache,
+    indexed_at = EXCLUDED.indexed_at
+"""
+
+
+def _file_entry_params(entry: ContentFileEntry) -> dict[str, Any]:
+    """Return the parameter dict for one file upsert row."""
+
+    return {
+        "repo_id": entry.repo_id,
+        "relative_path": entry.relative_path,
+        "commit_sha": entry.commit_sha,
+        "content": entry.content,
+        "content_hash": entry.content_hash,
+        "line_count": entry.line_count,
+        "language": entry.language,
+        "artifact_type": entry.artifact_type,
+        "template_dialect": entry.template_dialect,
+        "iac_relevant": entry.iac_relevant,
+        "indexed_at": entry.indexed_at,
+    }
+
+
+def _entity_entry_params(entry: ContentEntityEntry) -> dict[str, Any]:
+    """Return the parameter dict for one entity upsert row."""
+
+    return {
+        "entity_id": entry.entity_id,
+        "repo_id": entry.repo_id,
+        "relative_path": entry.relative_path,
+        "entity_type": entry.entity_type,
+        "entity_name": entry.entity_name,
+        "start_line": entry.start_line,
+        "end_line": entry.end_line,
+        "start_byte": entry.start_byte,
+        "end_byte": entry.end_byte,
+        "language": entry.language,
+        "artifact_type": entry.artifact_type,
+        "template_dialect": entry.template_dialect,
+        "iac_relevant": entry.iac_relevant,
+        "source_cache": entry.source_cache,
+        "indexed_at": entry.indexed_at,
+    }
+
+
+def _entity_batch_size(entry_count: int) -> int:
+    """Return the clamped entity upsert batch size from configuration."""
+
+    raw = os.getenv("PCG_CONTENT_ENTITY_UPSERT_BATCH_SIZE")
+    try:
+        return max(
+            1,
+            min(int(raw or DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE), entry_count),
+        )
+    except ValueError:
+        return min(DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE, entry_count)
+
 
 class PostgresContentProvider:
     """Persist and query source content in PostgreSQL."""
@@ -92,58 +197,31 @@ class PostgresContentProvider:
             },
         ):
             with self._cursor() as cursor:
-                cursor.execute(
-                    """
-                INSERT INTO content_files (
-                    repo_id,
-                    relative_path,
-                    commit_sha,
-                    content,
-                    content_hash,
-                    line_count,
-                    language,
-                    artifact_type,
-                    template_dialect,
-                    iac_relevant,
-                    indexed_at
-                ) VALUES (
-                    %(repo_id)s,
-                    %(relative_path)s,
-                    %(commit_sha)s,
-                    %(content)s,
-                    %(content_hash)s,
-                    %(line_count)s,
-                    %(language)s,
-                    %(artifact_type)s,
-                    %(template_dialect)s,
-                    %(iac_relevant)s,
-                    %(indexed_at)s
-                )
-                ON CONFLICT (repo_id, relative_path) DO UPDATE
-                SET commit_sha = EXCLUDED.commit_sha,
-                    content = EXCLUDED.content,
-                    content_hash = EXCLUDED.content_hash,
-                    line_count = EXCLUDED.line_count,
-                    language = EXCLUDED.language,
-                    artifact_type = EXCLUDED.artifact_type,
-                    template_dialect = EXCLUDED.template_dialect,
-                    iac_relevant = EXCLUDED.iac_relevant,
-                    indexed_at = EXCLUDED.indexed_at
-                """,
-                    {
-                        "repo_id": entry.repo_id,
-                        "relative_path": entry.relative_path,
-                        "commit_sha": entry.commit_sha,
-                        "content": entry.content,
-                        "content_hash": entry.content_hash,
-                        "line_count": entry.line_count,
-                        "language": entry.language,
-                        "artifact_type": entry.artifact_type,
-                        "template_dialect": entry.template_dialect,
-                        "iac_relevant": entry.iac_relevant,
-                        "indexed_at": entry.indexed_at,
-                    },
-                )
+                cursor.execute(_FILE_UPSERT_SQL, _file_entry_params(entry))
+
+    def upsert_file_batch(self, entries: Sequence[ContentFileEntry]) -> None:
+        """Insert or update file-content rows in a single batch.
+
+        Uses ``executemany`` so all rows share one cursor round-trip instead
+        of opening/closing a cursor per file.
+
+        Args:
+            entries: File content rows to store.
+        """
+
+        if not entries:
+            return
+
+        with get_observability().start_span(
+            "pcg.content.postgres.upsert_file_batch",
+            attributes={
+                "pcg.content.file_count": len(entries),
+                "pcg.content.repo_id": entries[0].repo_id,
+            },
+        ):
+            rows = [_file_entry_params(e) for e in entries]
+            with self._cursor() as cursor:
+                cursor.executemany(_FILE_UPSERT_SQL, rows)
 
     def upsert_entities(self, entries: Sequence[ContentEntityEntry]) -> None:
         """Insert or update entity-content rows.
@@ -155,17 +233,7 @@ class PostgresContentProvider:
         if not entries:
             return
 
-        raw_batch_size = os.getenv("PCG_CONTENT_ENTITY_UPSERT_BATCH_SIZE")
-        try:
-            batch_size = max(
-                1,
-                min(
-                    int(raw_batch_size or DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE),
-                    len(entries),
-                ),
-            )
-        except ValueError:
-            batch_size = min(DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE, len(entries))
+        batch_size = _entity_batch_size(len(entries))
 
         with get_observability().start_span(
             "pcg.content.postgres.upsert_entities",
@@ -175,78 +243,43 @@ class PostgresContentProvider:
             },
         ):
             with self._cursor() as cursor:
-                query = """
-                INSERT INTO content_entities (
-                    entity_id,
-                    repo_id,
-                    relative_path,
-                    entity_type,
-                    entity_name,
-                    start_line,
-                    end_line,
-                    start_byte,
-                    end_byte,
-                    language,
-                    artifact_type,
-                    template_dialect,
-                    iac_relevant,
-                    source_cache,
-                    indexed_at
-                ) VALUES (
-                    %(entity_id)s,
-                    %(repo_id)s,
-                    %(relative_path)s,
-                    %(entity_type)s,
-                    %(entity_name)s,
-                    %(start_line)s,
-                    %(end_line)s,
-                    %(start_byte)s,
-                    %(end_byte)s,
-                    %(language)s,
-                    %(artifact_type)s,
-                    %(template_dialect)s,
-                    %(iac_relevant)s,
-                    %(source_cache)s,
-                    %(indexed_at)s
-                )
-                ON CONFLICT (entity_id) DO UPDATE
-                SET repo_id = EXCLUDED.repo_id,
-                    relative_path = EXCLUDED.relative_path,
-                    entity_type = EXCLUDED.entity_type,
-                    entity_name = EXCLUDED.entity_name,
-                    start_line = EXCLUDED.start_line,
-                    end_line = EXCLUDED.end_line,
-                    start_byte = EXCLUDED.start_byte,
-                    end_byte = EXCLUDED.end_byte,
-                    language = EXCLUDED.language,
-                    artifact_type = EXCLUDED.artifact_type,
-                    template_dialect = EXCLUDED.template_dialect,
-                    iac_relevant = EXCLUDED.iac_relevant,
-                    source_cache = EXCLUDED.source_cache,
-                    indexed_at = EXCLUDED.indexed_at
-                """
-                rows = [
-                    {
-                        "entity_id": entry.entity_id,
-                        "repo_id": entry.repo_id,
-                        "relative_path": entry.relative_path,
-                        "entity_type": entry.entity_type,
-                        "entity_name": entry.entity_name,
-                        "start_line": entry.start_line,
-                        "end_line": entry.end_line,
-                        "start_byte": entry.start_byte,
-                        "end_byte": entry.end_byte,
-                        "language": entry.language,
-                        "artifact_type": entry.artifact_type,
-                        "template_dialect": entry.template_dialect,
-                        "iac_relevant": entry.iac_relevant,
-                        "source_cache": entry.source_cache,
-                        "indexed_at": entry.indexed_at,
-                    }
-                    for entry in entries
-                ]
+                rows = [_entity_entry_params(e) for e in entries]
                 for start in range(0, len(rows), batch_size):
-                    cursor.executemany(query, rows[start : start + batch_size])
+                    cursor.executemany(
+                        _ENTITY_UPSERT_SQL, rows[start : start + batch_size]
+                    )
+
+    def upsert_entities_batch(
+        self, entries: Sequence[ContentEntityEntry]
+    ) -> None:
+        """Insert or update entity rows across many files in a single batch.
+
+        Unlike ``upsert_entities`` which is called per-file, this method
+        accepts entities from multiple files and issues one ``executemany``
+        call for the whole batch inside a single cursor context.
+
+        Args:
+            entries: Entity rows from one or more files.
+        """
+
+        if not entries:
+            return
+
+        batch_size = _entity_batch_size(len(entries))
+
+        with get_observability().start_span(
+            "pcg.content.postgres.upsert_entities_batch",
+            attributes={
+                "pcg.content.entity_count": len(entries),
+                "pcg.content.repo_id": entries[0].repo_id,
+            },
+        ):
+            rows = [_entity_entry_params(e) for e in entries]
+            with self._cursor() as cursor:
+                for start in range(0, len(rows), batch_size):
+                    cursor.executemany(
+                        _ENTITY_UPSERT_SQL, rows[start : start + batch_size]
+                    )
 
     def delete_repository_content(self, repo_id: str) -> None:
         """Delete all cached content rows for one repository.

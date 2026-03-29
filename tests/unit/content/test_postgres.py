@@ -575,6 +575,139 @@ def test_upsert_entities_chunks_large_batches(monkeypatch) -> None:
     assert len(last_chunk) == 1
 
 
+def test_upsert_file_batch_uses_executemany(monkeypatch) -> None:
+    """Batch file upserts should persist all rows via a single executemany call."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    entries = [
+        ContentFileEntry(
+            repo_id="repository:r_test",
+            relative_path=f"src/file_{i}.py",
+            content=f"print({i})\n",
+            language="python",
+            indexed_at=datetime.now(tz=timezone.utc),
+        )
+        for i in range(3)
+    ]
+    provider.upsert_file_batch(entries)
+
+    assert cursor.executemany.call_count == 1
+    rows = cursor.executemany.call_args.args[1]
+    assert len(rows) == 3
+    assert rows[0]["relative_path"] == "src/file_0.py"
+    assert rows[2]["relative_path"] == "src/file_2.py"
+
+
+def test_upsert_file_batch_skips_empty_list(monkeypatch) -> None:
+    """Batch file upserts should be a no-op when the entry list is empty."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    provider.upsert_file_batch([])
+
+    assert cursor.executemany.call_count == 0
+
+
+def test_upsert_entities_batch_uses_executemany(monkeypatch) -> None:
+    """Batch entity upserts should persist all rows via executemany."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    entries = [
+        ContentEntityEntry(
+            entity_id=f"content-entity:e_batch_{i}",
+            repo_id="repository:r_test",
+            relative_path=f"src/file_{i}.py",
+            entity_type="Function",
+            entity_name=f"func_{i}",
+            start_line=1,
+            end_line=5,
+            source_cache=f"def func_{i}(): pass\n",
+            language="python",
+            indexed_at=datetime.now(tz=timezone.utc),
+        )
+        for i in range(4)
+    ]
+    provider.upsert_entities_batch(entries)
+
+    assert cursor.executemany.call_count == 1
+    rows = cursor.executemany.call_args.args[1]
+    assert len(rows) == 4
+
+
+def test_upsert_entities_batch_chunks_large_batches(monkeypatch) -> None:
+    """Batch entity upserts should split at the configured batch size."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+    monkeypatch.setenv("PCG_CONTENT_ENTITY_UPSERT_BATCH_SIZE", "3")
+
+    entries = [
+        ContentEntityEntry(
+            entity_id=f"content-entity:e_chunk_{i}",
+            repo_id="repository:r_test",
+            relative_path="app.py",
+            entity_type="Function",
+            entity_name=f"fn_{i}",
+            start_line=i + 1,
+            end_line=i + 1,
+            source_cache=f"def fn_{i}(): ...\n",
+            language="python",
+        )
+        for i in range(7)
+    ]
+    provider.upsert_entities_batch(entries)
+
+    assert cursor.executemany.call_count == 3
+    assert len(cursor.executemany.call_args_list[0].args[1]) == 3
+    assert len(cursor.executemany.call_args_list[2].args[1]) == 1
+
+
+def test_upsert_entities_batch_skips_empty_list(monkeypatch) -> None:
+    """Batch entity upserts should be a no-op when the entry list is empty."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    provider.upsert_entities_batch([])
+
+    assert cursor.executemany.call_count == 0
+
+
 def test_upsert_runtime_status_persists_ingester_status(monkeypatch) -> None:
     """Ingester status writes should upsert into the runtime status table."""
 
