@@ -82,6 +82,17 @@ TS_QUERIES = {
     "variables": """
         (variable_declarator name: (identifier) @name)
     """,
+    "variables_module": """
+        (program
+            (lexical_declaration
+                (variable_declarator name: (identifier) @name)))
+        (program
+            (variable_declaration
+                (variable_declarator name: (identifier) @name)))
+        (export_statement
+            declaration: (lexical_declaration
+                (variable_declarator name: (identifier) @name)))
+    """,
     "enums": """
         (enum_declaration
             name: (identifier) @name

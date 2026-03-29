@@ -423,15 +423,22 @@ class PythonTreeSitterParser:
     def _find_variables(self, root_node: Any) -> list[dict[str, Any]]:
         """Parse Python assignment targets as variables.
 
+        When ``PCG_VARIABLE_SCOPE`` is ``module`` (the default), only
+        module-level and class-level assignments are returned.  Set the
+        variable to ``all`` to restore the original behaviour that
+        captures every assignment.
+
         Args:
             root_node: Tree-sitter root node.
 
         Returns:
             Parsed variable metadata.
         """
+        scope = os.environ.get("PCG_VARIABLE_SCOPE", "module").lower()
+        query_key = "variables_module" if scope == "module" else "variables"
         variables: list[dict[str, Any]] = []
         for node, capture_name in execute_query(
-            self.language, PY_QUERIES["variables"], root_node
+            self.language, PY_QUERIES[query_key], root_node
         ):
             if capture_name != "name":
                 continue

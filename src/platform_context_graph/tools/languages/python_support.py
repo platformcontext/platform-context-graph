@@ -50,6 +50,13 @@ PY_QUERIES = {
         (assignment
             left: (identifier) @name)
     """,
+    "variables_module": """
+        (module
+            (assignment left: (identifier) @name))
+        (class_definition
+            body: (block
+                (assignment left: (identifier) @name)))
+    """,
     "lambda_assignments": """
         (assignment
             left: (identifier) @name

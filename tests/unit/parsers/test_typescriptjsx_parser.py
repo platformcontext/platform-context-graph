@@ -98,9 +98,10 @@ export class LegacyWidget extends React.Component {
 
 
 def test_parse_tsx_imports_calls_variables_and_type_aliases(
-    tsx_parser: TypescriptJSXTreeSitterParser, temp_test_dir
+    tsx_parser: TypescriptJSXTreeSitterParser, temp_test_dir, monkeypatch
 ) -> None:
     """Parse TSX constructs that feed the capability checklist."""
+    monkeypatch.setenv("PCG_VARIABLE_SCOPE", "all")
 
     source = """\
 import { useMemo } from 'react';

@@ -442,10 +442,19 @@ class TypescriptTreeSitterParser:
         return calls
 
     def _find_variables(self, root_node: Any) -> list[dict[str, Any]]:
-        """Parse TypeScript variable declarations that are not functions."""
+        """Parse TypeScript variable declarations that are not functions.
+
+        When ``PCG_VARIABLE_SCOPE`` is ``module`` (the default), only
+        program-level and exported declarations are returned.  Set to
+        ``all`` to restore the original behaviour.
+        """
+        import os
+
+        scope = os.environ.get("PCG_VARIABLE_SCOPE", "module").lower()
+        query_key = "variables_module" if scope == "module" else "variables"
         variables: list[dict[str, Any]] = []
         for node, capture_name in execute_query(
-            self.language, TS_QUERIES["variables"], root_node
+            self.language, TS_QUERIES[query_key], root_node
         ):
             if capture_name != "name":
                 continue
