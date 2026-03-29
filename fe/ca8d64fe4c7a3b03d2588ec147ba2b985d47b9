@@ -1,0 +1,25 @@
+src/platform_context_graph/query/context/database.py
+  171ca78060f03490 191-195
+src/platform_context_graph/query/story_workload.py
+  171ca78060f03490 159-163,170-171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "feca8d64fe4c7a3b03d2588ec147ba2b985d47b9",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 12,
+      "overriden_lines": 0
+    }
+  }
+}
