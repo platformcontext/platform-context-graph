@@ -411,9 +411,138 @@ def read_repository_metadata(session: Any, repo_path_obj: Path) -> dict[str, Any
     return repository_metadata_from_row(row=repo_row, repo_path=repo_path_obj)
 
 
+def collect_directory_chain_rows(
+    file_path_obj: Path,
+    repo_path_obj: Path,
+    file_path_str: str,
+    *,
+    warning_logger_fn: Any | None = None,
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Return directory rows and containment rows without executing queries.
+
+    Returns:
+        (dir_rows, containment_rows) where:
+        - dir_rows: [{parent_path, parent_label, current_path, part}]
+        - containment_rows: [{repo_path, file_path, parent_path, parent_label}]
+    """
+
+    relative_path_to_file = _relative_path_with_fallback(
+        file_path_obj,
+        repo_path_obj,
+        warning_logger_fn=warning_logger_fn,
+        operation="directory chain collect",
+    )
+
+    dir_rows: list[dict[str, str]] = []
+    parent_path = str(repo_path_obj)
+    parent_label = "Repository"
+
+    for part in relative_path_to_file.parts[:-1]:
+        current_path = str(Path(parent_path) / part)
+        dir_rows.append({
+            "parent_path": parent_path,
+            "parent_label": parent_label,
+            "current_path": current_path,
+            "part": part,
+        })
+        parent_path = current_path
+        parent_label = "Directory"
+
+    containment_rows: list[dict[str, str]] = [
+        {
+            "repo_path": str(repo_path_obj),
+            "file_path": file_path_str,
+            "parent_path": parent_path,
+            "parent_label": parent_label,
+        },
+    ]
+
+    return dir_rows, containment_rows
+
+
+def flush_directory_chain_rows(
+    tx: Any,
+    dir_rows: list[dict[str, str]],
+    containment_rows: list[dict[str, str]],
+) -> None:
+    """Write collected directory chains via UNWIND queries."""
+
+    if dir_rows:
+        # Split into Repository-parent and Directory-parent groups
+        repo_parent_rows = [r for r in dir_rows if r["parent_label"] == "Repository"]
+        dir_parent_rows = [r for r in dir_rows if r["parent_label"] == "Directory"]
+
+        if repo_parent_rows:
+            _run_write_query(
+                tx,
+                """
+                UNWIND $rows AS row
+                MATCH (p:Repository {path: row.parent_path})
+                MERGE (d:Directory {path: row.current_path})
+                SET d.name = row.part
+                MERGE (p)-[:CONTAINS]->(d)
+                """,
+                rows=repo_parent_rows,
+            )
+        if dir_parent_rows:
+            _run_write_query(
+                tx,
+                """
+                UNWIND $rows AS row
+                MATCH (p:Directory {path: row.parent_path})
+                MERGE (d:Directory {path: row.current_path})
+                SET d.name = row.part
+                MERGE (p)-[:CONTAINS]->(d)
+                """,
+                rows=dir_parent_rows,
+            )
+
+    if containment_rows:
+        # REPO_CONTAINS edges
+        _run_write_query(
+            tx,
+            """
+            UNWIND $rows AS row
+            MATCH (r:Repository {path: row.repo_path})
+            MATCH (f:File {path: row.file_path})
+            MERGE (r)-[:REPO_CONTAINS]->(f)
+            """,
+            rows=containment_rows,
+        )
+
+        # Parent CONTAINS File edges (split by parent label)
+        repo_file_rows = [r for r in containment_rows if r["parent_label"] == "Repository"]
+        dir_file_rows = [r for r in containment_rows if r["parent_label"] == "Directory"]
+
+        if repo_file_rows:
+            _run_write_query(
+                tx,
+                """
+                UNWIND $rows AS row
+                MATCH (p:Repository {path: row.parent_path})
+                MATCH (f:File {path: row.file_path})
+                MERGE (p)-[:CONTAINS]->(f)
+                """,
+                rows=repo_file_rows,
+            )
+        if dir_file_rows:
+            _run_write_query(
+                tx,
+                """
+                UNWIND $rows AS row
+                MATCH (p:Directory {path: row.parent_path})
+                MATCH (f:File {path: row.file_path})
+                MERGE (p)-[:CONTAINS]->(f)
+                """,
+                rows=dir_file_rows,
+            )
+
+
 __all__ = [
     "_bounded_positive_int_config",
     "_merge_directory_chain",
+    "collect_directory_chain_rows",
+    "flush_directory_chain_rows",
     "_relative_path_with_fallback",
     "_run_managed_write",
     "_run_write_query",

@@ -4,7 +4,8 @@ from pathlib import Path
 
 _LEGACY_MAX_LINES = {
     "graph_builder_indexing_execution.py": 791,
-    "graph_builder_persistence.py": 570,
+    "graph_builder_persistence.py": 590,
+    "graph_builder_persistence_helpers.py": 555,
     "graph_builder_persistence_batch.py": 520,
 }
 

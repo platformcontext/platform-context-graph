@@ -71,6 +71,9 @@ _SCHEMA_STATEMENTS = [
     "CREATE INDEX workload_name IF NOT EXISTS FOR (w:Workload) ON (w.name)",
     "CREATE INDEX workload_repo_id IF NOT EXISTS FOR (w:Workload) ON (w.repo_id)",
     "CREATE INDEX workload_instance_environment IF NOT EXISTS FOR (i:WorkloadInstance) ON (i.environment)",
+    "CREATE INDEX function_name IF NOT EXISTS FOR (f:Function) ON (f.name)",
+    "CREATE INDEX class_name IF NOT EXISTS FOR (c:Class) ON (c.name)",
+    "CREATE CONSTRAINT parameter_unique IF NOT EXISTS FOR (p:Parameter) REQUIRE (p.name, p.path, p.function_line_number) IS UNIQUE",
 ]
 _SCHEMA_STATEMENTS.extend(_UID_CONSTRAINT_STATEMENTS)
 
