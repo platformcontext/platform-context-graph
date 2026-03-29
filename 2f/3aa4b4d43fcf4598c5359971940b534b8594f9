@@ -1,0 +1,27 @@
+tests/unit/tools/test_graph_builder_call_relationships.py
+  171ca78060f03490 9,13,15,563-720
+src/platform_context_graph/tools/graph_builder_call_relationships.py
+  171ca78060f03490 18,22,291,372,438,449
+src/platform_context_graph/tools/graph_builder_call_batches.py
+  171ca78060f03490 82-84,91-95,100,111-115,120,130,133,135-140,154-158,167,350-376,409-433
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "2f3aa4b4d43fcf4598c5359971940b534b8594f9",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 1,
+      "accepted_lines": 568,
+      "overriden_lines": 0
+    }
+  }
+}
