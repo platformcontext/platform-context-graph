@@ -1,0 +1,40 @@
+src/platform_context_graph/tools/languages/cloudformation.py
+  448a72cc2515ab2b 9-10,18-21,27,32-37,45-47,69-70,75-77,83-84,94,128-138,145-344
+src/platform_context_graph/query/repositories/context_limitations.py
+  448a72cc2515ab2b 85,89,96,108-130
+src/platform_context_graph/tools/runtime_platform_families.py
+  448a72cc2515ab2b 48-101,103-116,230-233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "75be612aae28c26719a3f3611d22b4296046f3b2",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    },
+    "448a72cc2515ab2b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47731294-7809-43c0-bd49-b7ae1d2096f4",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 341,
+      "total_deletions": 8,
+      "accepted_lines": 336,
+      "overriden_lines": 1
+    }
+  }
+}
