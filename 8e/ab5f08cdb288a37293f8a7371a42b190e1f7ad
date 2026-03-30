@@ -1,0 +1,31 @@
+src/platform_context_graph/relationships/evidence_argocd.py
+  1fa037a66b990f4f 558,564
+src/platform_context_graph/relationships/file_evidence_support.py
+  1fa037a66b990f4f 145-147,427-428
+src/platform_context_graph/tools/languages/cloudformation.py
+  1fa037a66b990f4f 166-168,183,187,224,235
+src/platform_context_graph/tools/graph_builder_workloads.py
+  1fa037a66b990f4f 127-131
+src/platform_context_graph/relationships/terraform_evidence/generic.py
+  1fa037a66b990f4f 175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "8eab5f08cdb288a37293f8a7371a42b190e1f7ad",
+  "prompts": {
+    "1fa037a66b990f4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c541d4d3-d6c9-4200-8a0c-03cb682cc16c",
+        "model": "<synthetic>"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 20,
+      "total_deletions": 18,
+      "accepted_lines": 26,
+      "overriden_lines": 0
+    }
+  }
+}
