@@ -107,6 +107,14 @@ read_api_key() {
         "grep '^PCG_API_KEY=' /data/.platform-context-graph/.env | cut -d= -f2-"
 }
 
+logs_contain() {
+    local pattern="$1"
+    local logs_output
+
+    logs_output="$("${COMPOSE_CMD[@]}" logs platform-context-graph 2>&1 || true)"
+    printf '%s\n' "$logs_output" | rg -q --fixed-strings "$pattern"
+}
+
 require_tool docker
 require_tool curl
 require_tool rg
@@ -146,26 +154,46 @@ else:
 PY
 }
 
-export NEO4J_HTTP_PORT="$(pick_port "${NEO4J_HTTP_PORT:-17474}")"
-export NEO4J_BOLT_PORT="$(pick_port "${NEO4J_BOLT_PORT:-17687}")"
-export PCG_POSTGRES_PORT="$(pick_port "${PCG_POSTGRES_PORT:-25432}")"
-export PCG_HTTP_PORT="$(pick_port "${PCG_HTTP_PORT:-18080}")"
-export JAEGER_UI_PORT="$(pick_port "${JAEGER_UI_PORT:-26686}")"
-export OTEL_COLLECTOR_OTLP_GRPC_PORT="$(pick_port "${OTEL_COLLECTOR_OTLP_GRPC_PORT:-24317}")"
-export OTEL_COLLECTOR_OTLP_HTTP_PORT="$(pick_port "${OTEL_COLLECTOR_OTLP_HTTP_PORT:-24318}")"
-export OTEL_COLLECTOR_PROMETHEUS_PORT="$(pick_port "${OTEL_COLLECTOR_PROMETHEUS_PORT:-29464}")"
+configure_ports() {
+    export NEO4J_HTTP_PORT="$(pick_port "${NEO4J_HTTP_PORT:-17474}")"
+    export NEO4J_BOLT_PORT="$(pick_port "${NEO4J_BOLT_PORT:-17687}")"
+    export PCG_POSTGRES_PORT="$(pick_port "${PCG_POSTGRES_PORT:-25432}")"
+    export PCG_HTTP_PORT="$(pick_port "${PCG_HTTP_PORT:-18080}")"
+    export JAEGER_UI_PORT="$(pick_port "${JAEGER_UI_PORT:-26686}")"
+    export OTEL_COLLECTOR_OTLP_GRPC_PORT="$(pick_port "${OTEL_COLLECTOR_OTLP_GRPC_PORT:-24317}")"
+    export OTEL_COLLECTOR_OTLP_HTTP_PORT="$(pick_port "${OTEL_COLLECTOR_OTLP_HTTP_PORT:-24318}")"
+    export OTEL_COLLECTOR_PROMETHEUS_PORT="$(pick_port "${OTEL_COLLECTOR_PROMETHEUS_PORT:-29464}")"
 
-API_PORT="$PCG_HTTP_PORT"
-JAEGER_PORT="$JAEGER_UI_PORT"
-API_BASE_URL="http://localhost:${API_PORT}/api/v0"
-JAEGER_URL="http://localhost:${JAEGER_PORT}"
+    API_PORT="$PCG_HTTP_PORT"
+    JAEGER_PORT="$JAEGER_UI_PORT"
+    API_BASE_URL="http://localhost:${API_PORT}/api/v0"
+    JAEGER_URL="http://localhost:${JAEGER_PORT}"
+}
 
 cd "$REPO_ROOT"
 
-echo "Starting local compose stack..."
-echo "Using host ports: api=$PCG_HTTP_PORT postgres=$PCG_POSTGRES_PORT neo4j_http=$NEO4J_HTTP_PORT neo4j_bolt=$NEO4J_BOLT_PORT jaeger=$JAEGER_UI_PORT"
 "${COMPOSE_CMD[@]}" down -v >/dev/null 2>&1 || true
-"${COMPOSE_CMD[@]}" up -d --build
+compose_started=false
+for attempt in 1 2; do
+    configure_ports
+    echo "Starting local compose stack..."
+    echo "Using host ports: api=$PCG_HTTP_PORT postgres=$PCG_POSTGRES_PORT neo4j_http=$NEO4J_HTTP_PORT neo4j_bolt=$NEO4J_BOLT_PORT jaeger=$JAEGER_UI_PORT"
+    if "${COMPOSE_CMD[@]}" up -d --build; then
+        compose_started=true
+        break
+    fi
+    "${COMPOSE_CMD[@]}" down -v >/dev/null 2>&1 || true
+    if [[ "$attempt" -eq 2 ]]; then
+        break
+    fi
+    echo "Compose startup failed; retrying with fresh ports..."
+    sleep 2
+done
+
+if [[ "$compose_started" != "true" ]]; then
+    echo "Could not start the local compose stack after retrying." >&2
+    exit 1
+fi
 
 echo "Waiting for bootstrap indexing to finish..."
 wait_for_bootstrap_exit 600
@@ -196,9 +224,9 @@ if [[ -z "$RUN_ID" ]]; then
 fi
 
 echo "Verifying API logs contain the run_id and workload stage progress..."
-"${COMPOSE_CMD[@]}" logs platform-context-graph 2>&1 | rg -q "$RUN_ID"
-"${COMPOSE_CMD[@]}" logs platform-context-graph 2>&1 | rg -q "Re-finalization stage update: workloads"
-"${COMPOSE_CMD[@]}" logs platform-context-graph 2>&1 | rg -q "admin.refinalize.completed"
+logs_contain "$RUN_ID"
+logs_contain "Re-finalization stage update: workloads"
+logs_contain "admin.refinalize.completed"
 
 echo
 echo "Admin refinalize compose verification passed."

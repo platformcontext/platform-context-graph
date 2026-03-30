@@ -185,23 +185,34 @@ def materialize_runtime_dependencies(
     *,
     repo_descriptors: list[dict[str, str]],
     evidence_source: str,
-) -> None:
+    progress_callback: Any | None = None,
+) -> dict[str, int]:
     """Create repo and workload dependency edges from runtime service lists."""
 
     repo_dependency_rows, workload_dependency_rows = _load_runtime_dependency_targets(
         session,
         repo_descriptors=repo_descriptors,
     )
-    write_repo_dependency_rows(
+    repo_write_metrics = write_repo_dependency_rows(
         session,
         repo_dependency_rows,
         evidence_source=evidence_source,
+        progress_callback=progress_callback,
     )
-    write_workload_dependency_rows(
+    workload_write_metrics = write_workload_dependency_rows(
         session,
         workload_dependency_rows,
         evidence_source=evidence_source,
+        progress_callback=progress_callback,
     )
+    return {
+        "repo_dependency_edges_projected": len(repo_dependency_rows),
+        "workload_dependency_edges_projected": len(workload_dependency_rows),
+        "write_chunk_count": (
+            repo_write_metrics["write_chunk_count"]
+            + workload_write_metrics["write_chunk_count"]
+        ),
+    }
 
 
 __all__ = ["materialize_runtime_dependencies"]

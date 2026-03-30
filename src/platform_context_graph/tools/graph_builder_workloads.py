@@ -6,11 +6,7 @@ from pathlib import Path
 import re
 from typing import Any, Iterable
 
-from .graph_builder_platforms import (
-    canonical_platform_id,
-    infer_runtime_platform_kind,
-    materialize_infrastructure_platforms_for_repo_paths,
-)
+from .graph_builder_platforms import materialize_infrastructure_platforms_for_repo_paths
 from .graph_builder_workload_batches import (
     retract_instance_rows,
     retract_repo_dependency_rows,
@@ -24,6 +20,8 @@ from .graph_builder_workload_batches import (
 from .graph_builder_workload_dependency_support import (
     materialize_runtime_dependencies,
 )
+from .graph_builder_workload_projection import build_projection_rows
+from ..utils.debug_log import emit_log_call
 
 _EVIDENCE_SOURCE = "finalization/workloads"
 _OVERLAY_ENVIRONMENT_RE = re.compile(r"(?:^|/)overlays/([^/]+)/")
@@ -61,24 +59,6 @@ def _extract_overlay_environments(paths: Iterable[str]) -> list[str]:
     return environments
 
 
-def _infer_workload_kind(name: str, resource_kinds: Iterable[str]) -> str:
-    """Infer a workload kind from its name and matched runtime resources."""
-
-    normalized = name.lower()
-    if "cron" in normalized:
-        return "cronjob"
-    if "worker" in normalized:
-        return "worker"
-    if "consumer" in normalized:
-        return "consumer"
-    if "batch" in normalized:
-        return "batch"
-    normalized_resource_kinds = {str(kind).lower() for kind in resource_kinds if kind}
-    if normalized_resource_kinds.intersection({"deployment", "service", "statefulset"}):
-        return "service"
-    return "service"
-
-
 def _normalize_repo_paths(
     committed_repo_paths: list[Path] | None,
 ) -> list[str] | None:
@@ -87,6 +67,35 @@ def _normalize_repo_paths(
     if not committed_repo_paths:
         return None
     return [str(path.resolve()) for path in committed_repo_paths]
+
+
+def _merge_metric_totals(
+    totals: dict[str, int],
+    current: dict[str, int],
+) -> dict[str, int]:
+    """Merge one integer metrics payload into the running totals."""
+
+    for key, value in current.items():
+        totals[key] = totals.get(key, 0) + int(value)
+    return totals
+
+
+def _emit_workload_progress(
+    *,
+    info_logger_fn: Any,
+    progress_callback: Any | None,
+    **details: object,
+) -> None:
+    """Emit one structured workload progress event to logs and callbacks."""
+
+    if callable(progress_callback):
+        progress_callback(**details)
+    emit_log_call(
+        info_logger_fn,
+        "Workload finalization progress",
+        event_name="index.finalization.workloads.progress",
+        extra_keys={key: value for key, value in details.items() if value is not None},
+    )
 
 
 def _load_candidate_rows(
@@ -211,143 +220,34 @@ def _load_deployment_environments(
     return environments_by_repo
 
 
-def _build_projection_rows(
-    candidate_rows: list[dict[str, object]],
-    *,
-    deployment_environments: dict[str, list[str]],
-) -> tuple[
-    dict[str, int],
-    list[dict[str, object]],
-    list[dict[str, object]],
-    list[dict[str, object]],
-    list[dict[str, object]],
-    list[dict[str, str]],
-]:
-    """Build batched projection payloads from workload candidates."""
-
-    stats = {"workloads": 0, "instances": 0, "deployment_sources": 0}
-    workload_rows: list[dict[str, object]] = []
-    instance_rows: list[dict[str, object]] = []
-    deployment_source_rows: list[dict[str, object]] = []
-    runtime_platform_rows: list[dict[str, object]] = []
-    repo_descriptors: list[dict[str, str]] = []
-    seen_workloads: set[str] = set()
-    seen_instances: set[str] = set()
-    seen_deployment_sources: set[tuple[str, str]] = set()
-    seen_runtime_platforms: set[tuple[str, str]] = set()
-
-    for row in candidate_rows:
-        repo_id = str(row.get("repo_id") or "")
-        repo_name = str(row.get("repo_name") or "")
-        if not repo_id or not repo_name:
-            continue
-        workload_id = f"workload:{repo_name}"
-        workload_kind = _infer_workload_kind(repo_name, row.get("resource_kinds", []))
-        repo_descriptors.append(
-            {
-                "repo_id": repo_id,
-                "repo_name": repo_name,
-                "workload_id": workload_id,
-            }
-        )
-        if workload_id not in seen_workloads:
-            seen_workloads.add(workload_id)
-            workload_rows.append(
-                {
-                    "repo_id": repo_id,
-                    "workload_id": workload_id,
-                    "workload_kind": workload_kind,
-                    "workload_name": repo_name,
-                }
-            )
-            stats["workloads"] += 1
-
-        deployment_repo_id = str(row.get("deployment_repo_id") or "")
-        environments = deployment_environments.get(deployment_repo_id, [])
-        if not environments:
-            environments = [
-                namespace
-                for namespace in row.get("namespaces", [])
-                if namespace and str(namespace).strip()
-            ]
-
-        platform_kind = infer_runtime_platform_kind(row.get("resource_kinds", []))
-        for environment in environments:
-            instance_id = f"workload-instance:{repo_name}:{environment}"
-            if instance_id not in seen_instances:
-                seen_instances.add(instance_id)
-                instance_rows.append(
-                    {
-                        "environment": environment,
-                        "instance_id": instance_id,
-                        "repo_id": repo_id,
-                        "workload_id": workload_id,
-                        "workload_kind": workload_kind,
-                        "workload_name": repo_name,
-                    }
-                )
-                stats["instances"] += 1
-            if deployment_repo_id:
-                deployment_signature = (instance_id, deployment_repo_id)
-                if deployment_signature not in seen_deployment_sources:
-                    seen_deployment_sources.add(deployment_signature)
-                    deployment_source_rows.append(
-                        {
-                            "deployment_repo_id": deployment_repo_id,
-                            "environment": environment,
-                            "instance_id": instance_id,
-                            "workload_name": repo_name,
-                        }
-                    )
-                    stats["deployment_sources"] += 1
-            if platform_kind is None:
-                continue
-            platform_id = canonical_platform_id(
-                kind=platform_kind,
-                provider=None,
-                name=environment,
-                environment=environment,
-                region=None,
-                locator=None,
-            )
-            if platform_id is None:
-                continue
-            platform_signature = (instance_id, platform_id)
-            if platform_signature in seen_runtime_platforms:
-                continue
-            seen_runtime_platforms.add(platform_signature)
-            runtime_platform_rows.append(
-                {
-                    "environment": environment,
-                    "instance_id": instance_id,
-                    "platform_id": platform_id,
-                    "platform_kind": platform_kind,
-                    "platform_locator": None,
-                    "platform_name": environment,
-                    "platform_provider": None,
-                    "platform_region": None,
-                }
-            )
-
-    return (
-        stats,
-        workload_rows,
-        instance_rows,
-        deployment_source_rows,
-        runtime_platform_rows,
-        repo_descriptors,
-    )
-
-
 def materialize_workloads(
     builder: Any,
     *,
     info_logger_fn: Any,
     committed_repo_paths: list[Path] | None = None,
+    progress_callback: Any | None = None,
 ) -> dict[str, int]:
     """Materialize canonical workload nodes from indexed repo and Argo metadata."""
 
     repo_paths = _normalize_repo_paths(committed_repo_paths)
+    metrics = {
+        "candidate_repo_count": 0,
+        "cleanup_deleted_edges": 0,
+        "cleanup_deleted_nodes": 0,
+        "candidates_processed": 0,
+        "candidates_total": 0,
+        "deployment_sources": 0,
+        "deployment_sources_projected": 0,
+        "instances": 0,
+        "instances_projected": 0,
+        "repo_dependency_edges_projected": 0,
+        "runtime_platform_edges_projected": 0,
+        "targeted_repo_count": 0,
+        "workloads": 0,
+        "workloads_projected": 0,
+        "workload_dependency_edges_projected": 0,
+        "write_chunk_count": 0,
+    }
     with builder.driver.session() as session:
         target_repo_rows = _load_target_repo_rows(session, repo_paths=repo_paths)
         candidate_rows = _load_candidate_rows(session, repo_paths=repo_paths)
@@ -362,81 +262,182 @@ def materialize_workloads(
             deployment_source_rows,
             runtime_platform_rows,
             repo_descriptors,
-        ) = _build_projection_rows(
+        ) = build_projection_rows(
             candidate_rows,
             deployment_environments=deployment_environments,
         )
+        def _progress(**details: object) -> None:
+            """Mirror workload progress to both logs and the stage callback."""
+
+            _emit_workload_progress(
+                info_logger_fn=info_logger_fn,
+                progress_callback=progress_callback,
+                **details,
+            )
+
         target_repo_ids = [
             str(row.get("target_repo_id") or "")
             for row in target_repo_rows
             if str(row.get("target_repo_id") or "").strip()
         ]
+        metrics["targeted_repo_count"] = len(target_repo_ids)
         active_workload_ids = [
             str(row.get("workload_id") or "")
             for row in workload_rows
             if str(row.get("workload_id") or "").strip()
         ]
-        retract_repo_dependency_rows(
+        metrics["candidate_repo_count"] = len(candidate_rows)
+        metrics["candidates_processed"] = len(candidate_rows)
+        metrics["candidates_total"] = len(candidate_rows)
+        metrics["workloads"] = stats["workloads"]
+        metrics["workloads_projected"] = stats["workloads"]
+        metrics["instances"] = stats["instances"]
+        metrics["instances_projected"] = stats["instances"]
+        metrics["deployment_sources"] = stats["deployment_sources"]
+        metrics["deployment_sources_projected"] = stats["deployment_sources"]
+        metrics["runtime_platform_edges_projected"] = len(runtime_platform_rows)
+        _progress(
+            status="running",
+            operation="gather_completed",
+            candidate_repo_count=metrics["candidate_repo_count"],
+            candidates_processed=metrics["candidates_processed"],
+            candidates_total=metrics["candidates_total"],
+            deployment_sources_projected=metrics["deployment_sources_projected"],
+            instances_projected=metrics["instances_projected"],
+            runtime_platform_edges_projected=metrics["runtime_platform_edges_projected"],
+            targeted_repo_count=metrics["targeted_repo_count"],
+            workloads_projected=metrics["workloads_projected"],
+        )
+        _merge_metric_totals(
+            metrics,
+            retract_repo_dependency_rows(
             session,
             target_repo_ids,
             evidence_source=_EVIDENCE_SOURCE,
+            ),
         )
-        retract_workload_dependency_rows(
+        _progress(
+            status="running",
+            operation="cleanup_completed",
+            cleanup_pass="repo_dependencies",
+            cleanup_deleted_edges=metrics["cleanup_deleted_edges"],
+            cleanup_deleted_nodes=metrics["cleanup_deleted_nodes"],
+            targeted_repo_count=metrics["targeted_repo_count"],
+        )
+        _merge_metric_totals(
+            metrics,
+            retract_workload_dependency_rows(
             session,
             target_repo_ids,
             active_workload_ids=active_workload_ids,
             evidence_source=_EVIDENCE_SOURCE,
+            ),
         )
-        retract_stale_workload_rows(
+        _progress(
+            status="running",
+            operation="cleanup_completed",
+            cleanup_pass="workload_dependencies",
+            cleanup_deleted_edges=metrics["cleanup_deleted_edges"],
+            cleanup_deleted_nodes=metrics["cleanup_deleted_nodes"],
+            targeted_repo_count=metrics["targeted_repo_count"],
+        )
+        _merge_metric_totals(
+            metrics,
+            retract_stale_workload_rows(
             session,
             target_repo_ids,
             active_workload_ids=active_workload_ids,
             evidence_source=_EVIDENCE_SOURCE,
+            ),
         )
-        retract_instance_rows(
+        _progress(
+            status="running",
+            operation="cleanup_completed",
+            cleanup_pass="stale_workloads",
+            cleanup_deleted_edges=metrics["cleanup_deleted_edges"],
+            cleanup_deleted_nodes=metrics["cleanup_deleted_nodes"],
+            targeted_repo_count=metrics["targeted_repo_count"],
+        )
+        _merge_metric_totals(
+            metrics,
+            retract_instance_rows(
             session,
             target_repo_ids,
             evidence_source=_EVIDENCE_SOURCE,
+            ),
         )
-        write_workload_rows(
+        _progress(
+            status="running",
+            operation="cleanup_completed",
+            cleanup_pass="instances",
+            cleanup_deleted_edges=metrics["cleanup_deleted_edges"],
+            cleanup_deleted_nodes=metrics["cleanup_deleted_nodes"],
+            targeted_repo_count=metrics["targeted_repo_count"],
+        )
+        _merge_metric_totals(
+            metrics,
+            write_workload_rows(
             session,
             workload_rows,
             evidence_source=_EVIDENCE_SOURCE,
+            progress_callback=_progress,
+            ),
         )
-        write_instance_rows(
+        _merge_metric_totals(
+            metrics,
+            write_instance_rows(
             session,
             instance_rows,
             evidence_source=_EVIDENCE_SOURCE,
+            progress_callback=_progress,
+            ),
         )
-        write_deployment_source_rows(
+        _merge_metric_totals(
+            metrics,
+            write_deployment_source_rows(
             session,
             deployment_source_rows,
             evidence_source=_EVIDENCE_SOURCE,
+            progress_callback=_progress,
+            ),
         )
-        write_runtime_platform_rows(
+        _merge_metric_totals(
+            metrics,
+            write_runtime_platform_rows(
             session,
             runtime_platform_rows,
             evidence_source=_EVIDENCE_SOURCE,
+            progress_callback=_progress,
+            ),
         )
-        materialize_runtime_dependencies(
+        _merge_metric_totals(
+            metrics,
+            materialize_runtime_dependencies(
             session,
             repo_descriptors=repo_descriptors,
             evidence_source=_EVIDENCE_SOURCE,
+            progress_callback=_progress,
+            ),
         )
-        materialize_infrastructure_platforms_for_repo_paths(
+        _merge_metric_totals(
+            metrics,
+            materialize_infrastructure_platforms_for_repo_paths(
             session,
             repo_paths=committed_repo_paths,
+            progress_callback=_progress,
+        )
         )
 
-    if stats["workloads"] > 0:
+    if metrics["workloads_projected"] > 0:
         info_logger_fn(
             "Workload materialization created "
-            f"{stats['workloads']} workloads, {stats['instances']} instances, "
-            f"and {stats['deployment_sources']} deployment-source edges"
+            f"{metrics['workloads_projected']} workloads, "
+            f"{metrics['instances_projected']} instances, and "
+            f"{metrics['deployment_sources_projected']} deployment-source edges"
         )
     else:
         info_logger_fn("Workload materialization found no deployable repositories")
-    return stats
+    return metrics
 
 
 __all__ = ["materialize_workloads"]

@@ -189,7 +189,7 @@ def finalize_index_batch(
         if not kwargs or kwargs.get("status") == "started":
             stage_progress_callback(stage_name)
 
-    def _run_function_call_stage() -> None:
+    def _run_function_call_stage() -> dict[str, float | int]:
         """Materialize function-call edges and aggregate stage-level metrics."""
 
         aggregated_metrics: dict[str, float | int] = {}
@@ -221,18 +221,29 @@ def finalize_index_batch(
                 ),
             )
         setattr(builder, "_last_call_relationship_metrics", aggregated_metrics)
+        return aggregated_metrics
 
-    def _run_workload_stage() -> None:
+    def _run_workload_stage() -> dict[str, int]:
         """Materialize workloads, passing targeted repos when supported."""
 
         materialize_workloads = builder._materialize_workloads
+        kwargs: dict[str, Any] = {}
+        if _supports_keyword_arguments(
+            materialize_workloads,
+            ("progress_callback",),
+        ):
+            kwargs["progress_callback"] = lambda **callback_kwargs: (
+                _notify_stage_progress(
+                    "workloads",
+                    **callback_kwargs,
+                )
+            )
         if _supports_keyword_arguments(
             materialize_workloads,
             ("committed_repo_paths",),
         ):
-            materialize_workloads(committed_repo_paths=committed_repo_paths)
-            return
-        materialize_workloads()
+            kwargs["committed_repo_paths"] = committed_repo_paths
+        return materialize_workloads(**kwargs)
 
     all_stages: tuple[tuple[str, Any], ...] = (
         (
@@ -312,10 +323,10 @@ def finalize_index_batch(
             else None
         )
         if stage_span is None:
-            stage_fn()
+            stage_metrics = stage_fn()
         else:
             with stage_span:
-                stage_fn()
+                stage_metrics = stage_fn()
         elapsed = time.monotonic() - stage_start
         stage_timings[stage_name] = elapsed
         _notify_stage_progress(
@@ -324,6 +335,11 @@ def finalize_index_batch(
             duration_seconds=round(elapsed, 3),
             repo_count=len(committed_repo_paths),
             run_id=run_id,
+            **(
+                stage_metrics
+                if isinstance(stage_metrics, dict)
+                else {}
+            ),
         )
         if (
             telemetry is not None
@@ -353,6 +369,11 @@ def finalize_index_batch(
                 "stage": stage_name,
                 "duration_seconds": round(elapsed, 3),
                 "run_id": run_id,
+                **(
+                    stage_metrics
+                    if isinstance(stage_metrics, dict)
+                    else {}
+                ),
             },
         )
     total_elapsed = time.monotonic() - total_start

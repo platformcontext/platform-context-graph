@@ -60,3 +60,98 @@ def test_finalize_index_batch_filters_to_requested_stages_and_reports_progress()
     assert progress_events[-1][1]["status"] == "completed"
     assert progress_events[-1][1]["run_id"] == "refinalize-run-123"
 
+
+def test_finalize_index_batch_forwards_workload_progress_details() -> None:
+    """Workload-stage progress callbacks should flow through to the caller."""
+
+    progress_events: list[tuple[str, dict[str, object]]] = []
+
+    def _materialize_workloads(
+        *,
+        committed_repo_paths: list[Path] | None = None,
+        progress_callback=None,
+    ) -> dict[str, int]:
+        assert committed_repo_paths == [Path("/repos/payments-api")]
+        assert callable(progress_callback)
+        progress_callback(
+            status="running",
+            operation="gather_completed",
+            candidates_processed=1,
+            candidates_total=1,
+            candidate_repo_count=1,
+            targeted_repo_count=1,
+        )
+        progress_callback(
+            status="running",
+            operation="cleanup_completed",
+            cleanup_pass="instances",
+            cleanup_deleted_edges=3,
+            cleanup_deleted_nodes=1,
+        )
+        return {
+            "candidate_repo_count": 1,
+            "cleanup_deleted_edges": 3,
+            "cleanup_deleted_nodes": 1,
+            "instances_projected": 2,
+            "targeted_repo_count": 1,
+            "workloads_projected": 1,
+            "write_chunk_count": 4,
+        }
+
+    builder = SimpleNamespace(
+        _create_all_inheritance_links=lambda *_args, **_kwargs: None,
+        _create_all_function_calls=lambda *_args, **_kwargs: None,
+        _create_all_infra_links=lambda *_args, **_kwargs: None,
+        _materialize_workloads=_materialize_workloads,
+        _resolve_repository_relationships=lambda *_args, **_kwargs: None,
+    )
+
+    finalize_index_batch(
+        builder,
+        committed_repo_paths=[Path("/repos/payments-api")],
+        iter_snapshot_file_data_fn=lambda _path: iter([]),
+        merged_imports_map={},
+        info_logger_fn=lambda *_args, **_kwargs: None,
+        stage_progress_callback=lambda stage, **kwargs: progress_events.append(
+            (stage, kwargs)
+        ),
+        run_id="refinalize-run-456",
+        stages=["workloads"],
+    )
+
+    assert progress_events[0] == (
+        "workloads",
+        {
+            "status": "started",
+            "repo_count": 1,
+            "run_id": "refinalize-run-456",
+        },
+    )
+    assert progress_events[1] == (
+        "workloads",
+        {
+            "status": "running",
+            "operation": "gather_completed",
+            "candidates_processed": 1,
+            "candidates_total": 1,
+            "candidate_repo_count": 1,
+            "targeted_repo_count": 1,
+        },
+    )
+    assert progress_events[2] == (
+        "workloads",
+        {
+            "status": "running",
+            "operation": "cleanup_completed",
+            "cleanup_pass": "instances",
+            "cleanup_deleted_edges": 3,
+            "cleanup_deleted_nodes": 1,
+        },
+    )
+    assert progress_events[-1][0] == "workloads"
+    assert progress_events[-1][1]["status"] == "completed"
+    assert progress_events[-1][1]["workloads_projected"] == 1
+    assert progress_events[-1][1]["instances_projected"] == 2
+    assert progress_events[-1][1]["cleanup_deleted_edges"] == 3
+    assert progress_events[-1][1]["cleanup_deleted_nodes"] == 1
+    assert progress_events[-1][1]["write_chunk_count"] == 4

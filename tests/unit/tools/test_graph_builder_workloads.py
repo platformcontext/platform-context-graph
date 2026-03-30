@@ -14,11 +14,21 @@ from platform_context_graph.tools.graph_builder_workloads import materialize_wor
 
 
 class _FakeResult:
-    def __init__(self, *, records=None):
+    def __init__(self, *, records=None, nodes_deleted: int = 0, relationships_deleted: int = 0):
         self._records = records or []
+        self._nodes_deleted = nodes_deleted
+        self._relationships_deleted = relationships_deleted
 
     def data(self):
         return self._records
+
+    def consume(self):
+        return SimpleNamespace(
+            counters=SimpleNamespace(
+                nodes_deleted=self._nodes_deleted,
+                relationships_deleted=self._relationships_deleted,
+            )
+        )
 
 
 def _capture_run(
@@ -152,7 +162,9 @@ def test_materialize_workloads_creates_workload_instance_and_deployment_source()
     assert "app.source_roots" not in candidate_query
     assert "app.source_path" not in candidate_query
     assert "app.source_paths" not in candidate_query
-    assert stats == {"workloads": 1, "instances": 1, "deployment_sources": 1}
+    assert stats["workloads"] == 1
+    assert stats["instances"] == 1
+    assert stats["deployment_sources"] == 1
 
 
 def test_materialize_workloads_creates_runtime_platform_relationships() -> None:
@@ -224,6 +236,124 @@ def test_materialize_workloads_creates_runtime_platform_relationships() -> None:
     )
     assert "[:REPO_CONTAINS]->(f:File)" in deployment_source_query
     assert "[:CONTAINS*]->(f:File)" not in deployment_source_query
+
+
+def test_materialize_workloads_reports_gather_cleanup_and_chunk_progress() -> None:
+    """Workload materialization should emit structured progress details."""
+
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.__exit__.return_value = False
+    recorded_calls: list[tuple[str, dict[str, object]]] = []
+    progress_events: list[dict[str, object]] = []
+
+    def resolve(query: str, kwargs: dict[str, object]) -> _FakeResult:
+        if "RETURN repo.id as target_repo_id" in query:
+            return _FakeResult(
+                records=[
+                    {
+                        "target_repo_id": "repository:r_5c50d0d3",
+                        "target_repo_name": "api-node-search",
+                    }
+                ]
+            )
+        if "resource_kinds" in query and "RETURN repo.id as repo_id" in query:
+            return _FakeResult(
+                records=[
+                    {
+                        "repo_id": "repository:r_5c50d0d3",
+                        "repo_name": "api-node-search",
+                        "deployment_repo_id": "repository:r_20871f7f",
+                        "deployment_repo_name": "helm-charts",
+                        "resource_kinds": ["Deployment"],
+                        "namespaces": ["bg-qa"],
+                        "source_roots": ["argocd/api-node-search/"],
+                    }
+                ]
+            )
+        if "RETURN deployment_repo.id as deployment_repo_id" in query:
+            return _FakeResult(
+                records=[
+                    {
+                        "deployment_repo_id": "repository:r_20871f7f",
+                        "relative_path": "argocd/api-node-search/overlays/bg-qa/config.yaml",
+                    }
+                ]
+            )
+        if "MATCH (source_repo:Repository)-[rel:DEPENDS_ON]->" in query:
+            return _FakeResult(relationships_deleted=2)
+        if "MATCH (source:Workload)-[rel:DEPENDS_ON]->" in query:
+            return _FakeResult(relationships_deleted=1)
+        if "MATCH (target:Workload)" in query:
+            return _FakeResult()
+        if "MATCH (repo:Repository)-[rel:DEFINES]->(w:Workload)" in query:
+            return _FakeResult()
+        if "MATCH (w:Workload)" in query and "DELETE w" in query:
+            return _FakeResult(nodes_deleted=1)
+        if "MATCH (i)-[rel:DEPLOYMENT_SOURCE]->" in query:
+            return _FakeResult(relationships_deleted=1)
+        if "MATCH (i)-[rel:RUNS_ON]->" in query:
+            return _FakeResult(relationships_deleted=1)
+        if "MATCH (i)-[rel:INSTANCE_OF]->" in query:
+            return _FakeResult(relationships_deleted=1)
+        if "MATCH (i:WorkloadInstance)" in query and "DELETE i" in query:
+            return _FakeResult(nodes_deleted=1)
+        if "MATCH (repo:Repository)-[rel:PROVISIONS_PLATFORM]->" in query:
+            return _FakeResult(relationships_deleted=1)
+        if "MATCH (p:Platform)" in query and "DELETE p" in query:
+            return _FakeResult(nodes_deleted=1)
+        if "RETURN f.path as path" in query:
+            return _FakeResult(records=[])
+        if "ORDER BY repo.id" in query and "RETURN repo.id as repo_id" in query:
+            return _FakeResult(records=[{"repo_id": "repository:r_5c50d0d3"}])
+        return _FakeResult()
+
+    session.run.side_effect = _capture_run(recorded_calls, resolve)
+    builder = SimpleNamespace(
+        driver=SimpleNamespace(session=MagicMock(return_value=session))
+    )
+
+    stats = materialize_workloads(
+        builder,
+        info_logger_fn=lambda *_args, **_kwargs: None,
+        progress_callback=lambda **kwargs: progress_events.append(kwargs),
+    )
+
+    gather_event = next(
+        event
+        for event in progress_events
+        if event.get("operation") == "gather_completed"
+    )
+    cleanup_event = next(
+        event
+        for event in progress_events
+        if event.get("operation") == "cleanup_completed"
+        and event.get("cleanup_pass") == "repo_dependencies"
+    )
+    chunk_event = next(
+        event
+        for event in progress_events
+        if event.get("operation") == "write_chunk_completed"
+        and event.get("entity") == "workloads"
+    )
+
+    assert gather_event["status"] == "running"
+    assert gather_event["candidate_repo_count"] == 1
+    assert gather_event["targeted_repo_count"] == 1
+    assert gather_event["candidates_processed"] == 1
+    assert gather_event["candidates_total"] == 1
+    assert cleanup_event["cleanup_deleted_edges"] == 2
+    assert cleanup_event["cleanup_deleted_nodes"] == 0
+    assert chunk_event["status"] == "running"
+    assert chunk_event["chunk_index"] == 1
+    assert chunk_event["chunk_row_count"] == 1
+    assert stats["candidate_repo_count"] == 1
+    assert stats["targeted_repo_count"] == 1
+    assert stats["cleanup_deleted_edges"] == 7
+    assert stats["cleanup_deleted_nodes"] == 3
+    assert stats["workloads_projected"] == 1
+    assert stats["instances_projected"] == 1
+    assert stats["write_chunk_count"] >= 4
 
 
 def test_materialize_workloads_creates_infrastructure_platform_relationships(

@@ -113,7 +113,8 @@ def materialize_infrastructure_platforms_for_repo_paths(
     session: Any,
     *,
     repo_paths: list[Path] | None,
-) -> None:
+    progress_callback: Any | None = None,
+) -> dict[str, int]:
     """Attach infrastructure repositories to inferred platform nodes in batches."""
 
     normalized_repo_paths = [str(path.resolve()) for path in repo_paths or []]
@@ -131,7 +132,7 @@ def materialize_infrastructure_platforms_for_repo_paths(
         for row in target_repo_rows
         if str(row.get("repo_id") or "").strip()
     ]
-    retract_infrastructure_platform_rows(
+    cleanup_metrics = retract_infrastructure_platform_rows(
         session,
         target_repo_ids,
         evidence_source="finalization/workloads",
@@ -193,15 +194,24 @@ def materialize_infrastructure_platforms_for_repo_paths(
             }
         )
 
-    write_infrastructure_platform_rows(
+    write_metrics = write_infrastructure_platform_rows(
         session,
         descriptor_rows,
         evidence_source="finalization/workloads",
+        progress_callback=progress_callback,
     )
-    delete_orphan_platform_rows(
+    orphan_metrics = delete_orphan_platform_rows(
         session,
         evidence_source="finalization/workloads",
     )
+    cleanup_metrics["cleanup_deleted_edges"] += orphan_metrics["cleanup_deleted_edges"]
+    cleanup_metrics["cleanup_deleted_nodes"] += orphan_metrics["cleanup_deleted_nodes"]
+    return {
+        "cleanup_deleted_edges": cleanup_metrics["cleanup_deleted_edges"],
+        "cleanup_deleted_nodes": cleanup_metrics["cleanup_deleted_nodes"],
+        "infrastructure_platform_edges_projected": len(descriptor_rows),
+        "write_chunk_count": write_metrics["write_chunk_count"],
+    }
 
 
 def infer_runtime_platform_kind(resource_kinds: Iterable[str]) -> str | None:

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from .graph_builder_workload_metrics import merge_metrics
+from .graph_builder_workload_metrics import run_cleanup_query
+
 _DEFAULT_BATCH_SIZE = 250
+_EMPTY_WRITE_METRICS = {"write_chunk_count": 0, "written_row_count": 0}
+_EMPTY_CLEANUP_METRICS = {"cleanup_deleted_edges": 0, "cleanup_deleted_nodes": 0}
 
 
 def _chunk_rows(
@@ -22,11 +27,39 @@ def _run_batched_write(
     rows: list[dict[str, object]],
     *,
     evidence_source: str,
-) -> None:
+    entity_name: str,
+    progress_callback: Any | None = None,
+) -> dict[str, int]:
     """Execute one `UNWIND` write query in bounded chunks."""
 
-    for chunk in _chunk_rows(rows):
+    if not rows:
+        return dict(_EMPTY_WRITE_METRICS)
+
+    chunk_count = (len(rows) - 1) // _DEFAULT_BATCH_SIZE + 1
+    for chunk_index, chunk in enumerate(_chunk_rows(rows), start=1):
+        if callable(progress_callback):
+            progress_callback(
+                status="running",
+                operation="write_chunk_started",
+                entity=entity_name,
+                chunk_count=chunk_count,
+                chunk_index=chunk_index,
+                chunk_row_count=len(chunk),
+            )
         session.run(query, rows=chunk, evidence_source=evidence_source)
+        if callable(progress_callback):
+            progress_callback(
+                status="running",
+                operation="write_chunk_completed",
+                entity=entity_name,
+                chunk_count=chunk_count,
+                chunk_index=chunk_index,
+                chunk_row_count=len(chunk),
+            )
+    return {
+        "write_chunk_count": chunk_count,
+        "written_row_count": len(rows),
+    }
 
 
 def retract_repo_dependency_rows(
@@ -34,12 +67,13 @@ def retract_repo_dependency_rows(
     repo_ids: list[str],
     *,
     evidence_source: str,
-) -> None:
+) -> dict[str, int]:
     """Delete workload-owned repository dependencies for targeted repos."""
 
     if not repo_ids:
-        return
-    session.run(
+        return dict(_EMPTY_CLEANUP_METRICS)
+    return run_cleanup_query(
+        session,
         """
         MATCH (source_repo:Repository)-[rel:DEPENDS_ON]->(:Repository)
         WHERE source_repo.id IN $repo_ids
@@ -57,12 +91,13 @@ def retract_workload_dependency_rows(
     *,
     active_workload_ids: list[str],
     evidence_source: str,
-) -> None:
+) -> dict[str, int]:
     """Delete targeted workload dependencies while preserving active targets."""
 
     if not repo_ids:
-        return
-    session.run(
+        return dict(_EMPTY_CLEANUP_METRICS)
+    metrics = run_cleanup_query(
+        session,
         """
         MATCH (source:Workload)-[rel:DEPENDS_ON]->(:Workload)
         WHERE source.repo_id IN $repo_ids
@@ -72,7 +107,10 @@ def retract_workload_dependency_rows(
         repo_ids=repo_ids,
         evidence_source=evidence_source,
     )
-    session.run(
+    return merge_metrics(
+        metrics,
+        run_cleanup_query(
+            session,
         """
         MATCH (target:Workload)
         WHERE target.repo_id IN $repo_ids
@@ -85,6 +123,7 @@ def retract_workload_dependency_rows(
         active_workload_ids=active_workload_ids,
         repo_ids=repo_ids,
         evidence_source=evidence_source,
+        ),
     )
 
 
@@ -94,12 +133,13 @@ def retract_stale_workload_rows(
     *,
     active_workload_ids: list[str],
     evidence_source: str,
-) -> None:
+) -> dict[str, int]:
     """Delete stale targeted workload nodes without touching active ones."""
 
     if not repo_ids:
-        return
-    session.run(
+        return dict(_EMPTY_CLEANUP_METRICS)
+    metrics = run_cleanup_query(
+        session,
         """
         MATCH (repo:Repository)-[rel:DEFINES]->(w:Workload)
         WHERE repo.id IN $repo_ids
@@ -112,7 +152,10 @@ def retract_stale_workload_rows(
         repo_ids=repo_ids,
         evidence_source=evidence_source,
     )
-    session.run(
+    return merge_metrics(
+        metrics,
+        run_cleanup_query(
+            session,
         """
         MATCH (w:Workload)
         WHERE w.repo_id IN $repo_ids
@@ -124,6 +167,7 @@ def retract_stale_workload_rows(
         active_workload_ids=active_workload_ids,
         repo_ids=repo_ids,
         evidence_source=evidence_source,
+        ),
     )
 
 
@@ -132,17 +176,21 @@ def retract_instance_rows(
     repo_ids: list[str],
     *,
     evidence_source: str,
-) -> None:
+) -> dict[str, int]:
     """Delete targeted workload-instance state so it can be rebuilt cleanly."""
 
     if not repo_ids:
-        return
+        return dict(_EMPTY_CLEANUP_METRICS)
+    metrics = dict(_EMPTY_CLEANUP_METRICS)
     for relationship_type, target_label in (
         ("DEPLOYMENT_SOURCE", "Repository"),
         ("RUNS_ON", "Platform"),
         ("INSTANCE_OF", "Workload"),
     ):
-        session.run(
+        merge_metrics(
+            metrics,
+            run_cleanup_query(
+                session,
             f"""
             MATCH (i:WorkloadInstance)
             WHERE i.repo_id IN $repo_ids
@@ -153,8 +201,12 @@ def retract_instance_rows(
             """,
             repo_ids=repo_ids,
             evidence_source=evidence_source,
+            ),
         )
-    session.run(
+    return merge_metrics(
+        metrics,
+        run_cleanup_query(
+            session,
         """
         MATCH (i:WorkloadInstance)
         WHERE i.repo_id IN $repo_ids
@@ -164,6 +216,7 @@ def retract_instance_rows(
         """,
         repo_ids=repo_ids,
         evidence_source=evidence_source,
+        ),
     )
 
 
@@ -172,12 +225,13 @@ def retract_infrastructure_platform_rows(
     repo_ids: list[str],
     *,
     evidence_source: str,
-) -> None:
+) -> dict[str, int]:
     """Delete targeted infrastructure platform edges before re-materializing."""
 
     if not repo_ids:
-        return
-    session.run(
+        return dict(_EMPTY_CLEANUP_METRICS)
+    return run_cleanup_query(
+        session,
         """
         MATCH (repo:Repository)-[rel:PROVISIONS_PLATFORM]->(:Platform)
         WHERE repo.id IN $repo_ids
@@ -193,10 +247,11 @@ def delete_orphan_platform_rows(
     session: Any,
     *,
     evidence_source: str,
-) -> None:
+) -> dict[str, int]:
     """Delete detached finalization-owned platform nodes."""
 
-    session.run(
+    return run_cleanup_query(
+        session,
         """
         MATCH (p:Platform)
         WHERE p.evidence_source = $evidence_source
@@ -212,12 +267,11 @@ def write_workload_rows(
     rows: list[dict[str, object]],
     *,
     evidence_source: str,
-) -> None:
+    progress_callback: Any | None = None,
+) -> dict[str, int]:
     """Merge workload nodes and repository `DEFINES` edges in batches."""
 
-    if not rows:
-        return
-    _run_batched_write(
+    return _run_batched_write(
         session,
         """
         UNWIND $rows AS row
@@ -235,6 +289,8 @@ def write_workload_rows(
         """,
         rows,
         evidence_source=evidence_source,
+        entity_name="workloads",
+        progress_callback=progress_callback,
     )
 
 
@@ -243,12 +299,11 @@ def write_instance_rows(
     rows: list[dict[str, object]],
     *,
     evidence_source: str,
-) -> None:
+    progress_callback: Any | None = None,
+) -> dict[str, int]:
     """Merge workload instances and `INSTANCE_OF` edges in batches."""
 
-    if not rows:
-        return
-    _run_batched_write(
+    return _run_batched_write(
         session,
         """
         UNWIND $rows AS row
@@ -268,6 +323,8 @@ def write_instance_rows(
         """,
         rows,
         evidence_source=evidence_source,
+        entity_name="instances",
+        progress_callback=progress_callback,
     )
 
 
@@ -276,12 +333,11 @@ def write_deployment_source_rows(
     rows: list[dict[str, object]],
     *,
     evidence_source: str,
-) -> None:
+    progress_callback: Any | None = None,
+) -> dict[str, int]:
     """Merge deployment-source edges in batches."""
 
-    if not rows:
-        return
-    _run_batched_write(
+    return _run_batched_write(
         session,
         """
         UNWIND $rows AS row
@@ -294,6 +350,8 @@ def write_deployment_source_rows(
         """,
         rows,
         evidence_source=evidence_source,
+        entity_name="deployment_sources",
+        progress_callback=progress_callback,
     )
 
 
@@ -302,12 +360,11 @@ def write_runtime_platform_rows(
     rows: list[dict[str, object]],
     *,
     evidence_source: str,
-) -> None:
+    progress_callback: Any | None = None,
+) -> dict[str, int]:
     """Merge runtime platform nodes and `RUNS_ON` edges in batches."""
 
-    if not rows:
-        return
-    _run_batched_write(
+    return _run_batched_write(
         session,
         """
         UNWIND $rows AS row
@@ -328,6 +385,8 @@ def write_runtime_platform_rows(
         """,
         rows,
         evidence_source=evidence_source,
+        entity_name="runtime_platforms",
+        progress_callback=progress_callback,
     )
 
 
@@ -336,12 +395,11 @@ def write_repo_dependency_rows(
     rows: list[dict[str, object]],
     *,
     evidence_source: str,
-) -> None:
+    progress_callback: Any | None = None,
+) -> dict[str, int]:
     """Merge repository dependency edges in batches."""
 
-    if not rows:
-        return
-    _run_batched_write(
+    return _run_batched_write(
         session,
         """
         UNWIND $rows AS row
@@ -354,6 +412,8 @@ def write_repo_dependency_rows(
         """,
         rows,
         evidence_source=evidence_source,
+        entity_name="repo_dependencies",
+        progress_callback=progress_callback,
     )
 
 
@@ -362,12 +422,11 @@ def write_workload_dependency_rows(
     rows: list[dict[str, object]],
     *,
     evidence_source: str,
-) -> None:
+    progress_callback: Any | None = None,
+) -> dict[str, int]:
     """Merge workload dependency edges only when the target workload already exists."""
 
-    if not rows:
-        return
-    _run_batched_write(
+    return _run_batched_write(
         session,
         """
         UNWIND $rows AS row
@@ -380,6 +439,8 @@ def write_workload_dependency_rows(
         """,
         rows,
         evidence_source=evidence_source,
+        entity_name="workload_dependencies",
+        progress_callback=progress_callback,
     )
 
 
@@ -388,12 +449,11 @@ def write_infrastructure_platform_rows(
     rows: list[dict[str, object]],
     *,
     evidence_source: str,
-) -> None:
+    progress_callback: Any | None = None,
+) -> dict[str, int]:
     """Merge infrastructure platform nodes and `PROVISIONS_PLATFORM` edges in batches."""
 
-    if not rows:
-        return
-    _run_batched_write(
+    return _run_batched_write(
         session,
         """
         UNWIND $rows AS row
@@ -414,4 +474,6 @@ def write_infrastructure_platform_rows(
         """,
         rows,
         evidence_source=evidence_source,
+        entity_name="infrastructure_platforms",
+        progress_callback=progress_callback,
     )
