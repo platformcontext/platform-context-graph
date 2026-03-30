@@ -261,6 +261,11 @@ SERVICE_CATEGORIES: dict[str, str] = {
     "release": "compute",
 }
 
+# Well-known nested block names whose attributes are merged into the
+# top-level attribute set for identity-key inference.  Kubernetes resources
+# store ``name`` inside ``metadata``, for example.
+_NESTED_IDENTITY_BLOCKS: tuple[str, ...] = ("metadata",)
+
 # Well-known attribute names that serve as resource identifiers, ordered by
 # preference.  The first match wins.
 _IDENTITY_KEY_PATTERNS: tuple[str, ...] = (
@@ -336,7 +341,16 @@ def load_provider_schema(schema_path: Path) -> ProviderSchemaInfo | None:
     resource_types: dict[str, dict[str, Any]] = {}
     for resource_type, schema in resource_schemas.items():
         block = schema.get("block", {})
-        resource_types[resource_type] = block.get("attributes", {})
+        attrs = dict(block.get("attributes", {}))
+        # Merge attributes from well-known nested blocks (e.g. Kubernetes
+        # resources store ``name`` inside a ``metadata`` block).
+        for nested_key in _NESTED_IDENTITY_BLOCKS:
+            nested = block.get("block_types", {}).get(nested_key, {})
+            nested_attrs = nested.get("block", {}).get("attributes", {})
+            for attr_name, attr_def in nested_attrs.items():
+                if attr_name not in attrs:
+                    attrs[attr_name] = attr_def
+        resource_types[resource_type] = attrs
 
     return ProviderSchemaInfo(
         provider_key=provider_key,

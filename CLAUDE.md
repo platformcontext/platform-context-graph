@@ -228,11 +228,9 @@ Resource type support for Terraform evidence extraction is driven by provider sc
 | Alibaba Cloud (`aliyun/alicloud`) | 1.273.0 | 1,125 | 855 (76%) |
 | Oracle Cloud (`oracle/oci`) | 6.37.0 | 813 | 609 (75%) |
 | Cloudflare (`cloudflare/cloudflare`) | 5.18.0 | 215 | 113 (53%) |
-| Kubernetes (`hashicorp/kubernetes`) | 2.38.0 | 82 | 4 (5%) |
+| Kubernetes (`hashicorp/kubernetes`) | 2.38.0 | 82 | 81 (99%) |
 | Helm (`hashicorp/helm`) | 2.17.0 | 1 | 1 (100%) |
-| **Total** | | **5,982** | **4,371 (73%)** |
-
-*Note:* Kubernetes registers few types because its resources use nested `metadata` blocks for names rather than top-level string attributes. Kubernetes manifests are better handled by the YAML/manifest parsers.
+| **Total** | | **5,982** | **4,448 (74%)** |
 
 ### Schema file naming convention
 
