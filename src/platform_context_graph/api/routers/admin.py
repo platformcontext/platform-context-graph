@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, Depends
 
 from ..dependencies import get_database
 from ...core.jobs import JobManager
@@ -17,6 +18,7 @@ from ...utils.debug_log import info_logger, warning_logger
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+_finalization_lock = threading.Lock()
 _finalization_state: dict[str, Any] = {
     "running": False,
     "last_run_at": None,
@@ -28,13 +30,17 @@ _finalization_state: dict[str, Any] = {
 
 
 def _run_refinalization(database: Any) -> None:
-    """Execute re-finalization synchronously in a background task."""
+    """Execute re-finalization in a dedicated thread.
 
-    global _finalization_state
-    _finalization_state["running"] = True
-    _finalization_state["last_error"] = None
+    Note: inheritance, function_calls and infra_links stages are
+    effectively no-ops without snapshot file data. The primary value
+    is re-running workloads and relationship_resolution which operate
+    directly on the graph.
+    """
 
+    loop = asyncio.new_event_loop()
     try:
+        asyncio.set_event_loop(loop)
         driver = database.get_driver()
 
         with driver.session() as session:
@@ -49,7 +55,6 @@ def _run_refinalization(database: Any) -> None:
             event_name="admin.refinalize.started",
         )
 
-        loop = asyncio.new_event_loop()
         job_mgr = JobManager()
         builder = GraphBuilder(db_manager=database, job_manager=job_mgr, loop=loop)
 
@@ -88,41 +93,55 @@ def _run_refinalization(database: Any) -> None:
         warning_logger(
             f"Re-finalization failed: {exc}",
             event_name="admin.refinalize.failed",
+            exc_info=exc,
         )
     finally:
         _finalization_state["running"] = False
+        loop.close()
 
 
 @router.post("/refinalize")
 async def refinalize(
-    background_tasks: BackgroundTasks,
     database: Any = Depends(get_database),
 ) -> dict[str, Any]:
     """Trigger re-finalization of all indexed repositories.
 
-    Runs inheritance, function calls, infra links, workloads, and
-    relationship resolution across the entire graph. Executes in the
-    background and returns immediately.
+    Re-runs workloads and relationship resolution across the entire
+    graph. Executes in a background thread and returns immediately.
+
+    Note: status is per-process and not shared across workers.
     """
 
-    if _finalization_state["running"]:
-        return {
-            "status": "already_running",
-            "message": "Re-finalization is already in progress.",
-            "repo_count": _finalization_state["repo_count"],
-        }
+    with _finalization_lock:
+        if _finalization_state["running"]:
+            return {
+                "status": "already_running",
+                "message": "Re-finalization is already in progress.",
+                "repo_count": _finalization_state["repo_count"],
+            }
+        _finalization_state["running"] = True
+        _finalization_state["last_error"] = None
 
-    background_tasks.add_task(_run_refinalization, database)
+    thread = threading.Thread(
+        target=_run_refinalization,
+        args=(database,),
+        name="refinalize-worker",
+        daemon=True,
+    )
+    thread.start()
 
     return {
         "status": "started",
-        "message": "Re-finalization started in background.",
+        "message": "Re-finalization started in background thread.",
     }
 
 
 @router.get("/refinalize/status")
 async def refinalize_status() -> dict[str, Any]:
-    """Return the current re-finalization status."""
+    """Return the current re-finalization status.
+
+    Note: status is per-process and not shared across workers.
+    """
 
     return {
         "running": _finalization_state["running"],
