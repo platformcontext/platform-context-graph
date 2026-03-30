@@ -1,0 +1,64 @@
+scripts/generate_terraform_provider_schema.sh
+  1fa037a66b990f4f 1-88
+tests/unit/relationships/test_terraform_evidence_registry.py
+  1fa037a66b990f4f 260,267,278
+terraform_providers/.gitignore
+  1fa037a66b990f4f 1-5
+src/platform_context_graph/relationships/terraform_evidence/__init__.py
+  1fa037a66b990f4f 3-6,26-30
+tests/unit/relationships/test_terraform_provider_schema.py
+  1fa037a66b990f4f 1-339
+terraform_providers/google/versions.tf
+  1fa037a66b990f4f 1-13
+tests/fixtures/schemas/test_aws_provider_schema.json
+  1fa037a66b990f4f 1-68
+src/platform_context_graph/relationships/terraform_evidence/generic.py
+  1fa037a66b990f4f 1-195
+pyproject.toml
+  1fa037a66b990f4f 3,74-77
+terraform_providers/aws/versions.tf
+  1fa037a66b990f4f 1-18
+terraform_providers/azurerm/versions.tf
+  1fa037a66b990f4f 1-12
+src/platform_context_graph/relationships/terraform_evidence/provider_schema.py
+  1fa037a66b990f4f 1-321
+terraform_providers/cloudflare/versions.tf
+  1fa037a66b990f4f 1-10
+scripts/package_terraform_schemas.sh
+  1fa037a66b990f4f 1-84
+CLAUDE.md
+  1fa037a66b990f4f 209-282
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "43c04e6adc6e0a8341dfc1b34b5ab6c9569dff05",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    },
+    "1fa037a66b990f4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c541d4d3-d6c9-4200-8a0c-03cb682cc16c",
+        "model": "<synthetic>"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 1320,
+      "total_deletions": 91,
+      "accepted_lines": 1251,
+      "overriden_lines": 0
+    }
+  }
+}
