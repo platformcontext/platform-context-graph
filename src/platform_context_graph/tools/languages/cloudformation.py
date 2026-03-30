@@ -163,10 +163,10 @@ def _extract_lambda_function_props(node: dict[str, Any], props: dict[str, Any]) 
     if isinstance(code, dict):
         s3_key = code.get("S3Key")
         s3_bucket = code.get("S3Bucket")
-        if s3_key is not None:
+        if s3_bucket is not None and s3_key is not None:
+            node["code_uri"] = f"s3://{s3_bucket}/{s3_key}"
+        elif s3_key is not None:
             node["code_uri"] = str(s3_key)
-        elif s3_bucket is not None:
-            node["code_uri"] = str(s3_bucket)
 
     memory_size = props.get("MemorySize")
     if memory_size is not None:
@@ -180,11 +180,11 @@ def _extract_lambda_function_props(node: dict[str, Any], props: dict[str, Any]) 
     if isinstance(environment, dict):
         variables = environment.get("Variables")
         if isinstance(variables, dict) and variables:
-            node["environment_variables"] = ",".join(str(k) for k in variables)
+            node["environment_variables"] = ",".join(sorted(str(k) for k in variables))
 
     layers = props.get("Layers")
     if isinstance(layers, list) and layers:
-        node["layers"] = ",".join(str(layer) for layer in layers)
+        node["layers"] = ",".join(sorted(str(layer) for layer in layers))
 
 
 def _extract_sam_function_props(node: dict[str, Any], props: dict[str, Any]) -> None:
@@ -221,7 +221,7 @@ def _extract_sam_function_props(node: dict[str, Any], props: dict[str, Any]) -> 
     if isinstance(environment, dict):
         variables = environment.get("Variables")
         if isinstance(variables, dict) and variables:
-            node["environment_variables"] = ",".join(str(k) for k in variables)
+            node["environment_variables"] = ",".join(sorted(str(k) for k in variables))
 
     events = props.get("Events")
     if isinstance(events, dict) and events:
@@ -232,7 +232,7 @@ def _extract_sam_function_props(node: dict[str, Any], props: dict[str, Any]) -> 
                 if event_type is not None:
                     event_types.append(str(event_type))
         if event_types:
-            node["events"] = ",".join(event_types)
+            node["events"] = ",".join(sorted(event_types))
 
 
 def _extract_apigw_integration_props(

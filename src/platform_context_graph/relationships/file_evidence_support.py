@@ -142,9 +142,9 @@ def iter_terraform_files_from_content_store(
                 FROM content_files
                 WHERE repo_id = %(repo_id)s
                   AND (
-                    relative_path LIKE '%%.tf'
-                    OR relative_path LIKE '%%.tfvars'
-                    OR relative_path LIKE '%%.hcl'
+                    relative_path ILIKE '%%.tf'
+                    OR relative_path ILIKE '%%.tfvars'
+                    OR relative_path ILIKE '%%.hcl'
                   )
                   AND content IS NOT NULL
                 """,
@@ -424,8 +424,8 @@ def iter_yaml_files_from_content_store(
                 FROM content_files
                 WHERE repo_id = %(repo_id)s
                   AND (
-                    relative_path LIKE '%%.yaml'
-                    OR relative_path LIKE '%%.yml'
+                    relative_path ILIKE '%%.yaml'
+                    OR relative_path ILIKE '%%.yml'
                   )
                   AND content IS NOT NULL
                 """,

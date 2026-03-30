@@ -124,9 +124,11 @@ def materialize_workloads(
                    source_roots
             ORDER BY repo.name
             """,
-            source_roots_key="source_roots",
-            source_path_key="source_path",
-            source_paths_key="source_paths",
+            {
+                "source_roots_key": "source_roots",
+                "source_path_key": "source_path",
+                "source_paths_key": "source_paths",
+            },
         ).data()
 
         for row in candidate_rows:

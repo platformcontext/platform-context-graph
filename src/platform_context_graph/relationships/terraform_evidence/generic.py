@@ -172,6 +172,7 @@ def register_schema_driven_extractors(
             category = classify_resource_category(resource_type)
             extractor = make_generic_extractor(identity_keys, category)
             register_resource_extractor([resource_type], extractor)
+            already_registered.add(resource_type)
             registered_count += 1
 
         if registered_count:

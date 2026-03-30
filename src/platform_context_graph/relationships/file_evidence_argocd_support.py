@@ -221,8 +221,6 @@ def iter_argocd_discovered_config_files_from_content_store(
         return []
 
     sql_pattern = discovery_path.replace("*", "%")
-    if not sql_pattern.endswith("%"):
-        pass
 
     results: list[tuple[Path, str]] = []
     try:

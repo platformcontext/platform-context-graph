@@ -555,12 +555,13 @@ def _load_sibling_yaml_from_content_store(
                 WHERE repo_id = %(repo_id)s
                   AND relative_path LIKE %(dir_pattern)s
                   AND (relative_path LIKE '%%.yaml' OR relative_path LIKE '%%.yml')
-                  AND relative_path NOT LIKE '%%/%%/%%'
+                  AND SUBSTRING(relative_path FROM CHAR_LENGTH(%(dir_prefix)s) + 1) NOT LIKE '%%/%%/%%'
                   AND content IS NOT NULL
                 """,
                 {
                     "repo_id": repo_id,
                     "dir_pattern": directory + "/%",
+                    "dir_prefix": directory + "/",
                 },
             )
             for row in cursor:
