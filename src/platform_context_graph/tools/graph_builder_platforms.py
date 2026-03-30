@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import re
 from typing import Any, Iterable
 
+from .graph_builder_workload_batches import write_infrastructure_platform_rows
 from .runtime_platform_families import infer_infrastructure_runtime_family_kind
 from .runtime_platform_families import infer_runtime_family_kind_from_identifiers
 from .runtime_platform_families import infer_terraform_runtime_family_kind
@@ -98,10 +100,22 @@ def materialize_runtime_platform(
 
 def materialize_infrastructure_platforms(session: Any) -> None:
     """Attach infrastructure repositories to inferred platform nodes."""
+    materialize_infrastructure_platforms_for_repo_paths(session, repo_paths=None)
+
+
+def materialize_infrastructure_platforms_for_repo_paths(
+    session: Any,
+    *,
+    repo_paths: list[Path] | None,
+) -> None:
+    """Attach infrastructure repositories to inferred platform nodes in batches."""
+
+    normalized_repo_paths = [str(path.resolve()) for path in repo_paths or []]
 
     platform_rows = session.run(
         """
         MATCH (repo:Repository)
+        WHERE $repo_paths IS NULL OR repo.path IN $repo_paths
         OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(ds:TerraformDataSource)
         OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(mod:TerraformModule)
         OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(tf:TerraformResource)
@@ -124,9 +138,11 @@ def materialize_infrastructure_platforms(session: Any) -> None:
                resource_types,
                resource_names
         ORDER BY repo.name
-        """
+        """,
+        repo_paths=normalized_repo_paths or None,
     ).data()
 
+    descriptor_rows: list[dict[str, object]] = []
     for row in platform_rows:
         descriptor = infer_infrastructure_platform_descriptor(
             data_types=row.get("data_types", []),
@@ -139,30 +155,24 @@ def materialize_infrastructure_platforms(session: Any) -> None:
         )
         if descriptor is None:
             continue
-        session.run(
-            """
-            MATCH (repo:Repository {id: $repo_id})
-            MERGE (p:Platform {id: $platform_id})
-            SET p.type = 'platform',
-                p.name = $platform_name,
-                p.kind = $platform_kind,
-                p.provider = $platform_provider,
-                p.environment = $platform_environment,
-                p.region = $platform_region,
-                p.locator = $platform_locator
-            MERGE (repo)-[rel:PROVISIONS_PLATFORM]->(p)
-            SET rel.confidence = 0.98,
-                rel.reason = 'Terraform cluster and module data declare platform provisioning'
-            """,
-            platform_environment=descriptor["platform_environment"],
-            platform_id=descriptor["platform_id"],
-            platform_kind=descriptor["platform_kind"],
-            platform_locator=descriptor["platform_locator"],
-            platform_name=descriptor["platform_name"],
-            platform_provider=descriptor["platform_provider"],
-            platform_region=descriptor["platform_region"],
-            repo_id=row.get("repo_id"),
+        descriptor_rows.append(
+            {
+                "repo_id": row.get("repo_id"),
+                "platform_environment": descriptor["platform_environment"],
+                "platform_id": descriptor["platform_id"],
+                "platform_kind": descriptor["platform_kind"],
+                "platform_locator": descriptor["platform_locator"],
+                "platform_name": descriptor["platform_name"],
+                "platform_provider": descriptor["platform_provider"],
+                "platform_region": descriptor["platform_region"],
+            }
         )
+
+    write_infrastructure_platform_rows(
+        session,
+        descriptor_rows,
+        evidence_source="finalization/workloads",
+    )
 
 
 def infer_runtime_platform_kind(resource_kinds: Iterable[str]) -> str | None:

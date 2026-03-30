@@ -21,6 +21,38 @@ class _FakeResult:
         return self._records
 
 
+def _capture_run(
+    recorded_calls: list[tuple[str, dict[str, object]]],
+    resolver,
+):
+    """Record `session.run()` calls regardless of positional or keyword params."""
+
+    def run(
+        query: str,
+        parameters: dict[str, object] | None = None,
+        **kwargs: object,
+    ) -> _FakeResult:
+        merged_kwargs = dict(parameters or {})
+        merged_kwargs.update(kwargs)
+        recorded_calls.append((query, merged_kwargs))
+        return resolver(query, merged_kwargs)
+
+    return run
+
+
+def _first_batch_rows(
+    recorded_calls: list[tuple[str, dict[str, object]]],
+    query_fragment: str,
+) -> list[dict[str, object]]:
+    """Return the first `rows` payload captured for one batched query."""
+
+    return next(
+        kwargs["rows"]
+        for query, kwargs in recorded_calls
+        if query_fragment in query and "rows" in kwargs
+    )
+
+
 def test_materialize_workloads_creates_workload_instance_and_deployment_source() -> (
     None
 ):
@@ -29,8 +61,7 @@ def test_materialize_workloads_creates_workload_instance_and_deployment_source()
     session.__exit__.return_value = False
     recorded_calls: list[tuple[str, dict[str, object]]] = []
 
-    def run(query: str, **kwargs: object) -> _FakeResult:
-        recorded_calls.append((query, kwargs))
+    def resolve(query: str, kwargs: dict[str, object]) -> _FakeResult:
         if "RETURN repo.id as repo_id" in query:
             return _FakeResult(
                 records=[
@@ -55,7 +86,7 @@ def test_materialize_workloads_creates_workload_instance_and_deployment_source()
             )
         return _FakeResult()
 
-    session.run.side_effect = run
+    session.run.side_effect = _capture_run(recorded_calls, resolve)
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session))
     )
@@ -70,25 +101,21 @@ def test_materialize_workloads_creates_workload_instance_and_deployment_source()
         if "RETURN repo.id as repo_id" in query
     )
 
-    workload_merge = next(
-        kwargs
-        for query, kwargs in recorded_calls
-        if "MERGE (w:Workload {id: $workload_id})" in query
-    )
-    instance_merge = next(
-        kwargs
-        for query, kwargs in recorded_calls
-        if "MERGE (i:WorkloadInstance {id: $instance_id})" in query
-    )
-    deployment_edge = next(
-        kwargs
-        for query, kwargs in recorded_calls
-        if "MERGE (i)-[rel:DEPLOYMENT_SOURCE]->(deployment_repo)" in query
-    )
+    workload_merge = _first_batch_rows(
+        recorded_calls,
+        "MERGE (w:Workload {id: row.workload_id})",
+    )[0]
+    instance_merge = _first_batch_rows(
+        recorded_calls,
+        "MERGE (i:WorkloadInstance {id: row.instance_id})",
+    )[0]
+    deployment_edge = _first_batch_rows(
+        recorded_calls,
+        "MERGE (i)-[rel:DEPLOYMENT_SOURCE]->(deployment_repo)",
+    )[0]
 
     assert workload_merge == {
         "repo_id": "repository:r_5c50d0d3",
-        "repo_name": "api-node-search",
         "workload_id": "workload:api-node-search",
         "workload_kind": "service",
         "workload_name": "api-node-search",
@@ -115,7 +142,10 @@ def test_materialize_workloads_creates_workload_instance_and_deployment_source()
         "OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(k:K8sResource)"
         in candidate_query
     )
-    assert "OPTIONAL MATCH (repo)-[:CONTAINS*]->(:File)-[:CONTAINS]->(k:K8sResource)" not in candidate_query
+    assert (
+        "OPTIONAL MATCH (repo)-[:CONTAINS*]->(:File)-[:CONTAINS]->(k:K8sResource)"
+        not in candidate_query
+    )
     assert "type(source_rel) = 'SOURCES_FROM'" in candidate_query
     assert "[:SOURCES_FROM]" not in candidate_query
     assert "app[$source_roots_key]" in candidate_query
@@ -133,8 +163,7 @@ def test_materialize_workloads_creates_runtime_platform_relationships() -> None:
     session.__exit__.return_value = False
     recorded_calls: list[tuple[str, dict[str, object]]] = []
 
-    def run(query: str, **kwargs: object) -> _FakeResult:
-        recorded_calls.append((query, kwargs))
+    def resolve(query: str, kwargs: dict[str, object]) -> _FakeResult:
         if "RETURN repo.id as repo_id" in query:
             return _FakeResult(
                 records=[
@@ -159,24 +188,21 @@ def test_materialize_workloads_creates_runtime_platform_relationships() -> None:
             )
         return _FakeResult()
 
-    session.run.side_effect = run
+    session.run.side_effect = _capture_run(recorded_calls, resolve)
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session))
     )
 
     materialize_workloads(builder, info_logger_fn=lambda *_args, **_kwargs: None)
 
-    platform_merge = next(
-        kwargs
-        for query, kwargs in recorded_calls
-        if "MERGE (p:Platform {id: $platform_id})" in query
-        and "RUNS_ON" in query
-    )
-    runs_on_edge = next(
-        kwargs
-        for query, kwargs in recorded_calls
-        if "MERGE (i)-[rel:RUNS_ON]->(p)" in query
-    )
+    platform_merge = _first_batch_rows(
+        recorded_calls,
+        "MERGE (p:Platform {id: row.platform_id})",
+    )[0]
+    runs_on_edge = _first_batch_rows(
+        recorded_calls,
+        "MERGE (i)-[rel:RUNS_ON]->(p)",
+    )[0]
 
     assert platform_merge == {
         "environment": "bg-qa",
@@ -213,8 +239,7 @@ def test_materialize_workloads_creates_infrastructure_platform_relationships(
     session.__exit__.return_value = False
     recorded_calls: list[tuple[str, dict[str, object]]] = []
 
-    def run(query: str, **kwargs: object) -> _FakeResult:
-        recorded_calls.append((query, kwargs))
+    def resolve(query: str, kwargs: dict[str, object]) -> _FakeResult:
         if "TerraformDataSource" not in query and "RETURN repo.id as repo_id" in query:
             return _FakeResult(
                 records=[
@@ -247,24 +272,21 @@ def test_materialize_workloads_creates_infrastructure_platform_relationships(
             )
         return _FakeResult()
 
-    session.run.side_effect = run
+    session.run.side_effect = _capture_run(recorded_calls, resolve)
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session))
     )
 
     materialize_workloads(builder, info_logger_fn=lambda *_args, **_kwargs: None)
 
-    platform_merge = next(
-        kwargs
-        for query, kwargs in recorded_calls
-        if "MERGE (p:Platform {id: $platform_id})" in query
-        and "PROVISIONS_PLATFORM" in query
-    )
-    provisions_edge = next(
-        kwargs
-        for query, kwargs in recorded_calls
-        if "MERGE (repo)-[rel:PROVISIONS_PLATFORM]->(p)" in query
-    )
+    platform_merge = _first_batch_rows(
+        recorded_calls,
+        "MERGE (p:Platform {id: row.platform_id})",
+    )[0]
+    provisions_edge = _first_batch_rows(
+        recorded_calls,
+        "MERGE (repo)-[rel:PROVISIONS_PLATFORM]->(p)",
+    )[0]
 
     assert platform_merge == {
         "platform_environment": None,
@@ -281,8 +303,14 @@ def test_materialize_workloads_creates_infrastructure_platform_relationships(
     platform_query = next(
         query for query, _kwargs in recorded_calls if "TerraformDataSource" in query
     )
-    assert "[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(ds:TerraformDataSource)" in platform_query
-    assert "[:CONTAINS*]->(:File)-[:CONTAINS]->(ds:TerraformDataSource)" not in platform_query
+    assert (
+        "[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(ds:TerraformDataSource)"
+        in platform_query
+    )
+    assert (
+        "[:CONTAINS*]->(:File)-[:CONTAINS]->(ds:TerraformDataSource)"
+        not in platform_query
+    )
 
 
 def test_infer_infrastructure_platform_descriptor_returns_canonical_cluster_locator() -> (
@@ -335,7 +363,9 @@ def test_infer_infrastructure_platform_descriptor_ignores_eks_support_modules() 
     descriptor = infer_infrastructure_platform_descriptor(
         data_types=["aws_eks_cluster"],
         data_names=["main"],
-        module_sources=["terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"],
+        module_sources=[
+            "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+        ],
         module_names=["karpenter_irsa"],
         resource_types=["aws_eks_access_entry"],
         resource_names=["karpenter_nodes"],
@@ -348,31 +378,42 @@ def test_infer_infrastructure_platform_descriptor_ignores_eks_support_modules() 
 def test_infer_gitops_platform_kind_uses_runtime_family_registry() -> None:
     """GitOps platform hints should share the runtime-family registry logic."""
 
-    assert infer_gitops_platform_kind(
-        repo_name="iac-eks-argocd",
-        repo_slug="boatsgroup/iac-eks-argocd",
-        content="spec: {}",
-    ) == "eks"
-    assert infer_gitops_platform_kind(
-        repo_name="terraform-stack-ecs",
-        repo_slug=None,
-        content="spec: {}",
-    ) == "ecs"
+    assert (
+        infer_gitops_platform_kind(
+            repo_name="iac-eks-argocd",
+            repo_slug="boatsgroup/iac-eks-argocd",
+            content="spec: {}",
+        )
+        == "eks"
+    )
+    assert (
+        infer_gitops_platform_kind(
+            repo_name="terraform-stack-ecs",
+            repo_slug=None,
+            content="spec: {}",
+        )
+        == "ecs"
+    )
 
 
 def test_infer_gitops_platform_id_uses_family_provider() -> None:
     """GitOps platform ids should inherit provider data from the runtime family."""
 
-    assert infer_gitops_platform_id(
-        repo_name="iac-eks-argocd",
-        repo_slug="boatsgroup/iac-eks-argocd",
-        content="spec: {}",
-        platform_name="bg-qa",
-        environment="bg-qa",
-    ) == "platform:eks:aws:bg-qa:bg-qa:none"
+    assert (
+        infer_gitops_platform_id(
+            repo_name="iac-eks-argocd",
+            repo_slug="boatsgroup/iac-eks-argocd",
+            content="spec: {}",
+            platform_name="bg-qa",
+            environment="bg-qa",
+        )
+        == "platform:eks:aws:bg-qa:bg-qa:none"
+    )
 
 
-def test_materialize_workloads_skips_platform_edges_for_cluster_references_only() -> None:
+def test_materialize_workloads_skips_platform_edges_for_cluster_references_only() -> (
+    None
+):
     """Service stacks that only reference a cluster should not provision it."""
 
     session = MagicMock()
@@ -380,8 +421,7 @@ def test_materialize_workloads_skips_platform_edges_for_cluster_references_only(
     session.__exit__.return_value = False
     recorded_calls: list[tuple[str, dict[str, object]]] = []
 
-    def run(query: str, **kwargs: object) -> _FakeResult:
-        recorded_calls.append((query, kwargs))
+    def resolve(query: str, kwargs: dict[str, object]) -> _FakeResult:
         if "TerraformDataSource" not in query and "RETURN repo.id as repo_id" in query:
             return _FakeResult(records=[])
         if "TerraformDataSource" in query:
@@ -403,16 +443,14 @@ def test_materialize_workloads_skips_platform_edges_for_cluster_references_only(
             )
         return _FakeResult()
 
-    session.run.side_effect = run
+    session.run.side_effect = _capture_run(recorded_calls, resolve)
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session))
     )
 
     materialize_workloads(builder, info_logger_fn=lambda *_args, **_kwargs: None)
 
-    assert not any(
-        "PROVISIONS_PLATFORM" in query for query, _kwargs in recorded_calls
-    )
+    assert not any("PROVISIONS_PLATFORM" in query for query, _kwargs in recorded_calls)
 
 
 def test_materialize_workloads_skips_platform_edges_for_eks_addon_modules() -> None:
@@ -423,8 +461,7 @@ def test_materialize_workloads_skips_platform_edges_for_eks_addon_modules() -> N
     session.__exit__.return_value = False
     recorded_calls: list[tuple[str, dict[str, object]]] = []
 
-    def run(query: str, **kwargs: object) -> _FakeResult:
-        recorded_calls.append((query, kwargs))
+    def resolve(query: str, kwargs: dict[str, object]) -> _FakeResult:
         if "TerraformDataSource" not in query and "RETURN repo.id as repo_id" in query:
             return _FakeResult(records=[])
         if "TerraformDataSource" in query:
@@ -446,16 +483,14 @@ def test_materialize_workloads_skips_platform_edges_for_eks_addon_modules() -> N
             )
         return _FakeResult()
 
-    session.run.side_effect = run
+    session.run.side_effect = _capture_run(recorded_calls, resolve)
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session))
     )
 
     materialize_workloads(builder, info_logger_fn=lambda *_args, **_kwargs: None)
 
-    assert not any(
-        "PROVISIONS_PLATFORM" in query for query, _kwargs in recorded_calls
-    )
+    assert not any("PROVISIONS_PLATFORM" in query for query, _kwargs in recorded_calls)
 
 
 def test_materialize_workloads_creates_runtime_dependency_edges(tmp_path) -> None:
@@ -478,8 +513,7 @@ const main = async ({ api }) => {
     session.__exit__.return_value = False
     recorded_calls: list[tuple[str, dict[str, object]]] = []
 
-    def run(query: str, **kwargs: object) -> _FakeResult:
-        recorded_calls.append((query, kwargs))
+    def resolve(query: str, kwargs: dict[str, object]) -> _FakeResult:
         if "RETURN repo.id as repo_id" in query:
             return _FakeResult(
                 records=[
@@ -497,6 +531,8 @@ const main = async ({ api }) => {
             return _FakeResult(
                 records=[
                     {
+                        "repo_id": "repository:r_5c50d0d3",
+                        "repo_name": "api-node-search",
                         "path": str(entrypoint),
                         "relative_path": "api-node-search.ts",
                     }
@@ -513,23 +549,23 @@ const main = async ({ api }) => {
             )
         return _FakeResult()
 
-    session.run.side_effect = run
+    session.run.side_effect = _capture_run(recorded_calls, resolve)
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session))
     )
 
     materialize_workloads(builder, info_logger_fn=lambda *_args, **_kwargs: None)
 
-    repo_dependency = next(
-        kwargs
-        for query, kwargs in recorded_calls
-        if "MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)" in query
-    )
-    workload_dependency = next(
-        kwargs
+    repo_dependency = _first_batch_rows(
+        recorded_calls,
+        "MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)",
+    )[0]
+    workload_dependency_query, workload_dependency_params = next(
+        (query, kwargs)
         for query, kwargs in recorded_calls
         if "MERGE (source)-[rel:DEPENDS_ON]->(target)" in query
     )
+    workload_dependency = workload_dependency_params["rows"][0]
 
     assert repo_dependency == {
         "dependency_name": "api-node-forex",
@@ -542,3 +578,8 @@ const main = async ({ api }) => {
         "target_workload_id": "workload:api-node-forex",
         "workload_id": "workload:api-node-search",
     }
+    assert (
+        "MATCH (target:Workload {id: row.target_workload_id})"
+        in workload_dependency_query
+    )
+    assert "MERGE (target:Workload" not in workload_dependency_query

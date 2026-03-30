@@ -1018,6 +1018,71 @@ def test_get_repository_coverage_returns_latest_run_row(monkeypatch) -> None:
     assert result["server_content_available"] is True
 
 
+def test_update_latest_repository_coverage_finalization_updates_latest_rows(
+    monkeypatch,
+) -> None:
+    """Finalization repair should mutate the latest existing row for each repo."""
+
+    store = PostgresRuntimeStatusStore("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = [
+        {"repo_id": "repository:r_ab12cd34"},
+        {"repo_id": "repository:r_de56fg78"},
+    ]
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    store.update_latest_repository_coverage_finalization(
+        repo_ids=["repository:r_ab12cd34", "repository:r_de56fg78"],
+        finalization_status="completed",
+        finalization_finished_at="2026-03-30T12:10:00+00:00",
+        last_error=None,
+    )
+
+    assert cursor.execute.call_count == 2
+    validation_query, validation_params = cursor.execute.call_args_list[0].args
+    update_query, update_params = cursor.execute.call_args_list[1].args
+    assert "runtime_repository_coverage" in validation_query
+    assert validation_params["repo_ids"] == [
+        "repository:r_ab12cd34",
+        "repository:r_de56fg78",
+    ]
+    assert "UPDATE runtime_repository_coverage AS coverage" in update_query
+    assert update_params["finalization_status"] == "completed"
+    assert update_params["last_error"] is None
+
+
+def test_update_latest_repository_coverage_finalization_rejects_missing_rows(
+    monkeypatch,
+) -> None:
+    """Coverage repair should fail before updating when any repo lacks a row."""
+
+    store = PostgresRuntimeStatusStore("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = [{"repo_id": "repository:r_ab12cd34"}]
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    with pytest.raises(ValueError) as exc_info:
+        store.update_latest_repository_coverage_finalization(
+            repo_ids=["repository:r_ab12cd34", "repository:r_missing"],
+            finalization_status="failed",
+            finalization_finished_at="2026-03-30T12:10:00+00:00",
+            last_error="finalization failed",
+        )
+
+    assert "missing durable coverage rows" in str(exc_info.value)
+    assert cursor.execute.call_count == 1
+
+
 def test_list_repository_coverage_supports_incomplete_filter(monkeypatch) -> None:
     """Coverage listings should support filtering to incomplete repositories."""
 

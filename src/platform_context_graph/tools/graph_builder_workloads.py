@@ -7,16 +7,27 @@ import re
 from typing import Any, Iterable
 
 from .graph_builder_platforms import (
-    materialize_infrastructure_platforms,
-    materialize_runtime_platform,
+    canonical_platform_id,
+    infer_runtime_platform_kind,
+    materialize_infrastructure_platforms_for_repo_paths,
 )
-from .languages.runtime_dependencies import extract_runtime_service_dependencies
+from .graph_builder_workload_batches import (
+    write_deployment_source_rows,
+    write_instance_rows,
+    write_runtime_platform_rows,
+    write_workload_rows,
+)
+from .graph_builder_workload_dependency_support import (
+    materialize_runtime_dependencies,
+)
 
+_EVIDENCE_SOURCE = "finalization/workloads"
 _OVERLAY_ENVIRONMENT_RE = re.compile(r"(?:^|/)overlays/([^/]+)/")
 
 
 def _normalize_source_roots(raw_value: Any) -> list[str]:
     """Normalize stored ApplicationSet roots into a stable string list."""
+
     if isinstance(raw_value, str):
         values = raw_value.split(",")
     elif isinstance(raw_value, Iterable):
@@ -34,6 +45,7 @@ def _normalize_source_roots(raw_value: Any) -> list[str]:
 
 def _extract_overlay_environments(paths: Iterable[str]) -> list[str]:
     """Extract environment names from repo-relative overlay paths."""
+
     environments: list[str] = []
     for raw_path in paths:
         match = _OVERLAY_ENVIRONMENT_RE.search(str(raw_path))
@@ -47,6 +59,7 @@ def _extract_overlay_environments(paths: Iterable[str]) -> list[str]:
 
 def _infer_workload_kind(name: str, resource_kinds: Iterable[str]) -> str:
     """Infer a workload kind from its name and matched runtime resources."""
+
     normalized = name.lower()
     if "cron" in normalized:
         return "cronjob"
@@ -62,196 +75,302 @@ def _infer_workload_kind(name: str, resource_kinds: Iterable[str]) -> str:
     return "service"
 
 
+def _normalize_repo_paths(
+    committed_repo_paths: list[Path] | None,
+) -> list[str] | None:
+    """Convert repo path filters into stored repository path strings."""
+
+    if not committed_repo_paths:
+        return None
+    return [str(path.resolve()) for path in committed_repo_paths]
+
+
+def _load_candidate_rows(
+    session: Any,
+    *,
+    repo_paths: list[str] | None,
+) -> list[dict[str, object]]:
+    """Load workload candidates from repository and GitOps graph signal."""
+
+    return session.run(
+        """
+        MATCH (repo:Repository)
+        WHERE $repo_paths IS NULL OR repo.path IN $repo_paths
+        OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(k:K8sResource)
+        WHERE k.name = repo.name
+        WITH repo,
+             collect(DISTINCT toLower(coalesce(k.kind, ''))) as resource_kinds,
+             collect(DISTINCT coalesce(k.namespace, '')) as namespaces
+        OPTIONAL MATCH (app)-[source_rel]->(deployment_repo:Repository)
+        WHERE (app:ArgoCDApplication OR app:ArgoCDApplicationSet)
+          AND type(source_rel) = 'SOURCES_FROM'
+          AND app.name = repo.name
+        WITH repo,
+             resource_kinds,
+             namespaces,
+             collect(DISTINCT deployment_repo.id) as deployment_repo_ids,
+             collect(DISTINCT deployment_repo.name) as deployment_repo_names,
+             collect(
+                 DISTINCT coalesce(
+                     app[$source_roots_key],
+                     coalesce(app[$source_path_key], app[$source_paths_key], '')
+                 )
+             ) as source_roots
+        WHERE size(resource_kinds) > 0 OR size(deployment_repo_ids) > 0
+        RETURN repo.id as repo_id,
+               repo.name as repo_name,
+               CASE
+                   WHEN size(deployment_repo_ids) > 0
+                   THEN deployment_repo_ids[0]
+                   ELSE NULL
+               END as deployment_repo_id,
+               CASE
+                   WHEN size(deployment_repo_names) > 0
+                   THEN deployment_repo_names[0]
+                   ELSE NULL
+               END as deployment_repo_name,
+               resource_kinds,
+               namespaces,
+               source_roots
+        ORDER BY repo.name
+        """,
+        repo_paths=repo_paths,
+        source_roots_key="source_roots",
+        source_path_key="source_path",
+        source_paths_key="source_paths",
+    ).data()
+
+
+def _load_deployment_environments(
+    session: Any,
+    *,
+    candidate_rows: list[dict[str, object]],
+) -> dict[str, list[str]]:
+    """Load overlay environments for deployment repositories in one query."""
+
+    deployment_rows = [
+        {
+            "deployment_repo_id": row.get("deployment_repo_id"),
+            "source_roots": _normalize_source_roots(row.get("source_roots")),
+        }
+        for row in candidate_rows
+        if row.get("deployment_repo_id")
+        and _normalize_source_roots(row.get("source_roots"))
+    ]
+    if not deployment_rows:
+        return {}
+
+    environment_rows = session.run(
+        """
+        UNWIND $rows AS row
+        MATCH (deployment_repo:Repository {id: row.deployment_repo_id})-[:REPO_CONTAINS]->(f:File)
+        WHERE any(source_root IN row.source_roots
+            WHERE trim(source_root) <> ''
+              AND f.relative_path STARTS WITH trim(source_root))
+        RETURN deployment_repo.id as deployment_repo_id,
+               f.relative_path as relative_path
+        ORDER BY deployment_repo.id, f.relative_path
+        """,
+        rows=deployment_rows,
+    ).data()
+
+    environments_by_repo: dict[str, list[str]] = {}
+    for row in environment_rows:
+        deployment_repo_id = str(row.get("deployment_repo_id") or "")
+        if not deployment_repo_id:
+            continue
+        environments = environments_by_repo.setdefault(deployment_repo_id, [])
+        for environment in _extract_overlay_environments(
+            [str(row.get("relative_path") or "")]
+        ):
+            if environment not in environments:
+                environments.append(environment)
+    return environments_by_repo
+
+
+def _build_projection_rows(
+    candidate_rows: list[dict[str, object]],
+    *,
+    deployment_environments: dict[str, list[str]],
+) -> tuple[
+    dict[str, int],
+    list[dict[str, object]],
+    list[dict[str, object]],
+    list[dict[str, object]],
+    list[dict[str, object]],
+    list[dict[str, str]],
+]:
+    """Build batched projection payloads from workload candidates."""
+
+    stats = {"workloads": 0, "instances": 0, "deployment_sources": 0}
+    workload_rows: list[dict[str, object]] = []
+    instance_rows: list[dict[str, object]] = []
+    deployment_source_rows: list[dict[str, object]] = []
+    runtime_platform_rows: list[dict[str, object]] = []
+    repo_descriptors: list[dict[str, str]] = []
+    seen_workloads: set[str] = set()
+    seen_instances: set[str] = set()
+    seen_deployment_sources: set[tuple[str, str]] = set()
+    seen_runtime_platforms: set[tuple[str, str]] = set()
+
+    for row in candidate_rows:
+        repo_id = str(row.get("repo_id") or "")
+        repo_name = str(row.get("repo_name") or "")
+        if not repo_id or not repo_name:
+            continue
+        workload_id = f"workload:{repo_name}"
+        workload_kind = _infer_workload_kind(repo_name, row.get("resource_kinds", []))
+        repo_descriptors.append(
+            {
+                "repo_id": repo_id,
+                "repo_name": repo_name,
+                "workload_id": workload_id,
+            }
+        )
+        if workload_id not in seen_workloads:
+            seen_workloads.add(workload_id)
+            workload_rows.append(
+                {
+                    "repo_id": repo_id,
+                    "workload_id": workload_id,
+                    "workload_kind": workload_kind,
+                    "workload_name": repo_name,
+                }
+            )
+            stats["workloads"] += 1
+
+        deployment_repo_id = str(row.get("deployment_repo_id") or "")
+        environments = deployment_environments.get(deployment_repo_id, [])
+        if not environments:
+            environments = [
+                namespace
+                for namespace in row.get("namespaces", [])
+                if namespace and str(namespace).strip()
+            ]
+
+        platform_kind = infer_runtime_platform_kind(row.get("resource_kinds", []))
+        for environment in environments:
+            instance_id = f"workload-instance:{repo_name}:{environment}"
+            if instance_id not in seen_instances:
+                seen_instances.add(instance_id)
+                instance_rows.append(
+                    {
+                        "environment": environment,
+                        "instance_id": instance_id,
+                        "repo_id": repo_id,
+                        "workload_id": workload_id,
+                        "workload_kind": workload_kind,
+                        "workload_name": repo_name,
+                    }
+                )
+                stats["instances"] += 1
+            if deployment_repo_id:
+                deployment_signature = (instance_id, deployment_repo_id)
+                if deployment_signature not in seen_deployment_sources:
+                    seen_deployment_sources.add(deployment_signature)
+                    deployment_source_rows.append(
+                        {
+                            "deployment_repo_id": deployment_repo_id,
+                            "environment": environment,
+                            "instance_id": instance_id,
+                            "workload_name": repo_name,
+                        }
+                    )
+                    stats["deployment_sources"] += 1
+            if platform_kind is None:
+                continue
+            platform_id = canonical_platform_id(
+                kind=platform_kind,
+                provider=None,
+                name=environment,
+                environment=environment,
+                region=None,
+                locator=None,
+            )
+            if platform_id is None:
+                continue
+            platform_signature = (instance_id, platform_id)
+            if platform_signature in seen_runtime_platforms:
+                continue
+            seen_runtime_platforms.add(platform_signature)
+            runtime_platform_rows.append(
+                {
+                    "environment": environment,
+                    "instance_id": instance_id,
+                    "platform_id": platform_id,
+                    "platform_kind": platform_kind,
+                    "platform_locator": None,
+                    "platform_name": environment,
+                    "platform_provider": None,
+                    "platform_region": None,
+                }
+            )
+
+    return (
+        stats,
+        workload_rows,
+        instance_rows,
+        deployment_source_rows,
+        runtime_platform_rows,
+        repo_descriptors,
+    )
+
+
 def materialize_workloads(
     builder: Any,
     *,
     info_logger_fn: Any,
+    committed_repo_paths: list[Path] | None = None,
 ) -> dict[str, int]:
-    """Materialize canonical workload nodes from indexed repo and Argo metadata.
+    """Materialize canonical workload nodes from indexed repo and Argo metadata."""
 
-    Args:
-        builder: GraphBuilder facade instance.
-        info_logger_fn: Informational logger callable.
-
-    Returns:
-        Counts of nodes and edges created or refreshed.
-    """
-
-    stats = {"workloads": 0, "instances": 0, "deployment_sources": 0}
-    seen_workloads: set[str] = set()
-    seen_instances: set[str] = set()
-    seen_deployment_sources: set[tuple[str, str]] = set()
-
+    repo_paths = _normalize_repo_paths(committed_repo_paths)
     with builder.driver.session() as session:
-        candidate_rows = session.run(
-            """
-            MATCH (repo:Repository)
-            OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(k:K8sResource)
-            WHERE k.name = repo.name
-            WITH repo,
-                 collect(DISTINCT toLower(coalesce(k.kind, ''))) as resource_kinds,
-                 collect(DISTINCT coalesce(k.namespace, '')) as namespaces
-            OPTIONAL MATCH (app)-[source_rel]->(deployment_repo:Repository)
-            WHERE (app:ArgoCDApplication OR app:ArgoCDApplicationSet)
-              AND type(source_rel) = 'SOURCES_FROM'
-              AND app.name = repo.name
-            WITH repo,
-                 resource_kinds,
-                 namespaces,
-                 collect(DISTINCT deployment_repo.id) as deployment_repo_ids,
-                 collect(DISTINCT deployment_repo.name) as deployment_repo_names,
-                 collect(
-                     DISTINCT coalesce(
-                         app[$source_roots_key],
-                         coalesce(app[$source_path_key], app[$source_paths_key], '')
-                     )
-                 ) as source_roots
-            WHERE size(resource_kinds) > 0 OR size(deployment_repo_ids) > 0
-            RETURN repo.id as repo_id,
-                   repo.name as repo_name,
-                   CASE
-                       WHEN size(deployment_repo_ids) > 0
-                       THEN deployment_repo_ids[0]
-                       ELSE NULL
-                   END as deployment_repo_id,
-                   CASE
-                       WHEN size(deployment_repo_names) > 0
-                       THEN deployment_repo_names[0]
-                       ELSE NULL
-                   END as deployment_repo_name,
-                   resource_kinds,
-                   namespaces,
-                   source_roots
-            ORDER BY repo.name
-            """,
-            {
-                "source_roots_key": "source_roots",
-                "source_path_key": "source_path",
-                "source_paths_key": "source_paths",
-            },
-        ).data()
-
-        for row in candidate_rows:
-            repo_id = row.get("repo_id")
-            repo_name = row.get("repo_name")
-            if not repo_id or not repo_name:
-                continue
-
-            workload_id = f"workload:{repo_name}"
-            workload_kind = _infer_workload_kind(
-                repo_name, row.get("resource_kinds", [])
-            )
-            session.run(
-                """
-                MATCH (repo:Repository {id: $repo_id})
-                MERGE (w:Workload {id: $workload_id})
-                SET w.type = 'workload',
-                    w.name = $workload_name,
-                    w.kind = $workload_kind,
-                    w.repo_id = $repo_id
-                MERGE (repo)-[rel:DEFINES]->(w)
-                SET rel.confidence = 1.0,
-                    rel.reason = 'Repository defines workload'
-                """,
-                repo_id=repo_id,
-                repo_name=repo_name,
-                workload_id=workload_id,
-                workload_kind=workload_kind,
-                workload_name=repo_name,
-            )
-            if workload_id not in seen_workloads:
-                seen_workloads.add(workload_id)
-                stats["workloads"] += 1
-
-            source_roots = _normalize_source_roots(row.get("source_roots"))
-            environments: list[str] = []
-            deployment_repo_id = row.get("deployment_repo_id")
-            if deployment_repo_id and source_roots:
-                environment_rows = session.run(
-                    """
-                    MATCH (deployment_repo:Repository {id: $deployment_repo_id})-[:REPO_CONTAINS]->(f:File)
-                    WHERE any(source_root IN $source_roots
-                        WHERE trim(source_root) <> ''
-                          AND f.relative_path STARTS WITH trim(source_root))
-                    RETURN deployment_repo.id as deployment_repo_id,
-                           f.relative_path as relative_path
-                    """,
-                    deployment_repo_id=deployment_repo_id,
-                    source_roots=source_roots,
-                ).data()
-                environments = _extract_overlay_environments(
-                    row.get("relative_path", "") for row in environment_rows
-                )
-
-            if not environments:
-                environments = [
-                    namespace
-                    for namespace in row.get("namespaces", [])
-                    if namespace and namespace.strip()
-                ]
-
-            for environment in environments:
-                instance_id = f"workload-instance:{repo_name}:{environment}"
-                session.run(
-                    """
-                    MATCH (w:Workload {id: $workload_id})
-                    MERGE (i:WorkloadInstance {id: $instance_id})
-                    SET i.type = 'workload_instance',
-                        i.name = $workload_name,
-                        i.kind = $workload_kind,
-                        i.environment = $environment,
-                        i.workload_id = $workload_id,
-                        i.repo_id = $repo_id
-                    MERGE (i)-[rel:INSTANCE_OF]->(w)
-                    SET rel.confidence = 1.0,
-                        rel.reason = 'Workload instance belongs to workload'
-                    """,
-                    environment=environment,
-                    instance_id=instance_id,
-                    repo_id=repo_id,
-                    workload_id=workload_id,
-                    workload_kind=workload_kind,
-                    workload_name=repo_name,
-                )
-                if instance_id not in seen_instances:
-                    seen_instances.add(instance_id)
-                    stats["instances"] += 1
-
-                if deployment_repo_id:
-                    session.run(
-                        """
-                        MATCH (i:WorkloadInstance {id: $instance_id})
-                        MATCH (deployment_repo:Repository {id: $deployment_repo_id})
-                        MERGE (i)-[rel:DEPLOYMENT_SOURCE]->(deployment_repo)
-                        SET rel.confidence = 0.98,
-                            rel.reason = 'Deployment manifests for workload instance live in deployment repository'
-                        """,
-                        deployment_repo_id=deployment_repo_id,
-                        environment=environment,
-                        instance_id=instance_id,
-                        workload_name=repo_name,
-                    )
-                    deployment_signature = (instance_id, deployment_repo_id)
-                    if deployment_signature not in seen_deployment_sources:
-                        seen_deployment_sources.add(deployment_signature)
-                        stats["deployment_sources"] += 1
-
-                materialize_runtime_platform(
-                    session,
-                    instance_id=instance_id,
-                    environment=environment,
-                    workload_name=repo_name,
-                    resource_kinds=row.get("resource_kinds", []),
-                )
-
-            _materialize_runtime_dependencies(
-                session,
-                repo_id=repo_id,
-                repo_name=repo_name,
-                workload_id=workload_id,
-            )
-
-        materialize_infrastructure_platforms(session)
+        candidate_rows = _load_candidate_rows(session, repo_paths=repo_paths)
+        deployment_environments = _load_deployment_environments(
+            session,
+            candidate_rows=candidate_rows,
+        )
+        (
+            stats,
+            workload_rows,
+            instance_rows,
+            deployment_source_rows,
+            runtime_platform_rows,
+            repo_descriptors,
+        ) = _build_projection_rows(
+            candidate_rows,
+            deployment_environments=deployment_environments,
+        )
+        write_workload_rows(
+            session,
+            workload_rows,
+            evidence_source=_EVIDENCE_SOURCE,
+        )
+        write_instance_rows(
+            session,
+            instance_rows,
+            evidence_source=_EVIDENCE_SOURCE,
+        )
+        write_deployment_source_rows(
+            session,
+            deployment_source_rows,
+            evidence_source=_EVIDENCE_SOURCE,
+        )
+        write_runtime_platform_rows(
+            session,
+            runtime_platform_rows,
+            evidence_source=_EVIDENCE_SOURCE,
+        )
+        materialize_runtime_dependencies(
+            session,
+            repo_descriptors=repo_descriptors,
+            evidence_source=_EVIDENCE_SOURCE,
+        )
+        materialize_infrastructure_platforms_for_repo_paths(
+            session,
+            repo_paths=committed_repo_paths,
+        )
 
     if stats["workloads"] > 0:
         info_logger_fn(
@@ -262,141 +381,6 @@ def materialize_workloads(
     else:
         info_logger_fn("Workload materialization found no deployable repositories")
     return stats
-
-
-def _read_file_content_store_first(
-    *,
-    repo_id: str,
-    relative_path: str,
-    filesystem_path: str,
-) -> str | None:
-    """Read file content from the content store first, filesystem second.
-
-    Args:
-        repo_id: Canonical repository identifier.
-        relative_path: Repo-relative file path.
-        filesystem_path: Absolute filesystem path (fallback).
-
-    Returns:
-        File content string, or ``None`` when unavailable.
-    """
-
-    from ..content.state import get_postgres_content_provider
-
-    provider = get_postgres_content_provider()
-    if provider is not None and provider.enabled:
-        try:
-            with provider._cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT content FROM content_files
-                    WHERE repo_id = %(repo_id)s
-                      AND relative_path = %(relative_path)s
-                      AND content IS NOT NULL
-                    """,
-                    {"repo_id": repo_id, "relative_path": relative_path},
-                )
-                row = cursor.fetchone()
-                if row is not None:
-                    return row["content"]
-        except Exception:
-            pass
-
-    path = Path(filesystem_path).expanduser()
-    if path.is_file():
-        try:
-            return path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            pass
-    return None
-
-
-def _materialize_runtime_dependencies(
-    session: Any,
-    *,
-    repo_id: str,
-    repo_name: str,
-    workload_id: str,
-) -> None:
-    """Create repo and workload dependency edges from runtime service lists."""
-    file_rows = session.run(
-        """
-        MATCH (repo:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)
-        WHERE f.name IN [$typescript_entrypoint, $javascript_entrypoint]
-        RETURN f.path as path, f.relative_path as relative_path
-        ORDER BY f.relative_path
-        """,
-        repo_id=repo_id,
-        typescript_entrypoint=f"{repo_name}.ts",
-        javascript_entrypoint=f"{repo_name}.js",
-    ).data()
-
-    dependencies: list[str] = []
-    seen_dependencies: set[str] = set()
-    for row in file_rows:
-        content = _read_file_content_store_first(
-            repo_id=repo_id,
-            relative_path=str(row.get("relative_path") or ""),
-            filesystem_path=str(row.get("path") or ""),
-        )
-        if content is None:
-            continue
-        dependency_names = extract_runtime_service_dependencies(
-            content,
-            workload_name=repo_name,
-        )
-        for dependency_name in dependency_names:
-            if dependency_name in seen_dependencies:
-                continue
-            seen_dependencies.add(dependency_name)
-            dependencies.append(dependency_name)
-
-    for dependency_name in dependencies:
-        target_repo = session.run(
-            """
-            MATCH (target_repo:Repository)
-            WHERE target_repo.name = $dependency_name
-            RETURN target_repo.id as repo_id, target_repo.name as repo_name
-            LIMIT 1
-            """,
-            dependency_name=dependency_name,
-        ).data()
-        if not target_repo:
-            continue
-        target_repo_id = target_repo[0].get("repo_id")
-        if not target_repo_id:
-            continue
-        session.run(
-            """
-            MATCH (source_repo:Repository {id: $repo_id})
-            MATCH (target_repo:Repository {id: $target_repo_id})
-            MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)
-            SET rel.confidence = 0.9,
-                rel.reason = 'Runtime services list declares repository dependency'
-            """,
-            dependency_name=dependency_name,
-            repo_id=repo_id,
-            target_repo_id=target_repo_id,
-        )
-        session.run(
-            """
-            MATCH (source:Workload {id: $workload_id})
-            MATCH (target_repo:Repository {id: $target_repo_id})
-            MERGE (target:Workload {id: $target_workload_id})
-            ON CREATE SET target.type = 'workload',
-                          target.name = $dependency_name,
-                          target.kind = 'service',
-                          target.repo_id = $target_repo_id
-            MERGE (target_repo)-[:DEFINES]->(target)
-            MERGE (source)-[rel:DEPENDS_ON]->(target)
-            SET rel.confidence = 0.9,
-                rel.reason = 'Runtime services list declares workload dependency'
-            """,
-            dependency_name=dependency_name,
-            target_repo_id=target_repo_id,
-            target_workload_id=f"workload:{dependency_name}",
-            workload_id=workload_id,
-        )
 
 
 __all__ = ["materialize_workloads"]

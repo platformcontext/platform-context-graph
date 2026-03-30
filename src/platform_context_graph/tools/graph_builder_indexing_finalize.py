@@ -136,6 +136,7 @@ def finalize_index_batch(
     parse_strategy: str = "threaded",
     parse_workers: int = 1,
     skip_per_repo_stages: bool = False,
+    stages: list[str] | None = None,
 ) -> dict[str, float]:
     """Create cross-file and cross-repo relationships after repo commits finish.
 
@@ -208,6 +209,18 @@ def finalize_index_batch(
             )
         setattr(builder, "_last_call_relationship_metrics", aggregated_metrics)
 
+    def _run_workload_stage() -> None:
+        """Materialize workloads, passing targeted repos when supported."""
+
+        materialize_workloads = builder._materialize_workloads
+        if _supports_keyword_arguments(
+            materialize_workloads,
+            ("committed_repo_paths",),
+        ):
+            materialize_workloads(committed_repo_paths=committed_repo_paths)
+            return
+        materialize_workloads()
+
     all_stages: tuple[tuple[str, Any], ...] = (
         (
             "inheritance",
@@ -221,7 +234,10 @@ def finalize_index_batch(
             "infra_links",
             lambda: builder._create_all_infra_links(committed_repo_data_iter()),
         ),
-        ("workloads", builder._materialize_workloads),
+        (
+            "workloads",
+            _run_workload_stage,
+        ),
         (
             "relationship_resolution",
             lambda: builder._resolve_repository_relationships(
@@ -230,6 +246,19 @@ def finalize_index_batch(
             ),
         ),
     )
+    available_stage_names = {stage_name for stage_name, _stage_fn in all_stages}
+    if stages is not None:
+        unknown_stages = sorted(set(stages) - available_stage_names)
+        if unknown_stages:
+            raise ValueError(
+                "Unsupported finalization stages: " + ", ".join(unknown_stages)
+            )
+        requested_stage_names = set(stages)
+        all_stages = tuple(
+            (stage_name, stage_fn)
+            for stage_name, stage_fn in all_stages
+            if stage_name in requested_stage_names
+        )
 
     for stage_name, stage_fn in all_stages:
         if skip_per_repo_stages and stage_name in _PER_REPO_STAGES:
@@ -244,7 +273,12 @@ def finalize_index_batch(
             )
             stage_timings[stage_name] = 0.0
             continue
-        _notify_stage_progress(stage_name)
+        _notify_stage_progress(
+            stage_name,
+            status="started",
+            repo_count=len(committed_repo_paths),
+            run_id=run_id,
+        )
         log_memory_usage(
             info_logger_fn,
             context=f"Before finalization stage {stage_name}",
@@ -271,6 +305,13 @@ def finalize_index_batch(
                 stage_fn()
         elapsed = time.monotonic() - stage_start
         stage_timings[stage_name] = elapsed
+        _notify_stage_progress(
+            stage_name,
+            status="completed",
+            duration_seconds=round(elapsed, 3),
+            repo_count=len(committed_repo_paths),
+            run_id=run_id,
+        )
         if (
             telemetry is not None
             and component is not None
@@ -302,26 +343,21 @@ def finalize_index_batch(
             },
         )
     total_elapsed = time.monotonic() - total_start
+    timings_summary = ", ".join(
+        f"{stage_name}={duration:.1f}s"
+        for stage_name, duration in stage_timings.items()
+    )
     emit_log_call(
         info_logger_fn,
-        "Finalization timings: "
-        f"inheritance={stage_timings['inheritance']:.1f}s, "
-        f"function_calls={stage_timings['function_calls']:.1f}s, "
-        f"infra_links={stage_timings['infra_links']:.1f}s, "
-        f"workloads={stage_timings['workloads']:.1f}s, "
-        f"relationship_resolution={stage_timings['relationship_resolution']:.1f}s, "
-        f"total={total_elapsed:.1f}s",
+        f"Finalization timings: {timings_summary}, total={total_elapsed:.1f}s",
         event_name="index.finalization.completed",
         extra_keys={
             "run_id": run_id,
-            "inheritance_seconds": round(stage_timings["inheritance"], 3),
-            "function_calls_seconds": round(stage_timings["function_calls"], 3),
-            "infra_links_seconds": round(stage_timings["infra_links"], 3),
-            "workloads_seconds": round(stage_timings["workloads"], 3),
-            "relationship_resolution_seconds": round(
-                stage_timings["relationship_resolution"], 3
-            ),
             "total_seconds": round(total_elapsed, 3),
+            **{
+                f"{stage_name}_seconds": round(duration, 3)
+                for stage_name, duration in stage_timings.items()
+            },
         },
     )
     return stage_timings

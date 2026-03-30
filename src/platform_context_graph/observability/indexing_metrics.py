@@ -289,6 +289,8 @@ class RuntimeIndexMetricsMixin:
         """Return a gauge callback that reads one memory field by attribute name."""
 
         def _observe(_options: Any) -> list[Observation]:
+            """Yield one gauge observation when the memory sample is populated."""
+
             value = getattr(self, attr_name, _MEMORY_UNSET)
             return [] if value == _MEMORY_UNSET else [Observation(value, {})]
 

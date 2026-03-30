@@ -10,6 +10,7 @@ from .content_entity import content_entity_context
 from .database import db_workload_context
 from .fixture import fixture_entity_context
 from .support import load_fixture_graph, parse_workload_id
+from .workload_fixture import fixture_workload_context
 
 __all__ = [
     "ServiceAliasError",
@@ -214,8 +215,6 @@ def _workload_context(
     """Dispatch workload-context lookups across fixture and database sources."""
     fixture_graph = load_fixture_graph(database)
     if fixture_graph is not None:
-        from .database import fixture_workload_context
-
         return fixture_workload_context(
             fixture_graph,
             workload_id=workload_id,
