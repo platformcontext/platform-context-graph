@@ -33,6 +33,7 @@ from .dependencies import get_database, get_query_services
 from .http_auth import http_auth_middleware
 from .app_openapi import build_openapi_schema
 from .routers import (
+    admin_router,
     code_router,
     content_router,
     entities_router,
@@ -286,6 +287,7 @@ def create_app(
     app.include_router(content_router, prefix=API_V0_PREFIX)
     app.include_router(infra_router, prefix=API_V0_PREFIX)
     app.include_router(repositories_router, prefix=API_V0_PREFIX)
+    app.include_router(admin_router, prefix=API_V0_PREFIX)
     app.openapi = lambda: build_openapi_schema(app)
     return app
 
