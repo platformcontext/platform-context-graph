@@ -169,9 +169,6 @@ def register_schema_driven_extractors(
                 continue
 
             identity_keys = infer_identity_keys(attributes)
-            if not identity_keys:
-                continue
-
             category = classify_resource_category(resource_type)
             extractor = make_generic_extractor(identity_keys, category)
             register_resource_extractor([resource_type], extractor)

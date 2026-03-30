@@ -300,8 +300,8 @@ class TestRegisterSchemaDrivenExtractors:
         assert "aws_wafv2_web_acl" in registered
         assert "aws_neptune_cluster" in registered
         assert "aws_apprunner_service" in registered
-        # VPC has no name-like attribute in any schema → never registered.
-        assert "aws_vpc" not in registered
+        # All schema-known types are registered (even without identity keys).
+        assert "aws_vpc" in registered
 
     def test_skips_already_registered_types(self) -> None:
         import platform_context_graph.relationships.terraform_evidence  # noqa: F401

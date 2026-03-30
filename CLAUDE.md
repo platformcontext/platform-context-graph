@@ -220,17 +220,17 @@ Resource type support for Terraform evidence extraction is driven by provider sc
 
 **Current coverage:**
 
-| Provider | Version | Schema Types | Registered |
-|---|---|---|---|
-| AWS (`hashicorp/aws`) | 5.100.0 | 1,526 | 1,007 (66%) |
-| Azure (`hashicorp/azurerm`) | 4.66.0 | 1,124 | 1,003 (89%) |
-| GCP (`hashicorp/google`) | 6.50.0 | 1,096 | 779 (71%) |
-| Alibaba Cloud (`aliyun/alicloud`) | 1.273.0 | 1,125 | 855 (76%) |
-| Oracle Cloud (`oracle/oci`) | 6.37.0 | 813 | 609 (75%) |
-| Cloudflare (`cloudflare/cloudflare`) | 5.18.0 | 215 | 113 (53%) |
-| Kubernetes (`hashicorp/kubernetes`) | 2.38.0 | 82 | 81 (99%) |
-| Helm (`hashicorp/helm`) | 2.17.0 | 1 | 1 (100%) |
-| **Total** | | **5,982** | **4,448 (74%)** |
+| Provider | Version | Resource Types |
+|---|---|---|
+| AWS (`hashicorp/aws`) | 5.100.0 | 1,526 |
+| Azure (`hashicorp/azurerm`) | 4.66.0 | 1,124 |
+| GCP (`hashicorp/google`) | 6.50.0 | 1,096 |
+| Alibaba Cloud (`aliyun/alicloud`) | 1.273.0 | 1,125 |
+| Oracle Cloud (`oracle/oci`) | 6.37.0 | 813 |
+| Cloudflare (`cloudflare/cloudflare`) | 5.18.0 | 215 |
+| Kubernetes (`hashicorp/kubernetes`) | 2.38.0 | 82 |
+| Helm (`hashicorp/helm`) | 2.17.0 | 1 |
+| **Total** | | **5,982 (100%)** |
 
 ### Schema file naming convention
 
