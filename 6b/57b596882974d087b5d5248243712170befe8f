@@ -1,0 +1,38 @@
+tests/unit/relationships/test_terraform_evidence_integration.py
+  448a72cc2515ab2b 1-69,71-75,77-117,119-121,123-155,157-159,161-194,196-203,205-218
+src/platform_context_graph/relationships/evidence_terraform.py
+  448a72cc2515ab2b 28,186-196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "6b57b596882974d087b5d5248243712170befe8f",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    },
+    "448a72cc2515ab2b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47731294-7809-43c0-bd49-b7ae1d2096f4",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 238,
+      "total_deletions": 0,
+      "accepted_lines": 222,
+      "overriden_lines": 1
+    }
+  }
+}
