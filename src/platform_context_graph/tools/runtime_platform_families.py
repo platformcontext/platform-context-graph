@@ -45,6 +45,75 @@ _RUNTIME_FAMILIES: tuple[TerraformRuntimeFamily, ...] = (
         service_module_patterns=(),
         non_cluster_module_patterns=("iam-role-for-service-accounts-eks",),
     ),
+    TerraformRuntimeFamily(
+        kind="lambda",
+        provider="aws",
+        display_name="Lambda",
+        name_hints=("lambda", "serverless"),
+        cluster_module_patterns=(),
+        cluster_resource_types=("aws_lambda_function",),
+        service_module_patterns=("lambda-function", "serverless-function"),
+        non_cluster_module_patterns=(),
+    ),
+    TerraformRuntimeFamily(
+        kind="cloudflare_workers",
+        provider="cloudflare",
+        display_name="Cloudflare Workers",
+        name_hints=("cloudflare", "workers"),
+        cluster_module_patterns=(),
+        cluster_resource_types=("cloudflare_workers_script",),
+        service_module_patterns=("cloudflare-worker",),
+        non_cluster_module_patterns=(),
+    ),
+    TerraformRuntimeFamily(
+        kind="gke",
+        provider="gcp",
+        display_name="GKE",
+        name_hints=("gke",),
+        cluster_module_patterns=(
+            "terraform-google-modules/kubernetes-engine",
+            "gke-cluster",
+        ),
+        cluster_resource_types=("google_container_cluster",),
+        service_module_patterns=(),
+        non_cluster_module_patterns=(),
+    ),
+    TerraformRuntimeFamily(
+        kind="aks",
+        provider="azure",
+        display_name="AKS",
+        name_hints=("aks",),
+        cluster_module_patterns=(
+            "Azure/aks/azurerm",
+            "aks-cluster",
+        ),
+        cluster_resource_types=("azurerm_kubernetes_cluster",),
+        service_module_patterns=(),
+        non_cluster_module_patterns=(),
+    ),
+    TerraformRuntimeFamily(
+        kind="cloud_run",
+        provider="gcp",
+        display_name="Cloud Run",
+        name_hints=("cloud-run", "cloud_run", "cloudrun"),
+        cluster_module_patterns=(),
+        cluster_resource_types=(
+            "google_cloud_run_service",
+            "google_cloud_run_v2_service",
+        ),
+        service_module_patterns=("cloud-run",),
+        non_cluster_module_patterns=(),
+    ),
+    TerraformRuntimeFamily(
+        kind="container_apps",
+        provider="azure",
+        display_name="Azure Container Apps",
+        name_hints=("container-apps", "container_apps"),
+        cluster_module_patterns=(),
+        cluster_resource_types=("azurerm_container_app",),
+        service_module_patterns=(),
+        non_cluster_module_patterns=(),
+    ),
 )
 
 
@@ -74,14 +143,14 @@ def infer_terraform_runtime_family_kind(content: str) -> str | None:
             for resource_type in family.cluster_resource_types
         ):
             return family.kind
-        if any(
-            pattern in lower_content for pattern in family.cluster_module_patterns
-        ):
+        if any(pattern in lower_content for pattern in family.cluster_module_patterns):
             return family.kind
     return None
 
 
-def infer_runtime_family_kind_from_identifiers(values: Iterable[str | None]) -> str | None:
+def infer_runtime_family_kind_from_identifiers(
+    values: Iterable[str | None],
+) -> str | None:
     """Infer a runtime family kind from repo names, slugs, or other identifiers."""
 
     normalized_values = [
@@ -158,6 +227,10 @@ def format_platform_kind_label(kind: str) -> str:
         return family.display_name
     if normalized == "kubernetes":
         return "Kubernetes"
+    if normalized == "lambda":
+        return "Lambda"
+    if normalized == "cloudflare_workers":
+        return "Cloudflare Workers"
     return normalized.upper() if normalized else ""
 
 
