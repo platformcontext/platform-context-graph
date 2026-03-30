@@ -1,0 +1,38 @@
+CLAUDE.md
+  1fa037a66b990f4f 223-233
+tests/unit/relationships/test_terraform_provider_schema.py
+  1fa037a66b990f4f 303-304
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "eec46cc5e6bb08b58684ba888c0722213bc394cb",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    },
+    "1fa037a66b990f4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c541d4d3-d6c9-4200-8a0c-03cb682cc16c",
+        "model": "<synthetic>"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 13,
+      "total_deletions": 16,
+      "accepted_lines": 19,
+      "overriden_lines": 0
+    }
+  }
+}
