@@ -257,14 +257,14 @@ class TestCloudflareExtractors:
         import platform_context_graph.relationships.terraform_evidence  # noqa: F401
 
         extractors = get_extractors_for_type("cloudflare_workers_script")
-        body = 'name = "search-worker"'
+        body = 'script_name = "search-worker"'
         results = extractors[0](
             sample_context, "cloudflare_workers_script", "worker", body
         )
         assert len(results) >= 1
         assert results[0].candidate_name == "search-worker"
 
-    def test_dns_record_extracts_hostname_prefix(
+    def test_dns_record_extracts_name(
         self, sample_context: ExtractionContext
     ) -> None:
         import platform_context_graph.relationships.terraform_evidence  # noqa: F401
@@ -275,7 +275,7 @@ class TestCloudflareExtractors:
             sample_context, "cloudflare_dns_record", "boats_dns", body
         )
         assert len(results) >= 1
-        assert results[0].candidate_name == "api-node-boats"
+        assert results[0].candidate_name == "api-node-boats.example.com"
 
 
 class TestGcpExtractors:

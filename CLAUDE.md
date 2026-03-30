@@ -206,6 +206,80 @@ Stateless FastAPI reading Neo4j + Postgres.
 
 Query layer in `query/`. Content store in `content/`. Story builders in `query/story_*.py`.
 
+## Terraform Provider Schema
+
+Resource type support for Terraform evidence extraction is driven by provider schemas generated from real Terraform provider binaries. The schema is the single source of truth for which resource types exist.
+
+### How it works
+
+1. Compressed provider schemas ship inside the Python package at `relationships/terraform_evidence/schemas/<provider>-<version>.json.gz`
+2. At import time, `terraform_evidence/__init__.py` auto-registers extractors for all schema-known resource types that have inferable identity-key attributes (name, *_name, *_identifier)
+3. Resource types without name-like attributes (sub-resources, policies, attachments) are skipped
+4. Zero manual extractor files — everything is schema-driven
+5. Schemas are bundled as package data, so they work in Docker, pip installs, and development
+
+**Current coverage:**
+
+| Provider | Version | Schema Types | Registered |
+|---|---|---|---|
+| AWS (`hashicorp/aws`) | 5.100.0 | 1,526 | 1,007 (66%) |
+| Azure (`hashicorp/azurerm`) | 4.66.0 | 1,124 | 1,003 (89%) |
+| GCP (`hashicorp/google`) | 6.50.0 | 1,096 | 779 (71%) |
+| Cloudflare (`cloudflare/cloudflare`) | 5.18.0 | 215 | 113 (53%) |
+| **Total** | | **3,961** | **2,902 (73%)** |
+
+### Schema file naming convention
+
+Schemas follow `<provider>-<version>.json.gz`:
+- `aws-5.100.0.json.gz`
+- `azurerm-4.66.0.json.gz`
+- `google-6.50.0.json.gz`
+- `cloudflare-5.18.0.json.gz`
+
+The version is the exact provider version resolved by `terraform init`, extracted from `.terraform.lock.hcl`.
+
+### Updating provider versions
+
+```bash
+# 1. Edit the version constraint in terraform_providers/<provider>/versions.tf
+# 2. Regenerate the raw schema (requires terraform CLI)
+./scripts/generate_terraform_provider_schema.sh <provider>
+
+# 3. Package the schema into the Python package (versioned + compressed)
+./scripts/package_terraform_schemas.sh <provider>
+
+# 4. Verify
+PYTHONPATH=src uv run python -m pytest tests/unit/relationships/test_terraform_provider_schema.py -v
+```
+
+### Adding a new provider (open-source contribution)
+
+1. Create `terraform_providers/<provider>/versions.tf` with provider block
+2. Run `./scripts/generate_terraform_provider_schema.sh <provider>` to generate the raw schema
+3. Run `./scripts/package_terraform_schemas.sh <provider>` to compress and version it
+4. Add service category mappings to `SERVICE_CATEGORIES` in `provider_schema.py` (optional — unmapped services default to "infrastructure")
+5. Commit the `.json.gz` file — it ships with the package
+6. Done — schema-driven registration handles the rest automatically
+
+### Key files
+
+| File | Purpose |
+|---|---|
+| `terraform_providers/<provider>/versions.tf` | Provider version constraints for schema extraction |
+| `schemas/<provider>.json` | Raw generated schemas (gitignored, regenerate locally) |
+| `relationships/terraform_evidence/schemas/<provider>-<version>.json.gz` | **Bundled schemas (committed, ships with package)** |
+| `relationships/terraform_evidence/provider_schema.py` | Schema loader, identity-key inference, category classification |
+| `relationships/terraform_evidence/generic.py` | Schema-driven extractor factory + registration |
+| `relationships/terraform_evidence/__init__.py` | Orchestrator, calls `register_schema_driven_extractors()` |
+| `scripts/generate_terraform_provider_schema.sh` | Generates raw schemas from terraform providers |
+| `scripts/package_terraform_schemas.sh` | Compresses and versions schemas for distribution |
+
+### Config
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PCG_TERRAFORM_SCHEMA_DIR` | Package `schemas/` directory | Directory containing provider schema JSON files. Override to use custom schemas. |
+
 ## Active Work
 
 See `~/PRD-pcg-ingestion-remediation.md` for the current remediation plan. Execution order:

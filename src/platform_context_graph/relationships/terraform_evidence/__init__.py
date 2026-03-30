@@ -1,8 +1,9 @@
 """Terraform evidence extraction orchestrator.
 
-Imports all provider modules to trigger resource extractor registration,
-then provides the main evidence discovery entry point that delegates to
-registered per-resource-type extractors.
+All resource type registration is schema-driven: provider schemas generated
+by ``terraform providers schema -json`` are loaded from ``schemas/`` and
+extractors are registered automatically.  See ``generic.py`` and
+``provider_schema.py`` for the registration machinery.
 """
 
 from __future__ import annotations
@@ -22,11 +23,11 @@ from ._base import (
     get_extractors_for_type,
 )
 
-# Import provider modules to trigger extractor registration.
-from . import aws  # noqa: F401
-from . import cloudflare  # noqa: F401
-from . import gcp  # noqa: F401
-from . import azure  # noqa: F401
+# Register schema-driven extractors for all provider schemas found in
+# schemas/.  No-op when no schema files exist.
+from .generic import register_schema_driven_extractors as _register_generic
+
+_register_generic()
 
 
 def discover_terraform_resource_evidence(
