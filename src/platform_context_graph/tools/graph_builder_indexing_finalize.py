@@ -52,6 +52,20 @@ def _supports_keyword_arguments(callback: Any, keyword_names: tuple[str, ...]) -
     return all(name in accepted for name in keyword_names)
 
 
+def _stage_progress_accepts_details(callback: Any) -> bool:
+    """Return whether one stage callback can consume structured progress details."""
+
+    return _supports_keyword_arguments(
+        callback,
+        (
+            "status",
+            "duration_seconds",
+            "repo_count",
+            "run_id",
+        ),
+    )
+
+
 _PER_REPO_STAGES = frozenset({"inheritance"})
 
 
@@ -162,19 +176,18 @@ def finalize_index_batch(
         iter_snapshot_file_data_fn,
     )
     stage_timings: dict[str, float] = {}
+    callback_accepts_details = _stage_progress_accepts_details(stage_progress_callback)
 
     def _notify_stage_progress(stage_name: str, **kwargs: Any) -> None:
         """Send stage heartbeats without breaking legacy one-arg callbacks."""
 
         if not callable(stage_progress_callback):
             return
-        if kwargs and _supports_keyword_arguments(
-            stage_progress_callback,
-            tuple(kwargs.keys()),
-        ):
+        if kwargs and callback_accepts_details:
             stage_progress_callback(stage_name, **kwargs)
             return
-        stage_progress_callback(stage_name)
+        if not kwargs or kwargs.get("status") == "started":
+            stage_progress_callback(stage_name)
 
     def _run_function_call_stage() -> None:
         """Materialize function-call edges and aggregate stage-level metrics."""

@@ -7,7 +7,9 @@ from typing import Any, Iterable
 _DEFAULT_BATCH_SIZE = 250
 
 
-def _chunk_rows(rows: list[dict[str, object]], size: int = _DEFAULT_BATCH_SIZE) -> Iterable[list[dict[str, object]]]:
+def _chunk_rows(
+    rows: list[dict[str, object]], size: int = _DEFAULT_BATCH_SIZE
+) -> Iterable[list[dict[str, object]]]:
     """Yield fixed-size chunks for Cypher `UNWIND` writes."""
 
     for index in range(0, len(rows), size):
@@ -25,6 +27,184 @@ def _run_batched_write(
 
     for chunk in _chunk_rows(rows):
         session.run(query, rows=chunk, evidence_source=evidence_source)
+
+
+def retract_repo_dependency_rows(
+    session: Any,
+    repo_ids: list[str],
+    *,
+    evidence_source: str,
+) -> None:
+    """Delete workload-owned repository dependencies for targeted repos."""
+
+    if not repo_ids:
+        return
+    session.run(
+        """
+        MATCH (source_repo:Repository)-[rel:DEPENDS_ON]->(:Repository)
+        WHERE source_repo.id IN $repo_ids
+          AND rel.evidence_source = $evidence_source
+        DELETE rel
+        """,
+        repo_ids=repo_ids,
+        evidence_source=evidence_source,
+    )
+
+
+def retract_workload_dependency_rows(
+    session: Any,
+    repo_ids: list[str],
+    *,
+    active_workload_ids: list[str],
+    evidence_source: str,
+) -> None:
+    """Delete targeted workload dependencies while preserving active targets."""
+
+    if not repo_ids:
+        return
+    session.run(
+        """
+        MATCH (source:Workload)-[rel:DEPENDS_ON]->(:Workload)
+        WHERE source.repo_id IN $repo_ids
+          AND rel.evidence_source = $evidence_source
+        DELETE rel
+        """,
+        repo_ids=repo_ids,
+        evidence_source=evidence_source,
+    )
+    session.run(
+        """
+        MATCH (target:Workload)
+        WHERE target.repo_id IN $repo_ids
+          AND target.evidence_source = $evidence_source
+          AND NOT target.id IN $active_workload_ids
+        MATCH (:Workload)-[rel:DEPENDS_ON]->(target)
+        WHERE rel.evidence_source = $evidence_source
+        DELETE rel
+        """,
+        active_workload_ids=active_workload_ids,
+        repo_ids=repo_ids,
+        evidence_source=evidence_source,
+    )
+
+
+def retract_stale_workload_rows(
+    session: Any,
+    repo_ids: list[str],
+    *,
+    active_workload_ids: list[str],
+    evidence_source: str,
+) -> None:
+    """Delete stale targeted workload nodes without touching active ones."""
+
+    if not repo_ids:
+        return
+    session.run(
+        """
+        MATCH (repo:Repository)-[rel:DEFINES]->(w:Workload)
+        WHERE repo.id IN $repo_ids
+          AND rel.evidence_source = $evidence_source
+          AND w.evidence_source = $evidence_source
+          AND NOT w.id IN $active_workload_ids
+        DELETE rel
+        """,
+        active_workload_ids=active_workload_ids,
+        repo_ids=repo_ids,
+        evidence_source=evidence_source,
+    )
+    session.run(
+        """
+        MATCH (w:Workload)
+        WHERE w.repo_id IN $repo_ids
+          AND w.evidence_source = $evidence_source
+          AND NOT w.id IN $active_workload_ids
+          AND NOT (w)--()
+        DELETE w
+        """,
+        active_workload_ids=active_workload_ids,
+        repo_ids=repo_ids,
+        evidence_source=evidence_source,
+    )
+
+
+def retract_instance_rows(
+    session: Any,
+    repo_ids: list[str],
+    *,
+    evidence_source: str,
+) -> None:
+    """Delete targeted workload-instance state so it can be rebuilt cleanly."""
+
+    if not repo_ids:
+        return
+    for relationship_type, target_label in (
+        ("DEPLOYMENT_SOURCE", "Repository"),
+        ("RUNS_ON", "Platform"),
+        ("INSTANCE_OF", "Workload"),
+    ):
+        session.run(
+            f"""
+            MATCH (i:WorkloadInstance)
+            WHERE i.repo_id IN $repo_ids
+              AND i.evidence_source = $evidence_source
+            MATCH (i)-[rel:{relationship_type}]->(:{target_label})
+            WHERE rel.evidence_source = $evidence_source
+            DELETE rel
+            """,
+            repo_ids=repo_ids,
+            evidence_source=evidence_source,
+        )
+    session.run(
+        """
+        MATCH (i:WorkloadInstance)
+        WHERE i.repo_id IN $repo_ids
+          AND i.evidence_source = $evidence_source
+          AND NOT (i)--()
+        DELETE i
+        """,
+        repo_ids=repo_ids,
+        evidence_source=evidence_source,
+    )
+
+
+def retract_infrastructure_platform_rows(
+    session: Any,
+    repo_ids: list[str],
+    *,
+    evidence_source: str,
+) -> None:
+    """Delete targeted infrastructure platform edges before re-materializing."""
+
+    if not repo_ids:
+        return
+    session.run(
+        """
+        MATCH (repo:Repository)-[rel:PROVISIONS_PLATFORM]->(:Platform)
+        WHERE repo.id IN $repo_ids
+          AND rel.evidence_source = $evidence_source
+        DELETE rel
+        """,
+        repo_ids=repo_ids,
+        evidence_source=evidence_source,
+    )
+
+
+def delete_orphan_platform_rows(
+    session: Any,
+    *,
+    evidence_source: str,
+) -> None:
+    """Delete detached finalization-owned platform nodes."""
+
+    session.run(
+        """
+        MATCH (p:Platform)
+        WHERE p.evidence_source = $evidence_source
+          AND NOT (p)--()
+        DELETE p
+        """,
+        evidence_source=evidence_source,
+    )
 
 
 def write_workload_rows(

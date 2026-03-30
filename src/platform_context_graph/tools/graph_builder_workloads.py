@@ -12,6 +12,10 @@ from .graph_builder_platforms import (
     materialize_infrastructure_platforms_for_repo_paths,
 )
 from .graph_builder_workload_batches import (
+    retract_instance_rows,
+    retract_repo_dependency_rows,
+    retract_stale_workload_rows,
+    retract_workload_dependency_rows,
     write_deployment_source_rows,
     write_instance_rows,
     write_runtime_platform_rows,
@@ -138,6 +142,25 @@ def _load_candidate_rows(
         source_roots_key="source_roots",
         source_path_key="source_path",
         source_paths_key="source_paths",
+    ).data()
+
+
+def _load_target_repo_rows(
+    session: Any,
+    *,
+    repo_paths: list[str] | None,
+) -> list[dict[str, object]]:
+    """Load all targeted repositories, including ones without active workloads."""
+
+    return session.run(
+        """
+        MATCH (repo:Repository)
+        WHERE $repo_paths IS NULL OR repo.path IN $repo_paths
+        RETURN repo.id as target_repo_id,
+               repo.name as target_repo_name
+        ORDER BY repo.name
+        """,
+        repo_paths=repo_paths,
     ).data()
 
 
@@ -326,6 +349,7 @@ def materialize_workloads(
 
     repo_paths = _normalize_repo_paths(committed_repo_paths)
     with builder.driver.session() as session:
+        target_repo_rows = _load_target_repo_rows(session, repo_paths=repo_paths)
         candidate_rows = _load_candidate_rows(session, repo_paths=repo_paths)
         deployment_environments = _load_deployment_environments(
             session,
@@ -341,6 +365,38 @@ def materialize_workloads(
         ) = _build_projection_rows(
             candidate_rows,
             deployment_environments=deployment_environments,
+        )
+        target_repo_ids = [
+            str(row.get("target_repo_id") or "")
+            for row in target_repo_rows
+            if str(row.get("target_repo_id") or "").strip()
+        ]
+        active_workload_ids = [
+            str(row.get("workload_id") or "")
+            for row in workload_rows
+            if str(row.get("workload_id") or "").strip()
+        ]
+        retract_repo_dependency_rows(
+            session,
+            target_repo_ids,
+            evidence_source=_EVIDENCE_SOURCE,
+        )
+        retract_workload_dependency_rows(
+            session,
+            target_repo_ids,
+            active_workload_ids=active_workload_ids,
+            evidence_source=_EVIDENCE_SOURCE,
+        )
+        retract_stale_workload_rows(
+            session,
+            target_repo_ids,
+            active_workload_ids=active_workload_ids,
+            evidence_source=_EVIDENCE_SOURCE,
+        )
+        retract_instance_rows(
+            session,
+            target_repo_ids,
+            evidence_source=_EVIDENCE_SOURCE,
         )
         write_workload_rows(
             session,

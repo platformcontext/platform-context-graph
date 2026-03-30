@@ -6,7 +6,11 @@ from pathlib import Path
 import re
 from typing import Any, Iterable
 
-from .graph_builder_workload_batches import write_infrastructure_platform_rows
+from .graph_builder_workload_batches import (
+    delete_orphan_platform_rows,
+    retract_infrastructure_platform_rows,
+    write_infrastructure_platform_rows,
+)
 from .runtime_platform_families import infer_infrastructure_runtime_family_kind
 from .runtime_platform_families import infer_runtime_family_kind_from_identifiers
 from .runtime_platform_families import infer_terraform_runtime_family_kind
@@ -26,7 +30,9 @@ _NON_PLATFORM_IDENTIFIERS = {
     "public",
     "terraform_state",
 }
-_TERRAFORM_CLUSTER_NAME_RE = re.compile(r'\bcluster_name\b\s*=\s*"([^"]+)"', re.IGNORECASE)
+_TERRAFORM_CLUSTER_NAME_RE = re.compile(
+    r'\bcluster_name\b\s*=\s*"([^"]+)"', re.IGNORECASE
+)
 _TERRAFORM_NAME_RE = re.compile(r'\bname\b\s*=\s*"([^"]+)"', re.IGNORECASE)
 _GITOPS_EXPLICIT_PLATFORM_KEYS = {
     "destinationClusterName",
@@ -111,6 +117,25 @@ def materialize_infrastructure_platforms_for_repo_paths(
     """Attach infrastructure repositories to inferred platform nodes in batches."""
 
     normalized_repo_paths = [str(path.resolve()) for path in repo_paths or []]
+    target_repo_rows = session.run(
+        """
+        MATCH (repo:Repository)
+        WHERE $repo_paths IS NULL OR repo.path IN $repo_paths
+        RETURN repo.id as repo_id
+        ORDER BY repo.id
+        """,
+        repo_paths=normalized_repo_paths or None,
+    ).data()
+    target_repo_ids = [
+        str(row.get("repo_id") or "")
+        for row in target_repo_rows
+        if str(row.get("repo_id") or "").strip()
+    ]
+    retract_infrastructure_platform_rows(
+        session,
+        target_repo_ids,
+        evidence_source="finalization/workloads",
+    )
 
     platform_rows = session.run(
         """
@@ -173,6 +198,10 @@ def materialize_infrastructure_platforms_for_repo_paths(
         descriptor_rows,
         evidence_source="finalization/workloads",
     )
+    delete_orphan_platform_rows(
+        session,
+        evidence_source="finalization/workloads",
+    )
 
 
 def infer_runtime_platform_kind(resource_kinds: Iterable[str]) -> str | None:
@@ -205,7 +234,9 @@ def extract_terraform_platform_name(content: str) -> str | None:
     return None
 
 
-def infer_gitops_platform_kind(*, repo_name: str, repo_slug: str | None, content: str) -> str | None:
+def infer_gitops_platform_kind(
+    *, repo_name: str, repo_slug: str | None, content: str
+) -> str | None:
     """Infer a platform kind from portable GitOps control-plane signals."""
 
     hinted_kind = infer_runtime_family_kind_from_identifiers((repo_name, repo_slug))
@@ -293,12 +324,18 @@ def infer_infrastructure_platform_descriptor(
 ) -> dict[str, str] | None:
     """Return a platform descriptor for infra repos when the signal is explicit."""
 
-    normalized_data_types = [str(value).lower() for value in data_types if str(value).strip()]
-    normalized_data_names = [str(value).strip() for value in data_names if str(value).strip()]
+    normalized_data_types = [
+        str(value).lower() for value in data_types if str(value).strip()
+    ]
+    normalized_data_names = [
+        str(value).strip() for value in data_names if str(value).strip()
+    ]
     normalized_module_sources = [
         str(value).lower() for value in module_sources if str(value).strip()
     ]
-    normalized_module_names = [str(value).strip() for value in module_names if str(value).strip()]
+    normalized_module_names = [
+        str(value).strip() for value in module_names if str(value).strip()
+    ]
     normalized_resource_types = [
         str(value).lower() for value in resource_types if str(value).strip()
     ]
