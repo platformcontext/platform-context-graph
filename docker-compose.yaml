@@ -1,6 +1,6 @@
 services:
   neo4j:
-    image: neo4j:5-community
+    image: neo4j:2026-community
     ports:
       - "${NEO4J_HTTP_PORT:-7474}:7474"
       - "${NEO4J_BOLT_PORT:-7687}:7687"
@@ -35,7 +35,7 @@ services:
       - jaeger
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     ports:
       - "${PCG_POSTGRES_PORT:-15432}:5432"
     environment:

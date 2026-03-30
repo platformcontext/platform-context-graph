@@ -259,6 +259,50 @@ SERVICE_CATEGORIES: dict[str, str] = {
     "horizontal_pod_autoscaler": "compute",
     # --- Helm ---
     "release": "compute",
+    # --- RabbitMQ (rabbitmq_ prefix) ---
+    "exchange": "messaging",
+    "queue": "messaging",
+    "binding": "messaging",
+    "vhost": "messaging",
+    "user": "security",
+    "permissions": "security",
+    "policy": "governance",
+    "shovel": "messaging",
+    "federation_upstream": "messaging",
+    "topic_permissions": "security",
+    # --- MySQL (mysql_ prefix) ---
+    "database": "data",
+    "user": "security",
+    "grant": "security",
+    "role": "security",
+    # --- PagerDuty (pagerduty_ prefix) ---
+    "service": "monitoring",
+    "escalation_policy": "monitoring",
+    "schedule": "monitoring",
+    "team": "governance",
+    "user": "security",
+    "maintenance_window": "monitoring",
+    "ruleset": "monitoring",
+    "event_orchestration": "monitoring",
+    "incident_workflow": "monitoring",
+    "business_service": "monitoring",
+    # --- GitHub (github_ prefix) ---
+    "repository": "cicd",
+    "branch_protection": "security",
+    "actions": "cicd",
+    "team": "governance",
+    "membership": "governance",
+    "organization": "governance",
+    "issue_label": "governance",
+    # --- Grafana (grafana_ prefix) ---
+    "dashboard": "monitoring",
+    "folder": "monitoring",
+    "data_source": "monitoring",
+    "alert_notification": "monitoring",
+    "organization": "governance",
+    "notification_policy": "monitoring",
+    "contact_point": "monitoring",
+    "rule_group": "monitoring",
 }
 
 # Well-known nested block names whose attributes are merged into the
