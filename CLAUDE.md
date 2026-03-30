@@ -230,7 +230,15 @@ Resource type support for Terraform evidence extraction is driven by provider sc
 | Cloudflare (`cloudflare/cloudflare`) | 5.18.0 | 215 |
 | Kubernetes (`hashicorp/kubernetes`) | 2.38.0 | 82 |
 | Helm (`hashicorp/helm`) | 2.17.0 | 1 |
-| **Total** | | **5,982 (100%)** |
+| Random (`hashicorp/random`) | 3.8.1 | 10 |
+| TLS (`hashicorp/tls`) | 4.2.1 | 4 |
+| Time (`hashicorp/time`) | 0.13.1 | 4 |
+| Local (`hashicorp/local`) | 2.7.0 | 2 |
+| Archive (`hashicorp/archive`) | 2.7.1 | 1 |
+| Null (`hashicorp/null`) | 3.2.4 | 1 |
+| HTTP (`hashicorp/http`) | 3.5.0 | 0 |
+| External (`hashicorp/external`) | 2.3.5 | 0 |
+| **Total** | | **6,004** |
 
 ### Schema file naming convention
 

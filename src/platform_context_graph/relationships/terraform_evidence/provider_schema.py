@@ -303,6 +303,21 @@ SERVICE_CATEGORIES: dict[str, str] = {
     "notification_policy": "monitoring",
     "contact_point": "monitoring",
     "rule_group": "monitoring",
+    # --- Utility Providers ---
+    # archive (hashicorp/archive)
+    "file": "storage",
+    # tls (hashicorp/tls)
+    "private_key": "security",
+    "cert_request": "security",
+    "self_signed_cert": "security",
+    "locally_signed_cert": "security",
+    # http (hashicorp/http) - defaults to infrastructure
+    # local (hashicorp/local) - defaults to infrastructure
+    # null (hashicorp/null) - defaults to infrastructure
+    # random (hashicorp/random) - defaults to infrastructure
+    # time (hashicorp/time) - defaults to infrastructure
+    # external (hashicorp/external) - defaults to infrastructure
+    # template (hashicorp/template) - deprecated, defaults to infrastructure
 }
 
 # Well-known nested block names whose attributes are merged into the
