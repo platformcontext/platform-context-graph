@@ -1,12 +1,13 @@
 services:
   neo4j:
-    image: neo4j:5-community
+    image: neo4j:2026-community
     ports:
       - "${NEO4J_HTTP_PORT:-7474}:7474"
       - "${NEO4J_BOLT_PORT:-7687}:7687"
     environment:
       NEO4J_AUTH: neo4j/${PCG_NEO4J_PASSWORD:-change-me}
       NEO4J_PLUGINS: '[]'
+      NEO4J_dbms_security_auth__enabled: "${NEO4J_AUTH_ENABLED:-true}"
     volumes:
       - neo4j_data:/data
     healthcheck:
@@ -35,13 +36,23 @@ services:
       - jaeger
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     ports:
       - "${PCG_POSTGRES_PORT:-15432}:5432"
     environment:
       POSTGRES_DB: platform_context_graph
       POSTGRES_USER: pcg
       POSTGRES_PASSWORD: ${PCG_POSTGRES_PASSWORD:-change-me}
+    command:
+      - "postgres"
+      - "-c"
+      - "max_wal_size=4GB"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "work_mem=64MB"
+      - "-c"
+      - "maintenance_work_mem=256MB"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

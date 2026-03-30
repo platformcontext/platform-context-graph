@@ -101,6 +101,68 @@ def iter_checkout_files(checkout: RepositoryCheckout) -> Iterator[Path]:
             yield path
 
 
+def checkout_path_exists(checkout: RepositoryCheckout) -> bool:
+    """Return whether the checkout's local path exists on disk."""
+
+    if not checkout.checkout_path:
+        return False
+    return Path(checkout.checkout_path).is_dir()
+
+
+def iter_terraform_files_from_content_store(
+    checkout: RepositoryCheckout,
+) -> list[tuple[Path, str]]:
+    """Load Terraform files from the Postgres content store.
+
+    The content store is the authoritative source for indexed file content.
+    This reads Terraform/Terragrunt files directly from Postgres rather
+    than walking the filesystem.
+
+    Args:
+        checkout: Repository checkout record with ``logical_repo_id``.
+
+    Returns:
+        List of (synthetic_path, content) pairs for Terraform files.
+    """
+
+    from ..content.state import get_postgres_content_provider
+
+    provider = get_postgres_content_provider()
+    if provider is None or not provider.enabled:
+        return []
+
+    repo_id = checkout.logical_repo_id
+    terraform_files: list[tuple[Path, str]] = []
+
+    try:
+        with provider._cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT relative_path, content
+                FROM content_files
+                WHERE repo_id = %(repo_id)s
+                  AND (
+                    relative_path LIKE '%%.tf'
+                    OR relative_path LIKE '%%.tfvars'
+                    OR relative_path LIKE '%%.hcl'
+                  )
+                  AND content IS NOT NULL
+                """,
+                {"repo_id": repo_id},
+            )
+            for row in cursor:
+                relative_path = row["relative_path"]
+                content = row["content"]
+                if content:
+                    base = checkout.checkout_path or repo_id
+                    synthetic_path = Path(base) / relative_path
+                    terraform_files.append((synthetic_path, content))
+    except Exception:
+        return []
+
+    return terraform_files
+
+
 def is_terraform_file(path: Path) -> bool:
     """Return whether the path should be scanned as Terraform/Terragrunt."""
 
@@ -332,11 +394,13 @@ __all__ = [
     "append_evidence_for_candidate",
     "append_relationship_evidence",
     "build_catalog",
+    "checkout_path_exists",
     "is_terraform_file",
     "iter_checkout_files",
     "iter_kustomize_helm_strings",
     "iter_kustomize_image_strings",
     "iter_kustomize_resource_strings",
+    "iter_terraform_files_from_content_store",
     "iter_yaml_strings",
     "load_yaml_documents",
     "load_yaml_documents_from_text",

@@ -18,8 +18,10 @@ from .file_evidence_support import (
     CatalogEntry,
     append_evidence_for_candidate,
     append_relationship_evidence,
+    checkout_path_exists,
     is_terraform_file,
     iter_checkout_files,
+    iter_terraform_files_from_content_store,
     read_text,
 )
 from .models import RelationshipEvidenceFact, RepositoryCheckout
@@ -103,14 +105,17 @@ def discover_terraform_evidence(
     evidence: list[RelationshipEvidenceFact] = []
     seen: set[tuple[str, str, str, str]] = set()
     for checkout in checkouts:
-        terraform_files: list[tuple[Path, str]] = []
-        for file_path in iter_checkout_files(checkout):
-            if not is_terraform_file(file_path):
-                continue
-            content = read_text(file_path)
-            if content is None:
-                continue
-            terraform_files.append((file_path, content))
+        # Content store is the authoritative source — try it first.
+        terraform_files = iter_terraform_files_from_content_store(checkout)
+        if not terraform_files and checkout_path_exists(checkout):
+            terraform_files = []
+            for file_path in iter_checkout_files(checkout):
+                if not is_terraform_file(file_path):
+                    continue
+                content = read_text(file_path)
+                if content is None:
+                    continue
+                terraform_files.append((file_path, content))
         local_values = _checkout_local_string_values(terraform_files)
         cluster_references = _checkout_cluster_references(
             terraform_files,

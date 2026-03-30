@@ -41,6 +41,7 @@ from .cli_helpers import (
     cypher_helper,  # noqa: F401
     cypher_helper_visual,  # noqa: F401
     delete_helper,  # noqa: F401
+    finalize_helper,  # noqa: F401
     index_helper,  # noqa: F401
     index_status_helper,  # noqa: F401
     list_repos_helper,  # noqa: F401

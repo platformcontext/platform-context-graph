@@ -10,6 +10,7 @@ from .helpers.database import (
     list_repos_helper,
     stats_helper,
 )
+from .helpers.finalize import finalize_helper
 from .helpers.indexing import (
     add_package_helper,
     index_helper,
@@ -43,6 +44,7 @@ __all__ = [
     "cypher_helper",
     "cypher_helper_visual",
     "delete_helper",
+    "finalize_helper",
     "index_helper",
     "index_status_helper",
     "list_repos_helper",

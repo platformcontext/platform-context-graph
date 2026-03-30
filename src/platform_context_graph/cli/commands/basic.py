@@ -249,6 +249,39 @@ def register_basic_commands(main_module: Any, app: typer.Typer) -> None:
         main_module.index_status_helper(target)
 
     @app.command()
+    def finalize(
+        stages: list[str] | None = typer.Option(
+            None,
+            "--stage",
+            "-s",
+            help="Specific stages to run (can repeat). Defaults to graph-only stages.",
+        ),
+        run_id: str | None = typer.Option(
+            None,
+            "--run-id",
+            help="Run ID to load snapshots from (enables file-dependent stages).",
+        ),
+        dry_run: bool = typer.Option(
+            False,
+            "--dry-run",
+            help="Show what would run without executing.",
+        ),
+    ) -> None:
+        """Re-run finalization stages against an existing graph.
+
+        Use after a failed finalization or on a restored database backup.
+        Without --run-id, runs graph-only stages (workloads, relationship_resolution).
+        With --run-id, also runs file-dependent stages if NDJSON snapshots exist.
+        """
+
+        main_module._load_credentials()
+        main_module.finalize_helper(
+            stages=stages,
+            run_id=run_id,
+            dry_run=dry_run,
+        )
+
+    @app.command()
     def clean() -> None:
         """Remove orphaned nodes and relationships from the database."""
         main_module._load_credentials()
