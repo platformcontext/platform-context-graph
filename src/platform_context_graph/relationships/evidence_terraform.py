@@ -84,6 +84,34 @@ _CLUSTER_RE = re.compile(
     r'resource\s+"aws_(?P<kind>ecs|eks)_cluster"\s+"(?P<resource_name>[^"]+)"\s*\{(?P<body>.*?)\n\}',
     re.IGNORECASE | re.DOTALL,
 )
+# Matches non-cluster platform resources (Lambda, Cloudflare Workers, GKE, Cloud Run, etc.)
+_PLATFORM_RESOURCE_RE = re.compile(
+    r'resource\s+"(?P<resource_type>'
+    r"aws_lambda_function"
+    r"|cloudflare_workers_script"
+    r"|google_container_cluster"
+    r"|google_cloud_run_service"
+    r"|google_cloud_run_v2_service"
+    r"|azurerm_kubernetes_cluster"
+    r"|azurerm_container_app"
+    r')"\s+"(?P<resource_name>[^"]+)"\s*\{(?P<body>.*?)\n\}',
+    re.IGNORECASE | re.DOTALL,
+)
+_PLATFORM_RESOURCE_TYPE_TO_KIND: dict[str, str] = {
+    "aws_lambda_function": "lambda",
+    "cloudflare_workers_script": "cloudflare_workers",
+    "google_container_cluster": "gke",
+    "google_cloud_run_service": "cloud_run",
+    "google_cloud_run_v2_service": "cloud_run",
+    "azurerm_kubernetes_cluster": "aks",
+    "azurerm_container_app": "container_apps",
+}
+# Keys used to identify service/app names in non-cluster resources.
+_SERVICE_NAME_KEYS: tuple[str, ...] = (
+    "function_name",
+    "name",
+    "script_name",
+)
 _MODULE_RE = re.compile(
     r'module\s+"(?P<module_name>[^"]+)"\s*\{(?P<body>.*?)\n\}',
     re.IGNORECASE | re.DOTALL,
@@ -167,9 +195,24 @@ def _discover_terraform_platform_evidence(
     cluster_references: dict[str, str],
     seen: set[tuple[str, str, str, str]],
 ) -> list[RelationshipEvidenceFact]:
-    """Extract ECS platform provisioning and runtime evidence from one file."""
+    """Extract platform provisioning and runtime evidence from one file.
+
+    Handles both cluster-based platforms (ECS, EKS) and resource-based
+    platforms (Lambda, Cloudflare Workers, Cloud Run, AKS, Container Apps).
+    """
 
     evidence: list[RelationshipEvidenceFact] = []
+    # Non-cluster platform resources (Lambda, Cloudflare Workers, etc.)
+    evidence.extend(
+        _discover_resource_platform_evidence(
+            checkout=checkout,
+            catalog=catalog,
+            content=content,
+            file_path=file_path,
+            local_values=local_values,
+            seen=seen,
+        )
+    )
     kind = infer_terraform_platform_kind(content)
     if kind is None:
         return evidence
@@ -243,7 +286,9 @@ def _discover_terraform_platform_evidence(
             _first_quoted_value(body, "repo_name"),
             _first_quoted_value(body, "name"),
         )
-        environment_hint = _first_quoted_value(body, "cloudmap_namespace") or environment
+        environment_hint = (
+            _first_quoted_value(body, "cloudmap_namespace") or environment
+        )
         if not cluster_name or not app_repo:
             continue
         platform_id = _terraform_platform_id(
@@ -277,6 +322,120 @@ def _discover_terraform_platform_evidence(
                     "kind": kind,
                 },
             )
+    return evidence
+
+
+def _discover_resource_platform_evidence(
+    *,
+    checkout: RepositoryCheckout,
+    catalog: Sequence[CatalogEntry],
+    content: str,
+    file_path: Path,
+    local_values: dict[str, str],
+    seen: set[tuple[str, str, str, str]],
+) -> list[RelationshipEvidenceFact]:
+    """Extract platform evidence from non-cluster resources like Lambda and Workers."""
+
+    evidence: list[RelationshipEvidenceFact] = []
+    for match in _PLATFORM_RESOURCE_RE.finditer(content):
+        resource_type = match.group("resource_type").lower()
+        kind = _PLATFORM_RESOURCE_TYPE_TO_KIND.get(resource_type)
+        if kind is None:
+            continue
+        body = match.group("body")
+        family = lookup_runtime_family(kind)
+        provider = family.provider if family is not None else None
+
+        # Extract a stable name for the platform resource
+        resource_name = None
+        for key in _SERVICE_NAME_KEYS:
+            resource_name = _first_quoted_value(body, key)
+            if resource_name:
+                break
+        # Resolve locals references
+        if resource_name is None:
+            for key in _SERVICE_NAME_KEYS:
+                resource_name = _resolve_assignment_value(
+                    body,
+                    key=key,
+                    local_values=local_values,
+                    references={},
+                )
+                if resource_name:
+                    break
+        if not resource_name:
+            resource_name = match.group("resource_name")
+
+        platform_id = _terraform_platform_id(
+            kind=kind,
+            name=resource_name,
+            environment=None,
+        )
+        if platform_id is None:
+            continue
+
+        # PROVISIONS_PLATFORM: the repo declaring this resource provisions the platform
+        append_relationship_evidence(
+            evidence=evidence,
+            seen=seen,
+            source_repo_id=checkout.logical_repo_id,
+            target_repo_id=None,
+            source_entity_id=checkout.logical_repo_id,
+            target_entity_id=platform_id,
+            evidence_kind=terraform_platform_evidence_kind(kind, scope="resource"),
+            relationship_type="PROVISIONS_PLATFORM",
+            confidence=0.95,
+            rationale=f"Terraform {resource_type} resource provisions the runtime platform",
+            path=file_path,
+            extractor="terraform",
+            extra_details={
+                "resource_type": resource_type,
+                "resource_name": resource_name,
+                "provider": provider,
+                "kind": kind,
+            },
+        )
+
+        # RUNS_ON: try to link the resource to the source code repo it deploys
+        # For Lambda: look for handler, filename, or s3_key references
+        # For Workers: look for content or name references
+        app_repo = _first_non_empty(
+            _first_quoted_value(body, "app_repo"),
+            _first_quoted_value(body, "repo_name"),
+        )
+        if not app_repo:
+            # Infer from function_name or name (common pattern: function name = repo name)
+            app_repo = _first_non_empty(
+                _first_quoted_value(body, "function_name"),
+                _first_quoted_value(body, "script_name"),
+            )
+        if app_repo:
+            for entry in catalog:
+                if app_repo.lower() not in entry.aliases:
+                    continue
+                append_relationship_evidence(
+                    evidence=evidence,
+                    seen=seen,
+                    source_repo_id=entry.repo_id,
+                    target_repo_id=None,
+                    source_entity_id=entry.repo_id,
+                    target_entity_id=platform_id,
+                    evidence_kind=terraform_platform_evidence_kind(
+                        kind, scope="service"
+                    ),
+                    relationship_type="RUNS_ON",
+                    confidence=0.92,
+                    rationale=f"Terraform {resource_type} binds the application to the runtime",
+                    path=file_path,
+                    extractor="terraform",
+                    extra_details={
+                        "resource_type": resource_type,
+                        "resource_name": resource_name,
+                        "app_repo": app_repo,
+                        "provider": provider,
+                        "kind": kind,
+                    },
+                )
     return evidence
 
 
