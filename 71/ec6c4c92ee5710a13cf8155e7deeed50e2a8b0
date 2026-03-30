@@ -1,0 +1,23 @@
+src/platform_context_graph/api/routers/admin.py
+  171ca78060f03490 6,21,33,35-39,41,43,96,100,109-110,112-113,115-131,135,141-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "71ec6c4c92ee5710a13cf8155e7deeed50e2a8b0",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 43,
+      "total_deletions": 22,
+      "accepted_lines": 48,
+      "overriden_lines": 0
+    }
+  }
+}
