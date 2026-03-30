@@ -1,0 +1,41 @@
+terraform_providers/archive/versions.tf
+  1fa037a66b990f4f 1-10
+terraform_providers/local/versions.tf
+  1fa037a66b990f4f 1-10
+terraform_providers/null/versions.tf
+  1fa037a66b990f4f 1-10
+terraform_providers/tls/versions.tf
+  1fa037a66b990f4f 1-10
+terraform_providers/external/versions.tf
+  1fa037a66b990f4f 1-10
+terraform_providers/time/versions.tf
+  1fa037a66b990f4f 1-10
+src/platform_context_graph/relationships/terraform_evidence/provider_schema.py
+  1fa037a66b990f4f 306-320
+CLAUDE.md
+  1fa037a66b990f4f 233-241
+terraform_providers/random/versions.tf
+  1fa037a66b990f4f 1-10
+terraform_providers/http/versions.tf
+  1fa037a66b990f4f 1-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "a748c7496d74b3d4b06f8d8a6759d17ec5b8cfc7",
+  "prompts": {
+    "1fa037a66b990f4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c541d4d3-d6c9-4200-8a0c-03cb682cc16c",
+        "model": "<synthetic>"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 114,
+      "total_deletions": 1,
+      "accepted_lines": 114,
+      "overriden_lines": 0
+    }
+  }
+}
