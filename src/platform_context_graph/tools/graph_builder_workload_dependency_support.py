@@ -12,42 +12,56 @@ from .graph_builder_workload_batches import (
 from .languages.runtime_dependencies import extract_runtime_service_dependencies
 
 
-def _read_file_content_store_first(
-    *,
-    repo_id: str,
-    relative_path: str,
-    filesystem_path: str,
-) -> str | None:
+def _read_file_contents_store_first(
+    file_rows: list[dict[str, object]],
+) -> dict[tuple[str, str], str]:
     """Read file content from the content store first, filesystem second."""
 
     from ..content.state import get_postgres_content_provider
 
+    requested_files = [
+        {
+            "repo_id": str(row.get("repo_id") or ""),
+            "relative_path": str(row.get("relative_path") or ""),
+            "filesystem_path": str(row.get("path") or ""),
+        }
+        for row in file_rows
+        if str(row.get("repo_id") or "").strip()
+        and str(row.get("relative_path") or "").strip()
+    ]
+    if not requested_files:
+        return {}
+
     provider = get_postgres_content_provider()
+    contents_by_file: dict[tuple[str, str], str] = {}
     if provider is not None and provider.enabled:
         try:
-            with provider._cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT content FROM content_files
-                    WHERE repo_id = %(repo_id)s
-                      AND relative_path = %(relative_path)s
-                      AND content IS NOT NULL
-                    """,
-                    {"repo_id": repo_id, "relative_path": relative_path},
+            contents_by_file.update(
+                provider.get_file_contents_batch(
+                    repo_files=[
+                        {
+                            "repo_id": row["repo_id"],
+                            "relative_path": row["relative_path"],
+                        }
+                        for row in requested_files
+                    ]
                 )
-                row = cursor.fetchone()
-                if row is not None:
-                    return row["content"]
+            )
         except Exception:
             pass
 
-    path = Path(filesystem_path).expanduser()
-    if path.is_file():
+    for row in requested_files:
+        cache_key = (row["repo_id"], row["relative_path"])
+        if cache_key in contents_by_file:
+            continue
+        path = Path(row["filesystem_path"]).expanduser()
+        if not path.is_file():
+            continue
         try:
-            return path.read_text(encoding="utf-8")
+            contents_by_file[cache_key] = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
-            pass
-    return None
+            continue
+    return contents_by_file
 
 
 def _load_runtime_dependency_targets(
@@ -84,15 +98,17 @@ def _load_runtime_dependency_targets(
 
     dependencies_by_repo: dict[str, list[str]] = {}
     descriptors_by_repo_id = {row["repo_id"]: row for row in repo_descriptors}
+    contents_by_file = _read_file_contents_store_first(file_rows)
     for row in file_rows:
         repo_id = str(row.get("repo_id") or "")
         descriptor = descriptors_by_repo_id.get(repo_id)
         if descriptor is None:
             continue
-        content = _read_file_content_store_first(
-            repo_id=repo_id,
-            relative_path=str(row.get("relative_path") or ""),
-            filesystem_path=str(row.get("path") or ""),
+        content = contents_by_file.get(
+            (
+                repo_id,
+                str(row.get("relative_path") or ""),
+            )
         )
         if content is None:
             continue
