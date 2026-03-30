@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-from .file_evidence_support import load_yaml_documents
+from .file_evidence_support import load_yaml_documents, load_yaml_documents_from_text
 
 __all__ = [
     "extract_argocd_subject_name",
@@ -15,7 +15,9 @@ __all__ = [
     "iter_argocd_deployed_repo_identifiers",
     "iter_argocd_destination_cluster_names",
     "iter_argocd_discovered_config_files",
+    "iter_argocd_discovered_config_files_from_content_store",
     "iter_argocd_discovery_targets",
+    "load_yaml_from_content_store",
 ]
 
 _CLUSTER_VALUE_KEYS = {
@@ -195,6 +197,100 @@ def extract_argocd_subject_name(config_path: Path) -> str | None:
     return None
 
 
+def iter_argocd_discovered_config_files_from_content_store(
+    repo_id: str,
+    discovery_path: str,
+) -> list[tuple[Path, str]]:
+    """Discover ArgoCD config files from the content store.
+
+    Replaces filesystem glob against a target checkout with a Postgres query
+    that matches the discovery path pattern against indexed file paths.
+
+    Args:
+        repo_id: Canonical repository identifier for the target repo.
+        discovery_path: Glob pattern from ApplicationSet (e.g. ``argocd/*/overlays/*/config.yaml``).
+
+    Returns:
+        List of (synthetic_path, content) pairs for matching config files.
+    """
+
+    from ..content.state import get_postgres_content_provider
+
+    provider = get_postgres_content_provider()
+    if provider is None or not provider.enabled:
+        return []
+
+    sql_pattern = discovery_path.replace("*", "%")
+
+    results: list[tuple[Path, str]] = []
+    try:
+        with provider._cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT relative_path, content
+                FROM content_files
+                WHERE repo_id = %(repo_id)s
+                  AND relative_path LIKE %(pattern)s
+                  AND lower(relative_path) LIKE '%%config.yaml'
+                  AND content IS NOT NULL
+                """,
+                {"repo_id": repo_id, "pattern": sql_pattern},
+            )
+            for row in cursor:
+                relative_path = row["relative_path"]
+                content = row["content"]
+                if content:
+                    results.append((Path(relative_path), content))
+    except Exception:
+        return []
+
+    return results
+
+
+def load_yaml_from_content_store(
+    repo_id: str,
+    relative_path: str,
+) -> list[Any]:
+    """Load YAML documents for one file from the content store.
+
+    This is the content-store equivalent of ``load_yaml_documents(path)``
+    for use when file paths reference content inside a repo that isn't
+    cloned locally.
+
+    Args:
+        repo_id: Canonical repository identifier.
+        relative_path: Repo-relative file path.
+
+    Returns:
+        Parsed YAML documents, or empty list on failure.
+    """
+
+    from ..content.state import get_postgres_content_provider
+
+    provider = get_postgres_content_provider()
+    if provider is None or not provider.enabled:
+        return []
+
+    try:
+        with provider._cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT content
+                FROM content_files
+                WHERE repo_id = %(repo_id)s
+                  AND relative_path = %(relative_path)s
+                  AND content IS NOT NULL
+                """,
+                {"repo_id": repo_id, "relative_path": relative_path},
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return []
+            return load_yaml_documents_from_text(row["content"])
+    except Exception:
+        return []
+
+
 def _iter_argocd_git_generators(
     generators: Iterable[Any],
 ) -> Iterator[dict[str, Any]]:
@@ -241,7 +337,11 @@ def _iter_cluster_names(node: Any) -> Iterator[str]:
                 if cleaned:
                     yield cleaned
         for key, value in node.items():
-            cleaned = _normalize_cluster_value(value) if str(key).lower() in _CLUSTER_VALUE_KEYS else None
+            cleaned = (
+                _normalize_cluster_value(value)
+                if str(key).lower() in _CLUSTER_VALUE_KEYS
+                else None
+            )
             if cleaned:
                 yield cleaned
             yield from _iter_cluster_names(value)

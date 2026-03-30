@@ -11,12 +11,15 @@ from .evidence_argocd import discover_argocd_evidence
 from .file_evidence_support import (
     CatalogEntry,
     build_catalog,
+    checkout_path_exists,
     iter_checkout_files,
     iter_kustomize_helm_strings,
     iter_kustomize_image_strings,
     iter_kustomize_resource_strings,
+    iter_yaml_files_from_content_store,
     iter_yaml_strings,
     load_yaml_documents,
+    load_yaml_documents_from_text,
     match_catalog,
 )
 from .models import RelationshipEvidenceFact, RepositoryCheckout
@@ -54,7 +57,9 @@ def discover_gitops_evidence(
         evidence.extend(kustomize)
         evidence.extend(argocd)
         if gitops_span is not None:
-            gitops_span.set_attribute("pcg.relationships.helm_evidence_count", len(helm))
+            gitops_span.set_attribute(
+                "pcg.relationships.helm_evidence_count", len(helm)
+            )
             gitops_span.set_attribute(
                 "pcg.relationships.kustomize_evidence_count",
                 len(kustomize),
@@ -108,7 +113,14 @@ def _discover_helm_evidence(
         attributes={"pcg.relationships.checkout_count": len(checkouts)},
     ) as helm_span:
         for checkout in checkouts:
-            for file_path in iter_checkout_files(checkout):
+            yaml_files = iter_yaml_files_from_content_store(checkout)
+            if not yaml_files and checkout_path_exists(checkout):
+                yaml_files = [
+                    (file_path, None)
+                    for file_path in iter_checkout_files(checkout)
+                    if file_path.suffix.lower() in _YAML_SUFFIXES
+                ]
+            for file_path, content in yaml_files:
                 lower_name = file_path.name.lower()
                 if lower_name not in _HELM_CHART_FILENAMES and not (
                     lower_name.startswith(_HELM_VALUES_PREFIX)
@@ -126,7 +138,12 @@ def _discover_helm_evidence(
                     if evidence_kind == "HELM_CHART_REFERENCE"
                     else "Helm values reference the target repository"
                 )
-                for document in load_yaml_documents(file_path):
+                documents = (
+                    load_yaml_documents_from_text(content)
+                    if content is not None
+                    else load_yaml_documents(file_path)
+                )
+                for document in documents:
                     for value in iter_yaml_strings(document):
                         _append_repo_deploy_source_evidence(
                             evidence=evidence,
@@ -160,10 +177,22 @@ def _discover_kustomize_evidence(
         attributes={"pcg.relationships.checkout_count": len(checkouts)},
     ) as kustomize_span:
         for checkout in checkouts:
-            for file_path in iter_checkout_files(checkout):
+            yaml_files = iter_yaml_files_from_content_store(checkout)
+            if not yaml_files and checkout_path_exists(checkout):
+                yaml_files = [
+                    (file_path, None)
+                    for file_path in iter_checkout_files(checkout)
+                    if file_path.suffix.lower() in _YAML_SUFFIXES
+                ]
+            for file_path, content in yaml_files:
                 if file_path.name.lower() not in _KUSTOMIZATION_FILENAMES:
                     continue
-                for document in load_yaml_documents(file_path):
+                documents = (
+                    load_yaml_documents_from_text(content)
+                    if content is not None
+                    else load_yaml_documents(file_path)
+                )
+                for document in documents:
                     for evidence_kind, rationale, values in (
                         (
                             "KUSTOMIZE_RESOURCE_REFERENCE",
@@ -189,17 +218,24 @@ def _discover_kustomize_evidence(
                                 source_candidate=value,
                                 target_repo_id=checkout.logical_repo_id,
                                 evidence_kind=evidence_kind,
-                                confidence=0.9
-                                if evidence_kind == "KUSTOMIZE_RESOURCE_REFERENCE"
-                                else 0.89
-                                if evidence_kind == "KUSTOMIZE_HELM_CHART_REFERENCE"
-                                else 0.86,
+                                confidence=(
+                                    0.9
+                                    if evidence_kind == "KUSTOMIZE_RESOURCE_REFERENCE"
+                                    else (
+                                        0.89
+                                        if evidence_kind
+                                        == "KUSTOMIZE_HELM_CHART_REFERENCE"
+                                        else 0.86
+                                    )
+                                ),
                                 rationale=rationale,
                                 path=file_path,
                                 extractor="kustomize",
                             )
         if kustomize_span is not None:
-            kustomize_span.set_attribute("pcg.relationships.evidence_count", len(evidence))
+            kustomize_span.set_attribute(
+                "pcg.relationships.evidence_count", len(evidence)
+            )
     return evidence
 
 

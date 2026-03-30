@@ -38,6 +38,11 @@ nav:
     - Argo CD: deployment/argocd.md
   - Guides:
     - MCP Guide: guides/mcp-guide.md
+    - Terraform Providers:
+      - Overview: guides/terraform-providers/index.md
+      - Adding Providers: guides/terraform-providers/adding-providers.md
+      - Updating Providers: guides/terraform-providers/updating-providers.md
+      - Service Categories: guides/terraform-providers/service-categories.md
     - Neo4j Setup: guides/neo4j-setup.md
     - Shared Infra Trace: guides/shared-infra-trace.md
     - Relationship Graph Examples: guides/relationship-graphs.md

@@ -83,7 +83,8 @@ def materialize_workloads(
     seen_deployment_sources: set[tuple[str, str]] = set()
 
     with builder.driver.session() as session:
-        candidate_rows = session.run("""
+        candidate_rows = session.run(
+            """
             MATCH (repo:Repository)
             OPTIONAL MATCH (repo)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(k:K8sResource)
             WHERE k.name = repo.name
@@ -123,10 +124,12 @@ def materialize_workloads(
                    source_roots
             ORDER BY repo.name
             """,
-            source_roots_key="source_roots",
-            source_path_key="source_path",
-            source_paths_key="source_paths",
-            ).data()
+            {
+                "source_roots_key": "source_roots",
+                "source_path_key": "source_path",
+                "source_paths_key": "source_paths",
+            },
+        ).data()
 
         for row in candidate_rows:
             repo_id = row.get("repo_id")
@@ -261,6 +264,53 @@ def materialize_workloads(
     return stats
 
 
+def _read_file_content_store_first(
+    *,
+    repo_id: str,
+    relative_path: str,
+    filesystem_path: str,
+) -> str | None:
+    """Read file content from the content store first, filesystem second.
+
+    Args:
+        repo_id: Canonical repository identifier.
+        relative_path: Repo-relative file path.
+        filesystem_path: Absolute filesystem path (fallback).
+
+    Returns:
+        File content string, or ``None`` when unavailable.
+    """
+
+    from ..content.state import get_postgres_content_provider
+
+    provider = get_postgres_content_provider()
+    if provider is not None and provider.enabled:
+        try:
+            with provider._cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT content FROM content_files
+                    WHERE repo_id = %(repo_id)s
+                      AND relative_path = %(relative_path)s
+                      AND content IS NOT NULL
+                    """,
+                    {"repo_id": repo_id, "relative_path": relative_path},
+                )
+                row = cursor.fetchone()
+                if row is not None:
+                    return row["content"]
+        except Exception:
+            pass
+
+    path = Path(filesystem_path).expanduser()
+    if path.is_file():
+        try:
+            return path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            pass
+    return None
+
+
 def _materialize_runtime_dependencies(
     session: Any,
     *,
@@ -284,11 +334,15 @@ def _materialize_runtime_dependencies(
     dependencies: list[str] = []
     seen_dependencies: set[str] = set()
     for row in file_rows:
-        path = Path(str(row.get("path") or "")).expanduser()
-        if not path.is_file():
+        content = _read_file_content_store_first(
+            repo_id=repo_id,
+            relative_path=str(row.get("relative_path") or ""),
+            filesystem_path=str(row.get("path") or ""),
+        )
+        if content is None:
             continue
         dependency_names = extract_runtime_service_dependencies(
-            path.read_text(encoding="utf-8"),
+            content,
             workload_name=repo_name,
         )
         for dependency_name in dependency_names:
@@ -343,4 +397,6 @@ def _materialize_runtime_dependencies(
             target_workload_id=f"workload:{dependency_name}",
             workload_id=workload_id,
         )
+
+
 __all__ = ["materialize_workloads"]

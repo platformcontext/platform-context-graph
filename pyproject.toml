@@ -1,6 +1,6 @@
 [project]
 name = "platform-context-graph"
-version = "0.0.38"
+version = "0.0.39"
 description = "An MCP server, CLI, and API for code-to-cloud context graph reasoning by AI assistants."
 authors = [{ name = "platformcontext" }]
 readme = "README.md"
@@ -71,7 +71,11 @@ package-dir = { "" = "src" }
 include-package-data = true
 
 [tool.setuptools.package-data]
-platform_context_graph = ["viz/dist/**/*", "tools/parser_capabilities/specs/*.yaml"]
+platform_context_graph = [
+    "viz/dist/**/*",
+    "tools/parser_capabilities/specs/*.yaml",
+    "relationships/terraform_evidence/schemas/*.json.gz",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

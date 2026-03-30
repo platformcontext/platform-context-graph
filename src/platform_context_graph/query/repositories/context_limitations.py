@@ -82,15 +82,18 @@ def has_dns_evidence(infrastructure: dict[str, Any]) -> bool:
 
     for resource in infrastructure.get("k8s_resources", []):
         if str(resource.get("kind") or "").lower() in {
+            "certificate",
             "gateway",
             "httproute",
             "ingress",
+            "ingressroute",
             "route",
             "virtualservice",
         }:
             return True
     for resource in infrastructure.get("terraform_resources", []):
         if str(resource.get("resource_type") or "").lower() in {
+            # AWS
             "aws_alb",
             "aws_api_gateway_rest_api",
             "aws_apigatewayv2_api",
@@ -102,6 +105,29 @@ def has_dns_evidence(infrastructure: dict[str, Any]) -> bool:
             "aws_service_discovery_private_dns_namespace",
             "aws_service_discovery_public_dns_namespace",
             "aws_service_discovery_service",
+            # Azure
+            "azurerm_application_gateway",
+            "azurerm_cdn_frontdoor_route",
+            "azurerm_dns_a_record",
+            "azurerm_dns_cname_record",
+            "azurerm_dns_zone",
+            "azurerm_frontdoor",
+            "azurerm_traffic_manager_profile",
+            # Cloudflare
+            "cloudflare_dns_record",
+            "cloudflare_load_balancer",
+            "cloudflare_page_rule",
+            "cloudflare_record",
+            "cloudflare_tunnel",
+            "cloudflare_workers_route",
+            "cloudflare_zone",
+            # GCP
+            "google_cloud_run_domain_mapping",
+            "google_compute_global_address",
+            "google_compute_global_forwarding_rule",
+            "google_compute_url_map",
+            "google_dns_managed_zone",
+            "google_dns_record_set",
         }:
             return True
     return False
