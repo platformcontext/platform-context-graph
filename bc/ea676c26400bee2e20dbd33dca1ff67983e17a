@@ -1,0 +1,50 @@
+src/platform_context_graph/relationships/terraform_evidence/provider_schema.py
+  1fa037a66b990f4f 262-305
+terraform_providers/github/versions.tf
+  1fa037a66b990f4f 1-12
+docker-compose.yaml
+  1fa037a66b990f4f 3,38
+terraform_providers/pagerduty/versions.tf
+  1fa037a66b990f4f 1-12
+terraform_providers/mysql/versions.tf
+  1fa037a66b990f4f 1-14
+docker-compose.nornicdb.yml
+  171ca78060f03490 10-11,23-24,34-38
+terraform_providers/grafana/versions.tf
+  1fa037a66b990f4f 1-13
+terraform_providers/rabbitmq/versions.tf
+  1fa037a66b990f4f 1-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "bcea676c26400bee2e20dbd33dca1ff67983e17a",
+  "prompts": {
+    "171ca78060f03490": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c3e4c3c-1dc0-4c71-bf6a-5a5e4cce1302",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    },
+    "1fa037a66b990f4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c541d4d3-d6c9-4200-8a0c-03cb682cc16c",
+        "model": "<synthetic>"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 111,
+      "total_deletions": 2,
+      "accepted_lines": 117,
+      "overriden_lines": 0
+    }
+  }
+}
