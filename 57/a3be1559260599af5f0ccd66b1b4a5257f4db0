@@ -1,0 +1,31 @@
+docs/docs/guides/terraform-providers/index.md
+  1fa037a66b990f4f 1-121
+docs/docs/guides/terraform-providers/updating-providers.md
+  1fa037a66b990f4f 1-253
+docs/docs/guides/terraform-providers/service-categories.md
+  1fa037a66b990f4f 1-257
+docs/mkdocs.yml
+  1fa037a66b990f4f 41-45
+docs/docs/guides/terraform-providers/adding-providers.md
+  1fa037a66b990f4f 1-259
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.22",
+  "base_commit_sha": "57a3be1559260599af5f0ccd66b1b4a5257f4db0",
+  "prompts": {
+    "1fa037a66b990f4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c541d4d3-d6c9-4200-8a0c-03cb682cc16c",
+        "model": "<synthetic>"
+      },
+      "human_author": "Allen Sanabria <asanabria6910@gmail.com>",
+      "messages": [],
+      "total_additions": 895,
+      "total_deletions": 0,
+      "accepted_lines": 895,
+      "overriden_lines": 0
+    }
+  }
+}
