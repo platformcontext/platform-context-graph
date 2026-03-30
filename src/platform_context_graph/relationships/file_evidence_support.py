@@ -356,7 +356,9 @@ def match_catalog(
     tokens = candidate_tokens(candidate)
     matches: list[tuple[CatalogEntry, str]] = []
     for entry in catalog:
-        matched_alias = next((alias for alias in entry.aliases if alias in tokens), None)
+        matched_alias = next(
+            (alias for alias in entry.aliases if alias in tokens), None
+        )
         if matched_alias is not None:
             matches.append((entry, matched_alias))
     return matches
@@ -389,6 +391,59 @@ def candidate_tokens(candidate: str) -> set[str]:
     return tokens
 
 
+def iter_yaml_files_from_content_store(
+    checkout: RepositoryCheckout,
+) -> list[tuple[Path, str]]:
+    """Load YAML files from the Postgres content store.
+
+    The content store is the authoritative source for indexed file content.
+    This reads YAML files directly from Postgres for use by Helm, Kustomize,
+    and ArgoCD evidence extractors.
+
+    Args:
+        checkout: Repository checkout record with ``logical_repo_id``.
+
+    Returns:
+        List of (synthetic_path, content) pairs for YAML files.
+    """
+
+    from ..content.state import get_postgres_content_provider
+
+    provider = get_postgres_content_provider()
+    if provider is None or not provider.enabled:
+        return []
+
+    repo_id = checkout.logical_repo_id
+    yaml_files: list[tuple[Path, str]] = []
+
+    try:
+        with provider._cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT relative_path, content
+                FROM content_files
+                WHERE repo_id = %(repo_id)s
+                  AND (
+                    relative_path LIKE '%%.yaml'
+                    OR relative_path LIKE '%%.yml'
+                  )
+                  AND content IS NOT NULL
+                """,
+                {"repo_id": repo_id},
+            )
+            for row in cursor:
+                relative_path = row["relative_path"]
+                content = row["content"]
+                if content:
+                    base = checkout.checkout_path or repo_id
+                    synthetic_path = Path(base) / relative_path
+                    yaml_files.append((synthetic_path, content))
+    except Exception:
+        return []
+
+    return yaml_files
+
+
 __all__ = [
     "CatalogEntry",
     "append_evidence_for_candidate",
@@ -401,6 +456,7 @@ __all__ = [
     "iter_kustomize_image_strings",
     "iter_kustomize_resource_strings",
     "iter_terraform_files_from_content_store",
+    "iter_yaml_files_from_content_store",
     "iter_yaml_strings",
     "load_yaml_documents",
     "load_yaml_documents_from_text",
