@@ -25,6 +25,7 @@ from .file_evidence_support import (
     read_text,
 )
 from .models import RelationshipEvidenceFact, RepositoryCheckout
+from .terraform_evidence import discover_terraform_resource_evidence
 
 _TERRAFORM_PATTERNS: tuple[tuple[str, str, re.Pattern[str], float, str], ...] = (
     (
@@ -179,6 +180,17 @@ def discover_terraform_evidence(
                     file_path=file_path,
                     local_values=local_values,
                     cluster_references=cluster_references,
+                    seen=seen,
+                )
+            )
+            # Registry-based resource extractors (per-provider modules).
+            evidence.extend(
+                discover_terraform_resource_evidence(
+                    checkout=checkout,
+                    catalog=catalog,
+                    content=content,
+                    file_path=file_path,
+                    local_values=local_values,
                     seen=seen,
                 )
             )
