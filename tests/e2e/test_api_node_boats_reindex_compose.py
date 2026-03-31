@@ -231,6 +231,7 @@ def test_api_node_boats_reindex_compose_flow(client: _LiveApiClient) -> None:
         story_payload=bootstrap_story,
         context_payload=bootstrap_context,
         subject_repository=manifest.subject_repository,
+        assertions=manifest.bootstrap_assertions,
     )
 
     mutation_repo_ids: dict[str, str] = {}
@@ -271,6 +272,7 @@ def test_api_node_boats_reindex_compose_flow(client: _LiveApiClient) -> None:
         story_payload=after_story,
         context_payload=after_context,
         subject_repository=manifest.subject_repository,
+        assertions=manifest.bootstrap_assertions,
     )
     after_updated_at = {
         repository_name: str(
@@ -289,5 +291,5 @@ def test_api_node_boats_reindex_compose_flow(client: _LiveApiClient) -> None:
             story=after_story,
             context=after_context,
         ),
-        mutated_repositories=tuple(mutation_repo_ids),
+        assertions=manifest.scan_assertions,
     )

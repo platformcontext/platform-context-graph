@@ -84,6 +84,19 @@ def test_validate_bootstrap_contract_requires_story_and_context_fields() -> None
         story_payload=story_payload,
         context_payload=context_payload,
         subject_repository="api-node-boats",
+        assertions={
+            "blocking": [
+                {"kind": "story_non_empty"},
+                {"kind": "api_version", "value": "v3"},
+                {"kind": "docs_route", "value": "/_specs"},
+                {"kind": "hostname_contains", "value": "api-node-boats.qa"},
+                {"kind": "provisioned_by", "value": "terraform-stack-node10"},
+                {"kind": "platform_kind", "value": "ecs"},
+                {"kind": "deploys_from", "value": "helm-charts"},
+                {"kind": "environment_non_empty"},
+                {"kind": "dependency", "value": "api-node-forex"},
+            ]
+        },
     )
 
 
@@ -112,10 +125,19 @@ def test_validate_scan_contract_requires_repo_reprocessing_and_story_delta() -> 
     module.validate_scan_contract(
         before=before,
         after=after,
-        mutated_repositories=(
-            "api-node-provisioning-indexer",
-            "terraform-stack-node10",
-        ),
+        assertions={
+            "blocking": [
+                {
+                    "kind": "repo_reprocessed",
+                    "repo": "api-node-provisioning-indexer",
+                },
+                {
+                    "kind": "repo_reprocessed",
+                    "repo": "terraform-stack-node10",
+                },
+                {"kind": "story_or_context_changed"},
+            ]
+        },
     )
 
     with pytest.raises(AssertionError, match="reprocessed"):
@@ -126,5 +148,13 @@ def test_validate_scan_contract_requires_repo_reprocessing_and_story_delta() -> 
                 story=after.story,
                 context=after.context,
             ),
-            mutated_repositories=("api-node-provisioning-indexer",),
+            assertions={
+                "blocking": [
+                    {
+                        "kind": "repo_reprocessed",
+                        "repo": "api-node-provisioning-indexer",
+                    },
+                    {"kind": "story_or_context_changed"},
+                ]
+            },
         )
