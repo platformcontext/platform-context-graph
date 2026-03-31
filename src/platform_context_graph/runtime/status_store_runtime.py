@@ -116,6 +116,15 @@ def upsert_repository_coverage(**kwargs: Any) -> None:
     store.upsert_repository_coverage(**kwargs)
 
 
+def update_latest_repository_coverage_finalization(**kwargs: Any) -> None:
+    """Repair finalization-only fields on the latest coverage row per repo."""
+
+    store = get_runtime_status_store()
+    if store is None or not store.enabled:
+        return
+    store.update_latest_repository_coverage_finalization(**kwargs)
+
+
 def get_repository_coverage(
     *, repo_id: str, run_id: str | None = None
 ) -> dict[str, Any] | None:

@@ -16,6 +16,7 @@ from ..observability import get_observability
 from .models import ContentEntityEntry, ContentFileEntry
 from .postgres_queries import (
     get_entity_content as postgres_get_entity_content,
+    get_file_contents_batch as postgres_get_file_contents_batch,
     get_file_content as postgres_get_file_content,
     search_entity_content as postgres_search_entity_content,
     search_file_content as postgres_search_file_content,
@@ -395,6 +396,13 @@ class PostgresContentProvider:
                 hit=result is not None,
                 duration_seconds=time.monotonic() - started,
             )
+
+    def get_file_contents_batch(
+        self, *, repo_files: list[dict[str, str]]
+    ) -> dict[tuple[str, str], str]:
+        """Return indexed file contents for a batch of repo-relative paths."""
+
+        return postgres_get_file_contents_batch(self, repo_files=repo_files)
 
     def get_entity_content(self, *, entity_id: str) -> dict[str, Any] | None:
         """Return source content for one content-bearing entity.

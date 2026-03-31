@@ -1,0 +1,13 @@
+name: deploy-legacy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy legacy task
+        run: echo "deploying service-edge-api to legacy ecs"

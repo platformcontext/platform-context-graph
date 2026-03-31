@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .database import fixture_workload_context
 from .support import build_fixture_indexes, canonical_ref, load_fixture_graph
+from .workload_fixture import fixture_workload_context
 
 
 def fixture_entity_context(

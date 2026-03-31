@@ -46,6 +46,14 @@ def temp_test_dir():
     shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+@pytest.fixture(autouse=True)
+def isolate_http_auth_env(monkeypatch: pytest.MonkeyPatch):
+    """Keep local HTTP auth env from leaking into tests unintentionally."""
+
+    monkeypatch.delenv("PCG_API_KEY", raising=False)
+    monkeypatch.delenv("PCG_AUTO_GENERATE_API_KEY", raising=False)
+
+
 @pytest.fixture(scope="session")
 def fixture_repo():
     """Returns the portable Jenkins + Ansible fixture corpus root."""

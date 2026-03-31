@@ -458,6 +458,75 @@ class PostgresRuntimeStatusStore:
                 )
             return cursor.fetchone()
 
+    def update_latest_repository_coverage_finalization(
+        self,
+        *,
+        repo_ids: list[str],
+        finalization_status: str,
+        finalization_finished_at: str | datetime | None,
+        last_error: str | None,
+        updated_at: str | datetime | None = None,
+    ) -> None:
+        """Update finalization-only fields on the latest coverage row per repo."""
+
+        normalized_repo_ids = list(
+            dict.fromkeys(repo_id for repo_id in repo_ids if repo_id)
+        )
+        if not normalized_repo_ids:
+            return
+
+        now = updated_at or utc_now()
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT DISTINCT repo_id
+                FROM runtime_repository_coverage
+                WHERE repo_id = ANY(%(repo_ids)s)
+                """,
+                {"repo_ids": normalized_repo_ids},
+            )
+            existing_repo_ids = {
+                row["repo_id"]
+                for row in cursor.fetchall()
+                if row.get("repo_id")
+            }
+            missing_repo_ids = [
+                repo_id
+                for repo_id in normalized_repo_ids
+                if repo_id not in existing_repo_ids
+            ]
+            if missing_repo_ids:
+                raise ValueError(
+                    "Cannot repair finalization status for repositories with missing "
+                    "durable coverage rows: "
+                    + ", ".join(sorted(missing_repo_ids))
+                )
+
+            cursor.execute(
+                """
+                WITH latest AS (
+                    SELECT DISTINCT ON (repo_id) ctid, repo_id
+                    FROM runtime_repository_coverage
+                    WHERE repo_id = ANY(%(repo_ids)s)
+                    ORDER BY repo_id, updated_at DESC
+                )
+                UPDATE runtime_repository_coverage AS coverage
+                SET finalization_status = %(finalization_status)s,
+                    finalization_finished_at = %(finalization_finished_at)s,
+                    last_error = %(last_error)s,
+                    updated_at = %(updated_at)s
+                FROM latest
+                WHERE coverage.ctid = latest.ctid
+                """,
+                {
+                    "repo_ids": normalized_repo_ids,
+                    "finalization_status": finalization_status,
+                    "finalization_finished_at": finalization_finished_at,
+                    "last_error": last_error,
+                    "updated_at": now,
+                },
+            )
+
     def list_repository_coverage(
         self,
         *,

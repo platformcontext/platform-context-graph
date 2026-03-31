@@ -20,6 +20,23 @@ Run it with:
 docker compose up --build
 ```
 
+For the admin re-finalize flow specifically, use the compose-backed verification wrapper:
+
+```bash
+./scripts/verify_admin_refinalize_compose.sh
+```
+
+That script:
+- starts the local compose stack from a clean state
+- waits for bootstrap indexing and API health
+- reads the generated API key from the running service
+- runs `tests/e2e/test_admin_refinalize_compose.py` against the live API
+- verifies the returned `run_id` also appears in the API logs
+- prints the Jaeger URL, the failing `run_id`, and the last admin status payload if the flow fails
+- auto-selects free host ports when the usual local defaults are already occupied
+
+Set `PCG_KEEP_COMPOSE_STACK=true` if you want the stack left running after the verification completes.
+
 By default, the bootstrap and repo-sync services mount the fixture ecosystems tree from
 `./tests/fixtures/ecosystems` into `/fixtures` so the stack stays safe for local smoke testing.
 

@@ -10,6 +10,7 @@ from ..tools.languages.templated_detection import infer_content_metadata
 from .postgres_support import append_array_filter, snippet_for_match
 
 __all__ = [
+    "get_file_contents_batch",
     "get_entity_content",
     "get_file_content",
     "search_entity_content",
@@ -18,6 +19,61 @@ __all__ = [
 
 _SEARCH_PAGE_SIZE = 500
 _MAX_SEARCH_SCAN_ROWS = 5_000
+
+
+def get_file_contents_batch(
+    provider: Any,
+    *,
+    repo_files: list[dict[str, str]],
+) -> dict[tuple[str, str], str]:
+    """Return file contents for a batch of repo-relative file paths."""
+
+    if not repo_files:
+        return {}
+
+    normalized_repo_files = [
+        {
+            "repo_id": str(row.get("repo_id") or "").strip(),
+            "relative_path": str(row.get("relative_path") or "").strip(),
+        }
+        for row in repo_files
+        if str(row.get("repo_id") or "").strip()
+        and str(row.get("relative_path") or "").strip()
+    ]
+    if not normalized_repo_files:
+        return {}
+
+    with trace_query(
+        "content_postgres_file_batch",
+        attributes={"pcg.content.file_count": len(normalized_repo_files)},
+    ):
+        with provider._cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT repo_id, relative_path, content
+                FROM content_files
+                WHERE content IS NOT NULL
+                  AND (repo_id, relative_path) IN (
+                    SELECT repo_id, relative_path
+                    FROM unnest(
+                        %(repo_ids)s::text[],
+                        %(relative_paths)s::text[]
+                    ) AS requested(repo_id, relative_path)
+                  )
+                """,
+                {
+                    "repo_ids": [row["repo_id"] for row in normalized_repo_files],
+                    "relative_paths": [
+                        row["relative_path"] for row in normalized_repo_files
+                    ],
+                },
+            )
+            rows = cursor.fetchall()
+    return {
+        (str(row["repo_id"]), str(row["relative_path"])): str(row["content"])
+        for row in rows
+        if row.get("repo_id") and row.get("relative_path") and row.get("content")
+    }
 
 
 def _resolve_row_metadata(*, relative_path: str, content: str, row: dict[str, Any]) -> dict[str, Any]:

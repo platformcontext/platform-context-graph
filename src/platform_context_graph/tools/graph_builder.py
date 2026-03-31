@@ -194,9 +194,19 @@ class GraphBuilder:
         """Create infrastructure relationships after indexing completes."""
         _create_all_infra_links(self, all_file_data, info_logger_fn=info_logger)
 
-    def _materialize_workloads(self) -> dict[str, int]:
+    def _materialize_workloads(
+        self,
+        committed_repo_paths: list[Path] | None = None,
+        *,
+        progress_callback: Any | None = None,
+    ) -> dict[str, int]:
         """Materialize canonical workloads after cross-repo links are in place."""
-        return _materialize_workloads(self, info_logger_fn=info_logger)
+        return _materialize_workloads(
+            self,
+            info_logger_fn=info_logger,
+            committed_repo_paths=committed_repo_paths,
+            progress_callback=progress_callback,
+        )
 
     def _resolve_repository_relationships(
         self,

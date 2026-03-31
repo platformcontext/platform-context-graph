@@ -60,6 +60,13 @@ def get_ignored_dir_names(*, get_config_value_fn: Any) -> set[str]:
     }
 
 
+def ignore_hidden_files(*, get_config_value_fn: Any) -> bool:
+    """Return whether hidden files and directories should be skipped."""
+
+    raw_value = str(get_config_value_fn("IGNORE_HIDDEN_FILES") or "true").strip()
+    return raw_value.lower() != "false"
+
+
 def collect_supported_files(
     builder: Any,
     path: Path,
@@ -85,6 +92,7 @@ def collect_supported_files(
     dependency_exclusion_enabled = dependency_ignore_enabled(
         get_config_value_fn=get_config_value_fn
     )
+    ignore_hidden = ignore_hidden_files(get_config_value_fn=get_config_value_fn)
 
     if path.is_file():
         if dependency_exclusion_enabled and _is_dependency_relative_to(
@@ -109,7 +117,7 @@ def collect_supported_files(
             if directory.lower() in ignore_dirs:
                 telemetry.record_hidden_directory_skip(directory.lower())
                 continue
-            if directory.startswith("."):
+            if ignore_hidden and directory.startswith("."):
                 telemetry.record_hidden_directory_skip("hidden")
                 continue
             kept_dirs.append(directory)

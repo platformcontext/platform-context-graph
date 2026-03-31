@@ -87,6 +87,45 @@ _FALKORDB_FULLTEXT_STATEMENTS = [
     "CALL db.idx.fulltext.createNodeIndex('Class', 'name', 'source', 'docstring')",
 ]
 
+_NEO4J_FULLTEXT_FALLBACKS = {
+    _NEO4J_FULLTEXT_STATEMENTS[0]: (
+        "CREATE FULLTEXT INDEX code_search_index IF NOT EXISTS "
+        "FOR (n:Function|Class|Variable) "
+        "ON EACH [n.name, n.source, n.docstring]"
+    ),
+    _NEO4J_FULLTEXT_STATEMENTS[1]: (
+        "CREATE FULLTEXT INDEX infra_search_index IF NOT EXISTS "
+        "FOR (n:K8sResource|TerraformResource|ArgoCDApplication|ArgoCDApplicationSet|"
+        "CrossplaneXRD|CrossplaneComposition|CrossplaneClaim|KustomizeOverlay|"
+        "HelmChart|HelmValues|TerraformVariable|TerraformOutput|TerraformModule|"
+        "TerraformDataSource|TerraformProvider|TerraformLocal|TerragruntConfig|"
+        "CloudFormationResource|CloudFormationParameter|CloudFormationOutput) "
+        "ON EACH [n.name, n.kind, n.resource_type]"
+    ),
+}
+
+
+def _should_retry_with_fulltext_fallback(statement: str, exc: Exception) -> bool:
+    """Return whether one legacy Neo4j fulltext statement should use modern syntax."""
+
+    if statement not in _NEO4J_FULLTEXT_FALLBACKS:
+        return False
+    error_text = str(exc)
+    return "db.index.fulltext.createNodeIndex" in error_text or (
+        "Procedure.ProcedureNotFound" in error_text
+    )
+
+
+def _run_schema_statement(session: Any, statement: str) -> None:
+    """Execute one schema statement, retrying Neo4j fulltext indexes when needed."""
+
+    try:
+        session.run(statement)
+    except Exception as exc:
+        if not _should_retry_with_fulltext_fallback(statement, exc):
+            raise
+        session.run(_NEO4J_FULLTEXT_FALLBACKS[statement])
+
 
 def _schema_statements_for_capabilities(
     capabilities: GraphStoreCapabilities,
@@ -122,7 +161,7 @@ def create_schema(builder: Any, *, info_logger_fn: Any, warning_logger_fn: Any) 
         failed = 0
         for statement in _schema_statements_for_capabilities(capabilities):
             try:
-                session.run(statement)
+                _run_schema_statement(session, statement)
             except Exception as exc:
                 failed += 1
                 warning_logger_fn(f"Schema statement warning: {exc}")

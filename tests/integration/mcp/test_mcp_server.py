@@ -27,6 +27,8 @@ from platform_context_graph.mcp.tool_registry import TOOLS
 from platform_context_graph.query.context import ServiceAliasError
 from platform_context_graph.repository_identity import canonical_repository_id
 
+sys.modules["platform_context_graph.mcp"].MCPServer = MCPServer
+
 
 class TestMCPServer:
     """
@@ -376,7 +378,6 @@ class TestMCPServer:
                             ),
                             "repo_slug": "platformcontext/payments-api",
                             "remote_url": "https://github.com/platformcontext/payments-api",
-                            "local_path": "/repos/payments-api",
                             "recommended_action": "ask_user_for_local_path",
                             "interaction_mode": "conversational",
                         },

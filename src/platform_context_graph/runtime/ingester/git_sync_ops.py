@@ -409,6 +409,8 @@ def _filesystem_copy_ignore(
     resolved_pcgignore_root = Path(pcgignore_root).resolve()
 
     def _ignored(names_root: str, names: list[str]) -> set[str]:
+        """Filter copytree children using gitignore, pcgignore, and repo rules."""
+
         current_root = Path(names_root).resolve()
         ignored: set[str] = set()
         for name in names:
