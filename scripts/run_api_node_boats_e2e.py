@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 import importlib.util
+import json
 from pathlib import Path
 import sys
 from types import ModuleType
@@ -59,6 +61,28 @@ class WorkspaceSession:
 
     workspace_root: Path
     working_copies: dict[str, Path]
+
+
+def write_workspace_session_artifact(
+    session: WorkspaceSession, output_path: Path
+) -> None:
+    """Persist one workspace-session artifact for shell wrappers and tests."""
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(
+            {
+                "workspace_root": str(session.workspace_root),
+                "working_copies": {
+                    name: str(path) for name, path in sorted(session.working_copies.items())
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def default_root_paths(home_dir: Path) -> dict[str, Path]:
@@ -142,3 +166,42 @@ def prepare_workspace_from_manifest_path(
         scratch_root=scratch_root,
         root_paths=default_root_paths(home_dir),
     )
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments for the local harness helper."""
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    prepare_parser = subparsers.add_parser(
+        "prepare-workspace",
+        help="Create one disposable workspace from the local ecosystem manifest.",
+    )
+    prepare_parser.add_argument("--manifest-path", required=True)
+    prepare_parser.add_argument("--scratch-root", required=True)
+    prepare_parser.add_argument("--output-json", required=True)
+    prepare_parser.add_argument("--home-dir", default=str(Path.home()))
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run one orchestrator command."""
+
+    args = parse_args(argv)
+    if args.command != "prepare-workspace":
+        raise ValueError(f"Unsupported command: {args.command}")
+    session = prepare_workspace_from_manifest_path(
+        manifest_path=Path(args.manifest_path).expanduser(),
+        scratch_root=Path(args.scratch_root).expanduser(),
+        home_dir=Path(args.home_dir).expanduser(),
+    )
+    write_workspace_session_artifact(
+        session,
+        Path(args.output_json).expanduser(),
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

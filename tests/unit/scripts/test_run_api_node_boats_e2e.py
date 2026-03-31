@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -189,3 +190,22 @@ def test_prepare_workspace_from_manifest_path_uses_local_manifest_contract(
 
     assert (session.workspace_root / "api-node-boats" / ".git").is_dir()
     assert (session.workspace_root / "terraform-stack-node10" / ".git").is_dir()
+
+
+def test_write_workspace_session_artifact_serializes_paths(tmp_path: Path) -> None:
+    """The orchestrator should persist one portable workspace session artifact."""
+
+    module = _load_module()
+    session = module.WorkspaceSession(
+        workspace_root=tmp_path / "workspace",
+        working_copies={"api-node-boats": tmp_path / "workspace" / "api-node-boats"},
+    )
+    output_path = tmp_path / "session.json"
+
+    module.write_workspace_session_artifact(session, output_path)
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["workspace_root"] == str(tmp_path / "workspace")
+    assert payload["working_copies"]["api-node-boats"] == str(
+        tmp_path / "workspace" / "api-node-boats"
+    )
