@@ -59,6 +59,12 @@ def _config_value(key: str) -> str | None:
     return None
 
 
+def _config_value_include_hidden(key: str) -> str | None:
+    if key == "IGNORE_HIDDEN_FILES":
+        return "false"
+    return _config_value(key)
+
+
 def test_estimate_processing_time_skips_hidden_and_ignored_directories(
     tmp_path: Path, monkeypatch
 ):
@@ -99,6 +105,29 @@ def test_estimate_processing_time_skips_hidden_and_ignored_directories(
 
     assert total_files == 2
     assert estimated_time == 0.1
+
+
+def test_collect_supported_files_includes_hidden_workflow_dirs_when_config_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    builder = _make_builder()
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.get_config_value",
+        _config_value_include_hidden,
+    )
+
+    visible_python = tmp_path / "app.py"
+    visible_python.write_text("print('root')\n", encoding="utf-8")
+    hidden_workflow = tmp_path / ".github" / "workflows" / "deploy.yaml"
+    hidden_workflow.parent.mkdir(parents=True)
+    hidden_workflow.write_text("name: deploy\n", encoding="utf-8")
+    ignored_git = tmp_path / ".git" / "config"
+    ignored_git.parent.mkdir(parents=True)
+    ignored_git.write_text("[core]\n", encoding="utf-8")
+
+    files = builder._collect_supported_files(tmp_path)
+
+    assert set(files) == {hidden_workflow, visible_python}
 
 
 def test_build_graph_from_path_async_skips_hidden_cache_repos_but_keeps_visible_git_repos(

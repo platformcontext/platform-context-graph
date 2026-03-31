@@ -35,13 +35,30 @@ def exclusive_e2e_graph() -> None:
 
 @pytest.fixture
 def seeded_e2e_graph(exclusive_e2e_graph: None) -> None:
-    """Re-seed the live graph with the prompt-contract fixture corpus."""
+    """Re-seed the live graph with the default prompt-contract fixture corpus."""
+
+    _run_seed_script()
+    yield
+
+
+@pytest.fixture
+def seeded_relationship_platform_graph(exclusive_e2e_graph: None) -> None:
+    """Re-seed the live graph with the synthetic relationship-platform corpus."""
+
+    _run_seed_script(fixture_set="relationship_platform")
+    yield
+
+
+def _run_seed_script(*, fixture_set: str | None = None) -> None:
+    """Run the shared e2e seed script for one selected fixture set."""
 
     env = os.environ.copy()
     pythonpath_parts = [str(_REPO_ROOT / "src"), str(_REPO_ROOT)]
     if env.get("PYTHONPATH"):
         pythonpath_parts.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = ":".join(pythonpath_parts)
+    if fixture_set:
+        env["PCG_E2E_FIXTURE_SET"] = fixture_set
     completed = subprocess.run(
         [sys.executable, str(_SEED_SCRIPT)],
         cwd=_REPO_ROOT,
@@ -56,4 +73,3 @@ def seeded_e2e_graph(exclusive_e2e_graph: None) -> None:
             f"stdout:\n{completed.stdout}\n"
             f"stderr:\n{completed.stderr}"
         )
-    yield
