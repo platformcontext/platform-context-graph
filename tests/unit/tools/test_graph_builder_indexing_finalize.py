@@ -155,3 +155,51 @@ def test_finalize_index_batch_forwards_workload_progress_details() -> None:
     assert progress_events[-1][1]["cleanup_deleted_edges"] == 3
     assert progress_events[-1][1]["cleanup_deleted_nodes"] == 1
     assert progress_events[-1][1]["write_chunk_count"] == 4
+
+
+def test_finalize_index_batch_filters_progress_details_for_narrow_callbacks() -> None:
+    """Narrow stage callbacks should receive only the keyword subset they accept."""
+
+    progress_events: list[tuple[str, str | None]] = []
+
+    def _materialize_workloads(
+        *,
+        committed_repo_paths: list[Path] | None = None,
+        progress_callback=None,
+    ) -> dict[str, int]:
+        assert committed_repo_paths == [Path("/repos/payments-api")]
+        assert callable(progress_callback)
+        progress_callback(
+            status="running",
+            operation="gather_completed",
+            candidates_processed=1,
+        )
+        return {"workloads_projected": 1}
+
+    builder = SimpleNamespace(
+        _create_all_inheritance_links=lambda *_args, **_kwargs: None,
+        _create_all_function_calls=lambda *_args, **_kwargs: None,
+        _create_all_infra_links=lambda *_args, **_kwargs: None,
+        _materialize_workloads=_materialize_workloads,
+        _resolve_repository_relationships=lambda *_args, **_kwargs: None,
+    )
+
+    def _record_progress(stage: str, status: str | None = None) -> None:
+        progress_events.append((stage, status))
+
+    finalize_index_batch(
+        builder,
+        committed_repo_paths=[Path("/repos/payments-api")],
+        iter_snapshot_file_data_fn=lambda _path: iter([]),
+        merged_imports_map={},
+        info_logger_fn=lambda *_args, **_kwargs: None,
+        stage_progress_callback=_record_progress,
+        run_id="refinalize-run-789",
+        stages=["workloads"],
+    )
+
+    assert progress_events == [
+        ("workloads", "started"),
+        ("workloads", "running"),
+        ("workloads", "completed"),
+    ]

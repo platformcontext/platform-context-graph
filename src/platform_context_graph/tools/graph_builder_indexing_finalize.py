@@ -52,18 +52,24 @@ def _supports_keyword_arguments(callback: Any, keyword_names: tuple[str, ...]) -
     return all(name in accepted for name in keyword_names)
 
 
-def _stage_progress_accepts_details(callback: Any) -> bool:
-    """Return whether one stage callback can consume structured progress details."""
+def _filter_supported_keyword_arguments(
+    callback: Any,
+    keyword_arguments: dict[str, Any],
+) -> dict[str, Any]:
+    """Return only the keyword arguments that one callback can consume."""
 
-    return _supports_keyword_arguments(
-        callback,
-        (
-            "status",
-            "duration_seconds",
-            "repo_count",
-            "run_id",
-        ),
-    )
+    try:
+        parameters = inspect.signature(callback).parameters.values()
+    except (TypeError, ValueError):
+        return {}
+    if any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters):
+        return keyword_arguments
+    accepted = {parameter.name for parameter in parameters}
+    return {
+        name: value
+        for name, value in keyword_arguments.items()
+        if name in accepted
+    }
 
 
 _PER_REPO_STAGES = frozenset({"inheritance"})
@@ -176,15 +182,18 @@ def finalize_index_batch(
         iter_snapshot_file_data_fn,
     )
     stage_timings: dict[str, float] = {}
-    callback_accepts_details = _stage_progress_accepts_details(stage_progress_callback)
 
     def _notify_stage_progress(stage_name: str, **kwargs: Any) -> None:
         """Send stage heartbeats without breaking legacy one-arg callbacks."""
 
         if not callable(stage_progress_callback):
             return
-        if kwargs and callback_accepts_details:
-            stage_progress_callback(stage_name, **kwargs)
+        forwarded_kwargs = _filter_supported_keyword_arguments(
+            stage_progress_callback,
+            kwargs,
+        )
+        if forwarded_kwargs:
+            stage_progress_callback(stage_name, **forwarded_kwargs)
             return
         if not kwargs or kwargs.get("status") == "started":
             stage_progress_callback(stage_name)
