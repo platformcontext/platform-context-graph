@@ -146,6 +146,18 @@ configure_ports() {
     JAEGER_URL="http://localhost:${JAEGER_PORT}"
 }
 
+configure_resource_defaults() {
+    export PCG_PARSE_WORKERS="${PCG_PARSE_WORKERS:-1}"
+    export PCG_INDEX_QUEUE_DEPTH="${PCG_INDEX_QUEUE_DEPTH:-1}"
+    export PCG_COMMIT_WORKERS="${PCG_COMMIT_WORKERS:-1}"
+    export PCG_FILE_BATCH_SIZE="${PCG_FILE_BATCH_SIZE:-10}"
+    export PCG_REPO_FILE_PARSE_MULTIPROCESS="${PCG_REPO_FILE_PARSE_MULTIPROCESS:-false}"
+
+    export NEO4J_server_memory_heap_initial__size="${NEO4J_server_memory_heap_initial__size:-512M}"
+    export NEO4J_server_memory_heap_max__size="${NEO4J_server_memory_heap_max__size:-1024M}"
+    export NEO4J_server_memory_pagecache_size="${NEO4J_server_memory_pagecache_size:-512M}"
+}
+
 require_tool docker
 require_tool curl
 require_tool python3
@@ -210,14 +222,19 @@ PY
 
 "${COMPOSE_CMD[@]}" down -v >/dev/null 2>&1 || true
 configure_ports
+configure_resource_defaults
 echo "Starting local compose stack..."
 echo "Using host ports: api=$PCG_HTTP_PORT postgres=$PCG_POSTGRES_PORT neo4j_bolt=$NEO4J_BOLT_PORT jaeger=$JAEGER_UI_PORT"
 echo "Workspace root: $PCG_FILESYSTEM_HOST_ROOT"
 echo "Scratch root: $SCRATCH_ROOT"
-"${COMPOSE_CMD[@]}" up -d --build
+echo "Resource profile: parse_workers=$PCG_PARSE_WORKERS queue_depth=$PCG_INDEX_QUEUE_DEPTH commit_workers=$PCG_COMMIT_WORKERS file_batch_size=$PCG_FILE_BATCH_SIZE neo4j_heap_max=$NEO4J_server_memory_heap_max__size neo4j_pagecache=$NEO4J_server_memory_pagecache_size"
+"${COMPOSE_CMD[@]}" up -d --build neo4j postgres jaeger otel-collector bootstrap-index
 
 echo "Waiting for bootstrap indexing to finish..."
 wait_for_bootstrap_exit "$TIMEOUT_SECONDS"
+
+echo "Starting API and repo-sync after successful bootstrap..."
+"${COMPOSE_CMD[@]}" up -d --build platform-context-graph repo-sync
 
 echo "Waiting for API health..."
 wait_for_http "http://localhost:${API_PORT}/health" 120 2
