@@ -43,7 +43,7 @@ cleanup() {
     if [[ "$KEEP_STACK" != "true" && "${#COMPOSE_CMD[@]}" -gt 0 ]]; then
         "${COMPOSE_CMD[@]}" down -v >/dev/null 2>&1 || true
     fi
-    if [[ "$KEEP_SCRATCH" != "true" && -n "$SCRATCH_ROOT" && -d "$SCRATCH_ROOT" ]]; then
+    if [[ "$exit_code" -eq 0 && "$KEEP_SCRATCH" != "true" && -n "$SCRATCH_ROOT" && -d "$SCRATCH_ROOT" ]]; then
         rm -rf "$SCRATCH_ROOT"
     fi
     exit "$exit_code"
@@ -175,8 +175,13 @@ fi
 cd "$REPO_ROOT"
 
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-pcg-api-node-boats-e2e}"
-SCRATCH_ROOT="${PCG_E2E_SCRATCH_ROOT:-$(mktemp -d)}"
-mkdir -p "$SCRATCH_ROOT"
+if [[ -n "${PCG_E2E_SCRATCH_ROOT:-}" ]]; then
+    SCRATCH_ROOT="$PCG_E2E_SCRATCH_ROOT"
+    mkdir -p "$SCRATCH_ROOT"
+else
+    mkdir -p "$REPO_ROOT/.tmp"
+    SCRATCH_ROOT="$(mktemp -d "$REPO_ROOT/.tmp/api-node-boats-e2e.XXXXXX")"
+fi
 WORKSPACE_INFO_PATH="$SCRATCH_ROOT/workspace-session.json"
 API_KEY_FILE="$SCRATCH_ROOT/api_key.txt"
 

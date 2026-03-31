@@ -41,9 +41,12 @@ def test_resolve_repository_by_plain_name_uses_entities_resolve() -> None:
             return {
                 "matches": [
                     {
-                        "id": "repository:r_api-node-boats",
-                        "name": "api-node-boats",
-                        "type": "repository",
+                        "ref": {
+                            "id": "repository:r_api-node-boats",
+                            "name": "api-node-boats",
+                            "type": "repository",
+                        },
+                        "score": 0.97,
                     }
                 ]
             }

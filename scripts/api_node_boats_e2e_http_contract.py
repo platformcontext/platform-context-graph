@@ -50,7 +50,12 @@ def resolve_repository_id(client: ClientProtocol, repo_name: str) -> str:
         raise AssertionError(
             f"Expected exactly one repository match for {repo_name}, got {len(matches)}"
         )
-    resolved_id = str(matches[0].get("id") or "")
+    match_row = matches[0]
+    resolved_id = str(
+        match_row.get("id")
+        or (match_row.get("ref") or {}).get("id")
+        or ""
+    )
     if not resolved_id:
         raise AssertionError(f"No canonical repository id returned for {repo_name}")
     return resolved_id
