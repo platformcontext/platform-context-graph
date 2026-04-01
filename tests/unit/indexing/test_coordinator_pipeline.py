@@ -153,7 +153,7 @@ async def _run_pipeline(
     def _capture_warning(msg):
         warnings.append(msg)
 
-    committed_repo_paths, merged = await process_repository_snapshots(
+    committed_repo_paths, merged, _ = await process_repository_snapshots(
         builder=SimpleNamespace(),
         run_state=run_state,
         repo_paths=repo_paths,
@@ -1321,7 +1321,7 @@ def test_pipeline_resumes_completed_repo_from_metadata_without_reloading_file_da
     async def should_not_parse(*_args, **_kwargs):
         raise AssertionError("completed repos should not be reparsed")
 
-    committed_repo_paths, merged_imports_map = asyncio.run(
+    committed_repo_paths, merged_imports_map, _ = asyncio.run(
         process_repository_snapshots(
             builder=SimpleNamespace(),
             run_state=run_state,
@@ -1387,7 +1387,7 @@ def test_pipeline_reparses_completed_repo_when_file_data_snapshot_is_missing(
             file_data=[{"path": str(repo_files[0].resolve()), "functions": []}],
         )
 
-    committed_repo_paths, merged_imports_map = asyncio.run(
+    committed_repo_paths, merged_imports_map, _ = asyncio.run(
         process_repository_snapshots(
             builder=SimpleNamespace(),
             run_state=run_state,

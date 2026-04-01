@@ -59,6 +59,7 @@ DEFAULT_CONFIG = {
     "PCG_IGNORE_DEPENDENCY_DIRS": "true",
     "PCG_MAX_CALLS_PER_FILE": "50",
     "PCG_CALL_RESOLUTION_SCOPE": "repo",
+    "PCG_INDEX_SUMMARY_DIR": "",
     "ECOSYSTEM_MANIFEST_PATH": "",
     "ECOSYSTEM_BASE_PATH": "",
     "ECOSYSTEM_PARALLEL_REPOS": "4",
@@ -116,6 +117,10 @@ CONFIG_DESCRIPTIONS = {
         "When 'global', unresolved calls fall through to corpus-wide name matching "
         "(original behavior). The default 'repo' improves both precision and speed "
         "for multi-repo workspaces."
+    ),
+    "PCG_INDEX_SUMMARY_DIR": (
+        "Override directory for run summary JSON artifacts. "
+        "When unset, summaries are written to ~/.pcg/index-runs/<run_id>/."
     ),
     "INDEX_SOURCE": "Store full source code in graph database (for faster indexing use false, for better performance use true)",
     "SCIP_INDEXER": "Use SCIP-based indexing for higher accuracy call/inheritance resolution (requires scip-<lang> tools installed)",

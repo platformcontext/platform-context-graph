@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -36,21 +37,22 @@ from .graph_builder_persistence_unwind import resolve_max_entity_value_length
 
 @dataclass(frozen=True)
 class BatchCommitResult:
-    """Describe which files committed successfully in one batch write attempt."""
+    """Describe files committed successfully with timing and entity counts."""
 
     committed_file_paths: tuple[str, ...] = ()
     failed_file_paths: tuple[str, ...] = ()
+    content_write_duration_seconds: float = 0.0
+    graph_write_duration_seconds: float = 0.0
+    entity_totals: dict[str, int] = field(default_factory=dict)
 
     @property
     def committed_file_count(self) -> int:
         """Return the number of files that reached durable graph state."""
-
         return len(self.committed_file_paths)
 
     @property
     def last_committed_file(self) -> str | None:
         """Return the final committed file path when any succeeded."""
-
         if not self.committed_file_paths:
             return None
         return self.committed_file_paths[-1]
@@ -404,12 +406,13 @@ def commit_file_batch_to_graph(
         committed_files = 0
         committed_file_paths: list[str] = []
         repo_entity_totals: dict[str, int] = {}
-
+        content_write_total, graph_write_total = 0.0, 0.0
         for start in range(0, total_files, tx_file_limit):
             tx_chunk = file_data_list[start : start + tx_file_limit]
+            _t0 = time.perf_counter()
             _content_dual_write_batch(tx_chunk, repository, warning_logger_fn)
-
-            tx, is_explicit = _begin_transaction(session)
+            content_write_total += time.perf_counter() - _t0
+            _t0, tx, is_explicit = time.perf_counter(), *_begin_transaction(session)
             chunk_file_paths: list[str] = []
             try:
                 with get_observability().start_span(
@@ -478,6 +481,7 @@ def commit_file_batch_to_graph(
                         _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                     if is_explicit:
                         tx.commit()
+                    graph_write_total += time.perf_counter() - _t0
             except Exception as exc:
                 if is_explicit:
                     tx.rollback()
@@ -576,7 +580,12 @@ def commit_file_batch_to_graph(
                     "entity_totals": repo_entity_totals,
                 },
             )
-        return BatchCommitResult(committed_file_paths=tuple(committed_file_paths))
+        return replace(
+            BatchCommitResult(committed_file_paths=tuple(committed_file_paths)),
+            content_write_duration_seconds=content_write_total,
+            graph_write_duration_seconds=graph_write_total,
+            entity_totals=repo_entity_totals,
+        )
 
 
 __all__ = [

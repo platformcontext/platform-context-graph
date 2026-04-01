@@ -106,6 +106,10 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
     ingester_scan_requests_total: Any = field(init=False, default=None)
     index_snapshot_queue_depth: Any = field(init=False, default=None)
     index_parse_tasks_active: Any = field(init=False, default=None)
+    index_repo_graph_write_duration: Any = field(init=False, default=None)
+    index_repo_content_write_duration: Any = field(init=False, default=None)
+    index_fallback_resolution_total: Any = field(init=False, default=None)
+    index_ambiguous_resolution_total: Any = field(init=False, default=None)
 
     def __post_init__(self) -> None:
         """Create the tracer, meter, and metric instruments for the runtime."""
@@ -124,34 +128,6 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
 
     def _setup_instruments(self) -> None:
         """Initialize counters, histograms, and gauges for this runtime."""
-
-        self.http_requests_total = None
-        self.http_request_duration = None
-        self.http_request_errors_total = None
-        self.mcp_requests_total = None
-        self.mcp_request_duration = None
-        self.mcp_request_errors_total = None
-        self.mcp_tool_calls_total = None
-        self.mcp_tool_duration = None
-        self.mcp_tool_errors_total = None
-        self.index_runs_total = None
-        self.index_run_duration = None
-        self.index_repositories_total = None
-        self.index_checkpoints_total = None
-        self.index_repository_duration = None
-        self.index_stage_duration = None
-        self.hidden_dirs_skipped_total = None
-        self.index_lock_contention_skips_total = None
-        self.neo4j_query_duration = None
-        self.neo4j_query_errors_total = None
-        self.graph_write_batch_duration = None
-        self.graph_write_batch_rows = None
-        self.content_provider_requests_total = None
-        self.content_provider_duration = None
-        self.content_workspace_fallback_total = None
-        self.ingester_scan_requests_total = None
-        self.index_snapshot_queue_depth = None
-        self.index_parse_tasks_active = None
 
         if not self.enabled or self.meter is None:
             return
@@ -236,6 +212,21 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         )
         self.ingester_scan_requests_total = self.meter.create_counter(
             "pcg_ingester_scan_requests_total"
+        )
+
+        self.index_repo_graph_write_duration = self.meter.create_histogram(
+            "pcg_index_repo_graph_write_duration_seconds",
+            unit="s",
+        )
+        self.index_repo_content_write_duration = self.meter.create_histogram(
+            "pcg_index_repo_content_write_duration_seconds",
+            unit="s",
+        )
+        self.index_fallback_resolution_total = self.meter.create_counter(
+            "pcg_index_fallback_resolution_total"
+        )
+        self.index_ambiguous_resolution_total = self.meter.create_counter(
+            "pcg_index_ambiguous_resolution_total"
         )
 
         self.meter.create_observable_gauge(
