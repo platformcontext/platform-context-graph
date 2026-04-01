@@ -57,7 +57,6 @@ class BatchCommitResult:
             return None
         return self.committed_file_paths[-1]
 
-
 def _content_dual_write(
     file_data: dict[str, Any],
     file_name: str,
@@ -97,7 +96,6 @@ def _content_dual_write(
             },
             exc_info=exc,
         )
-
 
 def _content_dual_write_batch(
     file_data_list: list[dict[str, Any]],
@@ -144,7 +142,6 @@ def _content_dual_write_batch(
             exc_info=exc,
         )
 
-
 def _begin_transaction(session: Any) -> tuple[Any, bool]:
     """Begin an explicit transaction if the backend supports it.
 
@@ -161,7 +158,6 @@ def _begin_transaction(session: Any) -> tuple[Any, bool]:
         except (AttributeError, NotImplementedError, RuntimeError, TypeError):
             pass
     return session, False
-
 
 def _write_one_file_graph(
     tx: Any,
@@ -331,7 +327,6 @@ def add_file_to_graph(
                 tx.rollback()
             raise
 
-
 def _accumulate_entity_totals(
     totals: dict[str, int],
     flush_metrics: dict[str, Any],
@@ -360,6 +355,9 @@ def commit_file_batch_to_graph(
     debug_log_fn: Any,
     info_logger_fn: Any,
     warning_logger_fn: Any,
+    adaptive_flush_threshold: int | None = None,
+    adaptive_entity_batch_size: int | None = None,
+    adaptive_tx_file_limit: int | None = None,
 ) -> BatchCommitResult:
     """Persist a batch of parsed files using bounded Neo4j write transactions.
 
@@ -394,11 +392,14 @@ def commit_file_batch_to_graph(
     max_entity_value_length = resolve_max_entity_value_length(
         get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH")
     )
-    tx_file_limit = _bounded_positive_int_config(
-        "PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE",
-        5,
-        maximum=max(1, len(file_data_list)),
-    )
+    if adaptive_tx_file_limit is not None:
+        tx_file_limit = min(adaptive_tx_file_limit, max(1, len(file_data_list)))
+    else:
+        tx_file_limit = _bounded_positive_int_config(
+            "PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE",
+            5,
+            maximum=max(1, len(file_data_list)),
+        )
 
     with builder.driver.session() as session:
         repository = read_repository_metadata(session, repo_path_obj)
@@ -445,7 +446,7 @@ def commit_file_batch_to_graph(
                                 current_file=file_path_str,
                                 committed=False,
                             )
-                        if should_flush_batches(accumulator):
+                        if should_flush_batches(accumulator, flush_threshold=adaptive_flush_threshold):
                             log_prepared_entity_batches(
                                 accumulator,
                                 repo_path_str=repo_path_str,
@@ -457,6 +458,7 @@ def commit_file_batch_to_graph(
                                 accumulator,
                                 info_logger_fn=info_logger_fn,
                                 debug_logger_fn=debug_log_fn,
+                                entity_batch_size=adaptive_entity_batch_size,
                             )
                             _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                             accumulator = empty_accumulator()
@@ -477,6 +479,7 @@ def commit_file_batch_to_graph(
                             accumulator,
                             info_logger_fn=info_logger_fn,
                             debug_logger_fn=debug_log_fn,
+                            entity_batch_size=adaptive_entity_batch_size,
                         )
                         _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                     if is_explicit:
@@ -520,6 +523,7 @@ def commit_file_batch_to_graph(
                             file_batches,
                             info_logger_fn=info_logger_fn,
                             debug_logger_fn=debug_log_fn,
+                            entity_batch_size=adaptive_entity_batch_size,
                         )
                         _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                         if is_explicit:

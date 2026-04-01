@@ -676,6 +676,7 @@ async def process_repository_snapshots(
                             repo_path,
                             batch_size=batch_size,
                         ),
+                        repo_class=repo_tel.repo_class,
                     )
                     if commit_timing_result is not None:
                         repo_tel.graph_write_duration_seconds = (

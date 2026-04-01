@@ -219,8 +219,13 @@ def _commit_repository_snapshot(
     is_dependency: bool,
     progress_callback: Any | None = None,
     iter_snapshot_file_data_batches_fn: Any | None = None,
+    repo_class: str | None = None,
 ) -> CommitTimingResult:
     """Replace one repository's persisted graph/content state from a snapshot."""
+
+    from .adaptive_batch_config import resolve_batch_config
+
+    batch_config = resolve_batch_config(repo_class=repo_class)
 
     repo_path = Path(snapshot.repo_path).resolve()
     graph_store = _graph_store_adapter(builder)
@@ -252,7 +257,19 @@ def _commit_repository_snapshot(
         content_provider.delete_repository_content(metadata["id"])
 
     builder.add_repository_to_graph(repo_path, is_dependency=is_dependency)
-    batch_size = _positive_int_env("PCG_FILE_BATCH_SIZE", 50, maximum=512)
+    batch_size = min(
+        batch_config.file_batch_size,
+        _positive_int_env("PCG_FILE_BATCH_SIZE", 50, maximum=512),
+    )
+    logger.info(
+        "Adaptive batch config: repo_class=%s, file_batch=%d, flush_threshold=%d, "
+        "entity_batch=%d, tx_file_limit=%d",
+        batch_config.repo_class,
+        batch_size,
+        batch_config.flush_row_threshold,
+        batch_config.entity_batch_size,
+        batch_config.tx_file_limit,
+    )
     total_files = snapshot.file_count or len(snapshot.file_data)
     committed_files = 0
     timing = CommitTimingResult()
@@ -291,6 +308,9 @@ def _commit_repository_snapshot(
                     )
                 )
             _batch_start = time.perf_counter()
+            commit_kwargs["adaptive_flush_threshold"] = batch_config.flush_row_threshold
+            commit_kwargs["adaptive_entity_batch_size"] = batch_config.entity_batch_size
+            commit_kwargs["adaptive_tx_file_limit"] = batch_config.tx_file_limit
             commit_result = builder.commit_file_batch_to_graph(
                 batch, repo_path, **commit_kwargs
             )
