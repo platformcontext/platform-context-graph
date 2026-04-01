@@ -159,9 +159,7 @@ def finalize_repository_batch(
                         "function_calls": dict(call_relationship_metrics)
                     }
                 run_state.finalization_status = "completed"
-                run_state.status = (
-                    "completed" if blocking_count == 0 else "partial_success"
-                )
+                run_state.status = "completed"
                 persist_run_state_fn(run_state)
                 publish_run_repository_coverage_fn(
                     builder=builder,

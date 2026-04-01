@@ -6,8 +6,10 @@ from typing import Any
 
 _OTEL_STAGE_KEYS = (
     ("contextual_exact", "contextual_exact_duration_seconds"),
+    ("contextual_repo_scoped", "contextual_repo_scoped_duration_seconds"),
     ("contextual_fallback", "contextual_fallback_duration_seconds"),
     ("file_level_exact", "file_level_exact_duration_seconds"),
+    ("file_level_repo_scoped", "file_level_repo_scoped_duration_seconds"),
     ("file_level_fallback", "file_level_fallback_duration_seconds"),
     ("total", "total_duration_seconds"),
 )

@@ -34,10 +34,12 @@ from platform_context_graph.tools.graph_builder_call_batches import (
 class _FakeResult:
     """Minimal Neo4j result stand-in."""
 
-    def __init__(self, row: dict[str, object] | None) -> None:
+    def __init__(self, row: dict[str, object] | list[dict[str, object]] | None) -> None:
         self._row = row
 
     def single(self) -> dict[str, object] | None:
+        if isinstance(self._row, list):
+            return self._row[0] if self._row else None
         return self._row
 
     def data(self) -> list[dict[str, Any]]:

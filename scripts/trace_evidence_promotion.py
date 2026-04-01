@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from typing import Any
 
 import httpx
@@ -255,9 +254,7 @@ def trace_graph(session: Any, repo_name: str) -> dict[str, Any]:
     return results
 
 
-def trace_api(
-    client: httpx.Client, repo_name: str
-) -> dict[str, Any]:
+def trace_api(client: httpx.Client, repo_name: str) -> dict[str, Any]:
     """Query the API for promoted context and story."""
 
     results: dict[str, Any] = {}
@@ -310,7 +307,9 @@ def trace_api(
     if context.get("platforms"):
         print("\n  Platforms detail:")
         for p in context["platforms"]:
-            print(f"    kind={p.get('kind')} name={p.get('name')} provider={p.get('provider')}")
+            print(
+                f"    kind={p.get('kind')} name={p.get('name')} provider={p.get('provider')}"
+            )
     if context.get("deploys_from"):
         print("\n  Deploys from detail:")
         for d in context["deploys_from"]:
@@ -321,7 +320,9 @@ def trace_api(
             print(f"    {p.get('name')}")
     if context.get("ecosystem"):
         eco = context["ecosystem"]
-        print(f"\n  Ecosystem: deps={eco.get('dependencies')}, dependents={eco.get('dependents')}")
+        print(
+            f"\n  Ecosystem: deps={eco.get('dependencies')}, dependents={eco.get('dependents')}"
+        )
 
     results["context"] = promoted_fields
     results["full_context"] = context
@@ -342,9 +343,7 @@ def trace_api(
     return results
 
 
-def evaluate_hypotheses(
-    graph: dict[str, Any], api: dict[str, Any]
-) -> None:
+def evaluate_hypotheses(graph: dict[str, Any], api: dict[str, Any]) -> None:
     """Evaluate the four PRD hypotheses and print a matrix."""
 
     _section("HYPOTHESIS EVALUATION")
@@ -432,7 +431,9 @@ def evaluate_hypotheses(
 def main() -> None:
     """Run the evidence promotion trace."""
 
-    parser = argparse.ArgumentParser(description="Trace evidence promotion for one repo")
+    parser = argparse.ArgumentParser(
+        description="Trace evidence promotion for one repo"
+    )
     parser.add_argument("--repo-name", default="api-node-boats")
     parser.add_argument("--api-url", default="http://localhost:8080/api/v0")
     parser.add_argument("--api-key", default=os.getenv("PCG_E2E_API_KEY", ""))

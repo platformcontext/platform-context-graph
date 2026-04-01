@@ -303,6 +303,8 @@ def project_resolved_relationships(
                           AND (
                             (source:Repository AND source.id IN $scope_ids)
                             OR (target:Repository AND target.id IN $scope_ids)
+                            OR (source:WorkloadSubject AND source.repository_id IN $scope_ids)
+                            OR (target:WorkloadSubject AND target.repository_id IN $scope_ids)
                           )
                         DELETE rel
                         """,
@@ -362,9 +364,7 @@ def project_resolved_relationships(
                         """,
                         rows=workload_rows,
                     )
-                grouped_rows: dict[
-                    tuple[str, str, str], list[dict[str, object]]
-                ] = {}
+                grouped_rows: dict[tuple[str, str, str], list[dict[str, object]]] = {}
                 for item in resolved:
                     source_entity_id = item.source_entity_id or item.source_repo_id
                     target_entity_id = item.target_entity_id or item.target_repo_id

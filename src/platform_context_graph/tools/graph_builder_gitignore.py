@@ -19,6 +19,7 @@ def _safe_resolve(path: Path) -> Path | None:
     try:
         return path.resolve()
     except (RuntimeError, OSError):
+        _logger.debug("Skipping unresolvable path (symlink loop or OS error): %s", path)
         return None
 
 
@@ -148,7 +149,9 @@ def filter_repo_gitignore_files(
     if not honor_gitignore_enabled(get_config_value_fn=get_config_value_fn):
         kept_files: list[Path] = []
         external_files: list[Path] = []
-        for file_path in sorted((Path(path) for path in files), key=lambda path: str(path)):
+        for file_path in sorted(
+            (Path(path) for path in files), key=lambda path: str(path)
+        ):
             if not _resolves_within_repo(repo_root, file_path):
                 external_files.append(file_path.absolute())
                 continue

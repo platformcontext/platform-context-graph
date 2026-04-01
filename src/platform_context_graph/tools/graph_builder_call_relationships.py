@@ -177,7 +177,7 @@ def create_all_function_calls(
         file_level_buffer = []
 
     with builder.driver.session() as session:
-        # Build family-aware known-callable name set for pre-filtering.
+        # Build known-callable name set for pre-filtering.
         known_callable_names = _build_known_callable_names(session)
         debug_log_fn(f"Known callable names in graph: {len(known_callable_names)}")
 
@@ -303,8 +303,8 @@ def _prepare_call_rows(
         if called_name in _PYTHON_BUILTIN_NAMES:
             continue
 
-        # Family-aware pre-filter: skip calls whose name does not exist
-        # as any Function/Class in the compatible language family.
+        # Name-existence pre-filter: skip calls whose name does not exist
+        # as any Function or Class in the graph.
         if known_callable_names is not None and called_name not in known_callable_names:
             if unresolved_counter is not None:
                 unresolved_counter[called_name] += 1
