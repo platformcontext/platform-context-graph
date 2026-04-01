@@ -665,7 +665,7 @@ async def process_repository_snapshots(
                         "pcg.index.commit_workers": commit_concurrency,
                     },
                 ):
-                    await asyncio.to_thread(
+                    commit_timing_result = await asyncio.to_thread(
                         commit_repository_snapshot_fn,
                         builder,
                         snapshot,
@@ -677,6 +677,19 @@ async def process_repository_snapshots(
                             batch_size=batch_size,
                         ),
                     )
+                    if commit_timing_result is not None:
+                        repo_tel.graph_write_duration_seconds = (
+                            commit_timing_result.graph_write_duration_seconds
+                        )
+                        repo_tel.content_write_duration_seconds = (
+                            commit_timing_result.content_write_duration_seconds
+                        )
+                        repo_tel.max_graph_batch_rows = (
+                            commit_timing_result.max_graph_batch_rows
+                        )
+                        repo_tel.max_content_batch_rows = (
+                            commit_timing_result.max_content_batch_rows
+                        )
                 async with commit_state_lock:
                     committed_repo_paths.append(repo_path.resolve())
                     merge_import_maps(merged_imports_map, snapshot.imports_map)
@@ -712,7 +725,6 @@ async def process_repository_snapshots(
                 )
                 mem_sample = read_memory_usage_sample()
                 record_memory_sample(repo_tel, "commit_end", mem_sample)
-                commit_timing_result = None
                 telemetry.record_index_repositories(
                     component=component,
                     phase="completed",
