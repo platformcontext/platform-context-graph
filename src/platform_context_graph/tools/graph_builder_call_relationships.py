@@ -6,11 +6,15 @@ import builtins as py_builtins
 import logging
 import os
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 _logger = logging.getLogger(__name__)
 
+from .graph_builder_call_otel import (
+    emit_call_resolution_otel_metrics as _emit_call_resolution_otel_metrics,
+)
 from .graph_builder_call_batches import (
     call_resolution_metrics as _call_resolution_metrics,
     combine_call_relationship_metrics as _combine_call_relationship_metrics,
@@ -30,6 +34,35 @@ _PYTHON_BUILTIN_NAMES = frozenset(dir(py_builtins))
 
 _MINIFIED_SUFFIXES = (".min.js", ".min.css", ".bundle.js", ".chunk.js")
 _MAX_CALLS_PER_FILE = int(os.environ.get("PCG_MAX_CALLS_PER_FILE", "50"))
+
+# Language families for cross-language call resolution.  Only languages
+# within the same family may produce CALLS edges in repo-scoped and
+# fallback resolution passes.
+_LANGUAGE_FAMILIES: dict[str, str] = {
+    "javascript": "js_family",
+    "typescript": "js_family",
+}
+
+
+def compatible_languages(lang: str | None) -> list[str]:
+    """Return the list of languages compatible with *lang* for call resolution.
+
+    Languages within the same family (e.g. JS/TS) are cross-compatible.
+    All other languages resolve only against themselves.
+
+    Args:
+        lang: The source language identifier, or ``None``.
+
+    Returns:
+        A list of compatible language identifiers.  Empty when *lang*
+        is ``None``.
+    """
+    if not lang:
+        return []
+    family = _LANGUAGE_FAMILIES.get(lang)
+    if family:
+        return [k for k, v in _LANGUAGE_FAMILIES.items() if v == family]
+    return [lang]
 
 
 def _is_minified_or_bundled(file_path: str) -> bool:
@@ -79,6 +112,17 @@ def create_function_calls(
     _create_file_level_call_relationships_batched(session, file_level_rows)
 
 
+def _build_known_callable_names(session: Any) -> frozenset[str]:
+    """Query Neo4j for all distinct Function and Class names."""
+    names: set[str] = set()
+    for label in ("Function", "Class"):
+        rows = session.run(
+            f"MATCH (n:{label}) RETURN DISTINCT n.name AS name",
+        ).data()
+        names.update(row["name"] for row in rows if row.get("name"))
+    return frozenset(names)
+
+
 def create_all_function_calls(
     builder: Any,
     all_file_data: list[dict[str, Any]] | Any,
@@ -99,20 +143,16 @@ def create_all_function_calls(
     resolved_warning_logger_fn = warning_logger_fn or (lambda *_args, **_kwargs: None)
     next_row_id = 0
     processed_files = 0
-    contextual_metrics = _call_resolution_metrics(
+    unresolved_counter: Counter[str] = Counter()
+    _empty = dict(
         rows=[],
         fallback_rows=0,
         unresolved_rows=[],
         exact_duration=0.0,
         fallback_duration=0.0,
     )
-    file_level_metrics = _call_resolution_metrics(
-        rows=[],
-        fallback_rows=0,
-        unresolved_rows=[],
-        exact_duration=0.0,
-        fallback_duration=0.0,
-    )
+    contextual_metrics = _call_resolution_metrics(**_empty)
+    file_level_metrics = _call_resolution_metrics(**_empty)
     contextual_buffer: list[dict[str, Any]] = []
     file_level_buffer: list[dict[str, Any]] = []
 
@@ -137,6 +177,10 @@ def create_all_function_calls(
         file_level_buffer = []
 
     with builder.driver.session() as session:
+        # Build known-callable name set for pre-filtering.
+        known_callable_names = _build_known_callable_names(session)
+        debug_log_fn(f"Known callable names in graph: {len(known_callable_names)}")
+
         for file_data in all_file_data:
             processed_files += 1
             file_path_str = file_data.get("path", "")
@@ -160,6 +204,8 @@ def create_all_function_calls(
                     get_config_value_fn=resolved_get_config_value_fn,
                     warning_logger_fn=resolved_warning_logger_fn,
                     start_row_id=next_row_id,
+                    known_callable_names=known_callable_names,
+                    unresolved_counter=unresolved_counter,
                 )
             )
             total_rows = len(file_contextual_rows) + len(file_level_batch_rows)
@@ -184,75 +230,32 @@ def create_all_function_calls(
                 )
         _flush_contextual(session)
         _flush_file_level(session)
+
+    # Aggregated unresolved summary (replaces per-call warning spam).
+    if unresolved_counter:
+        total_unresolved = sum(unresolved_counter.values())
+        top_fmt = ", ".join(f"{n}={c}" for n, c in unresolved_counter.most_common(10))
+        _logger.info(
+            "Unresolved calls: total=%d, distinct=%d, top=[%s]",
+            total_unresolved,
+            len(unresolved_counter),
+            top_fmt,
+        )
     metrics = _combine_call_relationship_metrics(contextual_metrics, file_level_metrics)
     setattr(builder, "_last_call_relationship_metrics", metrics)
     debug_log_fn(
-        "CALLS metrics: "
-        f"contextual_exact={metrics['contextual_exact_duration_seconds']:.1f}s, "
-        f"contextual_fallback={metrics['contextual_fallback_duration_seconds']:.1f}s, "
-        f"file_level_exact={metrics['file_level_exact_duration_seconds']:.1f}s, "
-        f"file_level_fallback={metrics['file_level_fallback_duration_seconds']:.1f}s, "
+        f"CALLS metrics: exact={metrics['exact_duration_seconds']:.1f}s, "
+        f"repo_scoped={metrics['repo_scoped_duration_seconds']:.1f}s, "
+        f"fallback={metrics['fallback_duration_seconds']:.1f}s, "
         f"total={metrics['total_duration_seconds']:.1f}s"
     )
     _logger.info(
-        "CALLS resolution: total=%.1fs, "
-        "contextual_unmatched=%d, file_level_unmatched=%d",
+        "CALLS resolution: total=%.1fs, unmatched=%d+%d",
         metrics.get("total_duration_seconds", 0),
         metrics.get("contextual_unmatched_rows", 0),
         metrics.get("file_level_unmatched_rows", 0),
     )
-    try:
-        from platform_context_graph.observability import get_observability
-
-        obs = get_observability()
-        if hasattr(obs, "record_index_stage_duration"):
-            obs.record_index_stage_duration(
-                component="indexer",
-                mode="batch",
-                source="finalization",
-                stage="function_calls_contextual_exact",
-                duration_seconds=metrics.get("contextual_exact_duration_seconds", 0),
-                parse_strategy="",
-                parse_workers=0,
-            )
-            obs.record_index_stage_duration(
-                component="indexer",
-                mode="batch",
-                source="finalization",
-                stage="function_calls_contextual_fallback",
-                duration_seconds=metrics.get("contextual_fallback_duration_seconds", 0),
-                parse_strategy="",
-                parse_workers=0,
-            )
-            obs.record_index_stage_duration(
-                component="indexer",
-                mode="batch",
-                source="finalization",
-                stage="function_calls_file_level_exact",
-                duration_seconds=metrics.get("file_level_exact_duration_seconds", 0),
-                parse_strategy="",
-                parse_workers=0,
-            )
-            obs.record_index_stage_duration(
-                component="indexer",
-                mode="batch",
-                source="finalization",
-                stage="function_calls_file_level_fallback",
-                duration_seconds=metrics.get("file_level_fallback_duration_seconds", 0),
-                parse_strategy="",
-                parse_workers=0,
-            )
-            obs.record_index_stage_duration(
-                component="indexer",
-                mode="batch",
-                source="finalization",
-                stage="function_calls_total",
-                duration_seconds=metrics.get("total_duration_seconds", 0),
-                parse_strategy="",
-                parse_workers=0,
-            )
-    except Exception:
-        pass  # Don't fail indexing if metrics emission fails
+    _emit_call_resolution_otel_metrics(metrics)
     return metrics
 
 
@@ -275,6 +278,8 @@ def _prepare_call_rows(
     get_config_value_fn: Any,
     warning_logger_fn: Any,
     start_row_id: int,
+    known_callable_names: frozenset[str] | None = None,
+    unresolved_counter: Counter | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     """Resolve one file's calls into contextual and file-level batch rows."""
 
@@ -296,6 +301,13 @@ def _prepare_call_rows(
     for call in file_data.get("function_calls", []):
         called_name = call["name"]
         if called_name in _PYTHON_BUILTIN_NAMES:
+            continue
+
+        # Name-existence pre-filter: skip calls whose name does not exist
+        # as any Function or Class in the graph.
+        if known_callable_names is not None and called_name not in known_callable_names:
+            if unresolved_counter is not None:
+                unresolved_counter[called_name] += 1
             continue
 
         resolved_path = None
@@ -343,11 +355,14 @@ def _prepare_call_rows(
                     )
 
         if not resolved_path:
-            if not skip_external:
-                warning_logger_fn(
-                    f"Could not resolve call {called_name} (lookup: {lookup_name}) in {caller_file_path}"
-                )
             is_unresolved_external = True
+            if unresolved_counter is not None:
+                unresolved_counter[called_name] += 1
+            elif not skip_external:
+                warning_logger_fn(
+                    f"Could not resolve call {called_name} "
+                    f"(lookup: {lookup_name}) in {caller_file_path}"
+                )
         else:
             is_unresolved_external = False
 
@@ -438,6 +453,7 @@ def _build_call_params(
     repo_path: str,
 ) -> dict[str, Any]:
     """Build the common query parameters for function call relationships."""
+    lang = call.get("lang")
     return {
         "caller_file_path": caller_file_path,
         "called_name": called_name,
@@ -445,7 +461,8 @@ def _build_call_params(
         "line_number": call["line_number"],
         "args": call.get("args", []),
         "full_call_name": call.get("full_name", called_name),
-        "lang": call.get("lang"),
+        "lang": lang,
+        "compatible_langs": compatible_languages(lang),
         "repo_path": repo_path,
     }
 

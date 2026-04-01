@@ -510,7 +510,7 @@ def test_project_resolved_relationships_uses_relationship_type_for_projection() 
     )
 
     queries = [query for query, _params in driver.session_instance.tx.calls]
-    assert any("MATCH ()-[rel]->()" in query for query in queries)
+    assert any("DELETE rel" in query and "evidence_source" in query for query in queries)
     assert any(
         "MERGE (source)-[rel:DISCOVERS_CONFIG_IN]->(target)" in query
         for query in queries

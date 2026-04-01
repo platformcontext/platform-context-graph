@@ -51,7 +51,21 @@ def finalize_repository_batch(
             last_success_at=last_success_at,
         )
 
-    if run_state.blocking_repositories() == 0:
+    blocking_count = run_state.blocking_repositories()
+    has_committed_repos = len(committed_repo_paths) > 0
+    should_finalize = has_committed_repos or blocking_count == 0
+    if should_finalize:
+        if blocking_count > 0:
+            emit_log_call(
+                info_logger_fn,
+                "Proceeding with finalization despite blocking repositories",
+                event_name="index.finalization.partial_start",
+                extra_keys={
+                    "run_id": run_state.run_id,
+                    "committed_count": len(committed_repo_paths),
+                    "blocking_repositories": blocking_count,
+                },
+            )
         started_at = utc_now_fn()
         started = time.perf_counter()
         run_state.finalization_status = "running"
@@ -111,6 +125,9 @@ def finalize_repository_batch(
             attributes={
                 "pcg.index.run_id": run_state.run_id,
                 "pcg.index.repo_count": len(repo_paths),
+                "pcg.index.committed_repo_count": len(committed_repo_paths),
+                "pcg.index.blocking_repo_count": blocking_count,
+                "pcg.index.partial_finalization": blocking_count > 0,
             },
         ) as finalize_span:
             try:
@@ -198,12 +215,13 @@ def finalize_repository_batch(
     )
     emit_log_call(
         info_logger_fn,
-        "Repository batch finalization deferred because repositories are still blocking",
+        "Repository batch finalization deferred: no committed repositories to finalize",
         event_name="index.finalization.deferred",
         extra_keys={
             "run_id": run_state.run_id,
             "root_path": str(root_path.resolve()),
             "repository_count": len(repo_paths),
+            "committed_count": len(committed_repo_paths),
             "blocking_repositories": run_state.blocking_repositories(),
         },
     )

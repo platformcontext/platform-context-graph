@@ -11,6 +11,7 @@ from ..repository_identity import git_remote_for_path, repository_metadata
 from ..utils.debug_log import emit_log_call, info_logger
 from .entities import platform_from_entity_id, workload_subject_from_entity_id
 from .file_evidence import discover_checkout_file_evidence
+from .file_evidence_support import build_catalog_from_graph
 from .identity import canonical_checkout_id
 from .models import RelationshipEvidenceFact, RepositoryCheckout, ResolvedRelationship
 
@@ -161,7 +162,19 @@ def discover_repository_dependency_evidence(
                     "pcg.relationships.cross_repo_evidence_count",
                     len(cross_repo_rows),
                 )
-            file_evidence = discover_checkout_file_evidence(checkouts)
+            graph_catalog = build_catalog_from_graph(driver)
+            emit_log_call(
+                info_logger,
+                "Built graph-wide alias catalog for file evidence matching",
+                event_name="relationships.catalog.built",
+                extra_keys={
+                    "catalog_entries": len(graph_catalog),
+                    "checkout_count": len(checkouts),
+                },
+            )
+            file_evidence = discover_checkout_file_evidence(
+                checkouts, catalog=graph_catalog or None
+            )
             terraform_file_evidence_count = sum(
                 1
                 for item in file_evidence
@@ -226,6 +239,7 @@ def project_resolved_relationships(
     db_manager: Any,
     generation_id: str,
     resolved: Sequence[ResolvedRelationship],
+    committed_repo_ids: Sequence[str] = (),
 ) -> None:
     """Project resolved repository dependencies back into the graph."""
 
@@ -238,8 +252,10 @@ def project_resolved_relationships(
             "pcg.relationships.scope": REPOSITORY_DEPENDENCY_SCOPE,
             "pcg.relationships.generation_id": generation_id,
             "pcg.relationships.resolved_count": len(resolved),
+            "pcg.relationships.committed_repo_count": len(committed_repo_ids),
+            "pcg.relationships.scoped_delete": bool(committed_repo_ids),
         },
-    ):
+    ) as project_span:
         with driver.session() as session:
 
             def _write_projection(tx: Any) -> None:
@@ -276,16 +292,45 @@ def project_resolved_relationships(
                             "missing Repository nodes: "
                             + ", ".join(sorted(missing_repo_ids))
                         )
-                tx.run(
-                    """
-                    MATCH ()-[rel]->()
-                    WHERE rel.evidence_source = 'resolver'
-                      AND (rel.evidence_generation_id IS NULL
-                           OR rel.evidence_generation_id <> $generation_id)
-                    DELETE rel
-                    """,
-                    generation_id=generation_id,
-                )
+                scope_ids = list(committed_repo_ids) if committed_repo_ids else repo_ids
+                if scope_ids:
+                    delete_result = tx.run(
+                        """
+                        MATCH (source)-[rel]->(target)
+                        WHERE rel.evidence_source = 'resolver'
+                          AND (rel.evidence_generation_id IS NULL
+                               OR rel.evidence_generation_id <> $generation_id)
+                          AND (
+                            (source:Repository AND source.id IN $scope_ids)
+                            OR (target:Repository AND target.id IN $scope_ids)
+                            OR (source:WorkloadSubject AND source.repository_id IN $scope_ids)
+                            OR (target:WorkloadSubject AND target.repository_id IN $scope_ids)
+                          )
+                        DELETE rel
+                        """,
+                        generation_id=generation_id,
+                        scope_ids=scope_ids,
+                    )
+                    deleted_count = 0
+                    try:
+                        summary = delete_result.consume()
+                        deleted_count = summary.counters.relationships_deleted
+                    except AttributeError:
+                        pass
+                    emit_log_call(
+                        info_logger,
+                        "Scoped delete of stale resolver edges",
+                        event_name="relationships.project.scoped_delete",
+                        extra_keys={
+                            "generation_id": generation_id,
+                            "scope_repo_count": len(scope_ids),
+                            "deleted_edge_count": deleted_count,
+                        },
+                    )
+                    if project_span is not None:
+                        project_span.set_attribute(
+                            "pcg.relationships.deleted_stale_edges", deleted_count
+                        )
                 if not resolved:
                     return
                 platform_rows = _platform_projection_rows(resolved)
@@ -319,9 +364,7 @@ def project_resolved_relationships(
                         """,
                         rows=workload_rows,
                     )
-                grouped_rows: dict[
-                    tuple[str, str, str], list[dict[str, object]]
-                ] = {}
+                grouped_rows: dict[tuple[str, str, str], list[dict[str, object]]] = {}
                 for item in resolved:
                     source_entity_id = item.source_entity_id or item.source_repo_id
                     target_entity_id = item.target_entity_id or item.target_repo_id

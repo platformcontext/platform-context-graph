@@ -78,7 +78,9 @@ service:
 
     evidence = discover_checkout_file_evidence(checkouts)
 
-    assert [(item.evidence_kind, item.relationship_type) for item in evidence] == [
+    assert sorted(
+        [(item.evidence_kind, item.relationship_type) for item in evidence]
+    ) == [
         ("HELM_CHART_REFERENCE", "DEPLOYS_FROM"),
         ("HELM_VALUES_REFERENCE", "DEPLOYS_FROM"),
     ]

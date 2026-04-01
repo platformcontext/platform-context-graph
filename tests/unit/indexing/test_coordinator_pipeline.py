@@ -1134,6 +1134,7 @@ def test_finalize_repository_batch_logs_structured_deferred_event() -> None:
         "run_id": "test-run",
         "root_path": str(repo_path.resolve()),
         "repository_count": 1,
+        "committed_count": 0,
         "blocking_repositories": 1,
     }
     assert log_records[-1]["exc_info"] is None
