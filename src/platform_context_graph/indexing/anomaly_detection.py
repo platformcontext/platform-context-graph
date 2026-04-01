@@ -227,17 +227,13 @@ def emit_anomaly_events(
     for anomaly in anomalies:
         anomaly_type = anomaly["type"]
         repo_name = anomaly.get("repo_name", "unknown")
+        repo_path = anomaly.get("repo_path", "")
         actual = anomaly.get("actual")
         threshold = anomaly.get("threshold")
         warning_logger_fn(
             f"Anomaly detected: {anomaly_type} for {repo_name} "
-            f"(actual={actual}, threshold={threshold})",
-            event_name=f"index.repository.{anomaly_type}",
-            run_id=run_id,
-            repo_name=repo_name,
-            repo_path=anomaly.get("repo_path"),
-            actual=actual,
-            threshold=threshold,
+            f"(actual={actual}, threshold={threshold}, "
+            f"run_id={run_id}, repo_path={repo_path})"
         )
 
 

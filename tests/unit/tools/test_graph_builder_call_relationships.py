@@ -757,3 +757,281 @@ def test_global_scope_skips_repo_scoped_query(monkeypatch) -> None:
     assert (
         len(repo_scoped_queries) == 0
     ), "Repo-scoped query should NOT run when scope=global"
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: Family-aware known-callable filter
+# ---------------------------------------------------------------------------
+
+
+class _FamilyAwareSession:
+    """Fake session that returns Function/Class names WITH lang property."""
+
+    def __init__(self, names_with_lang: list[dict[str, str]]) -> None:
+        self.calls: list[tuple[str, dict]] = []
+        self._names_with_lang = names_with_lang
+
+    def run(self, query: str, params=None):
+        final_params = params or {}
+        self.calls.append((query, final_params))
+        if "RETURN DISTINCT n.name AS name, n.lang AS lang" in query:
+            return _FakeResult(self._names_with_lang)
+        if "rows" in final_params:
+            matched_ids = [row["row_id"] for row in final_params["rows"]]
+            return _FakeResult({"matched_row_ids": matched_ids})
+        return _FakeResult({"created": 1})
+
+
+def test_build_known_callable_names_by_family_groups_by_language() -> None:
+    """JS and TS names should be merged into the same family set; PHP stays separate."""
+
+    session = _FamilyAwareSession(
+        names_with_lang=[
+            {"name": "render", "lang": "javascript"},
+            {"name": "setup", "lang": "typescript"},
+            {"name": "fetchBoats", "lang": "php"},
+            {"name": "shared", "lang": "javascript"},
+        ]
+    )
+
+    result = call_relationships._build_known_callable_names_by_family(session)
+
+    # JS and TS share the js_family, so both should see all three names
+    assert "render" in result["javascript"]
+    assert "setup" in result["javascript"]
+    assert "shared" in result["javascript"]
+    assert "render" in result["typescript"]
+    assert "setup" in result["typescript"]
+    assert "shared" in result["typescript"]
+
+    # PHP is its own family
+    assert "fetchBoats" in result["php"]
+    assert "render" not in result["php"]
+    assert "setup" not in result["php"]
+
+
+def test_family_aware_prefilter_drops_cross_family_names() -> None:
+    """A PHP call to a name that only exists as JS callable should be filtered out."""
+
+    from collections import Counter
+
+    unresolved = Counter()
+    # Only JS callables exist -- no PHP callables at all
+    known_by_family = {
+        "javascript": frozenset({"render", "setup"}),
+        "typescript": frozenset({"render", "setup"}),
+    }
+
+    file_data = {
+        "path": "/tmp/repo/file.php",
+        "repo_path": "/tmp/repo",
+        "functions": [],
+        "classes": [],
+        "imports": [],
+        "function_calls": [
+            {"name": "render", "line_number": 10, "args": [], "lang": "php"},
+        ],
+    }
+
+    contextual_rows, file_level_rows, _ = call_relationships._prepare_call_rows(
+        file_data,
+        {},
+        caller_file_path="/tmp/repo/file.php",
+        get_config_value_fn=lambda _key: None,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+        start_row_id=0,
+        known_callable_names_by_family=known_by_family,
+        unresolved_counter=unresolved,
+    )
+
+    # The call should have been filtered -- render is JS-only, caller is PHP
+    assert len(contextual_rows) == 0
+    assert len(file_level_rows) == 0
+    assert unresolved["render"] == 1
+
+
+def test_family_aware_prefilter_allows_same_family_names() -> None:
+    """A JS call to a name that exists as TS callable should pass the filter."""
+
+    from collections import Counter
+
+    unresolved = Counter()
+    known_by_family = {
+        "javascript": frozenset({"render", "setup"}),
+        "typescript": frozenset({"render", "setup"}),
+    }
+
+    file_data = {
+        "path": "/tmp/repo/app.js",
+        "repo_path": "/tmp/repo",
+        "functions": [],
+        "classes": [],
+        "imports": [],
+        "function_calls": [
+            {"name": "render", "line_number": 5, "args": [], "lang": "javascript"},
+        ],
+    }
+
+    contextual_rows, file_level_rows, _ = call_relationships._prepare_call_rows(
+        file_data,
+        {},
+        caller_file_path="/tmp/repo/app.js",
+        get_config_value_fn=lambda _key: None,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+        start_row_id=0,
+        known_callable_names_by_family=known_by_family,
+        unresolved_counter=unresolved,
+    )
+
+    # The call should pass -- render exists in the JS family
+    all_rows = contextual_rows + file_level_rows
+    assert len(all_rows) == 1
+    assert all_rows[0]["called_name"] == "render"
+
+
+def test_family_aware_prefilter_allows_when_lang_is_none() -> None:
+    """Calls without a lang property should always pass the prefilter."""
+
+    from collections import Counter
+
+    unresolved = Counter()
+    known_by_family = {
+        "javascript": frozenset({"render"}),
+    }
+
+    file_data = {
+        "path": "/tmp/repo/unknown.txt",
+        "repo_path": "/tmp/repo",
+        "functions": [],
+        "classes": [],
+        "imports": [],
+        "function_calls": [
+            # No lang on the call
+            {"name": "render", "line_number": 1, "args": []},
+        ],
+    }
+
+    contextual_rows, file_level_rows, _ = call_relationships._prepare_call_rows(
+        file_data,
+        {},
+        caller_file_path="/tmp/repo/unknown.txt",
+        get_config_value_fn=lambda _key: None,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+        start_row_id=0,
+        known_callable_names_by_family=known_by_family,
+        unresolved_counter=unresolved,
+    )
+
+    # No lang => should not be filtered
+    all_rows = contextual_rows + file_level_rows
+    assert len(all_rows) == 1
+    assert all_rows[0]["called_name"] == "render"
+
+
+# ---------------------------------------------------------------------------
+# Fix 3: Enhanced aggregated reporting
+# ---------------------------------------------------------------------------
+
+
+def test_unresolved_by_lang_counter() -> None:
+    """Per-language unresolved tracking should tally by caller language."""
+
+    from collections import Counter
+
+    unresolved = Counter()
+    prefiltered = Counter()
+    # Empty callable set for PHP means all PHP calls get prefiltered
+    known_by_family = {
+        "javascript": frozenset({"render"}),
+        "typescript": frozenset({"render"}),
+    }
+
+    file_data = {
+        "path": "/tmp/repo/file.php",
+        "repo_path": "/tmp/repo",
+        "functions": [],
+        "classes": [],
+        "imports": [],
+        "function_calls": [
+            {"name": "someFunc", "line_number": 10, "args": [], "lang": "php"},
+            {"name": "anotherFunc", "line_number": 20, "args": [], "lang": "php"},
+        ],
+    }
+
+    call_relationships._prepare_call_rows(
+        file_data,
+        {},
+        caller_file_path="/tmp/repo/file.php",
+        get_config_value_fn=lambda _key: None,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+        start_row_id=0,
+        known_callable_names_by_family=known_by_family,
+        unresolved_counter=unresolved,
+        prefiltered_counter=prefiltered,
+    )
+
+    # Both PHP calls should be prefiltered (not in PHP family callable set)
+    assert prefiltered["php"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Fix 4: Class-aware resolution guardrails
+# ---------------------------------------------------------------------------
+
+
+def test_max_calls_for_repo_class() -> None:
+    """Verify class-aware caps return correct values for each class."""
+
+    max_fn = call_relationships.max_calls_for_repo_class
+
+    assert max_fn("small") == 100
+    assert max_fn("medium") == 50
+    assert max_fn("large") == 25
+    assert max_fn("xlarge") == 15
+    assert max_fn("dangerous") == 5
+    assert max_fn(None) == call_relationships._MAX_CALLS_PER_FILE
+    assert max_fn("unknown") == call_relationships._MAX_CALLS_PER_FILE
+
+
+def test_adaptive_resolution_guardrails_enabled(monkeypatch) -> None:
+    """When env var is true, class-aware cap should be used instead of default."""
+
+    monkeypatch.setenv("PCG_ADAPTIVE_RESOLUTION_GUARDRAILS_ENABLED", "true")
+
+    session = _FamilyAwareSession(
+        names_with_lang=[
+            {"name": "helper_one", "lang": "python"},
+            {"name": "helper_two", "lang": "python"},
+        ]
+    )
+    builder = SimpleNamespace(driver=_FakeDriver(session))
+
+    # Create many calls to exceed the 'large' cap of 25
+    many_calls = [
+        {"name": "helper_one", "line_number": i, "args": [], "lang": "python"}
+        for i in range(60)
+    ]
+
+    all_file_data = [
+        {
+            "path": "/tmp/repo/big.py",
+            "repo_path": "/tmp/repo",
+            "functions": [],
+            "classes": [],
+            "imports": [],
+            "function_calls": many_calls,
+        },
+    ]
+    imports_map = {"helper_one": ["/tmp/repo/helpers.py"]}
+
+    metrics = create_all_function_calls(
+        builder,
+        all_file_data,
+        imports_map,
+        debug_log_fn=lambda *_args, **_kwargs: None,
+        repo_class="large",
+    )
+
+    # With repo_class="large", cap is 25. Verify total rows processed <= 25.
+    total_rows = metrics.get("contextual_rows", 0) + metrics.get("file_level_rows", 0)
+    assert total_rows <= 25

@@ -245,3 +245,36 @@ class TestEmitAnomalyEvents:
         )
         assert len(calls) == 1
         assert "parse_queue_wait_high" in calls[0][0]
+
+    def test_works_with_positional_only_logger(self):
+        """Ensure emit_anomaly_events works when logger takes only a string.
+
+        The real warning_logger_fn in coordinator_pipeline only accepts a
+        single positional message string — no keyword arguments.
+        """
+        from platform_context_graph.indexing.anomaly_detection import (
+            emit_anomaly_events,
+        )
+
+        messages: list[str] = []
+
+        def positional_only_logger(msg: str) -> None:
+            messages.append(msg)
+
+        anomalies = [
+            {
+                "type": "commit_memory_high",
+                "actual": 3000.0,
+                "threshold": 2048.0,
+                "repo_name": "big-repo",
+                "repo_path": "/repos/big-repo",
+            }
+        ]
+        emit_anomaly_events(
+            anomalies,
+            warning_logger_fn=positional_only_logger,
+            run_id="run456",
+        )
+        assert len(messages) == 1
+        assert "commit_memory_high" in messages[0]
+        assert "big-repo" in messages[0]
