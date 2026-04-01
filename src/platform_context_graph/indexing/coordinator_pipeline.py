@@ -31,8 +31,20 @@ from .anomaly_detection import (
 )
 from .repo_classification import (
     classify_repo_pre_parse,
+    classify_repo_runtime,
     load_repo_class_overrides,
 )
+
+_ENTITY_FIELDS = ("functions", "classes", "variables", "interfaces", "structs", "enums")
+
+
+def _count_snapshot_entities(file_data: list[dict[str, Any]]) -> int:
+    """Count total entities across all parsed files for reclassification."""
+    total = 0
+    for fd in file_data:
+        for field in _ENTITY_FIELDS:
+            total += len(fd.get(field, []))
+    return total
 
 
 def prepare_repository_snapshots(
@@ -367,6 +379,29 @@ async def process_repository_snapshots(
                         )
                         repo_tel.parse_duration_seconds = parse_duration
                         repo_tel.parsed_file_count = snapshot.file_count
+                        entity_count = _count_snapshot_entities(snapshot.file_data)
+                        pre_class = repo_tel.repo_class or "medium"
+                        upgraded_class = classify_repo_runtime(
+                            pre_class=pre_class,
+                            parse_duration_seconds=parse_duration,
+                            parsed_file_count=snapshot.file_count,
+                            entity_count=entity_count,
+                        )
+                        if upgraded_class != pre_class:
+                            emit_log_call(
+                                info_logger_fn,
+                                f"Runtime reclassification {repo_path.name}: "
+                                f"{pre_class} -> {upgraded_class}",
+                                event_name="index.repository.reclassified",
+                                extra_keys={
+                                    "repo_path": str(repo_path.resolve()),
+                                    "pre_class": pre_class,
+                                    "runtime_class": upgraded_class,
+                                    "parse_duration": round(parse_duration, 3),
+                                    "entity_count": entity_count,
+                                },
+                            )
+                        repo_tel.repo_class = upgraded_class
                         if hasattr(telemetry, "record_index_stage_duration"):
                             telemetry.record_index_stage_duration(
                                 component=component,

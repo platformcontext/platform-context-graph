@@ -137,6 +137,7 @@ class GraphBuilder:
         adaptive_flush_threshold: int | None = None,
         adaptive_entity_batch_size: int | None = None,
         adaptive_tx_file_limit: int | None = None,
+        adaptive_content_batch_size: int | None = None,
     ) -> Any:
         """Persist a batch of parsed files in a single Neo4j transaction.
 
@@ -147,6 +148,7 @@ class GraphBuilder:
             adaptive_flush_threshold: Optional class-aware flush threshold.
             adaptive_entity_batch_size: Optional class-aware UNWIND size.
             adaptive_tx_file_limit: Optional class-aware tx file limit.
+            adaptive_content_batch_size: Optional class-aware content upsert size.
         """
         return _commit_file_batch_to_graph(
             self,
@@ -159,6 +161,7 @@ class GraphBuilder:
             adaptive_flush_threshold=adaptive_flush_threshold,
             adaptive_entity_batch_size=adaptive_entity_batch_size,
             adaptive_tx_file_limit=adaptive_tx_file_limit,
+            adaptive_content_batch_size=adaptive_content_batch_size,
         )
 
     def _safe_run_create(

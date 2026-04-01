@@ -57,6 +57,7 @@ class BatchCommitResult:
             return None
         return self.committed_file_paths[-1]
 
+
 def _content_dual_write(
     file_data: dict[str, Any],
     file_name: str,
@@ -97,10 +98,13 @@ def _content_dual_write(
             exc_info=exc,
         )
 
+
 def _content_dual_write_batch(
     file_data_list: list[dict[str, Any]],
     repository: dict[str, Any],
     warning_logger_fn: Any,
+    *,
+    content_batch_size: int | None = None,
 ) -> None:
     """Batch Postgres dual-write for multiple files in one round-trip."""
 
@@ -129,7 +133,10 @@ def _content_dual_write_batch(
             if file_entries:
                 content_provider.upsert_file_batch(file_entries)
             if entity_entries:
-                content_provider.upsert_entities_batch(entity_entries)
+                content_provider.upsert_entities_batch(
+                    entity_entries,
+                    entity_batch_size=content_batch_size,
+                )
     except Exception as exc:
         emit_log_call(
             warning_logger_fn,
@@ -142,15 +149,9 @@ def _content_dual_write_batch(
             exc_info=exc,
         )
 
-def _begin_transaction(session: Any) -> tuple[Any, bool]:
-    """Begin an explicit transaction if the backend supports it.
 
-    Returns:
-        Tuple of ``(tx, is_explicit)`` where ``tx`` is a transaction object
-        (or the session itself for backends without transaction support) and
-        ``is_explicit`` indicates whether ``commit()``/``rollback()`` should
-        be called.
-    """
+def _begin_transaction(session: Any) -> tuple[Any, bool]:
+    """Begin an explicit transaction if the backend supports it."""
     begin = getattr(session, "begin_transaction", None)
     if begin is not None:
         try:
@@ -158,6 +159,7 @@ def _begin_transaction(session: Any) -> tuple[Any, bool]:
         except (AttributeError, NotImplementedError, RuntimeError, TypeError):
             pass
     return session, False
+
 
 def _write_one_file_graph(
     tx: Any,
@@ -327,6 +329,7 @@ def add_file_to_graph(
                 tx.rollback()
             raise
 
+
 def _accumulate_entity_totals(
     totals: dict[str, int],
     flush_metrics: dict[str, Any],
@@ -358,25 +361,11 @@ def commit_file_batch_to_graph(
     adaptive_flush_threshold: int | None = None,
     adaptive_entity_batch_size: int | None = None,
     adaptive_tx_file_limit: int | None = None,
+    adaptive_content_batch_size: int | None = None,
 ) -> BatchCommitResult:
-    """Persist a batch of parsed files using bounded Neo4j write transactions.
-
-    Opens one session, reads repository metadata once, then writes the batch in
-    smaller transaction-sized file chunks so large repositories do not retain
-    one giant in-flight transaction. Postgres content writes are handled
-    per-file outside the Neo4j transaction.
-
-    Args:
-        builder: ``GraphBuilder`` facade instance.
-        file_data_list: List of parsed file payloads to persist.
-        repo_path: Resolved repository root path.
-        debug_log_fn: Debug logger callable.
-        info_logger_fn: Info logger callable.
-        warning_logger_fn: Warning logger callable.
-    """
+    """Persist parsed files using bounded Neo4j write transactions."""
     if not file_data_list:
         return BatchCommitResult()
-
     repo_path_obj = repo_path.resolve()
     repo_path_str = str(repo_path_obj)
 
@@ -411,7 +400,12 @@ def commit_file_batch_to_graph(
         for start in range(0, total_files, tx_file_limit):
             tx_chunk = file_data_list[start : start + tx_file_limit]
             _t0 = time.perf_counter()
-            _content_dual_write_batch(tx_chunk, repository, warning_logger_fn)
+            _content_dual_write_batch(
+                tx_chunk,
+                repository,
+                warning_logger_fn,
+                content_batch_size=adaptive_content_batch_size,
+            )
             content_write_total += time.perf_counter() - _t0
             _t0, tx, is_explicit = time.perf_counter(), *_begin_transaction(session)
             chunk_file_paths: list[str] = []
@@ -446,7 +440,9 @@ def commit_file_batch_to_graph(
                                 current_file=file_path_str,
                                 committed=False,
                             )
-                        if should_flush_batches(accumulator, flush_threshold=adaptive_flush_threshold):
+                        if should_flush_batches(
+                            accumulator, flush_threshold=adaptive_flush_threshold
+                        ):
                             log_prepared_entity_batches(
                                 accumulator,
                                 repo_path_str=repo_path_str,

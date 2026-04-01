@@ -311,6 +311,9 @@ def _commit_repository_snapshot(
             commit_kwargs["adaptive_flush_threshold"] = batch_config.flush_row_threshold
             commit_kwargs["adaptive_entity_batch_size"] = batch_config.entity_batch_size
             commit_kwargs["adaptive_tx_file_limit"] = batch_config.tx_file_limit
+            commit_kwargs["adaptive_content_batch_size"] = (
+                batch_config.content_upsert_batch_size
+            )
             commit_result = builder.commit_file_batch_to_graph(
                 batch, repo_path, **commit_kwargs
             )

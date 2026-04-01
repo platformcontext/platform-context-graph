@@ -259,17 +259,26 @@ class PostgresContentProvider:
             with self._cursor() as cursor:
                 cursor.executemany(_FILE_UPSERT_SQL, rows)
 
-    def upsert_entities(self, entries: Sequence[ContentEntityEntry]) -> None:
+    def upsert_entities(
+        self,
+        entries: Sequence[ContentEntityEntry],
+        *,
+        entity_batch_size: int | None = None,
+    ) -> None:
         """Insert or update entity-content rows.
 
         Args:
             entries: Entity rows to store.
+            entity_batch_size: Override for the per-executemany chunk size.
         """
 
         if not entries:
             return
 
-        batch_size = _entity_batch_size(len(entries))
+        if entity_batch_size is not None:
+            batch_size = max(1, min(entity_batch_size, len(entries)))
+        else:
+            batch_size = _entity_batch_size(len(entries))
 
         with get_observability().start_span(
             "pcg.content.postgres.upsert_entities",
@@ -285,13 +294,21 @@ class PostgresContentProvider:
                         _ENTITY_UPSERT_SQL, rows[start : start + batch_size]
                     )
 
-    def upsert_entities_batch(self, entries: Sequence[ContentEntityEntry]) -> None:
+    def upsert_entities_batch(
+        self,
+        entries: Sequence[ContentEntityEntry],
+        *,
+        entity_batch_size: int | None = None,
+    ) -> None:
         """Insert or update entity rows from multiple files in one batch."""
 
         if not entries:
             return
 
-        batch_size = _entity_batch_size(len(entries))
+        if entity_batch_size is not None:
+            batch_size = max(1, min(entity_batch_size, len(entries)))
+        else:
+            batch_size = _entity_batch_size(len(entries))
 
         with get_observability().start_span(
             "pcg.content.postgres.upsert_entities_batch",
