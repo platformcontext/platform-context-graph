@@ -8,6 +8,19 @@ from typing import Any
 
 from pathspec.gitignore import GitIgnoreSpec
 
+import logging
+
+_logger = logging.getLogger(__name__)
+
+
+def _safe_resolve(path: Path) -> Path | None:
+    """Resolve a path, returning None on symlink loops or OS errors."""
+
+    try:
+        return path.resolve()
+    except (RuntimeError, OSError):
+        return None
+
 
 @dataclass(frozen=True, slots=True)
 class GitIgnoreFilterResult:
@@ -30,8 +43,12 @@ def honor_gitignore_enabled(*, get_config_value_fn: Any) -> bool:
 def _ancestor_dirs(repo_root: Path, file_path: Path) -> list[Path]:
     """Return ancestor directories from repo root through file parent."""
 
-    file_path = file_path.resolve()
-    repo_root = repo_root.resolve()
+    resolved_file = _safe_resolve(file_path)
+    resolved_root = _safe_resolve(repo_root)
+    if resolved_file is None or resolved_root is None:
+        return []
+    file_path = resolved_file
+    repo_root = resolved_root
     if file_path == repo_root:
         return [repo_root]
 
@@ -53,9 +70,12 @@ def _ancestor_dirs(repo_root: Path, file_path: Path) -> list[Path]:
 def _resolves_within_repo(repo_root: Path, file_path: Path) -> bool:
     """Return whether one path resolves to a location inside the repo root."""
 
-    resolved_repo_root = repo_root.resolve()
+    resolved_repo_root = _safe_resolve(repo_root)
+    resolved_file = _safe_resolve(file_path)
+    if resolved_repo_root is None or resolved_file is None:
+        return False
     try:
-        file_path.resolve().relative_to(resolved_repo_root)
+        resolved_file.relative_to(resolved_repo_root)
     except ValueError:
         return False
     return True
@@ -94,8 +114,12 @@ def is_gitignored_in_repo(
 ) -> bool:
     """Return whether ``file_path`` is ignored by `.gitignore` files in ``repo_root``."""
 
-    repo_root = repo_root.resolve()
-    file_path = file_path.resolve()
+    resolved_root = _safe_resolve(repo_root)
+    resolved_file = _safe_resolve(file_path)
+    if resolved_root is None or resolved_file is None:
+        return False
+    repo_root = resolved_root
+    file_path = resolved_file
     cache = spec_cache if spec_cache is not None else {}
     if not _resolves_within_repo(repo_root, file_path):
         return False
@@ -128,7 +152,10 @@ def filter_repo_gitignore_files(
             if not _resolves_within_repo(repo_root, file_path):
                 external_files.append(file_path.absolute())
                 continue
-            kept_files.append(file_path.resolve())
+            resolved = _safe_resolve(file_path)
+            if resolved is None:
+                continue
+            kept_files.append(resolved)
         return GitIgnoreFilterResult(
             kept_files=kept_files,
             ignored_files=[],
@@ -143,10 +170,13 @@ def filter_repo_gitignore_files(
         if not _resolves_within_repo(repo_root, file_path):
             external_files.append(file_path.absolute())
             continue
+        resolved = _safe_resolve(file_path)
+        if resolved is None:
+            continue
         if is_gitignored_in_repo(repo_root, file_path, spec_cache=cache):
-            ignored_files.append(file_path.resolve())
+            ignored_files.append(resolved)
         else:
-            kept_files.append(file_path.resolve())
+            kept_files.append(resolved)
     return GitIgnoreFilterResult(
         kept_files=kept_files,
         ignored_files=ignored_files,
@@ -162,10 +192,16 @@ def summarize_gitignored_paths(
 ) -> str:
     """Return a compact top-path summary for ignored files in one repo."""
 
-    repo_root = repo_root.resolve()
+    resolved_root = _safe_resolve(repo_root)
+    if resolved_root is None:
+        return "none"
+    repo_root = resolved_root
     buckets: dict[str, int] = {}
     for file_path in ignored_files:
-        relative_parts = file_path.resolve().relative_to(repo_root).parts
+        resolved = _safe_resolve(file_path)
+        if resolved is None:
+            continue
+        relative_parts = resolved.relative_to(repo_root).parts
         bucket = relative_parts[0] if relative_parts else "."
         buckets[bucket] = buckets.get(bucket, 0) + 1
     summary = ", ".join(

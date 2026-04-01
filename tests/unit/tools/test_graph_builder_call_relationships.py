@@ -25,14 +25,44 @@ class _FakeResult:
     def single(self) -> dict[str, object] | None:
         return self._row
 
+    def data(self) -> list[dict[str, object]]:
+        if self._row is None:
+            return []
+        return self._row if isinstance(self._row, list) else [self._row]
+
 
 class _FakeSession:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        known_names: list[dict[str, str]] | None = None,
+    ) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
+        # When no known_names supplied, return a broad set so the
+        # known-callable pre-filter does not interfere with existing tests.
+        self._known_names = (
+            known_names
+            if known_names is not None
+            else [
+                {"name": n}
+                for n in (
+                    "helper_one",
+                    "helper_two",
+                    "helper",
+                    "process",
+                    "renderDashboard",
+                    "dependencyCall",
+                    "vendoredFn",
+                    "call",
+                )
+            ]
+        )
 
     def run(self, query: str, params: dict[str, object] | None = None):
         final_params = params or {}
         self.calls.append((query, final_params))
+        if "RETURN DISTINCT n.name" in query:
+            return _FakeResult(self._known_names)
         if "rows" in final_params:
             matched_ids = [row["row_id"] for row in final_params["rows"]]
             return _FakeResult({"matched_row_ids": matched_ids})
@@ -188,9 +218,10 @@ def test_create_all_function_calls_batches_across_files() -> None:
         debug_log_fn=lambda *_args, **_kwargs: None,
     )
 
-    assert len(session.calls) == 1
-    assert all("UNWIND $rows AS row" in query for query, _params in session.calls)
-    assert [len(params["rows"]) for _query, params in session.calls] == [2]
+    # 2 known-name queries (Function + Class) + 1 UNWIND batch query
+    unwind_calls = [(q, p) for q, p in session.calls if "UNWIND $rows AS row" in q]
+    assert len(unwind_calls) == 1
+    assert [len(params["rows"]) for _query, params in unwind_calls] == [2]
 
 
 def test_create_all_function_calls_returns_resolution_metrics(
@@ -493,8 +524,10 @@ def test_create_all_function_calls_skips_minified_files() -> None:
         debug_log_fn=lambda *_args, **_kwargs: None,
     )
 
-    assert len(session.calls) == 1
-    _query, params = session.calls[0]
+    # 2 known-name queries (Function + Class) + 1 UNWIND batch query
+    unwind_calls = [(q, p) for q, p in session.calls if "UNWIND $rows AS row" in q]
+    assert len(unwind_calls) == 1
+    _query, params = unwind_calls[0]
     # .min.js files are skipped during call resolution to avoid
     # expensive queries on minified bundles with thousands of
     # single-letter function calls.
@@ -629,6 +662,8 @@ def test_repo_scope_prevents_cross_repo_call_resolution(monkeypatch) -> None:
         def run(self, query: str, params=None):
             final_params = params or {}
             self.calls.append((query, final_params))
+            if "RETURN DISTINCT n.name" in query:
+                return _FakeResult([{"name": "process"}])
             rows = final_params.get("rows", [])
             if "STARTS WITH row.repo_path" in query:
                 # Simulate: the only function named 'process' lives in

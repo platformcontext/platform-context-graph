@@ -8,16 +8,26 @@ from ..observability import get_observability
 from ..utils.debug_log import emit_log_call, info_logger
 from .evidence_gitops import discover_gitops_evidence
 from .evidence_terraform import discover_terraform_evidence
-from .file_evidence_support import build_catalog
+from .file_evidence_support import CatalogEntry, build_catalog
 from .models import RelationshipEvidenceFact, RepositoryCheckout
 
 
 def discover_checkout_file_evidence(
     checkouts: Sequence[RepositoryCheckout],
+    catalog: Sequence[CatalogEntry] | None = None,
 ) -> list[RelationshipEvidenceFact]:
-    """Extract repo dependency evidence directly from portable file semantics."""
+    """Extract repo dependency evidence directly from portable file semantics.
 
-    catalog = build_catalog(checkouts)
+    Args:
+        checkouts: Repositories whose files will be scanned for evidence.
+        catalog: Pre-built alias catalog covering all target repos.
+            When ``None``, a catalog is built from *checkouts* only (legacy
+            behaviour).  Callers should pass a graph-wide catalog so that
+            evidence can match against any indexed repository.
+    """
+
+    if catalog is None:
+        catalog = build_catalog(checkouts)
     if not catalog:
         return []
 

@@ -70,6 +70,33 @@ def build_catalog(checkouts: Sequence[RepositoryCheckout]) -> list[CatalogEntry]
     return entries
 
 
+def build_catalog_from_graph(driver: Any) -> list[CatalogEntry]:
+    """Build the alias catalog from all Repository nodes in the graph.
+
+    Ensures file evidence extraction can match references against any
+    indexed repo, not just the repos being re-processed in the current run.
+    """
+
+    with driver.session() as session:
+        rows = session.run(
+            "MATCH (r:Repository) "
+            "RETURN r.id AS repo_id, r.name AS repo_name, "
+            "r.repo_slug AS repo_slug, r.remote_url AS remote_url"
+        ).data()
+
+    graph_checkouts = [
+        RepositoryCheckout(
+            checkout_id=row["repo_id"], logical_repo_id=row["repo_id"],
+            repo_name=row["repo_name"], repo_slug=row.get("repo_slug"),
+            remote_url=row.get("remote_url"), checkout_path=None,
+        )
+        for row in rows
+        if row.get("repo_id") and row.get("repo_name")
+    ]
+    return build_catalog(graph_checkouts)
+
+
+
 def aliases_for_checkout(checkout: RepositoryCheckout) -> set[str]:
     """Return matchable aliases for one checkout."""
 
@@ -449,6 +476,7 @@ __all__ = [
     "append_evidence_for_candidate",
     "append_relationship_evidence",
     "build_catalog",
+    "build_catalog_from_graph",
     "checkout_path_exists",
     "is_terraform_file",
     "iter_checkout_files",

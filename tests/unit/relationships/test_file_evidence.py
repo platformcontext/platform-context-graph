@@ -79,8 +79,8 @@ service:
     evidence = discover_checkout_file_evidence(checkouts)
 
     assert [(item.evidence_kind, item.relationship_type) for item in evidence] == [
-        ("HELM_CHART_REFERENCE", "DEPLOYS_FROM"),
         ("HELM_VALUES_REFERENCE", "DEPLOYS_FROM"),
+        ("HELM_CHART_REFERENCE", "DEPLOYS_FROM"),
     ]
     assert {item.source_repo_id for item in evidence} == {checkouts[1].logical_repo_id}
     assert {item.target_repo_id for item in evidence} == {checkouts[0].logical_repo_id}

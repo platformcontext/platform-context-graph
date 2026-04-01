@@ -358,6 +358,7 @@ def contextual_call_fallback_batch_query() -> str:
         OPTIONAL MATCH (caller_class:Class {name: row.caller_name, path: row.caller_file_path})
         WITH row, COALESCE(caller_function, caller_class) AS caller
         OPTIONAL MATCH (called:Function {name: row.called_name})
+          WHERE called.lang IS NULL OR called.lang IN row.compatible_langs
         WITH row, caller, called
         WHERE caller IS NOT NULL AND called IS NOT NULL
         MERGE (caller)-[:CALLS {line_number: row.line_number, args: row.args, full_call_name: row.full_call_name}]->(called)
@@ -380,8 +381,10 @@ def contextual_repo_scoped_batch_query() -> str:
         WITH row, COALESCE(caller_function, caller_class) AS caller
         OPTIONAL MATCH (called_function:Function {name: row.called_name})
           WHERE called_function.path STARTS WITH row.repo_path
+            AND (called_function.lang IS NULL OR called_function.lang IN row.compatible_langs)
         OPTIONAL MATCH (called_class:Class {name: row.called_name})
           WHERE called_class.path STARTS WITH row.repo_path
+            AND (called_class.lang IS NULL OR called_class.lang IN row.compatible_langs)
         OPTIONAL MATCH (called_class)-[:CONTAINS]->(init:Function)
         WITH row, caller, called_function, called_class,
              CASE WHEN init.name IN ["__init__", "constructor"] THEN init END AS init
@@ -419,6 +422,7 @@ def file_level_call_fallback_batch_query() -> str:
         UNWIND $rows AS row
         OPTIONAL MATCH (caller:File {path: row.caller_file_path})
         OPTIONAL MATCH (called:Function {name: row.called_name})
+          WHERE called.lang IS NULL OR called.lang IN row.compatible_langs
         WITH row, caller, called
         WHERE caller IS NOT NULL AND called IS NOT NULL
         MERGE (caller)-[:CALLS {line_number: row.line_number, args: row.args, full_call_name: row.full_call_name}]->(called)
@@ -439,8 +443,10 @@ def file_level_repo_scoped_batch_query() -> str:
         OPTIONAL MATCH (caller:File {path: row.caller_file_path})
         OPTIONAL MATCH (called_function:Function {name: row.called_name})
           WHERE called_function.path STARTS WITH row.repo_path
+            AND (called_function.lang IS NULL OR called_function.lang IN row.compatible_langs)
         OPTIONAL MATCH (called_class:Class {name: row.called_name})
           WHERE called_class.path STARTS WITH row.repo_path
+            AND (called_class.lang IS NULL OR called_class.lang IN row.compatible_langs)
         OPTIONAL MATCH (called_class)-[:CONTAINS]->(init:Function)
         WITH row, caller, called_function, called_class,
              CASE WHEN init.name IN ["__init__", "constructor"] THEN init END AS init

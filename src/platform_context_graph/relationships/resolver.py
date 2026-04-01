@@ -181,10 +181,12 @@ def resolve_repository_relationships_for_committed_repositories(
                     "resolved_count": len(resolved),
                 },
             )
+            committed_repo_ids = [c.logical_repo_id for c in checkouts]
             project_resolved_relationships(
                 db_manager=builder.db_manager,
                 generation_id=generation.generation_id,
                 resolved=resolved,
+                committed_repo_ids=committed_repo_ids,
             )
             emit_log_call(
                 info_logger_fn,
