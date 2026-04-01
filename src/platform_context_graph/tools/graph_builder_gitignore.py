@@ -53,7 +53,11 @@ def _ancestor_dirs(repo_root: Path, file_path: Path) -> list[Path]:
     if file_path == repo_root:
         return [repo_root]
 
-    parent_dir = file_path if file_path.is_dir() else file_path.parent
+    try:
+        parent_dir = file_path if file_path.is_dir() else file_path.parent
+    except (PermissionError, OSError):
+        _logger.debug("Cannot stat path (permission denied): %s", file_path)
+        return []
     if repo_root != parent_dir and repo_root not in parent_dir.parents:
         raise ValueError(f"{file_path} is not under repo root {repo_root}")
 
@@ -89,15 +93,23 @@ def _load_gitignore_spec(
 ) -> GitIgnoreSpec | None:
     """Load and cache a ``GitIgnoreSpec`` for one `.gitignore` file."""
 
-    resolved = gitignore_path.resolve()
+    resolved = _safe_resolve(gitignore_path)
+    if resolved is None:
+        return None
     if resolved in spec_cache:
         return spec_cache[resolved]
 
-    if not resolved.exists() or not resolved.is_file():
+    try:
+        if not resolved.exists() or not resolved.is_file():
+            spec_cache[resolved] = None
+            return None
+
+        lines = resolved.read_text(encoding="utf-8").splitlines()
+    except (PermissionError, OSError):
+        _logger.debug("Cannot read .gitignore (permission denied or OS error): %s", resolved)
         spec_cache[resolved] = None
         return None
 
-    lines = resolved.read_text(encoding="utf-8").splitlines()
     if not lines:
         spec_cache[resolved] = None
         return None
