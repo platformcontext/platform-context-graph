@@ -38,7 +38,7 @@ from .graph_builder_parsers import (
     parse_file as _parse_file,
     pre_scan_for_imports as _pre_scan_for_imports,
 )
-from .graph_builder_persistence import (
+from ..graph.persistence import (
     add_file_to_graph as _add_file_to_graph,
     add_repository_to_graph as _add_repository_to_graph,
     commit_file_batch_to_graph as _commit_file_batch_to_graph,
