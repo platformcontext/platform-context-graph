@@ -27,7 +27,6 @@ from ..cli.config_manager import get_config_value
 from ..core.pcg_bundle import PCGBundle
 from ..observability import initialize_observability
 from ..domain.responses import IngesterScanRequestResponse, IngesterStatusResponse
-from ..indexing.coordinator import describe_index_run
 from ..query import status as status_queries
 from .dependencies import get_database, get_query_services
 from .http_auth import http_auth_middleware
@@ -152,13 +151,16 @@ def create_app(
         return {"status": "ok"}
 
     @router.get("/index-status", tags=["system"])
-    def index_status(target: str | None = None) -> dict[str, Any]:
+    def index_status(
+        target: str | None = None,
+        services: Any = Depends(get_query_services),
+    ) -> dict[str, Any]:
         """Return the latest checkpointed index status for a path or run ID."""
 
-        summary = describe_index_run(
-            target
-            or status_queries.default_index_status_target("repository")
-            or Path.cwd()
+        summary = status_queries.describe_index_status(
+            services.database,
+            target=target or status_queries.default_index_status_target("repository"),
+            ingester="repository",
         )
         if summary is None:
             raise HTTPException(status_code=404, detail="Index status not found")
@@ -181,10 +183,17 @@ def create_app(
         )
 
     @router.get("/index-runs/{run_id}", tags=["system"])
-    def index_run_status(run_id: str) -> dict[str, Any]:
+    def index_run_status(
+        run_id: str,
+        services: Any = Depends(get_query_services),
+    ) -> dict[str, Any]:
         """Return the checkpointed status summary for one run identifier."""
 
-        summary = describe_index_run(run_id)
+        summary = status_queries.describe_index_status(
+            services.database,
+            target=run_id,
+            ingester="repository",
+        )
         if summary is None:
             raise HTTPException(status_code=404, detail="Index run not found")
         return summary
