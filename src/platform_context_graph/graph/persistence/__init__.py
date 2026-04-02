@@ -10,8 +10,10 @@ from .directories import (
     flush_directory_chain_rows,
     merge_directory_chain,
 )
+from .entities import build_entity_merge_statement
 
 __all__ = (
+    "build_entity_merge_statement",
     "collect_directory_chain_rows",
     "delete_file_from_graph",
     "delete_repository_from_graph",
