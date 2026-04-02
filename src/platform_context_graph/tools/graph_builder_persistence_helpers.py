@@ -10,7 +10,7 @@ from ..cli.config_manager import get_config_value
 from ..content.ingest import repository_metadata_from_row
 from ..core.records import record_to_dict
 from ..utils.debug_log import emit_log_call
-from .graph_builder_directory_chain import (
+from ..graph.persistence.directories import (
     collect_directory_chain_rows as _collect_directory_chain_rows,
     flush_directory_chain_rows as _flush_directory_chain_rows,
     merge_directory_chain,
