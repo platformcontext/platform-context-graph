@@ -11,7 +11,7 @@ from typing import Any, Callable
 
 from ...observability import get_observability
 from ...utils.debug_log import emit_log_call
-from ...tools.parse_worker import parse_file_in_worker
+from .parse_worker import parse_file_in_worker
 from ...tools.repository_display import repository_display_name
 from .types import RepositoryParseSnapshot
 

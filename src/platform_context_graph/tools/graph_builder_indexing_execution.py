@@ -18,7 +18,7 @@ from ..collectors.git.parse_execution import (
 )
 from .graph_builder_indexing_discovery import resolve_repository_file_sets
 from .graph_builder_indexing_types import RepositoryParseSnapshot
-from .parse_worker import parse_file_in_worker
+from ..collectors.git.parse_worker import parse_file_in_worker
 from .repository_display import repository_display_name
 
 _REPO_PARSE_PROGRESS_MIN_FILES = 250

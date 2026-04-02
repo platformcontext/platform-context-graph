@@ -25,7 +25,7 @@ from platform_context_graph.tools.graph_builder_indexing import (
     parse_repository_snapshot_async,
     resolve_repository_file_sets,
 )
-from platform_context_graph.tools.parse_worker import init_parse_worker
+from platform_context_graph.collectors.git.parse_worker import init_parse_worker
 from .coordinator_pipeline import (
     finalize_repository_batch,
     process_repository_snapshots,
