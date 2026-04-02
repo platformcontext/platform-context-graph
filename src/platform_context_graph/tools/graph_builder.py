@@ -32,7 +32,7 @@ from ..graph.persistence import (
     delete_repository_from_graph as _delete_repository_from_graph,
     update_file_in_graph as _update_file_in_graph,
 )
-from .graph_builder_parsers import (
+from ..parsers.registry import (
     TreeSitterParser,
     build_parser_registry,
     parse_file as _parse_file,

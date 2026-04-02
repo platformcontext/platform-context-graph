@@ -9,7 +9,7 @@ from typing import Any
 from ..cli.config_manager import get_config_value
 from ..observability import initialize_observability
 from ..utils.debug_log import error_logger, warning_logger
-from .graph_builder_parsers import build_parser_registry, parse_file
+from ..parsers.registry import build_parser_registry, parse_file
 
 _WORKER_BUILDER: SimpleNamespace | None = None
 
