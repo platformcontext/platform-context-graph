@@ -2,7 +2,7 @@ language: python
 title: Python Parser
 family: language
 parser: PythonTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/python.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/python.py
 doc_path: docs/docs/languages/python.md
 fixture_repo: tests/fixtures/ecosystems/python_comprehensive/
 unit_test_file: tests/unit/parsers/test_python_parser.py
