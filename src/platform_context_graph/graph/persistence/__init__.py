@@ -11,6 +11,7 @@ from .directories import (
     merge_directory_chain,
 )
 from .content_store import content_dual_write, content_dual_write_batch
+from .commit import commit_file_batch_to_graph
 from .entities import build_entity_merge_statement
 from .files import add_file_to_graph, write_one_file_graph
 from .metrics import accumulate_entity_totals
@@ -58,6 +59,7 @@ __all__ = (
     "begin_transaction",
     "collect_file_write_data",
     "collect_directory_chain_rows",
+    "commit_file_batch_to_graph",
     "content_dual_write",
     "content_dual_write_batch",
     "delete_file_from_graph",
