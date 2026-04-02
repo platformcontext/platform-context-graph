@@ -8,7 +8,7 @@ from typing import Any
 from ...cli.config_manager import get_config_value
 from ...utils.debug_log import info_logger
 from ...tools.dependency_catalog import dependency_ignore_enabled, is_dependency_path
-from ...tools.graph_builder_gitignore import (
+from .gitignore import (
     filter_repo_gitignore_files,
     summarize_gitignored_paths,
 )

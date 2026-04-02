@@ -13,7 +13,7 @@ from platform_context_graph.tools.dependency_catalog import (
     dependency_ignore_enabled,
     is_dependency_path,
 )
-from platform_context_graph.tools.graph_builder_gitignore import (
+from platform_context_graph.collectors.git.gitignore import (
     honor_gitignore_enabled,
     is_gitignored_in_repo,
 )
