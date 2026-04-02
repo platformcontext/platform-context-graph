@@ -27,7 +27,7 @@ from .graph_builder_indexing import (
     estimate_processing_time as _estimate_processing_time,
     get_ignored_dir_names as _get_ignored_dir_names,
 )
-from .graph_builder_mutations import (
+from ..graph.persistence import (
     delete_file_from_graph as _delete_file_from_graph,
     delete_repository_from_graph as _delete_repository_from_graph,
     update_file_in_graph as _update_file_in_graph,
