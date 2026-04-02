@@ -18,7 +18,7 @@ from ...tools.graph_builder_indexing_execution import (
     parse_repository_snapshot_async,
 )
 from .finalize import finalize_index_batch, finalize_single_repository
-from ...tools.graph_builder_indexing_types import RepositoryParseSnapshot
+from .types import RepositoryParseSnapshot
 
 __all__ = [
     "RepositoryParseSnapshot",
