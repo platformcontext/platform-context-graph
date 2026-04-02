@@ -10,7 +10,9 @@ from .directories import (
     flush_directory_chain_rows,
     merge_directory_chain,
 )
+from .content_store import content_dual_write, content_dual_write_batch
 from .entities import build_entity_merge_statement
+from .metrics import accumulate_entity_totals
 from .repositories import (
     _bounded_positive_int_config,
     _merge_directory_chain,
@@ -20,6 +22,7 @@ from .repositories import (
     add_repository_to_graph,
     read_repository_metadata,
 )
+from .session import begin_transaction
 from .worker import (
     commit_batch_in_process,
     get_commit_worker_connection_params,
@@ -50,8 +53,11 @@ __all__ = (
     "_run_write_query",
     "BatchCommitResult",
     "build_entity_merge_statement",
+    "begin_transaction",
     "collect_file_write_data",
     "collect_directory_chain_rows",
+    "content_dual_write",
+    "content_dual_write_batch",
     "delete_file_from_graph",
     "delete_repository_from_graph",
     "empty_accumulator",
@@ -69,6 +75,7 @@ __all__ = (
     "should_flush_batches",
     "summarize_entity_source_files",
     "get_commit_worker_connection_params",
+    "accumulate_entity_totals",
     "update_file_in_graph",
     "validate_cypher_label",
     "validate_cypher_property_keys",

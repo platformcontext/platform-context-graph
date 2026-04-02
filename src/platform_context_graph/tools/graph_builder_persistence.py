@@ -8,9 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-_GIL_YIELD_ENABLED: bool = (
-    os.environ.get("PCG_COMMIT_GIL_YIELD_ENABLED", "true").lower() != "false"
-)
+_GIL_YIELD_ENABLED: bool = os.environ.get("PCG_COMMIT_GIL_YIELD_ENABLED", "true").lower() != "false"
 
 from ..cli.config_manager import get_config_value
 from ..content.ingest import prepare_content_entries
@@ -26,6 +24,11 @@ from ..graph.persistence.batching import (
     merge_batches,
     should_flush_batches,
 )
+from ..graph.persistence.content_store import (
+    content_dual_write as _canonical_content_dual_write,
+    content_dual_write_batch as _canonical_content_dual_write_batch,
+)
+from ..graph.persistence.metrics import accumulate_entity_totals
 from ..graph.persistence.types import BatchCommitResult
 from ..graph.persistence.repositories import (
     _bounded_positive_int_config,
@@ -38,6 +41,7 @@ from ..graph.persistence.repositories import (
     flush_directory_chain_rows,
     read_repository_metadata,
 )
+from ..graph.persistence.session import begin_transaction as _begin_transaction
 from ..graph.persistence.unwind import resolve_max_entity_value_length
 
 
@@ -47,40 +51,16 @@ def _content_dual_write(
     repository: dict[str, Any],
     warning_logger_fn: Any,
 ) -> None:
-    """Attempt a Postgres content-store dual-write for one file."""
+    """Compatibility wrapper for the canonical content dual-write helper."""
 
-    content_provider = get_postgres_content_provider()
-    if content_provider is None or not content_provider.enabled:
-        return
-    telemetry = get_observability()
-    try:
-        with telemetry.start_span(
-            "pcg.content.dual_write",
-            attributes={
-                "pcg.content.repo_id": repository.get("id"),
-                "pcg.content.relative_path": str(file_data.get("path", file_name)),
-            },
-        ):
-            file_entry, entity_entries = prepare_content_entries(
-                file_data=file_data,
-                repository=repository,
-            )
-            if file_entry is not None:
-                content_provider.upsert_file(file_entry)
-            if entity_entries:
-                content_provider.upsert_entities(entity_entries)
-    except Exception as exc:
-        emit_log_call(
-            warning_logger_fn,
-            f"Content store dual-write failed for {file_name}: {exc}",
-            event_name="content.dual_write.failed",
-            extra_keys={
-                "file_name": file_name,
-                "repo_id": repository.get("id"),
-            },
-            exc_info=exc,
-        )
-
+    _canonical_content_dual_write(
+        file_data,
+        file_name,
+        repository,
+        warning_logger_fn,
+        get_content_provider=get_postgres_content_provider,
+        prepare_entries=prepare_content_entries,
+    )
 
 def _content_dual_write_batch(
     file_data_list: list[dict[str, Any]],
@@ -89,60 +69,16 @@ def _content_dual_write_batch(
     *,
     content_batch_size: int | None = None,
 ) -> None:
-    """Batch Postgres dual-write for multiple files in one round-trip."""
+    """Compatibility wrapper for batched content-store dual-writes."""
 
-    content_provider = get_postgres_content_provider()
-    if content_provider is None or not content_provider.enabled:
-        return
-    telemetry = get_observability()
-    try:
-        with telemetry.start_span(
-            "pcg.content.dual_write_batch",
-            attributes={
-                "pcg.content.repo_id": repository.get("id"),
-                "pcg.content.file_count": len(file_data_list),
-            },
-        ):
-            file_entries = []
-            entity_entries = []
-            for file_data in file_data_list:
-                file_entry, entities = prepare_content_entries(
-                    file_data=file_data,
-                    repository=repository,
-                )
-                if file_entry is not None:
-                    file_entries.append(file_entry)
-                entity_entries.extend(entities)
-            if file_entries:
-                content_provider.upsert_file_batch(file_entries)
-            if entity_entries:
-                content_provider.upsert_entities_batch(
-                    entity_entries,
-                    entity_batch_size=content_batch_size,
-                )
-    except Exception as exc:
-        emit_log_call(
-            warning_logger_fn,
-            f"Content store batch dual-write failed for {len(file_data_list)} files: {exc}",
-            event_name="content.dual_write_batch.failed",
-            extra_keys={
-                "file_count": len(file_data_list),
-                "repo_id": repository.get("id"),
-            },
-            exc_info=exc,
-        )
-
-
-def _begin_transaction(session: Any) -> tuple[Any, bool]:
-    """Begin an explicit transaction if the backend supports it."""
-    begin = getattr(session, "begin_transaction", None)
-    if begin is not None:
-        try:
-            return begin(), True
-        except (AttributeError, NotImplementedError, RuntimeError, TypeError):
-            pass
-    return session, False
-
+    _canonical_content_dual_write_batch(
+        file_data_list,
+        repository,
+        warning_logger_fn,
+        content_batch_size=content_batch_size,
+        get_content_provider=get_postgres_content_provider,
+        prepare_entries=prepare_content_entries,
+    )
 
 def _write_one_file_graph(
     tx: Any,
@@ -313,25 +249,6 @@ def add_file_to_graph(
             raise
 
 
-def _accumulate_entity_totals(
-    totals: dict[str, int],
-    flush_metrics: dict[str, Any],
-) -> None:
-    """Add entity row counts from one flush into a mutable aggregate.
-
-    Args:
-        totals: Mutable dict accumulating per-label entity row counts.
-        flush_metrics: Metrics dict returned by ``flush_write_batches``.
-    """
-
-    for key, summary in flush_metrics.items():
-        if not key.startswith("entity:"):
-            continue
-        label = key[len("entity:") :]
-        row_count = int(summary.get("total_rows", 0))
-        totals[label] = totals.get(label, 0) + row_count
-
-
 def commit_file_batch_to_graph(
     builder: Any,
     file_data_list: list[dict[str, Any]],
@@ -439,7 +356,7 @@ def commit_file_batch_to_graph(
                                 debug_logger_fn=debug_log_fn,
                                 entity_batch_size=adaptive_entity_batch_size,
                             )
-                            _accumulate_entity_totals(repo_entity_totals, flush_metrics)
+                            accumulate_entity_totals(repo_entity_totals, flush_metrics)
                             accumulator = empty_accumulator()
 
                     flush_directory_chain_rows(
@@ -460,7 +377,7 @@ def commit_file_batch_to_graph(
                             debug_logger_fn=debug_log_fn,
                             entity_batch_size=adaptive_entity_batch_size,
                         )
-                        _accumulate_entity_totals(repo_entity_totals, flush_metrics)
+                        accumulate_entity_totals(repo_entity_totals, flush_metrics)
                     if is_explicit:
                         tx.commit()
                         if _GIL_YIELD_ENABLED:
@@ -507,7 +424,7 @@ def commit_file_batch_to_graph(
                             debug_logger_fn=debug_log_fn,
                             entity_batch_size=adaptive_entity_batch_size,
                         )
-                        _accumulate_entity_totals(repo_entity_totals, flush_metrics)
+                        accumulate_entity_totals(repo_entity_totals, flush_metrics)
                         if is_explicit:
                             tx.commit()
                             if _GIL_YIELD_ENABLED:
@@ -576,10 +493,5 @@ def commit_file_batch_to_graph(
             entity_totals=repo_entity_totals,
         )
 
-
-__all__ = [
-    "BatchCommitResult",
-    "add_file_to_graph",
-    "add_repository_to_graph",
-    "commit_file_batch_to_graph",
-]
+__all__ = ["BatchCommitResult", "add_file_to_graph", "add_repository_to_graph",
+           "commit_file_batch_to_graph"]
