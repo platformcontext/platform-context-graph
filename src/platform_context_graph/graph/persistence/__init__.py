@@ -20,6 +20,10 @@ from .repositories import (
     add_repository_to_graph,
     read_repository_metadata,
 )
+from .worker import (
+    commit_batch_in_process,
+    get_commit_worker_connection_params,
+)
 
 __all__ = (
     "_bounded_positive_int_config",
@@ -34,6 +38,8 @@ __all__ = (
     "flush_directory_chain_rows",
     "merge_directory_chain",
     "add_repository_to_graph",
+    "commit_batch_in_process",
     "read_repository_metadata",
+    "get_commit_worker_connection_params",
     "update_file_in_graph",
 )
