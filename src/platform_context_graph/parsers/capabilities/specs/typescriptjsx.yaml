@@ -2,7 +2,7 @@ language: typescriptjsx
 title: TypeScript JSX Parser
 family: language
 parser: TypescriptJSXTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/typescriptjsx.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/typescriptjsx.py
 doc_path: docs/docs/languages/typescriptjsx.md
 fixture_repo: tests/fixtures/ecosystems/tsx_comprehensive/
 unit_test_file: tests/unit/parsers/test_typescriptjsx_parser.py
