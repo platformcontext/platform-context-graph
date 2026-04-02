@@ -55,7 +55,9 @@ from .graph_builder_relationships import (
 )
 from ..graph.schema import create_schema as _create_schema
 from ..parsers.scip import build_graph_from_scip as _build_graph_from_scip
-from .graph_builder_workloads import materialize_workloads as _materialize_workloads
+from ..resolution.workloads.materialization import (
+    materialize_workloads as _materialize_workloads,
+)
 
 
 class GraphBuilder:

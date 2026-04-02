@@ -25,3 +25,11 @@ def test_graph_builder_facade_uses_canonical_graph_persistence() -> None:
     assert graph_builder_module._commit_file_batch_to_graph.__module__ == (
         "platform_context_graph.graph.persistence.commit"
     )
+
+
+def test_graph_builder_facade_uses_canonical_workload_resolution() -> None:
+    """GraphBuilder should import workload materialization from resolution."""
+
+    assert graph_builder_module._materialize_workloads.__module__ == (
+        "platform_context_graph.resolution.workloads.materialization"
+    )
