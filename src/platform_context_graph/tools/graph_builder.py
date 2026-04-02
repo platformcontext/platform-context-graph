@@ -54,7 +54,7 @@ from .graph_builder_relationships import (
     safe_run_create as _safe_run_create,
 )
 from ..graph.schema import create_schema as _create_schema
-from .graph_builder_scip import build_graph_from_scip as _build_graph_from_scip
+from ..parsers.scip import build_graph_from_scip as _build_graph_from_scip
 from .graph_builder_workloads import materialize_workloads as _materialize_workloads
 
 
