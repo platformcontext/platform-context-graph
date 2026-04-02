@@ -10,7 +10,7 @@ from typing import Any
 from tree_sitter import Language, Parser
 import importlib
 
-from ..tools.graph_builder_raw_text import (
+from .raw_text import (
     DOCKERFILE_PARSER_KEY,
     JENKINSFILE_PARSER_KEY,
     parser_key_for_path,

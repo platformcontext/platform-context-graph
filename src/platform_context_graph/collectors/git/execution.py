@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ...utils.debug_log import emit_log_call
-from ...tools.repository_display import repository_display_name
+from .display import repository_display_name
 from .discovery import resolve_repository_file_sets
 
 EmitLogCallFn = Callable[..., None]

@@ -12,7 +12,7 @@ from ...tools.graph_builder_gitignore import (
     filter_repo_gitignore_files,
     summarize_gitignored_paths,
 )
-from ...tools.repository_display import repository_display_name
+from .display import repository_display_name
 
 
 def estimate_processing_time(
@@ -87,7 +87,7 @@ def collect_supported_files(
     Returns:
         Supported file paths rooted at ``path``.
     """
-    from ...tools.graph_builder_raw_text import parser_key_for_path
+    from ...parsers.raw_text import parser_key_for_path
 
     dependency_exclusion_enabled = dependency_ignore_enabled(
         get_config_value_fn=get_config_value_fn
