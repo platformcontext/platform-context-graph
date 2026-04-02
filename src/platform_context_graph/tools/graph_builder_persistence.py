@@ -60,6 +60,7 @@ def _content_dual_write(
         prepare_entries=prepare_content_entries,
     )
 
+
 def _content_dual_write_batch(
     file_data_list: list[dict[str, Any]],
     repository: dict[str, Any],
@@ -77,6 +78,7 @@ def _content_dual_write_batch(
         get_content_provider=get_postgres_content_provider,
         prepare_entries=prepare_content_entries,
     )
+
 
 def add_file_to_graph(
     builder: Any,
@@ -170,5 +172,10 @@ def commit_file_batch_to_graph(
         write_one_file_graph_fn=_write_one_file_graph,
     )
 
-__all__ = ["BatchCommitResult", "add_file_to_graph", "add_repository_to_graph",
-           "commit_file_batch_to_graph"]
+
+__all__ = [
+    "BatchCommitResult",
+    "add_file_to_graph",
+    "add_repository_to_graph",
+    "commit_file_batch_to_graph",
+]

@@ -11,34 +11,34 @@ from platform_context_graph.utils.tree_sitter_manager import execute_query
 
 JS_QUERIES = {
     "functions": """
-        (function_declaration 
+        (function_declaration
             name: (identifier) @name
             parameters: (formal_parameters) @params
         ) @function_node
-        (variable_declarator 
-            name: (identifier) @name 
-            value: (function_expression 
+        (variable_declarator
+            name: (identifier) @name
+            value: (function_expression
                 parameters: (formal_parameters) @params
             ) @function_node
         )
-        (variable_declarator 
-            name: (identifier) @name 
-            value: (arrow_function 
+        (variable_declarator
+            name: (identifier) @name
+            value: (arrow_function
                 parameters: (formal_parameters) @params
             ) @function_node
         )
-        (variable_declarator 
-            name: (identifier) @name 
-            value: (arrow_function 
+        (variable_declarator
+            name: (identifier) @name
+            value: (arrow_function
                 parameter: (identifier) @single_param
             ) @function_node
         )
-        (method_definition 
+        (method_definition
             name: (property_identifier) @name
             parameters: (formal_parameters) @params
         ) @function_node
         (assignment_expression
-            left: (member_expression 
+            left: (member_expression
                 property: (property_identifier) @name
             )
             right: (function_expression
@@ -46,7 +46,7 @@ JS_QUERIES = {
             ) @function_node
         )
         (assignment_expression
-            left: (member_expression 
+            left: (member_expression
                 property: (property_identifier) @name
             )
             right: (arrow_function
@@ -86,13 +86,13 @@ def pre_scan_javascript(files: list[Path], parser_wrapper: Any) -> dict[str, lis
         (variable_declarator name: (identifier) @name value: (arrow_function))
         (method_definition name: (property_identifier) @name)
         (assignment_expression
-            left: (member_expression 
+            left: (member_expression
                 property: (property_identifier) @name
             )
             right: (function_expression)
         )
         (assignment_expression
-            left: (member_expression 
+            left: (member_expression
                 property: (property_identifier) @name
             )
             right: (arrow_function)

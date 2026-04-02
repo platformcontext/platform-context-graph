@@ -37,4 +37,3 @@ def test_legacy_content_dual_write_wrapper_remains_callable() -> None:
     """Legacy tools helper should remain importable during the transition."""
 
     assert callable(_content_dual_write)
-
