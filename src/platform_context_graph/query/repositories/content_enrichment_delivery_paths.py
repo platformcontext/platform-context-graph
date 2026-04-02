@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...tools.runtime_platform_families import format_platform_kind_label
+from ...resolution.platform_families import format_platform_kind_label
 
 _GITOPS_DELIVERY_MODES = frozenset({"eks_gitops", "eks_gitops_rollback"})
 _DIRECT_DELIVERY_MODES = frozenset(

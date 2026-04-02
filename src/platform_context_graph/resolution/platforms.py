@@ -11,14 +11,10 @@ from .workloads.batches import (
     retract_infrastructure_platform_rows,
     write_infrastructure_platform_rows,
 )
-from ..tools.runtime_platform_families import (
-    infer_infrastructure_runtime_family_kind,
-)
-from ..tools.runtime_platform_families import (
-    infer_runtime_family_kind_from_identifiers,
-)
-from ..tools.runtime_platform_families import infer_terraform_runtime_family_kind
-from ..tools.runtime_platform_families import lookup_runtime_family
+from .platform_families import infer_infrastructure_runtime_family_kind
+from .platform_families import infer_runtime_family_kind_from_identifiers
+from .platform_families import infer_terraform_runtime_family_kind
+from .platform_families import lookup_runtime_family
 
 _NON_PLATFORM_IDENTIFIERS = {
     "alerts",
