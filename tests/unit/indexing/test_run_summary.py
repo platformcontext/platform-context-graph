@@ -260,8 +260,9 @@ class TestBuildRunSummary:
             )
             for i in range(1, 4)
         }
+        repos = {f"/repos/repo-{i}": True for i in range(1, 4)}
         summary = build_run_summary(
-            run_state=_make_run_state(),
+            run_state=_make_run_state(repos=repos),
             repo_telemetry_map=tels,
             config=_make_config(),
             started_at="2026-04-01T00:00:00Z",

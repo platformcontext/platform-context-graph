@@ -175,22 +175,18 @@ def check_anomalies(
 
 def class_adjusted_thresholds(
     base: AnomalyThresholds,
-    repo_class: str,
+    repo_class: str | None,
 ) -> AnomalyThresholds:
-    """Return thresholds adjusted for the given repository class.
-
-    Larger repo classes get proportionally looser thresholds to reduce
-    false-positive anomaly noise. The ``medium`` class is the baseline
-    (1.0x multiplier).
+    """Return thresholds adjusted by repository size class multiplier.
 
     Args:
-        base: The base threshold configuration.
-        repo_class: The assigned repository class.
+        base: The base anomaly thresholds.
+        repo_class: The repository size classification.
 
     Returns:
-        An adjusted ``AnomalyThresholds`` instance.
+        Adjusted thresholds (or the base if class is unknown).
     """
-    multiplier = _CLASS_MULTIPLIERS.get(repo_class, 1.0)
+    multiplier = _CLASS_MULTIPLIERS.get(repo_class or "", 1.0)
     if multiplier == 1.0:
         return base
 

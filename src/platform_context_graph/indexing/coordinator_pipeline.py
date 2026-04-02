@@ -32,6 +32,7 @@ from .repo_telemetry import (
 )
 from .anomaly_detection import (
     check_anomalies,
+    class_adjusted_thresholds,
     emit_anomaly_events,
     load_anomaly_thresholds,
 )
@@ -143,6 +144,18 @@ async def process_repository_snapshots(
         )
     )
     repo_telemetry_map: dict[str, RepoTelemetry] = {}
+    # Create minimal telemetry entries for already-completed repos
+    for completed_path in committed_repo_paths:
+        completed_key = str(completed_path)
+        repo_state = run_state.repositories.get(completed_key)
+        if repo_state is not None and completed_key not in repo_telemetry_map:
+            tel = create_repo_telemetry(completed_path)
+            tel.status = "completed"
+            tel.parsed_file_count = getattr(repo_state, "file_count", 0) or 0
+            tel.commit_duration_seconds = getattr(
+                repo_state, "commit_duration_seconds", None
+            )
+            repo_telemetry_map[completed_key] = tel
     anomaly_thresholds = load_anomaly_thresholds()
     repo_class_overrides = load_repo_class_overrides()
     parse_slots = parse_worker_count_fn()
@@ -291,6 +304,7 @@ async def process_repository_snapshots(
                             duration_seconds=queue_wait_duration,
                             parse_strategy=parse_strategy,
                             parse_workers=parse_workers,
+                            repo_class=repo_tel.repo_class,
                         )
                     emit_log_call(
                         info_logger_fn,
@@ -343,6 +357,7 @@ async def process_repository_snapshots(
                             count=1,
                             mode=family,
                             source=source,
+                            repo_class=repo_tel.repo_class,
                         )
                         if resume_candidate:
                             telemetry.record_index_repositories(
@@ -351,6 +366,7 @@ async def process_repository_snapshots(
                                 count=1,
                                 mode=family,
                                 source=source,
+                                repo_class=repo_tel.repo_class,
                             )
                         emit_log_call(
                             info_logger_fn,
@@ -421,6 +437,7 @@ async def process_repository_snapshots(
                                 duration_seconds=parse_duration,
                                 parse_strategy=parse_strategy,
                                 parse_workers=parse_workers,
+                                repo_class=repo_tel.repo_class,
                             )
                         emit_log_call(
                             info_logger_fn,
@@ -547,6 +564,11 @@ async def process_repository_snapshots(
                 count=1,
                 mode=family,
                 source=source,
+                repo_class=(
+                    repo_telemetry_map[repo_key].repo_class
+                    if repo_key in repo_telemetry_map
+                    else None
+                ),
             )
             if started is not None:
                 telemetry.record_index_repository_duration(
@@ -555,6 +577,11 @@ async def process_repository_snapshots(
                     source=source,
                     status="failed",
                     duration_seconds=time.perf_counter() - started,
+                    repo_class=(
+                        repo_telemetry_map[repo_key].repo_class
+                        if repo_key in repo_telemetry_map
+                        else None
+                    ),
                 )
             if repo_span is not None:
                 repo_span.record_exception(exc)
@@ -658,6 +685,7 @@ async def process_repository_snapshots(
                         duration_seconds=commit_wait_duration,
                         parse_strategy=parse_strategy,
                         parse_workers=parse_workers,
+                        repo_class=repo_tel.repo_class,
                     )
                 emit_log_call(
                     info_logger_fn,
@@ -873,6 +901,7 @@ async def process_repository_snapshots(
                     count=1,
                     mode=family,
                     source=source,
+                    repo_class=repo_tel.repo_class,
                 )
                 telemetry.record_index_repository_duration(
                     component=component,
@@ -880,6 +909,7 @@ async def process_repository_snapshots(
                     source=source,
                     status="completed",
                     duration_seconds=time.perf_counter() - started,
+                    repo_class=repo_tel.repo_class,
                 )
                 commit_duration = (
                     time.perf_counter() - commit_started
@@ -891,7 +921,10 @@ async def process_repository_snapshots(
                     time.perf_counter() - started if started else None
                 )
                 repo_tel.status = "completed"
-                detected = check_anomalies(repo_tel, anomaly_thresholds)
+                adjusted = class_adjusted_thresholds(
+                    anomaly_thresholds, repo_tel.repo_class
+                )
+                detected = check_anomalies(repo_tel, adjusted)
                 if detected:
                     repo_tel.anomalies.extend(detected)
                     emit_anomaly_events(
@@ -908,6 +941,7 @@ async def process_repository_snapshots(
                         duration_seconds=commit_duration,
                         parse_strategy=parse_strategy,
                         parse_workers=parse_workers,
+                        repo_class=repo_tel.repo_class,
                     )
                 emit_log_call(
                     info_logger_fn,
@@ -957,6 +991,7 @@ async def process_repository_snapshots(
                     count=1,
                     mode=family,
                     source=source,
+                    repo_class=repo_tel.repo_class,
                 )
                 telemetry.record_index_repository_duration(
                     component=component,
@@ -964,6 +999,7 @@ async def process_repository_snapshots(
                     source=source,
                     status="commit_incomplete",
                     duration_seconds=time.perf_counter() - started,
+                    repo_class=repo_tel.repo_class,
                 )
                 tb = traceback.format_exception(exc)
                 warning_logger_fn(

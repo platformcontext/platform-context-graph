@@ -506,6 +506,7 @@ def commit_file_batch_to_graph(
                 )
                 failed_file_paths: list[str] = []
                 for file_data in tx_chunk:
+                    _retry_t0 = time.perf_counter()
                     tx, is_explicit = _begin_transaction(session)
                     try:
                         file_path_str, file_batches = _write_one_file_graph(
@@ -533,6 +534,7 @@ def commit_file_batch_to_graph(
                             tx.commit()
                             if _GIL_YIELD_ENABLED:
                                 time.sleep(0)
+                        graph_write_total += time.perf_counter() - _retry_t0
                         committed_files += 1
                         committed_file_paths.append(file_path_str)
                     except Exception as file_exc:

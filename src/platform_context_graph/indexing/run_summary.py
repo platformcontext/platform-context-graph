@@ -314,6 +314,13 @@ def build_run_summary(
     total_parsed = sum(t.parsed_file_count for t in telemetries)
     completed = sum(1 for t in telemetries if t.status == "completed")
     failed = sum(1 for t in telemetries if t.status == "failed")
+    # Use run_state.repositories for discovered count when telemetry
+    # may be incomplete (e.g. resumed runs skip parse/commit).
+    discovered = (
+        len(run_state.repositories)
+        if hasattr(run_state, "repositories")
+        else len(telemetries)
+    )
     stage_durations = getattr(run_state, "finalization_stage_durations", {}) or {}
 
     # Compute peak memory across all repos
@@ -334,7 +341,7 @@ def build_run_summary(
         "finalization_status": run_state.finalization_status,
         "config": asdict(config),
         "totals": {
-            "repositories_discovered": len(telemetries),
+            "repositories_discovered": discovered,
             "repositories_completed": completed,
             "repositories_failed": failed,
             "total_files_parsed": total_parsed,

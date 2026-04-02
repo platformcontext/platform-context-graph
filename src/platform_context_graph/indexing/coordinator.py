@@ -318,20 +318,31 @@ def _commit_repository_snapshot(
                 batch, repo_path, **commit_kwargs
             )
             _batch_duration = time.perf_counter() - _batch_start
-            timing.accumulate_graph_batch(
-                duration_seconds=_batch_duration, row_count=len(batch)
-            )
             if commit_result is not None:
                 result_entity_totals = getattr(commit_result, "entity_totals", None)
+                entity_row_count = (
+                    sum(result_entity_totals.values())
+                    if result_entity_totals
+                    else len(batch)
+                )
+                graph_dur = getattr(
+                    commit_result, "graph_write_duration_seconds", _batch_duration
+                )
+                timing.accumulate_graph_batch(
+                    duration_seconds=graph_dur, row_count=entity_row_count
+                )
                 if result_entity_totals:
                     timing.merge_entity_totals(result_entity_totals)
-                if hasattr(commit_result, "content_write_duration_seconds"):
-                    timing.content_write_duration_seconds += (
-                        commit_result.content_write_duration_seconds
-                    )
-                    timing.content_batch_count += (
-                        getattr(commit_result, "content_batch_count", 0) or 0
-                    )
+                content_dur = getattr(
+                    commit_result, "content_write_duration_seconds", 0.0
+                )
+                if content_dur > 0:
+                    timing.content_write_duration_seconds += content_dur
+                    timing.content_batch_count += 1
+            else:
+                timing.accumulate_graph_batch(
+                    duration_seconds=_batch_duration, row_count=len(batch)
+                )
             committed_paths, failed_paths = _normalize_batch_commit_result(
                 commit_result, batch
             )
@@ -380,20 +391,29 @@ def _commit_repository_snapshot(
             batch, repo_path, **commit_kwargs
         )
         _batch_duration = time.perf_counter() - _batch_start
-        timing.accumulate_graph_batch(
-            duration_seconds=_batch_duration, row_count=len(batch)
-        )
         if commit_result is not None:
             result_entity_totals = getattr(commit_result, "entity_totals", None)
+            entity_row_count = (
+                sum(result_entity_totals.values())
+                if result_entity_totals
+                else len(batch)
+            )
+            graph_dur = getattr(
+                commit_result, "graph_write_duration_seconds", _batch_duration
+            )
+            timing.accumulate_graph_batch(
+                duration_seconds=graph_dur, row_count=entity_row_count
+            )
             if result_entity_totals:
                 timing.merge_entity_totals(result_entity_totals)
-            if hasattr(commit_result, "content_write_duration_seconds"):
-                timing.content_write_duration_seconds += (
-                    commit_result.content_write_duration_seconds
-                )
-                timing.content_batch_count += (
-                    getattr(commit_result, "content_batch_count", 0) or 0
-                )
+            content_dur = getattr(commit_result, "content_write_duration_seconds", 0.0)
+            if content_dur > 0:
+                timing.content_write_duration_seconds += content_dur
+                timing.content_batch_count += 1
+        else:
+            timing.accumulate_graph_batch(
+                duration_seconds=_batch_duration, row_count=len(batch)
+            )
         committed_paths, failed_paths = _normalize_batch_commit_result(
             commit_result, batch
         )
