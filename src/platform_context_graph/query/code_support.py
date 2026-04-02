@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ..repository_identity import build_repo_access, relative_path_from_local
-from ..tools.code_finder import CodeFinder
+from .code_finder import CodeFinder
 from .repositories import (
     _canonical_repository_ref,
     _get_db_manager,
