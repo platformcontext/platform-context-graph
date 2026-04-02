@@ -272,10 +272,7 @@ class PostgresRuntimeStatusStore:
             )
             reindex_row = cursor.fetchone() or idle_reindex_control(ingester)
             if status_row is None:
-                if (
-                    control_row["scan_request_state"] == "idle"
-                    and reindex_row["reindex_request_state"] == "idle"
-                ):
+                if control_row["scan_request_state"] == "idle":
                     return None
                 return {
                     "runtime_family": "ingester",
@@ -303,7 +300,6 @@ class PostgresRuntimeStatusStore:
                     "failed_repositories": 0,
                     "updated_at": None,
                     **control_row,
-                    **reindex_row,
                 }
             merged = {
                 "runtime_family": "ingester",
@@ -311,7 +307,6 @@ class PostgresRuntimeStatusStore:
                 **dict(status_row),
             }
             merged.update(control_row)
-            merged.update(reindex_row)
             return merged
 
     def upsert_repository_coverage(

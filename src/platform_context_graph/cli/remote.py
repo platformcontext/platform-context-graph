@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from dataclasses import dataclass
@@ -188,4 +187,4 @@ def request_json(
 def print_json_payload(console: Any, payload: Any) -> None:
     """Pretty-print one JSON payload to the CLI console."""
 
-    console.print_json(data=json.dumps(payload))
+    console.print_json(data=payload, default=str)

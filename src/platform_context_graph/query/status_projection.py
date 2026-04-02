@@ -23,6 +23,8 @@ def active_repository_from_summary(summary: dict[str, Any]) -> dict[str, Any] | 
         return None
 
     def _sort_key(repo: dict[str, Any]) -> tuple[str, str]:
+        """Sort active repositories by freshest progress and stable path."""
+
         return (
             str(repo.get("last_progress_at") or repo.get("updated_at") or ""),
             str(repo.get("repo_path") or ""),

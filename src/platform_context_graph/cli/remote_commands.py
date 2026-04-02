@@ -28,6 +28,7 @@ def render_remote_index_status(
         service_url=service_url,
         api_key=api_key,
         profile=profile,
+        require_remote=True,
     )
     try:
         summary = request_json(
@@ -68,6 +69,7 @@ def render_remote_workspace_status(
         service_url=service_url,
         api_key=api_key,
         profile=profile,
+        require_remote=True,
     )
     try:
         status = request_json(
@@ -155,6 +157,7 @@ def render_remote_search(
         service_url=service_url,
         api_key=api_key,
         profile=profile,
+        require_remote=True,
     )
     try:
         payload = request_json(
@@ -190,6 +193,7 @@ def render_remote_relationship_query(
         service_url=service_url,
         api_key=api_key,
         profile=profile,
+        require_remote=True,
     )
     try:
         payload = request_json(
@@ -224,6 +228,7 @@ def render_remote_complexity(
         service_url=service_url,
         api_key=api_key,
         profile=profile,
+        require_remote=True,
     )
     try:
         payload = request_json(
@@ -259,6 +264,7 @@ def render_remote_dead_code(
         service_url=service_url,
         api_key=api_key,
         profile=profile,
+        require_remote=True,
     )
     try:
         payload = request_json(

@@ -324,7 +324,25 @@ def run_repo_sync_loop(
                     ),
                     error_message=str(exc),
                 )
-                raise
+                delay_seconds = retry_after_seconds(exc, attempt)
+                _persist_ingester_status(
+                    config,
+                    status="degraded",
+                    last_attempt_at=started_at,
+                    next_retry_at=_utc_now() + timedelta(seconds=delay_seconds),
+                    last_error_kind=classify_sync_error(exc),
+                    last_error_message=str(exc),
+                )
+                attempt += 1
+                log(
+                    config.component,
+                    "Repo sync degraded after manual reindex failure: "
+                    f"{exc}. Retrying in {delay_seconds}s",
+                )
+                pending_request = _wait_for_next_cycle(
+                    config.component, delay_seconds
+                )
+                continue
         if claimed_request is not None:
             get_observability().record_ingester_scan_request(
                 ingester=config.component,
