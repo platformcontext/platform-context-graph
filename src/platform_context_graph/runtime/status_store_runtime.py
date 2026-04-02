@@ -104,6 +104,26 @@ def request_ingester_scan(
     return store.request_scan(ingester=ingester, requested_by=requested_by)
 
 
+def request_ingester_reindex(
+    *,
+    ingester: str,
+    requested_by: str = "api",
+    force: bool = True,
+    scope: str = "workspace",
+) -> dict[str, Any] | None:
+    """Persist a manual ingester reindex request when configured."""
+
+    store = get_runtime_status_store()
+    if store is None or not store.enabled:
+        return None
+    return store.request_reindex(
+        ingester=ingester,
+        requested_by=requested_by,
+        force=force,
+        scope=scope,
+    )
+
+
 def upsert_repository_coverage(**kwargs: Any) -> None:
     """Persist one durable repository coverage row when configured."""
 
@@ -165,6 +185,15 @@ def claim_ingester_scan_request(*, ingester: str) -> dict[str, Any] | None:
     return store.claim_scan_request(ingester=ingester)
 
 
+def claim_ingester_reindex_request(*, ingester: str) -> dict[str, Any] | None:
+    """Claim the next pending manual ingester reindex request when configured."""
+
+    store = get_runtime_status_store()
+    if store is None or not store.enabled:
+        return None
+    return store.claim_reindex_request(ingester=ingester)
+
+
 def complete_ingester_scan_request(
     *,
     ingester: str,
@@ -177,6 +206,24 @@ def complete_ingester_scan_request(
     if store is None or not store.enabled:
         return
     store.complete_scan_request(
+        ingester=ingester,
+        request_token=request_token,
+        error_message=error_message,
+    )
+
+
+def complete_ingester_reindex_request(
+    *,
+    ingester: str,
+    request_token: str,
+    error_message: str | None = None,
+) -> None:
+    """Mark one claimed ingester reindex request completed when configured."""
+
+    store = get_runtime_status_store()
+    if store is None or not store.enabled:
+        return
+    store.complete_reindex_request(
         ingester=ingester,
         request_token=request_token,
         error_message=error_message,

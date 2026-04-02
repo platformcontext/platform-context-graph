@@ -40,9 +40,9 @@ def test_create_app_requires_bearer_auth_for_non_public_routes(
 
     monkeypatch.setenv("PCG_API_KEY", "test-api-key")
     monkeypatch.setattr(
-        api_app,
-        "describe_index_run",
-        lambda target=None: {
+        api_app.status_queries,
+        "describe_index_status",
+        lambda _database, *, target=None, ingester="repository": {
             "run_id": "run-123",
             "root_path": str(target or "/srv/repos"),
             "status": "indexing",
@@ -69,6 +69,40 @@ def test_create_app_requires_bearer_auth_for_non_public_routes(
     assert wrong_token.status_code == 401
     assert authorized.status_code == 200
     assert authorized.json()["run_id"] == "run-123"
+
+
+def test_create_app_exposes_index_run_status_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    monkeypatch.setattr(
+        api_app.status_queries,
+        "describe_index_status",
+        lambda _database, *, target=None, ingester="repository": (
+            {
+                "run_id": "run-123",
+                "root_path": "/srv/repos",
+                "status": "running",
+                "finalization_status": "pending",
+            }
+            if target == "run-123"
+            else None
+        ),
+    )
+
+    app = api_app.create_app(
+        query_services_dependency=lambda: SimpleNamespace(database=object())
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/api/v0/index-runs/run-123")
+
+    assert response.status_code == 200
+    assert response.json()["run_id"] == "run-123"
 
 
 def test_create_app_keeps_health_and_docs_public_when_bearer_auth_is_enabled(
@@ -514,9 +548,9 @@ def test_create_app_exposes_index_status_route(monkeypatch: pytest.MonkeyPatch) 
     api_app = importlib.import_module("platform_context_graph.api.app")
 
     monkeypatch.setattr(
-        api_app,
-        "describe_index_run",
-        lambda target=None: {
+        api_app.status_queries,
+        "describe_index_status",
+        lambda _database, *, target=None, ingester="repository": {
             "run_id": "run-123",
             "root_path": "/srv/repos",
             "status": "indexing",
@@ -556,7 +590,7 @@ def test_index_status_route_defaults_to_checkpoint_target(
         lambda _ingester="repository": "/srv/repos",
     )
 
-    def fake_describe_index_run(target=None):
+    def fake_describe_index_status(_database, *, target=None, ingester="repository"):
         captured_target["value"] = target
         return {
             "run_id": "run-456",
@@ -570,9 +604,9 @@ def test_index_status_route_defaults_to_checkpoint_target(
         }
 
     monkeypatch.setattr(
-        api_app,
-        "describe_index_run",
-        fake_describe_index_run,
+        api_app.status_queries,
+        "describe_index_status",
+        fake_describe_index_status,
     )
 
     app = api_app.create_app(
@@ -584,6 +618,47 @@ def test_index_status_route_defaults_to_checkpoint_target(
 
     assert response.status_code == 200
     assert captured_target["value"] == "/srv/repos"
+
+
+def test_index_status_route_falls_back_to_runtime_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Index-status should use shared runtime state when API-local checkpoints are absent."""
+
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    monkeypatch.setattr(
+        api_app.status_queries,
+        "describe_index_status",
+        lambda _database, *, target=None, ingester="repository": (
+            {
+                "run_id": "run-runtime",
+                "root_path": "/srv/repos",
+                "status": "running",
+                "finalization_status": "pending",
+                "repository_count": 9,
+                "completed_repositories": 4,
+                "failed_repositories": 0,
+                "pending_repositories": 5,
+                "repositories": [],
+            }
+            if target == "run-runtime" and ingester == "repository"
+            else None
+        ),
+    )
+
+    app = api_app.create_app(
+        query_services_dependency=lambda: SimpleNamespace(database=object())
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/api/v0/index-status", params={"target": "run-runtime"})
+
+    assert response.status_code == 200
+    assert response.json()["run_id"] == "run-runtime"
 
 
 def test_service_app_factory_is_exported() -> None:

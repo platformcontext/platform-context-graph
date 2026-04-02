@@ -37,6 +37,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/license.md` | License page | active |
 | `docs/docs/reference/cli-analysis.md` | CLI analysis reference | active |
 | `docs/docs/reference/cli-indexing.md` | CLI indexing reference | active |
+| `docs/docs/reference/cli-kiss.md` | Short CLI quickstart and remote/local usage guide | active |
 | `docs/docs/reference/cli-reference.md` | CLI command reference | active |
 | `docs/docs/reference/cli-system.md` | CLI system reference | active |
 | `docs/docs/reference/configuration.md` | Configuration reference | active |

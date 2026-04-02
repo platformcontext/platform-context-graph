@@ -1294,6 +1294,93 @@ def test_repo_sync_loop_claims_and_completes_manual_scan_requests(
     ]
 
 
+def test_repo_sync_loop_claims_and_completes_manual_reindex_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Manual reindex requests should run a forced workspace index and complete."""
+
+    sync = importlib.import_module("platform_context_graph.runtime.ingester.sync")
+    monkeypatch.setenv("PCG_REPO_SYNC_INITIAL_DELAY_SECONDS", "0")
+
+    completed_requests: list[dict[str, object]] = []
+    captured_index_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        sync,
+        "claim_ingester_scan_request",
+        MagicMock(return_value=None),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "claim_ingester_reindex_request",
+        MagicMock(
+            side_effect=[
+                {
+                    "ingester": "repository",
+                    "reindex_request_token": "reindex-123",
+                    "reindex_request_state": "running",
+                    "requested_force": True,
+                    "requested_scope": "workspace",
+                },
+                None,
+            ]
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "complete_ingester_reindex_request",
+        lambda **kwargs: completed_requests.append(kwargs),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        sync,
+        "run_repo_sync_cycle",
+        MagicMock(return_value=SimpleNamespace(discovered=5)),
+    )
+
+    def _capture_index(
+        workspace: Path,
+        *,
+        selected_repositories=None,
+        family: str,
+        source: str,
+        component: str,
+        force: bool,
+    ) -> None:
+        del selected_repositories
+        captured_index_calls.append(
+            {
+                "workspace": workspace,
+                "family": family,
+                "source": source,
+                "component": component,
+                "force": force,
+            }
+        )
+
+    def _stop_after_first_cycle(_component: str, _delay_seconds: int):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(sync, "_wait_for_next_cycle", _stop_after_first_cycle)
+
+    with pytest.raises(KeyboardInterrupt):
+        sync.run_repo_sync_loop(interval_seconds=900, index_workspace=_capture_index)
+
+    assert captured_index_calls
+    assert captured_index_calls[0]["family"] == "reindex"
+    assert captured_index_calls[0]["source"] == "admin"
+    assert captured_index_calls[0]["component"] == "repository"
+    assert captured_index_calls[0]["force"] is True
+    assert completed_requests == [
+        {
+            "ingester": "repository",
+            "request_token": "reindex-123",
+            "error_message": None,
+        }
+    ]
+
+
 def test_update_existing_repositories_refreshes_https_origin_with_fresh_token(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

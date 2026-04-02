@@ -19,6 +19,7 @@ from .status_store_support import (
     CONTROL_SCHEMA,
     COVERAGE_SCHEMA,
     STATUS_SCHEMA,
+    idle_reindex_control,
     idle_scan_control,
     utc_now,
 )
@@ -251,6 +252,25 @@ class PostgresRuntimeStatusStore:
                 {"ingester": ingester},
             )
             control_row = cursor.fetchone() or idle_scan_control(ingester)
+            cursor.execute(
+                """
+                SELECT ingester,
+                       reindex_request_token,
+                       reindex_request_state,
+                       reindex_requested_at,
+                       reindex_requested_by,
+                       reindex_started_at,
+                       reindex_completed_at,
+                       reindex_error_message,
+                       reindex_force,
+                       reindex_scope,
+                       reindex_run_id
+                FROM runtime_ingester_control
+                WHERE ingester = %(ingester)s
+                """,
+                {"ingester": ingester},
+            )
+            reindex_row = cursor.fetchone() or idle_reindex_control(ingester)
             if status_row is None:
                 if control_row["scan_request_state"] == "idle":
                     return None
@@ -629,6 +649,85 @@ class PostgresRuntimeStatusStore:
             )
             return cursor.fetchone()
 
+    def request_reindex(
+        self,
+        *,
+        ingester: str,
+        requested_by: str = "api",
+        force: bool = True,
+        scope: str = "workspace",
+    ) -> dict[str, Any]:
+        """Persist a pending manual ingester reindex request."""
+
+        request_token = str(uuid4())
+        requested_at = utc_now()
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO runtime_ingester_control (
+                    ingester,
+                    reindex_request_token,
+                    reindex_request_state,
+                    reindex_requested_at,
+                    reindex_requested_by,
+                    reindex_started_at,
+                    reindex_completed_at,
+                    reindex_error_message,
+                    reindex_force,
+                    reindex_scope,
+                    reindex_run_id,
+                    updated_at
+                ) VALUES (
+                    %(ingester)s,
+                    %(reindex_request_token)s,
+                    %(reindex_request_state)s,
+                    %(reindex_requested_at)s,
+                    %(reindex_requested_by)s,
+                    NULL,
+                    NULL,
+                    NULL,
+                    %(reindex_force)s,
+                    %(reindex_scope)s,
+                    NULL,
+                    %(updated_at)s
+                )
+                ON CONFLICT (ingester) DO UPDATE
+                SET reindex_request_token = EXCLUDED.reindex_request_token,
+                    reindex_request_state = EXCLUDED.reindex_request_state,
+                    reindex_requested_at = EXCLUDED.reindex_requested_at,
+                    reindex_requested_by = EXCLUDED.reindex_requested_by,
+                    reindex_started_at = NULL,
+                    reindex_completed_at = NULL,
+                    reindex_error_message = NULL,
+                    reindex_force = EXCLUDED.reindex_force,
+                    reindex_scope = EXCLUDED.reindex_scope,
+                    reindex_run_id = NULL,
+                    updated_at = EXCLUDED.updated_at
+                RETURNING ingester,
+                          reindex_request_token,
+                          reindex_request_state,
+                          reindex_requested_at,
+                          reindex_requested_by,
+                          reindex_started_at,
+                          reindex_completed_at,
+                          reindex_error_message,
+                          reindex_force AS requested_force,
+                          reindex_scope AS requested_scope,
+                          reindex_run_id AS run_id
+                """,
+                {
+                    "ingester": ingester,
+                    "reindex_request_token": request_token,
+                    "reindex_request_state": "pending",
+                    "reindex_requested_at": requested_at,
+                    "reindex_requested_by": requested_by,
+                    "reindex_force": force,
+                    "reindex_scope": scope,
+                    "updated_at": requested_at,
+                },
+            )
+            return cursor.fetchone()
+
     def claim_scan_request(self, *, ingester: str) -> dict[str, Any] | None:
         """Atomically claim the next pending scan request for an ingester."""
 
@@ -655,6 +754,40 @@ class PostgresRuntimeStatusStore:
                     "ingester": ingester,
                     "scan_request_state": "running",
                     "scan_started_at": started_at,
+                    "updated_at": started_at,
+                },
+            )
+            return cursor.fetchone()
+
+    def claim_reindex_request(self, *, ingester: str) -> dict[str, Any] | None:
+        """Atomically claim the next pending reindex request for an ingester."""
+
+        started_at = utc_now()
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE runtime_ingester_control
+                SET reindex_request_state = %(reindex_request_state)s,
+                    reindex_started_at = %(reindex_started_at)s,
+                    updated_at = %(updated_at)s
+                WHERE ingester = %(ingester)s
+                  AND reindex_request_state = 'pending'
+                RETURNING ingester,
+                          reindex_request_token,
+                          reindex_request_state,
+                          reindex_requested_at,
+                          reindex_requested_by,
+                          reindex_started_at,
+                          reindex_completed_at,
+                          reindex_error_message,
+                          reindex_force AS requested_force,
+                          reindex_scope AS requested_scope,
+                          reindex_run_id AS run_id
+                """,
+                {
+                    "ingester": ingester,
+                    "reindex_request_state": "running",
+                    "reindex_started_at": started_at,
                     "updated_at": started_at,
                 },
             )
@@ -689,6 +822,39 @@ class PostgresRuntimeStatusStore:
                     ),
                     "scan_completed_at": completed_at,
                     "scan_error_message": error_message,
+                    "updated_at": completed_at,
+                },
+            )
+
+    def complete_reindex_request(
+        self,
+        *,
+        ingester: str,
+        request_token: str,
+        error_message: str | None = None,
+    ) -> None:
+        """Mark one claimed reindex request completed or failed."""
+
+        completed_at = utc_now()
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE runtime_ingester_control
+                SET reindex_request_state = %(reindex_request_state)s,
+                    reindex_completed_at = %(reindex_completed_at)s,
+                    reindex_error_message = %(reindex_error_message)s,
+                    updated_at = %(updated_at)s
+                WHERE ingester = %(ingester)s
+                  AND reindex_request_token = %(reindex_request_token)s
+                """,
+                {
+                    "ingester": ingester,
+                    "reindex_request_token": request_token,
+                    "reindex_request_state": (
+                        "failed" if error_message is not None else "completed"
+                    ),
+                    "reindex_completed_at": completed_at,
+                    "reindex_error_message": error_message,
                     "updated_at": completed_at,
                 },
             )

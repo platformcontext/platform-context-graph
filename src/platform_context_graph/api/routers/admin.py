@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..dependencies import get_database
+from ...query.status import request_ingester_reindex_control
 from ...core.jobs import JobManager
 from ...runtime.status_store_runtime import (
     update_latest_repository_coverage_finalization,
@@ -32,6 +33,14 @@ class RefinalizeRequest(BaseModel):
 
     stages: list[str] | None = None
     repo_ids: list[str] | None = None
+
+
+class ReindexRequest(BaseModel):
+    """Request body for the admin reindex endpoint."""
+
+    ingester: str = "repository"
+    scope: str = "workspace"
+    force: bool = True
 
 _finalization_lock = threading.Lock()
 _finalization_state: dict[str, Any] = {
@@ -357,4 +366,45 @@ async def refinalize_status() -> dict[str, Any]:
         "last_timings": _finalization_state["last_timings"],
         "last_error": _finalization_state["last_error"],
         "repo_count": _finalization_state["repo_count"],
+    }
+
+
+@router.post("/reindex")
+async def reindex(
+    payload: ReindexRequest | None = None,
+    database: Any = Depends(get_database),
+) -> dict[str, Any]:
+    """Persist a full reindex request for the ingester to claim asynchronously."""
+
+    payload = payload or ReindexRequest()
+    normalized_ingester = str(payload.ingester or "repository").strip().lower()
+    normalized_scope = str(payload.scope or "workspace").strip().lower()
+    if normalized_ingester != "repository":
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown ingester for admin reindex: {payload.ingester}",
+        )
+    if normalized_scope != "workspace":
+        raise HTTPException(
+            status_code=400,
+            detail="Admin reindex currently supports only scope='workspace'.",
+        )
+
+    result = request_ingester_reindex_control(
+        database,
+        ingester=normalized_ingester,
+        requested_by="api",
+        force=bool(payload.force),
+        scope=normalized_scope,
+    )
+    return {
+        "status": "accepted" if result.get("accepted", True) else "unavailable",
+        "ingester": normalized_ingester,
+        "request_token": result.get("reindex_request_token"),
+        "request_state": result.get("reindex_request_state"),
+        "requested_at": result.get("reindex_requested_at"),
+        "requested_by": result.get("reindex_requested_by"),
+        "force": bool(result.get("requested_force", payload.force)),
+        "scope": result.get("requested_scope") or normalized_scope,
+        "run_id": result.get("run_id"),
     }

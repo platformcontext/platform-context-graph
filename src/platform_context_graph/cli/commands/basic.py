@@ -9,6 +9,8 @@ from typing import Any
 import typer
 
 from .basic_support import delete_all_repositories, run_doctor
+from ..remote import remote_mode_requested
+from ..remote_commands import render_remote_index_status
 from ..visualizer import check_visual_flag
 
 
@@ -54,10 +56,34 @@ def register_basic_commands(main_module: Any, app: typer.Typer) -> None:
         target: str | None = typer.Argument(
             None,
             help="Repository/workspace path or checkpoint run ID. Defaults to the current directory.",
-        )
+        ),
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
     ) -> None:
         """Show the latest checkpointed indexing status for a path or run ID."""
 
+        if remote_mode_requested(service_url, profile):
+            render_remote_index_status(
+                main_module,
+                target=target,
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+            )
+            return
         main_module.index_status_helper(target)
 
     @app.command()

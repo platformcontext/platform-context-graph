@@ -240,6 +240,14 @@ def validate_config_value(key: str, value: str) -> tuple[bool, Optional[str]]:
         except ValueError:
             return False, "PCG_WATCH_DEBOUNCE_SECONDS must be a number"
 
+    if key == "PCG_REMOTE_TIMEOUT_SECONDS":
+        try:
+            timeout_seconds = int(value)
+            if timeout_seconds <= 0 or timeout_seconds > 3600:
+                return False, "PCG_REMOTE_TIMEOUT_SECONDS must be between 1 and 3600"
+        except ValueError:
+            return False, "PCG_REMOTE_TIMEOUT_SECONDS must be a number"
+
     if key == "MAX_DEPTH":
         if value.lower() != "unlimited":
             try:

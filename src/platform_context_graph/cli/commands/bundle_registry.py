@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import requests
 import typer
+
+from ..remote import RemoteAPIError, request_json, resolve_remote_target
 
 
 def register_bundle_registry_commands(main_module: Any, app: typer.Typer) -> None:
@@ -183,10 +184,20 @@ def register_bundle_registry_commands(main_module: Any, app: typer.Typer) -> Non
         bundle_file: str = typer.Argument(
             ..., help="Path to the .pcg bundle file to upload"
         ),
-        service_url: str = typer.Option(
-            ...,
+        service_url: str | None = typer.Option(
+            None,
             "--service-url",
             help="Base URL of the PlatformContextGraph HTTP service",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
         ),
         clear: bool = typer.Option(
             False,
@@ -209,13 +220,22 @@ def register_bundle_registry_commands(main_module: Any, app: typer.Typer) -> Non
             )
             raise typer.Exit(code=1)
 
-        url = f"{service_url.rstrip('/')}/api/v0/bundles/import"
+        remote_target = resolve_remote_target(
+            service_url=service_url,
+            api_key=api_key,
+            profile=profile,
+            timeout_seconds=timeout_seconds,
+            require_remote=True,
+        )
+        url = f"{remote_target.service_url}/api/v0/bundles/import"
         main_module.console.print(f"[cyan]Uploading bundle to {url}...[/cyan]")
 
         try:
             with bundle_path.open("rb") as handle:
-                response = requests.post(
-                    url,
+                payload = request_json(
+                    remote_target,
+                    method="POST",
+                    path="/api/v0/bundles/import",
                     files={
                         "bundle": (
                             bundle_path.name,
@@ -224,18 +244,10 @@ def register_bundle_registry_commands(main_module: Any, app: typer.Typer) -> Non
                         )
                     },
                     data={"clear_existing": "true" if clear else "false"},
-                    timeout=timeout_seconds,
+                    timeout_seconds=timeout_seconds,
                 )
-            response.raise_for_status()
-            payload = response.json()
-        except requests.RequestException as exc:
-            message = getattr(getattr(exc, "response", None), "text", str(exc))
-            main_module.console.print(f"[bold red]Upload failed: {message}[/bold red]")
-            raise typer.Exit(code=1) from exc
-        except ValueError as exc:
-            main_module.console.print(
-                f"[bold red]Upload returned invalid JSON: {exc}[/bold red]"
-            )
+        except RemoteAPIError as exc:
+            main_module.console.print(f"[bold red]Upload failed: {exc}[/bold red]")
             raise typer.Exit(code=1) from exc
 
         if not payload.get("success"):

@@ -8,6 +8,8 @@ import typer
 from rich import box
 from rich.table import Table
 
+from ..remote import remote_mode_requested
+from ..remote_commands import render_remote_relationship_query
 from ..visualizer import (
     check_visual_flag,
     visualize_call_chain,
@@ -15,8 +17,6 @@ from ..visualizer import (
     visualize_dependencies,
     visualize_inheritance_tree,
 )
-
-
 def register_analyze_graph_commands(main_module: Any, app: typer.Typer) -> typer.Typer:
     """Register graph-oriented ``pcg analyze`` commands.
 
@@ -46,14 +46,44 @@ def register_analyze_graph_commands(main_module: Any, app: typer.Typer) -> typer
             "-V",
             help="Show results as interactive graph visualization",
         ),
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
     ) -> None:
         """Show what functions the target function calls."""
+        if remote_mode_requested(service_url, profile):
+            if check_visual_flag(ctx, visual):
+                raise typer.BadParameter(
+                    "Remote analyze commands do not support --visual in v1."
+                )
+            render_remote_relationship_query(
+                main_module,
+                query_type="find_callees",
+                target=function,
+                context=file,
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+                failure_label="Remote analyze failed",
+            )
+            return
         main_module._load_credentials()
         services = main_module._initialize_services()
         if not all(services):
             return
         db_manager, _, code_finder = services
-
         try:
             results = code_finder.what_does_function_call(function, file)
             if not results:
@@ -109,14 +139,44 @@ def register_analyze_graph_commands(main_module: Any, app: typer.Typer) -> typer
             "-V",
             help="Show results as interactive graph visualization",
         ),
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
     ) -> None:
         """Show what functions call the target function."""
+        if remote_mode_requested(service_url, profile):
+            if check_visual_flag(ctx, visual):
+                raise typer.BadParameter(
+                    "Remote analyze commands do not support --visual in v1."
+                )
+            render_remote_relationship_query(
+                main_module,
+                query_type="find_callers",
+                target=function,
+                context=file,
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+                failure_label="Remote analyze failed",
+            )
+            return
         main_module._load_credentials()
         services = main_module._initialize_services()
         if not all(services):
             return
         db_manager, _, code_finder = services
-
         try:
             results = code_finder.who_calls_function(function, file)
             if not results:
@@ -179,14 +239,48 @@ def register_analyze_graph_commands(main_module: Any, app: typer.Typer) -> typer
             "-V",
             help="Show results as interactive graph visualization",
         ),
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
     ) -> None:
         """Show the call chain between two functions."""
+        if remote_mode_requested(service_url, profile):
+            if check_visual_flag(ctx, visual):
+                raise typer.BadParameter(
+                    "Remote analyze commands do not support --visual in v1."
+                )
+            if from_file or to_file:
+                raise typer.BadParameter(
+                    "Remote analyze chain does not support --from-file or --to-file in v1."
+                )
+            render_remote_relationship_query(
+                main_module,
+                query_type="call_chain",
+                target=f"{from_func}->{to_func}",
+                context=str(max_depth),
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+                failure_label="Remote analyze chain failed",
+            )
+            return
         main_module._load_credentials()
         services = main_module._initialize_services()
         if not all(services):
             return
         db_manager, _, code_finder = services
-
         try:
             results = code_finder.find_function_call_chain(
                 from_func, to_func, max_depth, from_file, to_file
@@ -254,15 +348,45 @@ def register_analyze_graph_commands(main_module: Any, app: typer.Typer) -> typer
             "-V",
             help="Show results as interactive graph visualization",
         ),
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
     ) -> None:
         """Show dependencies and importers for a module."""
         del show_external
+        if remote_mode_requested(service_url, profile):
+            if check_visual_flag(ctx, visual):
+                raise typer.BadParameter(
+                    "Remote analyze commands do not support --visual in v1."
+                )
+            render_remote_relationship_query(
+                main_module,
+                query_type="module_deps",
+                target=target,
+                context=None,
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+                failure_label="Remote analyze deps failed",
+            )
+            return
         main_module._load_credentials()
         services = main_module._initialize_services()
         if not all(services):
             return
         db_manager, _, code_finder = services
-
         try:
             results = code_finder.find_module_dependencies(target)
             if not results.get("importers") and not results.get("imports"):

@@ -61,6 +61,7 @@ nav:
     - Graph Model: concepts/graph-model.md
     - Modes: concepts/modes.md
     - Source Layout: reference/source-layout.md
+    - CLI K.I.S.S.: reference/cli-kiss.md
     - CLI Reference: reference/cli-reference.md
     - CLI Indexing: reference/cli-indexing.md
     - CLI Analysis: reference/cli-analysis.md

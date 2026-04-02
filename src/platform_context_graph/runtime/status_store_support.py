@@ -54,8 +54,38 @@ CREATE TABLE IF NOT EXISTS runtime_ingester_control (
     scan_started_at TIMESTAMPTZ,
     scan_completed_at TIMESTAMPTZ,
     scan_error_message TEXT,
+    reindex_request_token TEXT,
+    reindex_request_state TEXT NOT NULL DEFAULT 'idle',
+    reindex_requested_at TIMESTAMPTZ,
+    reindex_requested_by TEXT,
+    reindex_started_at TIMESTAMPTZ,
+    reindex_completed_at TIMESTAMPTZ,
+    reindex_error_message TEXT,
+    reindex_force BOOLEAN NOT NULL DEFAULT TRUE,
+    reindex_scope TEXT,
+    reindex_run_id TEXT,
     updated_at TIMESTAMPTZ NOT NULL
 );
+ALTER TABLE runtime_ingester_control
+    ADD COLUMN IF NOT EXISTS reindex_request_token TEXT;
+ALTER TABLE runtime_ingester_control
+    ADD COLUMN IF NOT EXISTS reindex_request_state TEXT NOT NULL DEFAULT 'idle';
+ALTER TABLE runtime_ingester_control
+    ADD COLUMN IF NOT EXISTS reindex_requested_at TIMESTAMPTZ;
+ALTER TABLE runtime_ingester_control
+    ADD COLUMN IF NOT EXISTS reindex_requested_by TEXT;
+ALTER TABLE runtime_ingester_control
+    ADD COLUMN IF NOT EXISTS reindex_started_at TIMESTAMPTZ;
+ALTER TABLE runtime_ingester_control
+    ADD COLUMN IF NOT EXISTS reindex_completed_at TIMESTAMPTZ;
+ALTER TABLE runtime_ingester_control
+    ADD COLUMN IF NOT EXISTS reindex_error_message TEXT;
+ALTER TABLE runtime_ingester_control
+    ADD COLUMN IF NOT EXISTS reindex_force BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE runtime_ingester_control
+    ADD COLUMN IF NOT EXISTS reindex_scope TEXT;
+ALTER TABLE runtime_ingester_control
+    ADD COLUMN IF NOT EXISTS reindex_run_id TEXT;
 """
 
 COVERAGE_SCHEMA = """
@@ -113,4 +143,24 @@ def idle_scan_control(ingester: str) -> dict[str, Any]:
         "scan_started_at": None,
         "scan_completed_at": None,
         "scan_error_message": None,
+    }
+
+
+def idle_reindex_control(ingester: str) -> dict[str, Any]:
+    """Return the default idle reindex-control payload for one ingester."""
+
+    return {
+        "runtime_family": "ingester",
+        "ingester": ingester,
+        "provider": ingester,
+        "reindex_request_token": None,
+        "reindex_request_state": "idle",
+        "reindex_requested_at": None,
+        "reindex_requested_by": None,
+        "reindex_started_at": None,
+        "reindex_completed_at": None,
+        "reindex_error_message": None,
+        "reindex_force": True,
+        "reindex_scope": None,
+        "reindex_run_id": None,
     }
