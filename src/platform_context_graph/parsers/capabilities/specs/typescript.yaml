@@ -2,7 +2,7 @@ language: typescript
 title: TypeScript Parser
 family: language
 parser: TypescriptTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/typescript.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/typescript.py
 doc_path: docs/docs/languages/typescript.md
 fixture_repo: tests/fixtures/ecosystems/typescript_comprehensive/
 unit_test_file: tests/unit/parsers/test_typescript_parser.py
