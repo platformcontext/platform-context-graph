@@ -112,7 +112,7 @@ def test_commit_file_batch_to_graph_flushes_incrementally_when_buffer_grows(
         _fake_collect_file_write_data,
     )
     monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence_batch._WRITE_BATCH_FLUSH_ROW_THRESHOLD",
+        "platform_context_graph.graph.persistence.batch_support._WRITE_BATCH_FLUSH_ROW_THRESHOLD",
         3,
     )
 

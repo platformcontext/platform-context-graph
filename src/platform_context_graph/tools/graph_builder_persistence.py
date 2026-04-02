@@ -17,7 +17,7 @@ from ..content.ingest import prepare_content_entries
 from ..content.state import get_postgres_content_provider
 from ..observability import get_observability
 from ..utils.debug_log import emit_log_call
-from .graph_builder_persistence_batch import (
+from ..graph.persistence.batching import (
     collect_file_write_data,
     empty_accumulator,
     flush_write_batches,
@@ -26,7 +26,7 @@ from .graph_builder_persistence_batch import (
     merge_batches,
     should_flush_batches,
 )
-from .graph_builder_persistence_helpers import (
+from ..graph.persistence.repositories import (
     _bounded_positive_int_config,
     _merge_directory_chain,
     _relative_path_with_fallback,
@@ -37,7 +37,7 @@ from .graph_builder_persistence_helpers import (
     flush_directory_chain_rows,
     read_repository_metadata,
 )
-from .graph_builder_persistence_unwind import resolve_max_entity_value_length
+from ..graph.persistence.unwind import resolve_max_entity_value_length
 
 
 @dataclass(frozen=True)

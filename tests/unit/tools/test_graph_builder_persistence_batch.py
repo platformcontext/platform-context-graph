@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from platform_context_graph.tools import graph_builder_persistence_batch
+from platform_context_graph.graph.persistence import batching as graph_builder_persistence_batch
 
 
 def test_flush_write_batches_chunks_variable_rows(monkeypatch) -> None:
