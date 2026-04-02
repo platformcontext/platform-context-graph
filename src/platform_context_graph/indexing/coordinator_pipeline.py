@@ -3,22 +3,59 @@
 from __future__ import annotations
 
 import asyncio
+import multiprocessing
 import os
 import threading
 import time
 import traceback
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from platform_context_graph.tools.graph_builder_indexing import merge_import_maps
 from platform_context_graph.utils.debug_log import emit_log_call
 
+from platform_context_graph.tools.graph_builder_persistence_worker import (
+    get_commit_worker_connection_params,
+)
+
 from .coordinator_finalize import finalize_repository_batch
-from .memory_diagnostics import log_memory_usage
+from .memory_diagnostics import log_memory_usage, read_memory_usage_sample
 from .coordinator_models import (
     ACTIVE_REPO_STATES,
     RepositorySnapshotMetadata,
 )
+from .repo_telemetry import (
+    RepoTelemetry,
+    create_repo_telemetry,
+    record_memory_sample,
+)
+from .anomaly_detection import (
+    check_anomalies,
+    class_adjusted_thresholds,
+    emit_anomaly_events,
+    load_anomaly_thresholds,
+)
+from .coordinator_async_commit import (
+    _ASYNC_COMMIT_ENABLED,
+    commit_repository_snapshot_async,
+)
+from .repo_classification import (
+    classify_repo_pre_parse,
+    classify_repo_runtime,
+    load_repo_class_overrides,
+)
+
+_ENTITY_FIELDS = ("functions", "classes", "variables", "interfaces", "structs", "enums")
+
+
+def _count_snapshot_entities(file_data: list[dict[str, Any]]) -> int:
+    """Count total entities across all parsed files for reclassification."""
+    total = 0
+    for fd in file_data:
+        for field in _ENTITY_FIELDS:
+            total += len(fd.get(field, []))
+    return total
 
 
 def prepare_repository_snapshots(
@@ -93,7 +130,7 @@ async def process_repository_snapshots(
     parse_executor: Any | None = None,
     parse_strategy: str = "threaded",
     parse_workers: int = 1,
-) -> tuple[list[Path], dict[str, list[str]]]:
+) -> tuple[list[Path], dict[str, list[str]], dict[str, RepoTelemetry]]:
     """Parse repositories concurrently and commit via PCG_COMMIT_WORKERS consumers."""
 
     committed_repo_paths, merged_imports_map, parse_targets = (
@@ -106,6 +143,21 @@ async def process_repository_snapshots(
             persist_run_state_fn=persist_run_state_fn,
         )
     )
+    repo_telemetry_map: dict[str, RepoTelemetry] = {}
+    # Create minimal telemetry entries for already-completed repos
+    for completed_path in committed_repo_paths:
+        completed_key = str(completed_path)
+        repo_state = run_state.repositories.get(completed_key)
+        if repo_state is not None and completed_key not in repo_telemetry_map:
+            tel = create_repo_telemetry(completed_path)
+            tel.status = "completed"
+            tel.parsed_file_count = getattr(repo_state, "file_count", 0) or 0
+            tel.commit_duration_seconds = getattr(
+                repo_state, "commit_duration_seconds", None
+            )
+            repo_telemetry_map[completed_key] = tel
+    anomaly_thresholds = load_anomaly_thresholds()
+    repo_class_overrides = load_repo_class_overrides()
     parse_slots = parse_worker_count_fn()
     snapshot_queue = asyncio_module.Queue(maxsize=index_queue_depth_fn(parse_slots))
     queue_sentinel = object()
@@ -189,6 +241,16 @@ async def process_repository_snapshots(
         last_progress_publish = 0.0
         try:
             repo_state = run_state.repositories[repo_key]
+            repo_tel = create_repo_telemetry(repo_path)
+            repo_tel.discovered_file_count = len(repo_file_sets[repo_path])
+            override_class = repo_class_overrides.get(repo_tel.repo_name)
+            if override_class:
+                repo_tel.repo_class = override_class
+            else:
+                repo_tel.repo_class = classify_repo_pre_parse(
+                    discovered_file_count=repo_tel.discovered_file_count
+                )
+            repo_telemetry_map[repo_key] = repo_tel
 
             def _progress_callback(
                 *, current_file: str | None = None, force: bool = False
@@ -231,6 +293,7 @@ async def process_repository_snapshots(
                 ):
                     await parse_semaphore.acquire()
                 queue_wait_duration = time.perf_counter() - queue_wait_started
+                repo_tel.parse_queue_wait_seconds = queue_wait_duration
                 try:
                     if hasattr(telemetry, "record_index_stage_duration"):
                         telemetry.record_index_stage_duration(
@@ -241,6 +304,7 @@ async def process_repository_snapshots(
                             duration_seconds=queue_wait_duration,
                             parse_strategy=parse_strategy,
                             parse_workers=parse_workers,
+                            repo_class=repo_tel.repo_class,
                         )
                     emit_log_call(
                         info_logger_fn,
@@ -293,6 +357,7 @@ async def process_repository_snapshots(
                             count=1,
                             mode=family,
                             source=source,
+                            repo_class=repo_tel.repo_class,
                         )
                         if resume_candidate:
                             telemetry.record_index_repositories(
@@ -301,6 +366,7 @@ async def process_repository_snapshots(
                                 count=1,
                                 mode=family,
                                 source=source,
+                                repo_class=repo_tel.repo_class,
                             )
                         emit_log_call(
                             info_logger_fn,
@@ -313,6 +379,9 @@ async def process_repository_snapshots(
                                 "parse_strategy": parse_strategy,
                                 "parse_workers": parse_workers,
                             },
+                        )
+                        record_memory_sample(
+                            repo_tel, "parse_start", read_memory_usage_sample()
                         )
                         parse_started = time.perf_counter()
                         snapshot = await parse_repository_snapshot_async_fn(
@@ -331,6 +400,34 @@ async def process_repository_snapshots(
                             parse_workers=parse_workers,
                         )
                         parse_duration = time.perf_counter() - parse_started
+                        record_memory_sample(
+                            repo_tel, "parse_end", read_memory_usage_sample()
+                        )
+                        repo_tel.parse_duration_seconds = parse_duration
+                        repo_tel.parsed_file_count = snapshot.file_count
+                        entity_count = _count_snapshot_entities(snapshot.file_data)
+                        pre_class = repo_tel.repo_class or "medium"
+                        upgraded_class = classify_repo_runtime(
+                            pre_class=pre_class,
+                            parse_duration_seconds=parse_duration,
+                            parsed_file_count=snapshot.file_count,
+                            entity_count=entity_count,
+                        )
+                        if upgraded_class != pre_class:
+                            emit_log_call(
+                                info_logger_fn,
+                                f"Runtime reclassification {repo_path.name}: "
+                                f"{pre_class} -> {upgraded_class}",
+                                event_name="index.repository.reclassified",
+                                extra_keys={
+                                    "repo_path": str(repo_path.resolve()),
+                                    "pre_class": pre_class,
+                                    "runtime_class": upgraded_class,
+                                    "parse_duration": round(parse_duration, 3),
+                                    "entity_count": entity_count,
+                                },
+                            )
+                        repo_tel.repo_class = upgraded_class
                         if hasattr(telemetry, "record_index_stage_duration"):
                             telemetry.record_index_stage_duration(
                                 component=component,
@@ -340,6 +437,7 @@ async def process_repository_snapshots(
                                 duration_seconds=parse_duration,
                                 parse_strategy=parse_strategy,
                                 parse_workers=parse_workers,
+                                repo_class=repo_tel.repo_class,
                             )
                         emit_log_call(
                             info_logger_fn,
@@ -404,8 +502,24 @@ async def process_repository_snapshots(
                             "pcg.index.parse_workers": parse_workers,
                         },
                     ):
+                        emit_log_call(
+                            info_logger_fn,
+                            f"Queueing snapshot for commit: {repo_path.resolve()} "
+                            f"(qsize_before={snapshot_queue.qsize()})",
+                            event_name="index.snapshot.queue_put",
+                            extra_keys={
+                                "repo_path": str(repo_path.resolve()),
+                                "queue_size_before": snapshot_queue.qsize(),
+                            },
+                        )
                         await snapshot_queue.put(
-                            (repo_path, snapshot, started, commit_wait_started)
+                            (
+                                repo_path,
+                                snapshot,
+                                started,
+                                commit_wait_started,
+                                repo_tel,
+                            )
                         )
                     if hasattr(telemetry, "set_index_snapshot_queue_depth"):
                         telemetry.set_index_snapshot_queue_depth(
@@ -431,6 +545,9 @@ async def process_repository_snapshots(
                     finished_at=utc_now_fn(),
                     persist=False,
                 )
+            if repo_key in repo_telemetry_map:
+                repo_telemetry_map[repo_key].status = "failed"
+                repo_telemetry_map[repo_key].error = str(exc)
             run_state.last_error = str(exc)
             persist_run_state_fn(run_state)
             _publish_runtime_state()
@@ -447,6 +564,11 @@ async def process_repository_snapshots(
                 count=1,
                 mode=family,
                 source=source,
+                repo_class=(
+                    repo_telemetry_map[repo_key].repo_class
+                    if repo_key in repo_telemetry_map
+                    else None
+                ),
             )
             if started is not None:
                 telemetry.record_index_repository_duration(
@@ -455,6 +577,11 @@ async def process_repository_snapshots(
                     source=source,
                     status="failed",
                     duration_seconds=time.perf_counter() - started,
+                    repo_class=(
+                        repo_telemetry_map[repo_key].repo_class
+                        if repo_key in repo_telemetry_map
+                        else None
+                    ),
                 )
             if repo_span is not None:
                 repo_span.record_exception(exc)
@@ -473,6 +600,36 @@ async def process_repository_snapshots(
         commit_concurrency = 1
     else:
         commit_concurrency = max(1, min(parsed, 32))
+    emit_log_call(
+        info_logger_fn,
+        f"Commit worker config: PCG_COMMIT_WORKERS={raw!r}, "
+        f"parsed={parsed if 'parsed' in dir() else 'N/A'}, "
+        f"commit_concurrency={commit_concurrency}",
+        event_name="index.commit_workers.config",
+        extra_keys={
+            "raw_env": raw,
+            "commit_concurrency": commit_concurrency,
+        },
+    )
+
+    # Create ProcessPoolExecutor when commit_concurrency > 1 for true parallelism
+    _commit_process_pool: ProcessPoolExecutor | None = None
+    _connection_params: dict[str, str | None] | None = None
+    if commit_concurrency > 1:
+        mp_start_method = os.getenv("PCG_MULTIPROCESS_START_METHOD", "spawn")
+        mp_context = multiprocessing.get_context(mp_start_method)
+        _commit_process_pool = ProcessPoolExecutor(
+            max_workers=commit_concurrency,
+            mp_context=mp_context,
+        )
+        _connection_params = get_commit_worker_connection_params()
+        emit_log_call(
+            info_logger_fn,
+            f"Using ProcessPoolExecutor with {commit_concurrency} commit workers",
+            event_name="index.commit_pool.created",
+            extra_keys={"commit_concurrency": commit_concurrency},
+        )
+
     commit_state_lock = asyncio.Lock()
     _checkpoint_write_lock = threading.Lock()
 
@@ -481,22 +638,44 @@ async def process_repository_snapshots(
         with _checkpoint_write_lock:
             persist_run_state_fn(run_state)
 
-    async def _commit_snapshots() -> None:
+    async def _commit_snapshots(worker_id: int = 0) -> None:
         """Commit parsed repository snapshots from the queue in arrival order."""
 
+        emit_log_call(
+            info_logger_fn,
+            f"Commit worker {worker_id} started, waiting for snapshots",
+            event_name="index.commit_worker.started",
+            extra_keys={"worker_id": worker_id},
+        )
         while True:
+            emit_log_call(
+                info_logger_fn,
+                f"Commit worker {worker_id} waiting on queue (qsize={snapshot_queue.qsize()})",
+                event_name="index.commit_worker.waiting",
+                extra_keys={
+                    "worker_id": worker_id,
+                    "queue_size": snapshot_queue.qsize(),
+                },
+            )
             item = await snapshot_queue.get()
             if item is queue_sentinel:
+                emit_log_call(
+                    info_logger_fn,
+                    f"Commit worker {worker_id} received sentinel, exiting",
+                    event_name="index.commit_worker.sentinel",
+                    extra_keys={"worker_id": worker_id},
+                )
                 snapshot_queue.task_done()
                 return
 
-            repo_path, snapshot, started, snapshot_ready_started = item
+            repo_path, snapshot, started, snapshot_ready_started, repo_tel = item
             repo_state = run_state.repositories[str(repo_path.resolve())]
             commit_started: float | None = None
             last_commit_progress_publish = 0.0
             last_commit_coverage_publish = 0.0
             try:
                 commit_wait_duration = time.perf_counter() - snapshot_ready_started
+                repo_tel.commit_queue_wait_seconds = commit_wait_duration
                 if hasattr(telemetry, "record_index_stage_duration"):
                     telemetry.record_index_stage_duration(
                         component=component,
@@ -506,15 +685,17 @@ async def process_repository_snapshots(
                         duration_seconds=commit_wait_duration,
                         parse_strategy=parse_strategy,
                         parse_workers=parse_workers,
+                        repo_class=repo_tel.repo_class,
                     )
                 emit_log_call(
                     info_logger_fn,
-                    f"Repository commit slot acquired for {repo_path.resolve()} after "
+                    f"Commit worker {worker_id}: acquired slot for {repo_path.resolve()} after "
                     f"{commit_wait_duration:.3f}s",
                     event_name="index.repository.commit_wait.completed",
                     extra_keys={
                         "run_id": run_state.run_id,
                         "repo_path": str(repo_path.resolve()),
+                        "worker_id": worker_id,
                         "duration_seconds": round(commit_wait_duration, 6),
                         "parse_strategy": parse_strategy,
                         "parse_workers": parse_workers,
@@ -548,6 +729,9 @@ async def process_repository_snapshots(
                     repo_paths=[repo_path],
                     include_graph_counts=False,
                     include_content_counts=False,
+                )
+                record_memory_sample(
+                    repo_tel, "commit_start", read_memory_usage_sample()
                 )
                 commit_started = time.perf_counter()
                 emit_log_call(
@@ -616,18 +800,66 @@ async def process_repository_snapshots(
                         "pcg.index.commit_workers": commit_concurrency,
                     },
                 ):
-                    await asyncio.to_thread(
-                        commit_repository_snapshot_fn,
-                        builder,
-                        snapshot,
-                        is_dependency=is_dependency,
-                        progress_callback=_commit_progress_callback,
-                        iter_snapshot_file_data_batches_fn=lambda repo_path, batch_size: iter_snapshot_file_data_batches_fn(
-                            run_state.run_id,
-                            repo_path,
-                            batch_size=batch_size,
-                        ),
+                    _iter_fn = lambda repo_path, batch_size: iter_snapshot_file_data_batches_fn(
+                        run_state.run_id,
+                        repo_path,
+                        batch_size=batch_size,
                     )
+                    if _commit_process_pool is not None:
+                        # CW > 1: use ProcessPoolExecutor for true parallelism
+                        commit_timing_result = await commit_repository_snapshot_async(
+                            builder,
+                            snapshot,
+                            is_dependency=is_dependency,
+                            progress_callback=_commit_progress_callback,
+                            iter_snapshot_file_data_batches_fn=_iter_fn,
+                            repo_class=repo_tel.repo_class,
+                            process_executor=_commit_process_pool,
+                            connection_params=_connection_params,
+                        )
+                    elif _ASYNC_COMMIT_ENABLED:
+                        # CW == 1: async commit with ThreadPoolExecutor
+                        commit_timing_result = await commit_repository_snapshot_async(
+                            builder,
+                            snapshot,
+                            is_dependency=is_dependency,
+                            progress_callback=_commit_progress_callback,
+                            iter_snapshot_file_data_batches_fn=_iter_fn,
+                            repo_class=repo_tel.repo_class,
+                        )
+                    else:
+                        # CW == 1: sync commit via asyncio.to_thread
+                        commit_timing_result = await asyncio.to_thread(
+                            commit_repository_snapshot_fn,
+                            builder,
+                            snapshot,
+                            is_dependency=is_dependency,
+                            progress_callback=_commit_progress_callback,
+                            iter_snapshot_file_data_batches_fn=_iter_fn,
+                            repo_class=repo_tel.repo_class,
+                        )
+                    emit_log_call(
+                        info_logger_fn,
+                        f"Commit worker {worker_id}: finished commit for {repo_path.resolve()}",
+                        event_name="index.commit_worker.commit_done",
+                        extra_keys={
+                            "worker_id": worker_id,
+                            "repo_path": str(repo_path.resolve()),
+                        },
+                    )
+                    if commit_timing_result is not None:
+                        repo_tel.graph_write_duration_seconds = (
+                            commit_timing_result.graph_write_duration_seconds
+                        )
+                        repo_tel.content_write_duration_seconds = (
+                            commit_timing_result.content_write_duration_seconds
+                        )
+                        repo_tel.max_graph_batch_rows = (
+                            commit_timing_result.max_graph_batch_rows
+                        )
+                        repo_tel.max_content_batch_rows = (
+                            commit_timing_result.max_content_batch_rows
+                        )
                 async with commit_state_lock:
                     committed_repo_paths.append(repo_path.resolve())
                     merge_import_maps(merged_imports_map, snapshot.imports_map)
@@ -661,12 +893,15 @@ async def process_repository_snapshots(
                     info_logger_fn,
                     context=("Repository commit memory " f"repo={repo_path.resolve()}"),
                 )
+                mem_sample = read_memory_usage_sample()
+                record_memory_sample(repo_tel, "commit_end", mem_sample)
                 telemetry.record_index_repositories(
                     component=component,
                     phase="completed",
                     count=1,
                     mode=family,
                     source=source,
+                    repo_class=repo_tel.repo_class,
                 )
                 telemetry.record_index_repository_duration(
                     component=component,
@@ -674,12 +909,29 @@ async def process_repository_snapshots(
                     source=source,
                     status="completed",
                     duration_seconds=time.perf_counter() - started,
+                    repo_class=repo_tel.repo_class,
                 )
                 commit_duration = (
                     time.perf_counter() - commit_started
                     if commit_started is not None
                     else 0.0
                 )
+                repo_tel.commit_duration_seconds = commit_duration
+                repo_tel.total_repository_duration_seconds = (
+                    time.perf_counter() - started if started else None
+                )
+                repo_tel.status = "completed"
+                adjusted = class_adjusted_thresholds(
+                    anomaly_thresholds, repo_tel.repo_class
+                )
+                detected = check_anomalies(repo_tel, adjusted)
+                if detected:
+                    repo_tel.anomalies.extend(detected)
+                    emit_anomaly_events(
+                        detected,
+                        warning_logger_fn=warning_logger_fn,
+                        run_id=run_state.run_id,
+                    )
                 if hasattr(telemetry, "record_index_stage_duration"):
                     telemetry.record_index_stage_duration(
                         component=component,
@@ -689,6 +941,7 @@ async def process_repository_snapshots(
                         duration_seconds=commit_duration,
                         parse_strategy=parse_strategy,
                         parse_workers=parse_workers,
+                        repo_class=repo_tel.repo_class,
                     )
                 emit_log_call(
                     info_logger_fn,
@@ -704,6 +957,8 @@ async def process_repository_snapshots(
                     },
                 )
             except Exception as exc:
+                repo_tel.status = "failed"
+                repo_tel.error = str(exc)
                 repo_state.error = str(exc)
                 commit_finished_at = utc_now_fn()
                 _update_repo_progress(
@@ -736,6 +991,7 @@ async def process_repository_snapshots(
                     count=1,
                     mode=family,
                     source=source,
+                    repo_class=repo_tel.repo_class,
                 )
                 telemetry.record_index_repository_duration(
                     component=component,
@@ -743,6 +999,7 @@ async def process_repository_snapshots(
                     source=source,
                     status="commit_incomplete",
                     duration_seconds=time.perf_counter() - started,
+                    repo_class=repo_tel.repo_class,
                 )
                 tb = traceback.format_exception(exc)
                 warning_logger_fn(
@@ -762,9 +1019,15 @@ async def process_repository_snapshots(
                     )
                 _publish_runtime_state()
 
+    emit_log_call(
+        info_logger_fn,
+        f"Creating {commit_concurrency} commit worker(s)",
+        event_name="index.commit_workers.creating",
+        extra_keys={"commit_concurrency": commit_concurrency},
+    )
     commit_tasks = [
-        asyncio_module.create_task(_commit_snapshots())
-        for _ in range(commit_concurrency)
+        asyncio_module.create_task(_commit_snapshots(worker_id=i))
+        for i in range(commit_concurrency)
     ]
     parse_tasks = [
         asyncio_module.create_task(
@@ -790,9 +1053,17 @@ async def process_repository_snapshots(
         for _ in range(commit_concurrency):
             await snapshot_queue.put(queue_sentinel)
         await asyncio_module.gather(*commit_tasks)
+        # Shutdown ProcessPoolExecutor if we created one
+        if _commit_process_pool is not None:
+            _commit_process_pool.shutdown(wait=True)
+            emit_log_call(
+                info_logger_fn,
+                "ProcessPoolExecutor shutdown complete",
+                event_name="index.commit_pool.shutdown",
+            )
     if escaped_parse_exception is not None:
         raise escaped_parse_exception
-    return committed_repo_paths, merged_imports_map
+    return committed_repo_paths, merged_imports_map, repo_telemetry_map
 
 
 __all__ = [

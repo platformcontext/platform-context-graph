@@ -90,7 +90,7 @@ def test_execute_index_run_parses_multiple_repositories_concurrently(
     )
     monkeypatch.setattr(
         "platform_context_graph.indexing.coordinator._commit_repository_snapshot",
-        lambda _builder, snapshot, *, is_dependency, progress_callback=None, iter_snapshot_file_data_batches_fn=None: committed.append(
+        lambda _builder, snapshot, *, is_dependency, progress_callback=None, iter_snapshot_file_data_batches_fn=None, repo_class=None: committed.append(
             snapshot.repo_path
         ),
     )
@@ -395,7 +395,7 @@ def test_commit_repository_snapshot_relays_intra_batch_heartbeats(
 
     progress_updates: list[dict[str, object]] = []
 
-    def _commit_file_batch_to_graph(batch, _repo_path, *, progress_callback=None):
+    def _commit_file_batch_to_graph(batch, _repo_path, *, progress_callback=None, **_kwargs):
         assert len(batch) == 3
         assert callable(progress_callback)
         progress_callback(

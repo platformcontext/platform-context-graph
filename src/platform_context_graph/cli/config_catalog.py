@@ -59,6 +59,9 @@ DEFAULT_CONFIG = {
     "PCG_IGNORE_DEPENDENCY_DIRS": "true",
     "PCG_MAX_CALLS_PER_FILE": "50",
     "PCG_CALL_RESOLUTION_SCOPE": "repo",
+    "PCG_ASYNC_COMMIT_ENABLED": "false",
+    "PCG_COMMIT_GIL_YIELD_ENABLED": "true",
+    "PCG_INDEX_SUMMARY_DIR": "",
     "ECOSYSTEM_MANIFEST_PATH": "",
     "ECOSYSTEM_BASE_PATH": "",
     "ECOSYSTEM_PARALLEL_REPOS": "4",
@@ -117,6 +120,23 @@ CONFIG_DESCRIPTIONS = {
         "(original behavior). The default 'repo' improves both precision and speed "
         "for multi-repo workspaces."
     ),
+    "PCG_ASYNC_COMMIT_ENABLED": (
+        "Use per-batch async commit path instead of asyncio.to_thread(). "
+        "Each file batch runs in a dedicated single-thread executor with "
+        "event-loop yielding between batches, enabling true parallel "
+        "commit workers without GIL contention. Default false — enable "
+        "after validating with PCG_COMMIT_WORKERS>1."
+    ),
+    "PCG_COMMIT_GIL_YIELD_ENABLED": (
+        "Insert time.sleep(0) after each Neo4j tx.commit() to voluntarily "
+        "release the Python GIL, allowing the asyncio event loop to schedule "
+        "other commit workers. Required for PCG_COMMIT_WORKERS>1 to achieve "
+        "actual parallelism via asyncio.to_thread()."
+    ),
+    "PCG_INDEX_SUMMARY_DIR": (
+        "Override directory for run summary JSON artifacts. "
+        "When unset, summaries are written to ~/.pcg/index-runs/<run_id>/."
+    ),
     "INDEX_SOURCE": "Store full source code in graph database (for faster indexing use false, for better performance use true)",
     "SCIP_INDEXER": "Use SCIP-based indexing for higher accuracy call/inheritance resolution (requires scip-<lang> tools installed)",
     "SCIP_LANGUAGES": "Comma-separated languages to index via SCIP when SCIP_INDEXER=true (python,typescript,go,rust,java)",
@@ -151,6 +171,8 @@ CONFIG_VALIDATORS = {
     "PCG_MULTIPROCESS_START_METHOD": ["spawn", "fork", "forkserver"],
     "PCG_IGNORE_DEPENDENCY_DIRS": ["true", "false"],
     "PCG_CALL_RESOLUTION_SCOPE": ["repo", "global"],
+    "PCG_ASYNC_COMMIT_ENABLED": ["true", "false"],
+    "PCG_COMMIT_GIL_YIELD_ENABLED": ["true", "false"],
     "INDEX_JSON": ["true", "false"],
     "INDEX_YAML": ["true", "false"],
     "INDEX_HCL": ["true", "false"],

@@ -40,7 +40,6 @@ _NON_ENTITY_BATCH_KEYS = (
     "generic_import_rows",
 )
 
-
 def collect_file_write_data(
     file_data: dict[str, Any],
     file_path_str: str,
@@ -171,13 +170,13 @@ def collect_file_write_data(
         "generic_import_rows": generic_import_rows,
     }
 
-
 def flush_write_batches(
     tx: Any,
     batches: dict[str, Any],
     *,
     info_logger_fn: Any | None = None,
     debug_logger_fn: Any | None = None,
+    entity_batch_size: int | None = None,
 ) -> dict[str, dict[str, float | int]]:
     """Flush all accumulated write batches through UNWIND queries.
 
@@ -195,6 +194,7 @@ def flush_write_batches(
             label,
             rows,
             info_logger_fn=info_logger_fn,
+            entity_batch_size=entity_batch_size,
         )
         batch_metrics[f"entity:{label}"] = summary
         telemetry.record_graph_write_batch(
@@ -270,14 +270,12 @@ def flush_write_batches(
             )
     return batch_metrics
 
-
 def has_pending_rows(batches: dict[str, Any]) -> bool:
     """Return whether a write-batch accumulator still has rows to flush."""
 
     if any(rows for rows in batches["entities_by_label"].values()):
         return True
     return any(batches[key] for key in _NON_ENTITY_BATCH_KEYS)
-
 
 def pending_row_count(batches: dict[str, Any]) -> int:
     """Return the total number of buffered rows across all batch collections."""
@@ -286,12 +284,16 @@ def pending_row_count(batches: dict[str, Any]) -> int:
     other_rows = sum(len(batches[key]) for key in _NON_ENTITY_BATCH_KEYS)
     return entity_rows + other_rows
 
-
-def should_flush_batches(batches: dict[str, Any]) -> bool:
+def should_flush_batches(
+    batches: dict[str, Any],
+    flush_threshold: int | None = None,
+) -> bool:
     """Return whether the in-memory write buffer should flush early."""
-
-    return pending_row_count(batches) >= _WRITE_BATCH_FLUSH_ROW_THRESHOLD
-
+    threshold = (
+        flush_threshold if flush_threshold is not None
+        else _WRITE_BATCH_FLUSH_ROW_THRESHOLD
+    )
+    return pending_row_count(batches) >= threshold
 
 def log_prepared_entity_batches(
     batches: dict[str, Any],
@@ -361,7 +363,6 @@ def log_prepared_entity_batches(
             },
         )
 
-
 def summarize_entity_source_files(
     rows: list[dict[str, Any]],
     *,
@@ -393,16 +394,15 @@ def summarize_entity_source_files(
         "top_files": file_counts.most_common(limit),
     }
 
-
 def _flush_entity_label_batches(
     tx: Any,
     label: str,
     rows: list[dict[str, Any]],
     *,
     info_logger_fn: Any | None = None,
+    entity_batch_size: int | None = None,
 ) -> dict[str, float | int]:
     """Flush one entity label, chunking only where the label needs it."""
-
     if not rows:
         return {
             "total_rows": 0,
@@ -413,7 +413,13 @@ def _flush_entity_label_batches(
             "max_chunk_rows": 0,
         }
 
-    chunk_size = _ENTITY_BATCH_SIZE_BY_LABEL.get(label, _DEFAULT_ENTITY_BATCH_SIZE)
+    label_specific = _ENTITY_BATCH_SIZE_BY_LABEL.get(label)
+    if label_specific is not None:
+        chunk_size = label_specific
+    elif entity_batch_size is not None:
+        chunk_size = entity_batch_size
+    else:
+        chunk_size = _DEFAULT_ENTITY_BATCH_SIZE
     total_rows = 0
     uid_rows = 0
     name_rows = 0
@@ -468,7 +474,6 @@ def _flush_entity_label_batches(
         "max_chunk_rows": max_chunk_rows,
     }
 
-
 def merge_batches(
     accumulator: dict[str, Any],
     new_batches: dict[str, Any],
@@ -489,7 +494,6 @@ def merge_batches(
     accumulator["js_import_rows"].extend(new_batches["js_import_rows"])
     accumulator["generic_import_rows"].extend(new_batches["generic_import_rows"])
 
-
 def empty_accumulator() -> dict[str, Any]:
     """Return an empty write-batch accumulator."""
     return {
@@ -502,7 +506,6 @@ def empty_accumulator() -> dict[str, Any]:
         "js_import_rows": [],
         "generic_import_rows": [],
     }
-
 
 __all__ = [
     "collect_file_write_data",

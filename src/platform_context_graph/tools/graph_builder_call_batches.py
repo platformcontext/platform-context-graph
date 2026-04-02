@@ -337,7 +337,9 @@ def contextual_call_batch_queries() -> tuple[str, ...]:
         OPTIONAL MATCH (caller_class:Class {name: row.caller_name, path: row.caller_file_path})
         WITH row, COALESCE(caller_function, caller_class) AS caller
         OPTIONAL MATCH (called_function:Function {name: row.called_name, path: row.called_file_path})
+          WHERE called_function.lang IS NULL OR called_function.lang IN row.compatible_langs
         OPTIONAL MATCH (called_class:Class {name: row.called_name, path: row.called_file_path})
+          WHERE called_class.lang IS NULL OR called_class.lang IN row.compatible_langs
         OPTIONAL MATCH (called_class)-[:CONTAINS]->(init:Function)
         WITH row, caller, called_function, called_class,
              CASE WHEN init.name IN ["__init__", "constructor"] THEN init END AS init
@@ -403,7 +405,9 @@ def file_level_call_batch_queries() -> tuple[str, ...]:
         UNWIND $rows AS row
         OPTIONAL MATCH (caller:File {path: row.caller_file_path})
         OPTIONAL MATCH (called_function:Function {name: row.called_name, path: row.called_file_path})
+          WHERE called_function.lang IS NULL OR called_function.lang IN row.compatible_langs
         OPTIONAL MATCH (called_class:Class {name: row.called_name, path: row.called_file_path})
+          WHERE called_class.lang IS NULL OR called_class.lang IN row.compatible_langs
         OPTIONAL MATCH (called_class)-[:CONTAINS]->(init:Function)
         WITH row, caller, called_function, called_class,
              CASE WHEN init.name IN ["__init__", "constructor"] THEN init END AS init

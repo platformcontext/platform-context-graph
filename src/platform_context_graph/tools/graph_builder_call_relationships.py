@@ -27,6 +27,12 @@ from .graph_builder_call_batches import (
     filter_fallback_candidate_rows as _filter_fallback_candidate_rows,
     run_call_batch_query as _run_call_batch_query_impl,
 )
+from .graph_builder_call_prefilter import (
+    build_known_callable_names as _build_known_callable_names_flat,
+    build_known_callable_names_by_family as _build_known_callable_names_by_family,
+    compatible_languages,
+    max_calls_for_repo_class,
+)
 
 _CALL_RELATIONSHIP_BUFFER_FLUSH_ROWS = 2000
 _CALL_RELATIONSHIP_BATCH_SIZE = 250
@@ -35,48 +41,16 @@ _PYTHON_BUILTIN_NAMES = frozenset(dir(py_builtins))
 _MINIFIED_SUFFIXES = (".min.js", ".min.css", ".bundle.js", ".chunk.js")
 _MAX_CALLS_PER_FILE = int(os.environ.get("PCG_MAX_CALLS_PER_FILE", "50"))
 
-# Language families for cross-language call resolution.  Only languages
-# within the same family may produce CALLS edges in repo-scoped and
-# fallback resolution passes.
-_LANGUAGE_FAMILIES: dict[str, str] = {
-    "javascript": "js_family",
-    "typescript": "js_family",
-}
-
-
-def compatible_languages(lang: str | None) -> list[str]:
-    """Return the list of languages compatible with *lang* for call resolution.
-
-    Languages within the same family (e.g. JS/TS) are cross-compatible.
-    All other languages resolve only against themselves.
-
-    Args:
-        lang: The source language identifier, or ``None``.
-
-    Returns:
-        A list of compatible language identifiers.  Empty when *lang*
-        is ``None``.
-    """
-    if not lang:
-        return []
-    family = _LANGUAGE_FAMILIES.get(lang)
-    if family:
-        return [k for k, v in _LANGUAGE_FAMILIES.items() if v == family]
-    return [lang]
-
 
 def _is_minified_or_bundled(file_path: str) -> bool:
     """Return whether a file is minified or bundled and should skip call resolution."""
-
-    lower = file_path.lower()
-    return any(lower.endswith(suffix) for suffix in _MINIFIED_SUFFIXES)
+    return any(file_path.lower().endswith(s) for s in _MINIFIED_SUFFIXES)
 
 
 def safe_run_create(session: Any, query: str, params: dict[str, Any]) -> bool:
     """Run a relationship creation query and report whether it created a row."""
     try:
-        result = session.run(query, params)
-        row = result.single()
+        row = session.run(query, params).single()
         return row is not None and row.get("created", 0) > 0
     except Exception:
         return False
@@ -112,17 +86,6 @@ def create_function_calls(
     _create_file_level_call_relationships_batched(session, file_level_rows)
 
 
-def _build_known_callable_names(session: Any) -> frozenset[str]:
-    """Query Neo4j for all distinct Function and Class names."""
-    names: set[str] = set()
-    for label in ("Function", "Class"):
-        rows = session.run(
-            f"MATCH (n:{label}) RETURN DISTINCT n.name AS name",
-        ).data()
-        names.update(row["name"] for row in rows if row.get("name"))
-    return frozenset(names)
-
-
 def create_all_function_calls(
     builder: Any,
     all_file_data: list[dict[str, Any]] | Any,
@@ -132,6 +95,7 @@ def create_all_function_calls(
     get_config_value_fn: Any | None = None,
     warning_logger_fn: Any | None = None,
     progress_callback: Any | None = None,
+    repo_class: str | None = None,
 ) -> dict[str, float | int]:
     """Create ``CALLS`` relationships after all files are indexed."""
     file_count = len(all_file_data) if hasattr(all_file_data, "__len__") else None
@@ -141,9 +105,26 @@ def create_all_function_calls(
         debug_log_fn(f"_create_all_function_calls called with {file_count} files")
     resolved_get_config_value_fn = get_config_value_fn or (lambda _key: None)
     resolved_warning_logger_fn = warning_logger_fn or (lambda *_args, **_kwargs: None)
+
+    # Determine effective per-file cap (adaptive or env-based).
+    adaptive_enabled = (
+        os.environ.get("PCG_ADAPTIVE_RESOLUTION_GUARDRAILS_ENABLED", "false").lower()
+        == "true"
+    )
+    if adaptive_enabled and repo_class:
+        effective_cap = max_calls_for_repo_class(repo_class)
+        _logger.info(
+            "Adaptive resolution: repo_class=%s, max_calls_per_file=%d",
+            repo_class,
+            effective_cap,
+        )
+    else:
+        effective_cap = _MAX_CALLS_PER_FILE
+
     next_row_id = 0
     processed_files = 0
     unresolved_counter: Counter[str] = Counter()
+    prefiltered_counter: Counter[str] = Counter()
     _empty = dict(
         rows=[],
         fallback_rows=0,
@@ -177,9 +158,13 @@ def create_all_function_calls(
         file_level_buffer = []
 
     with builder.driver.session() as session:
-        # Build known-callable name set for pre-filtering.
-        known_callable_names = _build_known_callable_names(session)
-        debug_log_fn(f"Known callable names in graph: {len(known_callable_names)}")
+        # Build family-aware known-callable name set for pre-filtering.
+        known_names_by_family = _build_known_callable_names_by_family(session)
+        total_names = sum(len(v) for v in known_names_by_family.values())
+        debug_log_fn(
+            f"Known callable names by family: "
+            f"{len(known_names_by_family)} langs, {total_names} names"
+        )
 
         for file_data in all_file_data:
             processed_files += 1
@@ -204,15 +189,16 @@ def create_all_function_calls(
                     get_config_value_fn=resolved_get_config_value_fn,
                     warning_logger_fn=resolved_warning_logger_fn,
                     start_row_id=next_row_id,
-                    known_callable_names=known_callable_names,
+                    known_callable_names_by_family=known_names_by_family,
                     unresolved_counter=unresolved_counter,
+                    prefiltered_counter=prefiltered_counter,
                 )
             )
             total_rows = len(file_contextual_rows) + len(file_level_batch_rows)
-            if total_rows > _MAX_CALLS_PER_FILE:
-                file_contextual_rows = file_contextual_rows[:_MAX_CALLS_PER_FILE]
+            if total_rows > effective_cap:
+                file_contextual_rows = file_contextual_rows[:effective_cap]
                 file_level_batch_rows = file_level_batch_rows[
-                    : max(0, _MAX_CALLS_PER_FILE - len(file_contextual_rows))
+                    : max(0, effective_cap - len(file_contextual_rows))
                 ]
             if file_contextual_rows:
                 contextual_buffer.extend(file_contextual_rows)
@@ -231,6 +217,17 @@ def create_all_function_calls(
         _flush_contextual(session)
         _flush_file_level(session)
 
+    # Aggregated prefiltered summary (Fix 3: family-aware prefilter stats).
+    if prefiltered_counter:
+        total_prefiltered = sum(prefiltered_counter.values())
+        lang_fmt = ", ".join(
+            f"{lang}={cnt}" for lang, cnt in prefiltered_counter.most_common(10)
+        )
+        _logger.info(
+            "Prefiltered calls (not in family callable set): total=%d, %s",
+            total_prefiltered,
+            lang_fmt,
+        )
     # Aggregated unresolved summary (replaces per-call warning spam).
     if unresolved_counter:
         total_unresolved = sum(unresolved_counter.values())
@@ -264,7 +261,6 @@ def _accumulate_resolution_metrics(
     current: dict[str, float | int],
 ) -> None:
     """Add one call-resolution metric payload into a mutable aggregate."""
-
     for key, value in current.items():
         if isinstance(value, (int, float)):
             totals[key] = totals.get(key, 0) + value
@@ -279,7 +275,9 @@ def _prepare_call_rows(
     warning_logger_fn: Any,
     start_row_id: int,
     known_callable_names: frozenset[str] | None = None,
+    known_callable_names_by_family: dict[str, frozenset[str]] | None = None,
     unresolved_counter: Counter | None = None,
+    prefiltered_counter: Counter | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     """Resolve one file's calls into contextual and file-level batch rows."""
 
@@ -303,12 +301,27 @@ def _prepare_call_rows(
         if called_name in _PYTHON_BUILTIN_NAMES:
             continue
 
-        # Name-existence pre-filter: skip calls whose name does not exist
-        # as any Function or Class in the graph.
-        if known_callable_names is not None and called_name not in known_callable_names:
-            if unresolved_counter is not None:
-                unresolved_counter[called_name] += 1
-            continue
+        # Family-aware pre-filter: skip calls whose name does not exist
+        # within the caller's language family callable set.
+        call_lang = call.get("lang")
+        if known_callable_names_by_family is not None:
+            if call_lang:
+                family_names = known_callable_names_by_family.get(
+                    call_lang, frozenset()
+                )
+                if called_name not in family_names:
+                    if prefiltered_counter is not None:
+                        prefiltered_counter[call_lang] += 1
+                    if unresolved_counter is not None:
+                        unresolved_counter[called_name] += 1
+                    continue
+            # When call_lang is None, fall through (don't filter).
+        elif known_callable_names is not None:
+            # Legacy path: flat name set without family grouping.
+            if called_name not in known_callable_names:
+                if unresolved_counter is not None:
+                    unresolved_counter[called_name] += 1
+                continue
 
         resolved_path = None
         full_call = call.get("full_name", called_name)

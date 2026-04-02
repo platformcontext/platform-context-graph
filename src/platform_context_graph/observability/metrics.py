@@ -5,11 +5,11 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from .indexing_metrics import RuntimeIndexMetricsMixin
+from .indexing_metrics_v2 import RuntimeIndexMetricsV2Mixin
 from .otel import Observation, current_component, status_class
 
 
-class RuntimeMetricsMixin(RuntimeIndexMetricsMixin):
+class RuntimeMetricsMixin(RuntimeIndexMetricsV2Mixin):
     """Provide metric-recording helpers for :class:`ObservabilityRuntime`."""
 
     enabled: bool

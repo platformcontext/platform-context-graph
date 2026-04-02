@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+import time
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
+
+_GIL_YIELD_ENABLED: bool = (
+    os.environ.get("PCG_COMMIT_GIL_YIELD_ENABLED", "true").lower() != "false"
+)
 
 from ..cli.config_manager import get_config_value
 from ..content.ingest import prepare_content_entries
@@ -36,21 +42,22 @@ from .graph_builder_persistence_unwind import resolve_max_entity_value_length
 
 @dataclass(frozen=True)
 class BatchCommitResult:
-    """Describe which files committed successfully in one batch write attempt."""
+    """Describe files committed successfully with timing and entity counts."""
 
     committed_file_paths: tuple[str, ...] = ()
     failed_file_paths: tuple[str, ...] = ()
+    content_write_duration_seconds: float = 0.0
+    graph_write_duration_seconds: float = 0.0
+    entity_totals: dict[str, int] = field(default_factory=dict)
 
     @property
     def committed_file_count(self) -> int:
         """Return the number of files that reached durable graph state."""
-
         return len(self.committed_file_paths)
 
     @property
     def last_committed_file(self) -> str | None:
         """Return the final committed file path when any succeeded."""
-
         if not self.committed_file_paths:
             return None
         return self.committed_file_paths[-1]
@@ -101,6 +108,8 @@ def _content_dual_write_batch(
     file_data_list: list[dict[str, Any]],
     repository: dict[str, Any],
     warning_logger_fn: Any,
+    *,
+    content_batch_size: int | None = None,
 ) -> None:
     """Batch Postgres dual-write for multiple files in one round-trip."""
 
@@ -129,7 +138,10 @@ def _content_dual_write_batch(
             if file_entries:
                 content_provider.upsert_file_batch(file_entries)
             if entity_entries:
-                content_provider.upsert_entities_batch(entity_entries)
+                content_provider.upsert_entities_batch(
+                    entity_entries,
+                    entity_batch_size=content_batch_size,
+                )
     except Exception as exc:
         emit_log_call(
             warning_logger_fn,
@@ -144,14 +156,7 @@ def _content_dual_write_batch(
 
 
 def _begin_transaction(session: Any) -> tuple[Any, bool]:
-    """Begin an explicit transaction if the backend supports it.
-
-    Returns:
-        Tuple of ``(tx, is_explicit)`` where ``tx`` is a transaction object
-        (or the session itself for backends without transaction support) and
-        ``is_explicit`` indicates whether ``commit()``/``rollback()`` should
-        be called.
-    """
+    """Begin an explicit transaction if the backend supports it."""
     begin = getattr(session, "begin_transaction", None)
     if begin is not None:
         try:
@@ -358,25 +363,14 @@ def commit_file_batch_to_graph(
     debug_log_fn: Any,
     info_logger_fn: Any,
     warning_logger_fn: Any,
+    adaptive_flush_threshold: int | None = None,
+    adaptive_entity_batch_size: int | None = None,
+    adaptive_tx_file_limit: int | None = None,
+    adaptive_content_batch_size: int | None = None,
 ) -> BatchCommitResult:
-    """Persist a batch of parsed files using bounded Neo4j write transactions.
-
-    Opens one session, reads repository metadata once, then writes the batch in
-    smaller transaction-sized file chunks so large repositories do not retain
-    one giant in-flight transaction. Postgres content writes are handled
-    per-file outside the Neo4j transaction.
-
-    Args:
-        builder: ``GraphBuilder`` facade instance.
-        file_data_list: List of parsed file payloads to persist.
-        repo_path: Resolved repository root path.
-        debug_log_fn: Debug logger callable.
-        info_logger_fn: Info logger callable.
-        warning_logger_fn: Warning logger callable.
-    """
+    """Persist parsed files using bounded Neo4j write transactions."""
     if not file_data_list:
         return BatchCommitResult()
-
     repo_path_obj = repo_path.resolve()
     repo_path_str = str(repo_path_obj)
 
@@ -392,11 +386,14 @@ def commit_file_batch_to_graph(
     max_entity_value_length = resolve_max_entity_value_length(
         get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH")
     )
-    tx_file_limit = _bounded_positive_int_config(
-        "PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE",
-        5,
-        maximum=max(1, len(file_data_list)),
-    )
+    if adaptive_tx_file_limit is not None:
+        tx_file_limit = min(adaptive_tx_file_limit, max(1, len(file_data_list)))
+    else:
+        tx_file_limit = _bounded_positive_int_config(
+            "PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE",
+            5,
+            maximum=max(1, len(file_data_list)),
+        )
 
     with builder.driver.session() as session:
         repository = read_repository_metadata(session, repo_path_obj)
@@ -404,12 +401,18 @@ def commit_file_batch_to_graph(
         committed_files = 0
         committed_file_paths: list[str] = []
         repo_entity_totals: dict[str, int] = {}
-
+        content_write_total, graph_write_total = 0.0, 0.0
         for start in range(0, total_files, tx_file_limit):
             tx_chunk = file_data_list[start : start + tx_file_limit]
-            _content_dual_write_batch(tx_chunk, repository, warning_logger_fn)
-
-            tx, is_explicit = _begin_transaction(session)
+            _t0 = time.perf_counter()
+            _content_dual_write_batch(
+                tx_chunk,
+                repository,
+                warning_logger_fn,
+                content_batch_size=adaptive_content_batch_size,
+            )
+            content_write_total += time.perf_counter() - _t0
+            _t0, tx, is_explicit = time.perf_counter(), *_begin_transaction(session)
             chunk_file_paths: list[str] = []
             try:
                 with get_observability().start_span(
@@ -442,7 +445,9 @@ def commit_file_batch_to_graph(
                                 current_file=file_path_str,
                                 committed=False,
                             )
-                        if should_flush_batches(accumulator):
+                        if should_flush_batches(
+                            accumulator, flush_threshold=adaptive_flush_threshold
+                        ):
                             log_prepared_entity_batches(
                                 accumulator,
                                 repo_path_str=repo_path_str,
@@ -454,6 +459,7 @@ def commit_file_batch_to_graph(
                                 accumulator,
                                 info_logger_fn=info_logger_fn,
                                 debug_logger_fn=debug_log_fn,
+                                entity_batch_size=adaptive_entity_batch_size,
                             )
                             _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                             accumulator = empty_accumulator()
@@ -474,10 +480,14 @@ def commit_file_batch_to_graph(
                             accumulator,
                             info_logger_fn=info_logger_fn,
                             debug_logger_fn=debug_log_fn,
+                            entity_batch_size=adaptive_entity_batch_size,
                         )
                         _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                     if is_explicit:
                         tx.commit()
+                        if _GIL_YIELD_ENABLED:
+                            time.sleep(0)
+                    graph_write_total += time.perf_counter() - _t0
             except Exception as exc:
                 if is_explicit:
                     tx.rollback()
@@ -496,6 +506,7 @@ def commit_file_batch_to_graph(
                 )
                 failed_file_paths: list[str] = []
                 for file_data in tx_chunk:
+                    _retry_t0 = time.perf_counter()
                     tx, is_explicit = _begin_transaction(session)
                     try:
                         file_path_str, file_batches = _write_one_file_graph(
@@ -516,10 +527,14 @@ def commit_file_batch_to_graph(
                             file_batches,
                             info_logger_fn=info_logger_fn,
                             debug_logger_fn=debug_log_fn,
+                            entity_batch_size=adaptive_entity_batch_size,
                         )
                         _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                         if is_explicit:
                             tx.commit()
+                            if _GIL_YIELD_ENABLED:
+                                time.sleep(0)
+                        graph_write_total += time.perf_counter() - _retry_t0
                         committed_files += 1
                         committed_file_paths.append(file_path_str)
                     except Exception as file_exc:
@@ -576,7 +591,12 @@ def commit_file_batch_to_graph(
                     "entity_totals": repo_entity_totals,
                 },
             )
-        return BatchCommitResult(committed_file_paths=tuple(committed_file_paths))
+        return replace(
+            BatchCommitResult(committed_file_paths=tuple(committed_file_paths)),
+            content_write_duration_seconds=content_write_total,
+            graph_write_duration_seconds=graph_write_total,
+            entity_totals=repo_entity_totals,
+        )
 
 
 __all__ = [

@@ -20,8 +20,10 @@ from platform_context_graph.tools.graph_builder_call_relationships import (
     create_all_function_calls,
 )
 from platform_context_graph.tools.graph_builder_call_batches import (
+    contextual_call_batch_queries,
     contextual_call_fallback_batch_query,
     contextual_repo_scoped_batch_query,
+    file_level_call_batch_queries,
     file_level_call_fallback_batch_query,
     file_level_repo_scoped_batch_query,
 )
@@ -64,6 +66,26 @@ class _FakeSession:
         self.calls.append((query, final_params))
         if "RETURN DISTINCT n.name AS name" in query:
             return _FakeResult(self._known_names)
+        if "rows" in final_params:
+            matched_ids = [row["row_id"] for row in final_params["rows"]]
+            return _FakeResult({"matched_row_ids": matched_ids})
+        return _FakeResult({"created": 1})
+
+
+class _FamilyAwareFakeSession:
+    """Session that returns name+lang for the family-aware query."""
+
+    def __init__(self, names_with_lang: list[dict[str, str]]) -> None:
+        self.calls: list[tuple[str, dict]] = []
+        self._names_with_lang = names_with_lang
+
+    def run(self, query: str, params=None):
+        final_params = params or {}
+        self.calls.append((query, final_params))
+        if "RETURN DISTINCT n.name AS name, n.lang AS lang" in query:
+            return _FakeResult(self._names_with_lang)
+        if "RETURN DISTINCT n.name AS name" in query:
+            return _FakeResult(self._names_with_lang)
         if "rows" in final_params:
             matched_ids = [row["row_id"] for row in final_params["rows"]]
             return _FakeResult({"matched_row_ids": matched_ids})
@@ -261,6 +283,30 @@ class TestCypherQueriesHaveLangFilter:
         query = file_level_call_fallback_batch_query()
         assert "called.lang IS NULL OR called.lang IN row.compatible_langs" in query
 
+    def test_contextual_exact_has_lang_filter(self) -> None:
+        """Exact match contextual queries must filter by compatible_langs.
+
+        Without this filter, the exact match pass creates cross-language
+        false CALLS edges (e.g. PHP → JS) when imports_map resolves a
+        name to a file containing a function in a different language.
+        """
+        for query in contextual_call_batch_queries():
+            assert "compatible_langs" in query, (
+                "Contextual exact query missing compatible_langs filter"
+            )
+
+    def test_file_level_exact_has_lang_filter(self) -> None:
+        """Exact match file-level queries must filter by compatible_langs.
+
+        Same rationale as the contextual variant: the exact pass resolves
+        by name + path without checking language compatibility, producing
+        cross-language false edges.
+        """
+        for query in file_level_call_batch_queries():
+            assert "compatible_langs" in query, (
+                "File-level exact query missing compatible_langs filter"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Wave 3: known-callable pre-filter
@@ -275,7 +321,7 @@ class TestKnownCallablePreFilter:
         session = _FakeSession(
             known_names=[{"name": "foo"}, {"name": "Bar"}],
         )
-        names = call_mod._build_known_callable_names(session)
+        names = call_mod._build_known_callable_names_flat(session)
         assert "foo" in names
         assert "Bar" in names
         label_queries = [q for q, _ in session.calls if "RETURN DISTINCT n.name" in q]
@@ -398,8 +444,11 @@ class TestAggregatedUnresolvedReporting:
 
     def test_create_all_uses_known_names_and_counter(self) -> None:
         """create_all_function_calls should build known names and aggregate."""
-        known = [{"name": "helper_one"}]
-        session = _FakeSession(known_names=known)
+        # The family-aware query returns name+lang pairs.  Calls without
+        # a matching lang+name pair should be prefiltered out.
+        session = _FamilyAwareFakeSession(
+            names_with_lang=[{"name": "helper_one", "lang": "python"}],
+        )
         builder = SimpleNamespace(driver=_FakeDriver(session))
 
         create_all_function_calls(
@@ -412,8 +461,18 @@ class TestAggregatedUnresolvedReporting:
                     "classes": [],
                     "imports": [],
                     "function_calls": [
-                        {"name": "helper_one", "line_number": 10, "args": []},
-                        {"name": "not_in_graph", "line_number": 20, "args": []},
+                        {
+                            "name": "helper_one",
+                            "line_number": 10,
+                            "args": [],
+                            "lang": "python",
+                        },
+                        {
+                            "name": "not_in_graph",
+                            "line_number": 20,
+                            "args": [],
+                            "lang": "python",
+                        },
                     ],
                 },
             ],
@@ -421,8 +480,8 @@ class TestAggregatedUnresolvedReporting:
             debug_log_fn=lambda *_a, **_kw: None,
         )
 
-        # The known-names query should have been executed (2 queries:
-        # one for Function, one for Class)
+        # The family-aware known-names query should have been executed
+        # (2 queries: one for Function, one for Class)
         name_queries = [q for q, _ in session.calls if "RETURN DISTINCT n.name" in q]
         assert len(name_queries) == 2
 

@@ -265,11 +265,10 @@ def _load_credentials() -> None:
     for config in config_sources:
         merged_config.update(config)
 
-    db_override_keys = {"DATABASE_TYPE", "PCG_RUNTIME_DB_TYPE", "DEFAULT_DATABASE"}
     for key, value in merged_config.items():
         if value is None:
             continue
-        if key in db_override_keys and key in os.environ:
+        if key in os.environ:
             continue
         os.environ[key] = str(value)
 
