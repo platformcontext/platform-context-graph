@@ -71,6 +71,40 @@ def test_create_app_requires_bearer_auth_for_non_public_routes(
     assert authorized.json()["run_id"] == "run-123"
 
 
+def test_create_app_exposes_index_run_status_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("httpx")
+    from starlette.testclient import TestClient
+
+    api_app = importlib.import_module("platform_context_graph.api.app")
+
+    monkeypatch.setattr(
+        api_app,
+        "describe_index_run",
+        lambda target=None: (
+            {
+                "run_id": "run-123",
+                "root_path": "/srv/repos",
+                "status": "running",
+                "finalization_status": "pending",
+            }
+            if target == "run-123"
+            else None
+        ),
+    )
+
+    app = api_app.create_app(
+        query_services_dependency=lambda: SimpleNamespace(database=object())
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/api/v0/index-runs/run-123")
+
+    assert response.status_code == 200
+    assert response.json()["run_id"] == "run-123"
+
+
 def test_create_app_keeps_health_and_docs_public_when_bearer_auth_is_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

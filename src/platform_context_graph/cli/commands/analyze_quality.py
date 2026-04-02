@@ -8,6 +8,12 @@ import typer
 from rich import box
 from rich.table import Table
 
+from ..remote import remote_mode_requested
+from ..remote_commands import (
+    render_remote_complexity,
+    render_remote_dead_code,
+    render_remote_relationship_query,
+)
 from ..visualizer import check_visual_flag, visualize_overrides
 
 
@@ -36,8 +42,34 @@ def register_analyze_quality_commands(
             "-f",
             help="Specific file path (only used when function name is provided)",
         ),
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
     ) -> None:
         """Show cyclomatic complexity for functions."""
+        if remote_mode_requested(service_url, profile):
+            render_remote_complexity(
+                main_module,
+                function_name=path,
+                path=file,
+                limit=limit,
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+            )
+            return
         main_module._load_credentials()
         services = main_module._initialize_services()
         if not all(services):
@@ -117,9 +149,35 @@ def register_analyze_quality_commands(
         exclude_decorators: str | None = typer.Option(
             None, "--exclude", "-e", help="Comma-separated decorators to exclude"
         ),
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
     ) -> None:
         """Find potentially unused functions and classes."""
         del path
+        if remote_mode_requested(service_url, profile):
+            render_remote_dead_code(
+                main_module,
+                exclude_decorated_with=(
+                    exclude_decorators.split(",") if exclude_decorators else None
+                ),
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+            )
+            return
         main_module._load_credentials()
         services = main_module._initialize_services()
         if not all(services):
@@ -172,8 +230,39 @@ def register_analyze_quality_commands(
             "-V",
             help="Show results as interactive graph visualization",
         ),
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
     ) -> None:
         """Find all implementations of a function across different classes."""
+        if remote_mode_requested(service_url, profile):
+            if check_visual_flag(ctx, visual):
+                raise typer.BadParameter(
+                    "Remote analyze commands do not support --visual in v1."
+                )
+            render_remote_relationship_query(
+                main_module,
+                query_type="overrides",
+                target=function_name,
+                context=None,
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+                failure_label="Remote overrides analysis failed",
+            )
+            return
         main_module._load_credentials()
         services = main_module._initialize_services()
         if not all(services):
@@ -222,8 +311,35 @@ def register_analyze_quality_commands(
         file: str | None = typer.Option(
             None, "--file", "-f", help="Specific file path"
         ),
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
     ) -> None:
         """Analyze where a variable is defined and used across the codebase."""
+        if remote_mode_requested(service_url, profile):
+            render_remote_relationship_query(
+                main_module,
+                query_type="variable_scope",
+                target=variable_name,
+                context=file,
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+                failure_label="Remote variable analysis failed",
+            )
+            return
         main_module._load_credentials()
         services = main_module._initialize_services()
         if not all(services):

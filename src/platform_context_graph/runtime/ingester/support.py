@@ -53,6 +53,7 @@ def index_workspace_default(
     family: str = "index",
     source: str = "manual",
     component: str = "cli",
+    force: bool = False,
 ) -> None:
     """Run the default CLI indexing entrypoint for a workspace.
 
@@ -64,6 +65,7 @@ def index_workspace_default(
 
     index_helper(
         str(workspace),
+        force=force,
         selected_repositories=selected_repositories,
         family=family,
         source=source,
@@ -79,6 +81,7 @@ def invoke_index_workspace(
     family: str,
     source: str,
     component: str,
+    force: bool = False,
 ) -> None:
     """Call an index callback with repo-batch metadata when supported."""
 
@@ -98,6 +101,7 @@ def invoke_index_workspace(
         "family": family,
         "source": source,
         "component": component,
+        "force": force,
     }.items():
         if accepts_var_kwargs or key in signature.parameters:
             kwargs[key] = value

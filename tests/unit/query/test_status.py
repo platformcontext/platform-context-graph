@@ -184,6 +184,103 @@ def test_get_ingester_status_prefers_checkpoint_when_store_is_bootstrap_pending(
     assert result["last_error_message"] == "repo failed"
 
 
+def test_get_ingester_status_prefers_newer_checkpoint_over_stale_runtime_row(
+    monkeypatch,
+) -> None:
+    """Active checkpoint state should beat an older idle persisted runtime row."""
+
+    store = _Store(
+        {
+            "repository": {
+                "runtime_family": "ingester",
+                "ingester": "repository",
+                "provider": "repository",
+                "status": "idle",
+                "active_run_id": "run-old",
+                "updated_at": datetime(2026, 3, 24, 12, 0, tzinfo=timezone.utc),
+            }
+        }
+    )
+    monkeypatch.setattr(status_queries, "get_runtime_status_store", lambda: store)
+    monkeypatch.setattr(
+        status_queries,
+        "_describe_index_run",
+        lambda target: {
+            "run_id": "run-new",
+            "status": "running",
+            "created_at": "2026-03-24T12:01:00+00:00",
+            "updated_at": "2026-03-24T12:05:00+00:00",
+            "last_error": None,
+            "repository_count": 8,
+            "completed_repositories": 3,
+            "failed_repositories": 0,
+            "pending_repositories": 5,
+            "repositories": [
+                {
+                    "repo_path": "/tmp/repos/orders-api",
+                    "status": "running",
+                    "phase": "parsed",
+                    "phase_started_at": "2026-03-24T12:04:30+00:00",
+                    "last_progress_at": "2026-03-24T12:05:00+00:00",
+                    "updated_at": "2026-03-24T12:05:00+00:00",
+                }
+            ],
+        },
+    )
+    monkeypatch.setenv("PCG_REPOS_DIR", "/tmp/repos")
+
+    result = status_queries.get_ingester_status(object(), ingester="repository")
+
+    assert result["status"] == "indexing"
+    assert result["active_run_id"] == "run-new"
+    assert result["active_repository_path"] == "/tmp/repos/orders-api"
+    assert result["pending_repositories"] == 5
+
+
+def test_get_ingester_status_keeps_fresher_runtime_row_when_checkpoint_is_older(
+    monkeypatch,
+) -> None:
+    """Fresh runtime status should still win when checkpoint state lags behind it."""
+
+    store = _Store(
+        {
+            "repository": {
+                "runtime_family": "ingester",
+                "ingester": "repository",
+                "provider": "repository",
+                "status": "indexing",
+                "active_run_id": "run-live",
+                "active_phase": "committing",
+                "updated_at": datetime(2026, 3, 24, 12, 6, tzinfo=timezone.utc),
+            }
+        }
+    )
+    monkeypatch.setattr(status_queries, "get_runtime_status_store", lambda: store)
+    monkeypatch.setattr(
+        status_queries,
+        "_describe_index_run",
+        lambda target: {
+            "run_id": "run-old",
+            "status": "running",
+            "created_at": "2026-03-24T12:00:00+00:00",
+            "updated_at": "2026-03-24T12:02:00+00:00",
+            "last_error": None,
+            "repository_count": 8,
+            "completed_repositories": 2,
+            "failed_repositories": 0,
+            "pending_repositories": 6,
+            "repositories": [],
+        },
+    )
+    monkeypatch.setenv("PCG_REPOS_DIR", "/tmp/repos")
+
+    result = status_queries.get_ingester_status(object(), ingester="repository")
+
+    assert result["status"] == "indexing"
+    assert result["active_run_id"] == "run-live"
+    assert result["active_phase"] == "committing"
+
+
 def test_get_ingester_status_uses_bootstrap_provider_row_for_repository_view(
     monkeypatch,
 ) -> None:

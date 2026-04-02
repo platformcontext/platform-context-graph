@@ -8,6 +8,8 @@ import typer
 from rich import box
 from rich.table import Table
 
+from ..remote import remote_mode_requested
+from ..remote_commands import render_remote_search
 from ..visualizer import check_visual_flag, visualize_search_results
 
 
@@ -41,8 +43,37 @@ def register_find_primary_commands(main_module: Any, app: typer.Typer) -> typer.
             "-V",
             help="Show results as interactive graph visualization",
         ),
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
     ) -> None:
         """Find code elements by exact name."""
+        if remote_mode_requested(service_url, profile):
+            if check_visual_flag(ctx, visual):
+                raise typer.BadParameter(
+                    "Remote find commands do not support --visual in v1."
+                )
+            render_remote_search(
+                main_module,
+                query=name,
+                exact=True,
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+            )
+            return
         main_module._load_credentials()
         services = main_module._initialize_services()
         if not all(services):
@@ -153,8 +184,37 @@ def register_find_primary_commands(main_module: Any, app: typer.Typer) -> typer.
             "-V",
             help="Show results as interactive graph visualization",
         ),
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
     ) -> None:
         """Find code elements using substring matching."""
+        if remote_mode_requested(service_url, profile):
+            if check_visual_flag(ctx, visual):
+                raise typer.BadParameter(
+                    "Remote find commands do not support --visual in v1."
+                )
+            render_remote_search(
+                main_module,
+                query=pattern,
+                exact=False,
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+            )
+            return
         main_module._load_credentials()
         services = main_module._initialize_services()
         if not all(services):

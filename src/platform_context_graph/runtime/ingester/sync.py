@@ -34,6 +34,7 @@ from .support import (
     begin_index_cycle,
     fingerprint_tree,
     index_workspace_default,
+    invoke_index_workspace,
     resumable_repository_paths,
     log,
     manifest_path,
@@ -42,7 +43,9 @@ from .support import (
     workspace_lock,
 )
 from ..status_store import (
+    claim_ingester_reindex_request,
     claim_ingester_scan_request,
+    complete_ingester_reindex_request,
     complete_ingester_scan_request,
     get_runtime_status_store,
     update_runtime_ingester_status,
@@ -274,10 +277,54 @@ def run_repo_sync_loop(
     attempt = 1
     while True:
         started_at = _utc_now()
+        claimed_reindex_request = claim_ingester_reindex_request(
+            ingester=config.component
+        )
         claimed_request = pending_request or claim_ingester_scan_request(
             ingester=config.component
         )
         pending_request = None
+        if claimed_reindex_request is not None:
+            try:
+                _persist_ingester_status(
+                    config,
+                    status="indexing",
+                    last_attempt_at=started_at,
+                    next_retry_at=None,
+                    last_error_kind=None,
+                    last_error_message=None,
+                )
+                invoke_index_workspace(
+                    index_workspace or index_workspace_default,
+                    config.repos_dir,
+                    family="reindex",
+                    source=str(
+                        claimed_reindex_request.get("reindex_requested_by") or "admin"
+                    ),
+                    component=config.component,
+                    force=bool(claimed_reindex_request.get("requested_force", True)),
+                )
+                complete_ingester_reindex_request(
+                    ingester=config.component,
+                    request_token=str(
+                        claimed_reindex_request["reindex_request_token"]
+                    ),
+                    error_message=None,
+                )
+                attempt = 1
+                pending_request = _wait_for_next_cycle(
+                    config.component, interval_seconds
+                )
+                continue
+            except Exception as exc:
+                complete_ingester_reindex_request(
+                    ingester=config.component,
+                    request_token=str(
+                        claimed_reindex_request["reindex_request_token"]
+                    ),
+                    error_message=str(exc),
+                )
+                raise
         if claimed_request is not None:
             get_observability().record_ingester_scan_request(
                 ingester=config.component,

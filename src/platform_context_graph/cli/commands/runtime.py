@@ -9,6 +9,9 @@ from typing import Any
 import typer
 from rich.table import Table
 
+from ..remote import remote_mode_requested
+from ..remote_commands import render_remote_workspace_status, run_remote_admin_reindex
+
 
 def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
     """Register runtime-oriented command groups on the root CLI app.
@@ -34,6 +37,9 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
         )
     )
     app.add_typer(workspace_app, name="workspace")
+
+    admin_app = typer.Typer(help="Administrative local and remote operations")
+    app.add_typer(admin_app, name="admin")
 
     internal_app = typer.Typer(help="Internal runtime commands")
     app.add_typer(internal_app, name="internal")
@@ -200,10 +206,79 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
         main_module.workspace_index_helper()
 
     @workspace_app.command("status")
-    def workspace_status() -> None:
+    def workspace_status(
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
+    ) -> None:
         """Show the configured workspace path and latest workspace index summary."""
 
+        if remote_mode_requested(service_url, profile):
+            render_remote_workspace_status(
+                main_module,
+                service_url=service_url,
+                api_key=api_key,
+                profile=profile,
+            )
+            return
         main_module.workspace_status_helper()
+
+    @admin_app.command("reindex")
+    def admin_reindex(
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
+        ingester: str = typer.Option(
+            "repository",
+            "--ingester",
+            help="Ingester name to target for the remote reindex request.",
+        ),
+        scope: str = typer.Option(
+            "workspace",
+            "--scope",
+            help="Reindex scope. Currently only 'workspace' is supported.",
+        ),
+        force: bool = typer.Option(
+            True,
+            "--force/--no-force",
+            help="Whether the ingester should invalidate the existing checkpoint before rebuilding.",
+        ),
+    ) -> None:
+        """Queue a remote ingester reindex request through the admin API."""
+
+        run_remote_admin_reindex(
+            main_module,
+            service_url=service_url,
+            api_key=api_key,
+            profile=profile,
+            ingester=ingester,
+            scope=scope,
+            force=force,
+        )
 
     @workspace_app.command("watch")
     def workspace_watch(

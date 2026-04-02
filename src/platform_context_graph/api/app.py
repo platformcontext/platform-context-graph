@@ -180,6 +180,15 @@ def create_app(
             limit=limit,
         )
 
+    @router.get("/index-runs/{run_id}", tags=["system"])
+    def index_run_status(run_id: str) -> dict[str, Any]:
+        """Return the checkpointed status summary for one run identifier."""
+
+        summary = describe_index_run(run_id)
+        if summary is None:
+            raise HTTPException(status_code=404, detail="Index run not found")
+        return summary
+
     @router.post("/bundles/import", tags=["system"])
     async def import_bundle(
         bundle: UploadFile = File(...),

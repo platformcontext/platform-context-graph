@@ -390,10 +390,10 @@ class TestCLICommands:
         # Output might be empty in some test envs, checking exit code is enough integration test
         # assert "No such command" in result.stdout
 
-    @patch("platform_context_graph.cli.commands.bundle_registry.requests.post")
+    @patch("platform_context_graph.cli.remote.requests.request")
     def test_bundle_upload_command_posts_bundle_to_remote_service(
         self,
-        mock_post,
+        mock_request,
         tmp_path: Path,
     ):
         """`pcg bundle upload` should post a bundle archive to the API service."""
@@ -406,7 +406,7 @@ class TestCLICommands:
         mock_response.json.return_value = {"success": True, "message": "imported"}
         mock_response.text = '{"success":true}'
         mock_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_response
+        mock_request.return_value = mock_response
 
         result = runner.invoke(
             app,
@@ -424,8 +424,10 @@ class TestCLICommands:
 
         assert result.exit_code == 0
         assert "imported" in result.stdout
-        mock_post.assert_called_once()
-        _args, kwargs = mock_post.call_args
+        mock_request.assert_called_once()
+        _args, kwargs = mock_request.call_args
+        assert kwargs["method"] == "POST"
+        assert kwargs["url"] == "http://pcg.local/api/v0/bundles/import"
         assert kwargs["data"] == {"clear_existing": "true"}
         assert kwargs["timeout"] == 900
         assert kwargs["files"]["bundle"][0] == "dependency.pcg"

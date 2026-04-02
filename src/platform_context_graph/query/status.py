@@ -10,6 +10,7 @@ from typing import Any
 from ..observability import get_observability, trace_query
 from ..runtime.status_store import (
     get_runtime_status_store,
+    request_ingester_reindex,
     request_ingester_scan,
 )
 from .repositories.common import get_db_manager, resolve_repository
@@ -20,6 +21,7 @@ __all__ = [
     "resolve_index_status_target",
     "get_ingester_status",
     "list_ingesters",
+    "request_ingester_reindex_control",
     "request_ingester_scan_control",
 ]
 
@@ -365,6 +367,62 @@ def _checkpoint_status_fallback(ingester: str) -> dict[str, Any] | None:
     return _checkpoint_status_payload(ingester=ingester, summary=summary)
 
 
+def _parse_status_timestamp(value: Any) -> datetime | None:
+    """Parse a status timestamp value into a comparable datetime."""
+
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    if candidate.endswith("Z"):
+        candidate = f"{candidate[:-1]}+00:00"
+    try:
+        return datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+
+
+def _status_updated_at(payload: dict[str, Any]) -> datetime | None:
+    """Return the freshest comparable timestamp from one status payload."""
+
+    for field in ("active_last_progress_at", "updated_at", "last_attempt_at"):
+        parsed = _parse_status_timestamp(payload.get(field))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _runtime_status_should_yield_to_checkpoint(
+    runtime_payload: dict[str, Any],
+    checkpoint_payload: dict[str, Any],
+) -> bool:
+    """Report whether checkpoint status should replace the persisted runtime row."""
+
+    runtime_status = str(runtime_payload.get("status") or "")
+    if runtime_status == "bootstrap_pending":
+        return True
+
+    checkpoint_status = str(checkpoint_payload.get("status") or "")
+    runtime_updated_at = _status_updated_at(runtime_payload)
+    checkpoint_updated_at = _status_updated_at(checkpoint_payload)
+    if checkpoint_status != "indexing":
+        return False
+    if runtime_status != "indexing":
+        return (
+            checkpoint_updated_at is not None
+            and (
+                runtime_updated_at is None
+                or checkpoint_updated_at >= runtime_updated_at
+            )
+        )
+    if checkpoint_updated_at is None or runtime_updated_at is None:
+        return False
+    return checkpoint_updated_at > runtime_updated_at
+
+
 def list_ingesters(_database: Any) -> list[dict[str, Any]]:
     """Return the current status for each known ingester."""
 
@@ -383,16 +441,17 @@ def get_ingester_status(
 
     with trace_query("runtime_ingester_status"):
         store = get_runtime_status_store()
+        checkpoint_fallback = _checkpoint_status_fallback(ingester)
         if store is not None and store.enabled:
             result = _select_runtime_status_payload(store, ingester=ingester)
             if result is not None:
-                if result.get("status") != "bootstrap_pending":
-                    return result
-                fallback = _checkpoint_status_fallback(ingester)
-                return fallback or result
-        fallback = _checkpoint_status_fallback(ingester)
-        if fallback is not None:
-            return fallback
+                if checkpoint_fallback is not None and _runtime_status_should_yield_to_checkpoint(
+                    result, checkpoint_fallback
+                ):
+                    return checkpoint_fallback
+                return result
+        if checkpoint_fallback is not None:
+            return checkpoint_fallback
         return _default_status(ingester)
 
 
@@ -440,5 +499,53 @@ def request_ingester_scan_control(
                 "scan_request_state": result["scan_request_state"],
                 "scan_requested_at": result["scan_requested_at"],
                 "scan_requested_by": result.get("scan_requested_by"),
+            }
+        )
+
+
+def request_ingester_reindex_control(
+    _database: Any,
+    *,
+    ingester: str = "repository",
+    requested_by: str = "api",
+    force: bool = True,
+    scope: str = "workspace",
+) -> dict[str, Any]:
+    """Persist a manual ingester reindex request and return its accepted state."""
+
+    with trace_query("runtime_request_ingester_reindex"):
+        result = request_ingester_reindex(
+            ingester=ingester,
+            requested_by=requested_by,
+            force=force,
+            scope=scope,
+        )
+        if result is None:
+            return {
+                "runtime_family": "ingester",
+                "ingester": ingester,
+                "provider": ingester,
+                "accepted": False,
+                "reindex_request_token": "",
+                "reindex_request_state": "unavailable",
+                "reindex_requested_at": None,
+                "reindex_requested_by": requested_by,
+                "requested_force": force,
+                "requested_scope": scope,
+                "run_id": None,
+            }
+        return _normalize_status_payload(
+            {
+                "runtime_family": "ingester",
+                "ingester": result["ingester"],
+                "provider": result["ingester"],
+                "accepted": True,
+                "reindex_request_token": result["reindex_request_token"],
+                "reindex_request_state": result["reindex_request_state"],
+                "reindex_requested_at": result["reindex_requested_at"],
+                "reindex_requested_by": result.get("reindex_requested_by"),
+                "requested_force": bool(result.get("requested_force", True)),
+                "requested_scope": result.get("requested_scope") or scope,
+                "run_id": result.get("run_id"),
             }
         )
