@@ -219,7 +219,9 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
     @ecosystem_app.command("link")
     def ecosystem_link() -> None:
         """Build cross-repository relationships after indexing."""
-        from platform_context_graph.tools.cross_repo_linker import CrossRepoLinker
+        from platform_context_graph.relationships.cross_repo_linker import (
+            CrossRepoLinker,
+        )
 
         services = _initialize_ecosystem_services(main_module)
         if services is None:

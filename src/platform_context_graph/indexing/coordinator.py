@@ -20,7 +20,7 @@ from platform_context_graph.repository_identity import (
     repository_metadata,
 )
 from platform_context_graph.utils.debug_log import emit_log_call, warning_logger
-from platform_context_graph.tools.graph_builder_indexing import (
+from platform_context_graph.collectors.git.indexing import (
     finalize_index_batch,
     parse_repository_snapshot_async,
     resolve_repository_file_sets,

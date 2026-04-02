@@ -14,7 +14,7 @@ from ..repository_identity import (
     relative_path_from_local,
     repository_metadata,
 )
-from ..tools.dependency_catalog import dependency_ignore_enabled, is_dependency_path
+from ..platform.dependency_catalog import dependency_ignore_enabled, is_dependency_path
 
 __all__ = [
     "WorkspaceContentProvider",

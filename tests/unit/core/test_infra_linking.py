@@ -191,7 +191,7 @@ class TestInfraLinkingDetection:
         base.update(kwargs)
         return base
 
-    @patch("platform_context_graph.tools.cross_repo_linker.CrossRepoLinker")
+    @patch("platform_context_graph.relationships.cross_repo_linker.CrossRepoLinker")
     def test_skips_when_no_infra_nodes(self, mock_linker_cls):
         """Linking is skipped when all_file_data has no infra items."""
         from platform_context_graph.tools.graph_builder import GraphBuilder
@@ -209,7 +209,7 @@ class TestInfraLinkingDetection:
         GraphBuilder._create_all_infra_links(gb, all_file_data)
         mock_linker_cls.assert_not_called()
 
-    @patch("platform_context_graph.tools.cross_repo_linker.CrossRepoLinker")
+    @patch("platform_context_graph.relationships.cross_repo_linker.CrossRepoLinker")
     def test_runs_when_infra_nodes_present(self, mock_linker_cls):
         """Linking runs when all_file_data contains infra items."""
         from platform_context_graph.tools.graph_builder import GraphBuilder

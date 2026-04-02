@@ -19,7 +19,7 @@ from ..query import infra as infra_queries
 from ..query import repositories as repository_queries
 from ..runtime.roles import get_runtime_role, runtime_supports_mutations
 from ..tools.code_finder import CodeFinder
-from ..tools.cross_repo_linker import CrossRepoLinker
+from ..relationships.cross_repo_linker import CrossRepoLinker
 from ..tools.graph_builder import GraphBuilder
 from .content_tools import ContentToolMixin
 from .query_tools import QueryToolMixin

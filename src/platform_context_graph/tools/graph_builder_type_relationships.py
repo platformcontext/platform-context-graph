@@ -41,7 +41,7 @@ def create_all_infra_links(
         return
 
     info_logger_fn("Creating infrastructure relationships...")
-    from .cross_repo_linker import CrossRepoLinker
+    from ..relationships.cross_repo_linker import CrossRepoLinker
 
     linker = CrossRepoLinker(builder.db_manager)
     stats = linker.link_all()

@@ -6,17 +6,24 @@ PlatformContextGraph keeps the importable Python package under `src/platform_con
 
 | Package | Responsibility |
 | :--- | :--- |
+| `app/` | service-role entrypoints and startup wiring |
+| `collectors/` | source-specific collection logic such as Git discovery and parse execution |
 | `api/` | FastAPI app wiring, dependencies, and HTTP routers |
 | `cli/` | Typer entrypoints, command registration, setup flows, and visualization helpers |
 | `content/` | content-store providers, content identity helpers, and workspace fallback |
 | `core/` | database adapters, watcher/runtime primitives, and low-level support code |
 | `domain/` | shared typed entities and response models |
+| `facts/` | Phase 1 placeholder boundary for future fact-first models and storage |
+| `graph/` | canonical graph schema and persistence helpers |
 | `mcp/` | MCP server, transport, tool registry, and handler wiring |
 | `observability/` | OTEL bootstrap, runtime state, metrics, and instrumentation helpers |
+| `parsers/` | parser registry, raw-text parsing, parser capabilities, language parsers, and SCIP |
+| `platform/` | Phase 1 placeholder for shared platform/runtime primitives |
 | `query/` | shared read/query services used by CLI, MCP, and HTTP |
+| `resolution/` | workload/platform materialization and future shared resolution logic |
 | `relationships/` | evidence-backed repo relationship discovery, resolution, persistence, and projection |
 | `runtime/` | repo sync, bootstrap indexing, and long-running runtime helpers |
-| `tools/` | graph builder, parsers, analysis utilities, and language/infrastructure helpers |
+| `tools/` | `GraphBuilder`, compatibility shims, and remaining legacy helpers |
 | `utils/` | reusable helper utilities that do not belong to a higher-level subsystem |
 | `viz/` | visualization-serving support code |
 
@@ -68,6 +75,8 @@ The relationships package owns the post-index repo-correlation pipeline:
 - `relationships/postgres_generation.py`: generation persistence helpers
 - `relationships/postgres_support.py`: relationship table schema bootstrap
 - `relationships/state.py`: shared store lifecycle
+- `relationships/cross_repo_linker.py`: cross-repository infrastructure and deployment linking
+- `relationships/cross_repo_linker_support.py`: repository-reference matching helpers
 
 ## Content Package Layout
 
@@ -80,13 +89,23 @@ The content package owns portable source retrieval and content-store writes:
 - `content/service.py`: provider orchestration and backend preference rules
 - `content/state.py`: shared provider lifecycle
 
-## Parser And Graph-Building Layout
+## Collectors, Parsers, And Graph Layout
 
-The indexing side separates orchestration from specialized helpers:
+The indexing side now separates source collection, parsing, graph persistence,
+and post-index materialization into clearer boundaries:
 
-- `tools/graph_builder.py`: stable public graph-builder facade
-- `tools/graph_builder_*.py`: graph-building helper slices
-- `tools/languages/`: code and infrastructure parser entrypoints
+- `collectors/git/`: repository discovery, `.gitignore`, parse workers, path indexing, finalize helpers, and parse execution
+- `parsers/registry.py`: canonical parser registry and worker-friendly parse entrypoints
+- `parsers/raw_text.py`: raw-text parser support for searchable non-code artifacts
+- `parsers/languages/`: canonical language parser entrypoints that have already moved
+- `parsers/capabilities/`: parser capability catalog, models, validation, and packaged specs
+- `parsers/scip/`: SCIP indexing helpers
+- `graph/schema/`: graph schema creation
+- `graph/persistence/`: graph write helpers, batching, content dual-write, commit orchestration, and worker support
+- `resolution/workloads/` and `resolution/platforms.py`: workload and platform materialization after graph writes
+
+`tools/graph_builder.py` remains the stable public facade while the underlying
+source-of-truth modules move into these canonical packages.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.
@@ -115,6 +134,20 @@ acquisition and indexing grouped under its own subpackage:
 - `runtime/ingester/sync.py`: steady-state sync loop
 - `runtime/ingester/git.py`: git sync helpers
 - `runtime/ingester/support.py`: shared runtime support functions
+
+The ingester increasingly depends on canonical packages rather than `tools/`:
+
+- `collectors/git/` for repo-scoped collection
+- `parsers/` for parser-platform code
+- `graph/` for canonical graph writes
+- `resolution/` for workload/platform materialization
+
+## Platform Package Layout
+
+The `platform/` boundary is still small in Phase 1, but it now owns shared
+cross-cutting primitives that do not belong to one collector or one runtime:
+
+- `platform/dependency_catalog.py`: built-in dependency and cache directory exclusion rules
 
 For infrastructure parsing, YAML-family handlers are separated by domain instead of hiding everything in one monolithic file. For example, Kubernetes manifests, Argo CD, Crossplane, Helm, and Kustomize each have their own focused parser module.
 

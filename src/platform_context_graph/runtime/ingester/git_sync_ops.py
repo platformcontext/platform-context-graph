@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from platform_context_graph.observability import get_observability
-from platform_context_graph.tools.dependency_catalog import (
+from platform_context_graph.platform.dependency_catalog import (
     dependency_ignore_enabled,
     is_dependency_path,
 )
@@ -17,7 +17,7 @@ from platform_context_graph.collectors.git.gitignore import (
     honor_gitignore_enabled,
     is_gitignored_in_repo,
 )
-from platform_context_graph.tools.graph_builder_indexing_discovery import (
+from platform_context_graph.collectors.git.discovery import (
     find_pcgignore,
 )
 from platform_context_graph.utils.debug_log import emit_log_call, warning_logger
