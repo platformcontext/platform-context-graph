@@ -40,6 +40,7 @@ from .batching import (
     should_flush_batches,
     summarize_entity_source_files,
 )
+from .types import BatchCommitResult
 
 __all__ = (
     "_bounded_positive_int_config",
@@ -47,6 +48,7 @@ __all__ = (
     "_relative_path_with_fallback",
     "_run_managed_write",
     "_run_write_query",
+    "BatchCommitResult",
     "build_entity_merge_statement",
     "collect_file_write_data",
     "collect_directory_chain_rows",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +26,7 @@ from ..graph.persistence.batching import (
     merge_batches,
     should_flush_batches,
 )
+from ..graph.persistence.types import BatchCommitResult
 from ..graph.persistence.repositories import (
     _bounded_positive_int_config,
     _merge_directory_chain,
@@ -38,29 +39,6 @@ from ..graph.persistence.repositories import (
     read_repository_metadata,
 )
 from ..graph.persistence.unwind import resolve_max_entity_value_length
-
-
-@dataclass(frozen=True)
-class BatchCommitResult:
-    """Describe files committed successfully with timing and entity counts."""
-
-    committed_file_paths: tuple[str, ...] = ()
-    failed_file_paths: tuple[str, ...] = ()
-    content_write_duration_seconds: float = 0.0
-    graph_write_duration_seconds: float = 0.0
-    entity_totals: dict[str, int] = field(default_factory=dict)
-
-    @property
-    def committed_file_count(self) -> int:
-        """Return the number of files that reached durable graph state."""
-        return len(self.committed_file_paths)
-
-    @property
-    def last_committed_file(self) -> str | None:
-        """Return the final committed file path when any succeeded."""
-        if not self.committed_file_paths:
-            return None
-        return self.committed_file_paths[-1]
 
 
 def _content_dual_write(

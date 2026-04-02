@@ -25,9 +25,9 @@ from ...core.database import Neo4jDriverWrapper
 # Import the module to access its globals
 from ... import content
 from ...tools.graph_builder_persistence import (
-    BatchCommitResult,
     commit_file_batch_to_graph,
 )
+from .types import BatchCommitResult
 
 _logger = logging.getLogger(__name__)
 
