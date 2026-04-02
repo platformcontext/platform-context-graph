@@ -21,7 +21,7 @@ from ..relationships import (
 from ..repository_identity import git_remote_for_path, repository_metadata
 from ..utils.debug_log import debug_log, error_logger, info_logger, warning_logger
 from ..utils.debug_log import debug_logger
-from .graph_builder_indexing import (
+from ..collectors.git.indexing import (
     build_graph_from_path_async as _build_graph_from_path_async,
     collect_supported_files as _collect_supported_files,
     estimate_processing_time as _estimate_processing_time,
