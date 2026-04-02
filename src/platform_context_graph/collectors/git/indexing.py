@@ -13,11 +13,9 @@ from .discovery import (
     merge_import_maps,
     resolve_repository_file_sets,
 )
-from ...tools.graph_builder_indexing_execution import (
-    build_graph_from_path_async,
-    parse_repository_snapshot_async,
-)
+from .execution import build_graph_from_path_async
 from .finalize import finalize_index_batch, finalize_single_repository
+from .parse_execution import parse_repository_snapshot_async
 from .types import RepositoryParseSnapshot
 
 __all__ = [
