@@ -15,10 +15,9 @@ from .discovery import (
 )
 from ...tools.graph_builder_indexing_execution import (
     build_graph_from_path_async,
-    finalize_index_batch,
-    finalize_single_repository,
     parse_repository_snapshot_async,
 )
+from .finalize import finalize_index_batch, finalize_single_repository
 from ...tools.graph_builder_indexing_types import RepositoryParseSnapshot
 
 __all__ = [
