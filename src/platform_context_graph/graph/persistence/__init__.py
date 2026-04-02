@@ -12,6 +12,7 @@ from .directories import (
 )
 from .content_store import content_dual_write, content_dual_write_batch
 from .entities import build_entity_merge_statement
+from .files import add_file_to_graph, write_one_file_graph
 from .metrics import accumulate_entity_totals
 from .repositories import (
     _bounded_positive_int_config,
@@ -51,6 +52,7 @@ __all__ = (
     "_relative_path_with_fallback",
     "_run_managed_write",
     "_run_write_query",
+    "add_file_to_graph",
     "BatchCommitResult",
     "build_entity_merge_statement",
     "begin_transaction",
@@ -79,4 +81,5 @@ __all__ = (
     "update_file_in_graph",
     "validate_cypher_label",
     "validate_cypher_property_keys",
+    "write_one_file_graph",
 )

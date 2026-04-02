@@ -28,6 +28,10 @@ from ..graph.persistence.content_store import (
     content_dual_write as _canonical_content_dual_write,
     content_dual_write_batch as _canonical_content_dual_write_batch,
 )
+from ..graph.persistence.files import (
+    add_file_to_graph as _canonical_add_file_to_graph,
+    write_one_file_graph as _canonical_write_one_file_graph,
+)
 from ..graph.persistence.metrics import accumulate_entity_totals
 from ..graph.persistence.types import BatchCommitResult
 from ..graph.persistence.repositories import (
@@ -80,71 +84,6 @@ def _content_dual_write_batch(
         prepare_entries=prepare_content_entries,
     )
 
-def _write_one_file_graph(
-    tx: Any,
-    file_data: dict[str, Any],
-    *,
-    repo_path_obj: Path,
-    max_entity_value_length: int,
-    warning_logger_fn: Any,
-    dir_rows_accumulator: list[dict[str, str]] | None = None,
-    containment_rows_accumulator: list[dict[str, str]] | None = None,
-) -> tuple[str, dict[str, Any]]:
-    """Write one file node and return its prepared batch payload.
-
-    When dir_rows_accumulator and containment_rows_accumulator are provided,
-    directory chain data is collected into them for batched UNWIND flush
-    instead of executing per-file queries.
-    """
-
-    file_path_str = str(Path(file_data["path"]).resolve())
-    file_path_obj = Path(file_path_str)
-    file_name = Path(file_path_str).name
-    is_dependency = file_data.get("is_dependency", False)
-    relative_path = _relative_path_with_fallback(
-        file_path_obj,
-        repo_path_obj,
-        warning_logger_fn=warning_logger_fn,
-        operation="batch graph persistence",
-    ).as_posix()
-
-    _run_write_query(
-        tx,
-        """
-        MERGE (f:File {path: $file_path})
-        SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
-        """,
-        file_path=file_path_str,
-        name=file_name,
-        relative_path=relative_path,
-        is_dependency=is_dependency,
-    )
-
-    if dir_rows_accumulator is not None and containment_rows_accumulator is not None:
-        dir_rows, cont_rows = collect_directory_chain_rows(
-            file_path_obj,
-            repo_path_obj,
-            file_path_str,
-            warning_logger_fn=warning_logger_fn,
-        )
-        dir_rows_accumulator.extend(dir_rows)
-        containment_rows_accumulator.extend(cont_rows)
-    else:
-        _merge_directory_chain(
-            tx,
-            file_path_obj,
-            repo_path_obj,
-            file_path_str,
-            warning_logger_fn=warning_logger_fn,
-        )
-
-    return file_path_str, collect_file_write_data(
-        file_data,
-        file_path_str,
-        max_entity_value_length=max_entity_value_length,
-    )
-
-
 def add_file_to_graph(
     builder: Any,
     file_data: dict[str, Any],
@@ -155,98 +94,43 @@ def add_file_to_graph(
     info_logger_fn: Any,
     warning_logger_fn: Any,
 ) -> None:
-    """Persist a parsed file, its contained nodes, and immediate edges.
+    """Compatibility wrapper for the canonical file-persistence helper."""
 
-    Uses a single explicit Neo4j transaction for all write operations and
-    UNWIND queries for bulk entity/import operations.
-
-    Args:
-        builder: ``GraphBuilder`` facade instance.
-        file_data: Parsed file payload emitted by the language parser.
-        repo_name: Preserved compatibility argument from the public method signature.
-        imports_map: Preserved compatibility argument for public method parity.
-        debug_log_fn: Debug logger callable.
-        info_logger_fn: Info logger callable.
-        warning_logger_fn: Warning logger callable.
-    """
-    _ = (repo_name, imports_map, info_logger_fn)
-    calls_count = len(file_data.get("function_calls", []))
-    emit_log_call(
-        debug_log_fn,
-        f"Executing add_file_to_graph for {file_data.get('path', 'unknown')} - Calls found: {calls_count}",
-        event_name="graph.file.write.started",
-        extra_keys={
-            "file_path": str(file_data.get("path", "unknown")),
-            "function_call_count": calls_count,
-        },
+    _canonical_add_file_to_graph(
+        builder,
+        file_data,
+        repo_name,
+        imports_map,
+        debug_log_fn=debug_log_fn,
+        info_logger_fn=info_logger_fn,
+        warning_logger_fn=warning_logger_fn,
+        content_dual_write_fn=_content_dual_write,
+        begin_transaction_fn=_begin_transaction,
     )
 
-    file_path_str = str(Path(file_data["path"]).resolve())
-    file_path_obj = Path(file_path_str)
-    file_name = Path(file_path_str).name
-    is_dependency = file_data.get("is_dependency", False)
-    repo_path_obj = Path(file_data["repo_path"]).resolve()
 
-    with builder.driver.session() as session:
-        repository = read_repository_metadata(session, repo_path_obj)
+def _write_one_file_graph(
+    tx: Any,
+    file_data: dict[str, Any],
+    *,
+    repo_path_obj: Path,
+    max_entity_value_length: int,
+    warning_logger_fn: Any,
+    dir_rows_accumulator: list[dict[str, str]] | None = None,
+    containment_rows_accumulator: list[dict[str, str]] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Compatibility wrapper for the canonical per-file graph writer."""
 
-        relative_path = _relative_path_with_fallback(
-            file_path_obj,
-            repo_path_obj,
-            warning_logger_fn=warning_logger_fn,
-            operation="single-file graph persistence",
-        ).as_posix()
-
-        # Postgres content dual-write is outside the Neo4j transaction.
-        _content_dual_write(file_data, file_name, repository, warning_logger_fn)
-        max_entity_value_length = resolve_max_entity_value_length(
-            get_config_value("PCG_MAX_ENTITY_VALUE_LENGTH")
-        )
-
-        # All Neo4j writes go inside a single explicit transaction when
-        # the backend supports it; otherwise fall back to auto-commit.
-        tx, is_explicit = _begin_transaction(session)
-        try:
-            with get_observability().start_span(
-                "pcg.graph.file_commit",
-                attributes={
-                    "pcg.graph.file_path": file_path_str,
-                    "pcg.graph.repo_path": str(repo_path_obj),
-                },
-            ):
-                _run_write_query(
-                    tx,
-                    """
-                    MERGE (f:File {path: $file_path})
-                    SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
-                    """,
-                    file_path=file_path_str,
-                    name=file_name,
-                    relative_path=relative_path,
-                    is_dependency=is_dependency,
-                )
-
-                _merge_directory_chain(
-                    tx,
-                    file_path_obj,
-                    repo_path_obj,
-                    file_path_str,
-                    warning_logger_fn=warning_logger_fn,
-                )
-
-                write_data = collect_file_write_data(
-                    file_data,
-                    file_path_str,
-                    max_entity_value_length=max_entity_value_length,
-                )
-                flush_write_batches(tx, write_data)
-
-                if is_explicit:
-                    tx.commit()
-        except Exception:
-            if is_explicit:
-                tx.rollback()
-            raise
+    return _canonical_write_one_file_graph(
+        tx,
+        file_data,
+        repo_path_obj=repo_path_obj,
+        max_entity_value_length=max_entity_value_length,
+        warning_logger_fn=warning_logger_fn,
+        collect_file_write_data_fn=collect_file_write_data,
+        dir_rows_accumulator=dir_rows_accumulator,
+        containment_rows_accumulator=containment_rows_accumulator,
+    )
 
 
 def commit_file_batch_to_graph(
