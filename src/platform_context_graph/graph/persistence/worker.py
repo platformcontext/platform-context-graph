@@ -24,6 +24,7 @@ from ...core.database import Neo4jDriverWrapper
 
 # Import the module to access its globals
 from ... import content
+from .commit import commit_file_batch_to_graph
 from .types import BatchCommitResult
 
 _logger = logging.getLogger(__name__)
@@ -40,16 +41,6 @@ __all__ = [
 _cached_driver: neo4j.Driver | None = None
 _cached_driver_wrapper: Neo4jDriverWrapper | None = None
 _cached_driver_key: tuple[str, str, str, str | None] | None = None
-
-
-def commit_file_batch_to_graph(*args, **kwargs):
-    """Load the canonical commit helper lazily to avoid import-time cycles."""
-
-    from ...tools.graph_builder_persistence import (
-        commit_file_batch_to_graph as _commit_file_batch_to_graph,
-    )
-
-    return _commit_file_batch_to_graph(*args, **kwargs)
 
 
 def _get_or_create_driver(

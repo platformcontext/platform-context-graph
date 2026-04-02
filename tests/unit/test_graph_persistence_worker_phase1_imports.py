@@ -4,7 +4,13 @@ from platform_context_graph.graph.persistence.worker import (
     commit_batch_in_process as new_commit_batch_in_process,
 )
 from platform_context_graph.graph.persistence.worker import (
+    commit_file_batch_to_graph as worker_commit_file_batch_to_graph,
+)
+from platform_context_graph.graph.persistence.worker import (
     get_commit_worker_connection_params as new_get_commit_worker_connection_params,
+)
+from platform_context_graph.graph.persistence.commit import (
+    commit_file_batch_to_graph as canonical_commit_file_batch_to_graph,
 )
 from platform_context_graph.tools.graph_builder_persistence_worker import (
     commit_batch_in_process as legacy_commit_batch_in_process,
@@ -28,3 +34,9 @@ def test_legacy_graph_persistence_worker_imports_reexport_new_api() -> None:
         legacy_get_commit_worker_connection_params
         is new_get_commit_worker_connection_params
     )
+
+
+def test_worker_commit_alias_reuses_canonical_commit_module() -> None:
+    """Worker should delegate through the canonical graph commit helper."""
+
+    assert worker_commit_file_batch_to_graph is canonical_commit_file_batch_to_graph
