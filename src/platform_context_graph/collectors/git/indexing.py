@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ...tools.graph_builder_indexing_discovery import (
+from .discovery import (
     apply_ignore_spec,
     collect_supported_files,
     discover_git_repositories,
