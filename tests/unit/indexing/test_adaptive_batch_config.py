@@ -26,23 +26,23 @@ class TestAdaptiveBatchConfig:
         config = batch_config_for_class("medium")
         assert config.file_batch_size == 50
 
-    def test_large_repo_gets_reduced_file_batch(self):
-        """Large repos should get a smaller file batch size."""
+    def test_large_repo_gets_default_or_equal_file_batch(self):
+        """Large repos use medium-equivalent file batch to avoid batch overhead."""
         from platform_context_graph.indexing.adaptive_batch_config import (
             batch_config_for_class,
         )
 
         config = batch_config_for_class("large")
-        assert config.file_batch_size < 50
+        assert config.file_batch_size <= 50
 
-    def test_xlarge_repo_gets_aggressive_file_batch(self):
-        """XLarge repos should get an aggressively reduced file batch size."""
+    def test_xlarge_repo_gets_reduced_file_batch(self):
+        """XLarge repos should get a reduced file batch size."""
         from platform_context_graph.indexing.adaptive_batch_config import (
             batch_config_for_class,
         )
 
         config = batch_config_for_class("xlarge")
-        assert config.file_batch_size < 30
+        assert config.file_batch_size < 50
 
     def test_dangerous_repo_gets_minimum_file_batch(self):
         """Dangerous repos should get the smallest safe file batch size."""
@@ -234,9 +234,9 @@ class TestBatchConfigDataclass:
         classes = ["small", "medium", "large", "xlarge", "dangerous"]
         sizes = [batch_config_for_class(c).file_batch_size for c in classes]
         for i in range(len(sizes) - 1):
-            assert sizes[i] >= sizes[i + 1], (
-                f"{classes[i]}={sizes[i]} should be >= {classes[i+1]}={sizes[i+1]}"
-            )
+            assert (
+                sizes[i] >= sizes[i + 1]
+            ), f"{classes[i]}={sizes[i]} should be >= {classes[i+1]}={sizes[i+1]}"
 
     def test_monotonic_decrease_flush_threshold(self):
         """Flush threshold should decrease monotonically from small to dangerous."""
@@ -247,9 +247,9 @@ class TestBatchConfigDataclass:
         classes = ["small", "medium", "large", "xlarge", "dangerous"]
         sizes = [batch_config_for_class(c).flush_row_threshold for c in classes]
         for i in range(len(sizes) - 1):
-            assert sizes[i] >= sizes[i + 1], (
-                f"{classes[i]}={sizes[i]} should be >= {classes[i+1]}={sizes[i+1]}"
-            )
+            assert (
+                sizes[i] >= sizes[i + 1]
+            ), f"{classes[i]}={sizes[i]} should be >= {classes[i+1]}={sizes[i+1]}"
 
 
 class TestAdaptiveBatchEnabled:
@@ -288,3 +288,89 @@ class TestAdaptiveBatchEnabled:
         config = resolve_batch_config(repo_class=None)
         assert config.file_batch_size == 50
         assert config.repo_class == "medium"
+
+
+class TestLargeXlargeBatchTuning:
+    """Tests for tuned batch config values for large/xlarge repos."""
+
+    def test_large_tx_file_limit_tuned(self):
+        """Large repos should use tx_file_limit=5 after tuning."""
+        from platform_context_graph.indexing.adaptive_batch_config import (
+            batch_config_for_class,
+        )
+
+        config = batch_config_for_class("large")
+        assert config.tx_file_limit == 5
+
+    def test_xlarge_tx_file_limit_tuned(self):
+        """XLarge repos should use tx_file_limit=4 after tuning."""
+        from platform_context_graph.indexing.adaptive_batch_config import (
+            batch_config_for_class,
+        )
+
+        config = batch_config_for_class("xlarge")
+        assert config.tx_file_limit == 4
+
+    def test_large_flush_row_threshold_tuned(self):
+        """Large repos should use flush_row_threshold=1500 after tuning."""
+        from platform_context_graph.indexing.adaptive_batch_config import (
+            batch_config_for_class,
+        )
+
+        config = batch_config_for_class("large")
+        assert config.flush_row_threshold == 1500
+
+    def test_xlarge_flush_row_threshold_tuned(self):
+        """XLarge repos should use flush_row_threshold=750 after tuning."""
+        from platform_context_graph.indexing.adaptive_batch_config import (
+            batch_config_for_class,
+        )
+
+        config = batch_config_for_class("xlarge")
+        assert config.flush_row_threshold == 750
+
+    def test_large_entity_batch_size_tuned(self):
+        """Large repos should use entity_batch_size=7500 after tuning."""
+        from platform_context_graph.indexing.adaptive_batch_config import (
+            batch_config_for_class,
+        )
+
+        config = batch_config_for_class("large")
+        assert config.entity_batch_size == 7_500
+
+    def test_xlarge_entity_batch_size_tuned(self):
+        """XLarge repos should use entity_batch_size=3500 after tuning."""
+        from platform_context_graph.indexing.adaptive_batch_config import (
+            batch_config_for_class,
+        )
+
+        config = batch_config_for_class("xlarge")
+        assert config.entity_batch_size == 3_500
+
+    def test_large_content_upsert_batch_size_tuned(self):
+        """Large repos should use content_upsert_batch_size=350 after tuning."""
+        from platform_context_graph.indexing.adaptive_batch_config import (
+            batch_config_for_class,
+        )
+
+        config = batch_config_for_class("large")
+        assert config.content_upsert_batch_size == 350
+
+    def test_xlarge_content_upsert_batch_size_tuned(self):
+        """XLarge repos should use content_upsert_batch_size=150 after tuning."""
+        from platform_context_graph.indexing.adaptive_batch_config import (
+            batch_config_for_class,
+        )
+
+        config = batch_config_for_class("xlarge")
+        assert config.content_upsert_batch_size == 150
+
+    def test_tx_file_limit_monotonic_large_ge_xlarge(self):
+        """tx_file_limit must be monotonically decreasing: large >= xlarge."""
+        from platform_context_graph.indexing.adaptive_batch_config import (
+            batch_config_for_class,
+        )
+
+        large = batch_config_for_class("large")
+        xlarge = batch_config_for_class("xlarge")
+        assert large.tx_file_limit >= xlarge.tx_file_limit

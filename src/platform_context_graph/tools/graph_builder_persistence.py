@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
+
+_GIL_YIELD_ENABLED: bool = (
+    os.environ.get("PCG_COMMIT_GIL_YIELD_ENABLED", "true").lower() != "false"
+)
 
 from ..cli.config_manager import get_config_value
 from ..content.ingest import prepare_content_entries
@@ -480,6 +485,8 @@ def commit_file_batch_to_graph(
                         _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                     if is_explicit:
                         tx.commit()
+                        if _GIL_YIELD_ENABLED:
+                            time.sleep(0)
                     graph_write_total += time.perf_counter() - _t0
             except Exception as exc:
                 if is_explicit:
@@ -524,6 +531,8 @@ def commit_file_batch_to_graph(
                         _accumulate_entity_totals(repo_entity_totals, flush_metrics)
                         if is_explicit:
                             tx.commit()
+                            if _GIL_YIELD_ENABLED:
+                                time.sleep(0)
                         committed_files += 1
                         committed_file_paths.append(file_path_str)
                     except Exception as file_exc:

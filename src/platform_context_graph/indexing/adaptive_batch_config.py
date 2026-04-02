@@ -57,19 +57,19 @@ _CLASS_CONFIGS: dict[str, AdaptiveBatchConfig] = {
     ),
     "large": AdaptiveBatchConfig(
         repo_class="large",
-        file_batch_size=25,
-        flush_row_threshold=1000,
-        entity_batch_size=5_000,
-        tx_file_limit=3,
-        content_upsert_batch_size=250,
+        file_batch_size=50,
+        flush_row_threshold=1500,
+        entity_batch_size=7_500,
+        tx_file_limit=5,
+        content_upsert_batch_size=350,
     ),
     "xlarge": AdaptiveBatchConfig(
         repo_class="xlarge",
-        file_batch_size=15,
-        flush_row_threshold=500,
-        entity_batch_size=2_500,
-        tx_file_limit=2,
-        content_upsert_batch_size=100,
+        file_batch_size=35,
+        flush_row_threshold=750,
+        entity_batch_size=3_500,
+        tx_file_limit=4,
+        content_upsert_batch_size=150,
     ),
     "dangerous": AdaptiveBatchConfig(
         repo_class="dangerous",
@@ -115,8 +115,7 @@ def resolve_batch_config(
         An ``AdaptiveBatchConfig`` instance.
     """
     enabled = (
-        os.environ.get("PCG_ADAPTIVE_GRAPH_BATCHING_ENABLED", "false").lower()
-        == "true"
+        os.environ.get("PCG_ADAPTIVE_GRAPH_BATCHING_ENABLED", "false").lower() == "true"
     )
     if not enabled:
         return _CLASS_CONFIGS[_DEFAULT_CLASS]

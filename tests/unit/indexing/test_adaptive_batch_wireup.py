@@ -20,8 +20,8 @@ class TestCommitSnapshotUsesAdaptiveConfig:
 
         monkeypatch.setenv("PCG_ADAPTIVE_GRAPH_BATCHING_ENABLED", "true")
         xlarge_config = batch_config_for_class("xlarge")
-        # xlarge should use 15, well below the default 50
-        assert xlarge_config.file_batch_size == 15
+        # xlarge should use 35, below the default 50 but not aggressively small
+        assert xlarge_config.file_batch_size == 35
 
     def test_commit_uses_default_when_adaptive_disabled(self, monkeypatch):
         """When adaptive batching is disabled, should use medium defaults."""

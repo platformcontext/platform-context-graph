@@ -9,6 +9,7 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_ROOT = REPO_ROOT / "src" / "platform_context_graph"
@@ -1437,6 +1438,7 @@ def test_pipeline_concurrent_commit_workers_complete_successfully(
     """With PCG_COMMIT_WORKERS=2, multiple repos commit and the pipeline completes."""
 
     monkeypatch.setenv("PCG_COMMIT_WORKERS", "2")
+    monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
 
     repos = [tmp_path / f"repo-{i}" for i in range(3)]
     for repo in repos:
@@ -1444,7 +1446,6 @@ def test_pipeline_concurrent_commit_workers_complete_successfully(
         (repo / "main.py").write_text("print('ok')\n", encoding="utf-8")
 
     repo_file_sets = {repo: [repo / "main.py"] for repo in repos}
-    committed_repos: list[str] = []
 
     async def parse_snapshot(_builder, repo_path, repo_files, **_kw):
         return RepositorySnapshot(
@@ -1454,22 +1455,22 @@ def test_pipeline_concurrent_commit_workers_complete_successfully(
             file_data=[],
         )
 
-    def track_commit(_builder, snapshot, **_kw) -> None:
-        committed_repos.append(snapshot.repo_path)
-
-    committed_repo_paths, merged, run_state, _ = asyncio.run(
-        _run_pipeline(
-            repos,
-            repo_file_sets,
-            parse_snapshot,
-            commit_fn=track_commit,
-            parse_worker_count=4,
+    # CW>1 uses commit_repository_snapshot_async with ProcessPoolExecutor.
+    # Patch _sync_setup_repo since the test builder is a SimpleNamespace
+    # that lacks the db_manager/driver attrs the real setup needs.
+    with patch(
+        "platform_context_graph.indexing.coordinator_async_commit._sync_setup_repo"
+    ):
+        committed_repo_paths, merged, run_state, _ = asyncio.run(
+            _run_pipeline(
+                repos,
+                repo_file_sets,
+                parse_snapshot,
+                parse_worker_count=4,
+            )
         )
-    )
 
     assert len(committed_repo_paths) == 3
-    assert len(committed_repos) == 3
-    assert set(committed_repos) == {str(r.resolve()) for r in repos}
     for repo in repos:
         assert run_state.repositories[str(repo.resolve())].status == "completed"
     # Verify imports from all repos were merged
@@ -1482,6 +1483,7 @@ def test_pipeline_concurrent_commit_workers_send_correct_sentinel_count(
     """With PCG_COMMIT_WORKERS=2, two sentinels are sent so all consumers exit."""
 
     monkeypatch.setenv("PCG_COMMIT_WORKERS", "2")
+    monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
 
     # Even with zero repos to parse, the pipeline must send N sentinels and
     # await N commit tasks without deadlocking.
@@ -1504,6 +1506,7 @@ def test_pipeline_concurrent_commit_workers_overlap(
     """With PCG_COMMIT_WORKERS=2, two repos should commit concurrently."""
 
     monkeypatch.setenv("PCG_COMMIT_WORKERS", "2")
+    monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
 
     repo_a = tmp_path / "repo-a"
     repo_b = tmp_path / "repo-b"
@@ -1518,8 +1521,6 @@ def test_pipeline_concurrent_commit_workers_overlap(
         repo_b: [repo_b / "main.py"],
     }
 
-    commit_count = 0
-
     async def parse_snapshot(_builder, repo_path, repo_files, **_kw):
         return RepositorySnapshot(
             repo_path=str(repo_path.resolve()),
@@ -1528,23 +1529,21 @@ def test_pipeline_concurrent_commit_workers_overlap(
             file_data=[],
         )
 
-    def counting_commit(_builder, _snapshot, **_kw) -> None:
-        """Count commits to verify all repos are processed."""
-        nonlocal commit_count
-        commit_count += 1
-
-    committed_repo_paths, _, run_state, _ = asyncio.run(
-        _run_pipeline(
-            repos,
-            repo_file_sets,
-            parse_snapshot,
-            commit_fn=counting_commit,
-            parse_worker_count=4,
+    # CW>1 uses commit_repository_snapshot_async with ProcessPoolExecutor.
+    # Patch _sync_setup_repo since the test builder lacks driver attrs.
+    with patch(
+        "platform_context_graph.indexing.coordinator_async_commit._sync_setup_repo"
+    ):
+        committed_repo_paths, _, run_state, _ = asyncio.run(
+            _run_pipeline(
+                repos,
+                repo_file_sets,
+                parse_snapshot,
+                parse_worker_count=4,
+            )
         )
-    )
 
     # Both repos should complete; the pipeline should not deadlock with 2 workers.
     assert len(committed_repo_paths) == 2
-    assert commit_count == 2
     assert run_state.repositories[str(repo_a.resolve())].status == "completed"
     assert run_state.repositories[str(repo_b.resolve())].status == "completed"
