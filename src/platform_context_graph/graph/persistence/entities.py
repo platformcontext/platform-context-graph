@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...tools.graph_builder_persistence_unwind import (
+from .unwind import (
     validate_cypher_label,
     validate_cypher_property_keys,
 )

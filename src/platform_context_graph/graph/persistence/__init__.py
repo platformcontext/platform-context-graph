@@ -24,6 +24,11 @@ from .worker import (
     commit_batch_in_process,
     get_commit_worker_connection_params,
 )
+from .unwind import (
+    run_entity_unwind,
+    validate_cypher_label,
+    validate_cypher_property_keys,
+)
 
 __all__ = (
     "_bounded_positive_int_config",
@@ -39,7 +44,10 @@ __all__ = (
     "merge_directory_chain",
     "add_repository_to_graph",
     "commit_batch_in_process",
+    "run_entity_unwind",
     "read_repository_metadata",
     "get_commit_worker_connection_params",
     "update_file_in_graph",
+    "validate_cypher_label",
+    "validate_cypher_property_keys",
 )
