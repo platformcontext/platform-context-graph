@@ -1,15 +1,3 @@
-"""Compatibility facade for the handwritten JavaScript parser."""
+"""Compatibility exports for the relocated JavaScript parser package."""
 
-from .javascript_support import (  # noqa: F401
-    JS_QUERIES,
-    JavascriptTreeSitterParser,
-    parse_javascript_file,
-    pre_scan_javascript,
-)
-
-__all__ = [
-    "JS_QUERIES",
-    "JavascriptTreeSitterParser",
-    "parse_javascript_file",
-    "pre_scan_javascript",
-]
+from platform_context_graph.parsers.languages.javascript import *  # noqa: F403

@@ -2,7 +2,7 @@ language: javascript
 title: JavaScript Parser
 family: language
 parser: JavascriptTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/javascript.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/javascript.py
 doc_path: docs/docs/languages/javascript.md
 fixture_repo: tests/fixtures/ecosystems/javascript_comprehensive/
 unit_test_file: tests/unit/parsers/test_javascript_parser.py
