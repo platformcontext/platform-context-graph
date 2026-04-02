@@ -18,13 +18,13 @@ If you want the shortest path first, start with [CLI K.I.S.S.](cli-kiss.md).
 - Local mode: commands run against your local database, local workspace, and local files.
 - Remote mode: selected commands call a deployed PCG HTTP API.
 
-Remote mode is explicit in v1. A command only runs remotely when it supports remote execution and you pass `--service-url` or `--profile`.
+Remote mode is explicit. A command only runs remotely when it supports remote execution and you pass `--service-url` or `--profile`.
 
 Remote mode facts for this release:
 
 - It uses the HTTP API, not MCP.
 - It is available for a limited set of query, status, bundle-upload, and admin commands.
-- Remote `find` and `analyze` commands do not support `--visual` in v1.
+- Remote `find` and `analyze` commands do not support `--visual`.
 - `pcg admin reindex` queues a reindex request for the ingester to execute. The API process does not do the full reindex work inline.
 
 Hidden internal runtime commands exist for service containers, but this page documents the public CLI surface.
@@ -175,7 +175,7 @@ These are public aliases:
 
 ### Commands that support remote execution
 
-In this branch, remote mode is available for:
+Remote mode is available for:
 
 - `pcg index-status`
 - `pcg workspace status`

@@ -7,7 +7,7 @@ If you only remember five things about `pcg`, make it these:
 1. `pcg` has a local mode and a remote mode.
 2. Local mode works on your machine and your local graph.
 3. Remote mode is explicit and uses the HTTP API.
-4. Not every command supports remote mode in v1.
+4. Not every command supports remote mode yet.
 5. `pcg help` shows the full public command tree.
 
 ## Quick local workflow
@@ -61,7 +61,7 @@ pcg admin reindex --profile qa
 
 ## What works remotely today
 
-These commands support remote mode in this branch:
+These commands support remote mode:
 
 - `pcg index-status`
 - `pcg workspace status`
@@ -80,7 +80,7 @@ These commands support remote mode in this branch:
 
 ## What stays local
 
-These are still local-only in v1:
+These are still local-only:
 
 - `pcg index`
 - `pcg watch`
