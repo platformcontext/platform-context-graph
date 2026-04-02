@@ -184,7 +184,7 @@ def register_bundle_registry_commands(main_module: Any, app: typer.Typer) -> Non
         bundle_file: str = typer.Argument(
             ..., help="Path to the .pcg bundle file to upload"
         ),
-        service_url: str = typer.Option(
+        service_url: str | None = typer.Option(
             None,
             "--service-url",
             help="Base URL of the PlatformContextGraph HTTP service",
