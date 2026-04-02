@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/platformcontext/platform-context-graph
-  tag: "v0.0.40"
+  tag: "v0.0.41"
   pullPolicy: IfNotPresent
 
 serviceAccount:
