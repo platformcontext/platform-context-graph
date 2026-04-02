@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..core.database import DatabaseManager
-from ..tools.code_finder_analysis import CodeFinderAnalysisMixin
+from .code_finder_analysis import CodeFinderAnalysisMixin
 from .code_finder_dispatch import CodeFinderDispatchMixin
 from .code_finder_relationships import CodeFinderRelationshipsMixin
 from .code_finder_search import CodeFinderSearchMixin

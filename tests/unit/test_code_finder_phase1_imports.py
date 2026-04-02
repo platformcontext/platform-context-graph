@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from platform_context_graph.query.code_finder import CodeFinder as canonical_code_finder
+from platform_context_graph.query.code_finder_analysis import (
+    CodeFinderAnalysisMixin as canonical_analysis_mixin,
+)
 from platform_context_graph.query.code_finder_dispatch import (
     CodeFinderDispatchMixin as canonical_dispatch_mixin,
 )
@@ -14,6 +17,9 @@ from platform_context_graph.query.code_finder_search import (
 )
 from platform_context_graph.query import code_support
 from platform_context_graph.tools.code_finder import CodeFinder as legacy_code_finder
+from platform_context_graph.tools.code_finder_analysis import (
+    CodeFinderAnalysisMixin as legacy_analysis_mixin,
+)
 from platform_context_graph.tools.code_finder_dispatch import (
     CodeFinderDispatchMixin as legacy_dispatch_mixin,
 )
@@ -29,6 +35,7 @@ def test_legacy_code_finder_modules_point_at_query_canonical_modules() -> None:
     """Legacy CodeFinder modules should re-export canonical query modules."""
 
     assert legacy_code_finder is canonical_code_finder
+    assert legacy_analysis_mixin is canonical_analysis_mixin
     assert legacy_dispatch_mixin is canonical_dispatch_mixin
     assert legacy_relationships_mixin is canonical_relationships_mixin
     assert legacy_search_mixin is canonical_search_mixin
