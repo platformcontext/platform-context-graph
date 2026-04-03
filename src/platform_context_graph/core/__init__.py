@@ -205,7 +205,7 @@ def get_database_manager() -> (
     raise ValueError(error_msg)
 
 
-# For backward compatibility, export managers
+# Export managers at the package root for callers that need direct imports.
 from .database import DatabaseManager
 from .database_falkordb import FalkorDBManager
 from .database_falkordb_remote import FalkorDBRemoteManager

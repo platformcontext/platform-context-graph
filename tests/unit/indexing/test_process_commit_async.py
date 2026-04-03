@@ -136,7 +136,7 @@ async def test_async_commit_falls_back_to_thread_pool_without_process_executor(
     mock_builder,
     mock_snapshot,
 ):
-    """Without process_executor, uses ThreadPoolExecutor (backward compat)."""
+    """Without process_executor, uses the threaded execution path."""
     # Setup mocks
     mock_git_remote.return_value = "https://github.com/test/repo.git"
     mock_repo_metadata.return_value = {"id": "test-repo-id", "name": "test-repo"}

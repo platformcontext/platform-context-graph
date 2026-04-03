@@ -143,8 +143,8 @@ async def commit_repository_snapshot_async(
 
     Each file-batch commit runs synchronously on a dedicated executor.
     When ``process_executor`` is provided, batches dispatch to child
-    processes for true parallelism. Otherwise, uses ThreadPoolExecutor
-    for backward compatibility.
+    processes for true parallelism. Otherwise, batches run on a
+    ThreadPoolExecutor in the current process.
 
     Args:
         builder: GraphBuilder instance.

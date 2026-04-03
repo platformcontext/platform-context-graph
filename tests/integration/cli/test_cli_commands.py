@@ -264,13 +264,36 @@ class TestCLICommands:
     @patch(
         "platform_context_graph.resolution.orchestration.start_resolution_engine"
     )
+    @patch("platform_context_graph.facts.state.get_fact_work_queue")
+    @patch("platform_context_graph.facts.state.get_fact_store")
+    @patch("platform_context_graph.core.get_database_manager")
+    @patch("platform_context_graph.tools.graph_builder.GraphBuilder")
+    @patch("platform_context_graph.core.jobs.JobManager")
     def test_internal_resolution_engine_command_uses_python_runtime(
-        self, mock_start_resolution_engine
+        self,
+        mock_job_manager,
+        mock_graph_builder,
+        mock_get_database_manager,
+        mock_get_fact_store,
+        mock_get_fact_work_queue,
+        mock_start_resolution_engine,
     ):
+        mock_get_fact_work_queue.return_value = object()
+        mock_get_fact_store.return_value = object()
+        mock_get_database_manager.return_value = object()
+        mock_job_manager.return_value = object()
+        mock_graph_builder.return_value = object()
+
         result = runner.invoke(app, ["internal", "resolution-engine"])
 
         assert result.exit_code == 0
-        mock_start_resolution_engine.assert_called_once_with()
+        mock_start_resolution_engine.assert_called_once()
+        _, kwargs = mock_start_resolution_engine.call_args
+        assert kwargs["queue"] is mock_get_fact_work_queue.return_value
+        assert kwargs["projector"].keywords == {
+            "builder": mock_graph_builder.return_value,
+            "fact_store": mock_get_fact_store.return_value,
+        }
 
     @patch("platform_context_graph.cli.main.workspace_plan_helper")
     def test_workspace_plan_command_uses_workspace_helper(

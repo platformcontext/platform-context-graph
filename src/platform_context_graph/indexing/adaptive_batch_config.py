@@ -37,7 +37,7 @@ class AdaptiveBatchConfig:
 
 
 # Sizing tables: monotonically decreasing from small → dangerous.
-# medium = current static defaults for backwards compatibility.
+# medium = baseline static defaults.
 _CLASS_CONFIGS: dict[str, AdaptiveBatchConfig] = {
     "small": AdaptiveBatchConfig(
         repo_class="small",

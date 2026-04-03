@@ -222,7 +222,7 @@ def get_tree_sitter_manager() -> TreeSitterManager:
         return _manager_instance
 
 
-# Convenience functions for backward compatibility
+# Convenience module-level wrappers
 def get_language_safe(lang: str) -> Language:
     """Get a cached Language object. Thread-safe."""
     return get_tree_sitter_manager().get_language_safe(lang)
@@ -235,10 +235,10 @@ def create_parser(lang: str) -> Parser:
 
 def execute_query(language: Language, query_string: str, node):
     """
-    Execute a tree-sitter query and return captures in backward-compatible format.
+    Execute a tree-sitter query and return capture tuples.
 
-    This function provides compatibility with the old tree-sitter 0.20.x API where
-    you could call query.captures(node). The new 0.25+ API uses QueryCursor.
+    This helper normalizes the current tree-sitter query cursor API into the
+    capture tuple format used throughout the parser layer.
 
     Args:
         language: Tree-sitter Language object
@@ -246,7 +246,7 @@ def execute_query(language: Language, query_string: str, node):
         node: Tree-sitter Node to query
 
     Returns:
-        List of (node, capture_name) tuples, compatible with old API
+        List of ``(node, capture_name)`` tuples.
 
     Example:
         >>> from tree_sitter_language_pack import get_language

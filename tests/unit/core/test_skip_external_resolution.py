@@ -1,11 +1,10 @@
-"""
-Unit tests for SKIP_EXTERNAL_RESOLUTION configuration option.
-Tests config_manager.py and graph_builder.py integration.
-"""
+"""Unit tests for SKIP_EXTERNAL_RESOLUTION configuration option."""
 
 import os
-import pytest
+from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 from platform_context_graph.cli.config_manager import (
     get_config_value,
     set_config_value,
@@ -14,6 +13,34 @@ from platform_context_graph.cli.config_manager import (
     CONFIG_VALIDATORS,
     DEFAULT_CONFIG,
 )
+
+
+def _patch_temp_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> Path:
+    """Redirect config-manager file writes into a temporary directory."""
+
+    config_dir = tmp_path / "config"
+    config_file = config_dir / ".env"
+
+    def _ensure_config_dir(path: Path = config_dir) -> None:
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "logs").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "platform_context_graph.cli.config_manager.CONFIG_DIR",
+        config_dir,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.config_manager.CONFIG_FILE",
+        config_file,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.config_manager.ensure_config_dir",
+        _ensure_config_dir,
+    )
+    return config_file
 
 
 class TestSkipExternalResolutionConfig:
@@ -52,7 +79,7 @@ class TestSkipExternalResolutionConfig:
         assert "enabled" not in valid_values
 
     def test_default_value_is_false(self):
-        """Test that default value is 'false' for backward compatibility."""
+        """Test that the default value remains 'false'."""
         from platform_context_graph.cli.config_manager import DEFAULT_CONFIG
 
         assert "SKIP_EXTERNAL_RESOLUTION" in DEFAULT_CONFIG
@@ -90,8 +117,15 @@ class TestSkipExternalResolutionConfig:
         assert validate_config_value("PCG_HONOR_GITIGNORE", "true") == (True, None)
         assert validate_config_value("PCG_HONOR_GITIGNORE", "false") == (True, None)
 
-    def test_set_and_get_config_value(self):
+    def test_set_and_get_config_value(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
         """Test setting and getting the configuration value."""
+        _patch_temp_config(monkeypatch, tmp_path)
+        monkeypatch.delenv("SKIP_EXTERNAL_RESOLUTION", raising=False)
+
         # Set to true
         set_config_value("SKIP_EXTERNAL_RESOLUTION", "true")
         assert get_config_value("SKIP_EXTERNAL_RESOLUTION").lower() == "true"
@@ -148,10 +182,15 @@ class TestSkipExternalResolutionBehavior:
 class TestBackwardCompatibility:
     """Test that existing behavior is preserved when config is not set."""
 
-    def test_default_behavior_unchanged(self):
+    def test_default_behavior_unchanged(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
         """Test that default behavior matches original (warnings + attempts)."""
         # When SKIP_EXTERNAL_RESOLUTION is not set or is "false",
         # behavior should match the pre-rename defaults
+        _patch_temp_config(monkeypatch, tmp_path)
 
         with patch.dict(os.environ, {}, clear=True):
             from platform_context_graph.cli.config_manager import get_config_value
@@ -160,9 +199,15 @@ class TestBackwardCompatibility:
             value = get_config_value("SKIP_EXTERNAL_RESOLUTION")
             assert value is None or value.lower() == "false"
 
-    def test_existing_configs_not_affected(self):
+    def test_existing_configs_not_affected(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
         """Test that other configuration options still work."""
         # Setting SKIP_EXTERNAL_RESOLUTION should not affect other configs
+        _patch_temp_config(monkeypatch, tmp_path)
+        monkeypatch.delenv("SKIP_EXTERNAL_RESOLUTION", raising=False)
         set_config_value("SKIP_EXTERNAL_RESOLUTION", "true")
         set_config_value("INDEX_VARIABLES", "false")
 
