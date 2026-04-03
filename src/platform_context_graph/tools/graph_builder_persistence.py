@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,14 @@ from ..graph.persistence.content_store import (
 )
 from ..graph.persistence.commit import (
     commit_file_batch_to_graph as _canonical_commit_file_batch_to_graph,
+)
+
+_GIL_YIELD_ENABLED: bool = (
+    os.environ.get(
+        "PCG_COMMIT_GIL_YIELD_ENABLED",
+        "true",
+    ).lower()
+    != "false"
 )
 from ..graph.persistence.files import (
     add_file_to_graph as _canonical_add_file_to_graph,

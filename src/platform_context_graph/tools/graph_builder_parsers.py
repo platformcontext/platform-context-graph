@@ -36,6 +36,11 @@ class TreeSitterParser(_canonical.TreeSitterParser):
     """Legacy parser wrapper that keeps old monkeypatch seams working."""
 
     def __init__(self, language_name: str):
+        """Initialize the legacy parser wrapper.
+
+        Args:
+            language_name: Tree-sitter language identifier.
+        """
         _sync_canonical_globals()
         super().__init__(language_name)
 
