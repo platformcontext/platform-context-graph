@@ -200,6 +200,92 @@ def run_remote_admin_facts_replay(
         )
 
 
+def run_remote_admin_facts_list_work_items(
+    main_module: Any,
+    *,
+    service_url: str | None,
+    api_key: str | None,
+    profile: str | None,
+    statuses: list[str] | None,
+    repository_id: str | None,
+    source_run_id: str | None,
+    work_type: str | None,
+    failure_class: str | None,
+    limit: int,
+) -> None:
+    """List fact work items through the admin API."""
+
+    remote_target = resolve_remote_target(
+        service_url=service_url,
+        api_key=api_key,
+        profile=profile,
+        require_remote=True,
+    )
+    try:
+        payload = request_json(
+            remote_target,
+            method="POST",
+            path="/api/v0/admin/facts/work-items/query",
+            json_body={
+                "statuses": statuses or None,
+                "repository_id": repository_id,
+                "source_run_id": source_run_id,
+                "work_type": work_type,
+                "failure_class": failure_class,
+                "limit": limit,
+            },
+        )
+    except RemoteAPIError as exc:
+        main_module.console.print(
+            f"[bold red]Remote fact work-item query failed:[/bold red] {exc}"
+        )
+        raise typer.Exit(code=1) from exc
+
+    print_json_payload(main_module.console, payload)
+
+
+def run_remote_admin_facts_list_decisions(
+    main_module: Any,
+    *,
+    service_url: str | None,
+    api_key: str | None,
+    profile: str | None,
+    repository_id: str,
+    source_run_id: str,
+    decision_type: str | None,
+    include_evidence: bool,
+    limit: int,
+) -> None:
+    """List projection decisions through the admin API."""
+
+    remote_target = resolve_remote_target(
+        service_url=service_url,
+        api_key=api_key,
+        profile=profile,
+        require_remote=True,
+    )
+    try:
+        payload = request_json(
+            remote_target,
+            method="POST",
+            path="/api/v0/admin/facts/decisions/query",
+            json_body={
+                "repository_id": repository_id,
+                "source_run_id": source_run_id,
+                "decision_type": decision_type,
+                "include_evidence": include_evidence,
+                "limit": limit,
+            },
+        )
+    except RemoteAPIError as exc:
+        main_module.console.print(
+            f"[bold red]Remote projection decision query failed:[/bold red] {exc}"
+        )
+        raise typer.Exit(code=1) from exc
+
+    print_json_payload(main_module.console, payload)
+
+
 def render_remote_search(
     main_module: Any,
     *,

@@ -11,6 +11,7 @@ from platform_context_graph.facts.storage.models import FactRecordRow
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
 from platform_context_graph.observability import get_observability
 from platform_context_graph.observability.facts_first_logs import (
+    log_projection_decision,
     log_resolution_stage_failure,
     log_resolution_work_item,
 )
@@ -62,6 +63,7 @@ def _record_projection_decision(
 
     if decision_store is None:
         return
+    observability = get_observability()
     created_at = _utc_now()
     decision = build_projection_decision(
         stage=stage,
@@ -78,6 +80,21 @@ def _record_projection_decision(
     )
     if evidence:
         decision_store.insert_evidence(evidence)
+    observability.record_projection_decision(
+        component="resolution-engine",
+        decision_type=decision.decision_type,
+        confidence_score=decision.confidence_score,
+        evidence_count=len(evidence),
+    )
+    log_projection_decision(
+        repository_id=work_item.repository_id,
+        source_run_id=work_item.source_run_id,
+        work_item_id=work_item.work_item_id,
+        decision_id=decision.decision_id,
+        decision_type=decision.decision_type,
+        confidence_score=decision.confidence_score,
+        evidence_count=len(evidence),
+    )
 
 
 def project_work_item(

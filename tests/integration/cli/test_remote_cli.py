@@ -196,6 +196,82 @@ def test_admin_facts_replay_requires_one_selector() -> None:
 
 
 @patch("platform_context_graph.cli.remote.requests.request")
+def test_admin_facts_list_posts_remote_request(
+    mock_request: MagicMock,
+) -> None:
+    """`pcg admin facts list` should post the work-item query payload."""
+
+    mock_request.return_value = _Response({"count": 1, "items": []})
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "list",
+            "--service-url",
+            "https://pcg.example.com",
+            "--status",
+            "failed",
+            "--failure-class",
+            "timeout",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _args, kwargs = mock_request.call_args
+    assert kwargs["method"] == "POST"
+    assert kwargs["url"] == "https://pcg.example.com/api/v0/admin/facts/work-items/query"
+    assert kwargs["json"] == {
+        "statuses": ["failed"],
+        "repository_id": None,
+        "source_run_id": None,
+        "work_type": None,
+        "failure_class": "timeout",
+        "limit": 100,
+    }
+
+
+@patch("platform_context_graph.cli.remote.requests.request")
+def test_admin_facts_decisions_posts_remote_request(
+    mock_request: MagicMock,
+) -> None:
+    """`pcg admin facts decisions` should post the decision query payload."""
+
+    mock_request.return_value = _Response({"count": 1, "decisions": []})
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "decisions",
+            "--service-url",
+            "https://pcg.example.com",
+            "--repository-id",
+            "repository:r_payments",
+            "--source-run-id",
+            "run-123",
+            "--decision-type",
+            "project_workloads",
+            "--include-evidence",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _args, kwargs = mock_request.call_args
+    assert kwargs["method"] == "POST"
+    assert kwargs["url"] == "https://pcg.example.com/api/v0/admin/facts/decisions/query"
+    assert kwargs["json"] == {
+        "repository_id": "repository:r_payments",
+        "source_run_id": "run-123",
+        "decision_type": "project_workloads",
+        "include_evidence": True,
+        "limit": 100,
+    }
+
+
+@patch("platform_context_graph.cli.remote.requests.request")
 def test_analyze_callers_posts_code_relationship_request(
     mock_request: MagicMock,
 ) -> None:

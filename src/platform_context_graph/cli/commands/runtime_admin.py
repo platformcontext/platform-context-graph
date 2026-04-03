@@ -7,6 +7,8 @@ from typing import Any
 import typer
 
 from ..remote_commands import run_remote_admin_facts_replay
+from ..remote_commands import run_remote_admin_facts_list_decisions
+from ..remote_commands import run_remote_admin_facts_list_work_items
 from ..remote_commands import run_remote_admin_reindex
 
 
@@ -146,5 +148,64 @@ def register_admin_commands(main_module: Any, admin_app: typer.Typer) -> None:
             work_type=work_type,
             failure_class=failure_class,
             operator_note=operator_note,
+            limit=limit,
+        )
+
+    @admin_facts_app.command("list")
+    def admin_facts_list(
+        service_url: str | None = typer.Option(None, "--service-url"),
+        api_key: str | None = typer.Option(None, "--api-key"),
+        profile: str | None = typer.Option(None, "--profile"),
+        status: list[str] | None = typer.Option(
+            None,
+            "--status",
+            help="Filter work items by status. Repeat for multiple values.",
+        ),
+        repository_id: str | None = typer.Option(None, "--repository-id"),
+        source_run_id: str | None = typer.Option(None, "--source-run-id"),
+        work_type: str | None = typer.Option(None, "--work-type"),
+        failure_class: str | None = typer.Option(None, "--failure-class"),
+        limit: int = typer.Option(100, "--limit", min=1),
+    ) -> None:
+        """List facts-first work items and their durable failure metadata."""
+
+        run_remote_admin_facts_list_work_items(
+            main_module,
+            service_url=service_url,
+            api_key=api_key,
+            profile=profile,
+            statuses=status,
+            repository_id=repository_id,
+            source_run_id=source_run_id,
+            work_type=work_type,
+            failure_class=failure_class,
+            limit=limit,
+        )
+
+    @admin_facts_app.command("decisions")
+    def admin_facts_decisions(
+        repository_id: str = typer.Option(..., "--repository-id"),
+        source_run_id: str = typer.Option(..., "--source-run-id"),
+        service_url: str | None = typer.Option(None, "--service-url"),
+        api_key: str | None = typer.Option(None, "--api-key"),
+        profile: str | None = typer.Option(None, "--profile"),
+        decision_type: str | None = typer.Option(None, "--decision-type"),
+        include_evidence: bool = typer.Option(
+            False,
+            "--include-evidence/--no-include-evidence",
+        ),
+        limit: int = typer.Option(100, "--limit", min=1),
+    ) -> None:
+        """List persisted projection decisions and optional evidence."""
+
+        run_remote_admin_facts_list_decisions(
+            main_module,
+            service_url=service_url,
+            api_key=api_key,
+            profile=profile,
+            repository_id=repository_id,
+            source_run_id=source_run_id,
+            decision_type=decision_type,
+            include_evidence=include_evidence,
             limit=limit,
         )

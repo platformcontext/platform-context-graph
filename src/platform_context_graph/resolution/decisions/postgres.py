@@ -173,6 +173,8 @@ class PostgresProjectionDecisionStore:
         *,
         repository_id: str,
         source_run_id: str,
+        decision_type: str | None = None,
+        limit: int = 100,
     ) -> list[ProjectionDecisionRow]:
         """Return persisted decisions for one repository/run pair."""
 
@@ -191,11 +193,15 @@ class PostgresProjectionDecisionStore:
             FROM projection_decisions
             WHERE repository_id = %(repository_id)s
               AND source_run_id = %(source_run_id)s
+              AND (%(decision_type)s IS NULL OR decision_type = %(decision_type)s)
             ORDER BY created_at ASC, decision_id ASC
+            LIMIT %(limit)s
             """,
             {
                 "repository_id": repository_id,
                 "source_run_id": source_run_id,
+                "decision_type": decision_type,
+                "limit": max(limit, 1),
             },
         )
         return [ProjectionDecisionRow(**row) for row in rows]

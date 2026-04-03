@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -141,6 +142,7 @@ class _InMemoryWorkQueue:
         work_item_id: str,
         error_message: str,
         terminal: bool,
+        **_kwargs,
     ) -> None:
         raise AssertionError(
             f"Unexpected fail_work_item({work_item_id}, {error_message}, {terminal})"
@@ -423,6 +425,147 @@ def test_resolution_stage_failures_emit_error_class_metrics(
             "pcg.work_type": "project-git-facts",
             "pcg.stage": "project_relationships",
             "pcg.error_class": "RuntimeError",
+        },
+    )
+
+
+def test_projection_decisions_emit_confidence_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Persisted projection decisions should emit confidence-band metrics."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+    reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    metric_reader = InMemoryMetricReader()
+    initialize_observability(
+        component="resolution-engine",
+        metric_reader=metric_reader,
+    )
+
+    fact_store = _InMemoryFactStore()
+    fact_store.records = [
+        FactRecordRow(
+            fact_id="fact:file",
+            fact_type="FileObserved",
+            repository_id="github.com/acme/service",
+            checkout_path="/tmp/service",
+            relative_path="src/app.py",
+            source_system="git",
+            source_run_id="run-123",
+            source_snapshot_id="snapshot-abc",
+            payload={"language": "python"},
+            observed_at=_utc_now(),
+            ingested_at=_utc_now(),
+            provenance={},
+        )
+    ]
+    decision_store = SimpleNamespace(
+        upsert_decision=lambda _decision: None,
+        insert_evidence=lambda _evidence: None,
+    )
+
+    project_work_item(
+        FactWorkItemRow(
+            work_item_id="work-11",
+            work_type="project-git-facts",
+            repository_id="github.com/acme/service",
+            source_run_id="run-123",
+        ),
+        builder=object(),
+        fact_store=fact_store,
+        decision_store=decision_store,
+        fact_projector=lambda **_kwargs: {"repositories": 1},
+        relationship_projector=lambda **_kwargs: {"files": 1},
+        workload_projector=lambda **_kwargs: {"workloads_projected": 1},
+        platform_projector=lambda **_kwargs: {
+            "infrastructure_platform_edges_projected": 1
+        },
+    )
+
+    points = _metric_points(metric_reader)
+    assert _matching_values(
+        points,
+        "pcg_projection_decisions_total",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.decision_type": "project_workloads",
+            "pcg.confidence_band": "high",
+        },
+    )
+    assert _matching_values(
+        points,
+        "pcg_projection_confidence_score",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.decision_type": "project_platforms",
+            "pcg.confidence_band": "high",
+        },
+    )
+
+
+def test_resolution_iteration_emits_failure_classification_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Classified failures should emit durable failure-class counters."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+    reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    metric_reader = InMemoryMetricReader()
+    initialize_observability(
+        component="resolution-engine",
+        metric_reader=metric_reader,
+    )
+
+    class _FailureQueue:
+        def claim_work_item(self, *, lease_owner: str, lease_ttl_seconds: int):
+            del lease_ttl_seconds
+            return FactWorkItemRow(
+                work_item_id="work-12",
+                work_type="project-git-facts",
+                repository_id="github.com/acme/service",
+                source_run_id="run-123",
+                lease_owner=lease_owner,
+                lease_expires_at=_utc_now(),
+                status="leased",
+                attempt_count=3,
+                created_at=_utc_now(),
+                updated_at=_utc_now(),
+            )
+
+        def fail_work_item(self, **_kwargs) -> None:
+            return None
+
+        def list_queue_snapshot(self):  # noqa: ANN202
+            return []
+
+    processed = run_resolution_iteration(
+        queue=_FailureQueue(),
+        projector=lambda _row: (_ for _ in ()).throw(
+            ValueError("invalid fact payload")
+        ),
+        lease_owner="resolution-worker-1",
+        lease_ttl_seconds=60,
+        max_attempts=3,
+    )
+
+    points = _metric_points(metric_reader)
+    assert processed is True
+    assert _matching_values(
+        points,
+        "pcg_resolution_failure_classifications_total",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.work_type": "project-git-facts",
+            "pcg.failure_class": "input_invalid",
+            "pcg.retry_disposition": "non_retryable",
         },
     )
 

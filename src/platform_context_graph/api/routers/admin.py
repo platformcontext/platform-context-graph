@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ...facts.state import get_fact_work_queue
+from ...observability import get_observability
 from ..dependencies import get_database
 from ...query.status import request_ingester_reindex_control
 from ...core.jobs import JobManager
@@ -481,6 +482,11 @@ async def replay_failed_facts(
             "operator_note": payload.operator_note,
             "limit": payload.limit,
         },
+    )
+    get_observability().record_admin_fact_action(
+        component="api",
+        action="replay_failed_work_items",
+        outcome="success",
     )
     return {
         "status": "replayed",

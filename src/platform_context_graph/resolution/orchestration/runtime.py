@@ -191,6 +191,12 @@ def run_resolution_iteration(
                     error_class=failure.error_class,
                     age_seconds=work_item_age_seconds,
                 )
+            observability.record_resolution_failure_classification(
+                component="resolution-engine",
+                work_type=work_item.work_type,
+                failure_class=str(failure.failure_class),
+                retry_disposition=str(failure.retry_disposition),
+            )
             _refresh_queue_metrics(queue)
             observability.record_resolution_work_item(
                 component="resolution-engine",

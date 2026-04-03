@@ -382,6 +382,95 @@ class RuntimeFactResolutionMetricsMixin(RuntimeFactScalingMetricsMixin):
                 },
             )
 
+    def record_resolution_failure_classification(
+        self,
+        *,
+        component: str,
+        work_type: str,
+        failure_class: str,
+        retry_disposition: str,
+    ) -> None:
+        """Record one classified resolution failure."""
+
+        if not self.enabled:
+            return
+        failures_total = self._fact_resolution_instruments.get(
+            "resolution_failure_classifications_total"
+        )
+        if failures_total is not None:
+            failures_total.add(
+                1,
+                {
+                    "pcg.component": component,
+                    "pcg.work_type": work_type,
+                    "pcg.failure_class": failure_class,
+                    "pcg.retry_disposition": retry_disposition,
+                },
+            )
+
+    def record_projection_decision(
+        self,
+        *,
+        component: str,
+        decision_type: str,
+        confidence_score: float,
+        evidence_count: int,
+    ) -> None:
+        """Record one persisted projection decision and its confidence band."""
+
+        if not self.enabled:
+            return
+        if confidence_score >= 0.85:
+            confidence_band = "high"
+        elif confidence_score >= 0.7:
+            confidence_band = "medium"
+        else:
+            confidence_band = "low"
+        attrs = {
+            "pcg.component": component,
+            "pcg.decision_type": decision_type,
+            "pcg.confidence_band": confidence_band,
+        }
+        decisions_total = self._fact_resolution_instruments.get(
+            "projection_decisions_total"
+        )
+        confidence_histogram = self._fact_resolution_instruments.get(
+            "projection_confidence_score"
+        )
+        evidence_total = self._fact_resolution_instruments.get(
+            "projection_decision_evidence_total"
+        )
+        if decisions_total is not None:
+            decisions_total.add(1, attrs)
+        if confidence_histogram is not None:
+            confidence_histogram.record(confidence_score, attrs)
+        if evidence_count > 0 and evidence_total is not None:
+            evidence_total.add(evidence_count, attrs)
+
+    def record_admin_fact_action(
+        self,
+        *,
+        component: str,
+        action: str,
+        outcome: str,
+    ) -> None:
+        """Record one admin facts-first control-plane action."""
+
+        if not self.enabled:
+            return
+        actions_total = self._fact_resolution_instruments.get(
+            "admin_fact_actions_total"
+        )
+        if actions_total is not None:
+            actions_total.add(
+                1,
+                {
+                    "pcg.component": component,
+                    "pcg.action": action,
+                    "pcg.outcome": outcome,
+                },
+            )
+
     def _observe_fact_queue_depth(self, _options: Any) -> list[Observation]:
         """Produce facts queue depth observations."""
 
@@ -478,6 +567,21 @@ def setup_fact_resolution_instruments(runtime: Any) -> None:
     )
     runtime._fact_resolution_instruments["resolution_stage_failures_total"] = (
         runtime.meter.create_counter("pcg_resolution_stage_failures_total")
+    )
+    runtime._fact_resolution_instruments[
+        "resolution_failure_classifications_total"
+    ] = runtime.meter.create_counter("pcg_resolution_failure_classifications_total")
+    runtime._fact_resolution_instruments["projection_decisions_total"] = (
+        runtime.meter.create_counter("pcg_projection_decisions_total")
+    )
+    runtime._fact_resolution_instruments["projection_confidence_score"] = (
+        runtime.meter.create_histogram("pcg_projection_confidence_score")
+    )
+    runtime._fact_resolution_instruments["projection_decision_evidence_total"] = (
+        runtime.meter.create_counter("pcg_projection_decision_evidence_total")
+    )
+    runtime._fact_resolution_instruments["admin_fact_actions_total"] = (
+        runtime.meter.create_counter("pcg_admin_fact_actions_total")
     )
     runtime.meter.create_observable_gauge(
         "pcg_fact_queue_depth",
