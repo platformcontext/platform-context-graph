@@ -301,7 +301,9 @@ def materialize_workloads(
             candidates_total=metrics["candidates_total"],
             deployment_sources_projected=metrics["deployment_sources_projected"],
             instances_projected=metrics["instances_projected"],
-            runtime_platform_edges_projected=metrics["runtime_platform_edges_projected"],
+            runtime_platform_edges_projected=metrics[
+                "runtime_platform_edges_projected"
+            ],
             targeted_repo_count=metrics["targeted_repo_count"],
             workloads_projected=metrics["workloads_projected"],
         )

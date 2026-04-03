@@ -66,9 +66,7 @@ def _filter_supported_keyword_arguments(
         return keyword_arguments
     accepted = {parameter.name for parameter in parameters}
     return {
-        name: value
-        for name, value in keyword_arguments.items()
-        if name in accepted
+        name: value for name, value in keyword_arguments.items() if name in accepted
     }
 
 
@@ -344,11 +342,7 @@ def finalize_index_batch(
             duration_seconds=round(elapsed, 3),
             repo_count=len(committed_repo_paths),
             run_id=run_id,
-            **(
-                stage_metrics
-                if isinstance(stage_metrics, dict)
-                else {}
-            ),
+            **(stage_metrics if isinstance(stage_metrics, dict) else {}),
         )
         if (
             telemetry is not None
@@ -378,11 +372,7 @@ def finalize_index_batch(
                 "stage": stage_name,
                 "duration_seconds": round(elapsed, 3),
                 "run_id": run_id,
-                **(
-                    stage_metrics
-                    if isinstance(stage_metrics, dict)
-                    else {}
-                ),
+                **(stage_metrics if isinstance(stage_metrics, dict) else {}),
             },
         )
     total_elapsed = time.monotonic() - total_start

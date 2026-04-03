@@ -108,7 +108,9 @@ class TestEcosystemOverview:
         expected_count = len(
             [
                 path
-                for path in (Path(__file__).parent.parent / "fixtures" / "ecosystems").iterdir()
+                for path in (
+                    Path(__file__).parent.parent / "fixtures" / "ecosystems"
+                ).iterdir()
                 if path.is_dir() and not path.name.startswith(".")
             ]
         )

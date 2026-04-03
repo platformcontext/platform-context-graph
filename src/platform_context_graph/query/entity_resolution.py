@@ -333,7 +333,8 @@ def _db_repository_matches(
 
     driver = database.get_driver()
     with driver.session() as session:
-        repos = session.run(f"""
+        repos = session.run(
+            f"""
             MATCH (r:Repository)
             RETURN {_repository_projection()}
             ORDER BY r.name
@@ -403,7 +404,9 @@ def _db_workload_matches(
     limit: int,
 ) -> dict[str, Any]:
     """Resolve workload-shaped entities against the live database backend."""
-    if not allowed_types.intersection({EntityType.workload, EntityType.workload_instance}):
+    if not allowed_types.intersection(
+        {EntityType.workload, EntityType.workload_instance}
+    ):
         return {"matches": []}
 
     matches: list[dict[str, Any]] = []

@@ -96,7 +96,9 @@ def apply_json_document(
         return
 
     if lowered == "composer.json":
-        result["variables"].extend(_composer_dependency_variables(document, language_name))
+        result["variables"].extend(
+            _composer_dependency_variables(document, language_name)
+        )
         return
 
     if lowered == "tsconfig.json":

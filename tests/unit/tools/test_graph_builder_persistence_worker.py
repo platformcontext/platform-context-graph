@@ -63,12 +63,8 @@ class TestCommitBatchInProcessPicklability:
 class TestCommitBatchInProcessDelegation:
     """Verify commit_batch_in_process creates driver and delegates correctly."""
 
-    @patch(
-        "platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver"
-    )
-    @patch(
-        "platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph"
-    )
+    @patch("platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver")
+    @patch("platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph")
     @patch(
         "platform_context_graph.graph.persistence.worker._init_postgres_content_provider"
     )
@@ -132,12 +128,8 @@ class TestCommitBatchInProcessDelegation:
         # Assert - result returned correctly
         assert result == expected_result
 
-    @patch(
-        "platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver"
-    )
-    @patch(
-        "platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph"
-    )
+    @patch("platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver")
+    @patch("platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph")
     @patch(
         "platform_context_graph.graph.persistence.worker._init_postgres_content_provider"
     )
@@ -179,12 +171,8 @@ class TestCommitBatchInProcessDelegation:
 class TestDriverCaching:
     """Verify Neo4j driver is cached across batches in the same process."""
 
-    @patch(
-        "platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver"
-    )
-    @patch(
-        "platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph"
-    )
+    @patch("platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver")
+    @patch("platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph")
     def test_driver_cached_across_batches(
         self,
         mock_commit_fn: Mock,
@@ -216,12 +204,8 @@ class TestDriverCaching:
         # Driver not closed (cached for process lifetime)
         mock_driver.close.assert_not_called()
 
-    @patch(
-        "platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver"
-    )
-    @patch(
-        "platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph"
-    )
+    @patch("platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver")
+    @patch("platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph")
     def test_driver_not_closed_on_error(
         self,
         mock_commit_fn: Mock,

@@ -31,7 +31,11 @@ def test_repository_story_route_uses_repository_story_query() -> None:
             },
             "story": ["Payments API serves card-present transactions."],
             "story_sections": [
-                {"id": "deployment", "title": "Deployment", "summary": "GitHub Actions deploy onto EKS."}
+                {
+                    "id": "deployment",
+                    "title": "Deployment",
+                    "summary": "GitHub Actions deploy onto EKS.",
+                }
             ],
             "deployment_overview": {"platforms": [{"kind": "eks"}]},
             "evidence": [],
@@ -70,13 +74,19 @@ def test_workload_story_route_supports_environment_scope() -> None:
             },
             "story": ["Prod traffic lands on payments-api running in EKS."],
             "story_sections": [
-                {"id": "runtime", "title": "Runtime", "summary": "prod instance runs in EKS."}
+                {
+                    "id": "runtime",
+                    "title": "Runtime",
+                    "summary": "prod instance runs in EKS.",
+                }
             ],
             "deployment_overview": {"platforms": [{"kind": "eks"}]},
             "evidence": [],
             "limitations": [],
             "coverage": None,
-            "drilldowns": {"workload_context": {"workload_id": "workload:payments-api"}},
+            "drilldowns": {
+                "workload_context": {"workload_id": "workload:payments-api"}
+            },
         }
 
     services = SimpleNamespace(
@@ -90,7 +100,10 @@ def test_workload_story_route_supports_environment_scope() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json()["story"][0] == "Prod traffic lands on payments-api running in EKS."
+    assert (
+        response.json()["story"][0]
+        == "Prod traffic lands on payments-api running in EKS."
+    )
     assert calls == [
         {
             "database": services.database,

@@ -291,9 +291,9 @@ class TestCypherQueriesHaveLangFilter:
         name to a file containing a function in a different language.
         """
         for query in contextual_call_batch_queries():
-            assert "compatible_langs" in query, (
-                "Contextual exact query missing compatible_langs filter"
-            )
+            assert (
+                "compatible_langs" in query
+            ), "Contextual exact query missing compatible_langs filter"
 
     def test_file_level_exact_has_lang_filter(self) -> None:
         """Exact match file-level queries must filter by compatible_langs.
@@ -303,9 +303,9 @@ class TestCypherQueriesHaveLangFilter:
         cross-language false edges.
         """
         for query in file_level_call_batch_queries():
-            assert "compatible_langs" in query, (
-                "File-level exact query missing compatible_langs filter"
-            )
+            assert (
+                "compatible_langs" in query
+            ), "File-level exact query missing compatible_langs filter"
 
 
 # ---------------------------------------------------------------------------

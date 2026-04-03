@@ -21,7 +21,7 @@ def haskell_parser():
 
 
 def test_parse_functions(haskell_parser, temp_test_dir):
-    code = '''module Basic where
+    code = """module Basic where
 
 greet :: String -> String
 greet name = "Hello, " ++ name ++ "!"
@@ -34,7 +34,7 @@ classify n
   | n < 0     = "negative"
   | n == 0    = "zero"
   | otherwise = "positive"
-'''
+"""
     f = temp_test_dir / "Basic.hs"
     f.write_text(code)
     result = haskell_parser.parse(f)
@@ -46,7 +46,7 @@ classify n
 
 
 def test_parse_data_types(haskell_parser, temp_test_dir):
-    code = '''module Types where
+    code = """module Types where
 
 data Shape
   = Circle Double
@@ -60,7 +60,7 @@ data Person = Person
   } deriving (Show)
 
 newtype Name = Name String deriving (Show)
-'''
+"""
     f = temp_test_dir / "Types.hs"
     f.write_text(code)
     result = haskell_parser.parse(f)
@@ -71,14 +71,14 @@ newtype Name = Name String deriving (Show)
 
 
 def test_parse_type_classes(haskell_parser, temp_test_dir):
-    code = '''module Classes where
+    code = """module Classes where
 
 class Describable a where
   describe :: a -> String
 
 instance Describable Int where
   describe n = "Int: " ++ show n
-'''
+"""
     f = temp_test_dir / "Classes.hs"
     f.write_text(code)
     result = haskell_parser.parse(f)
@@ -89,12 +89,12 @@ instance Describable Int where
 
 
 def test_parse_imports(haskell_parser, temp_test_dir):
-    code = '''module Imports where
+    code = """module Imports where
 
 import Data.List (sort, nub)
 import Data.Char (toUpper)
 import qualified Data.Map as Map
-'''
+"""
     f = temp_test_dir / "Imports.hs"
     f.write_text(code)
     result = haskell_parser.parse(f)
@@ -104,14 +104,14 @@ import qualified Data.Map as Map
 
 
 def test_parse_variables(haskell_parser, temp_test_dir):
-    code = '''module Vars where
+    code = """module Vars where
 
 version :: String
 version = "1.0.0"
 
 maxRetries :: Int
 maxRetries = 3
-'''
+"""
     f = temp_test_dir / "Vars.hs"
     f.write_text(code)
     result = haskell_parser.parse(f)
@@ -122,14 +122,14 @@ maxRetries = 3
 
 
 def test_parse_function_calls(haskell_parser, temp_test_dir):
-    code = '''module Calls where
+    code = """module Calls where
 
 demo :: IO ()
 demo = do
   putStrLn "hello"
   let xs = [1, 2, 3]
   print (map (*2) xs)
-'''
+"""
     f = temp_test_dir / "Calls.hs"
     f.write_text(code)
     result = haskell_parser.parse(f)
@@ -139,14 +139,14 @@ demo = do
 
 
 def test_parse_higher_order(haskell_parser, temp_test_dir):
-    code = '''module HOF where
+    code = """module HOF where
 
 applyTwice :: (a -> a) -> a -> a
 applyTwice f x = f (f x)
 
 pipeline :: [Int] -> [Int]
 pipeline = filter even . map (*2) . filter (>0)
-'''
+"""
     f = temp_test_dir / "HOF.hs"
     f.write_text(code)
     result = haskell_parser.parse(f)
@@ -157,7 +157,7 @@ pipeline = filter even . map (*2) . filter (>0)
 
 
 def test_result_structure(haskell_parser, temp_test_dir):
-    code = 'module Minimal where\n\nx = 1\n'
+    code = "module Minimal where\n\nx = 1\n"
     f = temp_test_dir / "Minimal.hs"
     f.write_text(code)
     result = haskell_parser.parse(f)

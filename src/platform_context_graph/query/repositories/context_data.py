@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from ...utils.debug_log import emit_log_call, warning_logger
-from .common import canonical_repository_ref, graph_relationship_types, resolve_repository
+from .common import (
+    canonical_repository_ref,
+    graph_relationship_types,
+    resolve_repository,
+)
 from .context_limitations import build_context_limitations
 from .graph_counts import (
     repository_graph_counts,
@@ -164,9 +168,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
                     "graph_recursive_file_count", 0
                 ),
                 "content_file_count": coverage_summary.get("content_file_count", 0),
-                "content_entity_count": coverage_summary.get(
-                    "content_entity_count", 0
-                ),
+                "content_entity_count": coverage_summary.get("content_entity_count", 0),
                 "completeness_state": coverage_summary.get(
                     "completeness_state", "failed"
                 ),

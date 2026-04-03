@@ -70,9 +70,7 @@ class _Session:
 def _make_linker():
     """Create a linker with a recording Neo4j session."""
     session = _Session()
-    db = SimpleNamespace(
-        get_driver=lambda: SimpleNamespace(session=lambda: session)
-    )
+    db = SimpleNamespace(get_driver=lambda: SimpleNamespace(session=lambda: session))
     return CrossRepoLinker(db), session.queries
 
 
@@ -98,12 +96,10 @@ def test_link_argocd_deploys_maps_applicationsets() -> None:
 
     assert count == 2
     assert any(
-        "MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)" in query
-        for query in queries
+        "MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)" in query for query in queries
     )
     assert any(
-        "MATCH (app:ArgoCDApplicationSet)-[:SOURCES_FROM]->(repo:Repository)"
-        in query
+        "MATCH (app:ArgoCDApplicationSet)-[:SOURCES_FROM]->(repo:Repository)" in query
         and "source_roots" in query
         and "[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(k:K8sResource)" in query
         for query in queries

@@ -252,7 +252,7 @@ class TestCloudFormationYAMLDispatch:
         return InfraYAMLParser("yaml")
 
     def test_yaml_dispatcher_detects_cfn(self, parser, temp_test_dir):
-        content = '''AWSTemplateFormatVersion: "2010-09-09"
+        content = """AWSTemplateFormatVersion: "2010-09-09"
 Parameters:
   Env:
     Type: String
@@ -263,14 +263,16 @@ Resources:
 Outputs:
   BucketArn:
     Value: !GetAtt MyBucket.Arn
-'''
+"""
         f = temp_test_dir / "stack.yaml"
         f.write_text(content)
         result = parser.parse(str(f))
 
         assert len(result["cloudformation_resources"]) == 1
         assert result["cloudformation_resources"][0]["name"] == "MyBucket"
-        assert result["cloudformation_resources"][0]["resource_type"] == "AWS::S3::Bucket"
+        assert (
+            result["cloudformation_resources"][0]["resource_type"] == "AWS::S3::Bucket"
+        )
 
         assert len(result["cloudformation_parameters"]) == 1
         assert result["cloudformation_parameters"][0]["name"] == "Env"
@@ -278,11 +280,11 @@ Outputs:
         assert len(result["cloudformation_outputs"]) == 1
 
     def test_yaml_dispatcher_cfn_does_not_pollute_k8s(self, parser, temp_test_dir):
-        content = '''AWSTemplateFormatVersion: "2010-09-09"
+        content = """AWSTemplateFormatVersion: "2010-09-09"
 Resources:
   MyBucket:
     Type: AWS::S3::Bucket
-'''
+"""
         f = temp_test_dir / "cfn_only.yaml"
         f.write_text(content)
         result = parser.parse(str(f))
@@ -292,14 +294,14 @@ Resources:
         assert len(result["argocd_applications"]) == 0
 
     def test_yaml_dispatcher_k8s_not_cfn(self, parser, temp_test_dir):
-        content = '''apiVersion: v1
+        content = """apiVersion: v1
 kind: Service
 metadata:
   name: my-service
 spec:
   ports:
     - port: 80
-'''
+"""
         f = temp_test_dir / "k8s_svc.yaml"
         f.write_text(content)
         result = parser.parse(str(f))
@@ -308,7 +310,7 @@ spec:
         assert len(result["cloudformation_resources"]) == 0
 
     def test_yaml_dispatcher_cfn_multi_resource(self, parser, temp_test_dir):
-        content = '''AWSTemplateFormatVersion: "2010-09-09"
+        content = """AWSTemplateFormatVersion: "2010-09-09"
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -324,7 +326,7 @@ Resources:
     Properties:
       GroupDescription: Test SG
       VpcId: !Ref VPC
-'''
+"""
         f = temp_test_dir / "vpc.yaml"
         f.write_text(content)
         result = parser.parse(str(f))
@@ -337,13 +339,13 @@ Resources:
 
     def test_result_has_cfn_buckets(self, parser, temp_test_dir):
         """Verify empty result includes CloudFormation buckets."""
-        content = '''apiVersion: v1
+        content = """apiVersion: v1
 kind: ConfigMap
 metadata:
   name: test
 data:
   key: value
-'''
+"""
         f = temp_test_dir / "configmap.yaml"
         f.write_text(content)
         result = parser.parse(str(f))

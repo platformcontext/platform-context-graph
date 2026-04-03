@@ -13,7 +13,9 @@ from platform_context_graph.tools.languages.json_config import (
 class TestJSONConfigParser:
     """Verify filename-targeted JSON extraction stays useful and low-noise."""
 
-    def test_parse_package_json_dependencies_and_scripts(self, temp_test_dir: Path) -> None:
+    def test_parse_package_json_dependencies_and_scripts(
+        self, temp_test_dir: Path
+    ) -> None:
         """package.json should emit dependency variables and script functions."""
 
         file_path = temp_test_dir / "package.json"
@@ -157,7 +159,7 @@ class TestJSONConfigParser:
 
         file_path = temp_test_dir / "base.json"
         file_path.write_text(
-            '\n'.join(
+            "\n".join(
                 [
                     '{{- $env := required "env is required" .Values.env | trim -}}',
                     '{{- $accountId := required "accountId is required" .Values.accountId | trim -}}',

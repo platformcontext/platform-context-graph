@@ -510,7 +510,9 @@ def test_project_resolved_relationships_uses_relationship_type_for_projection() 
     )
 
     queries = [query for query, _params in driver.session_instance.tx.calls]
-    assert any("DELETE rel" in query and "evidence_source" in query for query in queries)
+    assert any(
+        "DELETE rel" in query and "evidence_source" in query for query in queries
+    )
     assert any(
         "MERGE (source)-[rel:DISCOVERS_CONFIG_IN]->(target)" in query
         for query in queries
@@ -650,7 +652,9 @@ def test_project_resolved_relationships_projects_platform_runtime_edges() -> Non
     )
 
     queries = [query for query, _params in driver.session_instance.tx.calls]
-    assert any("MERGE (platform:Platform {id: row.entity_id})" in query for query in queries)
+    assert any(
+        "MERGE (platform:Platform {id: row.entity_id})" in query for query in queries
+    )
     assert any(
         "MATCH (source:Repository {id: row.source_entity_id})" in query
         and "MATCH (target:Platform {id: row.target_entity_id})" in query
@@ -676,9 +680,7 @@ def test_project_resolved_relationships_scopes_delete_to_previous_generations() 
         def run(self, query: str, **params: object):
             self.calls.append((query, params))
             if "UNWIND $repo_ids AS repo_id" in query:
-                return FakeResult(
-                    [{"repo_id": "repository:r_api", "repo_count": 1}]
-                )
+                return FakeResult([{"repo_id": "repository:r_api", "repo_count": 1}])
             return FakeResult([])
 
     class FakeSession:
@@ -1066,7 +1068,9 @@ def test_resolve_repository_relationships_for_committed_repositories_preserves_l
         )
 
     assert activations == []
-    assert store.get_active_generation(scope="repo_dependencies") == ResolutionGeneration(
+    assert store.get_active_generation(
+        scope="repo_dependencies"
+    ) == ResolutionGeneration(
         generation_id="generation_active",
         scope="repo_dependencies",
         run_id="run-active",

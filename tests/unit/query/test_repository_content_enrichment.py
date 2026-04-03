@@ -33,7 +33,7 @@ def _build_indexed_file_mocks(
         pattern: str | None = None,
     ) -> list[str]:
         paths = []
-        for (rid, rpath) in sorted(file_store):
+        for rid, rpath in sorted(file_store):
             if rid != repo_id:
                 continue
             if prefix and not rpath.startswith(prefix):
@@ -45,9 +45,7 @@ def _build_indexed_file_mocks(
             paths.append(rpath)
         return paths
 
-    def _file_exists(
-        _database: Any, repo_id: str, relative_path: str
-    ) -> bool:
+    def _file_exists(_database: Any, repo_id: str, relative_path: str) -> bool:
         return (repo_id, relative_path) in file_store
 
     def _read_file_content(
@@ -1068,9 +1066,7 @@ def test_enrich_repository_context_extracts_nested_workflow_command_metadata(
             if _fp.is_file():
                 _rel = str(_fp.relative_to(_repo_path))
                 try:
-                    _indexed_store[(_repo_id, _rel)] = _fp.read_text(
-                        encoding="utf-8"
-                    )
+                    _indexed_store[(_repo_id, _rel)] = _fp.read_text(encoding="utf-8")
                 except UnicodeDecodeError:
                     pass
     _apply_indexed_file_mocks(monkeypatch, _indexed_store)

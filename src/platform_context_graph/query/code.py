@@ -22,6 +22,8 @@ __all__ = [
     "find_dead_code",
     "get_complexity",
 ]
+
+
 def search_code(
     database: Any,
     *,

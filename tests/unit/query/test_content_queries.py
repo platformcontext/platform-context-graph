@@ -44,7 +44,9 @@ def test_get_file_content_resolves_repo_names_to_canonical_ids(monkeypatch) -> N
     captured: dict[str, object] = {}
 
     class _ContentService:
-        def get_file_content(self, *, repo_id: str, relative_path: str) -> dict[str, object]:
+        def get_file_content(
+            self, *, repo_id: str, relative_path: str
+        ) -> dict[str, object]:
             captured["repo_id"] = repo_id
             captured["relative_path"] = relative_path
             return {

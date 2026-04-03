@@ -35,7 +35,9 @@ def _aliases(*groups: list[str]) -> list[str]:
     return aliases
 
 
-def db_workload_entities(database: Any, *, query: str, repo_id: str | None) -> list[dict[str, Any]]:
+def db_workload_entities(
+    database: Any, *, query: str, repo_id: str | None
+) -> list[dict[str, Any]]:
     """Return synthetic workload entities inferred from live repo, runtime, and Argo data."""
     terms = _search_terms(query)
     if not terms:
@@ -99,7 +101,11 @@ def db_workload_entities(database: Any, *, query: str, repo_id: str | None) -> l
                 "repo_id": row.get("repo_id"),
                 "aliases": _aliases(
                     [name, f"{name} service"],
-                    [row.get("repo_name", ""), row.get("repo_slug", ""), row.get("remote_url", "")],
+                    [
+                        row.get("repo_name", ""),
+                        row.get("repo_slug", ""),
+                        row.get("remote_url", ""),
+                    ],
                 ),
             }
         )
@@ -121,7 +127,11 @@ def db_workload_entities(database: Any, *, query: str, repo_id: str | None) -> l
                 "repo_id": row.get("repo_id"),
                 "aliases": _aliases(
                     [f"{name} {environment}", name],
-                    [row.get("repo_name", ""), row.get("repo_slug", ""), row.get("remote_url", "")],
+                    [
+                        row.get("repo_name", ""),
+                        row.get("repo_slug", ""),
+                        row.get("remote_url", ""),
+                    ],
                 ),
             }
         )

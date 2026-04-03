@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from platform_context_graph.graph.persistence import unwind as graph_builder_persistence_unwind
+from platform_context_graph.graph.persistence import (
+    unwind as graph_builder_persistence_unwind,
+)
 
 
 def test_entity_props_for_unwind_caps_oversized_value_preview(monkeypatch) -> None:

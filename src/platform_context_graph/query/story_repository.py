@@ -363,14 +363,19 @@ def build_repository_story_response(
                 )
         if dependencies:
             dependency_names = [
-                label for label in (_dependency_label(row) for row in dependencies) if label
+                label
+                for label in (_dependency_label(row) for row in dependencies)
+                if label
             ]
             if dependency_names:
                 dependency_summary_parts.append(
                     f"depends on {human_list(dependency_names)}"
                 )
                 dependency_items.extend(
-                    [{"type": "repository", "name": label} for label in dependency_names]
+                    [
+                        {"type": "repository", "name": label}
+                        for label in dependency_names
+                    ]
                 )
         if dependency_summary_parts:
             story_sections.append(

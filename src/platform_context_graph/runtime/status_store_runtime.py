@@ -57,7 +57,9 @@ def runtime_status_persistence_active() -> bool:
     """Return whether runtime status persistence is currently active."""
 
     dsn = _dsn()
-    return bool(_content_store_enabled() and dsn and PostgresRuntimeStatusStore(dsn).enabled)
+    return bool(
+        _content_store_enabled() and dsn and PostgresRuntimeStatusStore(dsn).enabled
+    )
 
 
 def _normalize_count(value: int | None) -> int:

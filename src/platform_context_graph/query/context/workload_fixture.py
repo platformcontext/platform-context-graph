@@ -32,7 +32,11 @@ def fixture_workload_context(
     selected_instance = None
     if environment is not None:
         selected_instance = next(
-            (entity for entity in instances if entity.get("environment") == environment),
+            (
+                entity
+                for entity in instances
+                if entity.get("environment") == environment
+            ),
             None,
         )
         if selected_instance is None:
@@ -43,7 +47,9 @@ def fixture_workload_context(
                 )
             }
 
-    source_instances = [selected_instance] if selected_instance is not None else instances
+    source_instances = (
+        [selected_instance] if selected_instance is not None else instances
+    )
     source_instance_ids = {entity["id"] for entity in source_instances}
     resource_ids = [
         edge["to"]

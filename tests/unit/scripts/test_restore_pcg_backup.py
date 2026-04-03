@@ -34,7 +34,9 @@ def test_default_compose_file_prefers_primary_yaml(tmp_path: Path) -> None:
     module = _load_module("restore_pcg_backup_primary_compose_test")
     project_root = tmp_path / "repo"
     project_root.mkdir()
-    (project_root / "docker-compose.yaml").write_text("services: {}\n", encoding="utf-8")
+    (project_root / "docker-compose.yaml").write_text(
+        "services: {}\n", encoding="utf-8"
+    )
     (project_root / "docker-compose.template.yml").write_text(
         "services: {}\n",
         encoding="utf-8",
@@ -84,13 +86,16 @@ def test_select_neo4j_auth_secret_prefers_exact_auth_match() -> None:
 
     module = _load_module("restore_pcg_backup_secret_select_test")
 
-    assert module.select_neo4j_auth_secret(
-        [
-            "platformcontextgraph-api-auth",
-            "platformcontextgraph-neo4j-auth",
-            "platformcontextgraph-postgresql-auth",
-        ]
-    ) == "platformcontextgraph-neo4j-auth"
+    assert (
+        module.select_neo4j_auth_secret(
+            [
+                "platformcontextgraph-api-auth",
+                "platformcontextgraph-neo4j-auth",
+                "platformcontextgraph-postgresql-auth",
+            ]
+        )
+        == "platformcontextgraph-neo4j-auth"
+    )
 
 
 def test_parse_args_enables_cluster_auth_and_verification() -> None:
@@ -138,7 +143,9 @@ def test_run_refinalize_verification_invokes_pytest_with_compose_api_env(
         captured["command"] = command
         captured["cwd"] = cwd
         captured["env"] = env
-        Path(env["PCG_E2E_RUN_ID_FILE"]).write_text("refinalize-api-test", encoding="utf-8")
+        Path(env["PCG_E2E_RUN_ID_FILE"]).write_text(
+            "refinalize-api-test", encoding="utf-8"
+        )
         Path(env["PCG_E2E_STATUS_FILE"]).write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr(module, "_run_checked", fake_run)

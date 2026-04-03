@@ -191,7 +191,7 @@ def test_bootstrap_index_respects_gitignore_and_pcgignore_during_filesystem_sync
     )
     (repo_dir / "main.tf").write_text('module "x" {}\n', encoding="utf-8")
     (repo_dir / ".terraform.lock.hcl").write_text(
-        '# terraform lockfile\n',
+        "# terraform lockfile\n",
         encoding="utf-8",
     )
     (repo_dir / "ignored-by-git.txt").write_text("skip me\n", encoding="utf-8")

@@ -174,7 +174,9 @@ def _endpoint_rows_from_operation_document(
     """Extract one normalized endpoint row from an operation document."""
 
     methods = [
-        method for method in _HTTP_METHODS if isinstance(operation_document.get(method), dict)
+        method
+        for method in _HTTP_METHODS
+        if isinstance(operation_document.get(method), dict)
     ]
     operation_ids = [
         str(operation_document[method]["operationId"])

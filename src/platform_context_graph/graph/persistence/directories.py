@@ -124,8 +124,12 @@ def flush_directory_chain_rows(
 ) -> None:
     """Write collected directory chains via UNWIND queries."""
     if dir_rows:
-        repo_parent_rows = [row for row in dir_rows if row["parent_label"] == "Repository"]
-        dir_parent_rows = [row for row in dir_rows if row["parent_label"] == "Directory"]
+        repo_parent_rows = [
+            row for row in dir_rows if row["parent_label"] == "Repository"
+        ]
+        dir_parent_rows = [
+            row for row in dir_rows if row["parent_label"] == "Directory"
+        ]
 
         if repo_parent_rows:
             run_write_query_fn(

@@ -117,6 +117,8 @@ def get_repository_coverage(
     )
     if service_result_has_error(result):
         return service_error_response(
-            request, detail=result["error"], not_found_title="Repository coverage not found"
+            request,
+            detail=result["error"],
+            not_found_title="Repository coverage not found",
         )
     return result

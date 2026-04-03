@@ -60,7 +60,7 @@ def test_classify_ansible_yaml_prefers_jinja_bucket() -> None:
     classification = module.classify_file(
         root_family="ansible_jinja",
         relative_path=Path("deploy.yml"),
-        content='hosts: "{{ env | default(\'qa\') }}"\n',
+        content="hosts: \"{{ env | default('qa') }}\"\n",
     )
 
     assert classification.bucket == "jinja_yaml"
@@ -166,18 +166,27 @@ def test_exclusion_reason_skips_generated_paths_by_default() -> None:
 
     module = _load_script_module("templated_repo_inventory_exclusions")
 
-    assert module.exclusion_reason(
-        Path(".terraform/modules/example/main.tf"),
-        include_generated=False,
-    ) == ".terraform"
-    assert module.exclusion_reason(
-        Path(".worktrees/feature/chart/templates/deployment.yaml"),
-        include_generated=False,
-    ) == ".worktrees"
-    assert module.exclusion_reason(
-        Path("chart/templates/deployment.yaml"),
-        include_generated=False,
-    ) is None
+    assert (
+        module.exclusion_reason(
+            Path(".terraform/modules/example/main.tf"),
+            include_generated=False,
+        )
+        == ".terraform"
+    )
+    assert (
+        module.exclusion_reason(
+            Path(".worktrees/feature/chart/templates/deployment.yaml"),
+            include_generated=False,
+        )
+        == ".worktrees"
+    )
+    assert (
+        module.exclusion_reason(
+            Path("chart/templates/deployment.yaml"),
+            include_generated=False,
+        )
+        is None
+    )
 
 
 def test_scan_root_summarizes_buckets_examples_and_ambiguity(tmp_path: Path) -> None:
@@ -191,11 +200,7 @@ def test_scan_root_summarizes_buckets_examples_and_ambiguity(tmp_path: Path) -> 
     (root / "Dockerfile").write_text("FROM python:3.12-slim\n", encoding="utf-8")
     (root / "values.yaml").write_text("replicas: 1\n", encoding="utf-8")
     (root / "chart" / "templates" / "statefulset.yaml").write_text(
-        (
-            "{{- if .Values.repoSync.enabled }}\n"
-            "kind: StatefulSet\n"
-            "{{- end }}\n"
-        ),
+        ("{{- if .Values.repoSync.enabled }}\n" "kind: StatefulSet\n" "{{- end }}\n"),
         encoding="utf-8",
     )
     (root / "chart" / "templates" / "_helpers.tpl").write_text(

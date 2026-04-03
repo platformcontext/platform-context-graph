@@ -70,23 +70,30 @@ class CrossRepoLinker:
         nodes by comparing URL patterns.
         """
         with self.driver.session() as session:
-            repository_rows = session.run("""
+            repository_rows = session.run(
+                """
                 MATCH (repo:Repository)
                 RETURN repo.id as id,
                        repo.name as name,
                        repo[$remote_url_key] as remote_url,
                        repo[$repo_slug_key] as repo_slug
-            """, remote_url_key="remote_url", repo_slug_key="repo_slug").data()
+            """,
+                remote_url_key="remote_url",
+                repo_slug_key="repo_slug",
+            ).data()
             repo_lookup = repository_index(repository_rows)
             links: list[dict[str, str]] = []
             seen_links: set[tuple[str, str, str]] = set()
 
-            application_rows = session.run("""
+            application_rows = session.run(
+                """
                 MATCH (app:ArgoCDApplication)
                 WHERE app[$source_repo_key] IS NOT NULL
                   AND app[$source_repo_key] <> ''
                 RETURN app[$source_repo_key] as source_repo
-            """, source_repo_key="source_repo").data()
+            """,
+                source_repo_key="source_repo",
+            ).data()
             for row in application_rows:
                 source_repo = clean_text(row.get("source_repo"))
                 if source_repo is None:
@@ -101,12 +108,15 @@ class CrossRepoLinker:
                     seen_links.add(link_key)
                     links.append({"source_repo": source_repo, "repo_id": repo_id})
 
-            appset_rows = session.run("""
+            appset_rows = session.run(
+                """
                 MATCH (app:ArgoCDApplicationSet)
                 WHERE app[$source_repos_key] IS NOT NULL
                   AND app[$source_repos_key] <> ''
                 RETURN app[$source_repos_key] as source_repos
-            """, source_repos_key="source_repos").data()
+            """,
+                source_repos_key="source_repos",
+            ).data()
             for row in appset_rows:
                 source_repos = clean_text(row.get("source_repos"))
                 if source_repos is None:
@@ -170,13 +180,16 @@ class CrossRepoLinker:
         Matches claim kind against XRD claim_kind.
         """
         with self.driver.session() as session:
-            result = session.run("""
+            result = session.run(
+                """
                 MATCH (claim:CrossplaneClaim)
                 MATCH (xrd:CrossplaneXRD)
                 WHERE claim.kind = xrd[$claim_kind_key]
                 MERGE (claim)-[:SATISFIED_BY]->(xrd)
                 RETURN count(*) as cnt
-            """, claim_kind_key="claim_kind")
+            """,
+                claim_kind_key="claim_kind",
+            )
             record = result.single()
             return record["cnt"] if record else 0
 
@@ -186,13 +199,16 @@ class CrossRepoLinker:
         Matches compositeTypeRef.kind against XRD kind.
         """
         with self.driver.session() as session:
-            result = session.run("""
+            result = session.run(
+                """
                 MATCH (xrd:CrossplaneXRD)
                 MATCH (comp:CrossplaneComposition)
                 WHERE comp[$composite_kind_key] = xrd.kind
                 MERGE (xrd)-[:IMPLEMENTED_BY]->(comp)
                 RETURN count(*) as cnt
-            """, composite_kind_key="composite_kind")
+            """,
+                composite_kind_key="composite_kind",
+            )
             record = result.single()
             return record["cnt"] if record else 0
 
@@ -203,13 +219,17 @@ class CrossRepoLinker:
         Repository names or module source paths.
         """
         with self.driver.session() as session:
-            repository_rows = session.run("""
+            repository_rows = session.run(
+                """
                 MATCH (repo:Repository)
                 RETURN repo.id as id,
                        repo.name as name,
                        repo[$remote_url_key] as remote_url,
                        repo[$repo_slug_key] as repo_slug
-            """, remote_url_key="remote_url", repo_slug_key="repo_slug").data()
+            """,
+                remote_url_key="remote_url",
+                repo_slug_key="repo_slug",
+            ).data()
             repo_lookup = repository_index(repository_rows)
 
             module_rows = session.run("""
@@ -218,12 +238,15 @@ class CrossRepoLinker:
                   AND mod.source <> ''
                 RETURN mod.source as source
             """).data()
-            terragrunt_rows = session.run("""
+            terragrunt_rows = session.run(
+                """
                 MATCH (tg:TerragruntConfig)
                 WHERE tg[$terraform_source_key] IS NOT NULL
                   AND tg[$terraform_source_key] <> ''
                 RETURN tg[$terraform_source_key] as source
-            """, terraform_source_key="terraform_source").data()
+            """,
+                terraform_source_key="terraform_source",
+            ).data()
 
             module_links = reference_links(module_rows, repo_lookup)
             terragrunt_links = reference_links(terragrunt_rows, repo_lookup)
@@ -268,7 +291,8 @@ class CrossRepoLinker:
         Matches by namespace and source path correlation.
         """
         with self.driver.session() as session:
-            application_result = session.run("""
+            application_result = session.run(
+                """
                 MATCH (app:ArgoCDApplication)
                 WHERE app[$dest_namespace_key] IS NOT NULL
                   AND app[$dest_namespace_key] <> ''
@@ -279,8 +303,11 @@ class CrossRepoLinker:
                 MATCH (app)-[:SOURCES_FROM]->(repo)
                 MERGE (app)-[:DEPLOYS]->(k)
                 RETURN count(*) as cnt
-            """, dest_namespace_key="dest_namespace")
-            appset_result = session.run("""
+            """,
+                dest_namespace_key="dest_namespace",
+            )
+            appset_result = session.run(
+                """
                 MATCH (app:ArgoCDApplicationSet)-[:SOURCES_FROM]->(repo:Repository)
                 WHERE app[$source_roots_key] IS NOT NULL
                   AND app[$source_roots_key] <> ''
@@ -290,7 +317,9 @@ class CrossRepoLinker:
                       AND f.relative_path STARTS WITH trim(source_root))
                 MERGE (app)-[:DEPLOYS]->(k)
                 RETURN count(*) as cnt
-            """, source_roots_key="source_roots")
+            """,
+                source_roots_key="source_roots",
+            )
             application_record = application_result.single()
             appset_record = appset_result.single()
             return (application_record["cnt"] if application_record else 0) + (

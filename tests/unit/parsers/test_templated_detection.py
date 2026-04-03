@@ -48,7 +48,7 @@ def test_classify_ansible_yaml_returns_jinja() -> None:
     classification = templated_detection.classify_file(
         root_family="ansible_jinja",
         relative_path=Path("deploy.yml"),
-        content='hosts: "{{ env | default(\'qa\') }}"\n',
+        content="hosts: \"{{ env | default('qa') }}\"\n",
     )
 
     assert classification.bucket == "jinja_yaml"
@@ -151,9 +151,7 @@ def test_classify_jinja_text_template_keeps_dialect_without_forcing_yaml() -> No
         root_family="ansible_jinja",
         relative_path=Path("roles/web/templates/site.conf.j2"),
         content=(
-            "{% if enabled -%}\n"
-            "server_name {{ host_name }};\n"
-            "{% endif -%}\n"
+            "{% if enabled -%}\n" "server_name {{ host_name }};\n" "{% endif -%}\n"
         ),
     )
 
@@ -212,9 +210,7 @@ def test_classify_apache_conf_template_marks_raw_ingest_gap() -> None:
 
     classification = templated_detection.classify_file(
         root_family="ansible_jinja",
-        relative_path=Path(
-            "roles/apache/templates/sites-available/boattrader.conf.j2"
-        ),
+        relative_path=Path("roles/apache/templates/sites-available/boattrader.conf.j2"),
         content="ServerName {{ host_name }}\n",
     )
 
@@ -286,10 +282,10 @@ def test_classify_terraform_tpl_keeps_template_dialect() -> None:
         root_family="terraform",
         relative_path=Path("modules/app/templates/cloudwatch/dashboard.tpl"),
         content=(
-            '{\n'
+            "{\n"
             '  "region": "${aws_region}",\n'
             '  "metrics": ${jsonencode([for arn in arns : arn])}\n'
-            '}\n'
+            "}\n"
         ),
     )
 
@@ -389,14 +385,20 @@ def test_infer_content_metadata_for_terraform_template_text() -> None:
 def test_exclusion_reason_skips_generated_paths_by_default() -> None:
     """Generated directories should be excluded unless explicitly included."""
 
-    assert templated_detection.exclusion_reason(
-        Path(".terraform/modules/example/main.tf"),
-        include_generated=False,
-    ) == ".terraform"
-    assert templated_detection.exclusion_reason(
-        Path(".worktrees/feature/chart/templates/deployment.yaml"),
-        include_generated=False,
-    ) == ".worktrees"
+    assert (
+        templated_detection.exclusion_reason(
+            Path(".terraform/modules/example/main.tf"),
+            include_generated=False,
+        )
+        == ".terraform"
+    )
+    assert (
+        templated_detection.exclusion_reason(
+            Path(".worktrees/feature/chart/templates/deployment.yaml"),
+            include_generated=False,
+        )
+        == ".worktrees"
+    )
     assert (
         templated_detection.exclusion_reason(
             Path("chart/templates/deployment.yaml"),

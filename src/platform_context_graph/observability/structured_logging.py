@@ -63,6 +63,8 @@ _LOG_LEVELS = {
     "CRITICAL": logging.CRITICAL,
     "DISABLED": logging.CRITICAL + 10,
 }
+
+
 @dataclass(slots=True)
 class _LoggingState:
     """Runtime logging metadata shared by all emitted records."""
@@ -133,7 +135,9 @@ def debug_file_logging_enabled() -> bool:
 def debug_log_path() -> Path:
     """Return the configured legacy debug log file path."""
 
-    configured = _get_config_value("DEBUG_LOG_PATH", os.path.expanduser("~/mcp_debug.log"))
+    configured = _get_config_value(
+        "DEBUG_LOG_PATH", os.path.expanduser("~/mcp_debug.log")
+    )
     return Path(str(configured))
 
 
@@ -286,7 +290,9 @@ class StructuredTextFormatter(logging.Formatter):
         extras = _extra_keys_from_record(record)
         extras_text = ""
         if extras:
-            extras_text = f" extra_keys={json.dumps(extras, ensure_ascii=True, default=str)}"
+            extras_text = (
+                f" extra_keys={json.dumps(extras, ensure_ascii=True, default=str)}"
+            )
         return (
             f"{datetime.fromtimestamp(record.created, tz=UTC).isoformat(timespec='milliseconds').replace('+00:00', 'Z')} "
             f"{record.levelname} {record.name} component={component} "

@@ -44,10 +44,13 @@ ResolveMaxEntityValueLengthFn = Callable[[Any], int]
 ShouldFlushBatchesFn = Callable[..., bool]
 WriteOneFileGraphFn = Callable[..., tuple[str, dict[str, Any]]]
 
-_GIL_YIELD_ENABLED: bool = os.environ.get(
-    "PCG_COMMIT_GIL_YIELD_ENABLED",
-    "true",
-).lower() != "false"
+_GIL_YIELD_ENABLED: bool = (
+    os.environ.get(
+        "PCG_COMMIT_GIL_YIELD_ENABLED",
+        "true",
+    ).lower()
+    != "false"
+)
 
 
 def commit_file_batch_to_graph(

@@ -19,4 +19,3 @@ def test_content_store_dsn_resolution_active_requires_enabled_and_dsn(
 
     monkeypatch.setenv("PCG_CONTENT_STORE_ENABLED", "false")
     assert state.content_store_dsn_resolution_active() is False
-

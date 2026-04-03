@@ -87,9 +87,9 @@ def raw_text_language_for_path(path: Path) -> str:
     if name == "jenkinsfile" or name.startswith("jenkinsfile."):
         return "groovy"
     if _CONFIG_EXTENSIONS.intersection(suffixes):
-        if _JINJA_EXTENSIONS.intersection(suffixes) or _TEMPLATE_EXTENSIONS.intersection(
+        if _JINJA_EXTENSIONS.intersection(
             suffixes
-        ):
+        ) or _TEMPLATE_EXTENSIONS.intersection(suffixes):
             return "config_template"
         return "config"
     if _YAML_EXTENSIONS.intersection(suffixes) and _JINJA_EXTENSIONS.intersection(

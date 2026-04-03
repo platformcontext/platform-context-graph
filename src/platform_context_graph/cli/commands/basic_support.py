@@ -75,7 +75,9 @@ def run_doctor(main_module: Any) -> None:
     main_module.console.print("\n[bold]5. Checking PCG Command...[/bold]")
     pcg_path = shutil.which("pcg")
     if pcg_path:
-        main_module.console.print(f"   [green]✓[/green] pcg command found at: {pcg_path}")
+        main_module.console.print(
+            f"   [green]✓[/green] pcg command found at: {pcg_path}"
+        )
     else:
         main_module.console.print(
             "   [yellow]⚠[/yellow] pcg command not in PATH (using python -m platform_context_graph)"
@@ -278,7 +280,9 @@ def _run_permissions_check(main_module: Any, *, all_checks_passed: bool) -> bool
     return all_checks_passed
 
 
-def _render_repository_delete_warning(main_module: Any, repos: list[dict[str, Any]]) -> None:
+def _render_repository_delete_warning(
+    main_module: Any, repos: list[dict[str, Any]]
+) -> None:
     """Render the destructive-delete confirmation table for indexed repos."""
 
     main_module.console.print(

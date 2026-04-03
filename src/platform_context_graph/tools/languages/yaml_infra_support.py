@@ -40,9 +40,7 @@ _JINJA_CONTROL_SUFFIXES = ("%}", "-%}", "#}")
 _JINJA_MAPPING_EXPR_RE = re.compile(
     r"(^\s*[^#\n][^:\n]*:\s*)(\{\{.*\}\})(\s*(?:#.*)?)$"
 )
-_JINJA_SEQUENCE_EXPR_RE = re.compile(
-    r"(^\s*-\s*)(\{\{.*\}\})(\s*(?:#.*)?)$"
-)
+_JINJA_SEQUENCE_EXPR_RE = re.compile(r"(^\s*-\s*)(\{\{.*\}\})(\s*(?:#.*)?)$")
 
 
 def _load_all_yaml_documents(content: str) -> list[Any]:

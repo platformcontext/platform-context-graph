@@ -27,7 +27,9 @@ class ResolveEntityRequest(BaseModel):
 
     @field_validator("types", mode="before")
     @classmethod
-    def normalize_types(cls, value: list[EntityType | str] | None) -> list[EntityType] | None:
+    def normalize_types(
+        cls, value: list[EntityType | str] | None
+    ) -> list[EntityType] | None:
         """Accept public entity-type aliases while preserving canonical enums."""
         if value is None:
             return None

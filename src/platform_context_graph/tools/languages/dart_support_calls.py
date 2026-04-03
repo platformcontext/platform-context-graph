@@ -20,7 +20,9 @@ def find_calls(
     calls = []
     seen_calls = set()
 
-    def maybe_record_call(name_node: Any, *, full_name: str, selector_node: Any) -> None:
+    def maybe_record_call(
+        name_node: Any, *, full_name: str, selector_node: Any
+    ) -> None:
         """Record one Dart call if it has not been seen yet."""
 
         name = get_node_text(name_node)
@@ -74,7 +76,9 @@ def find_calls(
     return calls
 
 
-def extract_arguments(selector_node: Any, get_node_text: Callable[[Any], str]) -> list[str]:
+def extract_arguments(
+    selector_node: Any, get_node_text: Callable[[Any], str]
+) -> list[str]:
     """Return argument texts from a selector that carries call arguments."""
 
     argument_part = next(

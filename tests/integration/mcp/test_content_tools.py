@@ -113,8 +113,8 @@ def test_tools_call_does_not_trigger_repo_access_when_server_has_workspace_conte
 
         assert status == 200
         payload = response["result"]["content"][0]["text"]
-        assert "\"source_backend\": \"workspace\"" in payload
-        assert "\"relative_path\": \"src/payments.py\"" in payload
+        assert '"source_backend": "workspace"' in payload
+        assert '"relative_path": "src/payments.py"' in payload
         mock_server._client_request_handler.assert_not_awaited()
 
     asyncio.run(run_test())

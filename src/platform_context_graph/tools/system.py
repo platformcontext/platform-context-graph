@@ -122,7 +122,8 @@ class SystemTools:
         # This logic was moved from CodeFinder to be a system diagnostic tool
         try:
             with self.db_manager.get_driver().session() as session:
-                result = session.run("""
+                result = session.run(
+                    """
                     MATCH (func:Function)
                     WHERE coalesce(func[$is_dependency_key], false) = false
                       AND NOT func.name STARTS WITH '_'
@@ -134,7 +135,9 @@ class SystemTools:
                     RETURN func.name as function_name, func.path as path, func.line_number as line_number
                     ORDER BY func.path, func.line_number
                     LIMIT 50
-                """, is_dependency_key="is_dependency")
+                """,
+                    is_dependency_key="is_dependency",
+                )
                 return {
                     "success": True,
                     "results": {

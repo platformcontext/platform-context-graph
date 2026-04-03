@@ -223,7 +223,9 @@ def test_configure_logging_continues_when_legacy_log_file_is_unwritable(
 
     file_handler = logging.FileHandler
 
-    def blocked_file_handler(path: str | Path, *args: object, **kwargs: object) -> logging.Handler:
+    def blocked_file_handler(
+        path: str | Path, *args: object, **kwargs: object
+    ) -> logging.Handler:
         if Path(path) == Path("/tmp/blocked/pcg.log"):
             raise PermissionError("permission denied")
         return file_handler(path, *args, **kwargs)
@@ -237,7 +239,10 @@ def test_configure_logging_continues_when_legacy_log_file_is_unwritable(
     record = records[0]
     assert record["severity_text"] == "WARNING"
     assert record["event_name"] == "logging.file_sink.unavailable"
-    assert record["message"] == "Optional legacy log file sink unavailable; continuing with stdout logging"
+    assert (
+        record["message"]
+        == "Optional legacy log file sink unavailable; continuing with stdout logging"
+    )
     assert record["extra_keys"] == {
         "error": "permission denied",
         "path": "/tmp/blocked/pcg.log",
@@ -262,7 +267,9 @@ def test_configure_logging_continues_when_debug_log_file_is_unwritable(
 
     file_handler = logging.FileHandler
 
-    def blocked_file_handler(path: str | Path, *args: object, **kwargs: object) -> logging.Handler:
+    def blocked_file_handler(
+        path: str | Path, *args: object, **kwargs: object
+    ) -> logging.Handler:
         if Path(path) == Path("/tmp/blocked/mcp_debug.log"):
             raise PermissionError("permission denied")
         return file_handler(path, *args, **kwargs)
@@ -276,7 +283,10 @@ def test_configure_logging_continues_when_debug_log_file_is_unwritable(
     record = records[0]
     assert record["severity_text"] == "WARNING"
     assert record["event_name"] == "logging.file_sink.unavailable"
-    assert record["message"] == "Optional legacy log file sink unavailable; continuing with stdout logging"
+    assert (
+        record["message"]
+        == "Optional legacy log file sink unavailable; continuing with stdout logging"
+    )
     assert record["extra_keys"] == {
         "error": "permission denied",
         "path": "/tmp/blocked/mcp_debug.log",

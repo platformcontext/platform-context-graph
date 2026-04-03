@@ -32,7 +32,9 @@ def test_get_service_entrypoint_returns_git_collector_spec() -> None:
     assert spec.service_role == "git-collector"
     assert spec.runtime_role == "ingester"
     assert spec.implemented is True
-    assert spec.import_path == "platform_context_graph.runtime.ingester:run_repo_sync_loop"
+    assert (
+        spec.import_path == "platform_context_graph.runtime.ingester:run_repo_sync_loop"
+    )
 
 
 def test_get_service_entrypoint_returns_resolution_engine_placeholder() -> None:

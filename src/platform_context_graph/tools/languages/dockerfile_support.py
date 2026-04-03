@@ -39,7 +39,9 @@ def parse_dockerfile_tree(root_node: Any, source_bytes: bytes) -> dict[str, Any]
         elif node.type == "workdir_instruction":
             current_stage["workdir"] = _last_non_keyword_child_text(node, source_bytes)
         elif node.type == "entrypoint_instruction":
-            current_stage["entrypoint"] = _last_non_keyword_child_text(node, source_bytes)
+            current_stage["entrypoint"] = _last_non_keyword_child_text(
+                node, source_bytes
+            )
         elif node.type == "cmd_instruction":
             current_stage["cmd"] = _last_non_keyword_child_text(node, source_bytes)
         elif node.type == "user_instruction":
@@ -94,7 +96,9 @@ def _parse_arg_instruction(
 ) -> list[dict[str, Any]]:
     """Parse one Dockerfile ARG instruction."""
 
-    values = [_node_text(source_bytes, child) for child in node.children if child.is_named]
+    values = [
+        _node_text(source_bytes, child) for child in node.children if child.is_named
+    ]
     if not values:
         return []
     result = {
@@ -118,7 +122,11 @@ def _parse_env_instruction(
     for child in node.children:
         if child.type != "env_pair":
             continue
-        values = [_node_text(source_bytes, grandchild) for grandchild in child.children if grandchild.is_named]
+        values = [
+            _node_text(source_bytes, grandchild)
+            for grandchild in child.children
+            if grandchild.is_named
+        ]
         if len(values) < 2:
             continue
         row = {
@@ -169,7 +177,11 @@ def _parse_label_instruction(
     for child in node.children:
         if child.type != "label_pair":
             continue
-        values = [_strip_wrapping_quotes(_node_text(source_bytes, grandchild)) for grandchild in child.children if grandchild.is_named]
+        values = [
+            _strip_wrapping_quotes(_node_text(source_bytes, grandchild))
+            for grandchild in child.children
+            if grandchild.is_named
+        ]
         if len(values) < 2:
             continue
         row = {

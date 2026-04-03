@@ -9,7 +9,10 @@ from platform_context_graph.tools.graph_builder_persistence import _begin_transa
 def test_begin_transaction_canonical_module_is_graph_persistence() -> None:
     """Canonical transaction helper should live under graph.persistence."""
 
-    assert begin_transaction.__module__ == "platform_context_graph.graph.persistence.session"
+    assert (
+        begin_transaction.__module__
+        == "platform_context_graph.graph.persistence.session"
+    )
 
 
 def test_legacy_begin_transaction_aliases_canonical_helper() -> None:

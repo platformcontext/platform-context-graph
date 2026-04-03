@@ -76,6 +76,8 @@ _TERRAFORM_PATTERNS: tuple[tuple[str, str, re.Pattern[str], float, str], ...] = 
         "Terraform GitHub Actions subject references the target repository",
     ),
 )
+
+
 def discover_terraform_evidence(
     checkouts: Sequence[RepositoryCheckout],
     catalog: Sequence[CatalogEntry],
@@ -146,5 +148,6 @@ def discover_terraform_evidence(
                 )
             )
     return evidence
+
 
 __all__ = ["discover_terraform_evidence"]

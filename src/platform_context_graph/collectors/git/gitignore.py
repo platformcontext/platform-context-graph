@@ -105,7 +105,9 @@ def _load_gitignore_spec(
 
         lines = resolved.read_text(encoding="utf-8").splitlines()
     except (PermissionError, OSError):
-        _logger.debug("Cannot read .gitignore (permission denied or OS error): %s", resolved)
+        _logger.debug(
+            "Cannot read .gitignore (permission denied or OS error): %s", resolved
+        )
         spec_cache[resolved] = None
         return None
 

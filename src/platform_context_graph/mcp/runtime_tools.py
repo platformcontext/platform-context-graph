@@ -38,7 +38,9 @@ class RuntimeStatusToolMixin:
             return {"error": f"Unknown ingester: {ingester}"}
         return status_queries.get_ingester_status(self.db_manager, ingester=ingester)
 
-    def get_index_status_tool(self: _RuntimeStatusServer, **args: Any) -> dict[str, Any]:
+    def get_index_status_tool(
+        self: _RuntimeStatusServer, **args: Any
+    ) -> dict[str, Any]:
         """Return checkpointed index-run status for a path or run ID."""
 
         target = args.get("target")

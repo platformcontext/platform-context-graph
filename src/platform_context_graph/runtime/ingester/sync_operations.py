@@ -121,7 +121,8 @@ def _run_sync_git(
     ]
     discovered_repository_path_set = set(discovered_repository_paths)
     resumable_repository_paths = {
-        repo_path.resolve() for repo_path in resumable_repository_paths_fn(config.repos_dir)
+        repo_path.resolve()
+        for repo_path in resumable_repository_paths_fn(config.repos_dir)
     }
     resumable_managed_repositories = sorted(
         discovered_repository_path_set.intersection(resumable_repository_paths),
@@ -189,7 +190,9 @@ def _run_sync_git(
 
     discovered_count = len(managed_repository_roots(config.repos_dir))
     if graph_missing_repositories:
-        preview = ", ".join(_repo_label(path) for path in graph_missing_repositories[:5])
+        preview = ", ".join(
+            _repo_label(path) for path in graph_missing_repositories[:5]
+        )
         if len(graph_missing_repositories) > 5:
             preview = f"{preview}, ..."
         log_fn(

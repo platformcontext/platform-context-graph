@@ -24,7 +24,9 @@ def _make_builder() -> GraphBuilder:
 
 def _config_value(key: str) -> str | None:
     if key == "IGNORE_DIRS":
-        return "venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__"
+        return (
+            "venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__"
+        )
     if key == "PCG_IGNORE_DEPENDENCY_DIRS":
         return "true"
     if key == "PCG_HONOR_GITIGNORE":

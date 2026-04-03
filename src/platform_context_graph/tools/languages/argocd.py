@@ -98,7 +98,9 @@ def _collect_generator_sources(
                     )
 
 
-def _extract_template_sources(template_spec: dict[str, Any]) -> tuple[list[str], list[str]]:
+def _extract_template_sources(
+    template_spec: dict[str, Any],
+) -> tuple[list[str], list[str]]:
     """Extract repo URLs and paths from the ApplicationSet template spec."""
     source_repos: list[str] = []
     source_paths: list[str] = []
@@ -208,7 +210,7 @@ def parse_argocd_applicationset(
         Parsed ArgoCD ApplicationSet metadata.
     """
     spec = doc.get("spec", {}) or {}
-    template_spec = ((spec.get("template", {}) or {}).get("spec", {}) or {})
+    template_spec = (spec.get("template", {}) or {}).get("spec", {}) or {}
     generator_types: list[str] = []
     source_repos: list[str] = []
     source_paths: list[str] = []

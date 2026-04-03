@@ -286,7 +286,9 @@ def _automation_repository_names(rows: list[dict[str, Any]]) -> list[str]:
     )
 
 
-def _github_actions_automation_repositories(github_actions: dict[str, Any]) -> list[str]:
+def _github_actions_automation_repositories(
+    github_actions: dict[str, Any],
+) -> list[str]:
     """Return ordered unique automation repositories from a GitHub Actions block."""
 
     return _ordered_unique(

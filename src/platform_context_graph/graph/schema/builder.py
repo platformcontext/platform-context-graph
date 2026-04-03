@@ -172,4 +172,8 @@ def create_schema(builder: Any, *, info_logger_fn: Any, warning_logger_fn: Any) 
             info_logger_fn("Database schema verified/created successfully")
 
 
-__all__ = ["create_schema", "_run_schema_statement", "_schema_statements_for_capabilities"]
+__all__ = [
+    "create_schema",
+    "_run_schema_statement",
+    "_schema_statements_for_capabilities",
+]

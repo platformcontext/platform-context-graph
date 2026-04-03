@@ -229,11 +229,14 @@ class CodeFinderCatalogAnalysisMixin:
             Repository rows sorted by repository name.
         """
         with self.driver.session() as session:
-            result = session.run("""
+            result = session.run(
+                """
                 MATCH (r:Repository)
                 RETURN r.name as name,
                        r.path as path,
                        coalesce(r[$is_dependency_key], false) as is_dependency
                 ORDER BY r.name
-            """, is_dependency_key="is_dependency")
+            """,
+                is_dependency_key="is_dependency",
+            )
             return result.data()

@@ -62,15 +62,17 @@ def _parse_classes(
             class_name = parser._get_node_text(node)
             node_type = class_node.type  # data_type, class, newtype
 
-            classes.append({
-                "name": class_name,
-                "line_number": class_node.start_point[0] + 1,
-                "end_line": class_node.end_point[0] + 1,
-                "type": node_type,
-                "bases": [],
-                "path": str(path),
-                "lang": parser.language_name,
-            })
+            classes.append(
+                {
+                    "name": class_name,
+                    "line_number": class_node.start_point[0] + 1,
+                    "end_line": class_node.end_point[0] + 1,
+                    "type": node_type,
+                    "bases": [],
+                    "path": str(path),
+                    "lang": parser.language_name,
+                }
+            )
 
     return classes
 
@@ -92,14 +94,16 @@ def _parse_variables(
                 continue
             seen.add(key)
 
-            variables.append({
-                "name": parser._get_node_text(node),
-                "line_number": bind_node.start_point[0] + 1,
-                "path": str(path),
-                "lang": parser.language_name,
-                "context": None,
-                "class_context": None,
-            })
+            variables.append(
+                {
+                    "name": parser._get_node_text(node),
+                    "line_number": bind_node.start_point[0] + 1,
+                    "path": str(path),
+                    "lang": parser.language_name,
+                    "context": None,
+                    "class_context": None,
+                }
+            )
 
     return variables
 
@@ -132,15 +136,17 @@ def _parse_imports(
             if as_match:
                 alias = as_match.group(1)
 
-            imports.append({
-                "name": module_name,
-                "full_import_name": module_name,
-                "line_number": node.start_point[0] + 1,
-                "alias": alias,
-                "context": (None, None),
-                "lang": parser.language_name,
-                "is_dependency": False,
-            })
+            imports.append(
+                {
+                    "name": module_name,
+                    "full_import_name": module_name,
+                    "line_number": node.start_point[0] + 1,
+                    "alias": alias,
+                    "context": (None, None),
+                    "lang": parser.language_name,
+                    "is_dependency": False,
+                }
+            )
         except Exception:
             continue
     return imports
@@ -169,17 +175,19 @@ def _parse_calls(
                 continue
             seen_calls.add(call_key)
 
-            calls.append({
-                "name": call_name,
-                "full_name": call_name,
-                "line_number": start_line,
-                "args": [],
-                "inferred_obj_type": None,
-                "context": [None, None, None],
-                "class_context": [None, None],
-                "lang": parser.language_name,
-                "is_dependency": False,
-            })
+            calls.append(
+                {
+                    "name": call_name,
+                    "full_name": call_name,
+                    "line_number": start_line,
+                    "args": [],
+                    "inferred_obj_type": None,
+                    "context": [None, None, None],
+                    "class_context": [None, None],
+                    "lang": parser.language_name,
+                    "is_dependency": False,
+                }
+            )
         except Exception:
             continue
 
@@ -208,11 +216,25 @@ def pre_scan_haskell(files: list[Path], parser_wrapper: Any) -> dict[str, list[s
                 imports_map.setdefault(mod_match.group(1), []).append(str(path))
 
             # Extract top-level function/value names
-            for match in re.finditer(
-                r"^(\w+)\s+(?:::|=)", content, re.MULTILINE
-            ):
+            for match in re.finditer(r"^(\w+)\s+(?:::|=)", content, re.MULTILINE):
                 name = match.group(1)
-                if name not in ("module", "import", "data", "type", "class", "instance", "where", "let", "in", "do", "if", "then", "else", "case", "of"):
+                if name not in (
+                    "module",
+                    "import",
+                    "data",
+                    "type",
+                    "class",
+                    "instance",
+                    "where",
+                    "let",
+                    "in",
+                    "do",
+                    "if",
+                    "then",
+                    "else",
+                    "case",
+                    "of",
+                ):
                     imports_map.setdefault(name, []).append(str(path))
         except Exception as exc:
             warning_logger(f"Tree-sitter pre-scan failed for {path}: {exc}")

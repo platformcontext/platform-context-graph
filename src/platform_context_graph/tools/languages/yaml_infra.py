@@ -1,4 +1,5 @@
 """Compatibility facade for YAML infrastructure parsing."""
+
 from pathlib import Path
 from typing import Any, Callable
 
@@ -45,6 +46,8 @@ _DOCUMENT_PARSERS: tuple[tuple[str, ResourcePredicate, ResourceParser], ...] = (
         parse_crossplane_composition,
     ),
 )
+
+
 class InfraYAMLParser:
     """Parse infrastructure YAML files into graph-friendly resource buckets."""
 

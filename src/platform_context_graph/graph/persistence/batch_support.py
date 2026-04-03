@@ -31,6 +31,7 @@ _NON_ENTITY_BATCH_KEYS = (
     "generic_import_rows",
 )
 
+
 def collect_file_write_data(
     file_data: dict[str, Any],
     file_path_str: str,
@@ -161,12 +162,14 @@ def collect_file_write_data(
         "generic_import_rows": generic_import_rows,
     }
 
+
 def has_pending_rows(batches: dict[str, Any]) -> bool:
     """Return whether a write-batch accumulator still has rows to flush."""
 
     if any(rows for rows in batches["entities_by_label"].values()):
         return True
     return any(batches[key] for key in _NON_ENTITY_BATCH_KEYS)
+
 
 def pending_row_count(batches: dict[str, Any]) -> int:
     """Return the total number of buffered rows across all batch collections."""
@@ -175,16 +178,19 @@ def pending_row_count(batches: dict[str, Any]) -> int:
     other_rows = sum(len(batches[key]) for key in _NON_ENTITY_BATCH_KEYS)
     return entity_rows + other_rows
 
+
 def should_flush_batches(
     batches: dict[str, Any],
     flush_threshold: int | None = None,
 ) -> bool:
     """Return whether the in-memory write buffer should flush early."""
     threshold = (
-        flush_threshold if flush_threshold is not None
+        flush_threshold
+        if flush_threshold is not None
         else _WRITE_BATCH_FLUSH_ROW_THRESHOLD
     )
     return pending_row_count(batches) >= threshold
+
 
 def log_prepared_entity_batches(
     batches: dict[str, Any],
@@ -254,6 +260,7 @@ def log_prepared_entity_batches(
             },
         )
 
+
 def summarize_entity_source_files(
     rows: list[dict[str, Any]],
     *,
@@ -285,6 +292,7 @@ def summarize_entity_source_files(
         "top_files": file_counts.most_common(limit),
     }
 
+
 def merge_batches(
     accumulator: dict[str, Any],
     new_batches: dict[str, Any],
@@ -305,6 +313,7 @@ def merge_batches(
     accumulator["js_import_rows"].extend(new_batches["js_import_rows"])
     accumulator["generic_import_rows"].extend(new_batches["generic_import_rows"])
 
+
 def empty_accumulator() -> dict[str, Any]:
     """Return an empty write-batch accumulator."""
     return {
@@ -317,6 +326,7 @@ def empty_accumulator() -> dict[str, Any]:
         "js_import_rows": [],
         "generic_import_rows": [],
     }
+
 
 __all__ = [
     "_DEFAULT_ENTITY_BATCH_SIZE",

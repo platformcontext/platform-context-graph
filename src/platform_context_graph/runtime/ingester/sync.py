@@ -306,9 +306,7 @@ def run_repo_sync_loop(
                 )
                 complete_ingester_reindex_request(
                     ingester=config.component,
-                    request_token=str(
-                        claimed_reindex_request["reindex_request_token"]
-                    ),
+                    request_token=str(claimed_reindex_request["reindex_request_token"]),
                     error_message=None,
                 )
                 attempt = 1
@@ -319,9 +317,7 @@ def run_repo_sync_loop(
             except Exception as exc:
                 complete_ingester_reindex_request(
                     ingester=config.component,
-                    request_token=str(
-                        claimed_reindex_request["reindex_request_token"]
-                    ),
+                    request_token=str(claimed_reindex_request["reindex_request_token"]),
                     error_message=str(exc),
                 )
                 delay_seconds = retry_after_seconds(exc, attempt)
@@ -339,9 +335,7 @@ def run_repo_sync_loop(
                     "Repo sync degraded after manual reindex failure: "
                     f"{exc}. Retrying in {delay_seconds}s",
                 )
-                pending_request = _wait_for_next_cycle(
-                    config.component, delay_seconds
-                )
+                pending_request = _wait_for_next_cycle(config.component, delay_seconds)
                 continue
         if claimed_request is not None:
             get_observability().record_ingester_scan_request(

@@ -21,7 +21,7 @@ def ts_parser():
 
 
 def test_parse_functions(ts_parser, temp_test_dir):
-    code = '''function greet(name: string): string {
+    code = """function greet(name: string): string {
     return `Hello, ${name}!`;
 }
 
@@ -31,7 +31,7 @@ async function fetchData(url: string): Promise<any> {
     const response = await fetch(url);
     return response.json();
 }
-'''
+"""
     f = temp_test_dir / "funcs.ts"
     f.write_text(code)
     result = ts_parser.parse(f)
@@ -43,7 +43,7 @@ async function fetchData(url: string): Promise<any> {
 
 
 def test_parse_classes(ts_parser, temp_test_dir):
-    code = '''abstract class Shape {
+    code = """abstract class Shape {
     abstract area(): number;
     describe(): string { return "Shape"; }
 }
@@ -57,7 +57,7 @@ class Rectangle extends Shape {
     constructor(private width: number, private height: number) { super(); }
     area(): number { return this.width * this.height; }
 }
-'''
+"""
     f = temp_test_dir / "classes.ts"
     f.write_text(code)
     result = ts_parser.parse(f)
@@ -70,7 +70,7 @@ class Rectangle extends Shape {
 
 
 def test_parse_interfaces(ts_parser, temp_test_dir):
-    code = '''interface Serializable {
+    code = """interface Serializable {
     serialize(): string;
 }
 
@@ -79,7 +79,7 @@ interface Repository<T> {
     findAll(): Promise<T[]>;
     save(entity: T): Promise<T>;
 }
-'''
+"""
     f = temp_test_dir / "interfaces.ts"
     f.write_text(code)
     result = ts_parser.parse(f)
@@ -92,10 +92,10 @@ interface Repository<T> {
 
 
 def test_parse_imports(ts_parser, temp_test_dir):
-    code = '''import { readFileSync } from 'fs';
+    code = """import { readFileSync } from 'fs';
 import * as path from 'path';
 import type { Config } from './config';
-'''
+"""
     f = temp_test_dir / "imports.ts"
     f.write_text(code)
     result = ts_parser.parse(f)
@@ -105,10 +105,10 @@ import type { Config } from './config';
 
 
 def test_parse_variables(ts_parser, temp_test_dir):
-    code = '''const VERSION = "1.0.0";
+    code = """const VERSION = "1.0.0";
 let counter = 0;
 const config = { host: "localhost", port: 8080 };
-'''
+"""
     f = temp_test_dir / "vars.ts"
     f.write_text(code)
     result = ts_parser.parse(f)
@@ -118,12 +118,12 @@ const config = { host: "localhost", port: 8080 };
 
 
 def test_parse_function_calls(ts_parser, temp_test_dir):
-    code = '''function demo() {
+    code = """function demo() {
     console.log("hello");
     JSON.parse('{}');
     Array.from([1, 2, 3]);
 }
-'''
+"""
     f = temp_test_dir / "calls.ts"
     f.write_text(code)
     result = ts_parser.parse(f)
@@ -133,7 +133,7 @@ def test_parse_function_calls(ts_parser, temp_test_dir):
 
 
 def test_parse_enums(ts_parser, temp_test_dir):
-    code = '''enum Direction {
+    code = """enum Direction {
     Up = "UP",
     Down = "DOWN",
     Left = "LEFT",
@@ -145,7 +145,7 @@ const enum Color {
     Green = 1,
     Blue = 2,
 }
-'''
+"""
     f = temp_test_dir / "enums.ts"
     f.write_text(code)
     result = ts_parser.parse(f)
@@ -157,10 +157,10 @@ const enum Color {
 
 
 def test_parse_type_aliases(ts_parser, temp_test_dir):
-    code = '''type StringOrNumber = string | number;
+    code = """type StringOrNumber = string | number;
 type Status = "pending" | "active" | "inactive";
 type Handler<T> = (event: T) => void;
-'''
+"""
     f = temp_test_dir / "types.ts"
     f.write_text(code)
     result = ts_parser.parse(f)
@@ -170,7 +170,7 @@ type Handler<T> = (event: T) => void;
 
 
 def test_parse_generics(ts_parser, temp_test_dir):
-    code = '''function identity<T>(value: T): T {
+    code = """function identity<T>(value: T): T {
     return value;
 }
 
@@ -178,7 +178,7 @@ class Container<T> {
     constructor(private value: T) {}
     get(): T { return this.value; }
 }
-'''
+"""
     f = temp_test_dir / "generics.ts"
     f.write_text(code)
     result = ts_parser.parse(f)
@@ -191,7 +191,7 @@ class Container<T> {
 
 
 def test_parse_async_patterns(ts_parser, temp_test_dir):
-    code = '''async function fetchAll(urls: string[]): Promise<string[]> {
+    code = """async function fetchAll(urls: string[]): Promise<string[]> {
     const promises = urls.map(url => fetch(url).then(r => r.text()));
     return Promise.all(promises);
 }
@@ -201,7 +201,7 @@ function* range(start: number, end: number): Generator<number> {
         yield i;
     }
 }
-'''
+"""
     f = temp_test_dir / "async.ts"
     f.write_text(code)
     result = ts_parser.parse(f)
@@ -212,7 +212,7 @@ function* range(start: number, end: number): Generator<number> {
 
 
 def test_parse_access_modifiers(ts_parser, temp_test_dir):
-    code = '''class Service {
+    code = """class Service {
     private name: string;
     protected config: object;
     public port: number;
@@ -227,7 +227,7 @@ def test_parse_access_modifiers(ts_parser, temp_test_dir):
     private stop(): void {}
     protected restart(): void {}
 }
-'''
+"""
     f = temp_test_dir / "access.ts"
     f.write_text(code)
     result = ts_parser.parse(f)
@@ -249,7 +249,7 @@ class Demo {}
 
 
 def test_result_structure(ts_parser, temp_test_dir):
-    code = 'const x = 1;\n'
+    code = "const x = 1;\n"
     f = temp_test_dir / "minimal.ts"
     f.write_text(code)
     result = ts_parser.parse(f)

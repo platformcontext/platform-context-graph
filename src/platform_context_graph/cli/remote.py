@@ -105,7 +105,9 @@ def resolve_remote_target(
         resolved_profile = _lookup_config_value(config, "PCG_SERVICE_PROFILE")
     profile_suffix = _normalized_profile_suffix(resolved_profile)
 
-    resolved_service_url = service_url.strip() if service_url and service_url.strip() else None
+    resolved_service_url = (
+        service_url.strip() if service_url and service_url.strip() else None
+    )
     if resolved_service_url is None:
         resolved_service_url = _lookup_config_value(
             config,

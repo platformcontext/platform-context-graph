@@ -148,20 +148,22 @@ class HaskellTreeSitterParser:
                                     parameters.append(self._get_node_text(pat))
 
                     context_name, context_type, _ = self._get_parent_context(func_node)
-                    functions.append({
-                        "name": func_name,
-                        "args": parameters,
-                        "line_number": func_node.start_point[0] + 1,
-                        "end_line": func_node.end_point[0] + 1,
-                        "path": str(path),
-                        "lang": self.language_name,
-                        "context": context_name,
-                        "class_context": (
-                            context_name
-                            if context_type and "class" in context_type
-                            else None
-                        ),
-                    })
+                    functions.append(
+                        {
+                            "name": func_name,
+                            "args": parameters,
+                            "line_number": func_node.start_point[0] + 1,
+                            "end_line": func_node.end_point[0] + 1,
+                            "path": str(path),
+                            "lang": self.language_name,
+                            "context": context_name,
+                            "class_context": (
+                                context_name
+                                if context_type and "class" in context_type
+                                else None
+                            ),
+                        }
+                    )
                     if self.index_source:
                         functions[-1]["source"] = source_code
                 except Exception as exc:

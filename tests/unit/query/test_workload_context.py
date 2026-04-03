@@ -371,9 +371,7 @@ def test_get_workload_context_enriches_repo_backed_runtime_and_dependency_data(
     assert [item["id"] for item in logical["instances"]] == [
         "workload-instance:api-node-boats:bg-qa"
     ]
-    assert [item["id"] for item in logical["dependencies"]] == [
-        "repository:r_66cd2d76"
-    ]
+    assert [item["id"] for item in logical["dependencies"]] == ["repository:r_66cd2d76"]
     assert logical["entrypoints"] == [
         {
             "hostname": "api-node-boats.qa.bgrp.io",

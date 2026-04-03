@@ -298,9 +298,7 @@ def _classify_delivery_mode(workflow_file: str) -> str:
     return "workflow_dispatch"
 
 
-def _extract_jenkinsfiles(
-    *, database: Any, repo_id: str
-) -> list[dict[str, Any]]:
+def _extract_jenkinsfiles(*, database: Any, repo_id: str) -> list[dict[str, Any]]:
     """Extract Jenkins pipeline hints from Jenkinsfile-style files."""
 
     rows: list[dict[str, Any]] = []
@@ -319,9 +317,7 @@ def _extract_jenkinsfiles(
     return _dedupe_rows(rows)
 
 
-def _iter_jenkins_entrypoint_paths(
-    *, database: Any, repo_id: str
-) -> list[str]:
+def _iter_jenkins_entrypoint_paths(*, database: Any, repo_id: str) -> list[str]:
     """Return repo-local Jenkins entrypoint paths, including nested Groovy helpers."""
 
     candidates: dict[str, str] = {}
@@ -335,9 +331,7 @@ def _iter_jenkins_entrypoint_paths(
         key = relative_path.lower()
         candidates.setdefault(key, relative_path)
 
-    groovy_paths = discover_repo_files(
-        database, repo_id, suffix=".groovy"
-    )
+    groovy_paths = discover_repo_files(database, repo_id, suffix=".groovy")
     for relative_path in groovy_paths:
         normalized_name = Path(relative_path).name.strip().lower()
         if "jenkins" not in normalized_name:

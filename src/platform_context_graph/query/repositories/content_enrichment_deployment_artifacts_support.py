@@ -14,7 +14,7 @@ from .indexed_file_discovery import (
 )
 
 _TERRAFORM_CONFIG_PATH_RE = re.compile(
-    r'(?P<path>/(?:configd|api)/[A-Za-z0-9._/-]+/\*)',
+    r"(?P<path>/(?:configd|api)/[A-Za-z0-9._/-]+/\*)",
     re.IGNORECASE,
 )
 
@@ -127,9 +127,11 @@ def _extract_kustomize_resource_rows(
             {
                 "resource_path": resource_path,
                 "kind": str(parsed_resource.get("kind") or "").strip(),
-                "name": str((metadata or {}).get("name") or "").strip()
-                if isinstance(metadata, dict)
-                else "",
+                "name": (
+                    str((metadata or {}).get("name") or "").strip()
+                    if isinstance(metadata, dict)
+                    else ""
+                ),
                 "source_repo": source_repo_name,
                 "relative_path": kustomization_path,
                 "environment": environment,
@@ -166,9 +168,7 @@ def _extract_kustomize_patch_rows(
         patch_path = patch.get("path")
         if not isinstance(patch_path, str) or not patch_path.strip():
             continue
-        resolved_patch_path = posixpath.normpath(
-            posixpath.join(parent_dir, patch_path)
-        )
+        resolved_patch_path = posixpath.normpath(posixpath.join(parent_dir, patch_path))
         if not _is_within_repo(resolved_patch_path):
             continue
         rows.append(

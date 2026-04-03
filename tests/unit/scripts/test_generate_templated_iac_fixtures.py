@@ -42,7 +42,7 @@ def test_generate_fixture_corpus_sanitizes_company_markers(tmp_path: Path) -> No
     helm_source.write_text(
         (
             '{{- define "pcg.fullname" -}}\n'
-            'image: boatsgroup.pe.jfrog.io/bg-docker/platformcontextgraph\n'
+            "image: boatsgroup.pe.jfrog.io/bg-docker/platformcontextgraph\n"
             "githubOrg: boatsgroup\n"
             "{{- end -}}\n"
         ),
@@ -52,7 +52,7 @@ def test_generate_fixture_corpus_sanitizes_company_markers(tmp_path: Path) -> No
     dagster_source.parent.mkdir(parents=True)
     dagster_source.write_text(
         (
-            'webhook_url: https://hooks.slack.com/services/T1/B2/secret\n'
+            "webhook_url: https://hooks.slack.com/services/T1/B2/secret\n"
             "{% set portals = [\n"
             "  'boats.com',\n"
             "  'yachtworld'\n"

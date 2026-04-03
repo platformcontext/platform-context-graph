@@ -30,7 +30,9 @@ def merge_metrics(
     return totals
 
 
-def run_cleanup_query(session: Any, query: str, /, **parameters: object) -> dict[str, int]:
+def run_cleanup_query(
+    session: Any, query: str, /, **parameters: object
+) -> dict[str, int]:
     """Execute one cleanup query and return deleted node/edge counters."""
 
     return extract_cleanup_metrics(session.run(query, **parameters))

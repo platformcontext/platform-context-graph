@@ -80,9 +80,7 @@ def indexed_ecosystems(db, graph_builder, staged_ecosystems_dir: Path):
     for repo_dir in sorted(staged_ecosystems_dir.iterdir()):
         if repo_dir.is_dir() and not repo_dir.name.startswith("."):
             asyncio.run(
-                graph_builder.build_graph_from_path_async(
-                    repo_dir, is_dependency=False
-                )
+                graph_builder.build_graph_from_path_async(repo_dir, is_dependency=False)
             )
 
     yield db

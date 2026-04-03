@@ -146,9 +146,7 @@ def _parse_retry_after_seconds(response: requests.Response) -> float:
     if reset_after:
         try:
             reset_at = datetime.fromtimestamp(float(reset_after), tz=timezone.utc)
-            return max(
-                0.0, (reset_at - datetime.now(timezone.utc)).total_seconds()
-            )
+            return max(0.0, (reset_at - datetime.now(timezone.utc)).total_seconds())
         except ValueError:
             return _github_api_retry_delay_seconds()
 

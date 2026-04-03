@@ -365,16 +365,16 @@ def test_code_search_workspace_scope_returns_repo_identity_per_result() -> None:
                 remote_url="https://github.com/platformcontext/payments-api",
                 local_path="/repos/payments-api",
             ),
-                "repo_access": {
-                    "state": "needs_local_checkout",
-                    "repo_id": canonical_repository_id(
-                        remote_url="https://github.com/platformcontext/payments-api",
-                        local_path="/repos/payments-api",
-                    ),
-                    "repo_slug": "platformcontext/payments-api",
-                    "remote_url": "https://github.com/platformcontext/payments-api",
-                    "recommended_action": "ask_user_for_local_path",
-                    "interaction_mode": "conversational",
-                },
-            }
-        ]
+            "repo_access": {
+                "state": "needs_local_checkout",
+                "repo_id": canonical_repository_id(
+                    remote_url="https://github.com/platformcontext/payments-api",
+                    local_path="/repos/payments-api",
+                ),
+                "repo_slug": "platformcontext/payments-api",
+                "remote_url": "https://github.com/platformcontext/payments-api",
+                "recommended_action": "ask_user_for_local_path",
+                "interaction_mode": "conversational",
+            },
+        }
+    ]

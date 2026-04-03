@@ -34,6 +34,7 @@ except ImportError:  # pragma: no cover
     psycopg = None
     dict_row = None
 
+
 def _now() -> datetime:
     """Return the current UTC timestamp for persistence records."""
 
@@ -61,6 +62,7 @@ def entity_or_repo_identity(row: Mapping[str, Any], side: str) -> str | None:
     if entity_id:
         return entity_id
     return repository_entity_id(row.get(f"{side}_repo_id"))
+
 
 class PostgresRelationshipStore:
     """Persist repository relationship evidence, assertions, and resolutions."""

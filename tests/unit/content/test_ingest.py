@@ -194,9 +194,7 @@ def test_prepare_content_entries_strips_nul_bytes_for_content_store(
     repo_path = tmp_path / "legacy-php"
     repo_path.mkdir()
     file_path = repo_path / "timthumb.php"
-    file_path.write_bytes(
-        b"<?php\nfunction thumbnail() {\n    return \"A\x00B\";\n}\n"
-    )
+    file_path.write_bytes(b'<?php\nfunction thumbnail() {\n    return "A\x00B";\n}\n')
 
     repository = repository_metadata(
         name="legacy-php",

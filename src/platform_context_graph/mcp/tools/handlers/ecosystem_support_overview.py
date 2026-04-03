@@ -137,11 +137,8 @@ def build_deployment_overview(
         controller_driven_paths=list(overview.get("controller_driven_paths") or [])
     )
     deployment_story = _build_deployment_story(overview["delivery_paths"])
-    if (
-        controller_driven_story
-        and _should_prefer_controller_driven_story(
-            delivery_paths=overview["delivery_paths"]
-        )
+    if controller_driven_story and _should_prefer_controller_driven_story(
+        delivery_paths=overview["delivery_paths"]
     ):
         deployment_story = controller_driven_story
     if not deployment_story:
@@ -209,7 +206,8 @@ def _entrypoints_for_visibility(
             "visibility": row.get("visibility"),
         }
         for row in hostnames
-        if isinstance(row, dict) and str(row.get("visibility") or "").strip() == visibility
+        if isinstance(row, dict)
+        and str(row.get("visibility") or "").strip() == visibility
     ]
 
 
@@ -257,7 +255,9 @@ def _build_network_signals(
     return signals
 
 
-def _build_service_variants(terraform_modules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _build_service_variants(
+    terraform_modules: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Build compact service-variant rows from Terraform module matches."""
 
     variants: list[dict[str, Any]] = []
@@ -361,7 +361,10 @@ def _build_deployment_controllers(
             for row in terraform_resources
             if isinstance(row, dict)
         }
-        if any(resource_type.startswith("aws_codedeploy_") for resource_type in terraform_types):
+        if any(
+            resource_type.startswith("aws_codedeploy_")
+            for resource_type in terraform_types
+        ):
             add("codedeploy")
         add("terraform")
     return controllers
@@ -378,8 +381,16 @@ def _build_deployment_story(delivery_paths: list[dict[str, Any]]) -> list[str]:
         automation = list(row.get("automation_repositories") or [])
         deployment_sources = list(row.get("deployment_sources") or [])
         provisioning_repositories = list(row.get("provisioning_repositories") or [])
-        platform_kinds = [str(value).strip().upper() for value in row.get("platform_kinds") or [] if str(value).strip()]
-        environments = [str(value).strip() for value in row.get("environments") or [] if str(value).strip()]
+        platform_kinds = [
+            str(value).strip().upper()
+            for value in row.get("platform_kinds") or []
+            if str(value).strip()
+        ]
+        environments = [
+            str(value).strip()
+            for value in row.get("environments") or []
+            if str(value).strip()
+        ]
 
         line = controller
         if automation:
@@ -411,15 +422,18 @@ def _should_prefer_controller_driven_story(
             continue
         if row.get("controller") != "jenkins":
             return False
-        if any(row.get(key) for key in (
-            "automation_repositories",
-            "deployment_sources",
-            "config_sources",
-            "provisioning_repositories",
-            "platform_kinds",
-            "platforms",
-            "environments",
-        )):
+        if any(
+            row.get(key)
+            for key in (
+                "automation_repositories",
+                "deployment_sources",
+                "config_sources",
+                "provisioning_repositories",
+                "platform_kinds",
+                "platforms",
+                "environments",
+            )
+        ):
             return False
     return True
 

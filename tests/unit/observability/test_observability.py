@@ -298,7 +298,10 @@ def test_ingester_scan_request_metrics_and_service_name_use_ingester_identity(
 
     points = _metric_points(metric_reader)
 
-    assert otel.service_name_for_component("repository") == "platform-context-graph-ingester"
+    assert (
+        otel.service_name_for_component("repository")
+        == "platform-context-graph-ingester"
+    )
     assert _matching_values(
         points,
         "pcg_ingester_scan_requests_total",

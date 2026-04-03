@@ -340,7 +340,9 @@ class ContentService:
                     hit=hit,
                     duration_seconds=time.perf_counter() - started,
                 )
-                if hasattr(runtime, "record_content_workspace_fallback") and operation in {
+                if hasattr(
+                    runtime, "record_content_workspace_fallback"
+                ) and operation in {
                     "file",
                     "entity",
                     "lines",
@@ -373,7 +375,9 @@ class ContentService:
                     "line_number": line_number,
                     "content": lines[line_number - 1],
                 }
-                for line_number in range(bounded_start, min(bounded_end, len(lines)) + 1)
+                for line_number in range(
+                    bounded_start, min(bounded_end, len(lines)) + 1
+                )
             ],
             "source_backend": "postgres",
             "index_status": postgres_result.get("index_status"),

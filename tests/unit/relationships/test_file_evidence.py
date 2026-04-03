@@ -118,9 +118,7 @@ images:
 
     evidence = discover_checkout_file_evidence(checkouts)
 
-    assert {
-        (item.evidence_kind, item.relationship_type) for item in evidence
-    } == {
+    assert {(item.evidence_kind, item.relationship_type) for item in evidence} == {
         ("KUSTOMIZE_HELM_CHART_REFERENCE", "DEPLOYS_FROM"),
         ("KUSTOMIZE_IMAGE_REFERENCE", "DEPLOYS_FROM"),
         ("KUSTOMIZE_RESOURCE_REFERENCE", "DEPLOYS_FROM"),
@@ -221,7 +219,14 @@ spec:
         """.strip() + "\n",
         encoding="utf-8",
     )
-    (target_repo / "argocd" / "api-node-bw-home" / "overlays" / "bg-qa" / "config.yaml").write_text(
+    (
+        target_repo
+        / "argocd"
+        / "api-node-bw-home"
+        / "overlays"
+        / "bg-qa"
+        / "config.yaml"
+    ).write_text(
         """
 git:
   repoURL: https://github.com/boatsgroup/helm-charts
@@ -279,7 +284,9 @@ spec:
         """.strip() + "\n",
         encoding="utf-8",
     )
-    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa" / "config.yaml").write_text(
+    (
+        config_repo / "argocd" / "grafana" / "overlays" / "ops-qa" / "config.yaml"
+    ).write_text(
         """
 addon: grafana
 environment: ops-qa
@@ -326,7 +333,14 @@ spec:
         """.strip() + "\n",
         encoding="utf-8",
     )
-    (target_repo / "argocd" / "api-node-bw-home" / "overlays" / "bg-qa" / "config.yaml").write_text(
+    (
+        target_repo
+        / "argocd"
+        / "api-node-bw-home"
+        / "overlays"
+        / "bg-qa"
+        / "config.yaml"
+    ).write_text(
         """
 git:
   repoURL: https://github.com/boatsgroup/iac-eks-argocd
@@ -488,9 +502,9 @@ resource "aws_eks_cluster" "bg_qa" {
 
     evidence = discover_checkout_file_evidence(checkouts)
 
-    assert [
-        (item.evidence_kind, item.relationship_type) for item in evidence
-    ] == [("TERRAFORM_EKS_CLUSTER", "PROVISIONS_PLATFORM")]
+    assert [(item.evidence_kind, item.relationship_type) for item in evidence] == [
+        ("TERRAFORM_EKS_CLUSTER", "PROVISIONS_PLATFORM")
+    ]
     assert {item.source_repo_id for item in evidence} == {checkouts[0].logical_repo_id}
 
 
@@ -503,9 +517,7 @@ def test_discover_checkout_file_evidence_emits_argocd_platform_evidence(
     config_repo = tmp_path / "iac-eks-observability"
     service_repo = tmp_path / "helm-charts"
     (argocd_repo / "applicationsets").mkdir(parents=True)
-    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa").mkdir(
-        parents=True
-    )
+    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa").mkdir(parents=True)
     service_repo.mkdir()
     (argocd_repo / "applicationsets" / "grafana.yaml").write_text(
         """
@@ -523,7 +535,9 @@ spec:
         """.strip() + "\n",
         encoding="utf-8",
     )
-    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa" / "config.yaml").write_text(
+    (
+        config_repo / "argocd" / "grafana" / "overlays" / "ops-qa" / "config.yaml"
+    ).write_text(
         """
 name: api-node-bw-home
 git:
@@ -552,9 +566,7 @@ def test_discover_checkout_file_evidence_emits_argocd_platform_evidence_from_ove
     helm_repo = tmp_path / "helm-charts"
     service_repo = tmp_path / "api-node-boats"
     (argocd_repo / "applicationsets").mkdir(parents=True)
-    (helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa").mkdir(
-        parents=True
-    )
+    (helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa").mkdir(parents=True)
     service_repo.mkdir()
     (service_repo / "README.md").write_text("service repo\n", encoding="utf-8")
     (argocd_repo / "applicationsets" / "api-node-boats.yaml").write_text(
@@ -573,7 +585,9 @@ spec:
         """.strip() + "\n",
         encoding="utf-8",
     )
-    (helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "config.yaml").write_text(
+    (
+        helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "config.yaml"
+    ).write_text(
         """
 addon: api-node-boats
 git:
@@ -582,7 +596,14 @@ git:
         """.strip() + "\n",
         encoding="utf-8",
     )
-    (helm_repo / "argocd" / "api-node-boats" / "overlays" / "bg-qa" / "xirsarole-patch.yaml").write_text(
+    (
+        helm_repo
+        / "argocd"
+        / "api-node-boats"
+        / "overlays"
+        / "bg-qa"
+        / "xirsarole-patch.yaml"
+    ).write_text(
         """
 spec:
   clusterName: bg-qa
@@ -630,7 +651,9 @@ spec:
         """.strip() + "\n",
         encoding="utf-8",
     )
-    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa" / "config.yaml").write_text(
+    (
+        config_repo / "argocd" / "grafana" / "overlays" / "ops-qa" / "config.yaml"
+    ).write_text(
         """
 addon: grafana
 helm:
@@ -687,7 +710,9 @@ spec:
         """.strip() + "\n",
         encoding="utf-8",
     )
-    (config_repo / "argocd" / "grafana" / "overlays" / "ops-qa" / "config.yaml").write_text(
+    (
+        config_repo / "argocd" / "grafana" / "overlays" / "ops-qa" / "config.yaml"
+    ).write_text(
         "addon: grafana\n",
         encoding="utf-8",
     )

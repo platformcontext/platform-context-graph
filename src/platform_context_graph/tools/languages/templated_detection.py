@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 
-
 GENERATED_DIRS = frozenset(
     {
         ".git",
@@ -24,9 +23,14 @@ HCL_SUFFIXES = {".hcl", ".tf", ".tfvars"}
 JINJA_TEMPLATE_SUFFIXES = {".jinja", ".jinja2", ".j2"}
 TERRAFORM_TEMPLATE_SUFFIXES = {".tpl", ".tftpl"}
 RAW_CONFIG_SUFFIXES = {".conf", ".cfg", ".cnf"}
-TEXT_SUFFIXES = YAML_SUFFIXES | HCL_SUFFIXES | JINJA_TEMPLATE_SUFFIXES | {
-    ".kcl"
-} | TERRAFORM_TEMPLATE_SUFFIXES | RAW_CONFIG_SUFFIXES
+TEXT_SUFFIXES = (
+    YAML_SUFFIXES
+    | HCL_SUFFIXES
+    | JINJA_TEMPLATE_SUFFIXES
+    | {".kcl"}
+    | TERRAFORM_TEMPLATE_SUFFIXES
+    | RAW_CONFIG_SUFFIXES
+)
 TEXT_FILENAMES = {
     "dockerfile",
     "compose.yaml",
@@ -126,10 +130,14 @@ def _infer_root_family(relative_path: Path, content: str) -> str:
     )
     if any(suffix in HCL_SUFFIXES for suffix in suffixes):
         return "terraform"
-    if has_tf_markers and any(
-        suffix in TERRAFORM_TEMPLATE_SUFFIXES | JINJA_TEMPLATE_SUFFIXES
-        for suffix in suffixes
-    ) and not (go_expression_match or JINJA_STATEMENT_RE.search(content)):
+    if (
+        has_tf_markers
+        and any(
+            suffix in TERRAFORM_TEMPLATE_SUFFIXES | JINJA_TEMPLATE_SUFFIXES
+            for suffix in suffixes
+        )
+        and not (go_expression_match or JINJA_STATEMENT_RE.search(content))
+    ):
         return "terraform"
     if (
         suffixes
@@ -197,7 +205,12 @@ def _artifact_type(root_family: str, relative_path: Path) -> str:
         return "github_actions_workflow"
     if name == "dockerfile" or name.startswith("dockerfile."):
         return "dockerfile"
-    if name in {"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"}:
+    if name in {
+        "compose.yaml",
+        "compose.yml",
+        "docker-compose.yaml",
+        "docker-compose.yml",
+    }:
         return "docker_compose"
     if RAW_CONFIG_SUFFIXES.intersection(suffixes):
         if "apache" in parts or "httpd" in parts or "mods-available" in parts:
@@ -214,7 +227,9 @@ def _artifact_type(root_family: str, relative_path: Path) -> str:
             return "terraform_template_text"
         return "jinja_text_template"
     if suffixes and suffixes[-1] in TERRAFORM_TEMPLATE_SUFFIXES:
-        return "terraform_template_text" if root_family == "terraform" else "text_template"
+        return (
+            "terraform_template_text" if root_family == "terraform" else "text_template"
+        )
     if any(suffix in HCL_SUFFIXES for suffix in suffixes):
         return "terraform_hcl"
     if any(suffix in YAML_SUFFIXES for suffix in suffixes):
@@ -256,18 +271,22 @@ def _persisted_template_dialect(classification: FileClassification) -> str | Non
 def _is_raw_ingest_candidate(*, artifact_type: str, bucket: str) -> bool:
     """Return whether the file is a raw-text indexing gap today."""
 
-    return artifact_type in {
-        "apache_config",
-        "apache_config_template",
-        "dockerfile",
-        "generic_config_template",
-        "generic_config",
-        "jinja_text_template",
-        "nginx_config",
-        "nginx_config_template",
-        "terraform_template_text",
-        "text_template",
-    } or bucket == "plain_text"
+    return (
+        artifact_type
+        in {
+            "apache_config",
+            "apache_config_template",
+            "dockerfile",
+            "generic_config_template",
+            "generic_config",
+            "jinja_text_template",
+            "nginx_config",
+            "nginx_config_template",
+            "terraform_template_text",
+            "text_template",
+        }
+        or bucket == "plain_text"
+    )
 
 
 def _is_iac_relevant(
@@ -464,7 +483,9 @@ def classify_file(
     has_curly_expressions = bool(go_expression_count)
     has_github_actions = bool(github_actions_count)
 
-    if has_github_actions and not (explicit_go or explicit_jinja or has_curly_expressions):
+    if has_github_actions and not (
+        explicit_go or explicit_jinja or has_curly_expressions
+    ):
         return build_result(
             bucket="unknown_templated",
             dialects=("github_actions",),

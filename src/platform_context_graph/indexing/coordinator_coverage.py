@@ -109,9 +109,7 @@ def publish_repository_coverage(
         "root_file_count": existing_counts.get("root_file_count", 0),
         "root_directory_count": existing_counts.get("root_directory_count", 0),
         "file_count": existing_counts.get("file_count", 0),
-        "top_level_function_count": existing_counts.get(
-            "top_level_function_count", 0
-        ),
+        "top_level_function_count": existing_counts.get("top_level_function_count", 0),
         "class_method_count": existing_counts.get("class_method_count", 0),
         "total_function_count": existing_counts.get("total_function_count", 0),
         "class_count": existing_counts.get("class_count", 0),
@@ -125,7 +123,9 @@ def publish_repository_coverage(
     }
     if include_content_counts:
         content_counts = _content_counts(builder, metadata["id"])
-    graph_gap_count = max(int(repo_state.file_count or 0) - graph_counts["file_count"], 0)
+    graph_gap_count = max(
+        int(repo_state.file_count or 0) - graph_counts["file_count"], 0
+    )
     content_gap_count = max(
         graph_counts["file_count"] - content_counts["content_file_count"],
         0,

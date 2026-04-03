@@ -424,16 +424,15 @@ def _filesystem_copy_ignore(
                 continue
             if pcgignore_spec is not None:
                 try:
-                    relative_path = candidate.resolve().relative_to(resolved_pcgignore_root)
+                    relative_path = candidate.resolve().relative_to(
+                        resolved_pcgignore_root
+                    )
                 except ValueError:
                     relative_path = None
-                if (
-                    relative_path is not None
-                    and _pcgignore_matches(
-                        pcgignore_spec,
-                        relative_path=relative_path,
-                        is_dir=candidate.is_dir(),
-                    )
+                if relative_path is not None and _pcgignore_matches(
+                    pcgignore_spec,
+                    relative_path=relative_path,
+                    is_dir=candidate.is_dir(),
                 ):
                     ignored.add(name)
                     continue

@@ -54,7 +54,9 @@ def parse_hcl_document(
             if data_source is not None:
                 result["terraform_data_sources"].append(data_source)
         elif identifier == "provider":
-            provider = _parse_provider_block(block, source_bytes, path, provider_metadata)
+            provider = _parse_provider_block(
+                block, source_bytes, path, provider_metadata
+            )
             if provider is not None:
                 result["terraform_providers"].append(provider)
         elif identifier == "locals":
@@ -96,7 +98,9 @@ def _body_node(root_node: Any) -> Any | None:
     return None
 
 
-def _parse_resource_block(block: Any, source_bytes: bytes, path: str) -> dict[str, Any] | None:
+def _parse_resource_block(
+    block: Any, source_bytes: bytes, path: str
+) -> dict[str, Any] | None:
     """Parse one Terraform ``resource`` block into a graph entity payload."""
 
     labels = _block_labels(block, source_bytes)
@@ -113,7 +117,9 @@ def _parse_resource_block(block: Any, source_bytes: bytes, path: str) -> dict[st
     }
 
 
-def _parse_variable_block(block: Any, source_bytes: bytes, path: str) -> dict[str, Any] | None:
+def _parse_variable_block(
+    block: Any, source_bytes: bytes, path: str
+) -> dict[str, Any] | None:
     """Parse one Terraform ``variable`` block into a graph entity payload."""
 
     labels = _block_labels(block, source_bytes)
@@ -131,7 +137,9 @@ def _parse_variable_block(block: Any, source_bytes: bytes, path: str) -> dict[st
     }
 
 
-def _parse_output_block(block: Any, source_bytes: bytes, path: str) -> dict[str, Any] | None:
+def _parse_output_block(
+    block: Any, source_bytes: bytes, path: str
+) -> dict[str, Any] | None:
     """Parse one Terraform ``output`` block into a graph entity payload."""
 
     labels = _block_labels(block, source_bytes)
@@ -148,7 +156,9 @@ def _parse_output_block(block: Any, source_bytes: bytes, path: str) -> dict[str,
     }
 
 
-def _parse_module_block(block: Any, source_bytes: bytes, path: str) -> dict[str, Any] | None:
+def _parse_module_block(
+    block: Any, source_bytes: bytes, path: str
+) -> dict[str, Any] | None:
     """Parse one Terraform ``module`` block into a graph entity payload."""
 
     labels = _block_labels(block, source_bytes)
@@ -176,7 +186,9 @@ def _parse_module_block(block: Any, source_bytes: bytes, path: str) -> dict[str,
     }
 
 
-def _parse_data_block(block: Any, source_bytes: bytes, path: str) -> dict[str, Any] | None:
+def _parse_data_block(
+    block: Any, source_bytes: bytes, path: str
+) -> dict[str, Any] | None:
     """Parse one Terraform ``data`` block into a graph entity payload."""
 
     labels = _block_labels(block, source_bytes)
@@ -219,7 +231,9 @@ def _parse_provider_block(
     }
 
 
-def _parse_locals_block(block: Any, source_bytes: bytes, path: str) -> list[dict[str, Any]]:
+def _parse_locals_block(
+    block: Any, source_bytes: bytes, path: str
+) -> list[dict[str, Any]]:
     """Parse a Terraform or Terragrunt ``locals`` block into local rows."""
 
     rows: list[dict[str, Any]] = []
@@ -263,7 +277,9 @@ def _parse_terragrunt_config(
         elif identifier == "include":
             include_names.extend(_block_labels(block, source_bytes))
         elif identifier == "locals":
-            locals_keys.extend(item["name"] for item in _parse_locals_block(block, source_bytes, path))
+            locals_keys.extend(
+                item["name"] for item in _parse_locals_block(block, source_bytes, path)
+            )
 
     inputs_keys: list[str] = []
     for attribute in attributes:
@@ -293,14 +309,19 @@ def _collect_required_provider_metadata(
 
     metadata: dict[str, dict[str, str]] = {}
     terraform_blocks = [
-        block for block in blocks if _block_identifier(block, source_bytes) == "terraform"
+        block
+        for block in blocks
+        if _block_identifier(block, source_bytes) == "terraform"
     ]
     for terraform_block in terraform_blocks:
         terraform_body = _body_node(terraform_block)
         if terraform_body is None:
             continue
         for child in terraform_body.children:
-            if child.type != "block" or _block_identifier(child, source_bytes) != "required_providers":
+            if (
+                child.type != "block"
+                or _block_identifier(child, source_bytes) != "required_providers"
+            ):
                 continue
             providers_body = _body_node(child)
             if providers_body is None:

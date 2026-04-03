@@ -17,9 +17,9 @@ def values_path_patterns(source_path: str) -> list[str]:
         return []
     patterns: list[str] = []
     if normalized.endswith("config.yaml"):
-        patterns.append(normalized[:-len("config.yaml")] + "values.yaml")
+        patterns.append(normalized[: -len("config.yaml")] + "values.yaml")
     elif normalized.endswith("config.yml"):
-        patterns.append(normalized[:-len("config.yml")] + "values.yaml")
+        patterns.append(normalized[: -len("config.yml")] + "values.yaml")
     elif normalized.endswith(".yaml") or normalized.endswith(".yml"):
         patterns.append(normalized)
     else:

@@ -77,10 +77,19 @@ def test_build_deployment_overview_separates_distinct_shared_config_groups() -> 
         deployment_artifacts={
             "config_paths": [
                 {"path": "/configd/api-node-boats/*", "source_repo": "helm-charts"},
-                {"path": "/configd/api-node-boats/*", "source_repo": "terraform-stack-node10"},
+                {
+                    "path": "/configd/api-node-boats/*",
+                    "source_repo": "terraform-stack-node10",
+                },
                 {"path": "/api/api-node-boats/*", "source_repo": "helm-charts"},
-                {"path": "/api/api-node-boats/*", "source_repo": "terraform-stack-node10"},
-                {"path": "/secrets/api-node-boats/*", "source_repo": "iac-eks-observability"},
+                {
+                    "path": "/api/api-node-boats/*",
+                    "source_repo": "terraform-stack-node10",
+                },
+                {
+                    "path": "/secrets/api-node-boats/*",
+                    "source_repo": "iac-eks-observability",
+                },
                 {"path": "/secrets/api-node-boats/*", "source_repo": "helm-charts"},
             ]
         },

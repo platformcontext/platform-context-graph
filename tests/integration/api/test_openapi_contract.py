@@ -134,9 +134,7 @@ def _make_query_services() -> object:
                     "type": "repository",
                     "name": "payments-api",
                 },
-                "drilldowns": {
-                    "repo_context": {"repo_id": "repository:r_ab12cd34"}
-                },
+                "drilldowns": {"repo_context": {"repo_id": "repository:r_ab12cd34"}},
             },
             get_repository_stats=lambda *_args, **_kwargs: {
                 "success": True,
