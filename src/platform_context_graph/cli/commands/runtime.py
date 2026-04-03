@@ -301,7 +301,7 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
         from functools import partial
 
         from platform_context_graph.core import get_database_manager
-        from platform_context_graph.core.job_manager import JobManager
+        from platform_context_graph.core.jobs import JobManager
         from platform_context_graph.facts.state import (
             get_fact_store,
             get_fact_work_queue,
