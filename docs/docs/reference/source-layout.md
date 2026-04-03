@@ -64,6 +64,9 @@ The observability package is a real subsystem rather than a flat file:
 
 This keeps API, MCP, and indexing telemetry consistent.
 
+Operator-facing telemetry references live under `reference/telemetry/` with
+separate pages for overview, metrics, traces, and logs.
+
 ## Relationships Package Layout
 
 The relationships package owns the post-index repo-correlation pipeline:

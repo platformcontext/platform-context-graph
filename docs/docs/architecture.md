@@ -120,6 +120,13 @@ These signals are designed to support on-call debugging, backlog monitoring,
 performance tuning, and future scale decisions without adding repository or
 work-item identifiers to metric labels.
 
+See also:
+
+- [Telemetry Overview](reference/telemetry/index.md)
+- [Telemetry Metrics](reference/telemetry/metrics.md)
+- [Telemetry Traces](reference/telemetry/traces.md)
+- [Telemetry Logs](reference/telemetry/logs.md)
+
 ### Querying
 
 1. A user or agent asks a question.

@@ -22,3 +22,10 @@ Service-facing telemetry expectations:
 
 Metric labels should stay low-cardinality. Repository ids, run ids, snapshot ids,
 and work-item ids belong on spans and structured logs, not on metric labels.
+
+For operator-facing references, see:
+
+- `docs/docs/reference/telemetry/index.md`
+- `docs/docs/reference/telemetry/metrics.md`
+- `docs/docs/reference/telemetry/traces.md`
+- `docs/docs/reference/telemetry/logs.md`

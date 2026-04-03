@@ -56,6 +56,11 @@ nav:
     - MCP Cookbook: reference/mcp-cookbook.md
   - Reference:
     - Architecture: architecture.md
+    - Telemetry:
+      - Overview: reference/telemetry/index.md
+      - Metrics: reference/telemetry/metrics.md
+      - Traces: reference/telemetry/traces.md
+      - Logs: reference/telemetry/logs.md
     - Relationship Mapping: reference/relationship-mapping.md
     - How It Works: concepts/how-it-works.md
     - Graph Model: concepts/graph-model.md
