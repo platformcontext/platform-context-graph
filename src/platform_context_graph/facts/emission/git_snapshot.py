@@ -59,6 +59,25 @@ def _fact_record_from_file_fact(fact: FileObservedFact) -> FactRecordRow:
     )
 
 
+def _file_fact_payload_from_snapshot_entry(
+    *,
+    entry: dict[str, Any],
+    is_dependency: bool,
+) -> dict[str, Any]:
+    """Return the persisted file-fact payload for one parsed snapshot entry."""
+
+    parsed_file_data = {
+        key: value
+        for key, value in entry.items()
+        if key not in {"path", "repo_path", "is_dependency"}
+    }
+    return {
+        "language": entry.get("lang"),
+        "is_dependency": is_dependency,
+        "parsed_file_data": parsed_file_data,
+    }
+
+
 def _fact_record_from_entity_fact(
     fact: ParsedEntityObservedFact,
 ) -> FactRecordRow:
@@ -150,8 +169,10 @@ def emit_git_snapshot_facts(
         is_dependency=is_dependency,
         provenance=provenance,
     )
-    file_facts = [
-        FileObservedFact(
+    file_fact_rows: list[FactRecordRow] = []
+    file_facts = []
+    for entry in snapshot.file_data:
+        file_fact = FileObservedFact(
             repository_id=repository_id,
             checkout_path=checkout_path,
             relative_path=str(Path(entry["path"]).resolve().relative_to(checkout_path)),
@@ -159,8 +180,27 @@ def emit_git_snapshot_facts(
             is_dependency=is_dependency,
             provenance=provenance,
         )
-        for entry in snapshot.file_data
-    ]
+        file_facts.append(file_fact)
+        file_fact_row = _fact_record_from_file_fact(file_fact)
+        file_fact_rows.append(
+            FactRecordRow(
+                fact_id=file_fact_row.fact_id,
+                fact_type=file_fact_row.fact_type,
+                repository_id=file_fact_row.repository_id,
+                checkout_path=file_fact_row.checkout_path,
+                relative_path=file_fact_row.relative_path,
+                source_system=file_fact_row.source_system,
+                source_run_id=file_fact_row.source_run_id,
+                source_snapshot_id=file_fact_row.source_snapshot_id,
+                payload=_file_fact_payload_from_snapshot_entry(
+                    entry=entry,
+                    is_dependency=is_dependency,
+                ),
+                observed_at=file_fact_row.observed_at,
+                ingested_at=file_fact_row.ingested_at,
+                provenance=file_fact_row.provenance,
+            )
+        )
     entity_facts = _iter_entity_facts(
         repository_id=repository_id,
         checkout_path=checkout_path,
@@ -181,7 +221,7 @@ def emit_git_snapshot_facts(
     fact_store.upsert_facts(
         [
             _fact_record_from_repository_fact(repository_fact),
-            *[_fact_record_from_file_fact(fact) for fact in file_facts],
+            *file_fact_rows,
             *[_fact_record_from_entity_fact(fact) for fact in entity_facts],
         ]
     )

@@ -206,6 +206,12 @@ def test_emit_git_snapshot_facts_persists_run_facts_and_work_item() -> None:
     fact_store.upsert_fact_run.assert_called_once()
     fact_store.upsert_facts.assert_called_once()
     work_queue.enqueue_work_item.assert_called_once()
+    fact_rows = fact_store.upsert_facts.call_args.args[0]
+    file_fact_row = next(row for row in fact_rows if row.fact_type == "FileObserved")
+    assert (
+        file_fact_row.payload["parsed_file_data"]["functions"][0]["name"] == "handler"
+    )
+    assert file_fact_row.payload["parsed_file_data"]["lang"] == "python"
 
 
 def test_process_repository_snapshots_emits_facts_before_queueing_commits(

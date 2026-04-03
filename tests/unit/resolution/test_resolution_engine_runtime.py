@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+from platform_context_graph.facts.storage.models import FactRecordRow
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
+from platform_context_graph.resolution.orchestration.engine import project_work_item
 from platform_context_graph.resolution.orchestration.runtime import (
     run_resolution_iteration,
 )
@@ -83,3 +85,65 @@ def test_run_resolution_iteration_marks_failures() -> None:
         error_message="boom",
         terminal=False,
     )
+
+
+def test_project_work_item_loads_facts_and_runs_projection_stages() -> None:
+    """Projecting one work item should load facts and run both projection stages."""
+
+    fact_store = MagicMock()
+    fact_store.list_facts.return_value = [
+        FactRecordRow(
+            fact_id="fact:file",
+            fact_type="FileObserved",
+            repository_id="github.com/acme/service",
+            checkout_path="/tmp/service",
+            relative_path="src/app.py",
+            source_system="git",
+            source_run_id="run-123",
+            source_snapshot_id="snapshot-abc",
+            payload={"language": "python", "is_dependency": False},
+            observed_at=_utc_now(),
+            ingested_at=_utc_now(),
+            provenance={},
+        )
+    ]
+    handled: list[str] = []
+
+    def _fact_projector(*, builder, fact_records):  # type: ignore[no-untyped-def]
+        handled.append(f"facts:{len(fact_records)}")
+        return {"repositories": 0, "files": 1, "entities": 0}
+
+    def _relationship_projector(  # type: ignore[no-untyped-def]
+        *,
+        builder,
+        fact_records,
+        debug_log_fn,
+        warning_logger_fn,
+    ):
+        handled.append(f"relationships:{len(fact_records)}")
+        return {"files": 1, "imports": 0, "call_metrics": {}}
+
+    metrics = project_work_item(
+        FactWorkItemRow(
+            work_item_id="work-3",
+            work_type="project-git-facts",
+            repository_id="github.com/acme/service",
+            source_run_id="run-123",
+        ),
+        builder=MagicMock(),
+        fact_store=fact_store,
+        fact_projector=_fact_projector,
+        relationship_projector=_relationship_projector,
+        debug_log_fn=lambda *_args, **_kwargs: None,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert handled == ["facts:1", "relationships:1"]
+    fact_store.list_facts.assert_called_once_with(
+        repository_id="github.com/acme/service",
+        source_run_id="run-123",
+    )
+    assert metrics == {
+        "facts": {"repositories": 0, "files": 1, "entities": 0},
+        "relationships": {"files": 1, "imports": 0, "call_metrics": {}},
+    }
