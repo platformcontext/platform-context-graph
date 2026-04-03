@@ -48,7 +48,7 @@ graph TD
 | **Query Layer** | Entity-first query model shared by CLI, MCP, and HTTP. |
 | **Collectors** | Source-specific discovery and indexing support. Git is the current canonical collector family. |
 | **Parsers** | Parser registry, language parsers, raw-text handling, capability specs, and SCIP parser/runtime helpers. |
-| **Graph Layer** | Canonical schema and graph persistence helpers. |
+| **Graph Layer** | Canonical schema plus graph persistence helpers for files, entities, inheritance, and call relationships. |
 | **Resolution** | Workload and platform materialization after graph writes. |
 | **Database Layer** | Graph storage. Neo4j is the canonical backend for deployed services. |
 | **Content Store** | PostgreSQL-backed file and entity content cache for deployed API and MCP runtimes. |

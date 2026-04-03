@@ -101,7 +101,7 @@ and post-index materialization into clearer boundaries:
 - `parsers/capabilities/`: parser capability catalog, models, validation, and packaged specs
 - `parsers/scip/`: SCIP parser, runtime helpers, and indexing orchestration
 - `graph/schema/`: graph schema creation
-- `graph/persistence/`: graph write helpers, batching, content dual-write, commit orchestration, and worker support
+- `graph/persistence/`: graph write helpers, batching, content dual-write, commit orchestration, worker support, and call/inheritance relationship persistence
 - `resolution/workloads/` and `resolution/platforms.py`: workload and platform materialization after graph writes
 
 `tools/graph_builder.py` remains the stable public facade while the underlying

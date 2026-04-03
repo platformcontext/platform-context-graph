@@ -1,6 +1,6 @@
 """Compatibility facade for graph-builder relationship helpers."""
 
-from .graph_builder_call_relationships import (
+from ..graph.persistence.calls import (
     create_all_function_calls,
     create_function_calls,
     name_from_symbol,

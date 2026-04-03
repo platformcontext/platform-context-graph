@@ -133,7 +133,7 @@ class TestSkipExternalResolutionBehavior:
     def test_skip_external_logic_exists_in_code(self):
         """Test that the skip_external logic remains in the call-relationship helper."""
         import inspect
-        from platform_context_graph.tools.graph_builder_call_relationships import (
+        from platform_context_graph.graph.persistence.calls import (
             _prepare_call_rows,
         )
 

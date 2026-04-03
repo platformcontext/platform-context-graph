@@ -25,6 +25,9 @@ def test_graph_builder_facade_uses_canonical_graph_persistence() -> None:
     assert graph_builder_module._commit_file_batch_to_graph.__module__ == (
         "platform_context_graph.graph.persistence.commit"
     )
+    assert graph_builder_module._create_all_function_calls.__module__ == (
+        "platform_context_graph.graph.persistence.calls"
+    )
 
 
 def test_graph_builder_facade_uses_canonical_workload_resolution() -> None:

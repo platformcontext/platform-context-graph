@@ -6,8 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import builtins as py_builtins
 
-import platform_context_graph.tools.graph_builder_call_relationships as call_relationships
-from platform_context_graph.tools.graph_builder_call_relationships import (
+import platform_context_graph.graph.persistence.calls as call_relationships
+from platform_context_graph.graph.persistence.calls import (
     _contextual_call_batch_queries,
     _contextual_repo_scoped_batch_query,
     _file_level_call_batch_queries,

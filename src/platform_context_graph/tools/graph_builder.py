@@ -43,15 +43,19 @@ from ..graph.persistence import (
     add_repository_to_graph as _add_repository_to_graph,
     commit_file_batch_to_graph as _commit_file_batch_to_graph,
 )
-from .graph_builder_relationships import (
+from ..graph.persistence.calls import (
     create_all_function_calls as _create_all_function_calls,
-    create_all_infra_links as _create_all_infra_links,
-    create_all_inheritance_links as _create_all_inheritance_links,
-    create_csharp_inheritance_and_interfaces as _create_csharp_inheritance_and_interfaces,
     create_function_calls as _create_function_calls,
-    create_inheritance_links as _create_inheritance_links,
     name_from_symbol as _name_from_symbol,
     safe_run_create as _safe_run_create,
+)
+from ..graph.persistence.inheritance import (
+    create_all_inheritance_links as _create_all_inheritance_links,
+    create_csharp_inheritance_and_interfaces as _create_csharp_inheritance_and_interfaces,
+    create_inheritance_links as _create_inheritance_links,
+)
+from ..relationships.infra_links import (
+    create_all_infra_links as _create_all_infra_links,
 )
 from ..graph.schema import create_schema as _create_schema
 from ..parsers.scip import build_graph_from_scip as _build_graph_from_scip

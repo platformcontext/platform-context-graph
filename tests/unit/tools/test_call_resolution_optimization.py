@@ -14,12 +14,14 @@ from typing import Any
 
 import pytest
 
-import platform_context_graph.tools.graph_builder_call_relationships as call_mod
-from platform_context_graph.tools.graph_builder_call_relationships import (
+import platform_context_graph.graph.persistence.calls as call_mod
+from platform_context_graph.graph.persistence.call_prefilter import (
     compatible_languages,
+)
+from platform_context_graph.graph.persistence.calls import (
     create_all_function_calls,
 )
-from platform_context_graph.tools.graph_builder_call_batches import (
+from platform_context_graph.graph.persistence.call_batches import (
     contextual_call_batch_queries,
     contextual_call_fallback_batch_query,
     contextual_repo_scoped_batch_query,
