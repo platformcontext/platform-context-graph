@@ -172,6 +172,16 @@ class PostgresFactWorkQueue:
                     status,
                     attempt_count,
                     last_error,
+                    failure_stage,
+                    error_class,
+                    failure_class,
+                    failure_code,
+                    retry_disposition,
+                    dead_lettered_at,
+                    last_attempt_started_at,
+                    last_attempt_finished_at,
+                    next_retry_at,
+                    operator_note,
                     created_at,
                     updated_at
                 ) VALUES (
@@ -184,6 +194,16 @@ class PostgresFactWorkQueue:
                     %(status)s,
                     %(attempt_count)s,
                     %(last_error)s,
+                    %(failure_stage)s,
+                    %(error_class)s,
+                    %(failure_class)s,
+                    %(failure_code)s,
+                    %(retry_disposition)s,
+                    %(dead_lettered_at)s,
+                    %(last_attempt_started_at)s,
+                    %(last_attempt_finished_at)s,
+                    %(next_retry_at)s,
+                    %(operator_note)s,
                     %(created_at)s,
                     %(updated_at)s
                 )
@@ -196,6 +216,16 @@ class PostgresFactWorkQueue:
                     status = EXCLUDED.status,
                     attempt_count = EXCLUDED.attempt_count,
                     last_error = EXCLUDED.last_error,
+                    failure_stage = EXCLUDED.failure_stage,
+                    error_class = EXCLUDED.error_class,
+                    failure_class = EXCLUDED.failure_class,
+                    failure_code = EXCLUDED.failure_code,
+                    retry_disposition = EXCLUDED.retry_disposition,
+                    dead_lettered_at = EXCLUDED.dead_lettered_at,
+                    last_attempt_started_at = EXCLUDED.last_attempt_started_at,
+                    last_attempt_finished_at = EXCLUDED.last_attempt_finished_at,
+                    next_retry_at = EXCLUDED.next_retry_at,
+                    operator_note = EXCLUDED.operator_note,
                     updated_at = EXCLUDED.updated_at
                 """,
                 work_item_params(entry),
@@ -224,6 +254,10 @@ class PostgresFactWorkQueue:
                         lease_expires_at IS NULL
                         OR lease_expires_at <= %(now)s
                       )
+                      AND (
+                        next_retry_at IS NULL
+                        OR next_retry_at <= %(now)s
+                      )
                     ORDER BY updated_at ASC
                     LIMIT 1
                 )
@@ -232,6 +266,7 @@ class PostgresFactWorkQueue:
                     lease_expires_at = %(lease_expires_at)s,
                     status = 'leased',
                     attempt_count = fact_work_items.attempt_count + 1,
+                    last_attempt_started_at = %(now)s,
                     updated_at = %(now)s
                 WHERE work_item_id IN (SELECT work_item_id FROM claimable)
                 RETURNING work_item_id,
@@ -243,6 +278,16 @@ class PostgresFactWorkQueue:
                           status,
                           attempt_count,
                           last_error,
+                          failure_stage,
+                          error_class,
+                          failure_class,
+                          failure_code,
+                          retry_disposition,
+                          dead_lettered_at,
+                          last_attempt_started_at,
+                          last_attempt_finished_at,
+                          next_retry_at,
+                          operator_note,
                           created_at,
                           updated_at
                 """,
@@ -275,12 +320,17 @@ class PostgresFactWorkQueue:
                     lease_expires_at = %(lease_expires_at)s,
                     status = 'leased',
                     attempt_count = fact_work_items.attempt_count + 1,
+                    last_attempt_started_at = %(now)s,
                     updated_at = %(now)s
                 WHERE work_item_id = %(work_item_id)s
                   AND status = 'pending'
                   AND (
                     lease_expires_at IS NULL
                     OR lease_expires_at <= %(now)s
+                  )
+                  AND (
+                    next_retry_at IS NULL
+                    OR next_retry_at <= %(now)s
                   )
                 RETURNING work_item_id,
                           work_type,
@@ -291,6 +341,16 @@ class PostgresFactWorkQueue:
                           status,
                           attempt_count,
                           last_error,
+                          failure_stage,
+                          error_class,
+                          failure_class,
+                          failure_code,
+                          retry_disposition,
+                          dead_lettered_at,
+                          last_attempt_started_at,
+                          last_attempt_finished_at,
+                          next_retry_at,
+                          operator_note,
                           created_at,
                           updated_at
                 """,
@@ -310,9 +370,18 @@ class PostgresFactWorkQueue:
         work_item_id: str,
         error_message: str,
         terminal: bool,
+        failure_stage: str | None = None,
+        error_class: str | None = None,
+        failure_class: str | None = None,
+        failure_code: str | None = None,
+        retry_disposition: str | None = None,
+        next_retry_at: Any | None = None,
+        operator_note: str | None = None,
     ) -> None:
         """Mark one work item as retryable or terminally failed."""
 
+        updated_at = utc_now()
+        dead_lettered_at = updated_at if terminal else None
         self._record_operation(
             operation="fail_work_item",
             row_count=1,
@@ -322,8 +391,16 @@ class PostgresFactWorkQueue:
                 SET status = %(status)s,
                     lease_owner = NULL,
                     lease_expires_at = NULL,
-                    attempt_count = fact_work_items.attempt_count + 1,
                     last_error = %(last_error)s,
+                    failure_stage = %(failure_stage)s,
+                    error_class = %(error_class)s,
+                    failure_class = %(failure_class)s,
+                    failure_code = %(failure_code)s,
+                    retry_disposition = %(retry_disposition)s,
+                    dead_lettered_at = %(dead_lettered_at)s,
+                    last_attempt_finished_at = %(updated_at)s,
+                    next_retry_at = %(next_retry_at)s,
+                    operator_note = %(operator_note)s,
                     updated_at = %(updated_at)s
                 WHERE work_item_id = %(work_item_id)s
                 """,
@@ -331,7 +408,15 @@ class PostgresFactWorkQueue:
                     "work_item_id": work_item_id,
                     "status": "failed" if terminal else "pending",
                     "last_error": error_message,
-                    "updated_at": utc_now(),
+                    "failure_stage": failure_stage,
+                    "error_class": error_class,
+                    "failure_class": failure_class,
+                    "failure_code": failure_code,
+                    "retry_disposition": retry_disposition,
+                    "dead_lettered_at": dead_lettered_at,
+                    "next_retry_at": None if terminal else next_retry_at,
+                    "operator_note": operator_note,
+                    "updated_at": updated_at,
                 },
             ),
         )
@@ -349,6 +434,8 @@ class PostgresFactWorkQueue:
                     lease_owner = NULL,
                     lease_expires_at = NULL,
                     last_error = NULL,
+                    last_attempt_finished_at = %(updated_at)s,
+                    next_retry_at = NULL,
                     updated_at = %(updated_at)s
                 WHERE work_item_id = %(work_item_id)s
                 """,

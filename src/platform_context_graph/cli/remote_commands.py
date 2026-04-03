@@ -154,6 +154,8 @@ def run_remote_admin_facts_replay(
     repository_id: str | None,
     source_run_id: str | None,
     work_type: str | None,
+    failure_class: str | None,
+    operator_note: str | None,
     limit: int,
 ) -> None:
     """Replay failed facts-first work items through the admin API."""
@@ -174,6 +176,8 @@ def run_remote_admin_facts_replay(
                 "repository_id": repository_id,
                 "source_run_id": source_run_id,
                 "work_type": work_type,
+                "failure_class": failure_class,
+                "operator_note": operator_note,
                 "limit": limit,
             },
         )

@@ -101,6 +101,16 @@ def register_admin_commands(main_module: Any, admin_app: typer.Typer) -> None:
             "--work-type",
             help="Replay failed work items for one work type.",
         ),
+        failure_class: str | None = typer.Option(
+            None,
+            "--failure-class",
+            help="Replay failed work items for one durable failure class.",
+        ),
+        operator_note: str | None = typer.Option(
+            None,
+            "--note",
+            help="Operator note recorded with the replay event.",
+        ),
         limit: int = typer.Option(
             100,
             "--limit",
@@ -110,10 +120,19 @@ def register_admin_commands(main_module: Any, admin_app: typer.Typer) -> None:
     ) -> None:
         """Replay terminally failed facts-first work items through the admin API."""
 
-        if not any((work_item_id, repository_id, source_run_id, work_type)):
+        if not any(
+            (
+                work_item_id,
+                repository_id,
+                source_run_id,
+                work_type,
+                failure_class,
+            )
+        ):
             raise typer.BadParameter(
                 "At least one selector is required: --work-item-id, "
-                "--repository-id, --source-run-id, or --work-type."
+                "--repository-id, --source-run-id, --work-type, or "
+                "--failure-class."
             )
 
         run_remote_admin_facts_replay(
@@ -125,5 +144,7 @@ def register_admin_commands(main_module: Any, admin_app: typer.Typer) -> None:
             repository_id=repository_id,
             source_run_id=source_run_id,
             work_type=work_type,
+            failure_class=failure_class,
+            operator_note=operator_note,
             limit=limit,
         )

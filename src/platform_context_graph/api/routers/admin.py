@@ -51,6 +51,8 @@ class ReplayFailedFactsRequest(BaseModel):
     repository_id: str | None = None
     source_run_id: str | None = None
     work_type: str | None = None
+    failure_class: str | None = None
+    operator_note: str | None = None
     limit: int = 100
 
 
@@ -439,13 +441,15 @@ async def replay_failed_facts(
             payload.repository_id,
             payload.source_run_id,
             payload.work_type,
+            payload.failure_class,
         )
     ):
         raise HTTPException(
             status_code=400,
             detail=(
                 "admin facts replay requires at least one selector: "
-                "work_item_ids, repository_id, source_run_id, or work_type"
+                "work_item_ids, repository_id, source_run_id, work_type, "
+                "or failure_class"
             ),
         )
     queue = get_fact_work_queue()
@@ -460,6 +464,8 @@ async def replay_failed_facts(
         repository_id=payload.repository_id,
         source_run_id=payload.source_run_id,
         work_type=payload.work_type,
+        failure_class=payload.failure_class,
+        operator_note=payload.operator_note,
         limit=max(payload.limit, 1),
     )
     info_logger(
@@ -471,6 +477,8 @@ async def replay_failed_facts(
             "repository_id": payload.repository_id,
             "source_run_id": payload.source_run_id,
             "work_type": payload.work_type,
+            "failure_class": payload.failure_class,
+            "operator_note": payload.operator_note,
             "limit": payload.limit,
         },
     )
@@ -478,4 +486,14 @@ async def replay_failed_facts(
         "status": "replayed",
         "replayed_count": len(replayed),
         "work_item_ids": [row.work_item_id for row in replayed],
+        "replayed": [
+            {
+                "work_item_id": row.work_item_id,
+                "repository_id": row.repository_id,
+                "source_run_id": row.source_run_id,
+                "work_type": row.work_type,
+                "failure_class": row.failure_class,
+            }
+            for row in replayed
+        ],
     }

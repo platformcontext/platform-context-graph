@@ -210,6 +210,8 @@ async def test_replay_failed_facts_returns_replayed_items(
                 "repository_id": None,
                 "source_run_id": None,
                 "work_type": None,
+                "failure_class": "timeout",
+                "operator_note": "operator replay",
                 "limit": 100,
             }
             return [
@@ -219,18 +221,24 @@ async def test_replay_failed_facts_returns_replayed_items(
                     repository_id="repository:r_payments",
                     source_run_id="run-123",
                     attempt_count=0,
+                    failure_class="timeout",
                 )
             ]
 
     monkeypatch.setattr(admin, "get_fact_work_queue", lambda: _FakeQueue())
 
     response = await admin.replay_failed_facts(
-        admin.ReplayFailedFactsRequest(work_item_ids=["work-1"]),
+        admin.ReplayFailedFactsRequest(
+            work_item_ids=["work-1"],
+            failure_class="timeout",
+            operator_note="operator replay",
+        ),
     )
 
     assert response["status"] == "replayed"
     assert response["replayed_count"] == 1
     assert response["work_item_ids"] == ["work-1"]
+    assert response["replayed"][0]["failure_class"] == "timeout"
 
 
 @pytest.mark.asyncio

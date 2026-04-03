@@ -98,7 +98,7 @@ def test_fail_work_item_marks_retryable_and_terminal_states(monkeypatch) -> None
     queue.fail_work_item(work_item_id="work-1", error_message="boom", terminal=False)
     retry_query, retry_params = cursor.execute.call_args.args
 
-    assert "attempt_count = fact_work_items.attempt_count + 1" in retry_query
+    assert "attempt_count =" not in retry_query
     assert retry_params["status"] == "pending"
     assert retry_params["last_error"] == "boom"
 
@@ -177,7 +177,7 @@ def test_replay_failed_work_items_resets_attempts_and_status(monkeypatch) -> Non
     rows = queue.replay_failed_work_items(work_item_ids=["work-1"], limit=10)
 
     assert [row.work_item_id for row in rows] == ["work-1"]
-    query, params = cursor.execute.call_args.args
+    query, params = cursor.execute.call_args_list[0].args
     assert "status = 'failed'" in query
     assert "attempt_count = 0" in query
     assert params["work_item_ids"] == ["work-1"]

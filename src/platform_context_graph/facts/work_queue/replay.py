@@ -3,9 +3,69 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import uuid4
 
+from .models import FactReplayEventRow
 from .models import FactWorkItemRow
 from .support import utc_now
+
+
+def _record_replay_events(
+    queue: Any,
+    *,
+    replayed_rows: list[FactWorkItemRow],
+    operator_note: str | None,
+) -> list[FactReplayEventRow]:
+    """Persist one durable replay event for each replayed work item."""
+
+    created_at = utc_now()
+    events: list[FactReplayEventRow] = []
+    for row in replayed_rows:
+        event = FactReplayEventRow(
+            replay_event_id=f"fact-replay:{uuid4()}",
+            work_item_id=row.work_item_id,
+            repository_id=row.repository_id,
+            source_run_id=row.source_run_id,
+            work_type=row.work_type,
+            failure_class=row.failure_class,
+            operator_note=operator_note,
+            created_at=created_at,
+        )
+        queue._execute(
+            """
+            INSERT INTO fact_replay_events (
+                replay_event_id,
+                work_item_id,
+                repository_id,
+                source_run_id,
+                work_type,
+                failure_class,
+                operator_note,
+                created_at
+            ) VALUES (
+                %(replay_event_id)s,
+                %(work_item_id)s,
+                %(repository_id)s,
+                %(source_run_id)s,
+                %(work_type)s,
+                %(failure_class)s,
+                %(operator_note)s,
+                %(created_at)s
+            )
+            """,
+            {
+                "replay_event_id": event.replay_event_id,
+                "work_item_id": event.work_item_id,
+                "repository_id": event.repository_id,
+                "source_run_id": event.source_run_id,
+                "work_type": event.work_type,
+                "failure_class": event.failure_class,
+                "operator_note": event.operator_note,
+                "created_at": event.created_at,
+            },
+        )
+        events.append(event)
+    return events
 
 
 def replay_failed_work_items(
@@ -15,6 +75,8 @@ def replay_failed_work_items(
     repository_id: str | None = None,
     source_run_id: str | None = None,
     work_type: str | None = None,
+    failure_class: str | None = None,
+    operator_note: str | None = None,
     limit: int = 100,
 ) -> list[FactWorkItemRow]:
     """Replay terminally failed work items by returning them to pending."""
@@ -31,6 +93,7 @@ def replay_failed_work_items(
                   AND (%(repository_id)s IS NULL OR repository_id = %(repository_id)s)
                   AND (%(source_run_id)s IS NULL OR source_run_id = %(source_run_id)s)
                   AND (%(work_type)s IS NULL OR work_type = %(work_type)s)
+                  AND (%(failure_class)s IS NULL OR failure_class = %(failure_class)s)
                 ORDER BY updated_at ASC
                 LIMIT %(limit)s
             )
@@ -39,6 +102,7 @@ def replay_failed_work_items(
                 lease_owner = NULL,
                 lease_expires_at = NULL,
                 attempt_count = 0,
+                operator_note = %(operator_note)s,
                 updated_at = %(updated_at)s
             WHERE work_item_id IN (SELECT work_item_id FROM replayable)
             RETURNING work_item_id,
@@ -50,6 +114,16 @@ def replay_failed_work_items(
                       status,
                       attempt_count,
                       last_error,
+                      failure_stage,
+                      error_class,
+                      failure_class,
+                      failure_code,
+                      retry_disposition,
+                      dead_lettered_at,
+                      last_attempt_started_at,
+                      last_attempt_finished_at,
+                      next_retry_at,
+                      operator_note,
                       created_at,
                       updated_at
             """,
@@ -58,10 +132,18 @@ def replay_failed_work_items(
                 "repository_id": repository_id,
                 "source_run_id": source_run_id,
                 "work_type": work_type,
+                "failure_class": failure_class,
+                "operator_note": operator_note,
                 "limit": max(limit, 1),
                 "updated_at": utc_now(),
             },
         ),
         row_count=None,
     )
-    return [FactWorkItemRow(**row) for row in rows]
+    replayed_rows = [FactWorkItemRow(**row) for row in rows]
+    _record_replay_events(
+        queue,
+        replayed_rows=replayed_rows,
+        operator_note=operator_note,
+    )
+    return replayed_rows

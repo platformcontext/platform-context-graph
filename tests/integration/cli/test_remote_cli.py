@@ -154,6 +154,10 @@ def test_admin_facts_replay_posts_remote_request(
             "https://pcg.example.com",
             "--work-item-id",
             "work-1",
+            "--failure-class",
+            "timeout",
+            "--note",
+            "operator replay",
         ],
     )
 
@@ -167,6 +171,8 @@ def test_admin_facts_replay_posts_remote_request(
         "repository_id": None,
         "source_run_id": None,
         "work_type": None,
+        "failure_class": "timeout",
+        "operator_note": "operator replay",
         "limit": 100,
     }
 
