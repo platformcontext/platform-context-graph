@@ -14,7 +14,7 @@ The ingester discovers, clones, and indexes repositories for the PCG deployable 
 
 ## Source Discovery
 
-Repository selection is driven by `PCG_REPOSITORY_RULES_JSON`, which accepts structured exact and regex include rules against normalized `org/repo` identifiers. The legacy `PCG_REPOSITORIES` shorthand is still merged as exact rules for backward compatibility.
+Repository selection is driven by `PCG_REPOSITORY_RULES_JSON`, which accepts structured exact and regex include rules against normalized `org/repo` identifiers.
 
 Three source modes are supported:
 

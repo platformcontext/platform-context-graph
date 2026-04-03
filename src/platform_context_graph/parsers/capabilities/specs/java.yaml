@@ -2,7 +2,7 @@ language: java
 title: Java Parser
 family: language
 parser: JavaTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/java.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/java.py
 doc_path: docs/docs/languages/java.md
 fixture_repo: tests/fixtures/ecosystems/java_comprehensive/
 unit_test_file: tests/unit/parsers/test_java_parser.py

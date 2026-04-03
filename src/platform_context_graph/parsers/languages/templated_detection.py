@@ -1,54 +1,40 @@
-"""Dialect detection helpers for templated infrastructure files."""
+"""Dialect detection helpers for templated infrastructure files.
+
+This module classifies authored infrastructure files by their templating
+dialect (Go-template, Jinja, Terraform interpolation, GitHub Actions
+expressions) and infers persisted content metadata used during indexing.
+
+Constants, compiled regex patterns, and pure-function helpers live in the
+companion ``templated_detection_support`` module to keep this file focused
+on the public classification and metadata APIs.
+"""
 
 from dataclasses import dataclass
 from pathlib import Path
-import re
 
-GENERATED_DIRS = frozenset(
-    {
-        ".git",
-        ".terraform",
-        ".terragrunt-cache",
-        ".venv",
-        ".worktrees",
-        "__pycache__",
-        "build",
-        "dist",
-        "node_modules",
-        "vendor",
-    }
+from .templated_detection_support import (
+    GENERATED_DIRS,
+    GITHUB_ACTIONS_EXPR_RE,
+    GO_CONTEXT_RE,
+    GO_EXPRESSION_RE,
+    GO_HINT_RE,
+    GO_LINE_CONTROL_RE,
+    HCL_SUFFIXES,
+    JINJA_STATEMENT_RE,
+    JINJA_TEMPLATE_SUFFIXES,
+    RAW_CONFIG_SUFFIXES,
+    TERRAFORM_TEMPLATE_SUFFIXES,
+    TEXT_FILENAMES,
+    TEXT_SUFFIXES,
+    TF_DIRECTIVE_RE,
+    TF_INTERPOLATION_RE,
+    TF_TEMPLATEFILE_RE,
+    YAML_SUFFIXES,
+    artifact_type as _artifact_type,
+    is_iac_relevant as _is_iac_relevant,
+    is_raw_ingest_candidate as _is_raw_ingest_candidate,
+    suffixes as _suffixes,
 )
-YAML_SUFFIXES = {".yaml", ".yml"}
-HCL_SUFFIXES = {".hcl", ".tf", ".tfvars"}
-JINJA_TEMPLATE_SUFFIXES = {".jinja", ".jinja2", ".j2"}
-TERRAFORM_TEMPLATE_SUFFIXES = {".tpl", ".tftpl"}
-RAW_CONFIG_SUFFIXES = {".conf", ".cfg", ".cnf"}
-TEXT_SUFFIXES = (
-    YAML_SUFFIXES
-    | HCL_SUFFIXES
-    | JINJA_TEMPLATE_SUFFIXES
-    | {".kcl"}
-    | TERRAFORM_TEMPLATE_SUFFIXES
-    | RAW_CONFIG_SUFFIXES
-)
-TEXT_FILENAMES = {
-    "dockerfile",
-    "compose.yaml",
-    "compose.yml",
-    "docker-compose.yaml",
-    "docker-compose.yml",
-}
-GO_EXPRESSION_RE = re.compile(r"(?<!\$)\{\{[-~]?.*?[-~]?\}\}", re.DOTALL)
-JINJA_STATEMENT_RE = re.compile(r"\{%-?.*?-?%\}|\{#.*?#\}", re.DOTALL)
-GITHUB_ACTIONS_EXPR_RE = re.compile(r"\$\{\{.*?\}\}", re.DOTALL)
-GO_CONTEXT_RE = re.compile(r"\{\{[-~]?\s*(?:\.|\$)")
-GO_LINE_CONTROL_RE = re.compile(
-    r"(?m)^\s*\{\{[-~]?\s*(if|else|end|with|range|define|template|block)\b"
-)
-GO_HINT_RE = re.compile(r"\b(include|toYaml|nindent|tpl)\b")
-TF_INTERPOLATION_RE = re.compile(r"(?<!\$)\$\{")
-TF_DIRECTIVE_RE = re.compile(r"(?<!%)%\{")
-TF_TEMPLATEFILE_RE = re.compile(r"\btemplatefile\s*\(")
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,59 +170,6 @@ def _infer_root_family(relative_path: Path, content: str) -> str:
     return "generic"
 
 
-def _suffixes(relative_path: Path) -> tuple[str, ...]:
-    """Return normalized suffixes for a path."""
-
-    return tuple(suffix.lower() for suffix in relative_path.suffixes)
-
-
-def _artifact_type(root_family: str, relative_path: Path) -> str:
-    """Infer a coarse artifact type for reporting."""
-
-    name = relative_path.name.lower()
-    parts = {part.lower() for part in relative_path.parts}
-    suffixes = _suffixes(relative_path)
-    is_template_suffix = bool(
-        suffixes
-        and suffixes[-1] in JINJA_TEMPLATE_SUFFIXES | TERRAFORM_TEMPLATE_SUFFIXES
-    )
-
-    if ".github" in parts and "workflows" in parts:
-        return "github_actions_workflow"
-    if name == "dockerfile" or name.startswith("dockerfile."):
-        return "dockerfile"
-    if name in {
-        "compose.yaml",
-        "compose.yml",
-        "docker-compose.yaml",
-        "docker-compose.yml",
-    }:
-        return "docker_compose"
-    if RAW_CONFIG_SUFFIXES.intersection(suffixes):
-        if "apache" in parts or "httpd" in parts or "mods-available" in parts:
-            return "apache_config_template" if is_template_suffix else "apache_config"
-        if "nginx" in parts:
-            return "nginx_config_template" if is_template_suffix else "nginx_config"
-        return "generic_config_template" if is_template_suffix else "generic_config"
-    if any(suffix in YAML_SUFFIXES for suffix in suffixes) and any(
-        suffix in JINJA_TEMPLATE_SUFFIXES for suffix in suffixes
-    ):
-        return "yaml_template"
-    if suffixes and suffixes[-1] in JINJA_TEMPLATE_SUFFIXES:
-        if root_family == "terraform":
-            return "terraform_template_text"
-        return "jinja_text_template"
-    if suffixes and suffixes[-1] in TERRAFORM_TEMPLATE_SUFFIXES:
-        return (
-            "terraform_template_text" if root_family == "terraform" else "text_template"
-        )
-    if any(suffix in HCL_SUFFIXES for suffix in suffixes):
-        return "terraform_hcl"
-    if any(suffix in YAML_SUFFIXES for suffix in suffixes):
-        return "yaml_document"
-    return "plain_text"
-
-
 def _persisted_artifact_type(classification: FileClassification) -> str | None:
     """Map inventory classification buckets to persisted content metadata."""
 
@@ -266,62 +199,6 @@ def _persisted_template_dialect(classification: FileClassification) -> str | Non
     if dialect == "jinja_template":
         return "jinja"
     return dialect
-
-
-def _is_raw_ingest_candidate(*, artifact_type: str, bucket: str) -> bool:
-    """Return whether the file is a raw-text indexing gap today."""
-
-    return (
-        artifact_type
-        in {
-            "apache_config",
-            "apache_config_template",
-            "dockerfile",
-            "generic_config_template",
-            "generic_config",
-            "jinja_text_template",
-            "nginx_config",
-            "nginx_config_template",
-            "terraform_template_text",
-            "text_template",
-        }
-        or bucket == "plain_text"
-    )
-
-
-def _is_iac_relevant(
-    *,
-    root_family: str,
-    relative_path: Path,
-    artifact_type: str,
-    bucket: str,
-) -> bool:
-    """Return whether the file is IaC-relevant for reporting."""
-
-    if artifact_type == "github_actions_workflow":
-        return False
-    if root_family in {"helm_argo", "ansible_jinja", "terraform"}:
-        return True
-    if artifact_type in {
-        "apache_config",
-        "apache_config_template",
-        "docker_compose",
-        "dockerfile",
-        "nginx_config",
-        "nginx_config_template",
-        "terraform_template_text",
-        "yaml_template",
-        "generic_config_template",
-    }:
-        return True
-    if bucket in {
-        "go_template_yaml",
-        "jinja_yaml",
-        "terraform_hcl",
-        "terraform_hcl_templated",
-    }:
-        return True
-    return "iac" in {part.lower() for part in relative_path.parts}
 
 
 def classify_file(
@@ -405,13 +282,13 @@ def classify_file(
             renderability_hint=renderability_hint,
             artifact_type=artifact_type,
             raw_ingest_candidate=_is_raw_ingest_candidate(
-                artifact_type=artifact_type,
+                artifact_type_val=artifact_type,
                 bucket=bucket,
             ),
             iac_relevant=_is_iac_relevant(
                 root_family=root_family,
                 relative_path=relative_path,
-                artifact_type=artifact_type,
+                artifact_type_val=artifact_type,
                 bucket=bucket,
             ),
         )

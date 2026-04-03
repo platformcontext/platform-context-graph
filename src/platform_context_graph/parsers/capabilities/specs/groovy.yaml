@@ -2,7 +2,7 @@ language: groovy
 title: Groovy Parser
 family: language
 parser: GroovyTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/groovy.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/groovy.py
 doc_path: docs/docs/languages/groovy.md
 fixture_repo: tests/fixtures/ecosystems/groovy_comprehensive/
 unit_test_file: tests/unit/parsers/test_groovy_parser.py

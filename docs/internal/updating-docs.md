@@ -22,7 +22,7 @@ PCG currently has **one** public documentation surface:
 
 1. update or add Markdown under `docs/docs/`
 2. update navigation in `docs/mkdocs.yml`
-3. if you changed parser capability specs under `src/platform_context_graph/tools/parser_capabilities/specs/`, regenerate the language docs and feature matrix
+3. if you changed parser capability specs under `src/platform_context_graph/parsers/capabilities/specs/`, regenerate the language docs and feature matrix
 4. run the docs tests
 5. build the site locally
 
@@ -30,7 +30,7 @@ PCG currently has **one** public documentation surface:
 
 The language parser pages under `docs/docs/languages/` and the parser feature matrix are generated from canonical YAML specs:
 
-- `src/platform_context_graph/tools/parser_capabilities/specs/*.yaml`
+- `src/platform_context_graph/parsers/capabilities/specs/*.yaml`
 
 Generate them with:
 

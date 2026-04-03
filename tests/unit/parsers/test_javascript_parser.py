@@ -4,10 +4,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_context_graph.tools.languages.javascript import (
+from platform_context_graph.parsers.languages.javascript import (
     JavascriptTreeSitterParser,
 )
-from platform_context_graph.tools.languages.javascript_support import (
+from platform_context_graph.parsers.languages.javascript_support import (
     pre_scan_javascript,
 )
 from platform_context_graph.utils.tree_sitter_manager import get_tree_sitter_manager

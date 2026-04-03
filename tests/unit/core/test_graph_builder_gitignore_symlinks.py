@@ -5,10 +5,10 @@ from pathlib import Path
 import pytest
 
 from platform_context_graph.tools.graph_builder import GraphBuilder
-from platform_context_graph.tools.graph_builder_gitignore import (
+from platform_context_graph.collectors.git.gitignore import (
     filter_repo_gitignore_files,
 )
-from platform_context_graph.tools.graph_builder_indexing_discovery import (
+from platform_context_graph.collectors.git.discovery import (
     resolve_repository_file_sets,
 )
 

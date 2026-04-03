@@ -6,10 +6,11 @@ The Helm chart is the primary Kubernetes deployment artifact for PlatformContext
 
 ## Default Shape
 
-The chart deploys two workloads:
+The chart deploys three workloads:
 
 - **API Deployment** — stateless, serves HTTP and MCP. Does not mount the repository workspace.
 - **Ingester StatefulSet** — singleton, owns the shared workspace PVC, repository sync, and indexing lifecycle.
+- **Resolution Engine Deployment** — stateless, claims queued fact work and projects canonical graph state. Does not mount the repository workspace.
 
 Both connect to external Neo4j and external Postgres.
 
@@ -37,6 +38,7 @@ helm template platform-context-graph ./deploy/helm/platform-context-graph
 | :--- | :--- |
 | `contentStore.dsn` | External PostgreSQL DSN for content search and cached source retrieval |
 | `api.*` | API replica count and resource settings |
+| `resolutionEngine.*` | Resolution Engine enablement, replica count, and resource settings |
 | `ingester.*` | Ingester replica count, PVC size, and resource settings |
 | `repoSync.source.rules` | Structured include rules for Git discovery |
 | `observability.otel.*` | OTLP settings for traces and metrics |
@@ -60,14 +62,16 @@ observability:
     logsExporter: none
 ```
 
-The chart renders the same OTEL environment contract into both runtime workloads:
+The chart renders the same OTEL environment contract into all runtime workloads:
 
 - the API `Deployment`
+- the Resolution Engine `Deployment`
 - the ingester `StatefulSet`, including bootstrap and repo-sync containers where applicable
 
 It also sets a distinct `OTEL_SERVICE_NAME` per runtime so traces stay easy to split in Jaeger:
 
 - `platform-context-graph-api`
+- `platform-context-graph-resolution-engine`
 - `platform-context-graph-ingester`
 
 Typical override for a small deployment:
@@ -79,6 +83,12 @@ api:
     requests:
       cpu: 250m
       memory: 512Mi
+
+resolutionEngine:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
 
 ingester:
   resources:
@@ -139,7 +149,7 @@ That gives you:
 
 - newline-delimited JSON logs on stdout for log shipping
 - OTEL traces for Jaeger and other trace backends
-- shared request and trace correlation fields across API, MCP, and ingester logs
+- shared request and trace correlation fields across API, MCP, ingester, and resolution-engine logs
 
 PCG does not require the OTEL logs signal. The intended deployment shape is JSON stdout for logs and OTLP for traces.
 

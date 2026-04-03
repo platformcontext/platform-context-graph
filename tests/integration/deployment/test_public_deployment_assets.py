@@ -96,12 +96,31 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert not any(name.endswith("neo4j") or name == "neo4j" for name in metadata_names)
     assert not any(name.endswith("-scripts") for name in metadata_names)
 
-    deployment = next(doc for doc in docs if doc["kind"] == "Deployment")
-    deployment_pod_spec = deployment["spec"]["template"]["spec"]
-    deployment_container = next(
+    api_deployment = next(
+        doc
+        for doc in docs
+        if doc["kind"] == "Deployment"
+        and doc["metadata"]["name"] == "platform-context-graph-api"
+    )
+    api_pod_spec = api_deployment["spec"]["template"]["spec"]
+    api_container = next(
         container
-        for container in deployment_pod_spec["containers"]
+        for container in api_pod_spec["containers"]
         if container["name"] == "platform-context-graph"
+    )
+    resolution_engine_deployment = next(
+        doc
+        for doc in docs
+        if doc["kind"] == "Deployment"
+        and doc["metadata"]["name"] == "platform-context-graph-resolution-engine"
+    )
+    resolution_engine_pod_spec = resolution_engine_deployment["spec"]["template"][
+        "spec"
+    ]
+    resolution_engine_container = next(
+        container
+        for container in resolution_engine_pod_spec["containers"]
+        if container["name"] == "resolution-engine"
     )
 
     worker_statefulset = next(doc for doc in docs if doc["kind"] == "StatefulSet")
@@ -112,8 +131,8 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         if container["name"] == "repo-sync"
     )
 
-    assert deployment_pod_spec.get("initContainers", []) == []
-    assert deployment_container["command"] == [
+    assert api_pod_spec.get("initContainers", []) == []
+    assert api_container["command"] == [
         "pcg",
         "serve",
         "start",
@@ -121,6 +140,11 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         "0.0.0.0",
         "--port",
         "8080",
+    ]
+    assert resolution_engine_container["command"] == [
+        "pcg",
+        "internal",
+        "resolution-engine",
     ]
     assert worker_container["command"] == ["pcg", "internal", "repo-sync-loop"]
     assert (
@@ -145,14 +169,23 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         "app.kubernetes.io/component": "ingester",
     }
 
-    api_env_names = {env["name"] for env in deployment_container.get("env", [])}
+    api_env_names = {env["name"] for env in api_container.get("env", [])}
+    resolution_engine_env_items = {
+        env["name"]: env
+        for env in resolution_engine_container.get("env", [])
+        if "name" in env
+    }
     worker_env_names = {env["name"] for env in worker_container.get("env", [])}
     api_env_items = {
-        env["name"]: env for env in deployment_container.get("env", []) if "name" in env
+        env["name"]: env for env in api_container.get("env", []) if "name" in env
     }
     api_volume_mounts = {
         volume_mount["mountPath"]
-        for volume_mount in deployment_container.get("volumeMounts", [])
+        for volume_mount in api_container.get("volumeMounts", [])
+    }
+    resolution_engine_volume_mounts = {
+        volume_mount["mountPath"]
+        for volume_mount in resolution_engine_container.get("volumeMounts", [])
     }
     worker_volume_mounts = {
         volume_mount["mountPath"]
@@ -172,18 +205,40 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert "PCG_REPOSITORY_RULES_JSON" in worker_env_names
     assert "PCG_REPOS_DIR" in worker_env_names
     assert "/data" not in api_volume_mounts
+    assert resolution_engine_env_items["PCG_RUNTIME_ROLE"]["value"] == "combined"
+    assert "PCG_API_KEY" not in resolution_engine_env_items
+    assert "/data" not in resolution_engine_volume_mounts
     assert "/data" in worker_volume_mounts
 
 
 def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> None:
     docs = _render_chart()
 
-    deployment = next(doc for doc in docs if doc["kind"] == "Deployment")
-    deployment_pod_spec = deployment["spec"]["template"]["spec"]
-    deployment_container = next(
+    api_deployment = next(
+        doc
+        for doc in docs
+        if doc["kind"] == "Deployment"
+        and doc["metadata"]["name"] == "platform-context-graph-api"
+    )
+    api_pod_spec = api_deployment["spec"]["template"]["spec"]
+    api_container = next(
         container
-        for container in deployment_pod_spec["containers"]
+        for container in api_pod_spec["containers"]
         if container["name"] == "platform-context-graph"
+    )
+    resolution_engine_deployment = next(
+        doc
+        for doc in docs
+        if doc["kind"] == "Deployment"
+        and doc["metadata"]["name"] == "platform-context-graph-resolution-engine"
+    )
+    resolution_engine_pod_spec = resolution_engine_deployment["spec"]["template"][
+        "spec"
+    ]
+    resolution_engine_container = next(
+        container
+        for container in resolution_engine_pod_spec["containers"]
+        if container["name"] == "resolution-engine"
     )
 
     statefulset = next(doc for doc in docs if doc["kind"] == "StatefulSet")
@@ -207,14 +262,21 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
         "capabilities": {"drop": ["ALL"]},
     }
 
-    assert deployment_pod_spec["securityContext"] == expected_pod_security
+    assert api_pod_spec["securityContext"] == expected_pod_security
+    assert resolution_engine_pod_spec["securityContext"] == expected_pod_security
     assert worker_pod_spec["securityContext"] == expected_pod_security
-    assert deployment_container["securityContext"] == expected_container_security
+    assert api_container["securityContext"] == expected_container_security
+    assert resolution_engine_container["securityContext"] == expected_container_security
     assert worker_container["securityContext"] == expected_container_security
 
     api_env = {
         env["name"]: env["value"]
-        for env in deployment_container.get("env", [])
+        for env in api_container.get("env", [])
+        if "name" in env and "value" in env
+    }
+    resolution_engine_env = {
+        env["name"]: env["value"]
+        for env in resolution_engine_container.get("env", [])
         if "name" in env and "value" in env
     }
     worker_env = {
@@ -224,7 +286,11 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
     }
     api_volume_mounts = {
         volume_mount["mountPath"]
-        for volume_mount in deployment_container.get("volumeMounts", [])
+        for volume_mount in api_container.get("volumeMounts", [])
+    }
+    resolution_engine_volume_mounts = {
+        volume_mount["mountPath"]
+        for volume_mount in resolution_engine_container.get("volumeMounts", [])
     }
     worker_volume_mounts = {
         volume_mount["mountPath"]
@@ -232,7 +298,12 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
     }
     api_volumes = {
         volume["name"]: volume
-        for volume in deployment_pod_spec.get("volumes", [])
+        for volume in api_pod_spec.get("volumes", [])
+        if "name" in volume
+    }
+    resolution_engine_volumes = {
+        volume["name"]: volume
+        for volume in resolution_engine_pod_spec.get("volumes", [])
         if "name" in volume
     }
     worker_volumes = {
@@ -244,25 +315,36 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
     assert api_env["PCG_HOME"] == "/tmp/.platform-context-graph"
     assert api_env["HOME"] == "/tmp"
     assert api_env["LOG_FILE_PATH"] == ""
+    assert resolution_engine_env["PCG_HOME"] == "/tmp/.platform-context-graph"
+    assert resolution_engine_env["HOME"] == "/tmp"
+    assert resolution_engine_env["LOG_FILE_PATH"] == ""
     assert worker_env["HOME"] == "/data"
     assert worker_env["LOG_FILE_PATH"] == ""
     assert "/tmp" in api_volume_mounts
+    assert "/tmp" in resolution_engine_volume_mounts
     assert "/tmp" in worker_volume_mounts
     assert api_volumes["tmp"]["emptyDir"] == {}
+    assert resolution_engine_volumes["tmp"]["emptyDir"] == {}
     assert worker_volumes["tmp"]["emptyDir"] == {}
 
 
-def test_default_chart_renders_network_policies_for_api_and_ingester() -> None:
+def test_default_chart_renders_network_policies_for_all_runtime_workloads() -> None:
     docs = _render_chart()
     policies = [doc for doc in docs if doc["kind"] == "NetworkPolicy"]
 
-    assert len(policies) == 2
+    assert len(policies) == 3
 
     api_policy = next(
         policy
         for policy in policies
         if policy["spec"]["podSelector"]["matchLabels"]["app.kubernetes.io/component"]
         == "api"
+    )
+    resolution_engine_policy = next(
+        policy
+        for policy in policies
+        if policy["spec"]["podSelector"]["matchLabels"]["app.kubernetes.io/component"]
+        == "resolution-engine"
     )
     ingester_policy = next(
         policy
@@ -276,6 +358,10 @@ def test_default_chart_renders_network_policies_for_api_and_ingester() -> None:
         {"ports": [{"protocol": "TCP", "port": 8080}]}
     ]
     assert api_policy["spec"]["egress"] == [{}]
+
+    assert resolution_engine_policy["spec"]["policyTypes"] == ["Ingress", "Egress"]
+    assert resolution_engine_policy["spec"]["ingress"] == []
+    assert resolution_engine_policy["spec"]["egress"] == [{}]
 
     assert ingester_policy["spec"]["policyTypes"] == ["Ingress", "Egress"]
     assert ingester_policy["spec"]["ingress"] == []
@@ -357,6 +443,7 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
     assert "platform-context-graph" in services
     assert "neo4j" in services
     assert "repo-sync" in services
+    assert "resolution-engine" in services
 
     postgres = services["postgres"]
     assert postgres["image"].startswith("postgres:")
@@ -364,7 +451,12 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
     assert postgres["environment"]["POSTGRES_USER"] == "pcg"
     assert postgres["ports"] == ["${PCG_POSTGRES_PORT:-15432}:5432"]
 
-    for service_name in ["bootstrap-index", "platform-context-graph", "repo-sync"]:
+    for service_name in [
+        "bootstrap-index",
+        "platform-context-graph",
+        "repo-sync",
+        "resolution-engine",
+    ]:
         envs = _compose_service_envs(services[service_name])
         assert envs["PCG_CONTENT_STORE_DSN"].startswith("postgresql://")
         assert envs["PCG_POSTGRES_DSN"].startswith("postgresql://")
@@ -380,6 +472,8 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
     service_envs = _compose_service_envs(services["platform-context-graph"])
     assert service_envs["PCG_RUNTIME_ROLE"] == "api"
     assert service_envs["PCG_AUTO_GENERATE_API_KEY"] == "true"
+    resolution_engine_envs = _compose_service_envs(services["resolution-engine"])
+    assert resolution_engine_envs["PCG_RUNTIME_ROLE"] == "combined"
 
 
 @pytest.mark.parametrize("compose_file", [COMPOSE_FILE, COMPOSE_TEMPLATE_FILE])
@@ -413,7 +507,12 @@ def test_compose_stack_propagates_worker_tuning_envs(
     data = yaml.safe_load(compose_file.read_text())
     services = data["services"]
 
-    for service_name in ["bootstrap-index", "platform-context-graph", "repo-sync"]:
+    for service_name in [
+        "bootstrap-index",
+        "platform-context-graph",
+        "repo-sync",
+        "resolution-engine",
+    ]:
         envs = _compose_service_envs(services[service_name])
         assert "PCG_REPO_FILE_PARSE_MULTIPROCESS" in envs
         assert "PCG_PARSE_WORKERS" in envs
@@ -424,6 +523,7 @@ def test_compose_stack_propagates_worker_tuning_envs(
         "bootstrap-index",
         "platform-context-graph",
         "repo-sync",
+        "resolution-engine",
     ]:
         envs = _compose_service_envs(services[service_name])
         assert envs["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://otel-collector:4317"
@@ -461,7 +561,12 @@ def test_compose_stack_parameterizes_local_passwords(compose_file: Path) -> None
         "${PCG_POSTGRES_PASSWORD:-change-me}"
     )
 
-    for service_name in ["bootstrap-index", "platform-context-graph", "repo-sync"]:
+    for service_name in [
+        "bootstrap-index",
+        "platform-context-graph",
+        "repo-sync",
+        "resolution-engine",
+    ]:
         envs = _compose_service_envs(services[service_name])
         assert envs["NEO4J_PASSWORD"] == "${PCG_NEO4J_PASSWORD:-change-me}"
         assert (
@@ -489,9 +594,16 @@ def test_compose_stack_includes_service_and_external_test_database() -> None:
     assert "platform-context-graph" in services
     assert "neo4j" in services
     assert "repo-sync" in services
+    assert "resolution-engine" in services
     assert "postgres" in services
     assert services["repo-sync"]["command"] == ["pcg", "internal", "repo-sync-loop"]
     assert services["repo-sync"]["healthcheck"] == {"disable": True}
+    assert services["resolution-engine"]["command"] == [
+        "pcg",
+        "internal",
+        "resolution-engine",
+    ]
+    assert services["resolution-engine"]["healthcheck"] == {"disable": True}
 
 
 def test_chart_renders_otel_env_for_all_runtime_containers_when_enabled() -> None:
@@ -503,15 +615,28 @@ def test_chart_renders_otel_env_for_all_runtime_containers_when_enabled() -> Non
         "--set",
         "observability.environment=ops-qa",
     )
-    deployment = next(doc for doc in docs if doc["kind"] == "Deployment")
+    api_deployment = next(
+        doc
+        for doc in docs
+        if doc["kind"] == "Deployment"
+        and doc["metadata"]["name"] == "platform-context-graph-api"
+    )
+    resolution_engine_deployment = next(
+        doc
+        for doc in docs
+        if doc["kind"] == "Deployment"
+        and doc["metadata"]["name"] == "platform-context-graph-resolution-engine"
+    )
     statefulset = next(doc for doc in docs if doc["kind"] == "StatefulSet")
     pod_specs = [
-        deployment["spec"]["template"]["spec"],
+        api_deployment["spec"]["template"]["spec"],
+        resolution_engine_deployment["spec"]["template"]["spec"],
         statefulset["spec"]["template"]["spec"],
     ]
 
     expected_service_names = [
         "platform-context-graph-api",
+        "platform-context-graph-resolution-engine",
         "platform-context-graph-ingester",
     ]
 
@@ -654,7 +779,7 @@ def test_compose_stack_supports_filesystem_host_root_override() -> None:
 
     rendered = yaml.safe_load(result.stdout)
 
-    for service_name in ["bootstrap-index", "repo-sync"]:
+    for service_name in ["bootstrap-index", "repo-sync", "resolution-engine"]:
         volumes = rendered["services"][service_name]["volumes"]
         assert any(
             volume.get("type") == "bind"

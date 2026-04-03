@@ -34,7 +34,7 @@ OpenAPI-backed API for service-to-service automation, internal tools, and agent 
 
 ### Deployable Service
 
-Run PCG as a networked service with a stateless API runtime, a stateful repository ingester, and HTTP + MCP access over one surface.
+Run PCG as a networked service with a stateless API runtime, a stateful repository ingester, a standalone Resolution Engine, and HTTP + MCP access over one surface.
 
 ## Common Workflows
 
@@ -60,6 +60,7 @@ Run PCG as a networked service with a stateless API runtime, a stateful reposito
 ### Deployable service
 
 - [Deployment Overview](deployment/overview.md)
+- [Service Runtimes](deployment/service-runtimes.md)
 - [Docker Compose](deployment/docker-compose.md)
 - [Helm](deployment/helm.md)
 - [Argo CD](deployment/argocd.md)
@@ -71,3 +72,4 @@ Run PCG as a networked service with a stateless API runtime, a stateful reposito
 - [Fixture Ecosystems](guides/fixture-ecosystems.md)
 - [Graph Model](concepts/graph-model.md)
 - [Architecture](architecture.md)
+- [Local Testing](reference/local-testing.md)

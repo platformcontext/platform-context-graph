@@ -26,9 +26,18 @@ from platform_context_graph.collectors.git.indexing import (
     resolve_repository_file_sets,
 )
 from platform_context_graph.collectors.git.parse_worker import init_parse_worker
+from platform_context_graph.facts.state import get_fact_store
+from platform_context_graph.facts.state import get_fact_work_queue
 from .coordinator_pipeline import (
     finalize_repository_batch,
     process_repository_snapshots,
+)
+from .coordinator_facts import (
+    create_facts_first_commit_callback,
+    create_snapshot_fact_emitter,
+    finalize_fact_projection_batch,
+    facts_first_projection_enabled,
+    finalize_facts_first_run,
 )
 from .coordinator_coverage import publish_run_repository_coverage
 from .run_summary import (
@@ -143,8 +152,7 @@ def _normalize_batch_commit_result(
 def _parse_worker_count() -> int:
     """Return the configured repository-parse concurrency."""
 
-    legacy_default = _positive_int_env("PARALLEL_WORKERS", 4)
-    return _positive_int_env("PCG_PARSE_WORKERS", legacy_default)
+    return _positive_int_env("PCG_PARSE_WORKERS", 4)
 
 
 def _repo_file_parse_multiprocess_enabled() -> bool:
@@ -220,8 +228,11 @@ def _commit_repository_snapshot(
     progress_callback: Any | None = None,
     iter_snapshot_file_data_batches_fn: Any | None = None,
     repo_class: str | None = None,
+    fact_emission_result: Any | None = None,
 ) -> CommitTimingResult:
     """Replace one repository's persisted graph/content state from a snapshot."""
+
+    del fact_emission_result
 
     from .adaptive_batch_config import resolve_batch_config
 
@@ -552,6 +563,35 @@ async def execute_index_run(
         run_id=run_state.run_id,
         resume=resumed,
     ) as run_scope:
+        facts_first_enabled = facts_first_projection_enabled()
+        fact_store = get_fact_store() if facts_first_enabled else None
+        fact_work_queue = get_fact_work_queue() if facts_first_enabled else None
+        if facts_first_enabled and (fact_store is None or fact_work_queue is None):
+            raise RuntimeError(
+                "facts-first indexing requires configured fact store and work queue"
+            )
+
+        snapshot_fact_emitter = None
+        commit_repository_snapshot_fn: Any = _commit_repository_snapshot
+        if facts_first_enabled:
+            snapshot_fact_emitter = create_snapshot_fact_emitter(
+                source_run_id=run_state.run_id,
+                fact_store=fact_store,
+                work_queue=fact_work_queue,
+            )
+            commit_repository_snapshot_fn = create_facts_first_commit_callback(
+                builder=builder,
+                source_run_id=run_state.run_id,
+                fact_store=fact_store,
+                work_queue=fact_work_queue,
+                fact_emission_results=getattr(
+                    snapshot_fact_emitter,
+                    "fact_emission_results",
+                    None,
+                ),
+                info_logger_fn=info_logger_fn,
+                warning_logger_fn=warning_logger_fn,
+            )
         with _parse_executor_scope() as parse_executor:
             parse_strategy = _parse_strategy_label(parse_executor=parse_executor)
             committed_repo_paths, merged_imports_map, repo_telemetry_map = (
@@ -572,12 +612,13 @@ async def execute_index_run(
                     parse_worker_count_fn=_parse_worker_count,
                     index_queue_depth_fn=_index_queue_depth,
                     parse_repository_snapshot_async_fn=parse_repository_snapshot_async,
-                    commit_repository_snapshot_fn=_commit_repository_snapshot,
+                    commit_repository_snapshot_fn=commit_repository_snapshot_fn,
                     iter_snapshot_file_data_batches_fn=_iter_snapshot_file_data_batches,
                     load_snapshot_metadata_fn=_load_snapshot_metadata,
                     snapshot_file_data_exists_fn=_snapshot_file_data_exists,
                     save_snapshot_metadata_fn=_save_snapshot_metadata,
                     save_snapshot_file_data_fn=_save_snapshot_file_data,
+                    emit_snapshot_facts_fn=snapshot_fact_emitter,
                     persist_run_state_fn=_persist_run_state,
                     record_checkpoint_metric_fn=_record_checkpoint_metric,
                     update_pending_repository_gauge_fn=_update_pending_repository_gauge,
@@ -588,33 +629,61 @@ async def execute_index_run(
                     parse_executor=parse_executor,
                     parse_strategy=parse_strategy,
                     parse_workers=_parse_worker_count(),
+                    facts_first_mode=facts_first_enabled,
                 )
             )
-        finalize_repository_batch(
-            builder=builder,
-            root_path=root_path,
-            run_state=run_state,
-            repo_paths=repo_paths,
-            committed_repo_paths=committed_repo_paths,
-            iter_snapshot_file_data_fn=lambda repo_path: _iter_snapshot_file_data(
-                run_state.run_id, repo_path
-            ),
-            merged_imports_map=merged_imports_map,
-            component=component,
-            family=family,
-            source=source,
-            info_logger_fn=info_logger_fn,
-            error_logger_fn=error_logger_fn,
-            finalize_index_batch_fn=finalize_index_batch,
-            persist_run_state_fn=_persist_run_state,
-            delete_snapshots_fn=_delete_snapshots,
-            telemetry=telemetry,
-            utc_now_fn=_utc_now,
-            publish_run_repository_coverage_fn=publish_run_repository_coverage,
-            publish_runtime_progress_fn=_publish_runtime_progress,
-            parse_strategy=parse_strategy,
-            parse_workers=_parse_worker_count(),
-        )
+        if facts_first_enabled:
+            finalize_fact_projection_batch(
+                builder=builder,
+                root_path=root_path,
+                run_state=run_state,
+                repo_paths=repo_paths,
+                committed_repo_paths=committed_repo_paths,
+            )
+            finalize_facts_first_run(
+                run_state=run_state,
+                repo_paths=repo_paths,
+                committed_repo_paths=committed_repo_paths,
+                builder=builder,
+                component=component,
+                source=source,
+                persist_run_state_fn=_persist_run_state,
+                delete_snapshots_fn=_delete_snapshots,
+                publish_run_repository_coverage_fn=publish_run_repository_coverage,
+                publish_runtime_progress_fn=_publish_runtime_progress,
+                utc_now_fn=_utc_now,
+                last_metrics={"projected_repositories": len(committed_repo_paths)},
+            )
+            if run_state.status == "running":
+                run_state.status = "completed"
+            if run_state.finalization_status == "pending":
+                run_state.finalization_status = "completed"
+        else:
+            finalize_repository_batch(
+                builder=builder,
+                root_path=root_path,
+                run_state=run_state,
+                repo_paths=repo_paths,
+                committed_repo_paths=committed_repo_paths,
+                iter_snapshot_file_data_fn=lambda repo_path: _iter_snapshot_file_data(
+                    run_state.run_id, repo_path
+                ),
+                merged_imports_map=merged_imports_map,
+                component=component,
+                family=family,
+                source=source,
+                info_logger_fn=info_logger_fn,
+                error_logger_fn=error_logger_fn,
+                finalize_index_batch_fn=finalize_index_batch,
+                persist_run_state_fn=_persist_run_state,
+                delete_snapshots_fn=_delete_snapshots,
+                telemetry=telemetry,
+                utc_now_fn=_utc_now,
+                publish_run_repository_coverage_fn=publish_run_repository_coverage,
+                publish_runtime_progress_fn=_publish_runtime_progress,
+                parse_strategy=parse_strategy,
+                parse_workers=_parse_worker_count(),
+            )
 
         try:
             summary_config = RunSummaryConfig.from_env()

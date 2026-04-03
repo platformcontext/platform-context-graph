@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from platform_context_graph.tools.graph_builder_mutations import (
+from platform_context_graph.graph.persistence.mutations import (
     delete_repository_from_graph,
 )
 

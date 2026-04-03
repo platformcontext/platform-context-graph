@@ -2,7 +2,7 @@ language: kotlin
 title: Kotlin Parser
 family: language
 parser: KotlinTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/kotlin.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/kotlin.py
 doc_path: docs/docs/languages/kotlin.md
 fixture_repo: tests/fixtures/ecosystems/kotlin_comprehensive/
 unit_test_file: tests/unit/parsers/test_kotlin_parser.py

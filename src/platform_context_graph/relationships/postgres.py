@@ -37,13 +37,11 @@ except ImportError:  # pragma: no cover
 
 def _now() -> datetime:
     """Return the current UTC timestamp for persistence records."""
-
     return datetime.now(tz=UTC)
 
 
 def _digest(prefix: str, *parts: str | None) -> str:
     """Build a stable short identifier from one or more input parts."""
-
     normalized_parts = ["<none>" if part is None else part for part in parts]
     digest = hashlib.sha1("\n".join(normalized_parts).encode("utf-8")).hexdigest()[:16]
     return f"{prefix}_{digest}"
@@ -51,7 +49,6 @@ def _digest(prefix: str, *parts: str | None) -> str:
 
 def repository_entity_id(repo_id: str | None) -> str | None:
     """Return the canonical entity identifier for one repository row."""
-
     return repo_id
 
 

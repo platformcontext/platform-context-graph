@@ -15,7 +15,7 @@ from platform_context_graph.query.repositories.content_enrichment_automation_pat
 from platform_context_graph.query.repositories.content_enrichment_workflows import (
     extract_delivery_workflows,
 )
-from platform_context_graph.tools.languages.groovy_support import (
+from platform_context_graph.parsers.languages.groovy_support import (
     extract_jenkins_pipeline_metadata,
 )
 

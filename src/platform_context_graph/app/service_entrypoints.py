@@ -37,8 +37,11 @@ _SERVICE_ENTRYPOINTS = {
     SERVICE_ROLE_RESOLUTION_ENGINE: ServiceEntrypointSpec(
         service_role=SERVICE_ROLE_RESOLUTION_ENGINE,
         runtime_role="combined",
-        import_path="platform_context_graph.app.service_entrypoints:start_resolution_engine",
-        implemented=False,
+        import_path=(
+            "platform_context_graph.resolution.orchestration.runtime:"
+            "start_resolution_engine"
+        ),
+        implemented=True,
     ),
 }
 

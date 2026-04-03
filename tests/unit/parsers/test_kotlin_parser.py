@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_context_graph.tools.languages.kotlin import KotlinTreeSitterParser
-from platform_context_graph.tools.languages.kotlin_support import pre_scan_kotlin
+from platform_context_graph.parsers.languages.kotlin import KotlinTreeSitterParser
+from platform_context_graph.parsers.languages.kotlin_support import pre_scan_kotlin
 from platform_context_graph.utils.tree_sitter_manager import get_tree_sitter_manager
 
 

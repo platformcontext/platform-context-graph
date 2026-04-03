@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from platform_context_graph.tools.graph_builder_indexing_finalize import (
+from platform_context_graph.collectors.git.finalize import (
     finalize_index_batch,
 )
 

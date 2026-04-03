@@ -131,6 +131,65 @@ def test_admin_reindex_posts_remote_request(
 
 
 @patch("platform_context_graph.cli.remote.requests.request")
+def test_admin_facts_replay_posts_remote_request(
+    mock_request: MagicMock,
+) -> None:
+    """`pcg admin facts replay` should post the replay selector payload."""
+
+    mock_request.return_value = _Response(
+        {
+            "status": "replayed",
+            "replayed_count": 1,
+            "work_item_ids": ["work-1"],
+        }
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "replay",
+            "--service-url",
+            "https://pcg.example.com",
+            "--work-item-id",
+            "work-1",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "work-1" in _combined_output(result)
+    _args, kwargs = mock_request.call_args
+    assert kwargs["method"] == "POST"
+    assert kwargs["url"] == "https://pcg.example.com/api/v0/admin/facts/replay"
+    assert kwargs["json"] == {
+        "work_item_ids": ["work-1"],
+        "repository_id": None,
+        "source_run_id": None,
+        "work_type": None,
+        "limit": 100,
+    }
+
+
+def test_admin_facts_replay_requires_one_selector() -> None:
+    """The CLI should fail fast when replay is invoked without any selector."""
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "replay",
+            "--service-url",
+            "https://pcg.example.com",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "At least one selector" in _combined_output(result)
+
+
+@patch("platform_context_graph.cli.remote.requests.request")
 def test_analyze_callers_posts_code_relationship_request(
     mock_request: MagicMock,
 ) -> None:

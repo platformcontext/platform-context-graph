@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from platform_context_graph.tools.parser_capabilities import (
+from platform_context_graph.parsers.capabilities import (
     load_language_capability_specs,
     render_feature_matrix,
     render_language_doc,
@@ -45,8 +45,8 @@ def test_validate_language_capability_specs_allows_generated_doc_targets(
         tmp_path
         / "src"
         / "platform_context_graph"
-        / "tools"
-        / "parser_capabilities"
+        / "parsers"
+        / "capabilities"
         / "specs"
     )
     spec_root.mkdir(parents=True)
@@ -75,7 +75,7 @@ def test_validate_language_capability_specs_allows_generated_doc_targets(
                 "title": "Demo Parser",
                 "family": "language",
                 "parser": "DemoParser",
-                "parser_entrypoint": "src/platform_context_graph/tools/languages/demo.py",
+                "parser_entrypoint": "src/platform_context_graph/parsers/languages/demo.py",
                 "doc_path": "docs/docs/languages/demo.md",
                 "fixture_repo": "tests/fixtures/ecosystems/demo",
                 "unit_test_file": "tests/unit/parsers/test_demo_parser.py",
@@ -113,8 +113,8 @@ def test_validate_language_capability_specs_rejects_fixture_refs(
         tmp_path
         / "src"
         / "platform_context_graph"
-        / "tools"
-        / "parser_capabilities"
+        / "parsers"
+        / "capabilities"
         / "specs"
     )
     spec_root.mkdir(parents=True)
@@ -150,7 +150,7 @@ def test_validate_language_capability_specs_rejects_fixture_refs(
                 "title": "Demo Parser",
                 "family": "language",
                 "parser": "DemoParser",
-                "parser_entrypoint": "src/platform_context_graph/tools/languages/demo.py",
+                "parser_entrypoint": "src/platform_context_graph/parsers/languages/demo.py",
                 "doc_path": "docs/docs/languages/demo.md",
                 "fixture_repo": "tests/fixtures/ecosystems/demo",
                 "unit_test_file": "tests/unit/parsers/test_demo_parser.py",
@@ -177,7 +177,7 @@ def test_validate_language_capability_specs_rejects_fixture_refs(
     errors = validate_language_capability_specs(tmp_path)
 
     assert (
-        "src/platform_context_graph/tools/parser_capabilities/specs/demo.yaml:functions: "
+        "src/platform_context_graph/parsers/capabilities/specs/demo.yaml:functions: "
         "unit_test must reference a concrete test function tests/unit/parsers/test_demo_parser.py::demo_parser"
     ) in errors
 
@@ -191,8 +191,8 @@ def test_validate_language_capability_specs_rejects_supported_capability_without
         tmp_path
         / "src"
         / "platform_context_graph"
-        / "tools"
-        / "parser_capabilities"
+        / "parsers"
+        / "capabilities"
         / "specs"
     )
     spec_root.mkdir(parents=True)
@@ -220,7 +220,7 @@ def test_validate_language_capability_specs_rejects_supported_capability_without
                 "title": "Demo Parser",
                 "family": "language",
                 "parser": "DemoParser",
-                "parser_entrypoint": "src/platform_context_graph/tools/languages/demo.py",
+                "parser_entrypoint": "src/platform_context_graph/parsers/languages/demo.py",
                 "doc_path": "docs/docs/languages/demo.md",
                 "fixture_repo": "tests/fixtures/ecosystems/demo",
                 "unit_test_file": "tests/unit/parsers/test_demo_parser.py",
@@ -247,7 +247,7 @@ def test_validate_language_capability_specs_rejects_supported_capability_without
     errors = validate_language_capability_specs(tmp_path)
 
     assert (
-        "src/platform_context_graph/tools/parser_capabilities/specs/demo.yaml:functions: "
+        "src/platform_context_graph/parsers/capabilities/specs/demo.yaml:functions: "
         "supported capability must declare graph surface"
     ) in errors
 
@@ -261,8 +261,8 @@ def test_validate_language_capability_specs_reports_missing_language_key(
         tmp_path
         / "src"
         / "platform_context_graph"
-        / "tools"
-        / "parser_capabilities"
+        / "parsers"
+        / "capabilities"
         / "specs"
     )
     spec_root.mkdir(parents=True)
@@ -289,7 +289,7 @@ def test_validate_language_capability_specs_reports_missing_language_key(
                 "title": "Broken Parser",
                 "family": "language",
                 "parser": "BrokenParser",
-                "parser_entrypoint": "src/platform_context_graph/tools/languages/broken.py",
+                "parser_entrypoint": "src/platform_context_graph/parsers/languages/broken.py",
                 "doc_path": "docs/docs/languages/broken.md",
                 "fixture_repo": "tests/fixtures/ecosystems/demo",
                 "unit_test_file": "tests/unit/parsers/test_demo_parser.py",
@@ -316,7 +316,7 @@ def test_validate_language_capability_specs_reports_missing_language_key(
     errors = validate_language_capability_specs(tmp_path)
 
     assert (
-        "src/platform_context_graph/tools/parser_capabilities/specs/broken.yaml: "
+        "src/platform_context_graph/parsers/capabilities/specs/broken.yaml: "
         "missing keys ['language']"
     ) in errors
 

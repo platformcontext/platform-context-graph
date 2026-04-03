@@ -2,7 +2,7 @@ language: go
 title: Go Parser
 family: language
 parser: GoTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/go.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/go.py
 doc_path: docs/docs/languages/go.md
 fixture_repo: tests/fixtures/ecosystems/go_comprehensive/
 unit_test_file: tests/unit/parsers/test_go_parser.py

@@ -1,5 +1,12 @@
 # Ingestion Observability
 
+For the broader service-wide telemetry references, see:
+
+- [Telemetry Overview](telemetry/index.md)
+- [Telemetry Metrics](telemetry/metrics.md)
+- [Telemetry Traces](telemetry/traces.md)
+- [Telemetry Logs](telemetry/logs.md)
+
 This page is the operator-facing map for indexing and repository-ingestion
 telemetry. Use it when you need to answer "is the run healthy?", "where is it
 stuck?", or "did the queue/backpressure model behave the way we expected?".

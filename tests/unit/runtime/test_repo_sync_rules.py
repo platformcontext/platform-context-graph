@@ -27,10 +27,10 @@ class _FakeResponse:
         return self._payload
 
 
-def test_config_from_env_merges_structured_and_legacy_repository_rules(
+def test_config_from_env_uses_structured_repository_rules_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Merge structured rules with the deprecated exact shorthand."""
+    """Read repository include rules only from the structured JSON config."""
 
     repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
 
@@ -43,17 +43,57 @@ def test_config_from_env_merges_structured_and_legacy_repository_rules(
             ]
         ),
     )
-    monkeypatch.setenv("PCG_REPOSITORIES", "org/legacy-one,org/legacy-two")
-
     config = repo_sync.RepoSyncConfig.from_env(component="repo-sync")
 
-    assert config.repositories == ["org/legacy-one", "org/legacy-two"]
+    assert config.repositories == []
     assert config.repository_rules == (
         RepoSyncRepositoryRule(kind="exact", value="org/service-a"),
         RepoSyncRepositoryRule(kind="regex", value=r"^org/service-[bc]$"),
-        RepoSyncRepositoryRule(kind="exact", value="org/legacy-one"),
-        RepoSyncRepositoryRule(kind="exact", value="org/legacy-two"),
     )
+
+
+def test_config_from_env_explicit_mode_uses_exact_repository_rules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Populate explicit-mode repository IDs from exact structured rules."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    monkeypatch.setenv("PCG_REPO_SOURCE_MODE", "explicit")
+    monkeypatch.setenv(
+        "PCG_REPOSITORY_RULES_JSON",
+        json.dumps(
+            [
+                {"type": "exact", "value": "org/service-a"},
+                {"type": "exact", "value": "org/service-b"},
+            ]
+        ),
+    )
+
+    config = repo_sync.RepoSyncConfig.from_env(component="repo-sync")
+
+    assert config.repositories == ["org/service-a", "org/service-b"]
+    assert config.repository_rules == (
+        RepoSyncRepositoryRule(kind="exact", value="org/service-a"),
+        RepoSyncRepositoryRule(kind="exact", value="org/service-b"),
+    )
+
+
+def test_config_from_env_explicit_mode_rejects_regex_rules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit mode should fail clearly when structured rules include regex."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    monkeypatch.setenv("PCG_REPO_SOURCE_MODE", "explicit")
+    monkeypatch.setenv(
+        "PCG_REPOSITORY_RULES_JSON",
+        json.dumps([{"type": "regex", "value": r"^org/service-[bc]$"}]),
+    )
+
+    with pytest.raises(ValueError, match="only supports exact rules"):
+        repo_sync.RepoSyncConfig.from_env(component="repo-sync")
 
 
 def test_git_discovery_applies_exact_and_regex_include_rules(

@@ -1,13 +1,13 @@
 # C++ Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/cpp.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/cpp.yaml`
 
 ## Parser Contract
 - Language: `cpp`
 - Family: `language`
 - Parser: `CppTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/cpp.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/cpp.py`
 - Fixture repo: `tests/fixtures/ecosystems/cpp_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_cpp_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestCppGraph`

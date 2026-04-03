@@ -2,7 +2,7 @@ language: kustomize
 title: Kustomize Parser
 family: iac
 parser: InfraYAMLParser
-parser_entrypoint: src/platform_context_graph/tools/languages/yaml_infra.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/yaml_infra.py
 doc_path: docs/docs/languages/kustomize.md
 fixture_repo: tests/fixtures/ecosystems/kustomize_comprehensive/
 unit_test_file: tests/unit/parsers/test_yaml_infra_parser.py

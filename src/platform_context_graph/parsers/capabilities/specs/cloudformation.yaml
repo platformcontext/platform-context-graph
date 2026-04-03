@@ -2,7 +2,7 @@ language: cloudformation
 title: CloudFormation Parser
 family: iac
 parser: InfraYAMLParser
-parser_entrypoint: src/platform_context_graph/tools/languages/yaml_infra.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/yaml_infra.py
 doc_path: docs/docs/languages/cloudformation.md
 fixture_repo: tests/fixtures/ecosystems/cloudformation_comprehensive/
 unit_test_file: tests/unit/parsers/test_cloudformation_parser.py

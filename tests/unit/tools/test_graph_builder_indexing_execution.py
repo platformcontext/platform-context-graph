@@ -10,8 +10,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from platform_context_graph.tools.graph_builder_indexing_execution import (
-    finalize_index_batch,
+from platform_context_graph.collectors.git.finalize import finalize_index_batch
+from platform_context_graph.collectors.git.execution import build_graph_from_path_async
+from platform_context_graph.collectors.git.parse_execution import (
     parse_repository_snapshot_async,
 )
 
@@ -108,7 +109,7 @@ async def test_parse_repository_snapshot_falls_back_to_threaded_mode_without_exe
 
     monkeypatch.setenv("PCG_REPO_FILE_PARSE_MULTIPROCESS", "true")
     monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_indexing_execution.get_observability",
+        "platform_context_graph.collectors.git.parse_execution.get_observability",
         lambda: fake_observability,
     )
 
@@ -133,6 +134,7 @@ async def test_parse_repository_snapshot_falls_back_to_threaded_mode_without_exe
         asyncio_module=SimpleNamespace(sleep=_sleep),
         info_logger_fn=messages.append,
         progress_callback=None,
+        get_observability_fn=lambda: fake_observability,
     )
 
     assert snapshot.file_count == 1
@@ -157,7 +159,7 @@ async def test_parse_repository_snapshot_defaults_to_threaded_strategy_when_flag
 
     monkeypatch.delenv("PCG_REPO_FILE_PARSE_MULTIPROCESS", raising=False)
     monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_indexing_execution.get_observability",
+        "platform_context_graph.collectors.git.parse_execution.get_observability",
         lambda: fake_observability,
     )
 
@@ -182,6 +184,7 @@ async def test_parse_repository_snapshot_defaults_to_threaded_strategy_when_flag
         asyncio_module=SimpleNamespace(sleep=_sleep),
         info_logger_fn=messages.append,
         progress_callback=None,
+        get_observability_fn=lambda: fake_observability,
     )
 
     assert snapshot.file_count == 1
@@ -200,7 +203,7 @@ def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
         [10.0, 10.0, 11.5, 11.5, 14.0, 14.0, 14.2, 14.2, 15.0, 15.0, 15.0, 15.0]
     )
     monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_indexing_execution.time.monotonic",
+        "platform_context_graph.collectors.git.finalize.time.monotonic",
         lambda: next(monotonic_values),
     )
 
@@ -294,23 +297,6 @@ async def test_parse_repository_snapshot_logs_prescan_progress_and_slow_files(
             self.current += seconds
 
     clock = _FakeClock()
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_indexing_execution.time.monotonic",
-        clock.monotonic,
-    )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_indexing_execution._REPO_PARSE_PROGRESS_MIN_FILES",
-        1,
-    )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_indexing_execution._REPO_PARSE_PROGRESS_TARGET_STEPS",
-        2,
-    )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_indexing_execution._SLOW_PARSE_FILE_THRESHOLD_SECONDS",
-        1.0,
-    )
-
     messages: list[str] = []
     progress_files: list[str] = []
     job_updates: list[dict[str, str]] = []
@@ -355,6 +341,10 @@ async def test_parse_repository_snapshot_logs_prescan_progress_and_slow_files(
         progress_callback=lambda **kwargs: progress_files.append(
             kwargs["current_file"]
         ),
+        repo_parse_progress_min_files=1,
+        repo_parse_progress_target_steps=2,
+        slow_parse_file_threshold_seconds=1.0,
+        time_monotonic_fn=clock.monotonic,
     )
 
     assert snapshot.file_count == 3
@@ -484,10 +474,6 @@ async def test_build_graph_from_path_async_caches_repo_display_name_per_repo(
 ) -> None:
     """Legacy indexing should compute each repo display name only once per repo."""
 
-    from platform_context_graph.tools.graph_builder_indexing_execution import (
-        build_graph_from_path_async,
-    )
-
     repo_path = tmp_path / "boatsgroup" / "repo"
     repo_path.mkdir(parents=True)
     first_file = repo_path / "alpha.py"
@@ -496,15 +482,6 @@ async def test_build_graph_from_path_async_caches_repo_display_name_per_repo(
     second_file.write_text("print('b')\n", encoding="utf-8")
 
     display_calls: list[Path] = []
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_indexing_execution.repository_display_name",
-        lambda path: display_calls.append(path) or "boatsgroup/repo",
-    )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_indexing_execution.resolve_repository_file_sets",
-        lambda *_args, **_kwargs: {repo_path.resolve(): [first_file, second_file]},
-    )
-
     builder = SimpleNamespace(
         driver=SimpleNamespace(),
         job_manager=SimpleNamespace(update_job=lambda *_args, **_kwargs: None),
@@ -538,6 +515,11 @@ async def test_build_graph_from_path_async_caches_repo_display_name_per_repo(
         pathspec_module=SimpleNamespace(),
         warning_logger_fn=lambda *_args, **_kwargs: None,
         job_status_enum=SimpleNamespace(RUNNING="running"),
+        repository_display_name_fn=lambda path: display_calls.append(path)
+        or "boatsgroup/repo",
+        resolve_repository_file_sets_fn=lambda *_args, **_kwargs: {
+            repo_path.resolve(): [first_file, second_file]
+        },
     )
 
     assert display_calls == [repo_path.resolve()]

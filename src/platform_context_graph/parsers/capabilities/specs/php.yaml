@@ -2,7 +2,7 @@ language: php
 title: PHP Parser
 family: language
 parser: PhpTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/php.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/php.py
 doc_path: docs/docs/languages/php.md
 fixture_repo: tests/fixtures/ecosystems/php_comprehensive/
 unit_test_file: tests/unit/parsers/test_php_parser.py

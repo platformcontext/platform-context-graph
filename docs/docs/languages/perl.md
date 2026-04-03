@@ -1,13 +1,13 @@
 # Perl Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/perl.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/perl.yaml`
 
 ## Parser Contract
 - Language: `perl`
 - Family: `language`
 - Parser: `PerlTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/perl.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/perl.py`
 - Fixture repo: `tests/fixtures/ecosystems/perl_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_perl_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestPerlGraph`

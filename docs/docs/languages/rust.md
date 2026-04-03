@@ -1,13 +1,13 @@
 # Rust Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/rust.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/rust.yaml`
 
 ## Parser Contract
 - Language: `rust`
 - Family: `language`
 - Parser: `RustTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/rust.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/rust.py`
 - Fixture repo: `tests/fixtures/ecosystems/rust_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_rust_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestRustGraph`

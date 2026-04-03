@@ -208,9 +208,8 @@ def test_index_helper_reports_effective_worker_configuration(
     monkeypatch.setattr(
         "platform_context_graph.cli.config_manager.get_config_value",
         lambda key: {
-            "PCG_PARSE_WORKERS": None,
+            "PCG_PARSE_WORKERS": "6",
             "PCG_INDEX_QUEUE_DEPTH": None,
-            "PARALLEL_WORKERS": "6",
             "ENABLE_AUTO_WATCH": "false",
         }.get(key),
     )
@@ -221,6 +220,5 @@ def test_index_helper_reports_effective_worker_configuration(
         "Indexing config:" in message
         and "parse workers=6" in message
         and "queue depth=12" in message
-        and "legacy PARALLEL_WORKERS fallback" in message
         for message in prints
     )

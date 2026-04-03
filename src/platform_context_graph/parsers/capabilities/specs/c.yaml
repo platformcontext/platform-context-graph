@@ -2,7 +2,7 @@ language: c
 title: C Parser
 family: language
 parser: CTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/c.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/c.py
 doc_path: docs/docs/languages/c.md
 fixture_repo: tests/fixtures/ecosystems/c_comprehensive/
 unit_test_file: tests/unit/parsers/test_c_parser.py

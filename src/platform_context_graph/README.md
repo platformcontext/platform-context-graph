@@ -20,6 +20,6 @@ Top-level packages are organized by responsibility:
 - `resolution`: workload and platform materialization and future shared resolution logic.
 - `relationships`: evidence-backed repository relationship discovery and resolution.
 - `runtime`: sync and background runtime orchestration.
-- `tools`: GraphBuilder facade, compatibility shims, and remaining legacy helpers.
+- `tools`: GraphBuilder facade plus the remaining tool-facing query and linking surfaces.
 - `utils`: reusable cross-cutting helpers.
 - `viz`: graph visualization utilities.

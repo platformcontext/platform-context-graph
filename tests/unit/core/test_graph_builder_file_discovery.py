@@ -8,11 +8,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from platform_context_graph.tools.graph_builder import GraphBuilder
-from platform_context_graph.tools.graph_builder_indexing_discovery import (
+from platform_context_graph.collectors.git.discovery import (
     resolve_repository_file_sets,
 )
-from platform_context_graph.tools.graph_builder_indexing_execution import (
-    build_graph_from_path_async as legacy_build_graph_from_path_async,
+from platform_context_graph.collectors.git.execution import (
+    build_graph_from_path_async,
 )
 
 
@@ -161,7 +161,7 @@ def test_build_graph_from_path_async_skips_hidden_cache_repos_but_keeps_visible_
     cached_file.write_text("print('cached')\n")
 
     asyncio.run(
-        legacy_build_graph_from_path_async(
+        build_graph_from_path_async(
             builder,
             tmp_path,
             False,
@@ -431,7 +431,7 @@ def test_build_graph_from_path_async_explicit_file_bypasses_gitignore(
     ignored_file.write_text("print('override')\n", encoding="utf-8")
 
     asyncio.run(
-        legacy_build_graph_from_path_async(
+        build_graph_from_path_async(
             builder,
             ignored_file,
             False,

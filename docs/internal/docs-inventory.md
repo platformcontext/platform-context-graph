@@ -18,6 +18,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/deployment/helm.md` | Helm deployment | active |
 | `docs/docs/deployment/manifests.md` | Minimal Kubernetes manifests | active |
 | `docs/docs/deployment/overview.md` | Deployment overview | active |
+| `docs/docs/deployment/service-runtimes.md` | Operator guide for runtime ownership, entrypoints, and scaling boundaries | active |
 | `docs/docs/getting-started/installation.md` | Installation guide | active |
 | `docs/docs/getting-started/prerequisites.md` | Prerequisites | active |
 | `docs/docs/getting-started/quickstart.md` | Quickstart | active |
@@ -44,11 +45,16 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/reference/http-api.md` | HTTP API reference | active |
 | `docs/docs/reference/ingestion-observability.md` | Ingestion observability reference | active |
 | `docs/docs/reference/logging.md` | Logging and telemetry reference | active |
+| `docs/docs/reference/telemetry/index.md` | Telemetry overview and operator starting points | active |
+| `docs/docs/reference/telemetry/metrics.md` | Metric catalog and tuning recipes | active |
+| `docs/docs/reference/telemetry/traces.md` | Trace catalog and latency-debug recipes | active |
+| `docs/docs/reference/telemetry/logs.md` | Structured log catalog and forensic guidance | active |
 | `docs/docs/reference/mcp-cookbook.md` | MCP examples | active |
 | `docs/docs/reference/mcp-reference.md` | MCP reference | active |
 | `docs/docs/reference/pcgignore.md` | `.pcgignore` reference | active |
 | `docs/docs/reference/relationship-mapping.md` | Relationship mapping and typed edge semantics | active |
 | `docs/docs/reference/source-layout.md` | Source layout map | active |
+| `docs/docs/reference/local-testing.md` | Default local verification and testing runbook | active |
 | `docs/docs/reference/troubleshooting.md` | Troubleshooting guide | active |
 | `docs/docs/roadmap.md` | Public roadmap | active |
 | `docs/docs/use-cases.md` | Use cases | active |

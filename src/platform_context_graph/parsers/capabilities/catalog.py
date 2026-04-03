@@ -24,22 +24,12 @@ def specs_dir(root: Path | None = None) -> Path:
     """Return the directory containing canonical parser capability specs."""
 
     resolved_root = repo_root(root)
-    preferred = (
+    return (
         resolved_root
         / "src"
         / "platform_context_graph"
         / "parsers"
         / "capabilities"
-        / "specs"
-    )
-    if preferred.exists():
-        return preferred
-    return (
-        resolved_root
-        / "src"
-        / "platform_context_graph"
-        / "tools"
-        / "parser_capabilities"
         / "specs"
     )
 

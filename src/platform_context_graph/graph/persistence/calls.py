@@ -1,8 +1,13 @@
-"""Function-call relationship helpers for ``GraphBuilder``."""
+"""Function-call relationship helpers for ``GraphBuilder``.
+
+Orchestrates CALLS-edge creation across all indexed files.  Row
+preparation (import resolution, builtin filtering, pre-filtering) is
+delegated to :mod:`.call_row_prep`; batch persistence to
+:mod:`.call_batches`.
+"""
 
 from __future__ import annotations
 
-import builtins as py_builtins
 import logging
 import os
 import re
@@ -12,9 +17,6 @@ from typing import Any
 
 _logger = logging.getLogger(__name__)
 
-from .call_otel import (
-    emit_call_resolution_otel_metrics as _emit_call_resolution_otel_metrics,
-)
 from .call_batches import (
     call_resolution_metrics as _call_resolution_metrics,
     combine_call_relationship_metrics as _combine_call_relationship_metrics,
@@ -24,31 +26,40 @@ from .call_batches import (
     create_file_level_call_relationships_batched as _create_file_level_call_relationships_batched,
     file_level_call_batch_queries as _file_level_call_batch_queries,
     file_level_repo_scoped_batch_query as _file_level_repo_scoped_batch_query,
-    filter_fallback_candidate_rows as _filter_fallback_candidate_rows,
+    filter_fallback_candidate_rows as _filter_fallback_candidate_rows,  # noqa: F401
     run_call_batch_query as _run_call_batch_query_impl,
 )
+from .call_otel import (
+    emit_call_resolution_otel_metrics as _emit_call_resolution_otel_metrics,
+)
 from .call_prefilter import (
-    build_known_callable_names as _build_known_callable_names_flat,
+    build_known_callable_names as _build_known_callable_names_flat,  # noqa: F401
     build_known_callable_names_by_family as _build_known_callable_names_by_family,
     compatible_languages,
     max_calls_for_repo_class,
 )
+from .call_row_prep import (
+    is_minified_or_bundled as _is_minified_or_bundled,
+    prepare_call_rows as _prepare_call_rows,
+)
 
 _CALL_RELATIONSHIP_BUFFER_FLUSH_ROWS = 2000
 _CALL_RELATIONSHIP_BATCH_SIZE = 250
-_PYTHON_BUILTIN_NAMES = frozenset(dir(py_builtins))
-
-_MINIFIED_SUFFIXES = (".min.js", ".min.css", ".bundle.js", ".chunk.js")
 _MAX_CALLS_PER_FILE = int(os.environ.get("PCG_MAX_CALLS_PER_FILE", "50"))
 
 
-def _is_minified_or_bundled(file_path: str) -> bool:
-    """Return whether a file is minified or bundled and should skip call resolution."""
-    return any(file_path.lower().endswith(s) for s in _MINIFIED_SUFFIXES)
-
-
 def safe_run_create(session: Any, query: str, params: dict[str, Any]) -> bool:
-    """Run a relationship creation query and report whether it created a row."""
+    """Run a relationship creation query and report whether it created a row.
+
+    Args:
+        session: Active Neo4j session.
+        query: Cypher query containing a ``RETURN ... AS created`` clause.
+        params: Query parameters dict.
+
+    Returns:
+        ``True`` when the query returned at least one row with
+        ``created > 0``, ``False`` otherwise (including on exception).
+    """
     try:
         row = session.run(query, params).single()
         return row is not None and row.get("created", 0) > 0
@@ -66,7 +77,19 @@ def create_function_calls(
     get_config_value_fn: Any,
     warning_logger_fn: Any,
 ) -> None:
-    """Create ``CALLS`` relationships for one parsed file."""
+    """Create ``CALLS`` relationships for one parsed file.
+
+    Args:
+        builder: ``GraphBuilder`` instance (unused but kept for API
+            symmetry with bulk callers).
+        session: Active Neo4j session.
+        file_data: Parsed file dict with ``path``, ``function_calls``,
+            ``functions``, ``classes``, and ``imports`` keys.
+        imports_map: Global symbol-to-paths mapping.
+        debug_log_fn: Debug-level logging callable.
+        get_config_value_fn: Config lookup callable.
+        warning_logger_fn: Warning-level logging callable.
+    """
     caller_file_path = str(Path(file_data["path"]).resolve())
     num_calls = len(file_data.get("function_calls", []))
     if num_calls > 0:
@@ -97,7 +120,29 @@ def create_all_function_calls(
     progress_callback: Any | None = None,
     repo_class: str | None = None,
 ) -> dict[str, float | int]:
-    """Create ``CALLS`` relationships after all files are indexed."""
+    """Create ``CALLS`` relationships after all files are indexed.
+
+    Iterates every file in *all_file_data*, prepares call rows via
+    :func:`.call_row_prep.prepare_call_rows`, buffers them, and flushes
+    in batches to Neo4j.  Emits OTEL metrics and logs aggregated
+    prefilter / unresolved statistics on completion.
+
+    Args:
+        builder: ``GraphBuilder`` instance (provides ``driver``).
+        all_file_data: Iterable of parsed file dicts.
+        imports_map: Global symbol-to-paths mapping.
+        debug_log_fn: Debug-level logging callable.
+        get_config_value_fn: Config lookup callable (optional).
+        warning_logger_fn: Warning-level logging callable (optional).
+        progress_callback: Optional callable invoked after each file
+            with ``current_file``, ``processed_files``, and
+            ``total_files`` keyword arguments.
+        repo_class: Repository classification string used for adaptive
+            per-file call caps when the guardrail is enabled.
+
+    Returns:
+        Combined call-resolution metrics dict.
+    """
     file_count = len(all_file_data) if hasattr(all_file_data, "__len__") else None
     if file_count is None:
         debug_log_fn("_create_all_function_calls called with streamed file data")
@@ -138,6 +183,8 @@ def create_all_function_calls(
     file_level_buffer: list[dict[str, Any]] = []
 
     def _flush_contextual(session: Any) -> None:
+        """Persist buffered contextual call rows and reset the buffer."""
+
         nonlocal contextual_buffer
         if not contextual_buffer:
             return
@@ -148,6 +195,8 @@ def create_all_function_calls(
         contextual_buffer = []
 
     def _flush_file_level(session: Any) -> None:
+        """Persist buffered file-level fallback rows and reset the buffer."""
+
         nonlocal file_level_buffer
         if not file_level_buffer:
             return
@@ -260,224 +309,34 @@ def _accumulate_resolution_metrics(
     totals: dict[str, float | int],
     current: dict[str, float | int],
 ) -> None:
-    """Add one call-resolution metric payload into a mutable aggregate."""
+    """Add one call-resolution metric payload into a mutable aggregate.
+
+    Args:
+        totals: Mutable accumulator dict (modified in place).
+        current: Metric payload from one batch write.
+    """
     for key, value in current.items():
         if isinstance(value, (int, float)):
             totals[key] = totals.get(key, 0) + value
 
 
-def _prepare_call_rows(
-    file_data: dict[str, Any],
-    imports_map: dict[str, Any],
-    *,
-    caller_file_path: str,
-    get_config_value_fn: Any,
-    warning_logger_fn: Any,
-    start_row_id: int,
-    known_callable_names: frozenset[str] | None = None,
-    known_callable_names_by_family: dict[str, frozenset[str]] | None = None,
-    unresolved_counter: Counter | None = None,
-    prefiltered_counter: Counter | None = None,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
-    """Resolve one file's calls into contextual and file-level batch rows."""
-
-    local_names = {f["name"] for f in file_data.get("functions", [])} | {
-        c["name"] for c in file_data.get("classes", [])
-    }
-    local_imports = {
-        imp.get("alias") or imp["name"].split(".")[-1]: imp["name"]
-        for imp in file_data.get("imports", [])
-    }
-    skip_external = (
-        get_config_value_fn("SKIP_EXTERNAL_RESOLUTION") or "false"
-    ).lower() == "true"
-    repo_path = file_data.get("repo_path", "")
-    contextual_rows: list[dict[str, Any]] = []
-    file_level_rows: list[dict[str, Any]] = []
-    next_row_id = start_row_id
-
-    for call in file_data.get("function_calls", []):
-        called_name = call["name"]
-        if called_name in _PYTHON_BUILTIN_NAMES:
-            continue
-
-        # Family-aware pre-filter: skip calls whose name does not exist
-        # within the caller's language family callable set.
-        call_lang = call.get("lang")
-        if known_callable_names_by_family is not None:
-            if call_lang:
-                family_names = known_callable_names_by_family.get(
-                    call_lang, frozenset()
-                )
-                if called_name not in family_names:
-                    if prefiltered_counter is not None:
-                        prefiltered_counter[call_lang] += 1
-                    if unresolved_counter is not None:
-                        unresolved_counter[called_name] += 1
-                    continue
-            # When call_lang is None, fall through (don't filter).
-        elif known_callable_names is not None:
-            # Legacy path: flat name set without family grouping.
-            if called_name not in known_callable_names:
-                if unresolved_counter is not None:
-                    unresolved_counter[called_name] += 1
-                continue
-
-        resolved_path = None
-        full_call = call.get("full_name", called_name)
-        base_obj = full_call.split(".")[0] if "." in full_call else None
-        is_chained_call = full_call.count(".") > 1 if "." in full_call else False
-
-        if is_chained_call and base_obj in (
-            "self",
-            "this",
-            "super",
-            "super()",
-            "cls",
-            "@",
-        ):
-            lookup_name = called_name
-        else:
-            lookup_name = base_obj if base_obj else called_name
-
-        if (
-            base_obj in ("self", "this", "super", "super()", "cls", "@")
-            and not is_chained_call
-        ):
-            resolved_path = caller_file_path
-        elif lookup_name in local_names:
-            resolved_path = caller_file_path
-        elif call.get("inferred_obj_type"):
-            obj_type = call["inferred_obj_type"]
-            possible_paths = imports_map.get(obj_type, [])
-            if len(possible_paths) > 0:
-                resolved_path = possible_paths[0]
-
-        if not resolved_path:
-            possible_paths = imports_map.get(lookup_name, [])
-            if len(possible_paths) == 1:
-                resolved_path = possible_paths[0]
-            elif len(possible_paths) > 1 and lookup_name in local_imports:
-                if direct_paths := _direct_import_paths(
-                    imports_map, lookup_name, local_imports
-                ):
-                    resolved_path = direct_paths[0]
-                else:
-                    resolved_path = _match_import_path(
-                        local_imports[lookup_name], possible_paths
-                    )
-
-        if not resolved_path:
-            is_unresolved_external = True
-            if unresolved_counter is not None:
-                unresolved_counter[called_name] += 1
-            elif not skip_external:
-                warning_logger_fn(
-                    f"Could not resolve call {called_name} "
-                    f"(lookup: {lookup_name}) in {caller_file_path}"
-                )
-        else:
-            is_unresolved_external = False
-
-        if not resolved_path and called_name in local_names:
-            resolved_path = caller_file_path
-            is_unresolved_external = False
-        elif (
-            not resolved_path
-            and called_name in imports_map
-            and imports_map[called_name]
-        ):
-            resolved_path = _resolve_from_import_candidates(
-                called_name, imports_map, local_imports
-            )
-        elif not resolved_path:
-            resolved_path = caller_file_path
-
-        if skip_external and is_unresolved_external:
-            continue
-
-        call_params = _build_call_params(
-            call, caller_file_path, called_name, resolved_path, repo_path
-        )
-        call_params["row_id"] = next_row_id
-        next_row_id += 1
-        caller_context = call.get("context")
-        if (
-            caller_context
-            and len(caller_context) == 3
-            and caller_context[0] is not None
-        ):
-            contextual_rows.append(
-                {
-                    **call_params,
-                    "caller_name": caller_context[0],
-                }
-            )
-        else:
-            file_level_rows.append(call_params)
-
-    return contextual_rows, file_level_rows, next_row_id
-
-
 def name_from_symbol(symbol: str) -> str:
-    """Extract a readable symbol name from a SCIP symbol identifier."""
+    """Extract a readable symbol name from a SCIP symbol identifier.
+
+    Strips trailing punctuation (``#``, ``.``, ``()``), splits on ``/``
+    and ``#`` delimiters, and returns the last segment.
+
+    Args:
+        symbol: Raw SCIP symbol string.
+
+    Returns:
+        The human-readable short name.
+    """
     stripped = symbol.rstrip(".#")
     stripped = re.sub(r"\(\)\.?$", "", stripped)
     parts = re.split(r"[/#]", stripped)
     last = parts[-1] if parts else symbol
     return last or symbol
-
-
-def _direct_import_paths(
-    imports_map: dict[str, Any], lookup_name: str, local_imports: dict[str, str]
-) -> list[str]:
-    """Return direct import match candidates when a local alias is available."""
-    full_import_name = local_imports[lookup_name]
-    return imports_map.get(full_import_name, [])
-
-
-def _match_import_path(full_import_name: str, possible_paths: list[str]) -> str | None:
-    """Return the first path that matches the dotted import path."""
-    for path in possible_paths:
-        if full_import_name.replace(".", "/") in path:
-            return path
-    return None
-
-
-def _resolve_from_import_candidates(
-    called_name: str,
-    imports_map: dict[str, Any],
-    local_imports: dict[str, str],
-) -> str | None:
-    """Choose the best path candidate for an imported symbol."""
-    candidates = imports_map[called_name]
-    for path in candidates:
-        for import_name in local_imports.values():
-            if import_name.replace(".", "/") in path:
-                return path
-    return candidates[0] if candidates else None
-
-
-def _build_call_params(
-    call: dict[str, Any],
-    caller_file_path: str,
-    called_name: str,
-    resolved_path: str,
-    repo_path: str,
-) -> dict[str, Any]:
-    """Build the common query parameters for function call relationships."""
-    lang = call.get("lang")
-    return {
-        "caller_file_path": caller_file_path,
-        "called_name": called_name,
-        "called_file_path": resolved_path,
-        "line_number": call["line_number"],
-        "args": call.get("args", []),
-        "full_call_name": call.get("full_name", called_name),
-        "lang": lang,
-        "compatible_langs": compatible_languages(lang),
-        "repo_path": repo_path,
-    }
 
 
 def _run_call_batch_query(
@@ -487,7 +346,19 @@ def _run_call_batch_query(
     *,
     batch_size: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Run one batched call-link query using the module-level batch size."""
+    """Run one batched call-link query using the module-level batch size.
+
+    Args:
+        session: Active Neo4j session.
+        query: Cypher query to execute.
+        rows: Call-row dicts to pass as parameters.
+        batch_size: Override for
+            :data:`_CALL_RELATIONSHIP_BATCH_SIZE`.  ``None`` uses the
+            module default.
+
+    Returns:
+        List of unmatched row dicts returned by the batch writer.
+    """
 
     effective_batch_size = (
         _CALL_RELATIONSHIP_BATCH_SIZE if batch_size is None else batch_size

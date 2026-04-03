@@ -2,7 +2,7 @@ language: csharp
 title: C# Parser
 family: language
 parser: CSharpTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/csharp.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/csharp.py
 doc_path: docs/docs/languages/csharp.md
 fixture_repo: tests/fixtures/ecosystems/csharp_comprehensive/
 unit_test_file: tests/unit/parsers/test_csharp_parser.py

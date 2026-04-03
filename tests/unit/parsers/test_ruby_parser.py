@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_context_graph.tools.languages.ruby import (
+from platform_context_graph.parsers.languages.ruby import (
     RubyTreeSitterParser,
     pre_scan_ruby,
 )

@@ -1,13 +1,13 @@
 # C Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/c.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/c.yaml`
 
 ## Parser Contract
 - Language: `c`
 - Family: `language`
 - Parser: `CTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/c.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/c.py`
 - Fixture repo: `tests/fixtures/ecosystems/c_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_c_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestCGraph`

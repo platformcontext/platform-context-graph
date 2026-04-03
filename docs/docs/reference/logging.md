@@ -1,5 +1,7 @@
 # Logging Standard
 
+For the operator-facing logs guide, see [Telemetry Logs](telemetry/logs.md).
+
 PlatformContextGraph writes one JSON document per log line everywhere: API, MCP, ingester, Falkor worker, and local CLI commands.
 
 That is the standard on purpose. We want logs that are easy to ship, easy to parse, and easy to turn into dashboards without writing a custom parser for every service.

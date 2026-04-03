@@ -5,12 +5,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from platform_context_graph.tools.graph_builder_platforms import (
+from platform_context_graph.resolution.platforms import (
     infer_gitops_platform_id,
     infer_gitops_platform_kind,
     infer_infrastructure_platform_descriptor,
 )
-from platform_context_graph.tools.graph_builder_workloads import materialize_workloads
+from platform_context_graph.resolution.workloads.materialization import materialize_workloads
 
 
 class _FakeResult:

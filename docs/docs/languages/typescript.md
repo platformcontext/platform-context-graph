@@ -1,13 +1,13 @@
 # TypeScript Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/typescript.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/typescript.yaml`
 
 ## Parser Contract
 - Language: `typescript`
 - Family: `language`
 - Parser: `TypescriptTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/typescript.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/typescript.py`
 - Fixture repo: `tests/fixtures/ecosystems/typescript_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_typescript_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestTypeScriptGraph`

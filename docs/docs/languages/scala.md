@@ -1,13 +1,13 @@
 # Scala Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/scala.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/scala.yaml`
 
 ## Parser Contract
 - Language: `scala`
 - Family: `language`
 - Parser: `ScalaTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/scala.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/scala.py`
 - Fixture repo: `tests/fixtures/ecosystems/scala_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_scala_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestScalaGraph`

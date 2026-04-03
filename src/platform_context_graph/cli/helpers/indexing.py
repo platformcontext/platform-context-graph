@@ -112,14 +112,11 @@ def _index_helper(
         from platform_context_graph.cli.config_manager import get_index_runtime_config
 
         runtime_config = get_index_runtime_config()
-        config_suffix = ""
-        if runtime_config["parse_workers_source"] == "PARALLEL_WORKERS":
-            config_suffix = " (legacy PARALLEL_WORKERS fallback)"
         api.console.print(
             "[dim]Indexing config: "
             f"parse workers={runtime_config['parse_workers']}, "
             f"queue depth={runtime_config['queue_depth']}"
-            f"{config_suffix}[/dim]"
+            "[/dim]"
         )
     except Exception as exc:
         api.console.print(

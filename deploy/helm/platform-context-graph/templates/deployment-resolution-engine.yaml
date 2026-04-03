@@ -1,0 +1,80 @@
+{{- if .Values.resolutionEngine.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pcg.resolutionEngineFullname" . }}
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: resolution-engine
+spec:
+  replicas: {{ .Values.resolutionEngine.replicas }}
+  selector:
+    matchLabels:
+      {{- include "pcg.resolutionEngineSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "pcg.resolutionEngineSelectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "pcg.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: resolution-engine
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["pcg", "internal", "resolution-engine"]
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          env:
+            - name: PCG_RUNTIME_ROLE
+              value: "combined"
+            - name: PCG_HOME
+              value: /tmp/.platform-context-graph
+            - name: HOME
+              value: /tmp
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: NEO4J_URI
+              value: {{ .Values.neo4j.uri | quote }}
+            {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}
+            {{- include "pcg.renderOtelEnv" (dict "Values" .Values "component" "resolution-engine") | nindent 12 }}
+            - name: NEO4J_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.neo4j.auth.secretName }}
+                  key: {{ .Values.neo4j.auth.usernameKey }}
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.neo4j.auth.secretName }}
+                  key: {{ .Values.neo4j.auth.passwordKey }}
+            {{- include "pcg.renderEnvMap" .Values.env | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resolutionEngine.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

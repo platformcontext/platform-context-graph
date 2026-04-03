@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from platform_context_graph.tools.graph_builder_schema import _run_schema_statement
+from platform_context_graph.graph.schema.builder import _run_schema_statement
 
 
 def test_run_schema_statement_retries_neo4j_fulltext_with_modern_syntax() -> None:

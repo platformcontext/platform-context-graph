@@ -205,14 +205,6 @@ def validate_config_value(key: str, value: str) -> tuple[bool, Optional[str]]:
         except ValueError:
             return False, "COMPLEXITY_THRESHOLD must be a number"
 
-    if key == "PARALLEL_WORKERS":
-        try:
-            workers = int(value)
-            if workers <= 0 or workers > 32:
-                return False, "PARALLEL_WORKERS must be between 1 and 32"
-        except ValueError:
-            return False, "PARALLEL_WORKERS must be a number"
-
     if key == "PCG_MAX_ENTITY_VALUE_LENGTH":
         try:
             preview_length = int(value)
@@ -324,14 +316,8 @@ def get_index_runtime_config() -> Dict[str, Any]:
     """Return the effective public indexing worker configuration."""
 
     parse_workers_raw = get_config_value("PCG_PARSE_WORKERS")
-    legacy_workers_raw = get_config_value("PARALLEL_WORKERS")
-    parse_workers_source = (
-        "PCG_PARSE_WORKERS"
-        if parse_workers_raw is not None and str(parse_workers_raw).strip()
-        else "PARALLEL_WORKERS"
-    )
     parse_workers = _bounded_int_value(
-        parse_workers_raw or legacy_workers_raw,
+        parse_workers_raw,
         int(DEFAULT_CONFIG["PCG_PARSE_WORKERS"]),
         minimum=1,
         maximum=128,
@@ -345,7 +331,7 @@ def get_index_runtime_config() -> Dict[str, Any]:
     return {
         "parse_workers": parse_workers,
         "queue_depth": queue_depth,
-        "parse_workers_source": parse_workers_source,
+        "parse_workers_source": "PCG_PARSE_WORKERS",
     }
 
 

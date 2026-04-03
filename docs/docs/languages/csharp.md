@@ -1,13 +1,13 @@
 # C# Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/csharp.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/csharp.yaml`
 
 ## Parser Contract
 - Language: `csharp`
 - Family: `language`
 - Parser: `CSharpTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/csharp.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/csharp.py`
 - Fixture repo: `tests/fixtures/ecosystems/csharp_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_csharp_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestCSharpGraph`

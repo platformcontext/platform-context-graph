@@ -10,7 +10,8 @@ import typer
 from rich.table import Table
 
 from ..remote import remote_mode_requested
-from ..remote_commands import render_remote_workspace_status, run_remote_admin_reindex
+from ..remote_commands import render_remote_workspace_status
+from .runtime_admin import register_admin_commands
 
 
 def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
@@ -40,6 +41,7 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
 
     admin_app = typer.Typer(help="Administrative local and remote operations")
     app.add_typer(admin_app, name="admin")
+    register_admin_commands(main_module, admin_app)
 
     internal_app = typer.Typer(help="Internal runtime commands")
     app.add_typer(internal_app, name="internal")
@@ -235,51 +237,6 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
             return
         main_module.workspace_status_helper()
 
-    @admin_app.command("reindex")
-    def admin_reindex(
-        service_url: str | None = typer.Option(
-            None,
-            "--service-url",
-            help="Base URL of the remote PlatformContextGraph HTTP service.",
-        ),
-        api_key: str | None = typer.Option(
-            None,
-            "--api-key",
-            help="Bearer token for the remote PlatformContextGraph HTTP service.",
-        ),
-        profile: str | None = typer.Option(
-            None,
-            "--profile",
-            help="Named remote profile used to resolve service URL and token.",
-        ),
-        ingester: str = typer.Option(
-            "repository",
-            "--ingester",
-            help="Ingester name to target for the remote reindex request.",
-        ),
-        scope: str = typer.Option(
-            "workspace",
-            "--scope",
-            help="Reindex scope. Currently only 'workspace' is supported.",
-        ),
-        force: bool = typer.Option(
-            True,
-            "--force/--no-force",
-            help="Whether the ingester should invalidate the existing checkpoint before rebuilding.",
-        ),
-    ) -> None:
-        """Queue a remote ingester reindex request through the admin API."""
-
-        run_remote_admin_reindex(
-            main_module,
-            service_url=service_url,
-            api_key=api_key,
-            profile=profile,
-            ingester=ingester,
-            scope=scope,
-            force=force,
-        )
-
     @workspace_app.command("watch")
     def workspace_watch(
         include_repo: list[str] | None = typer.Option(
@@ -336,6 +293,40 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
         if effective_interval is None:
             effective_interval = int(os.getenv("PCG_REPO_SYNC_INTERVAL_SECONDS", "900"))
         main_module.run_repo_sync_loop(interval_seconds=effective_interval)
+
+    @internal_app.command("resolution-engine", hidden=True)
+    def internal_resolution_engine() -> None:
+        """Run the standalone facts projection engine."""
+        import asyncio
+        from functools import partial
+
+        from platform_context_graph.core import get_database_manager
+        from platform_context_graph.core.jobs import JobManager
+        from platform_context_graph.facts.state import (
+            get_fact_store,
+            get_fact_work_queue,
+        )
+        from platform_context_graph.resolution.orchestration import (
+            project_work_item,
+            start_resolution_engine,
+        )
+        from platform_context_graph.tools.graph_builder import GraphBuilder
+
+        queue = get_fact_work_queue()
+        if queue is None:
+            raise typer.Exit(
+                "Resolution engine requires PCG_POSTGRES_DSN or PCG_FACT_STORE_DSN"
+            )
+        fact_store = get_fact_store()
+        db_manager = get_database_manager()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        builder = GraphBuilder(db_manager, JobManager(), loop)
+        projector = partial(project_work_item, builder=builder, fact_store=fact_store)
+        start_resolution_engine(queue=queue, projector=projector)
 
     @app.command("m", rich_help_panel="Shortcuts")
     def mcp_setup_alias() -> None:

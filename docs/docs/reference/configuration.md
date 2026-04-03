@@ -48,7 +48,6 @@ Here are the available settings you can configure.
 | :--- | :--- | :--- |
 | **`DEFAULT_DATABASE`** | `falkordb` | The database engine to use (`neo4j`, `falkordb`, or `kuzudb`). |
 | **`ENABLE_AUTO_WATCH`** | `false` | If `true`, `pcg index` will automatically start watching for changes. |
-| **`PARALLEL_WORKERS`** | `4` | Legacy fallback for parse-worker count when `PCG_PARSE_WORKERS` is unset. |
 | **`CACHE_ENABLED`** | `true` | Caches file hashes to speed up re-indexing. |
 
 ### Logging And Tracing
@@ -92,7 +91,6 @@ Notes:
 - `PCG_REPO_FILE_PARSE_MULTIPROCESS` enables the process-pool parse engine; leave it `false` until you want the heavier worker-process path.
 - `PCG_MULTIPROCESS_START_METHOD` now defaults to `spawn` because it is the most reliable choice for the parser-heavy process-pool path across local macOS and Linux containers.
 - `PCG_WORKER_MAX_TASKS` is now opt-in. The default leaves parse workers alive for the whole run because recycling long-lived parser workers can stall large local and containerized indexing jobs.
-- `PARALLEL_WORKERS` is still honored as a backward-compatible fallback when `PCG_PARSE_WORKERS` is not set.
 - `pcg index` and `pcg watch` now print the effective worker/debounce values they are using so local runs match the documented configuration.
 
 ### Indexing Scope
@@ -121,10 +119,14 @@ Notes:
 | **`PCG_CONTENT_STORE_ENABLED`** | `true` | Enables PostgreSQL-backed content retrieval and search. Set this to `false` to disable Postgres content access entirely. |
 | **`PCG_CONTENT_STORE_DSN`** | unset | Primary DSN for the PostgreSQL content store. |
 | **`PCG_POSTGRES_DSN`** | unset | Backward-compatible alias for the PostgreSQL content store DSN. |
+| **`PCG_FACT_STORE_DSN`** | unset | Primary DSN for the facts-first PostgreSQL fact store. Falls back to `PCG_CONTENT_STORE_DSN` or `PCG_POSTGRES_DSN` when unset. |
+| **`PCG_FACT_STORE_POOL_MAX_SIZE`** | `4` | Maximum psycopg pool size for the fact-store backend. |
+| **`PCG_FACT_QUEUE_POOL_MAX_SIZE`** | `4` | Maximum psycopg pool size for the facts work-queue backend. |
 
 Notes:
 
 - deployed API runtimes use the PostgreSQL content store directly and return `unavailable` when content is not yet indexed
+- facts-first Git ingestion also uses Postgres for fact persistence and queued projection work
 - local helper flows may still fall back to the workspace or graph cache
 - content search routes and MCP search tools require PostgreSQL and return an error when the content store is disabled
 - portable source retrieval uses `repo_id + relative_path` for files and `entity_id` for content-bearing entities
@@ -138,8 +140,7 @@ These settings matter for deployable-service installs that use the repository in
 | **`PCG_RUNTIME_ROLE`** | `combined` | Runtime identity. Deployed split runtimes use `api` or `ingester`. |
 | **`PCG_REPO_SOURCE_MODE`** | `githubOrg` | Repository discovery mode. Supported modes include `githubOrg`, `explicit`, and `filesystem`. |
 | **`PCG_GITHUB_ORG`** | unset | GitHub organization used for repository discovery in `githubOrg` mode. |
-| **`PCG_REPOSITORY_RULES_JSON`** | unset | Structured exact/regex include rules applied to normalized `org/repo` identifiers during repo rediscovery. |
-| **`PCG_REPOSITORIES`** | unset | Deprecated exact-repository shorthand. Prefer `PCG_REPOSITORY_RULES_JSON`. |
+| **`PCG_REPOSITORY_RULES_JSON`** | unset | Structured exact/regex include rules applied to normalized `org/repo` identifiers during repo rediscovery. Exact rules also define repository IDs for `explicit` and `filesystem` source modes. |
 | **`PCG_REPOS_DIR`** | `/data/repos` | Shared workspace directory for cloned repositories. |
 | **`PCG_REPO_LIMIT`** | `4000` | Maximum repositories to discover from GitHub in one cycle. |
 | **`PCG_REPO_SYNC_INITIAL_DELAY_SECONDS`** | `30` | Delay before the ingester begins its first sync cycle. |

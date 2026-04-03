@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_context_graph.tools.languages.elixir import (
+from platform_context_graph.parsers.languages.elixir import (
     ElixirTreeSitterParser,
     pre_scan_elixir,
 )

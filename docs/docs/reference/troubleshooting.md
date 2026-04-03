@@ -69,6 +69,9 @@ docker compose logs platform-context-graph | tail -20
 
 # Repo sync status
 docker compose logs repo-sync | tail -20
+
+# Resolution engine status
+docker compose logs resolution-engine | tail -20
 ```
 
 Common causes:
@@ -89,6 +92,9 @@ kubectl logs -n platform-context-graph deployment/platform-context-graph-api --t
 # Ingester logs
 kubectl logs -n platform-context-graph statefulset/platform-context-graph-ingester --tail=50
 
+# Resolution Engine logs
+kubectl logs -n platform-context-graph deployment/platform-context-graph-resolution-engine --tail=50
+
 # Check events for scheduling or resource issues
 kubectl get events -n platform-context-graph --sort-by=.lastTimestamp | tail -20
 ```
@@ -98,7 +104,7 @@ Common causes:
 - Neo4j secret missing or incorrect credentials
 - Postgres DSN not configured or `pg_trgm` extension not enabled
 - PVC not bound for the ingester workspace
-- Resource limits too low — the ingester needs enough memory for large repo indexing
+- Resource limits too low — the ingester and resolution engine need enough memory for large repo indexing and graph projection
 
 ## Getting help
 

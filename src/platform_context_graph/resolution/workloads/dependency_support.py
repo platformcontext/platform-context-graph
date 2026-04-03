@@ -7,7 +7,7 @@ from typing import Any
 
 from .batches import write_repo_dependency_rows
 from .batches import write_workload_dependency_rows
-from ...tools.languages.runtime_dependencies import (
+from ...parsers.languages.runtime_dependencies import (
     extract_runtime_service_dependencies,
 )
 

@@ -5,11 +5,15 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from .fact_resolution_metrics import RuntimeFactResolutionMetricsMixin
 from .indexing_metrics_v2 import RuntimeIndexMetricsV2Mixin
 from .otel import Observation, current_component, status_class
 
 
-class RuntimeMetricsMixin(RuntimeIndexMetricsV2Mixin):
+class RuntimeMetricsMixin(
+    RuntimeFactResolutionMetricsMixin,
+    RuntimeIndexMetricsV2Mixin,
+):
     """Provide metric-recording helpers for :class:`ObservabilityRuntime`."""
 
     enabled: bool

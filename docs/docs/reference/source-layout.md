@@ -13,17 +13,17 @@ PlatformContextGraph keeps the importable Python package under `src/platform_con
 | `content/` | content-store providers, content identity helpers, and workspace fallback |
 | `core/` | database adapters, watcher/runtime primitives, and low-level support code |
 | `domain/` | shared typed entities and response models |
-| `facts/` | Phase 1 placeholder boundary for future fact-first models and storage |
+| `facts/` | typed fact models, Postgres fact storage, fact emission, queue state, and facts-first runtime helpers |
 | `graph/` | canonical graph schema and persistence helpers |
 | `mcp/` | MCP server, transport, tool registry, and handler wiring |
 | `observability/` | OTEL bootstrap, runtime state, metrics, and instrumentation helpers |
 | `parsers/` | parser registry, raw-text parsing, parser capabilities, language parsers, and SCIP |
 | `platform/` | Shared platform/runtime primitives such as dependency rules, package resolution, and runtime-family inference |
 | `query/` | shared read/query services used by CLI, MCP, and HTTP |
-| `resolution/` | workload/platform materialization and future shared resolution logic |
+| `resolution/` | Resolution Engine orchestration, fact projection, workload/platform materialization, and future shared resolution logic |
 | `relationships/` | evidence-backed repo relationship discovery, resolution, persistence, and projection |
-| `runtime/` | repo sync, bootstrap indexing, and long-running runtime helpers |
-| `tools/` | `GraphBuilder`, compatibility shims, and remaining legacy helpers |
+| `runtime/` | repo sync, bootstrap indexing, resolution-engine runtime loops, and long-running runtime helpers |
+| `tools/` | `GraphBuilder`, code-finder/query helpers, cross-repo linking entrypoints, and generated tool-facing artifacts |
 | `utils/` | reusable helper utilities that do not belong to a higher-level subsystem |
 | `viz/` | visualization-serving support code |
 
@@ -59,9 +59,13 @@ The observability package is a real subsystem rather than a flat file:
 - `observability/otel.py`: OTEL config, exporters, and context helpers
 - `observability/runtime.py`: runtime object and instrumentation hooks
 - `observability/metrics.py`: metric-recording helpers
+- `observability/fact_resolution_metrics.py`: facts-first queue, emission, and Resolution Engine telemetry helpers
 - `observability/state.py`: global runtime lifecycle and test-exporter hooks
 
 This keeps API, MCP, and indexing telemetry consistent.
+
+Operator-facing telemetry references live under `reference/telemetry/` with
+separate pages for overview, metrics, traces, and logs.
 
 ## Relationships Package Layout
 
@@ -89,12 +93,19 @@ The content package owns portable source retrieval and content-store writes:
 - `content/service.py`: provider orchestration and backend preference rules
 - `content/state.py`: shared provider lifecycle
 
-## Collectors, Parsers, And Graph Layout
+## Collectors, Facts, Parsers, And Graph Layout
 
 The indexing side now separates source collection, parsing, graph persistence,
-and post-index materialization into clearer boundaries:
+facts, graph persistence, and post-index materialization into clearer
+boundaries:
 
-- `collectors/git/`: repository discovery, `.gitignore`, parse workers, path indexing, finalize helpers, and parse execution
+- `collectors/git/`: repository discovery, `.gitignore`, parse workers, path indexing, parse execution, and facts-first Git collection support
+- `facts/models/`: typed fact contracts for repository/file/entity observations
+- `facts/storage/`: Postgres-backed fact storage
+- `facts/work_queue/`: Postgres-backed work item queue used by the Resolution Engine
+- `facts/emission/`: source-specific fact emission from parsed snapshots
+- `facts/state.py`: shared fact store and queue lifecycle for deployed runtimes
+- `indexing/coordinator_facts.py` and `indexing/coordinator_facts_support.py`: Git cutover helpers for fact emission, inline projection, and facts-first finalization
 - `parsers/registry.py`: canonical parser registry and worker-friendly parse entrypoints
 - `parsers/raw_text.py`: raw-text parser support for searchable non-code artifacts
 - `parsers/languages/`: canonical language parser entrypoints and support modules
@@ -102,10 +113,18 @@ and post-index materialization into clearer boundaries:
 - `parsers/scip/`: SCIP parser, runtime helpers, and indexing orchestration
 - `graph/schema/`: graph schema creation
 - `graph/persistence/`: graph write helpers, batching, content dual-write, commit orchestration, worker support, and call/inheritance relationship persistence
+- `resolution/orchestration/`: Resolution Engine claim/process loops and the
+  shared work-item projection path reused by the standalone runtime and inline
+  Git cutover processing
+- `resolution/projection/`: repository/file/entity/relationship/workload/platform projection from stored facts
 - `resolution/workloads/` and `resolution/platforms.py`: workload and platform materialization after graph writes
 
 `tools/graph_builder.py` remains the stable public facade while the underlying
 source-of-truth modules move into these canonical packages.
+
+For the current Git cutover, the coordinator also reuses the same facts-first
+projection contracts in-process. That keeps one indexing run end-to-end
+complete while still moving graph-write ownership out of the collector logic.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.
@@ -138,9 +157,10 @@ acquisition and indexing grouped under its own subpackage:
 The ingester increasingly depends on canonical packages rather than `tools/`:
 
 - `collectors/git/` for repo-scoped collection
+- `facts/` for durable source observations and queue state
 - `parsers/` for parser-platform code
 - `graph/` for canonical graph writes
-- `resolution/` for workload/platform materialization
+- `resolution/` for Resolution Engine orchestration and workload/platform materialization
 
 ## Platform Package Layout
 

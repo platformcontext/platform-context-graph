@@ -11,6 +11,21 @@ spec:
     matchLabels:
       {{- include "pcg.apiSelectorLabels" . | nindent 6 }}
 ---
+{{- if .Values.resolutionEngine.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "pcg.resolutionEngineFullname" . }}
+  labels:
+    {{- include "pcg.labels" . | nindent 4 }}
+    app.kubernetes.io/component: resolution-engine
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "pcg.resolutionEngineSelectorLabels" . | nindent 6 }}
+---
+{{- end }}
 {{- if .Values.repoSync.enabled }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget

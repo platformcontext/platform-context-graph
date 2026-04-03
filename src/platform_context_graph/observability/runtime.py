@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from .fact_resolution_metrics import setup_fact_resolution_instruments
 from .http_middleware import install_http_middleware
 from .metrics import RuntimeMetricsMixin
 from .otel import (
@@ -16,7 +17,6 @@ from .otel import (
     ActiveStateKey,
     FastAPI,
     FastAPIInstrumentor,
-    Observation,
     REQUEST_CONTEXT_UNSET,
     MeterProvider,
     MetricReader,
@@ -61,20 +61,28 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
     meter: Any = field(init=False, default=None)
     _active_runs: dict[ActiveStateKey, int] = field(init=False, default_factory=dict)
     _active_repositories: dict[ActiveStateKey, int] = field(
-        init=False,
-        default_factory=dict,
+        init=False, default_factory=dict
     )
     _checkpoint_pending_repositories: dict[ActiveStateKey, int] = field(
-        init=False,
-        default_factory=dict,
+        init=False, default_factory=dict
     )
     _index_snapshot_queue_depth: dict[ActiveStateKey, int] = field(
-        init=False,
-        default_factory=dict,
+        init=False, default_factory=dict
     )
     _index_parse_tasks_active: dict[ActiveStateKey, int] = field(
-        init=False,
-        default_factory=dict,
+        init=False, default_factory=dict
+    )
+    _fact_resolution_instruments: dict[str, Any] = field(
+        init=False, default_factory=dict
+    )
+    _fact_queue_depth: dict[ActiveStateKey, int] = field(
+        init=False, default_factory=dict
+    )
+    _fact_queue_oldest_age_seconds: dict[ActiveStateKey, float] = field(
+        init=False, default_factory=dict
+    )
+    _resolution_workers_active: dict[ActiveStateKey, int] = field(
+        init=False, default_factory=dict
     )
     _process_rss_bytes: int = field(init=False, default=-1)
     _cgroup_memory_bytes: int = field(init=False, default=-1)
@@ -249,6 +257,7 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
             "pcg_index_parse_tasks_active",
             callbacks=[self._observe_index_parse_tasks_active],
         )
+        setup_fact_resolution_instruments(self)
         for gauge_name, attr_name, description in (
             (
                 "pcg_process_rss_bytes",

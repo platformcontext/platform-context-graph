@@ -1,6 +1,6 @@
 """Tests for generic Terraform runtime-family helpers."""
 
-from platform_context_graph.tools.runtime_platform_families import (
+from platform_context_graph.resolution.platform_families import (
     format_platform_kind_label,
     infer_runtime_family_kind_from_identifiers,
     infer_terraform_runtime_family_kind,

@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from platform_context_graph.tools.languages.yaml_infra import InfraYAMLParser
-from platform_context_graph.tools.languages import yaml_infra_support
+from platform_context_graph.parsers.languages.yaml_infra import InfraYAMLParser
+from platform_context_graph.parsers.languages import yaml_infra_support
 
 
 class TestInfraYAMLParser:
@@ -402,7 +402,7 @@ def test_yaml_infra_facade_stays_thin_and_semantic_modules_are_importable() -> N
         Path(__file__).resolve().parents[3]
         / "src"
         / "platform_context_graph"
-        / "tools"
+        / "parsers"
         / "languages"
     )
     yaml_facade = languages_dir / "yaml_infra.py"
@@ -417,6 +417,6 @@ def test_yaml_infra_facade_stays_thin_and_semantic_modules_are_importable() -> N
         "kustomize",
     ):
         module = importlib.import_module(
-            f"platform_context_graph.tools.languages.{module_name}"
+            f"platform_context_graph.parsers.languages.{module_name}"
         )
         assert module is not None

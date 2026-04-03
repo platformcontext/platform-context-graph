@@ -2,7 +2,7 @@ language: scala
 title: Scala Parser
 family: language
 parser: ScalaTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/scala.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/scala.py
 doc_path: docs/docs/languages/scala.md
 fixture_repo: tests/fixtures/ecosystems/scala_comprehensive/
 unit_test_file: tests/unit/parsers/test_scala_parser.py

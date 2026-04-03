@@ -92,10 +92,7 @@ def _canonical_ref(entity: dict[str, Any]) -> EntityRef:
 
 def _match_terms(entity: dict[str, Any]) -> list[tuple[str, str]]:
     """Collect searchable terms used for repository and entity matching."""
-    terms: list[tuple[str, str]] = [
-        ("id", entity["id"]),
-        ("name", entity["name"]),
-    ]
+    terms: list[tuple[str, str]] = [("id", entity["id"]), ("name", entity["name"])]
     if path := entity.get("path"):
         terms.append(("path", path))
     if relative_path := entity.get("relative_path"):

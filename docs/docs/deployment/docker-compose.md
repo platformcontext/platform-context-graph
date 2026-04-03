@@ -7,8 +7,9 @@ The repository includes a Docker Compose stack that mirrors the deployable-servi
 3. start a local OpenTelemetry collector
 4. start Jaeger for trace inspection
 5. bootstrap index fixture repos
-6. start the combined HTTP API + MCP service
+6. start the HTTP API + MCP service
 7. run an ongoing repo-sync loop
+8. run the standalone resolution-engine loop
 
 Compose files:
 - `docker-compose.yaml`
@@ -37,7 +38,7 @@ That script:
 
 Set `PCG_KEEP_COMPOSE_STACK=true` if you want the stack left running after the verification completes.
 
-By default, the bootstrap and repo-sync services mount the fixture ecosystems tree from
+By default, the bootstrap, repo-sync, and resolution-engine services mount the fixture ecosystems tree from
 `./tests/fixtures/ecosystems` into `/fixtures` so the stack stays safe for local smoke testing.
 
 The runtime services export OTLP traces and metrics to the local collector by default, and the
@@ -54,8 +55,9 @@ The indexing services also honor worker-tuning controls from the environment:
 - `PCG_WORKER_MAX_TASKS`
 - `PCG_INDEX_QUEUE_DEPTH`
 
-Compose passes those values through to `bootstrap-index`, `repo-sync`, and
-`platform-context-graph`, so local and containerized runs stay aligned.
+Compose passes those values through to `bootstrap-index`, `repo-sync`,
+`resolution-engine`, and `platform-context-graph`, so local and containerized
+runs stay aligned.
 
 For a real local end-to-end run against a host directory, override the host-side source root with
 an absolute path:

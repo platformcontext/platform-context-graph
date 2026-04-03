@@ -120,6 +120,7 @@ async def process_repository_snapshots(
     snapshot_file_data_exists_fn: Any,
     save_snapshot_metadata_fn: Any,
     save_snapshot_file_data_fn: Any,
+    emit_snapshot_facts_fn: Any | None = None,
     persist_run_state_fn: Any,
     record_checkpoint_metric_fn: Any,
     update_pending_repository_gauge_fn: Any,
@@ -130,6 +131,7 @@ async def process_repository_snapshots(
     parse_executor: Any | None = None,
     parse_strategy: str = "threaded",
     parse_workers: int = 1,
+    facts_first_mode: bool = False,
 ) -> tuple[list[Path], dict[str, list[str]], dict[str, RepoTelemetry]]:
     """Parse repositories concurrently and commit via PCG_COMMIT_WORKERS consumers."""
 
@@ -474,6 +476,14 @@ async def process_repository_snapshots(
                             imports_map=snapshot.imports_map,
                         ),
                     )
+                    fact_emission_result = None
+                    if callable(emit_snapshot_facts_fn):
+                        fact_emission_result = emit_snapshot_facts_fn(
+                            run_id=run_state.run_id,
+                            repo_path=repo_path,
+                            snapshot=snapshot,
+                            is_dependency=is_dependency,
+                        )
                     snapshot.file_data = []
                     record_checkpoint_metric_fn(
                         component=component,
@@ -519,6 +529,7 @@ async def process_repository_snapshots(
                                 started,
                                 commit_wait_started,
                                 repo_tel,
+                                fact_emission_result,
                             )
                         )
                     if hasattr(telemetry, "set_index_snapshot_queue_depth"):
@@ -600,6 +611,8 @@ async def process_repository_snapshots(
         commit_concurrency = 1
     else:
         commit_concurrency = max(1, min(parsed, 32))
+    if facts_first_mode:
+        commit_concurrency = 1
     emit_log_call(
         info_logger_fn,
         f"Commit worker config: PCG_COMMIT_WORKERS={raw!r}, "
@@ -668,7 +681,14 @@ async def process_repository_snapshots(
                 snapshot_queue.task_done()
                 return
 
-            repo_path, snapshot, started, snapshot_ready_started, repo_tel = item
+            (
+                repo_path,
+                snapshot,
+                started,
+                snapshot_ready_started,
+                repo_tel,
+                fact_emission_result,
+            ) = item
             repo_state = run_state.repositories[str(repo_path.resolve())]
             commit_started: float | None = None
             last_commit_progress_publish = 0.0
@@ -800,12 +820,26 @@ async def process_repository_snapshots(
                         "pcg.index.commit_workers": commit_concurrency,
                     },
                 ):
-                    _iter_fn = lambda repo_path, batch_size: iter_snapshot_file_data_batches_fn(
-                        run_state.run_id,
-                        repo_path,
-                        batch_size=batch_size,
+                    _iter_fn = lambda repo_path, batch_size: (
+                        iter_snapshot_file_data_batches_fn(
+                            run_state.run_id,
+                            repo_path,
+                            batch_size=batch_size,
+                        )
                     )
-                    if _commit_process_pool is not None:
+                    to_thread_fn = getattr(asyncio_module, "to_thread", asyncio.to_thread)
+                    if facts_first_mode:
+                        commit_timing_result = await to_thread_fn(
+                            commit_repository_snapshot_fn,
+                            builder,
+                            snapshot,
+                            is_dependency=is_dependency,
+                            progress_callback=_commit_progress_callback,
+                            iter_snapshot_file_data_batches_fn=_iter_fn,
+                            repo_class=repo_tel.repo_class,
+                            fact_emission_result=fact_emission_result,
+                        )
+                    elif _commit_process_pool is not None:
                         # CW > 1: use ProcessPoolExecutor for true parallelism
                         commit_timing_result = await commit_repository_snapshot_async(
                             builder,
@@ -829,7 +863,7 @@ async def process_repository_snapshots(
                         )
                     else:
                         # CW == 1: sync commit via asyncio.to_thread
-                        commit_timing_result = await asyncio.to_thread(
+                        commit_timing_result = await to_thread_fn(
                             commit_repository_snapshot_fn,
                             builder,
                             snapshot,
@@ -891,7 +925,7 @@ async def process_repository_snapshots(
                 )
                 log_memory_usage(
                     info_logger_fn,
-                    context=("Repository commit memory " f"repo={repo_path.resolve()}"),
+                    context=(f"Repository commit memory repo={repo_path.resolve()}"),
                 )
                 mem_sample = read_memory_usage_sample()
                 record_memory_sample(repo_tel, "commit_end", mem_sample)

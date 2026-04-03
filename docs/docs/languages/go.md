@@ -1,13 +1,13 @@
 # Go Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/go.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/go.yaml`
 
 ## Parser Contract
 - Language: `go`
 - Family: `language`
 - Parser: `GoTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/go.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/go.py`
 - Fixture repo: `tests/fixtures/ecosystems/go_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_go_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestGoGraph`

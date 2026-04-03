@@ -9,8 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from platform_context_graph.utils.debug_log import warning_logger
-
 
 @dataclass(frozen=True, slots=True)
 class RepoSyncRepositoryRule:
@@ -131,39 +129,54 @@ def parse_repository_rules_json(raw: str | None) -> tuple[RepoSyncRepositoryRule
     )
 
 
-def merge_repository_rules(
+def extract_exact_repository_ids(
     rules: Sequence[RepoSyncRepositoryRule],
-    legacy_exact_repositories: Sequence[str],
-) -> tuple[RepoSyncRepositoryRule, ...]:
-    """Merge structured include rules with legacy exact repository names.
+) -> list[str]:
+    """Return de-duplicated exact repository identifiers from structured rules.
 
     Args:
         rules: Structured include rules from JSON.
-        legacy_exact_repositories: Deprecated exact repository names.
 
     Returns:
-        De-duplicated include rules with legacy exact names appended.
+        Exact repository identifiers in first-seen order.
     """
 
-    merged: list[RepoSyncRepositoryRule] = list(rules)
-    if legacy_exact_repositories:
-        warning_logger(
-            "PCG_REPOSITORIES is deprecated; use PCG_REPOSITORY_RULES_JSON with "
-            "exact rules instead"
-        )
-    merged.extend(
-        RepoSyncRepositoryRule(kind="exact", value=repo)
-        for repo in legacy_exact_repositories
-    )
-    deduped: list[RepoSyncRepositoryRule] = []
-    seen: set[tuple[str, str]] = set()
-    for rule in merged:
-        signature = (rule.kind, rule.value)
-        if signature in seen:
+    exact_repositories: list[str] = []
+    seen: set[str] = set()
+    for rule in rules:
+        if rule.kind != "exact":
             continue
-        seen.add(signature)
-        deduped.append(rule)
-    return tuple(deduped)
+        if rule.value in seen:
+            continue
+        seen.add(rule.value)
+        exact_repositories.append(rule.value)
+    return exact_repositories
+
+
+def validate_repository_rules_for_source_mode(
+    *,
+    source_mode: str,
+    repository_rules: Sequence[RepoSyncRepositoryRule],
+) -> None:
+    """Validate repository rules for source modes with strict exact-match inputs.
+
+    Args:
+        source_mode: Repo source mode selected for the runtime.
+        repository_rules: Structured include rules loaded from JSON.
+
+    Raises:
+        ValueError: If explicit/filesystem modes include non-exact rules.
+    """
+
+    if source_mode not in {"explicit", "filesystem"}:
+        return
+    non_exact_rules = [rule.value for rule in repository_rules if rule.kind != "exact"]
+    if non_exact_rules:
+        raise ValueError(
+            "PCG_REPOSITORY_RULES_JSON only supports exact rules when "
+            f"PCG_REPO_SOURCE_MODE={source_mode!r}; "
+            f"found non-exact rules: {non_exact_rules}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,8 +194,8 @@ class RepoSyncConfig:
         repo_limit: Maximum repositories to discover from GitHub.
         sync_lock_dir: Directory used as a coarse workspace lock.
         component: Observability component name for the runtime.
-        repository_rules: Structured include rules, merged with deprecated exact
-            shorthand when present.
+        repository_rules: Structured include rules loaded from
+            ``PCG_REPOSITORY_RULES_JSON``.
     """
 
     repos_dir: Path
@@ -206,27 +219,30 @@ class RepoSyncConfig:
 
         Environment:
             ``PCG_REPOSITORY_RULES_JSON`` supplies structured exact/regex include
-            rules. ``PCG_REPOSITORIES`` remains as a deprecated exact shorthand
-            and is merged for one release.
+            rules used by the repo-sync runtime.
 
         Returns:
             Parsed repository sync configuration.
         """
 
         repos_dir = Path(os.getenv("PCG_REPOS_DIR", "/data/repos"))
-        repositories = [
-            repo.strip()
-            for repo in os.getenv("PCG_REPOSITORIES", "").split(",")
-            if repo.strip()
-        ]
-        repository_rules = merge_repository_rules(
-            parse_repository_rules_json(os.getenv("PCG_REPOSITORY_RULES_JSON")),
-            repositories,
+        source_mode = os.getenv("PCG_REPO_SOURCE_MODE", "githubOrg")
+        repository_rules = parse_repository_rules_json(
+            os.getenv("PCG_REPOSITORY_RULES_JSON")
+        )
+        validate_repository_rules_for_source_mode(
+            source_mode=source_mode,
+            repository_rules=repository_rules,
+        )
+        repositories = (
+            extract_exact_repository_ids(repository_rules)
+            if source_mode in {"explicit", "filesystem"}
+            else []
         )
         filesystem_root = os.getenv("PCG_FILESYSTEM_ROOT")
         return cls(
             repos_dir=repos_dir,
-            source_mode=os.getenv("PCG_REPO_SOURCE_MODE", "githubOrg"),
+            source_mode=source_mode,
             git_auth_method=os.getenv("PCG_GIT_AUTH_METHOD", "githubApp"),
             github_org=os.getenv("PCG_GITHUB_ORG"),
             repositories=repositories,

@@ -59,6 +59,14 @@
         "key": { "type": "string" }
       }
     },
+    "resolutionEngine": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "resources": { "type": "object" }
+      }
+    },
     "repoSync": {
       "type": "object",
       "properties": {

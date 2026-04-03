@@ -57,8 +57,7 @@ def enrich_workflow_paths(
 def _repo_root(repository: dict[str, Any]) -> Path | None:
     """Return the local repository root when it exists on disk.
 
-    Retained for backward compatibility with Ansible enrichment which
-    still uses filesystem access.
+    Ansible enrichment still uses filesystem access for workflow path discovery.
     """
 
     raw_path = repository.get("local_path") or repository.get("path")

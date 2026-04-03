@@ -47,7 +47,9 @@ class ContentService:
             repo_id=repo_id,
             relative_path=relative_path,
         )
-        if postgres_result is not None:
+        if postgres_result is not None and not self._should_fallback_to_workspace(
+            postgres_result
+        ):
             return postgres_result
         if self.workspace_provider is None:
             return self._unavailable_file_content(
@@ -85,7 +87,9 @@ class ContentService:
             repo_id=repo_id,
             relative_path=relative_path,
         )
-        if postgres_result is not None:
+        if postgres_result is not None and not self._should_fallback_to_workspace(
+            postgres_result
+        ):
             return self._file_lines_from_postgres(
                 postgres_result,
                 repo_id=repo_id,
@@ -120,7 +124,9 @@ class ContentService:
         """
 
         postgres_result = self._from_postgres_entity(entity_id=entity_id)
-        if postgres_result is not None:
+        if postgres_result is not None and not self._should_fallback_to_workspace(
+            postgres_result
+        ):
             return postgres_result
         if self.workspace_provider is None:
             return self._unavailable_entity_content(entity_id=entity_id)
@@ -385,6 +391,22 @@ class ContentService:
             "template_dialect": postgres_result.get("template_dialect"),
             "iac_relevant": postgres_result.get("iac_relevant"),
         }
+
+    def _should_fallback_to_workspace(self, result: dict[str, Any]) -> bool:
+        """Return whether a Postgres result should fall through to workspace.
+
+        Args:
+            result: PostgreSQL-backed content response mapping.
+
+        Returns:
+            True when the result is an unavailable/not-indexed payload instead of
+            a concrete content hit.
+        """
+
+        return not bool(result.get("available", True)) and (
+            result.get("source_backend") in {"postgres", "unavailable"}
+            or result.get("index_status") == "not_indexed"
+        )
 
     def _unavailable_file_content(
         self,

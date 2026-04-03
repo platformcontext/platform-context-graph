@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from platform_context_graph.tools.languages.templated_detection import (
+from platform_context_graph.parsers.languages.templated_detection import (
     ContentMetadata,
     infer_content_metadata,
 )

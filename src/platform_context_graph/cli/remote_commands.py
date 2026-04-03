@@ -144,6 +144,58 @@ def run_remote_admin_reindex(
     )
 
 
+def run_remote_admin_facts_replay(
+    main_module: Any,
+    *,
+    service_url: str | None,
+    api_key: str | None,
+    profile: str | None,
+    work_item_ids: list[str] | None,
+    repository_id: str | None,
+    source_run_id: str | None,
+    work_type: str | None,
+    limit: int,
+) -> None:
+    """Replay failed facts-first work items through the admin API."""
+
+    remote_target = resolve_remote_target(
+        service_url=service_url,
+        api_key=api_key,
+        profile=profile,
+        require_remote=True,
+    )
+    try:
+        payload = request_json(
+            remote_target,
+            method="POST",
+            path="/api/v0/admin/facts/replay",
+            json_body={
+                "work_item_ids": work_item_ids or None,
+                "repository_id": repository_id,
+                "source_run_id": source_run_id,
+                "work_type": work_type,
+                "limit": limit,
+            },
+        )
+    except RemoteAPIError as exc:
+        main_module.console.print(
+            f"[bold red]Remote facts replay failed:[/bold red] {exc}"
+        )
+        raise typer.Exit(code=1) from exc
+
+    main_module.console.print(
+        f"[bold cyan]Facts Replay:[/bold cyan] {payload.get('status', 'unknown')}"
+    )
+    main_module.console.print(
+        f"[cyan]Replayed:[/cyan] {payload.get('replayed_count', 0)}"
+    )
+    work_item_ids = payload.get("work_item_ids") or []
+    if work_item_ids:
+        main_module.console.print(
+            "[cyan]Work items:[/cyan] " + ", ".join(str(item) for item in work_item_ids)
+        )
+
+
 def render_remote_search(
     main_module: Any,
     *,

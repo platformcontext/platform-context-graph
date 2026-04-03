@@ -48,6 +48,17 @@ api:
       cpu: 2000m
       memory: 8Gi
 
+resolutionEngine:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+
 exposure:
   ingress:
     enabled: false
