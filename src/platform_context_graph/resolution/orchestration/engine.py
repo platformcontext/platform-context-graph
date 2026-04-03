@@ -10,6 +10,10 @@ from platform_context_graph.resolution.projection import project_git_fact_record
 from platform_context_graph.resolution.projection.relationships import (
     project_git_relationship_fact_records,
 )
+from platform_context_graph.resolution.projection.workloads import (
+    project_platform_facts,
+    project_workload_facts,
+)
 
 
 def project_work_item(
@@ -19,6 +23,9 @@ def project_work_item(
     fact_store: Any | None = None,
     fact_projector: Any = project_git_fact_records,
     relationship_projector: Any = project_git_relationship_fact_records,
+    workload_projector: Any = project_workload_facts,
+    platform_projector: Any = project_platform_facts,
+    info_logger_fn: Any = lambda *_args, **_kwargs: None,
     debug_log_fn: Any = lambda *_args, **_kwargs: None,
     warning_logger_fn: Any = lambda *_args, **_kwargs: None,
 ) -> dict[str, Any] | None:
@@ -42,7 +49,18 @@ def project_work_item(
         debug_log_fn=debug_log_fn,
         warning_logger_fn=warning_logger_fn,
     )
+    workload_metrics = workload_projector(
+        builder=builder,
+        fact_records=fact_records,
+        info_logger_fn=info_logger_fn,
+    )
+    platform_metrics = platform_projector(
+        builder=builder,
+        fact_records=fact_records,
+    )
     return {
         "facts": fact_metrics,
         "relationships": relationship_metrics,
+        "workloads": workload_metrics,
+        "platforms": platform_metrics,
     }

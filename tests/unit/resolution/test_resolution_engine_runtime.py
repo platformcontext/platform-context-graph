@@ -123,6 +123,19 @@ def test_project_work_item_loads_facts_and_runs_projection_stages() -> None:
         handled.append(f"relationships:{len(fact_records)}")
         return {"files": 1, "imports": 0, "call_metrics": {}}
 
+    def _workload_projector(  # type: ignore[no-untyped-def]
+        *,
+        builder,
+        fact_records,
+        info_logger_fn,
+    ):
+        handled.append(f"workloads:{len(fact_records)}")
+        return {"workloads_projected": 1, "runtime_platform_edges_projected": 1}
+
+    def _platform_projector(*, builder, fact_records):  # type: ignore[no-untyped-def]
+        handled.append(f"platforms:{len(fact_records)}")
+        return {"infrastructure_platform_edges_projected": 1}
+
     metrics = project_work_item(
         FactWorkItemRow(
             work_item_id="work-3",
@@ -134,11 +147,14 @@ def test_project_work_item_loads_facts_and_runs_projection_stages() -> None:
         fact_store=fact_store,
         fact_projector=_fact_projector,
         relationship_projector=_relationship_projector,
+        workload_projector=_workload_projector,
+        platform_projector=_platform_projector,
         debug_log_fn=lambda *_args, **_kwargs: None,
         warning_logger_fn=lambda *_args, **_kwargs: None,
+        info_logger_fn=lambda *_args, **_kwargs: None,
     )
 
-    assert handled == ["facts:1", "relationships:1"]
+    assert handled == ["facts:1", "relationships:1", "workloads:1", "platforms:1"]
     fact_store.list_facts.assert_called_once_with(
         repository_id="github.com/acme/service",
         source_run_id="run-123",
@@ -146,4 +162,9 @@ def test_project_work_item_loads_facts_and_runs_projection_stages() -> None:
     assert metrics == {
         "facts": {"repositories": 0, "files": 1, "entities": 0},
         "relationships": {"files": 1, "imports": 0, "call_metrics": {}},
+        "workloads": {
+            "workloads_projected": 1,
+            "runtime_platform_edges_projected": 1,
+        },
+        "platforms": {"infrastructure_platform_edges_projected": 1},
     }
