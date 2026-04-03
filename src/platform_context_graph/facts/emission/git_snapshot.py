@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,53 @@ from platform_context_graph.facts.models.git import RepositoryObservedFact
 from platform_context_graph.facts.storage.models import FactRecordRow
 from platform_context_graph.facts.storage.models import FactRunRow
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
+
+
+@dataclass(frozen=True, slots=True)
+class GitSnapshotFactEmissionResult:
+    """Outcome metadata for one emitted repository snapshot batch."""
+
+    repository_id: str
+    source_run_id: str
+    source_snapshot_id: str
+    work_item_id: str
+    fact_count: int
+
+
+def build_git_snapshot_id(
+    *,
+    repository_id: str,
+    checkout_path: str,
+    source_run_id: str,
+) -> str:
+    """Return the deterministic snapshot identifier for one Git repo emission."""
+
+    return stable_fact_id(
+        fact_type="GitSnapshot",
+        identity={
+            "repository_id": repository_id,
+            "checkout_path": checkout_path,
+            "source_run_id": source_run_id,
+        },
+    )
+
+
+def build_git_projection_work_item_id(
+    *,
+    repository_id: str,
+    source_run_id: str,
+    source_snapshot_id: str,
+) -> str:
+    """Return the deterministic work-item identifier for one Git snapshot."""
+
+    return stable_fact_id(
+        fact_type="FactProjectionWorkItem",
+        identity={
+            "repository_id": repository_id,
+            "source_run_id": source_run_id,
+            "source_snapshot_id": source_snapshot_id,
+        },
+    )
 
 
 def _fact_record_from_repository_fact(
@@ -152,7 +200,7 @@ def emit_git_snapshot_facts(
     fact_store: Any,
     work_queue: Any,
     observed_at: Any,
-) -> int:
+) -> GitSnapshotFactEmissionResult:
     """Persist fact rows and enqueue one projection work item for a snapshot."""
 
     checkout_path = str(Path(snapshot.repo_path).resolve())
@@ -225,20 +273,24 @@ def emit_git_snapshot_facts(
             *[_fact_record_from_entity_fact(fact) for fact in entity_facts],
         ]
     )
+    work_item_id = build_git_projection_work_item_id(
+        repository_id=repository_id,
+        source_run_id=source_run_id,
+        source_snapshot_id=source_snapshot_id,
+    )
     work_queue.enqueue_work_item(
         FactWorkItemRow(
-            work_item_id=stable_fact_id(
-                fact_type="FactProjectionWorkItem",
-                identity={
-                    "repository_id": repository_id,
-                    "source_run_id": source_run_id,
-                    "source_snapshot_id": source_snapshot_id,
-                },
-            ),
+            work_item_id=work_item_id,
             work_type="project-git-facts",
             repository_id=repository_id,
             source_run_id=source_run_id,
             status="pending",
         )
     )
-    return 1 + len(file_facts) + len(entity_facts)
+    return GitSnapshotFactEmissionResult(
+        repository_id=repository_id,
+        source_run_id=source_run_id,
+        source_snapshot_id=source_snapshot_id,
+        work_item_id=work_item_id,
+        fact_count=1 + len(file_facts) + len(entity_facts),
+    )

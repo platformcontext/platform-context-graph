@@ -202,10 +202,11 @@ def test_emit_git_snapshot_facts_persists_run_facts_and_work_item() -> None:
         observed_at=_utc_now(),
     )
 
-    assert emitted > 0
+    assert emitted.fact_count > 0
     fact_store.upsert_fact_run.assert_called_once()
     fact_store.upsert_facts.assert_called_once()
     work_queue.enqueue_work_item.assert_called_once()
+    assert emitted.work_item_id
     fact_rows = fact_store.upsert_facts.call_args.args[0]
     file_fact_row = next(row for row in fact_rows if row.fact_type == "FileObserved")
     assert (

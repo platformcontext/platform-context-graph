@@ -1,0 +1,474 @@
+"""Facts-first coordinator helpers for the Phase 2 Git cutover."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+import time
+from typing import Any
+
+from platform_context_graph.facts.emission import emit_git_snapshot_facts
+from platform_context_graph.facts.emission.git_snapshot import (
+    GitSnapshotFactEmissionResult,
+)
+from platform_context_graph.facts.models.base import stable_fact_id
+from platform_context_graph.facts.state import get_fact_store
+from platform_context_graph.facts.state import get_fact_work_queue
+from platform_context_graph.facts.state import git_facts_first_enabled
+from platform_context_graph.facts.storage.models import FactRunRow
+from platform_context_graph.repository_identity import (
+    git_remote_for_path,
+    repository_metadata,
+)
+from platform_context_graph.resolution.orchestration import project_work_item
+
+from .commit_timing import CommitTimingResult
+
+__all__ = [
+    "commit_repository_snapshot_from_facts",
+    "create_facts_first_commit_callback",
+    "create_snapshot_fact_emitter",
+    "emit_repository_snapshot_facts",
+    "finalize_fact_projection_batch",
+    "finalize_facts_first_run",
+    "git_facts_first_enabled",
+    "project_repository_snapshot_facts",
+]
+
+
+def facts_first_projection_enabled() -> bool:
+    """Return whether Git indexing should switch to facts-first projection."""
+
+    if not git_facts_first_enabled():
+        return False
+    fact_store = get_fact_store()
+    work_queue = get_fact_work_queue()
+    return bool(
+        fact_store is not None
+        and work_queue is not None
+        and getattr(fact_store, "enabled", True)
+        and getattr(work_queue, "enabled", True)
+    )
+
+
+def _utc_now() -> Any:
+    """Return the coordinator runtime UTC clock."""
+
+    from .coordinator_storage import _utc_now as coordinator_utc_now
+
+    return coordinator_utc_now()
+
+
+def _graph_store_adapter(builder: object) -> object:
+    """Return the graph store adapter used by facts-first projection."""
+
+    from .coordinator_storage import _graph_store_adapter as storage_adapter
+
+    return storage_adapter(builder)
+
+
+def _repository_id_for_path(repo_path: Path) -> str:
+    """Return the canonical repository identifier for one local checkout."""
+
+    metadata = repository_metadata(
+        name=repo_path.name,
+        local_path=str(repo_path),
+        remote_url=git_remote_for_path(repo_path),
+    )
+    return str(metadata["id"])
+
+
+def _source_snapshot_id(*, source_run_id: str, repo_path: Path) -> str:
+    """Return a deterministic snapshot id for one repository in a run."""
+
+    return stable_fact_id(
+        fact_type="GitRepositorySnapshot",
+        identity={
+            "source_run_id": source_run_id,
+            "repo_path": str(repo_path.resolve()),
+        },
+    )
+
+
+def _fact_metric_row_count(metrics: dict[str, Any] | None) -> int:
+    """Return a best-effort row count derived from nested projection metrics."""
+
+    if not isinstance(metrics, dict):
+        return 0
+
+    total = 0
+    for value in metrics.values():
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            total += value
+            continue
+        if isinstance(value, dict):
+            total += _fact_metric_row_count(value)
+    return total
+
+
+def emit_repository_snapshot_facts(
+    *,
+    source_run_id: str,
+    repo_path: Path,
+    snapshot: object,
+    is_dependency: bool,
+    fact_store: object | None = None,
+    work_queue: object | None = None,
+    observed_at_fn: Callable[[], Any] = _utc_now,
+) -> GitSnapshotFactEmissionResult:
+    """Persist facts for one parsed repository snapshot."""
+
+    store = fact_store or get_fact_store()
+    queue = work_queue or get_fact_work_queue()
+    if store is None or queue is None:
+        raise RuntimeError("facts-first indexing requires a configured fact runtime")
+
+    resolved_repo_path = repo_path.resolve()
+    return emit_git_snapshot_facts(
+        snapshot=snapshot,
+        repository_id=_repository_id_for_path(resolved_repo_path),
+        source_run_id=source_run_id,
+        source_snapshot_id=_source_snapshot_id(
+            source_run_id=source_run_id,
+            repo_path=resolved_repo_path,
+        ),
+        is_dependency=is_dependency,
+        fact_store=store,
+        work_queue=queue,
+        observed_at=observed_at_fn(),
+    )
+
+
+def create_snapshot_fact_emitter(
+    *,
+    source_run_id: str,
+    fact_store: object | None = None,
+    work_queue: object | None = None,
+    observed_at_fn: Callable[[], Any] = _utc_now,
+) -> Callable[..., GitSnapshotFactEmissionResult]:
+    """Build the snapshot callback that persists facts for one run."""
+
+    def _emit_snapshot_facts(
+        *,
+        run_id: str,
+        repo_path: Path,
+        snapshot: object,
+        is_dependency: bool,
+    ) -> GitSnapshotFactEmissionResult:
+        del run_id
+        return emit_repository_snapshot_facts(
+            source_run_id=source_run_id,
+            repo_path=repo_path,
+            snapshot=snapshot,
+            is_dependency=is_dependency,
+            fact_store=fact_store,
+            work_queue=work_queue,
+            observed_at_fn=observed_at_fn,
+        )
+
+    return _emit_snapshot_facts
+
+
+def _clear_repository_projection_state(
+    *,
+    builder: object,
+    repository_id: str,
+    graph_store: object,
+) -> None:
+    """Delete graph/content state before facts-first reprojection."""
+
+    graph_store.delete_repository(repository_id)
+    content_provider = getattr(builder, "_content_provider", None)
+    if content_provider is not None and getattr(content_provider, "enabled", False):
+        content_provider.delete_repository_content(repository_id)
+
+
+def project_repository_snapshot_facts(
+    builder: object,
+    snapshot: object,
+    *,
+    fact_emission_result: GitSnapshotFactEmissionResult,
+    fact_store: object | None = None,
+    work_queue: object | None = None,
+    graph_store: object,
+    project_work_item_fn: Callable[..., dict[str, Any] | None] = project_work_item,
+    lease_owner: str = "indexing",
+    lease_ttl_seconds: int = 300,
+    info_logger_fn: Any = lambda *_args, **_kwargs: None,
+    warning_logger_fn: Any = lambda *_args, **_kwargs: None,
+    debug_log_fn: Any = lambda *_args, **_kwargs: None,
+    progress_callback: Any | None = None,
+    iter_snapshot_file_data_batches_fn: Any | None = None,
+    repo_class: str | None = None,
+) -> CommitTimingResult:
+    """Project one emitted repository snapshot into canonical graph state."""
+
+    del snapshot
+    del progress_callback
+    del iter_snapshot_file_data_batches_fn
+    del repo_class
+
+    store = fact_store or get_fact_store()
+    queue = work_queue or get_fact_work_queue()
+    if store is None or queue is None:
+        raise RuntimeError("facts-first indexing requires a configured fact runtime")
+
+    _clear_repository_projection_state(
+        builder=builder,
+        repository_id=fact_emission_result.repository_id,
+        graph_store=graph_store,
+    )
+
+    work_item = queue.lease_work_item(
+        work_item_id=fact_emission_result.work_item_id,
+        lease_owner=lease_owner,
+        lease_ttl_seconds=lease_ttl_seconds,
+    )
+    if work_item is None:
+        raise RuntimeError(
+            "facts-first projection could not lease work item "
+            f"{fact_emission_result.work_item_id}"
+        )
+
+    started = time.perf_counter()
+    try:
+        metrics = project_work_item_fn(
+            work_item,
+            builder=builder,
+            fact_store=store,
+            info_logger_fn=info_logger_fn,
+            debug_log_fn=debug_log_fn,
+            warning_logger_fn=warning_logger_fn,
+        )
+    except Exception as exc:
+        queue.fail_work_item(
+            work_item_id=work_item.work_item_id,
+            error_message=str(exc),
+            terminal=False,
+        )
+        raise
+
+    queue.complete_work_item(work_item_id=work_item.work_item_id)
+    timing = CommitTimingResult()
+    timing.accumulate_graph_batch(
+        duration_seconds=max(time.perf_counter() - started, 0.0),
+        row_count=max(_fact_metric_row_count(metrics), 1),
+    )
+    return timing
+
+
+def commit_repository_snapshot_from_facts(
+    *,
+    builder: object,
+    snapshot: object,
+    fact_emission_result: GitSnapshotFactEmissionResult,
+    fact_store: object | None = None,
+    work_queue: object | None = None,
+    graph_store: object,
+    project_work_item_fn: Callable[..., dict[str, Any] | None] = project_work_item,
+    lease_owner: str = "indexing",
+    lease_ttl_seconds: int = 300,
+    info_logger_fn: Any = lambda *_args, **_kwargs: None,
+    warning_logger_fn: Any = lambda *_args, **_kwargs: None,
+    debug_log_fn: Any = lambda *_args, **_kwargs: None,
+    progress_callback: Any | None = None,
+    iter_snapshot_file_data_batches_fn: Any | None = None,
+    repo_class: str | None = None,
+) -> CommitTimingResult:
+    """Compatibility wrapper for tests and coordinator callbacks."""
+
+    return project_repository_snapshot_facts(
+        builder,
+        snapshot,
+        fact_emission_result=fact_emission_result,
+        fact_store=fact_store,
+        work_queue=work_queue,
+        graph_store=graph_store,
+        project_work_item_fn=project_work_item_fn,
+        lease_owner=lease_owner,
+        lease_ttl_seconds=lease_ttl_seconds,
+        info_logger_fn=info_logger_fn,
+        warning_logger_fn=warning_logger_fn,
+        debug_log_fn=debug_log_fn,
+        progress_callback=progress_callback,
+        iter_snapshot_file_data_batches_fn=iter_snapshot_file_data_batches_fn,
+        repo_class=repo_class,
+    )
+
+
+def create_facts_first_commit_callback(
+    *,
+    builder: object,
+    source_run_id: str,
+    fact_store: object | None = None,
+    work_queue: object | None = None,
+    info_logger_fn: Any = lambda *_args, **_kwargs: None,
+    warning_logger_fn: Any = lambda *_args, **_kwargs: None,
+    observed_at_fn: Callable[[], Any] = _utc_now,
+) -> Callable[..., CommitTimingResult]:
+    """Build the commit callback that projects graph state from facts."""
+
+    store = fact_store or get_fact_store()
+    queue = work_queue or get_fact_work_queue()
+    if store is None or queue is None:
+        raise RuntimeError("facts-first indexing requires a configured fact runtime")
+
+    def _commit_snapshot_from_facts(
+        _builder: object,
+        snapshot: object,
+        *,
+        is_dependency: bool,
+        progress_callback: Any | None = None,
+        iter_snapshot_file_data_batches_fn: Any | None = None,
+        repo_class: str | None = None,
+        fact_emission_result: GitSnapshotFactEmissionResult | None = None,
+    ) -> CommitTimingResult:
+        del _builder
+        del is_dependency
+
+        repo_path = Path(str(snapshot.repo_path)).resolve()
+        repository_id = _repository_id_for_path(repo_path)
+        source_snapshot_id = _source_snapshot_id(
+            source_run_id=source_run_id,
+            repo_path=repo_path,
+        )
+        emission_result = fact_emission_result or GitSnapshotFactEmissionResult(
+            repository_id=repository_id,
+            source_run_id=source_run_id,
+            source_snapshot_id=source_snapshot_id,
+            work_item_id=stable_fact_id(
+                fact_type="FactProjectionWorkItem",
+                identity={
+                    "repository_id": repository_id,
+                    "source_run_id": source_run_id,
+                    "source_snapshot_id": source_snapshot_id,
+                },
+            ),
+            fact_count=max(getattr(snapshot, "file_count", 0), 1),
+        )
+        try:
+            timing = project_repository_snapshot_facts(
+                builder,
+                snapshot,
+                fact_emission_result=emission_result,
+                fact_store=store,
+                work_queue=queue,
+                graph_store=_graph_store_adapter(builder),
+                project_work_item_fn=project_work_item,
+                lease_owner="indexing",
+                lease_ttl_seconds=300,
+                info_logger_fn=info_logger_fn,
+                warning_logger_fn=warning_logger_fn,
+                progress_callback=progress_callback,
+                iter_snapshot_file_data_batches_fn=iter_snapshot_file_data_batches_fn,
+                repo_class=repo_class,
+            )
+        except Exception:
+            store.upsert_fact_run(
+                FactRunRow(
+                    source_run_id=source_run_id,
+                    source_system="git",
+                    source_snapshot_id=emission_result.source_snapshot_id,
+                    repository_id=emission_result.repository_id,
+                    status="failed",
+                    started_at=observed_at_fn(),
+                    completed_at=observed_at_fn(),
+                )
+            )
+            raise
+
+        store.upsert_fact_run(
+            FactRunRow(
+                source_run_id=source_run_id,
+                source_system="git",
+                source_snapshot_id=emission_result.source_snapshot_id,
+                repository_id=emission_result.repository_id,
+                status="completed",
+                started_at=observed_at_fn(),
+                completed_at=observed_at_fn(),
+            )
+        )
+        return timing
+
+    return _commit_snapshot_from_facts
+
+
+def finalize_fact_projection_batch(*_args, **_kwargs) -> dict[str, float]:
+    """Return an empty stage map for facts-first projection batches."""
+
+    return {}
+
+
+def finalize_facts_first_run(
+    *,
+    run_state: Any,
+    persist_run_state_fn: Callable[[Any], None],
+    delete_snapshots_fn: Callable[[str], None],
+    publish_runtime_progress_fn: Callable[..., None],
+    publish_run_repository_coverage_fn: Callable[..., None],
+    builder: object,
+    repo_paths: list[Path],
+    committed_repo_paths: list[Path],
+    component: str,
+    source: str,
+    utc_now_fn: Callable[[], str],
+    run_started_at: str | None = None,
+    last_metrics: dict[str, Any] | None = None,
+) -> None:
+    """Close out one facts-first indexing run without legacy finalization."""
+
+    blocking_count = run_state.blocking_repositories()
+    has_committed_repos = bool(committed_repo_paths)
+    if not has_committed_repos and blocking_count > 0:
+        run_state.status = "partial_failure"
+        run_state.finalization_status = "pending"
+        persist_run_state_fn(run_state)
+        publish_run_repository_coverage_fn(
+            builder=builder,
+            run_state=run_state,
+            repo_paths=repo_paths,
+            include_graph_counts=True,
+            include_content_counts=True,
+        )
+        publish_runtime_progress_fn(
+            ingester=component,
+            source=source,
+            run_state=run_state,
+            repository_count=len(repo_paths),
+            status="partial_failure",
+        )
+        return
+
+    finished_at = utc_now_fn()
+    run_state.status = "completed"
+    run_state.finalization_status = "completed"
+    run_state.finalization_started_at = run_started_at or finished_at
+    run_state.finalization_finished_at = finished_at
+    run_state.finalization_duration_seconds = 0.0
+    run_state.finalization_current_stage = None
+    run_state.finalization_stage_started_at = None
+    run_state.finalization_stage_durations = {}
+    run_state.finalization_stage_details = (
+        {"facts_projection": last_metrics.get("facts", {})}
+        if isinstance(last_metrics, dict) and "facts" in last_metrics
+        else {}
+    )
+    persist_run_state_fn(run_state)
+    publish_run_repository_coverage_fn(
+        builder=builder,
+        run_state=run_state,
+        repo_paths=repo_paths,
+        include_graph_counts=True,
+        include_content_counts=True,
+    )
+    publish_runtime_progress_fn(
+        ingester=component,
+        source=source,
+        run_state=run_state,
+        repository_count=len(repo_paths),
+        status="completed",
+        last_success_at=finished_at,
+    )
+    delete_snapshots_fn(run_state.run_id)

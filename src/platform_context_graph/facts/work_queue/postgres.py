@@ -175,6 +175,103 @@ class PostgresFactWorkQueue:
             row = cursor.fetchone()
         return FactWorkItemRow(**row) if row else None
 
+    def lease_work_item(
+        self,
+        *,
+        work_item_id: str,
+        lease_owner: str,
+        lease_ttl_seconds: int,
+    ) -> FactWorkItemRow | None:
+        """Lease one specific work item by identifier."""
+
+        now = _utc_now()
+        lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE fact_work_items
+                SET lease_owner = %(lease_owner)s,
+                    lease_expires_at = %(lease_expires_at)s,
+                    status = 'leased',
+                    attempt_count = fact_work_items.attempt_count + 1,
+                    updated_at = %(now)s
+                WHERE work_item_id = %(work_item_id)s
+                  AND status IN ('pending', 'leased')
+                  AND (
+                    lease_expires_at IS NULL
+                    OR lease_expires_at <= %(now)s
+                    OR lease_owner = %(lease_owner)s
+                  )
+                RETURNING work_item_id,
+                          work_type,
+                          repository_id,
+                          source_run_id,
+                          lease_owner,
+                          lease_expires_at,
+                          status,
+                          attempt_count,
+                          last_error,
+                          created_at,
+                          updated_at
+                """,
+                {
+                    "work_item_id": work_item_id,
+                    "lease_owner": lease_owner,
+                    "lease_expires_at": lease_expires_at,
+                    "now": now,
+                },
+            )
+            row = cursor.fetchone()
+        return FactWorkItemRow(**row) if row else None
+
+    def lease_work_item(
+        self,
+        *,
+        work_item_id: str,
+        lease_owner: str,
+        lease_ttl_seconds: int,
+    ) -> FactWorkItemRow | None:
+        """Lease one specific work item when it is still claimable."""
+
+        now = _utc_now()
+        lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE fact_work_items
+                SET lease_owner = %(lease_owner)s,
+                    lease_expires_at = %(lease_expires_at)s,
+                    status = 'leased',
+                    attempt_count = fact_work_items.attempt_count + 1,
+                    updated_at = %(now)s
+                WHERE work_item_id = %(work_item_id)s
+                  AND status = 'pending'
+                  AND (
+                    lease_expires_at IS NULL
+                    OR lease_expires_at <= %(now)s
+                  )
+                RETURNING work_item_id,
+                          work_type,
+                          repository_id,
+                          source_run_id,
+                          lease_owner,
+                          lease_expires_at,
+                          status,
+                          attempt_count,
+                          last_error,
+                          created_at,
+                          updated_at
+                """,
+                {
+                    "work_item_id": work_item_id,
+                    "lease_owner": lease_owner,
+                    "lease_expires_at": lease_expires_at,
+                    "now": now,
+                },
+            )
+            row = cursor.fetchone()
+        return FactWorkItemRow(**row) if row else None
+
     def fail_work_item(
         self,
         *,
@@ -223,3 +320,21 @@ class PostgresFactWorkQueue:
                     "updated_at": _utc_now(),
                 },
             )
+
+    def close(self) -> None:
+        """Close the underlying PostgreSQL connection when it exists."""
+
+        with self._lock:
+            if self._conn is not None and not self._conn.closed:
+                self._conn.close()
+            self._conn = None
+            self._initialized = False
+
+    def close(self) -> None:
+        """Close the shared PostgreSQL connection if it is open."""
+
+        with self._lock:
+            if self._conn is not None and not self._conn.closed:
+                self._conn.close()
+            self._conn = None
+            self._initialized = False

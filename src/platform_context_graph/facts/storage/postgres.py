@@ -208,3 +208,21 @@ class PostgresFactStore:
             )
             rows = cursor.fetchall()
         return [FactRecordRow(**row) for row in rows]
+
+    def close(self) -> None:
+        """Close the underlying PostgreSQL connection when it exists."""
+
+        with self._lock:
+            if self._conn is not None and not self._conn.closed:
+                self._conn.close()
+            self._conn = None
+            self._initialized = False
+
+    def close(self) -> None:
+        """Close the shared PostgreSQL connection if it is open."""
+
+        with self._lock:
+            if self._conn is not None and not self._conn.closed:
+                self._conn.close()
+            self._conn = None
+            self._initialized = False

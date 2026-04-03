@@ -4,8 +4,14 @@ PlatformContextGraph (PCG) is a code-to-cloud context graph that connects reposi
 
 It runs in two modes: locally as a CLI and stdio MCP server, or as a deployed service that exposes HTTP API and MCP while continuously maintaining graph state.
 
-Internally, Phase 1 reorganizes the monorepo around canonical package boundaries
-instead of treating `tools/` as the default home for indexing logic.
+Internally, Phase 1 reorganized the monorepo around canonical package boundaries
+instead of treating `tools/` as the default home for indexing logic. Phase 2
+switches Git indexing to a facts-first write path:
+
+- the Git collector parses repositories and emits durable facts into Postgres
+- the fact work queue coordinates projection work
+- the Resolution Engine owns canonical graph projection
+- query surfaces continue reading the canonical graph and content store
 
 ## High-Level Diagram
 
@@ -13,12 +19,15 @@ instead of treating `tools/` as the default home for indexing logic.
 graph TD
     Client[CLI / AI Client / HTTP Caller]
     API["PCG API Runtime"]
-    Ingester["Repository Ingester"]
+    Ingester["Git Collector Runtime"]
+    ResolutionEngine["Resolution Engine Runtime"]
     Query[Query Layer]
     Collectors["Collectors (Git today)"]
     Parsers["Parsers Platform"]
+    Facts["Postgres Fact Store"]
+    FactQueue["Postgres Fact Work Queue"]
     Graph["Graph Persistence + Schema"]
-    Resolution["Resolution Helpers"]
+    Resolution["Fact Projection + Workload/Platform Materialization"]
     DB[(Graph Database)]
     FS[File System]
     IaC[Terraform / Helm / K8s / Argo CD]
@@ -32,10 +41,13 @@ graph TD
     Collectors -- "5. Discover files and snapshots" --> FS
     Collectors -- "6. Invoke parser registry" --> Parsers
     Parsers -- "7. Parse code and IaC" --> IaC
-    Collectors -- "8. Persist parsed snapshots" --> Graph
-    Graph -- "9. Store nodes and edges" --> DB
-    Graph -- "10. Dual-write file and entity content" --> Content
-    Resolution -- "11. Materialize workloads and platform edges" --> DB
+    Collectors -- "8. Emit repository/file/entity facts" --> Facts
+    Facts -- "9. Enqueue projection work" --> FactQueue
+    FactQueue -- "10. Claim work" --> ResolutionEngine
+    ResolutionEngine -- "11. Project graph state" --> Graph
+    Graph -- "12. Store nodes and edges" --> DB
+    Graph -- "13. Dual-write file and entity content" --> Content
+    ResolutionEngine -- "14. Materialize workloads and platform edges" --> DB
 ```
 
 ## Components
@@ -46,13 +58,15 @@ graph TD
 | **MCP Server** | JSON-RPC surface for AI development tools. |
 | **HTTP API** | OpenAPI-backed surface for automation and service-to-service use. |
 | **Query Layer** | Entity-first query model shared by CLI, MCP, and HTTP. |
-| **Collectors** | Source-specific discovery and indexing support. Git is the current canonical collector family. |
+| **Collectors** | Source-specific discovery and indexing support. Git is the current canonical collector family and now stops at fact emission instead of owning final graph writes. |
+| **Facts Layer** | Typed fact models, durable Postgres-backed fact storage, and the fact work queue. |
 | **Parsers** | Parser registry, language parsers, raw-text handling, capability specs, and SCIP parser/runtime helpers. |
 | **Graph Layer** | Canonical schema plus graph persistence helpers for files, entities, inheritance, and call relationships. |
-| **Resolution** | Workload and platform materialization after graph writes. |
+| **Resolution** | Resolution Engine orchestration plus fact-to-graph projection, workload materialization, and platform inference. |
 | **Database Layer** | Graph storage. Neo4j is the canonical backend for deployed services. |
 | **Content Store** | PostgreSQL-backed file and entity content cache for deployed API and MCP runtimes. |
-| **Ingester Runtime** | Long-running repository ingestion, indexing, retry/backoff, and sync. |
+| **Git Collector Runtime** | Long-running repository sync, parse execution, fact emission, and retry/backoff. |
+| **Resolution Engine Runtime** | Background or in-process projection of queued facts into the canonical graph. |
 | **Observability** | Shared OTEL instrumentation for API, MCP, and indexing runtime signals. |
 
 ## Interfaces
@@ -65,13 +79,25 @@ The docs site (built with MkDocs) is the public reference surface.
 
 ### Indexing
 
-`pcg index .` or the deployed ingester scans repositories, parses code and IaC,
-materializes workloads/platforms, and writes graph data to the database.
+`pcg index .` or the deployed Git collector scans repositories, parses code and
+IaC, emits repository/file/entity facts into Postgres, and then projects the
+canonical graph from those facts.
 
 When the content store is configured, the same indexing pass also writes file content and entity snippets into Postgres.
 
-In Kubernetes, the repository ingester owns repo sync, retries, discovery,
-parsing, and graph writes. The API runtime serves independently.
+In Kubernetes, the Git collector owns repo sync, retries, discovery, parsing,
+and fact emission. The Resolution Engine owns graph projection. The API runtime
+serves independently.
+
+### Facts-First Git Flow
+
+1. The Git collector discovers repositories and parses a repository snapshot.
+2. The collector persists repository, file, and parsed-entity facts in Postgres.
+3. The collector enqueues one fact projection work item for that repository snapshot.
+4. The Resolution Engine claims the work item and loads the stored facts.
+5. The Resolution Engine projects repository, file, entity, relationship,
+   workload, and platform graph state.
+6. Query surfaces continue reading the canonical graph and content store as before.
 
 ### Querying
 
@@ -86,11 +112,12 @@ The source package is organized by responsibility under `src/platform_context_gr
 
 - `app/` — service-role entrypoints
 - `collectors/` — source-specific collection logic
+- `facts/` — typed fact models, Postgres storage, queue state, and source-specific fact emission
 - `graph/` — canonical graph schema and persistence helpers
 - `parsers/` — parser registry, raw-text support, parser capabilities, and SCIP
 - `platform/` — shared platform/runtime primitives such as dependency rules, package resolution, and automation-family inference
 - `query/` — shared read/query layer
-- `resolution/` — workload and platform materialization helpers
+- `resolution/` — Resolution Engine orchestration plus fact projection and materialization helpers
 - `runtime/` — runtime role management, ingester, and status helpers
 - `tools/` — `GraphBuilder` facade plus compatibility shims and remaining legacy helpers
 

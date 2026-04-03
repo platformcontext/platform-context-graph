@@ -1,13 +1,23 @@
 # Facts Package
 
-This package is the placeholder boundary for Phase 1.
+Typed fact models, Postgres-backed fact storage, queue state, and fact emission
+helpers live here.
 
-PCG is moving toward clearer fact-first boundaries, but this branch does not yet
-move content, identity, or normalization logic fully into `facts/`.
+This package now owns the source-of-truth ingestion layer for the Git facts-first
+pipeline:
 
-Use this package as the future home for:
+- `models/` defines typed repository, file, and parsed-entity observation facts
+- `storage/` persists fact runs and fact records in Postgres
+- `work_queue/` coordinates downstream projection work in Postgres
+- `emission/` turns parsed repository snapshots into durable facts
+- `state.py` owns shared fact store / queue lifecycle for deployed runtimes
 
-- source observations
-- provenance-rich typed fact models
-- fact storage and replay contracts
-- work-queue or outbox coordination for downstream resolution
+Current Git flow:
+
+1. the Git collector parses a repository snapshot
+2. `facts/emission/git_snapshot.py` persists repository, file, and entity facts
+3. one queued work item is created for that repository snapshot
+4. the Resolution Engine claims the work item and projects canonical graph state
+
+This package should continue to grow as new collectors emit source observations
+before graph projection.

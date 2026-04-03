@@ -107,3 +107,41 @@ def test_fail_work_item_marks_retryable_and_terminal_states(monkeypatch) -> None
 
     assert terminal_params["status"] == "failed"
     assert terminal_params["last_error"] == "fatal"
+
+
+def test_lease_work_item_targets_one_pending_row(monkeypatch) -> None:
+    """Leasing a known work item should return that specific row."""
+
+    queue = PostgresFactWorkQueue("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchone.return_value = {
+        "work_item_id": "work-1",
+        "work_type": "project-git-facts",
+        "repository_id": "github.com/acme/service",
+        "source_run_id": "run-123",
+        "lease_owner": "indexing-worker-1",
+        "lease_expires_at": _utc_now(),
+        "status": "leased",
+        "attempt_count": 1,
+        "last_error": None,
+        "created_at": _utc_now(),
+        "updated_at": _utc_now(),
+    }
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(queue, "_cursor", _cursor)
+
+    row = queue.lease_work_item(
+        work_item_id="work-1",
+        lease_owner="indexing-worker-1",
+        lease_ttl_seconds=60,
+    )
+
+    assert row is not None
+    assert row.work_item_id == "work-1"
+    query, params = cursor.execute.call_args.args
+    assert "WHERE work_item_id = %(work_item_id)s" in query
+    assert params["work_item_id"] == "work-1"
