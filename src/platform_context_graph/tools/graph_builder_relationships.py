@@ -6,12 +6,12 @@ from .graph_builder_call_relationships import (
     name_from_symbol,
     safe_run_create,
 )
-from .graph_builder_type_relationships import (
-    create_all_infra_links,
+from ..graph.persistence.inheritance import (
     create_all_inheritance_links,
     create_csharp_inheritance_and_interfaces,
     create_inheritance_links,
 )
+from ..relationships.infra_links import create_all_infra_links
 
 __all__ = [
     "create_all_function_calls",

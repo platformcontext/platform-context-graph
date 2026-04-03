@@ -45,6 +45,11 @@ from .batching import (
     should_flush_batches,
     summarize_entity_source_files,
 )
+from .inheritance import (
+    create_all_inheritance_links,
+    create_csharp_inheritance_and_interfaces,
+    create_inheritance_links,
+)
 from .types import BatchCommitResult
 
 __all__ = (
@@ -80,6 +85,9 @@ __all__ = (
     "summarize_entity_source_files",
     "get_commit_worker_connection_params",
     "accumulate_entity_totals",
+    "create_all_inheritance_links",
+    "create_csharp_inheritance_and_interfaces",
+    "create_inheritance_links",
     "update_file_in_graph",
     "validate_cypher_label",
     "validate_cypher_property_keys",
