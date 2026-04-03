@@ -8,6 +8,10 @@ from typing import Any
 from platform_context_graph.facts.storage.models import FactRecordRow
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
 from platform_context_graph.observability import get_observability
+from platform_context_graph.observability.facts_first_logs import (
+    log_resolution_stage_failure,
+    log_resolution_work_item,
+)
 from platform_context_graph.resolution.projection import project_git_fact_records
 from platform_context_graph.resolution.projection.relationships import (
     project_git_relationship_fact_records,
@@ -106,6 +110,15 @@ def project_work_item(
                 try:
                     metrics = callback()
                 except Exception as exc:
+                    log_resolution_stage_failure(
+                        repository_id=work_item.repository_id,
+                        source_run_id=work_item.source_run_id,
+                        work_item_id=work_item.work_item_id,
+                        work_type=work_item.work_type,
+                        attempt_count=work_item.attempt_count,
+                        stage=stage,
+                        error_class=type(exc).__name__,
+                    )
                     observability.record_resolution_stage_failure(
                         component="resolution-engine",
                         work_type=work_item.work_type,
@@ -153,6 +166,23 @@ def project_work_item(
             lambda: platform_projector(
                 builder=builder,
                 fact_records=fact_records,
+            ),
+        )
+        log_resolution_work_item(
+            "projected",
+            repository_id=work_item.repository_id,
+            source_run_id=work_item.source_run_id,
+            work_item_id=work_item.work_item_id,
+            work_type=work_item.work_type,
+            attempt_count=work_item.attempt_count,
+            fact_count=len(fact_records),
+            output_count=_metric_output_count(
+                {
+                    "facts": fact_metrics,
+                    "relationships": relationship_metrics,
+                    "workloads": workload_metrics,
+                    "platforms": platform_metrics,
+                }
             ),
         )
     return {

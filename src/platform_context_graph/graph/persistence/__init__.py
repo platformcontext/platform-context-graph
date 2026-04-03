@@ -14,6 +14,7 @@ _EXPORTS = {
     "_run_managed_write": (".repositories", "_run_managed_write"),
     "_run_write_query": (".repositories", "_run_write_query"),
     "add_file_to_graph": (".files", "add_file_to_graph"),
+    "add_repository_to_graph": (".repositories", "add_repository_to_graph"),
     "BatchCommitResult": (".types", "BatchCommitResult"),
     "begin_transaction": (".session", "begin_transaction"),
     "build_entity_merge_statement": (".entities", "build_entity_merge_statement"),

@@ -10,6 +10,9 @@ from collections.abc import Callable
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
 from platform_context_graph.observability import get_observability
 from platform_context_graph.observability import initialize_observability
+from platform_context_graph.observability.facts_first_logs import (
+    log_resolution_work_item,
+)
 
 from .engine import project_work_item
 
@@ -155,6 +158,15 @@ def run_resolution_iteration(
                 error_message=str(exc),
                 terminal=terminal,
             )
+            log_resolution_work_item(
+                "dead_lettered" if terminal else "failed",
+                repository_id=work_item.repository_id,
+                source_run_id=work_item.source_run_id,
+                work_item_id=work_item.work_item_id,
+                work_type=work_item.work_type,
+                attempt_count=work_item.attempt_count,
+                error_class=type(exc).__name__,
+            )
             if terminal:
                 observability.record_fact_queue_dead_letter(
                     component="resolution-engine",
@@ -171,6 +183,14 @@ def run_resolution_iteration(
             )
         else:
             queue.complete_work_item(work_item_id=work_item.work_item_id)
+            log_resolution_work_item(
+                "completed",
+                repository_id=work_item.repository_id,
+                source_run_id=work_item.source_run_id,
+                work_item_id=work_item.work_item_id,
+                work_type=work_item.work_type,
+                attempt_count=work_item.attempt_count,
+            )
             _refresh_queue_metrics(queue)
             observability.record_resolution_work_item(
                 component="resolution-engine",

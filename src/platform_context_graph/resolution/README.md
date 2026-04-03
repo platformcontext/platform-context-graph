@@ -32,3 +32,4 @@ Observability expectations for this package:
 - fact-load counters and stage-duration histograms for tuning and backlog triage
 - retry-age and dead-letter telemetry so exhausted work is visible to on-call responders
 - independent queue sampling so backlog and pool saturation remain visible even during idle periods
+- structured work-item and stage-failure logs so on-call can trace completion, retry, dead-letter, and replay decisions without relying on metrics alone

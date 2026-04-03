@@ -32,6 +32,8 @@ Operational visibility for this package now includes:
 - fact-store and fact-queue pool size, availability, in-use, waiting, and acquire-duration telemetry when psycopg pooling is enabled
 - facts queue depth and oldest-item age gauges when the Postgres queue backend is used
 - retry-age and dead-letter telemetry for fact work items processed through the Resolution Engine
+- dead-letter replay through the admin replay workflow backed by the same Postgres queue state
+- structured log breadcrumbs for snapshot emission and inline projection lease/failure/completion
 
 This package should continue to grow as new collectors emit source observations
 before graph projection.

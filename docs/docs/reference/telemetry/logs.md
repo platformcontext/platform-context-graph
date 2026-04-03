@@ -68,10 +68,16 @@ Why it matters:
 - `index.repository.commit_wait.completed`
 - `index.repository.commit.started`
 - `index.repository.completed`
+- `facts.snapshot.emitted`
+- `facts.inline_projection.leased`
+- `facts.inline_projection.lease_missed`
+- `facts.inline_projection.failed`
+- `facts.inline_projection.completed`
 
 Why it matters:
 
 - provides the breadcrumb trail for repo-level indexing behavior
+- shows where the Git collector handed work to the facts-first pipeline
 
 ### Graph persistence
 
@@ -95,6 +101,28 @@ Why it matters:
 
 - explains silent content-store misses that metrics alone cannot describe
 
+### Resolution Engine
+
+- `resolution.work_item.projected`
+- `resolution.work_item.completed`
+- `resolution.work_item.failed`
+- `resolution.work_item.dead_lettered`
+- `resolution.stage.failed`
+
+Why it matters:
+
+- explains whether the failure happened during fact load, relationship projection, workload/platform materialization, or final work-item completion
+- gives on-call responders the exact `work_item_id`, `source_run_id`, and error class needed to replay or investigate
+
+### Admin and operator workflow
+
+- `admin.facts.replayed`
+
+Why it matters:
+
+- records deliberate replay actions against dead-lettered fact work items so incident timelines stay auditable
+- provides a direct breadcrumb when retry pressure drops because an operator manually replayed failed work
+
 ## What Belongs In `extra_keys`
 
 Good fields for `extra_keys`:
@@ -111,6 +139,11 @@ Good fields for `extra_keys`:
 - `backend`
 - `file_path`
 - `worker_id`
+- `work_item_id`
+- `source_run_id`
+- `attempt_count`
+- `error_class`
+- `replayed_count`
 
 These are high-value because they are useful for incident filtering but too high-cardinality for metric labels.
 

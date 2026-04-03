@@ -57,12 +57,14 @@ Why it matters:
 - `pcg.fact_queue.lease_work_item`
 - `pcg.fact_queue.fail_work_item`
 - `pcg.fact_queue.complete_work_item`
+- `pcg.fact_queue.replay_failed_work_items`
 - `pcg.fact_queue.list_queue_snapshot`
 
 Why it matters:
 
 - shows the actual SQL-boundary cost of the new facts-first architecture
 - gives direct proof when Postgres becomes the bottleneck
+- includes the operator replay path for dead-lettered work items
 
 ### Resolution Engine
 
@@ -133,4 +135,3 @@ These attributes are especially useful for narrowing traces:
 - Use metrics to choose the right trace first.
 - Filter by `service.name` to separate API, ingester, and resolution-engine behavior.
 - Use `request_id`, `correlation_id`, `run_id`, and `work_item_id` to jump from logs into traces quickly.
-

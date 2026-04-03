@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 import time
 from typing import Any
 
@@ -15,7 +15,10 @@ from platform_context_graph.observability import get_observability
 
 from .models import FactWorkItemRow
 from .models import FactWorkQueueSnapshotRow
+from .replay import replay_failed_work_items
 from .schema import FACT_WORK_QUEUE_SCHEMA
+from .support import utc_now
+from .support import work_item_params
 
 try:
     import psycopg
@@ -27,32 +30,6 @@ except ImportError:  # pragma: no cover - exercised without optional dependency.
     _ConnectionPool = None
 
 _logger = logging.getLogger(__name__)
-
-
-def _utc_now() -> datetime:
-    """Return the current UTC timestamp."""
-
-    return datetime.now(tz=timezone.utc)
-
-
-def _work_item_params(entry: FactWorkItemRow) -> dict[str, Any]:
-    """Return SQL parameters for one fact work item row."""
-
-    return {
-        "work_item_id": entry.work_item_id,
-        "work_type": entry.work_type,
-        "repository_id": entry.repository_id,
-        "source_run_id": entry.source_run_id,
-        "lease_owner": entry.lease_owner,
-        "lease_expires_at": entry.lease_expires_at,
-        "status": entry.status,
-        "attempt_count": entry.attempt_count,
-        "last_error": entry.last_error,
-        "created_at": entry.created_at or _utc_now(),
-        "updated_at": entry.updated_at or _utc_now(),
-    }
-
-
 class PostgresFactWorkQueue:
     """Persist and lease fact work items in PostgreSQL."""
 
@@ -218,7 +195,7 @@ class PostgresFactWorkQueue:
                     last_error = EXCLUDED.last_error,
                     updated_at = EXCLUDED.updated_at
                 """,
-                _work_item_params(entry),
+                work_item_params(entry),
             ),
         )
 
@@ -230,7 +207,7 @@ class PostgresFactWorkQueue:
     ) -> FactWorkItemRow | None:
         """Claim one pending work item and return the leased row."""
 
-        now = _utc_now()
+        now = utc_now()
         lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
         row = self._record_operation(
             operation="claim_work_item",
@@ -284,7 +261,7 @@ class PostgresFactWorkQueue:
     ) -> FactWorkItemRow | None:
         """Lease one specific work item when it is still claimable."""
 
-        now = _utc_now()
+        now = utc_now()
         lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
         row = self._record_operation(
             operation="lease_work_item",
@@ -351,7 +328,7 @@ class PostgresFactWorkQueue:
                     "work_item_id": work_item_id,
                     "status": "failed" if terminal else "pending",
                     "last_error": error_message,
-                    "updated_at": _utc_now(),
+                    "updated_at": utc_now(),
                 },
             ),
         )
@@ -374,15 +351,20 @@ class PostgresFactWorkQueue:
                 """,
                 {
                     "work_item_id": work_item_id,
-                    "updated_at": _utc_now(),
+                    "updated_at": utc_now(),
                 },
             ),
         )
 
+    def replay_failed_work_items(self, **kwargs: Any) -> list[FactWorkItemRow]:
+        """Replay terminally failed work items by returning them to pending."""
+
+        return replay_failed_work_items(self, **kwargs)
+
     def list_queue_snapshot(self) -> list[FactWorkQueueSnapshotRow]:
         """Return aggregated queue depth and oldest age by work type and status."""
 
-        now = _utc_now()
+        now = utc_now()
         rows = self._record_operation(
             operation="list_queue_snapshot",
             callback=lambda: self._fetchall(

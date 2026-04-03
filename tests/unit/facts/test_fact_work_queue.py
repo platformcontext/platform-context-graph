@@ -145,3 +145,40 @@ def test_lease_work_item_targets_one_pending_row(monkeypatch) -> None:
     query, params = cursor.execute.call_args.args
     assert "WHERE work_item_id = %(work_item_id)s" in query
     assert params["work_item_id"] == "work-1"
+
+
+def test_replay_failed_work_items_resets_attempts_and_status(monkeypatch) -> None:
+    """Replay should move failed work back to pending with fresh attempts."""
+
+    queue = PostgresFactWorkQueue("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = [
+        {
+            "work_item_id": "work-1",
+            "work_type": "project-git-facts",
+            "repository_id": "github.com/acme/service",
+            "source_run_id": "run-123",
+            "lease_owner": None,
+            "lease_expires_at": None,
+            "status": "pending",
+            "attempt_count": 0,
+            "last_error": "boom",
+            "created_at": _utc_now(),
+            "updated_at": _utc_now(),
+        }
+    ]
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(queue, "_cursor", _cursor)
+
+    rows = queue.replay_failed_work_items(work_item_ids=["work-1"], limit=10)
+
+    assert [row.work_item_id for row in rows] == ["work-1"]
+    query, params = cursor.execute.call_args.args
+    assert "status = 'failed'" in query
+    assert "attempt_count = 0" in query
+    assert params["work_item_ids"] == ["work-1"]
+    assert params["limit"] == 10

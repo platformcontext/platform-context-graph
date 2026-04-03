@@ -195,3 +195,50 @@ async def test_reindex_rejects_unknown_scope() -> None:
 
     assert exc_info.value.status_code == 400
     assert "workspace" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_replay_failed_facts_returns_replayed_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Admin replay should return the replayed work-item ids."""
+
+    class _FakeQueue:
+        def replay_failed_work_items(self, **kwargs):
+            assert kwargs == {
+                "work_item_ids": ["work-1"],
+                "repository_id": None,
+                "source_run_id": None,
+                "work_type": None,
+                "limit": 100,
+            }
+            return [
+                SimpleNamespace(
+                    work_item_id="work-1",
+                    work_type="project-git-facts",
+                    repository_id="repository:r_payments",
+                    source_run_id="run-123",
+                    attempt_count=0,
+                )
+            ]
+
+    monkeypatch.setattr(admin, "get_fact_work_queue", lambda: _FakeQueue())
+
+    response = await admin.replay_failed_facts(
+        admin.ReplayFailedFactsRequest(work_item_ids=["work-1"]),
+    )
+
+    assert response["status"] == "replayed"
+    assert response["replayed_count"] == 1
+    assert response["work_item_ids"] == ["work-1"]
+
+
+@pytest.mark.asyncio
+async def test_replay_failed_facts_requires_a_selector() -> None:
+    """Admin replay should reject unbounded replay requests."""
+
+    with pytest.raises(HTTPException) as exc_info:
+        await admin.replay_failed_facts(admin.ReplayFailedFactsRequest())
+
+    assert exc_info.value.status_code == 400
+    assert "selector" in str(exc_info.value.detail)
