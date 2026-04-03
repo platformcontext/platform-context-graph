@@ -19,6 +19,10 @@ Collectors should:
 - parse or normalize source-local observations
 - emit durable facts
 
+During the current Git cutover, the resulting fact work item may be leased
+inline by the indexing coordinator so one run still completes end-to-end. That
+projection step is owned by `resolution/`, not by the collector package.
+
 Collectors should not own:
 
 - canonical graph writes

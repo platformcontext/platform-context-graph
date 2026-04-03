@@ -17,7 +17,10 @@ Current Git flow:
 1. the Git collector parses a repository snapshot
 2. `facts/emission/git_snapshot.py` persists repository, file, and entity facts
 3. one queued work item is created for that repository snapshot
-4. the Resolution Engine claims the work item and projects canonical graph state
+4. during the current cutover, the indexing coordinator can lease that queued
+   work item inline and project canonical graph state through `resolution/`
+5. the standalone `resolution-engine` runtime can claim the same queue for
+   background processing and future multi-collector flows
 
 This package should continue to grow as new collectors emit source observations
 before graph projection.

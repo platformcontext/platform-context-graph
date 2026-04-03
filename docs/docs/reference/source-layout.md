@@ -108,12 +108,18 @@ boundaries:
 - `parsers/scip/`: SCIP parser, runtime helpers, and indexing orchestration
 - `graph/schema/`: graph schema creation
 - `graph/persistence/`: graph write helpers, batching, content dual-write, commit orchestration, worker support, and call/inheritance relationship persistence
-- `resolution/orchestration/`: Resolution Engine claim/process loops and work-item projection
+- `resolution/orchestration/`: Resolution Engine claim/process loops and the
+  shared work-item projection path reused by the standalone runtime and inline
+  Git cutover processing
 - `resolution/projection/`: repository/file/entity/relationship/workload/platform projection from stored facts
 - `resolution/workloads/` and `resolution/platforms.py`: workload and platform materialization after graph writes
 
 `tools/graph_builder.py` remains the stable public facade while the underlying
 source-of-truth modules move into these canonical packages.
+
+For the current Git cutover, the coordinator also reuses the same facts-first
+projection contracts in-process. That keeps one indexing run end-to-end
+complete while still moving graph-write ownership out of the collector logic.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.

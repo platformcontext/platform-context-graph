@@ -138,6 +138,8 @@ def create_all_function_calls(
     file_level_buffer: list[dict[str, Any]] = []
 
     def _flush_contextual(session: Any) -> None:
+        """Persist buffered contextual call rows and reset the buffer."""
+
         nonlocal contextual_buffer
         if not contextual_buffer:
             return
@@ -148,6 +150,8 @@ def create_all_function_calls(
         contextual_buffer = []
 
     def _flush_file_level(session: Any) -> None:
+        """Persist buffered file-level fallback rows and reset the buffer."""
+
         nonlocal file_level_buffer
         if not file_level_buffer:
             return

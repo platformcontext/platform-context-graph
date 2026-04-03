@@ -15,3 +15,11 @@ query surface.
 
 For the current Git facts-first path, this package is the runtime owner of
 canonical graph writes. Collectors emit facts; resolution projects graph truth.
+
+That applies in two places:
+
+- the standalone `resolution-engine` service role
+- the facts-first coordinator cutover path used during Git indexing runs
+
+Both paths use the same projection contracts so the collector no longer owns
+final repository/file/entity/relationship/workload/platform graph state.

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 import time
 from typing import Any
@@ -52,11 +54,9 @@ def facts_first_projection_enabled() -> bool:
 
 
 def _utc_now() -> Any:
-    """Return the coordinator runtime UTC clock."""
+    """Return the current UTC timestamp for fact runtime writes."""
 
-    from .coordinator_storage import _utc_now as coordinator_utc_now
-
-    return coordinator_utc_now()
+    return datetime.now(tz=timezone.utc)
 
 
 def _graph_store_adapter(builder: object) -> object:
@@ -150,6 +150,8 @@ def create_snapshot_fact_emitter(
 ) -> Callable[..., GitSnapshotFactEmissionResult]:
     """Build the snapshot callback that persists facts for one run."""
 
+    emission_results: dict[str, GitSnapshotFactEmissionResult] = {}
+
     def _emit_snapshot_facts(
         *,
         run_id: str,
@@ -157,8 +159,10 @@ def create_snapshot_fact_emitter(
         snapshot: object,
         is_dependency: bool,
     ) -> GitSnapshotFactEmissionResult:
+        """Persist one parsed repository snapshot as durable facts."""
+
         del run_id
-        return emit_repository_snapshot_facts(
+        result = emit_repository_snapshot_facts(
             source_run_id=source_run_id,
             repo_path=repo_path,
             snapshot=snapshot,
@@ -167,7 +171,10 @@ def create_snapshot_fact_emitter(
             work_queue=work_queue,
             observed_at_fn=observed_at_fn,
         )
+        emission_results[str(repo_path.resolve())] = result
+        return result
 
+    setattr(_emit_snapshot_facts, "fact_emission_results", emission_results)
     return _emit_snapshot_facts
 
 
@@ -304,6 +311,7 @@ def create_facts_first_commit_callback(
     source_run_id: str,
     fact_store: object | None = None,
     work_queue: object | None = None,
+    fact_emission_results: dict[str, GitSnapshotFactEmissionResult] | None = None,
     info_logger_fn: Any = lambda *_args, **_kwargs: None,
     warning_logger_fn: Any = lambda *_args, **_kwargs: None,
     observed_at_fn: Callable[[], Any] = _utc_now,
@@ -325,6 +333,8 @@ def create_facts_first_commit_callback(
         repo_class: str | None = None,
         fact_emission_result: GitSnapshotFactEmissionResult | None = None,
     ) -> CommitTimingResult:
+        """Project one repository snapshot into the graph from stored facts."""
+
         del _builder
         del is_dependency
 
@@ -334,20 +344,24 @@ def create_facts_first_commit_callback(
             source_run_id=source_run_id,
             repo_path=repo_path,
         )
-        emission_result = fact_emission_result or GitSnapshotFactEmissionResult(
-            repository_id=repository_id,
-            source_run_id=source_run_id,
-            source_snapshot_id=source_snapshot_id,
-            work_item_id=stable_fact_id(
-                fact_type="FactProjectionWorkItem",
-                identity={
-                    "repository_id": repository_id,
-                    "source_run_id": source_run_id,
-                    "source_snapshot_id": source_snapshot_id,
-                },
-            ),
-            fact_count=max(getattr(snapshot, "file_count", 0), 1),
-        )
+        emission_result = fact_emission_result
+        if emission_result is None and fact_emission_results is not None:
+            emission_result = fact_emission_results.get(str(repo_path))
+        if emission_result is None:
+            emission_result = GitSnapshotFactEmissionResult(
+                repository_id=repository_id,
+                source_run_id=source_run_id,
+                source_snapshot_id=source_snapshot_id,
+                work_item_id=stable_fact_id(
+                    fact_type="FactProjectionWorkItem",
+                    identity={
+                        "repository_id": repository_id,
+                        "source_run_id": source_run_id,
+                        "source_snapshot_id": source_snapshot_id,
+                    },
+                ),
+                fact_count=max(getattr(snapshot, "file_count", 0), 1),
+            )
         try:
             timing = project_repository_snapshot_facts(
                 builder,

@@ -13,6 +13,10 @@ switches Git indexing to a facts-first write path:
 - the Resolution Engine owns canonical graph projection
 - query surfaces continue reading the canonical graph and content store
 
+For the current Git cutover, the same Resolution Engine projection path can be
+driven in-process by the indexing coordinator so one indexing run still
+completes deterministically without depending on a separate runtime hop.
+
 ## High-Level Diagram
 
 ```mermaid
@@ -95,9 +99,12 @@ serves independently.
 2. The collector persists repository, file, and parsed-entity facts in Postgres.
 3. The collector enqueues one fact projection work item for that repository snapshot.
 4. The Resolution Engine claims the work item and loads the stored facts.
-5. The Resolution Engine projects repository, file, entity, relationship,
+5. During indexing cutover, the coordinator can also drive that same work-item
+   projection path in-process so one run still completes end-to-end without a
+   separate service hop.
+6. The Resolution Engine projection path writes repository, file, entity, relationship,
    workload, and platform graph state.
-6. Query surfaces continue reading the canonical graph and content store as before.
+7. Query surfaces continue reading the canonical graph and content store as before.
 
 ### Querying
 

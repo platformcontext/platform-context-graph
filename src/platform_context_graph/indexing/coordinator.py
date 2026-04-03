@@ -35,6 +35,7 @@ from .coordinator_pipeline import (
 from .coordinator_facts import (
     create_facts_first_commit_callback,
     create_snapshot_fact_emitter,
+    finalize_fact_projection_batch,
     facts_first_projection_enabled,
     finalize_facts_first_run,
 )
@@ -228,8 +229,11 @@ def _commit_repository_snapshot(
     progress_callback: Any | None = None,
     iter_snapshot_file_data_batches_fn: Any | None = None,
     repo_class: str | None = None,
+    fact_emission_result: Any | None = None,
 ) -> CommitTimingResult:
     """Replace one repository's persisted graph/content state from a snapshot."""
+
+    del fact_emission_result
 
     from .adaptive_batch_config import resolve_batch_config
 
@@ -563,18 +567,22 @@ async def execute_index_run(
         facts_first_enabled = facts_first_projection_enabled()
         fact_store = get_fact_store() if facts_first_enabled else None
         fact_work_queue = get_fact_work_queue() if facts_first_enabled else None
-        snapshot_fact_emitter = (
-            create_snapshot_fact_emitter(
+        if facts_first_enabled and (
+            fact_store is None or fact_work_queue is None
+        ):
+            raise RuntimeError(
+                "facts-first indexing requires configured fact store and work queue"
+            )
+
+        snapshot_fact_emitter = None
+        commit_repository_snapshot_fn: Any = _commit_repository_snapshot
+        if facts_first_enabled:
+            snapshot_fact_emitter = create_snapshot_fact_emitter(
                 source_run_id=run_state.run_id,
                 fact_store=fact_store,
                 work_queue=fact_work_queue,
-                observed_at_fn=_utc_now,
             )
-            if facts_first_enabled
-            else None
-        )
-        commit_repository_snapshot_fn = (
-            create_facts_first_commit_callback(
+            commit_repository_snapshot_fn = create_facts_first_commit_callback(
                 builder=builder,
                 source_run_id=run_state.run_id,
                 fact_store=fact_store,
@@ -587,9 +595,6 @@ async def execute_index_run(
                 info_logger_fn=info_logger_fn,
                 warning_logger_fn=warning_logger_fn,
             )
-            if facts_first_enabled
-            else _commit_repository_snapshot
-        )
         with _parse_executor_scope() as parse_executor:
             parse_strategy = _parse_strategy_label(parse_executor=parse_executor)
             committed_repo_paths, merged_imports_map, repo_telemetry_map = (
@@ -627,9 +632,17 @@ async def execute_index_run(
                     parse_executor=parse_executor,
                     parse_strategy=parse_strategy,
                     parse_workers=_parse_worker_count(),
+                    facts_first_mode=facts_first_enabled,
                 )
             )
         if facts_first_enabled:
+            finalize_fact_projection_batch(
+                builder=builder,
+                root_path=root_path,
+                run_state=run_state,
+                repo_paths=repo_paths,
+                committed_repo_paths=committed_repo_paths,
+            )
             finalize_facts_first_run(
                 run_state=run_state,
                 repo_paths=repo_paths,

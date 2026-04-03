@@ -12,6 +12,9 @@ from types import SimpleNamespace
 import importlib
 import pytest
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PACKAGE_ROOT = REPO_ROOT / "src" / "platform_context_graph"
+
 if "rich.console" not in sys.modules:
     rich_module = ModuleType("rich")
     rich_module.__path__ = []
@@ -75,30 +78,41 @@ if "neo4j" not in sys.modules:
     neo4j_module.GraphDatabase = _GraphDatabase
     sys.modules["neo4j"] = neo4j_module
 
-if "platform_context_graph.collectors.git.indexing" not in sys.modules:
-    collectors_git_indexing = ModuleType(
-        "platform_context_graph.collectors.git.indexing"
-    )
-    collectors_git_indexing.finalize_index_batch = lambda *_args, **_kwargs: {}
-    collectors_git_indexing.merge_import_maps = lambda target, source: target | source
-    collectors_git_indexing.parse_repository_snapshot_async = (
-        lambda *_args, **_kwargs: None
-    )
-    collectors_git_indexing.resolve_repository_file_sets = (
-        lambda *_args, **_kwargs: {}
-    )
-    sys.modules["platform_context_graph.collectors.git.indexing"] = (
-        collectors_git_indexing
-    )
+try:
+    importlib.import_module("platform_context_graph.collectors.git.indexing")
+except Exception:
+    if "platform_context_graph.collectors.git.indexing" not in sys.modules:
+        collectors_git_indexing = ModuleType(
+            "platform_context_graph.collectors.git.indexing"
+        )
+        collectors_git_indexing.finalize_index_batch = lambda *_args, **_kwargs: {}
+        collectors_git_indexing.merge_import_maps = (
+            lambda target, source: target | source
+        )
+        collectors_git_indexing.parse_repository_snapshot_async = (
+            lambda *_args, **_kwargs: None
+        )
+        collectors_git_indexing.resolve_repository_file_sets = (
+            lambda *_args, **_kwargs: {}
+        )
+        sys.modules["platform_context_graph.collectors.git.indexing"] = (
+            collectors_git_indexing
+        )
 
-if "platform_context_graph.collectors.git.parse_worker" not in sys.modules:
-    collectors_git_parse_worker = ModuleType(
-        "platform_context_graph.collectors.git.parse_worker"
-    )
-    collectors_git_parse_worker.init_parse_worker = lambda *_args, **_kwargs: None
-    sys.modules["platform_context_graph.collectors.git.parse_worker"] = (
-        collectors_git_parse_worker
-    )
+try:
+    importlib.import_module("platform_context_graph.collectors.git.parse_worker")
+except Exception:
+    if "platform_context_graph.collectors.git.parse_worker" not in sys.modules:
+        collectors_git_parse_worker = ModuleType(
+            "platform_context_graph.collectors.git.parse_worker"
+        )
+        collectors_git_parse_worker.init_parse_worker = lambda *_args, **_kwargs: None
+        collectors_git_parse_worker.parse_file_in_worker = (
+            lambda *_args, **_kwargs: {}
+        )
+        sys.modules["platform_context_graph.collectors.git.parse_worker"] = (
+            collectors_git_parse_worker
+        )
 
 if "platform_context_graph.graph.persistence.worker" not in sys.modules:
     graph_persistence_worker = ModuleType(
@@ -127,7 +141,7 @@ if "platform_context_graph.indexing.coordinator_coverage" not in sys.modules:
 
 if "platform_context_graph.content.state" not in sys.modules:
     content_package = ModuleType("platform_context_graph.content")
-    content_package.__path__ = []
+    content_package.__path__ = [str(PACKAGE_ROOT / "content")]
     content_state_module = ModuleType("platform_context_graph.content.state")
     content_state_module.get_postgres_content_provider = lambda: None
     sys.modules["platform_context_graph.content"] = content_package
@@ -135,7 +149,7 @@ if "platform_context_graph.content.state" not in sys.modules:
 
 if "platform_context_graph.runtime.roles" not in sys.modules:
     runtime_package = ModuleType("platform_context_graph.runtime")
-    runtime_package.__path__ = []
+    runtime_package.__path__ = [str(PACKAGE_ROOT / "runtime")]
     runtime_roles_module = ModuleType("platform_context_graph.runtime.roles")
     runtime_status_store_module = ModuleType("platform_context_graph.runtime.status_store")
     runtime_roles_module.workspace_fallback_enabled = lambda: False
