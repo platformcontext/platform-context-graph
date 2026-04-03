@@ -108,8 +108,16 @@ def test_project_work_item_loads_facts_and_runs_projection_stages() -> None:
         )
     ]
     handled: list[str] = []
+    builder = MagicMock()
+    debug_logger = MagicMock()
+    warning_logger = MagicMock()
+    info_logger = MagicMock()
+    seen_fact_records: list[object] = []
 
     def _fact_projector(*, builder, fact_records):  # type: ignore[no-untyped-def]
+        assert builder is not None
+        assert builder is builder_obj
+        seen_fact_records.append(fact_records)
         handled.append(f"facts:{len(fact_records)}")
         return {"repositories": 0, "files": 1, "entities": 0}
 
@@ -120,6 +128,10 @@ def test_project_work_item_loads_facts_and_runs_projection_stages() -> None:
         debug_log_fn,
         warning_logger_fn,
     ):
+        assert builder is builder_obj
+        assert fact_records is seen_fact_records[0]
+        assert debug_log_fn is debug_logger
+        assert warning_logger_fn is warning_logger
         handled.append(f"relationships:{len(fact_records)}")
         return {"files": 1, "imports": 0, "call_metrics": {}}
 
@@ -129,13 +141,19 @@ def test_project_work_item_loads_facts_and_runs_projection_stages() -> None:
         fact_records,
         info_logger_fn,
     ):
+        assert builder is builder_obj
+        assert fact_records is seen_fact_records[0]
+        assert info_logger_fn is info_logger
         handled.append(f"workloads:{len(fact_records)}")
         return {"workloads_projected": 1, "runtime_platform_edges_projected": 1}
 
     def _platform_projector(*, builder, fact_records):  # type: ignore[no-untyped-def]
+        assert builder is builder_obj
+        assert fact_records is seen_fact_records[0]
         handled.append(f"platforms:{len(fact_records)}")
         return {"infrastructure_platform_edges_projected": 1}
 
+    builder_obj = builder
     metrics = project_work_item(
         FactWorkItemRow(
             work_item_id="work-3",
@@ -143,15 +161,15 @@ def test_project_work_item_loads_facts_and_runs_projection_stages() -> None:
             repository_id="github.com/acme/service",
             source_run_id="run-123",
         ),
-        builder=MagicMock(),
+        builder=builder,
         fact_store=fact_store,
         fact_projector=_fact_projector,
         relationship_projector=_relationship_projector,
         workload_projector=_workload_projector,
         platform_projector=_platform_projector,
-        debug_log_fn=lambda *_args, **_kwargs: None,
-        warning_logger_fn=lambda *_args, **_kwargs: None,
-        info_logger_fn=lambda *_args, **_kwargs: None,
+        debug_log_fn=debug_logger,
+        warning_logger_fn=warning_logger,
+        info_logger_fn=info_logger,
     )
 
     assert handled == ["facts:1", "relationships:1", "workloads:1", "platforms:1"]

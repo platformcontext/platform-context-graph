@@ -21,3 +21,13 @@ class FactWorkItemRow:
     last_error: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FactWorkQueueSnapshotRow:
+    """One aggregated queue depth and age observation."""
+
+    work_type: str
+    status: str
+    depth: int
+    oldest_age_seconds: float

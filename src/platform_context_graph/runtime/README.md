@@ -17,6 +17,12 @@ The deployed service shape is easiest to reason about as three primary roles:
 - **Repository ingester** — syncs repositories and drives the Git collector
 - **Resolution Engine** — claims fact work items and projects canonical graph state
 
+For SRE and tuning work, the important telemetry split is:
+
+- **API**: request latency, errors, and tool invocation timing
+- **Repository ingester / Git collector**: repository queue wait, parse, fact emission, commit/projection timing, and per-repo graph/content write durations
+- **Resolution Engine**: work-item claim outcomes, queue backlog gauges, fact-load timing, and projection stage durations
+
 Internally, the Git path now flows like this:
 
 - `collectors/git/` for source discovery and parse execution

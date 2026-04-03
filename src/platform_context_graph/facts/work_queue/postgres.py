@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .models import FactWorkItemRow
+from .models import FactWorkQueueSnapshotRow
 from .schema import FACT_WORK_QUEUE_SCHEMA
 
 try:
@@ -182,55 +183,6 @@ class PostgresFactWorkQueue:
         lease_owner: str,
         lease_ttl_seconds: int,
     ) -> FactWorkItemRow | None:
-        """Lease one specific work item by identifier."""
-
-        now = _utc_now()
-        lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
-        with self._cursor() as cursor:
-            cursor.execute(
-                """
-                UPDATE fact_work_items
-                SET lease_owner = %(lease_owner)s,
-                    lease_expires_at = %(lease_expires_at)s,
-                    status = 'leased',
-                    attempt_count = fact_work_items.attempt_count + 1,
-                    updated_at = %(now)s
-                WHERE work_item_id = %(work_item_id)s
-                  AND status IN ('pending', 'leased')
-                  AND (
-                    lease_expires_at IS NULL
-                    OR lease_expires_at <= %(now)s
-                    OR lease_owner = %(lease_owner)s
-                  )
-                RETURNING work_item_id,
-                          work_type,
-                          repository_id,
-                          source_run_id,
-                          lease_owner,
-                          lease_expires_at,
-                          status,
-                          attempt_count,
-                          last_error,
-                          created_at,
-                          updated_at
-                """,
-                {
-                    "work_item_id": work_item_id,
-                    "lease_owner": lease_owner,
-                    "lease_expires_at": lease_expires_at,
-                    "now": now,
-                },
-            )
-            row = cursor.fetchone()
-        return FactWorkItemRow(**row) if row else None
-
-    def lease_work_item(
-        self,
-        *,
-        work_item_id: str,
-        lease_owner: str,
-        lease_ttl_seconds: int,
-    ) -> FactWorkItemRow | None:
         """Lease one specific work item when it is still claimable."""
 
         now = _utc_now()
@@ -321,14 +273,35 @@ class PostgresFactWorkQueue:
                 },
             )
 
-    def close(self) -> None:
-        """Close the underlying PostgreSQL connection when it exists."""
+    def list_queue_snapshot(self) -> list[FactWorkQueueSnapshotRow]:
+        """Return aggregated queue depth and oldest age by work type and status."""
 
-        with self._lock:
-            if self._conn is not None and not self._conn.closed:
-                self._conn.close()
-            self._conn = None
-            self._initialized = False
+        now = _utc_now()
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT work_type,
+                       status,
+                       COUNT(*) AS depth,
+                       COALESCE(
+                         EXTRACT(EPOCH FROM (%(now)s - MIN(created_at))),
+                         0
+                       ) AS oldest_age_seconds
+                FROM fact_work_items
+                GROUP BY work_type, status
+                """,
+                {"now": now},
+            )
+            rows = cursor.fetchall()
+        return [
+            FactWorkQueueSnapshotRow(
+                work_type=row["work_type"],
+                status=row["status"],
+                depth=int(row["depth"]),
+                oldest_age_seconds=float(row["oldest_age_seconds"] or 0.0),
+            )
+            for row in rows
+        ]
 
     def close(self) -> None:
         """Close the shared PostgreSQL connection if it is open."""

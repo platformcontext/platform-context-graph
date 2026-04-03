@@ -59,6 +59,7 @@ The observability package is a real subsystem rather than a flat file:
 - `observability/otel.py`: OTEL config, exporters, and context helpers
 - `observability/runtime.py`: runtime object and instrumentation hooks
 - `observability/metrics.py`: metric-recording helpers
+- `observability/fact_resolution_metrics.py`: facts-first queue, emission, and Resolution Engine telemetry helpers
 - `observability/state.py`: global runtime lifecycle and test-exporter hooks
 
 This keeps API, MCP, and indexing telemetry consistent.
@@ -101,6 +102,7 @@ boundaries:
 - `facts/work_queue/`: Postgres-backed work item queue used by the Resolution Engine
 - `facts/emission/`: source-specific fact emission from parsed snapshots
 - `facts/state.py`: shared fact store and queue lifecycle for deployed runtimes
+- `indexing/coordinator_facts.py` and `indexing/coordinator_facts_support.py`: Git cutover helpers for fact emission, inline projection, and facts-first finalization
 - `parsers/registry.py`: canonical parser registry and worker-friendly parse entrypoints
 - `parsers/raw_text.py`: raw-text parser support for searchable non-code artifacts
 - `parsers/languages/`: canonical language parser entrypoints and support modules

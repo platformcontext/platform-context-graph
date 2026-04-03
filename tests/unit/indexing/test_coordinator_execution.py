@@ -368,22 +368,42 @@ def test_execute_index_run_uses_facts_first_projection_when_enabled(
         "platform_context_graph.indexing.coordinator.get_fact_work_queue",
         lambda: SimpleNamespace(enabled=True),
     )
+    emitter_fact_results: dict[str, object] = {}
+    emitter_factory_calls: list[dict[str, object]] = []
+    commit_factory_calls: list[dict[str, object]] = []
+
+    def _make_snapshot_fact_emitter(**kwargs):
+        emitter_factory_calls.append(kwargs)
+
+        def _emit(*, repo_path, snapshot, **_kwargs):
+            result = SimpleNamespace(
+                repository_id=f"repository:{repo_path.name}",
+                source_run_id="run-123",
+                source_snapshot_id=f"snapshot:{repo_path.name}",
+                work_item_id=f"work:{repo_path.name}",
+                fact_count=snapshot.file_count,
+            )
+            emitter_fact_results[str(repo_path.resolve())] = result
+            emitted.append(str(repo_path.resolve()))
+            return result
+
+        setattr(_emit, "fact_emission_results", emitter_fact_results)
+        return _emit
+
     monkeypatch.setattr(
         "platform_context_graph.indexing.coordinator.create_snapshot_fact_emitter",
-        lambda **_kwargs: (
-            lambda *, run_id, repo_path, snapshot, is_dependency: emitted.append(
-                str(repo_path.resolve())
-            )
-            or snapshot.file_count
-        ),
+        _make_snapshot_fact_emitter,
     )
+
+    def _make_facts_first_commit_callback(**kwargs):
+        commit_factory_calls.append(kwargs)
+        return lambda _builder, snapshot, **_commit_kwargs: projected.append(
+            snapshot.repo_path
+        )
+
     monkeypatch.setattr(
         "platform_context_graph.indexing.coordinator.create_facts_first_commit_callback",
-        lambda **_kwargs: (
-            lambda _builder, snapshot, **_commit_kwargs: projected.append(
-                snapshot.repo_path
-            )
-        ),
+        _make_facts_first_commit_callback,
     )
     monkeypatch.setattr(
         "platform_context_graph.indexing.coordinator.finalize_facts_first_run",
@@ -457,6 +477,16 @@ def test_execute_index_run_uses_facts_first_projection_when_enabled(
     assert emitted == [str(repo.resolve())]
     assert projected == [str(repo.resolve())]
     assert finalized == [[repo.resolve()]]
+    assert len(emitter_factory_calls) == 1
+    assert len(commit_factory_calls) == 1
+    assert emitter_factory_calls[0]["fact_store"].enabled is True
+    assert emitter_factory_calls[0]["work_queue"].enabled is True
+    assert commit_factory_calls[0]["fact_store"] is emitter_factory_calls[0]["fact_store"]
+    assert (
+        commit_factory_calls[0]["work_queue"]
+        is emitter_factory_calls[0]["work_queue"]
+    )
+    assert commit_factory_calls[0]["fact_emission_results"] is emitter_fact_results
     assert result.status == "completed"
 
 

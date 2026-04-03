@@ -12,3 +12,13 @@ Current ground rules:
 - custom log dimensions belong under `extra_keys`, not as ad hoc top-level fields
 - OTEL logs export is not required
 - use Jaeger when you need to understand slow indexing or request paths
+
+Service-facing telemetry expectations:
+
+- API and MCP expose request, latency, and error telemetry
+- the Git collector exposes repository queue wait, parse, fact emission, and commit/projection telemetry
+- the Resolution Engine exposes work-item claim, completion/failure, fact-load, and per-stage projection telemetry
+- the facts queue exposes backlog depth and oldest-item age by work type and status
+
+Metric labels should stay low-cardinality. Repository ids, run ids, snapshot ids,
+and work-item ids belong on spans and structured logs, not on metric labels.

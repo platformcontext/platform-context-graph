@@ -1547,3 +1547,101 @@ def test_pipeline_concurrent_commit_workers_overlap(
     assert len(committed_repo_paths) == 2
     assert run_state.repositories[str(repo_a.resolve())].status == "completed"
     assert run_state.repositories[str(repo_b.resolve())].status == "completed"
+
+
+def test_pipeline_facts_first_emits_before_snapshot_clear_and_forwards_exact_result(
+    tmp_path: Path,
+) -> None:
+    """Facts-first flow should emit before clearing file data and forward identity."""
+
+    repo = tmp_path / "repo-a"
+    repo.mkdir()
+    file_path = repo / "main.py"
+    file_path.write_text("print('a')\n", encoding="utf-8")
+
+    emitted_snapshots: list[list[dict[str, object]]] = []
+    forwarded_results: list[object] = []
+    forwarded_progress_callbacks: list[object] = []
+    forwarded_iter_fns: list[object] = []
+    forwarded_repo_classes: list[str | None] = []
+    merged_imports: dict[str, list[str]] = {}
+
+    async def parse_snapshot(_builder, repo_path, repo_files, **_kw):
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={"helper": [str(repo_files[0].resolve())]},
+            file_data=[
+                {
+                    "path": str(repo_files[0].resolve()),
+                    "repo_path": str(repo_path.resolve()),
+                    "lang": "python",
+                    "functions": [{"name": "handler", "line_number": 1}],
+                }
+            ],
+        )
+
+    emission_result = SimpleNamespace(work_item_id="work-1", fact_count=2)
+
+    def emit_snapshot_facts_fn(*, snapshot, **_kwargs):
+        emitted_snapshots.append(list(snapshot.file_data))
+        return emission_result
+
+    def commit_snapshot(_builder, snapshot, **kwargs) -> None:
+        forwarded_results.append(kwargs["fact_emission_result"])
+        forwarded_progress_callbacks.append(kwargs["progress_callback"])
+        forwarded_iter_fns.append(kwargs["iter_snapshot_file_data_batches_fn"])
+        forwarded_repo_classes.append(kwargs["repo_class"])
+        merged_imports.update(snapshot.imports_map)
+
+    asyncio.run(
+        process_repository_snapshots(
+            builder=SimpleNamespace(),
+            run_state=_make_run_state([repo]),
+            repo_paths=[repo],
+            repo_file_sets={repo: [file_path]},
+            resumed=False,
+            is_dependency=False,
+            job_id=None,
+            component="test",
+            family="index",
+            source="manual",
+            asyncio_module=asyncio,
+            info_logger_fn=lambda *_a, **_kw: None,
+            warning_logger_fn=lambda *_a, **_kw: None,
+            parse_worker_count_fn=lambda: 1,
+            index_queue_depth_fn=lambda _w: 8,
+            parse_repository_snapshot_async_fn=parse_snapshot,
+            commit_repository_snapshot_fn=commit_snapshot,
+            iter_snapshot_file_data_batches_fn=lambda *_a, **_kw: iter(()),
+            load_snapshot_metadata_fn=lambda *_a: None,
+            snapshot_file_data_exists_fn=lambda *_a: False,
+            save_snapshot_metadata_fn=lambda *_a: None,
+            save_snapshot_file_data_fn=lambda *_a: None,
+            emit_snapshot_facts_fn=emit_snapshot_facts_fn,
+            persist_run_state_fn=lambda _state: None,
+            record_checkpoint_metric_fn=_noop,
+            update_pending_repository_gauge_fn=_noop,
+            publish_runtime_progress_fn=_noop,
+            publish_run_repository_coverage_fn=_publish_coverage,
+            utc_now_fn=lambda: "2026-01-01T00:00:00Z",
+            telemetry=_telemetry(),
+            facts_first_mode=True,
+        )
+    )
+
+    assert emitted_snapshots == [
+        [
+            {
+                "path": str(file_path.resolve()),
+                "repo_path": str(repo.resolve()),
+                "lang": "python",
+                "functions": [{"name": "handler", "line_number": 1}],
+            }
+        ]
+    ]
+    assert forwarded_results == [emission_result]
+    assert callable(forwarded_progress_callbacks[0])
+    assert callable(forwarded_iter_fns[0])
+    assert forwarded_repo_classes == ["small"]
+    assert merged_imports == {"helper": [str(file_path.resolve())]}

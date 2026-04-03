@@ -22,5 +22,12 @@ Current Git flow:
 5. the standalone `resolution-engine` runtime can claim the same queue for
    background processing and future multi-collector flows
 
+Operational visibility for this package now includes:
+
+- fact emission spans at the repository snapshot boundary
+- fact record volume and emission-duration metrics
+- fact work-item lifecycle counters
+- facts queue depth and oldest-item age gauges when the Postgres queue backend is used
+
 This package should continue to grow as new collectors emit source observations
 before graph projection.

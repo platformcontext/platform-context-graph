@@ -23,3 +23,10 @@ That applies in two places:
 
 Both paths use the same projection contracts so the collector no longer owns
 final repository/file/entity/relationship/workload/platform graph state.
+
+Observability expectations for this package:
+
+- one work-item span for each projection attempt
+- child spans for fact load, fact projection, relationship projection, workload projection, and platform projection
+- work-item success/failure counters and duration histograms
+- fact-load counters and stage-duration histograms for tuning and backlog triage

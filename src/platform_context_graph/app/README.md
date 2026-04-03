@@ -16,6 +16,12 @@ Current service roles:
 - `git-collector` runs repo sync, discovery, parse execution, and fact emission
 - `resolution-engine` claims fact work items and projects canonical graph state
 
+Each role should also be observable as its own service:
+
+- `api` reports API and MCP request telemetry
+- `git-collector` reports collector/indexing and fact-emission telemetry
+- `resolution-engine` reports queue-claim and projection telemetry
+
 The important Phase 2 boundary is that `app/` decides *which* service role
 starts, while `facts/`, `collectors/`, `graph/`, and `resolution/` own the
 runtime behavior behind that role.

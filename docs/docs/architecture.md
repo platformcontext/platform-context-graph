@@ -71,7 +71,7 @@ graph TD
 | **Content Store** | PostgreSQL-backed file and entity content cache for deployed API and MCP runtimes. |
 | **Git Collector Runtime** | Long-running repository sync, parse execution, fact emission, and retry/backoff. |
 | **Resolution Engine Runtime** | Background or in-process projection of queued facts into the canonical graph. |
-| **Observability** | Shared OTEL instrumentation for API, MCP, and indexing runtime signals. |
+| **Observability** | Shared OTEL instrumentation for API, MCP, Git collector, facts queue, and Resolution Engine signals. |
 
 ## Interfaces
 
@@ -105,6 +105,19 @@ serves independently.
 6. The Resolution Engine projection path writes repository, file, entity, relationship,
    workload, and platform graph state.
 7. Query surfaces continue reading the canonical graph and content store as before.
+
+### Service Telemetry
+
+Each primary runtime now has a clear OTEL surface:
+
+- **API runtime**: HTTP and MCP request spans, durations, and error counters
+- **Git collector**: repository queue wait, parse, fact emission, commit/projection, and per-repo write timings
+- **Resolution Engine**: work-item claim/empty-poll outcomes, fact load spans, per-stage projection timings, and completed/failed work-item counters
+- **Fact work queue**: observable queue depth and oldest-item age by work type and status for backlog tracking and future autoscaling
+
+These signals are designed to support on-call debugging, backlog monitoring,
+performance tuning, and future scale decisions without adding repository or
+work-item identifiers to metric labels.
 
 ### Querying
 

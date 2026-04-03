@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
 from pathlib import Path
 import time
 from typing import Any
@@ -18,13 +16,17 @@ from platform_context_graph.facts.state import get_fact_store
 from platform_context_graph.facts.state import get_fact_work_queue
 from platform_context_graph.facts.state import git_facts_first_enabled
 from platform_context_graph.facts.storage.models import FactRunRow
-from platform_context_graph.repository_identity import (
-    git_remote_for_path,
-    repository_metadata,
-)
+from platform_context_graph.observability import get_observability
 from platform_context_graph.resolution.orchestration import project_work_item
 
 from .commit_timing import CommitTimingResult
+from .coordinator_facts_support import fact_metric_row_count
+from .coordinator_facts_support import clear_repository_projection_state
+from .coordinator_facts_support import graph_store_adapter
+from .coordinator_facts_support import refresh_fact_queue_metrics
+from .coordinator_facts_support import repository_id_for_path
+from .coordinator_facts_support import source_snapshot_id
+from .coordinator_facts_support import utc_now
 
 __all__ = [
     "commit_repository_snapshot_from_facts",
@@ -51,63 +53,6 @@ def facts_first_projection_enabled() -> bool:
         and getattr(fact_store, "enabled", True)
         and getattr(work_queue, "enabled", True)
     )
-
-
-def _utc_now() -> Any:
-    """Return the current UTC timestamp for fact runtime writes."""
-
-    return datetime.now(tz=timezone.utc)
-
-
-def _graph_store_adapter(builder: object) -> object:
-    """Return the graph store adapter used by facts-first projection."""
-
-    from .coordinator_storage import _graph_store_adapter as storage_adapter
-
-    return storage_adapter(builder)
-
-
-def _repository_id_for_path(repo_path: Path) -> str:
-    """Return the canonical repository identifier for one local checkout."""
-
-    metadata = repository_metadata(
-        name=repo_path.name,
-        local_path=str(repo_path),
-        remote_url=git_remote_for_path(repo_path),
-    )
-    return str(metadata["id"])
-
-
-def _source_snapshot_id(*, source_run_id: str, repo_path: Path) -> str:
-    """Return a deterministic snapshot id for one repository in a run."""
-
-    return stable_fact_id(
-        fact_type="GitRepositorySnapshot",
-        identity={
-            "source_run_id": source_run_id,
-            "repo_path": str(repo_path.resolve()),
-        },
-    )
-
-
-def _fact_metric_row_count(metrics: dict[str, Any] | None) -> int:
-    """Return a best-effort row count derived from nested projection metrics."""
-
-    if not isinstance(metrics, dict):
-        return 0
-
-    total = 0
-    for value in metrics.values():
-        if isinstance(value, bool):
-            continue
-        if isinstance(value, int):
-            total += value
-            continue
-        if isinstance(value, dict):
-            total += _fact_metric_row_count(value)
-    return total
-
-
 def emit_repository_snapshot_facts(
     *,
     source_run_id: str,
@@ -116,7 +61,7 @@ def emit_repository_snapshot_facts(
     is_dependency: bool,
     fact_store: object | None = None,
     work_queue: object | None = None,
-    observed_at_fn: Callable[[], Any] = _utc_now,
+    observed_at_fn: Callable[[], Any] = utc_now,
 ) -> GitSnapshotFactEmissionResult:
     """Persist facts for one parsed repository snapshot."""
 
@@ -126,19 +71,48 @@ def emit_repository_snapshot_facts(
         raise RuntimeError("facts-first indexing requires a configured fact runtime")
 
     resolved_repo_path = repo_path.resolve()
-    return emit_git_snapshot_facts(
-        snapshot=snapshot,
-        repository_id=_repository_id_for_path(resolved_repo_path),
+    repository_id = repository_id_for_path(resolved_repo_path)
+    snapshot_id = source_snapshot_id(
         source_run_id=source_run_id,
-        source_snapshot_id=_source_snapshot_id(
-            source_run_id=source_run_id,
-            repo_path=resolved_repo_path,
-        ),
-        is_dependency=is_dependency,
-        fact_store=store,
-        work_queue=queue,
-        observed_at=observed_at_fn(),
+        repo_path=resolved_repo_path,
     )
+    observed_at = observed_at_fn()
+    started = time.perf_counter()
+    observability = get_observability()
+    with observability.start_span(
+        "pcg.facts.emit_snapshot",
+        component="ingester",
+        attributes={
+            "pcg.repository_id": repository_id,
+            "pcg.facts.source_run_id": source_run_id,
+            "pcg.facts.source_snapshot_id": snapshot_id,
+            "pcg.index.is_dependency": is_dependency,
+        },
+    ):
+        result = emit_git_snapshot_facts(
+            snapshot=snapshot,
+            repository_id=repository_id,
+            source_run_id=source_run_id,
+            source_snapshot_id=snapshot_id,
+            is_dependency=is_dependency,
+            fact_store=store,
+            work_queue=queue,
+            observed_at=observed_at,
+        )
+    observability.record_fact_emission(
+        component="ingester",
+        source_system="git",
+        work_type="project-git-facts",
+        fact_count=result.fact_count,
+        duration_seconds=max(time.perf_counter() - started, 0.0),
+    )
+    observability.record_fact_work_item(
+        component="ingester",
+        work_type="project-git-facts",
+        outcome="enqueued",
+    )
+    refresh_fact_queue_metrics(queue, component="ingester")
+    return result
 
 
 def create_snapshot_fact_emitter(
@@ -146,7 +120,7 @@ def create_snapshot_fact_emitter(
     source_run_id: str,
     fact_store: object | None = None,
     work_queue: object | None = None,
-    observed_at_fn: Callable[[], Any] = _utc_now,
+    observed_at_fn: Callable[[], Any] = utc_now,
 ) -> Callable[..., GitSnapshotFactEmissionResult]:
     """Build the snapshot callback that persists facts for one run."""
 
@@ -176,20 +150,6 @@ def create_snapshot_fact_emitter(
 
     setattr(_emit_snapshot_facts, "fact_emission_results", emission_results)
     return _emit_snapshot_facts
-
-
-def _clear_repository_projection_state(
-    *,
-    builder: object,
-    repository_id: str,
-    graph_store: object,
-) -> None:
-    """Delete graph/content state before facts-first reprojection."""
-
-    graph_store.delete_repository(repository_id)
-    content_provider = getattr(builder, "_content_provider", None)
-    if content_provider is not None and getattr(content_provider, "enabled", False):
-        content_provider.delete_repository_content(repository_id)
 
 
 def project_repository_snapshot_facts(
@@ -222,24 +182,50 @@ def project_repository_snapshot_facts(
     if store is None or queue is None:
         raise RuntimeError("facts-first indexing requires a configured fact runtime")
 
-    _clear_repository_projection_state(
-        builder=builder,
-        repository_id=fact_emission_result.repository_id,
-        graph_store=graph_store,
-    )
-
-    work_item = queue.lease_work_item(
-        work_item_id=fact_emission_result.work_item_id,
-        lease_owner=lease_owner,
-        lease_ttl_seconds=lease_ttl_seconds,
-    )
-    if work_item is None:
-        raise RuntimeError(
-            "facts-first projection could not lease work item "
-            f"{fact_emission_result.work_item_id}"
-        )
-
     started = time.perf_counter()
+    observability = get_observability()
+    with observability.start_span(
+        "pcg.facts.inline_projection",
+        component="ingester",
+        attributes={
+            "pcg.repository_id": fact_emission_result.repository_id,
+            "pcg.facts.source_run_id": fact_emission_result.source_run_id,
+            "pcg.facts.source_snapshot_id": fact_emission_result.source_snapshot_id,
+            "pcg.facts.work_item_id": fact_emission_result.work_item_id,
+            "pcg.facts.fact_count": fact_emission_result.fact_count,
+            "pcg.queue.lease_owner": lease_owner,
+            "pcg.queue.lease_ttl_seconds": lease_ttl_seconds,
+        },
+    ) as span:
+        work_item = queue.lease_work_item(
+            work_item_id=fact_emission_result.work_item_id,
+            lease_owner=lease_owner,
+            lease_ttl_seconds=lease_ttl_seconds,
+        )
+        if work_item is None:
+            observability.record_fact_work_item(
+                component="ingester",
+                work_type="project-git-facts",
+                outcome="lease_miss",
+            )
+            refresh_fact_queue_metrics(queue, component="ingester")
+            raise RuntimeError(
+                "facts-first projection could not lease work item "
+                f"{fact_emission_result.work_item_id}"
+            )
+        if span is not None:
+            span.set_attribute("pcg.queue.attempt_count", work_item.attempt_count)
+        observability.record_fact_work_item(
+            component="ingester",
+            work_type=work_item.work_type,
+            outcome="leased",
+        )
+        refresh_fact_queue_metrics(queue, component="ingester")
+        clear_repository_projection_state(
+            builder=builder,
+            repository_id=fact_emission_result.repository_id,
+            graph_store=graph_store,
+        )
     try:
         metrics = project_work_item_fn(
             work_item,
@@ -255,13 +241,31 @@ def project_repository_snapshot_facts(
             error_message=str(exc),
             terminal=False,
         )
+        observability.record_fact_work_item(
+            component="ingester",
+            work_type=work_item.work_type,
+            outcome="failed",
+        )
+        refresh_fact_queue_metrics(queue, component="ingester")
         raise
 
     queue.complete_work_item(work_item_id=work_item.work_item_id)
+    observability.record_fact_work_item(
+        component="ingester",
+        work_type=work_item.work_type,
+        outcome="completed",
+    )
+    observability.record_resolution_stage_duration(
+        component="ingester",
+        work_type=work_item.work_type,
+        stage="inline_projection",
+        duration_seconds=max(time.perf_counter() - started, 0.0),
+    )
+    refresh_fact_queue_metrics(queue, component="ingester")
     timing = CommitTimingResult()
     timing.accumulate_graph_batch(
         duration_seconds=max(time.perf_counter() - started, 0.0),
-        row_count=max(_fact_metric_row_count(metrics), 1),
+        row_count=max(fact_metric_row_count(metrics), 1),
     )
     return timing
 
@@ -314,7 +318,7 @@ def create_facts_first_commit_callback(
     fact_emission_results: dict[str, GitSnapshotFactEmissionResult] | None = None,
     info_logger_fn: Any = lambda *_args, **_kwargs: None,
     warning_logger_fn: Any = lambda *_args, **_kwargs: None,
-    observed_at_fn: Callable[[], Any] = _utc_now,
+    observed_at_fn: Callable[[], Any] = utc_now,
 ) -> Callable[..., CommitTimingResult]:
     """Build the commit callback that projects graph state from facts."""
 
@@ -332,6 +336,10 @@ def create_facts_first_commit_callback(
         iter_snapshot_file_data_batches_fn: Any | None = None,
         repo_class: str | None = None,
         fact_emission_result: GitSnapshotFactEmissionResult | None = None,
+        project_repository_snapshot_facts_fn: Callable[..., CommitTimingResult] = (
+            project_repository_snapshot_facts
+        ),
+        graph_store_adapter_fn: Callable[[object], object] = graph_store_adapter,
     ) -> CommitTimingResult:
         """Project one repository snapshot into the graph from stored facts."""
 
@@ -339,8 +347,8 @@ def create_facts_first_commit_callback(
         del is_dependency
 
         repo_path = Path(str(snapshot.repo_path)).resolve()
-        repository_id = _repository_id_for_path(repo_path)
-        source_snapshot_id = _source_snapshot_id(
+        repository_id = repository_id_for_path(repo_path)
+        snapshot_id = source_snapshot_id(
             source_run_id=source_run_id,
             repo_path=repo_path,
         )
@@ -351,25 +359,25 @@ def create_facts_first_commit_callback(
             emission_result = GitSnapshotFactEmissionResult(
                 repository_id=repository_id,
                 source_run_id=source_run_id,
-                source_snapshot_id=source_snapshot_id,
+                source_snapshot_id=snapshot_id,
                 work_item_id=stable_fact_id(
                     fact_type="FactProjectionWorkItem",
                     identity={
                         "repository_id": repository_id,
                         "source_run_id": source_run_id,
-                        "source_snapshot_id": source_snapshot_id,
+                        "source_snapshot_id": snapshot_id,
                     },
                 ),
                 fact_count=max(getattr(snapshot, "file_count", 0), 1),
             )
         try:
-            timing = project_repository_snapshot_facts(
+            timing = project_repository_snapshot_facts_fn(
                 builder,
                 snapshot,
                 fact_emission_result=emission_result,
                 fact_store=store,
                 work_queue=queue,
-                graph_store=_graph_store_adapter(builder),
+                graph_store=graph_store_adapter_fn(builder),
                 project_work_item_fn=project_work_item,
                 lease_owner="indexing",
                 lease_ttl_seconds=300,
@@ -435,6 +443,11 @@ def finalize_facts_first_run(
 
     blocking_count = run_state.blocking_repositories()
     has_committed_repos = bool(committed_repo_paths)
+    run_state.finalization_stage_details = (
+        {"facts_projection": last_metrics.get("facts", {})}
+        if isinstance(last_metrics, dict) and "facts" in last_metrics
+        else {}
+    )
     if not has_committed_repos and blocking_count > 0:
         run_state.status = "partial_failure"
         run_state.finalization_status = "pending"
@@ -464,11 +477,6 @@ def finalize_facts_first_run(
     run_state.finalization_current_stage = None
     run_state.finalization_stage_started_at = None
     run_state.finalization_stage_durations = {}
-    run_state.finalization_stage_details = (
-        {"facts_projection": last_metrics.get("facts", {})}
-        if isinstance(last_metrics, dict) and "facts" in last_metrics
-        else {}
-    )
     persist_run_state_fn(run_state)
     publish_run_repository_coverage_fn(
         builder=builder,
