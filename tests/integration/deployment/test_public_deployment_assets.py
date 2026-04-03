@@ -150,6 +150,9 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert (
         worker_statefulset["spec"]["serviceName"] == "platform-context-graph-ingester"
     )
+    assert api_deployment["spec"]["revisionHistoryLimit"] == 3
+    assert resolution_engine_deployment["spec"]["revisionHistoryLimit"] == 3
+    assert worker_statefulset["spec"]["revisionHistoryLimit"] == 3
     assert worker_statefulset["spec"]["selector"]["matchLabels"] == {
         "app.kubernetes.io/name": "platform-context-graph",
         "app.kubernetes.io/instance": "platform-context-graph",
@@ -661,6 +664,70 @@ def test_chart_renders_otel_env_for_all_runtime_containers_when_enabled() -> Non
             assert env_by_name["OTEL_LOGS_EXPORTER"] == "none"
             assert env_by_name["OTEL_SERVICE_NAME"] == expected_service_name
             assert "OTEL_RESOURCE_ATTRIBUTES" in env_by_name
+
+
+def test_chart_renders_prometheus_metrics_services_and_service_monitors() -> None:
+    """Render per-runtime metrics services and service monitors when enabled."""
+
+    docs = _render_chart(
+        "--set",
+        "observability.prometheus.enabled=true",
+        "--set",
+        "observability.prometheus.serviceMonitor.enabled=true",
+        "--set",
+        "observability.prometheus.port=9464",
+    )
+
+    services = {
+        doc["metadata"]["name"]: doc for doc in docs if doc["kind"] == "Service"
+    }
+    service_monitors = {
+        doc["metadata"]["name"]: doc
+        for doc in docs
+        if doc["kind"] == "ServiceMonitor"
+    }
+    expected_metrics_names = [
+        "platform-context-graph-api-metrics",
+        "platform-context-graph-ingester-metrics",
+        "platform-context-graph-resolution-engine-metrics",
+    ]
+
+    for name in expected_metrics_names:
+        assert name in services
+        assert name in service_monitors
+        endpoint = service_monitors[name]["spec"]["endpoints"][0]
+        assert endpoint["port"] == "metrics"
+        assert endpoint["path"] == "/metrics"
+
+    api_deployment = next(
+        doc
+        for doc in docs
+        if doc["kind"] == "Deployment"
+        and doc["metadata"]["name"] == "platform-context-graph-api"
+    )
+    resolution_engine_deployment = next(
+        doc
+        for doc in docs
+        if doc["kind"] == "Deployment"
+        and doc["metadata"]["name"] == "platform-context-graph-resolution-engine"
+    )
+    ingester_statefulset = next(doc for doc in docs if doc["kind"] == "StatefulSet")
+
+    for pod_spec in [
+        api_deployment["spec"]["template"]["spec"],
+        resolution_engine_deployment["spec"]["template"]["spec"],
+        ingester_statefulset["spec"]["template"]["spec"],
+    ]:
+        container = pod_spec["containers"][0]
+        ports = {port["name"]: port["containerPort"] for port in container["ports"]}
+        env_by_name = {
+            env["name"]: env.get("value", "")
+            for env in container.get("env", [])
+            if "name" in env
+        }
+        assert ports["metrics"] == 9464
+        assert env_by_name["PCG_PROMETHEUS_METRICS_ENABLED"] == "true"
+        assert env_by_name["PCG_PROMETHEUS_METRICS_PORT"] == "9464"
 
 
 def test_chart_renders_content_store_envs_for_all_runtime_containers() -> None:

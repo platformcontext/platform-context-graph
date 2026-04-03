@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import threading
 from collections.abc import Iterator
 from typing import Any
@@ -26,6 +27,11 @@ from .otel import (
     resource_attributes,
     service_name_for_component,
 )
+from .prometheus import create_prometheus_reader
+from .prometheus import prometheus_metrics_enabled
+from .prometheus import prometheus_metrics_host
+from .prometheus import prometheus_metrics_port
+from .prometheus import start_prometheus_server
 from .runtime import ObservabilityRuntime
 from .structured_logging import configure_logging
 
@@ -33,6 +39,30 @@ _STATE_LOCK = threading.Lock()
 _STATE: ObservabilityRuntime | None = None
 _TEST_SPAN_EXPORTER: SpanExporter | None = None
 _TEST_METRIC_READER: MetricReader | None = None
+_PROMETHEUS_SERVER: Any | None = None
+
+
+def _parse_exporters(name: str, *, default: str) -> set[str]:
+    """Return normalized exporter names from an OTEL environment variable."""
+
+    raw_value = os.getenv(name, default)
+    return {
+        item.strip().lower()
+        for item in raw_value.split(",")
+        if item.strip()
+    }
+
+
+def _create_prometheus_reader() -> MetricReader | None:
+    """Create the Prometheus metric reader, if the dependency is installed."""
+
+    return create_prometheus_reader()
+
+
+def _start_prometheus_http_server(*, host: str, port: int) -> Any | None:
+    """Start the Prometheus HTTP server on the requested host and port."""
+
+    return start_prometheus_server(host=host, port=port)
 
 
 def initialize_observability(
@@ -55,6 +85,7 @@ def initialize_observability(
     """
 
     global _STATE, _TEST_SPAN_EXPORTER, _TEST_METRIC_READER
+    global _PROMETHEUS_SERVER
 
     configure_logging(component=component, runtime_role=component)
 
@@ -64,15 +95,49 @@ def initialize_observability(
                 _STATE.instrument_fastapi_app(app)
             return _STATE
 
+        explicit_metric_reader = metric_reader or _TEST_METRIC_READER
+        explicit_span_exporter = span_exporter or _TEST_SPAN_EXPORTER
+        metric_exporters = _parse_exporters(
+            "OTEL_METRICS_EXPORTER",
+            default="otlp",
+        )
+        trace_exporters = _parse_exporters(
+            "OTEL_TRACES_EXPORTER",
+            default="otlp",
+        )
+        otlp_requested = otel_endpoint_configured()
+        prometheus_requested = prometheus_metrics_enabled()
+        metric_readers: list[MetricReader] = []
+
+        if explicit_metric_reader is not None:
+            metric_readers.append(explicit_metric_reader)
+        else:
+            if "otlp" in metric_exporters and otlp_requested:
+                metric_readers.append(
+                    PeriodicExportingMetricReader(OTLPMetricExporter())
+                )
+            if (
+                prometheus_requested
+                or "prometheus" in metric_exporters
+            ):
+                prometheus_reader = _create_prometheus_reader()
+                if prometheus_reader is not None:
+                    metric_readers.append(prometheus_reader)
+                    if _PROMETHEUS_SERVER is None:
+                        _PROMETHEUS_SERVER = _start_prometheus_http_server(
+                            host=prometheus_metrics_host(),
+                            port=prometheus_metrics_port(),
+                        )
+
+        tracing_enabled = explicit_span_exporter is not None or (
+            "otlp" in trace_exporters and otlp_requested
+        )
+        metrics_enabled = bool(metric_readers)
         enabled = (
             TracerProvider is not None
             and MeterProvider is not None
             and not env_truthy("OTEL_SDK_DISABLED")
-            and (
-                otel_endpoint_configured()
-                or _TEST_SPAN_EXPORTER is not None
-                or _TEST_METRIC_READER is not None
-            )
+            and (tracing_enabled or metrics_enabled)
         )
 
         if not enabled:
@@ -86,12 +151,9 @@ def initialize_observability(
             return _STATE
 
         selected_span_exporter = (
-            span_exporter or _TEST_SPAN_EXPORTER or OTLPSpanExporter()
-        )
-        selected_metric_reader = (
-            metric_reader
-            or _TEST_METRIC_READER
-            or PeriodicExportingMetricReader(OTLPMetricExporter())
+            explicit_span_exporter
+            if explicit_span_exporter is not None
+            else OTLPSpanExporter()
         )
         use_simple_span_processor = (
             span_exporter is not None or _TEST_SPAN_EXPORTER is not None
@@ -103,22 +165,27 @@ def initialize_observability(
             resource_attributes(service_name_for_component(component))
         )
         tracer_provider = TracerProvider(resource=resource)
-        span_processor_cls = (
-            SimpleSpanProcessor if use_simple_span_processor else BatchSpanProcessor
-        )
-        tracer_provider.add_span_processor(span_processor_cls(selected_span_exporter))
+        if tracing_enabled:
+            span_processor_cls = (
+                SimpleSpanProcessor
+                if use_simple_span_processor
+                else BatchSpanProcessor
+            )
+            tracer_provider.add_span_processor(
+                span_processor_cls(selected_span_exporter)
+            )
         meter_provider = MeterProvider(
             resource=resource,
-            metric_readers=[selected_metric_reader],
+            metric_readers=metric_readers,
         )
         _STATE = ObservabilityRuntime(
             enabled=True,
             service_name=service_name_for_component(component),
             component=component,
-            tracer_provider=tracer_provider,
+            tracer_provider=tracer_provider if tracing_enabled else None,
             meter_provider=meter_provider,
-            trace_exporter=selected_span_exporter,
-            metric_reader=selected_metric_reader,
+            trace_exporter=selected_span_exporter if tracing_enabled else None,
+            metric_reader=metric_readers[0] if metric_readers else None,
             excluded_urls=excluded_urls(),
         )
         if app is not None:
@@ -160,11 +227,15 @@ def configure_test_exporters(
 def reset_observability_for_tests() -> None:
     """Clear the shared observability runtime and test exporters."""
 
-    global _STATE, _TEST_SPAN_EXPORTER, _TEST_METRIC_READER
+    global _PROMETHEUS_SERVER, _STATE, _TEST_SPAN_EXPORTER, _TEST_METRIC_READER
     with _STATE_LOCK:
         if _STATE is not None:
             with contextlib.suppress(Exception):
                 _STATE.shutdown()
+        if _PROMETHEUS_SERVER is not None:
+            with contextlib.suppress(Exception):
+                _PROMETHEUS_SERVER.shutdown()
+            _PROMETHEUS_SERVER = None
         _STATE = None
         _TEST_SPAN_EXPORTER = None
         _TEST_METRIC_READER = None

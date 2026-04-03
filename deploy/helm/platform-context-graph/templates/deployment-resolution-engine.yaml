@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/component: resolution-engine
 spec:
   replicas: {{ .Values.resolutionEngine.replicas }}
+  revisionHistoryLimit: {{ .Values.resolutionEngine.revisionHistoryLimit }}
   selector:
     matchLabels:
       {{- include "pcg.resolutionEngineSelectorLabels" . | nindent 6 }}
@@ -58,6 +59,7 @@ spec:
               value: {{ .Values.neo4j.uri | quote }}
             {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}
             {{- include "pcg.renderOtelEnv" (dict "Values" .Values "component" "resolution-engine") | nindent 12 }}
+            {{- include "pcg.renderPrometheusEnv" . | nindent 12 }}
             - name: NEO4J_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -69,6 +71,12 @@ spec:
                   name: {{ .Values.neo4j.auth.secretName }}
                   key: {{ .Values.neo4j.auth.passwordKey }}
             {{- include "pcg.renderEnvMap" .Values.env | nindent 12 }}
+          ports:
+            {{- if .Values.observability.prometheus.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.observability.prometheus.port }}
+              protocol: TCP
+            {{- end }}
           resources:
             {{- toYaml .Values.resolutionEngine.resources | nindent 12 }}
           volumeMounts:

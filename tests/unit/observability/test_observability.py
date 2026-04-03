@@ -133,6 +133,47 @@ def test_initialize_observability_instruments_fastapi_once_and_honors_exclusions
     assert "/health" in str(instrument_calls[0]["excluded_urls"])
 
 
+def test_initialize_observability_enables_prometheus_metrics_reader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Create a Prometheus reader and start the scrape server when enabled."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+    observability = importlib.import_module("platform_context_graph.observability")
+    state = importlib.import_module("platform_context_graph.observability.state")
+    observability.reset_observability_for_tests()
+
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.setenv("PCG_PROMETHEUS_METRICS_ENABLED", "true")
+    monkeypatch.setenv("PCG_PROMETHEUS_METRICS_PORT", "9470")
+    monkeypatch.setenv("PCG_PROMETHEUS_METRICS_HOST", "0.0.0.0")
+
+    sentinel_reader = InMemoryMetricReader()
+    started_servers: list[tuple[str, int]] = []
+
+    monkeypatch.setattr(
+        state,
+        "_create_prometheus_reader",
+        lambda: sentinel_reader,
+    )
+    monkeypatch.setattr(
+        state,
+        "_start_prometheus_http_server",
+        lambda *, host, port: (
+            started_servers.append((host, port)),
+            object(),
+        )[1],
+    )
+
+    runtime = observability.initialize_observability(component="resolution-engine")
+
+    assert runtime.enabled is True
+    assert started_servers == [("0.0.0.0", 9470)]
+
+
 def test_index_metrics_record_hidden_dir_skips_and_active_repo_counts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

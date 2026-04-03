@@ -40,6 +40,18 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-resolution-engine" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "pcg.apiMetricsServiceName" -}}
+{{- printf "%s-api-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "pcg.ingesterMetricsServiceName" -}}
+{{- printf "%s-ingester-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "pcg.resolutionEngineMetricsServiceName" -}}
+{{- printf "%s-resolution-engine-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "pcg.apiSelectorLabels" -}}
 {{- include "pcg.selectorLabels" . }}
 app.kubernetes.io/component: api
@@ -114,6 +126,17 @@ app.kubernetes.io/component: resolution-engine
   value: {{ join "," .Values.observability.otel.excludedUrls | quote }}
 - name: OTEL_RESOURCE_ATTRIBUTES
   value: {{ include "pcg.joinStringMap" .Values.observability.otel.resourceAttributes | quote }}
+{{- end }}
+{{- end -}}
+
+{{- define "pcg.renderPrometheusEnv" -}}
+{{- if .Values.observability.prometheus.enabled }}
+- name: PCG_PROMETHEUS_METRICS_ENABLED
+  value: "true"
+- name: PCG_PROMETHEUS_METRICS_HOST
+  value: {{ .Values.observability.prometheus.host | quote }}
+- name: PCG_PROMETHEUS_METRICS_PORT
+  value: {{ .Values.observability.prometheus.port | quote }}
 {{- end }}
 {{- end -}}
 
