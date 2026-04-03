@@ -121,10 +121,14 @@ Notes:
 | **`PCG_CONTENT_STORE_ENABLED`** | `true` | Enables PostgreSQL-backed content retrieval and search. Set this to `false` to disable Postgres content access entirely. |
 | **`PCG_CONTENT_STORE_DSN`** | unset | Primary DSN for the PostgreSQL content store. |
 | **`PCG_POSTGRES_DSN`** | unset | Backward-compatible alias for the PostgreSQL content store DSN. |
+| **`PCG_FACT_STORE_DSN`** | unset | Primary DSN for the facts-first PostgreSQL fact store. Falls back to `PCG_CONTENT_STORE_DSN` or `PCG_POSTGRES_DSN` when unset. |
+| **`PCG_FACT_STORE_POOL_MAX_SIZE`** | `4` | Maximum psycopg pool size for the fact-store backend. |
+| **`PCG_FACT_QUEUE_POOL_MAX_SIZE`** | `4` | Maximum psycopg pool size for the facts work-queue backend. |
 
 Notes:
 
 - deployed API runtimes use the PostgreSQL content store directly and return `unavailable` when content is not yet indexed
+- facts-first Git ingestion also uses Postgres for fact persistence and queued projection work
 - local helper flows may still fall back to the workspace or graph cache
 - content search routes and MCP search tools require PostgreSQL and return an error when the content store is disabled
 - portable source retrieval uses `repo_id + relative_path` for files and `entity_id` for content-bearing entities

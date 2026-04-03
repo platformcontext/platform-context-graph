@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -18,9 +20,13 @@ from .schema import FACT_WORK_QUEUE_SCHEMA
 try:
     import psycopg
     from psycopg.rows import dict_row
+    from psycopg_pool import ConnectionPool as _ConnectionPool
 except ImportError:  # pragma: no cover - exercised without optional dependency.
     psycopg = None
     dict_row = None
+    _ConnectionPool = None
+
+_logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> datetime:
@@ -54,15 +60,66 @@ class PostgresFactWorkQueue:
         """Bind the queue to a PostgreSQL DSN."""
 
         self._dsn = dsn
+        self._schema_lock = threading.Lock()
         self._lock = threading.Lock()
+        self._pool: Any | None = None
         self._conn: Any | None = None
+        self._conn_lock: threading.Lock | None = None
         self._initialized = False
+        if psycopg is not None and _ConnectionPool is not None and dsn:
+            try:
+                pool_max = max(4, int(os.getenv("PCG_FACT_QUEUE_POOL_MAX_SIZE", "4")))
+                self._pool = _ConnectionPool(
+                    dsn,
+                    min_size=1,
+                    max_size=pool_max,
+                    max_waiting=max(pool_max * 4, 8),
+                    kwargs={"autocommit": True, "row_factory": dict_row},
+                )
+            except Exception:
+                _logger.warning(
+                    "Fact work queue pool initialization failed; falling back to one connection",
+                    exc_info=True,
+                )
+                self._pool = None
+                self._conn_lock = threading.Lock()
+        else:
+            self._conn_lock = threading.Lock()
 
     @property
     def enabled(self) -> bool:
         """Return whether the queue is usable in the current process."""
 
         return psycopg is not None and bool(self._dsn)
+
+    def _ensure_schema(self, conn: Any) -> None:
+        """Run queue DDL once across the lifetime of the queue."""
+
+        if self._initialized:
+            return
+        with self._schema_lock:
+            if not self._initialized:
+                with conn.cursor() as cursor:
+                    cursor.execute(FACT_WORK_QUEUE_SCHEMA)
+                self._initialized = True
+
+    def _refresh_pool_metrics(self, *, component: str) -> None:
+        """Refresh connection-pool gauges when the queue uses pooling."""
+
+        if self._pool is None:
+            return
+        stats = self._pool.get_stats()
+        get_observability().set_fact_postgres_pool_stats(
+            component=component,
+            pool_name="fact_queue",
+            size=int(stats.get("pool_size", 0)),
+            available=int(stats.get("pool_available", 0)),
+            waiting=int(stats.get("requests_waiting", 0)),
+        )
+    def refresh_pool_metrics(self, *, component: str) -> None:
+        """Refresh queue pool metrics for independent samplers."""
+
+        self._refresh_pool_metrics(component=component)
 
     @contextmanager
     def _cursor(self) -> Any:
@@ -71,15 +128,49 @@ class PostgresFactWorkQueue:
         if not self.enabled:
             raise RuntimeError("fact work queue requires psycopg and a DSN")
 
-        with self._lock:
+        if self._pool is not None:
+            observability = get_observability()
+            component = self._component()
+            acquire_started = time.perf_counter()
+            try:
+                connection_context = self._pool.connection()
+                conn = connection_context.__enter__()
+            except Exception:
+                observability.record_fact_postgres_pool_acquire(
+                    component=component,
+                    pool_name="fact_queue",
+                    outcome="error",
+                    duration_seconds=max(time.perf_counter() - acquire_started, 0.0),
+                )
+                self._refresh_pool_metrics(component=component)
+                raise
+            observability.record_fact_postgres_pool_acquire(
+                component=component,
+                pool_name="fact_queue",
+                outcome="success",
+                duration_seconds=max(time.perf_counter() - acquire_started, 0.0),
+            )
+            self._refresh_pool_metrics(component=component)
+            exc_info: tuple[Any, Any, Any] = (None, None, None)
+            try:
+                self._ensure_schema(conn)
+                with conn.cursor() as cursor:
+                    yield cursor
+            except BaseException as exc:  # pragma: no cover - exercised via callers.
+                exc_info = (type(exc), exc, exc.__traceback__)
+                raise
+            finally:
+                connection_context.__exit__(*exc_info)
+                self._refresh_pool_metrics(component=component)
+            return
+
+        assert self._conn_lock is not None
+        with self._conn_lock:
             if self._conn is None or self._conn.closed:
                 self._conn = psycopg.connect(self._dsn, autocommit=True)
                 self._conn.row_factory = dict_row
                 self._initialized = False
-            if not self._initialized:
-                with self._conn.cursor() as cursor:
-                    cursor.execute(FACT_WORK_QUEUE_SCHEMA)
-                self._initialized = True
+            self._ensure_schema(self._conn)
             with self._conn.cursor() as cursor:
                 yield cursor
 
@@ -398,6 +489,9 @@ class PostgresFactWorkQueue:
     def close(self) -> None:
         """Close the shared PostgreSQL connection if it is open."""
 
+        if self._pool is not None:
+            self._pool.close()
+            self._pool = None
         with self._lock:
             if self._conn is not None and not self._conn.closed:
                 self._conn.close()

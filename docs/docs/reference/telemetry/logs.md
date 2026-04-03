@@ -41,6 +41,7 @@ Logs tell you what actually happened in human terms.
 That makes logs the best signal for:
 
 - debugging retries and fallback behavior
+- understanding why work items were dead-lettered
 - understanding why a repository failed
 - explaining queue churn and compatibility behavior
 - reconstructing operator actions during incidents
@@ -140,4 +141,3 @@ Use logs to confirm whether worker saturation is real or whether the queue/datab
 This page is the operator-facing guide.
 
 For the full logging envelope and platform rules, see the existing [Logging Standard](../logging.md).
-

@@ -50,13 +50,13 @@ flowchart LR
 
 ### Fact Store and Fact Work Queue
 
-- Metrics answer SQL operation rate, latency, queue backlog depth, queue age, and retry churn questions.
+- Metrics answer SQL operation rate, latency, queue backlog depth, queue age, retry churn, dead-letter pressure, and connection-pool saturation questions.
 - Traces show individual `fact_store` and `fact_queue` operations.
 - Logs are still lighter here than in other areas; traces and metrics are currently the stronger source of truth.
 
 ### Resolution Engine
 
-- Metrics answer claim latency, worker activity, work-item outcomes, stage durations, stage output volume, and stage failures by error class.
+- Metrics answer claim latency, worker activity, work-item outcomes, stage durations, stage output volume, stage failures by error class, and retry/dead-letter age.
 - Traces show the lifetime of one projection attempt from claim through graph projection.
 - Logs should be used when stage failures or queue churn need human-readable context.
 
@@ -71,4 +71,3 @@ flowchart LR
 - **Capacity planning:** start with the [Metrics](metrics.md) page.
 - **Latency debugging:** start with the [Traces](traces.md) page.
 - **Incident forensics:** start with the [Logs](logs.md) page.
-

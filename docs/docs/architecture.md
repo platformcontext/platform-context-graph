@@ -111,10 +111,10 @@ serves independently.
 Each primary runtime now has a clear OTEL surface:
 
 - **API runtime**: HTTP and MCP request spans, durations, and error counters
-- **Git collector**: repository queue wait, parse, fact emission, commit/projection, per-repo write timings, and Postgres fact-store operation telemetry
-- **Resolution Engine**: work-item claim latency, empty-poll outcomes, idle-sleep timing, active-worker gauge, fact load spans, per-stage projection timings, stage output counts, and stage failure/error-class counters
-- **Facts layer**: Postgres fact-store and fact-queue spans, durations, operation counters, row-volume counters, and queue backlog gauges
-- **Fact work queue**: observable queue depth and oldest-item age by work type and status for backlog tracking and future autoscaling
+- **Git collector**: repository queue wait, parse, fact emission, commit/projection, per-repo write timings, Postgres fact-store operation telemetry, and fact-store pool saturation telemetry
+- **Resolution Engine**: work-item claim latency, empty-poll outcomes, idle-sleep timing, active-worker gauge, retry age, dead-letter telemetry, fact load spans, per-stage projection timings, stage output counts, and stage failure/error-class counters
+- **Facts layer**: Postgres fact-store and fact-queue spans, durations, operation counters, row-volume counters, pool size/availability/waiting telemetry, and queue backlog gauges
+- **Fact work queue**: independently sampled queue depth and oldest-item age by work type and status for backlog tracking and autoscaling decisions
 
 These signals are designed to support on-call debugging, backlog monitoring,
 performance tuning, and future scale decisions without adding repository or

@@ -48,11 +48,29 @@ Each metric entry includes:
 - Description: MCP request latency.
 - How to leverage: Watch for tail-latency regressions in AI-driven workflows.
 
+### `pcg_mcp_request_errors_total`
+
+- Type: Counter
+- Description: Count of MCP requests that completed with an error outcome.
+- How to leverage: Alert on tool-serving instability separately from HTTP API health.
+
 ### `pcg_mcp_tool_calls_total`
 
 - Type: Counter
 - Description: Total MCP tool invocations.
 - How to leverage: Use it to identify the busiest tool families and to explain backend load spikes caused by agent traffic.
+
+### `pcg_mcp_tool_duration_seconds`
+
+- Type: Histogram
+- Description: End-to-end latency of individual MCP tool calls.
+- How to leverage: Use this to pinpoint whether MCP latency is broad request overhead or concentrated in specific tool families.
+
+### `pcg_mcp_tool_errors_total`
+
+- Type: Counter
+- Description: MCP tool failures grouped by tool name and error outcome.
+- How to leverage: Use it to identify unstable tools before they show up as broad MCP request regressions.
 
 ## Git Collector And Indexing
 
@@ -68,6 +86,18 @@ Each metric entry includes:
 - Description: End-to-end indexing run latency.
 - How to leverage: The top-line measure for “did the ingest pipeline get slower?”
 
+### `pcg_index_repositories_total`
+
+- Type: Counter
+- Description: Count of repositories processed during indexing runs.
+- How to leverage: Use with run duration to normalize throughput by repository volume instead of raw wall-clock time.
+
+### `pcg_index_checkpoints_total`
+
+- Type: Counter
+- Description: Count of indexing checkpoint lifecycle events.
+- How to leverage: Use this to detect resume-heavy runs, checkpoint churn, or unexpected restart behavior.
+
 ### `pcg_index_active_runs`
 
 - Type: Gauge
@@ -79,6 +109,12 @@ Each metric entry includes:
 - Type: Gauge
 - Description: Current number of repositories in flight during indexing.
 - How to leverage: Compare against configured worker counts to see whether the pipeline is actually saturated.
+
+### `pcg_index_checkpoint_pending_repositories`
+
+- Type: Gauge
+- Description: Number of repositories still pending inside a checkpointed run.
+- How to leverage: This is the cleanest “how much ingest work is left?” signal when resume/checkpoint mode is active.
 
 ### `pcg_index_repository_duration_seconds`
 
@@ -103,6 +139,48 @@ Each metric entry includes:
 - Type: Gauge
 - Description: Number of in-flight file parse tasks.
 - How to leverage: Helps distinguish “workers are idle” from “workers are saturated.”
+
+### `pcg_hidden_dirs_skipped_total`
+
+- Type: Counter
+- Description: Count of hidden directories skipped during discovery.
+- How to leverage: Useful when file-count drift or unexpectedly small snapshots might be explained by ignore behavior rather than parser regressions.
+
+### `pcg_index_lock_contention_skips_total`
+
+- Type: Counter
+- Description: Count of indexing attempts skipped because a repo lock was already held.
+- How to leverage: Use this to detect operational overlap or scheduling issues rather than treating reduced throughput as a parser/database problem.
+
+### `pcg_ingester_scan_requests_total`
+
+- Type: Counter
+- Description: Count of ingester scan-loop requests for repository discovery/sync.
+- How to leverage: Use this to separate sync cadence from actual indexing throughput.
+
+### `pcg_index_repo_graph_write_duration_seconds`
+
+- Type: Histogram
+- Description: Per-repository graph-write latency within indexing.
+- How to leverage: Use it to separate parse bottlenecks from graph persistence bottlenecks.
+
+### `pcg_index_repo_content_write_duration_seconds`
+
+- Type: Histogram
+- Description: Per-repository content-store write latency within indexing.
+- How to leverage: Useful when the content store becomes the slow tail instead of graph projection.
+
+### `pcg_index_fallback_resolution_total`
+
+- Type: Counter
+- Description: Count of fallback symbol/call resolution outcomes during indexing.
+- How to leverage: Rising fallback rates often indicate quality drift that can later become performance waste or incorrect edges.
+
+### `pcg_index_ambiguous_resolution_total`
+
+- Type: Counter
+- Description: Count of ambiguous resolution outcomes during indexing.
+- How to leverage: Use this as a semantic-quality metric when tuning call and relationship resolution.
 
 ## Facts-First Pipeline
 
@@ -171,6 +249,54 @@ Each metric entry includes:
 - Type: Counter
 - Description: Total rows returned by queue snapshot or queue read operations.
 - How to leverage: Useful for sizing and for understanding whether queue scans are still cheap as volume grows.
+
+### `pcg_fact_postgres_pool_size`
+
+- Type: Gauge
+- Description: Current configured connection count for the fact-store or fact-queue psycopg pool.
+- How to leverage: Confirms whether the service is actually running with the pool size you intended before you start blaming Postgres or worker count.
+
+### `pcg_fact_postgres_pool_available`
+
+- Type: Gauge
+- Description: Current number of immediately available connections in the fact-store or fact-queue pool.
+- How to leverage: If this stays near zero while backlog or latency rises, the service is connection-starved rather than compute-starved.
+
+### `pcg_fact_postgres_pool_in_use`
+
+- Type: Gauge
+- Description: Current number of borrowed connections in the fact-store or fact-queue pool.
+- How to leverage: Use it with `pcg_fact_postgres_pool_waiting` to decide whether to increase pool size or reduce concurrent workers.
+
+### `pcg_fact_postgres_pool_waiting`
+
+- Type: Gauge
+- Description: Current number of callers waiting for a fact-store or fact-queue pool connection.
+- How to leverage: This is the clearest pool-saturation metric. If it rises, you are already contending on Postgres access before queue age fully shows it.
+
+### `pcg_fact_postgres_pool_acquire_duration_seconds`
+
+- Type: Histogram
+- Description: Time spent waiting to borrow a connection from the fact-store or fact-queue pool.
+- How to leverage: Use this to distinguish “slow SQL” from “slow connection acquisition.”
+
+### `pcg_fact_queue_retry_age_seconds`
+
+- Type: Histogram
+- Description: Age of a retried work item when it is claimed again.
+- How to leverage: Rising retry age means retry traffic is starving behind fresh work or a bottleneck is preventing retries from making progress.
+
+### `pcg_fact_queue_dead_letters_total`
+
+- Type: Counter
+- Description: Count of work items sent to terminal failed state after exhausting retry attempts.
+- How to leverage: This is the top-line dead-letter signal for the facts-first pipeline and should page quickly if it rises unexpectedly.
+
+### `pcg_fact_queue_dead_letter_age_seconds`
+
+- Type: Histogram
+- Description: Age of a work item when it becomes terminally failed.
+- How to leverage: Use it to decide whether work is failing fast because of bad inputs or failing late after expensive wasted retries.
 
 ## Resolution Engine
 
@@ -272,6 +398,26 @@ Each metric entry includes:
 - Description: Count of content requests that fell back from Postgres to the workspace.
 - How to leverage: Use to detect when the content store is incomplete or unhealthy.
 
+## Host And Runtime Capacity
+
+### `pcg_process_rss_bytes`
+
+- Type: Gauge
+- Description: Current resident memory of the running process.
+- How to leverage: Use this for memory-right-sizing and to detect runaway service growth before the container is OOM-killed.
+
+### `pcg_cgroup_memory_bytes`
+
+- Type: Gauge
+- Description: Current cgroup memory usage in bytes.
+- How to leverage: Use this as the container-level memory truth during autoscaling and production incident response.
+
+### `pcg_cgroup_memory_limit_bytes`
+
+- Type: Gauge
+- Description: Configured cgroup memory limit in bytes.
+- How to leverage: Pair this with `pcg_cgroup_memory_bytes` to compute headroom and identify when memory pressure, not CPU, should drive scaling or tuning.
+
 ## Tuning Recipes
 
 ### Autoscaling The Resolution Engine
@@ -294,8 +440,10 @@ Use these together:
 - `pcg_fact_store_rows_total`
 - `pcg_fact_queue_operation_duration_seconds`
 - `pcg_fact_queue_depth`
+- `pcg_fact_postgres_pool_waiting`
+- `pcg_fact_postgres_pool_acquire_duration_seconds`
 
-If rows per second drops while queue age rises, the fact store or queue is the likely bottleneck.
+If rows per second drops while queue age rises, the fact store or queue is the likely bottleneck. If pool waiting or acquire duration also rises, fix connection saturation before tuning SQL itself.
 
 ### Tuning Neo4j Projection
 
@@ -308,4 +456,3 @@ Use these together:
 - `pcg_neo4j_query_duration_seconds`
 
 If stage output is flat but duration rises, look at graph batch size, Cypher cost, or database contention.
-

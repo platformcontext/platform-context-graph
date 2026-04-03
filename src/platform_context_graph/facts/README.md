@@ -29,7 +29,9 @@ Operational visibility for this package now includes:
 - fact work-item lifecycle counters
 - Postgres fact-store operation spans, counters, durations, and row-volume metrics
 - Postgres fact-queue operation spans, counters, durations, and row-volume metrics
+- fact-store and fact-queue pool size, availability, in-use, waiting, and acquire-duration telemetry when psycopg pooling is enabled
 - facts queue depth and oldest-item age gauges when the Postgres queue backend is used
+- retry-age and dead-letter telemetry for fact work items processed through the Resolution Engine
 
 This package should continue to grow as new collectors emit source observations
 before graph projection.

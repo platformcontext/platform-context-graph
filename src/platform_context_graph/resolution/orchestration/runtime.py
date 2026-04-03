@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import threading
 import time
 from collections.abc import Callable
 
@@ -12,6 +14,12 @@ from platform_context_graph.observability import initialize_observability
 from .engine import project_work_item
 
 ProjectorFn = Callable[[FactWorkItemRow], None]
+
+
+def _utc_now() -> datetime:
+    """Return the current UTC timestamp."""
+
+    return datetime.now(tz=timezone.utc)
 
 
 def _refresh_queue_metrics(queue: object) -> None:
@@ -34,6 +42,29 @@ def _refresh_queue_metrics(queue: object) -> None:
             status=row.status,
             age_seconds=row.oldest_age_seconds,
         )
+    refresh_pool_metrics = getattr(queue, "refresh_pool_metrics", None)
+    if callable(refresh_pool_metrics):
+        refresh_pool_metrics(component="resolution-engine")
+
+
+def run_queue_metrics_sampler_once(*, queue: object) -> None:
+    """Sample queue depth and pool metrics independently of work processing."""
+
+    _refresh_queue_metrics(queue)
+
+
+def _run_queue_metrics_sampler(
+    *,
+    queue: object,
+    stop_event: threading.Event,
+    interval_seconds: float,
+) -> None:
+    """Refresh queue metrics on an independent cadence until stopped."""
+
+    while not stop_event.is_set():
+        run_queue_metrics_sampler_once(queue=queue)
+        if stop_event.wait(max(interval_seconds, 0.1)):
+            return
 
 
 def run_resolution_iteration(
@@ -42,6 +73,7 @@ def run_resolution_iteration(
     projector: ProjectorFn = project_work_item,
     lease_owner: str,
     lease_ttl_seconds: int,
+    max_attempts: int = 3,
 ) -> bool:
     """Claim and process at most one resolution work item.
 
@@ -98,6 +130,18 @@ def run_resolution_iteration(
             outcome="claimed",
             duration_seconds=claim_duration,
         )
+        work_item_age_seconds: float | None = None
+        if work_item.created_at is not None:
+            work_item_age_seconds = max(
+                (_utc_now() - work_item.created_at).total_seconds(),
+                0.0,
+            )
+        if work_item.attempt_count > 1 and work_item_age_seconds is not None:
+            observability.record_fact_queue_retry_age(
+                component="resolution-engine",
+                work_type=work_item.work_type,
+                age_seconds=work_item_age_seconds,
+            )
         observability.set_resolution_workers_active(
             component="resolution-engine",
             active_count=1,
@@ -105,11 +149,19 @@ def run_resolution_iteration(
         try:
             projector(work_item)
         except Exception as exc:
+            terminal = work_item.attempt_count >= max_attempts
             queue.fail_work_item(
                 work_item_id=work_item.work_item_id,
                 error_message=str(exc),
-                terminal=False,
+                terminal=terminal,
             )
+            if terminal:
+                observability.record_fact_queue_dead_letter(
+                    component="resolution-engine",
+                    work_type=work_item.work_type,
+                    error_class=type(exc).__name__,
+                    age_seconds=work_item_age_seconds,
+                )
             _refresh_queue_metrics(queue)
             observability.record_resolution_work_item(
                 component="resolution-engine",
@@ -140,7 +192,9 @@ def start_resolution_engine(
     queue: object,
     lease_owner: str = "resolution-engine",
     lease_ttl_seconds: int = 60,
+    max_attempts: int = 3,
     idle_sleep_seconds: float = 1.0,
+    queue_metrics_refresh_seconds: float = 15.0,
     run_once: bool = False,
     projector: ProjectorFn = project_work_item,
     sleep_fn: Callable[[float], None] = time.sleep,
@@ -158,21 +212,41 @@ def start_resolution_engine(
     """
 
     initialize_observability(component="resolution-engine")
-    while True:
-        processed = run_resolution_iteration(
-            queue=queue,
-            projector=projector,
-            lease_owner=lease_owner,
-            lease_ttl_seconds=lease_ttl_seconds,
+    sampler_stop = threading.Event()
+    sampler_thread: threading.Thread | None = None
+    if not run_once:
+        sampler_thread = threading.Thread(
+            target=_run_queue_metrics_sampler,
+            kwargs={
+                "queue": queue,
+                "stop_event": sampler_stop,
+                "interval_seconds": queue_metrics_refresh_seconds,
+            },
+            name="pcg-resolution-queue-metrics",
+            daemon=True,
         )
-        if run_once:
-            return
-        if not processed:
-            sleep_started = time.perf_counter()
-            try:
-                sleep_fn(idle_sleep_seconds)
-            finally:
-                get_observability().record_resolution_idle_sleep(
-                    component="resolution-engine",
-                    duration_seconds=max(time.perf_counter() - sleep_started, 0.0),
-                )
+        sampler_thread.start()
+    try:
+        while True:
+            processed = run_resolution_iteration(
+                queue=queue,
+                projector=projector,
+                lease_owner=lease_owner,
+                lease_ttl_seconds=lease_ttl_seconds,
+                max_attempts=max_attempts,
+            )
+            if run_once:
+                return
+            if not processed:
+                sleep_started = time.perf_counter()
+                try:
+                    sleep_fn(idle_sleep_seconds)
+                finally:
+                    get_observability().record_resolution_idle_sleep(
+                        component="resolution-engine",
+                        duration_seconds=max(time.perf_counter() - sleep_started, 0.0),
+                    )
+    finally:
+        sampler_stop.set()
+        if sampler_thread is not None:
+            sampler_thread.join(timeout=max(queue_metrics_refresh_seconds, 0.1) * 2)

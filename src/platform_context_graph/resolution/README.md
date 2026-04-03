@@ -30,3 +30,5 @@ Observability expectations for this package:
 - child spans for fact load, fact projection, relationship projection, workload projection, and platform projection
 - work-item success/failure counters and duration histograms
 - fact-load counters and stage-duration histograms for tuning and backlog triage
+- retry-age and dead-letter telemetry so exhausted work is visible to on-call responders
+- independent queue sampling so backlog and pool saturation remain visible even during idle periods
