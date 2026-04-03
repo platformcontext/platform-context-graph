@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Sequence
 
-from ..tools.graph_builder_platforms import (
+from ..resolution.platforms import (
     extract_terraform_platform_name,
     infer_terraform_platform_kind,
 )

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Sequence
 
 from ..observability import get_observability
-from ..tools.graph_builder_platforms import infer_gitops_platform_id
+from ..resolution.platforms import infer_gitops_platform_id
 from .evidence_argocd_support import (
     append_matched_evidence,
     argocd_source_references_content_aware,

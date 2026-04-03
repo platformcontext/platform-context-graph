@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..observability import trace_query
-from ..tools.languages.templated_detection import infer_content_metadata
+from ..parsers.languages.templated_detection import infer_content_metadata
 from .postgres_support import append_array_filter, snippet_for_match
 
 __all__ = [
