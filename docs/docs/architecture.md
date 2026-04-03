@@ -47,7 +47,7 @@ graph TD
 | **HTTP API** | OpenAPI-backed surface for automation and service-to-service use. |
 | **Query Layer** | Entity-first query model shared by CLI, MCP, and HTTP. |
 | **Collectors** | Source-specific discovery and indexing support. Git is the current canonical collector family. |
-| **Parsers** | Parser registry, language parsers, raw-text handling, capability specs, and SCIP helpers. |
+| **Parsers** | Parser registry, language parsers, raw-text handling, capability specs, and SCIP parser/runtime helpers. |
 | **Graph Layer** | Canonical schema and graph persistence helpers. |
 | **Resolution** | Workload and platform materialization after graph writes. |
 | **Database Layer** | Graph storage. Neo4j is the canonical backend for deployed services. |
@@ -88,6 +88,7 @@ The source package is organized by responsibility under `src/platform_context_gr
 - `collectors/` — source-specific collection logic
 - `graph/` — canonical graph schema and persistence helpers
 - `parsers/` — parser registry, raw-text support, parser capabilities, and SCIP
+- `platform/` — shared platform/runtime primitives such as dependency rules, package resolution, and automation-family inference
 - `query/` — shared read/query layer
 - `resolution/` — workload and platform materialization helpers
 - `runtime/` — runtime role management, ingester, and status helpers

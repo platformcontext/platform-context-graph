@@ -76,7 +76,10 @@ async def build_graph_from_path_async(
             get_config_value_fn("SCIP_INDEXER") or "false"
         ).lower() == "true"
         if scip_enabled:
-            from ...tools.scip_indexer import detect_project_lang, is_scip_available
+            from ...parsers.scip.indexer import (
+                detect_project_lang,
+                is_scip_available,
+            )
 
             scip_langs_str = (
                 get_config_value_fn("SCIP_LANGUAGES")

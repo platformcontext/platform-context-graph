@@ -305,19 +305,19 @@ def test_pre_scan_for_imports_includes_c_java_ruby_and_csharp_together(
     )
 
     monkeypatch.setattr(
-        "platform_context_graph.tools.languages.c.pre_scan_c",
+        "platform_context_graph.parsers.languages.c.pre_scan_c",
         lambda files, _parser: {"c": [str(path) for path in files]},
     )
     monkeypatch.setattr(
-        "platform_context_graph.tools.languages.java.pre_scan_java",
+        "platform_context_graph.parsers.languages.java.pre_scan_java",
         lambda files, _parser: {"java": [str(path) for path in files]},
     )
     monkeypatch.setattr(
-        "platform_context_graph.tools.languages.ruby.pre_scan_ruby",
+        "platform_context_graph.parsers.languages.ruby.pre_scan_ruby",
         lambda files, _parser: {"ruby": [str(path) for path in files]},
     )
     monkeypatch.setattr(
-        "platform_context_graph.tools.languages.csharp.pre_scan_csharp",
+        "platform_context_graph.parsers.languages.csharp.pre_scan_csharp",
         lambda files, _parser: {"csharp": [str(path) for path in files]},
     )
 

@@ -18,7 +18,7 @@ PlatformContextGraph keeps the importable Python package under `src/platform_con
 | `mcp/` | MCP server, transport, tool registry, and handler wiring |
 | `observability/` | OTEL bootstrap, runtime state, metrics, and instrumentation helpers |
 | `parsers/` | parser registry, raw-text parsing, parser capabilities, language parsers, and SCIP |
-| `platform/` | Phase 1 placeholder for shared platform/runtime primitives |
+| `platform/` | Shared platform/runtime primitives such as dependency rules, package resolution, and runtime-family inference |
 | `query/` | shared read/query services used by CLI, MCP, and HTTP |
 | `resolution/` | workload/platform materialization and future shared resolution logic |
 | `relationships/` | evidence-backed repo relationship discovery, resolution, persistence, and projection |
@@ -97,9 +97,9 @@ and post-index materialization into clearer boundaries:
 - `collectors/git/`: repository discovery, `.gitignore`, parse workers, path indexing, finalize helpers, and parse execution
 - `parsers/registry.py`: canonical parser registry and worker-friendly parse entrypoints
 - `parsers/raw_text.py`: raw-text parser support for searchable non-code artifacts
-- `parsers/languages/`: canonical language parser entrypoints that have already moved
+- `parsers/languages/`: canonical language parser entrypoints and support modules
 - `parsers/capabilities/`: parser capability catalog, models, validation, and packaged specs
-- `parsers/scip/`: SCIP indexing helpers
+- `parsers/scip/`: SCIP parser, runtime helpers, and indexing orchestration
 - `graph/schema/`: graph schema creation
 - `graph/persistence/`: graph write helpers, batching, content dual-write, commit orchestration, and worker support
 - `resolution/workloads/` and `resolution/platforms.py`: workload and platform materialization after graph writes
@@ -148,6 +148,8 @@ The `platform/` boundary is still small in Phase 1, but it now owns shared
 cross-cutting primitives that do not belong to one collector or one runtime:
 
 - `platform/dependency_catalog.py`: built-in dependency and cache directory exclusion rules
+- `platform/package_resolver.py`: local package path discovery across Python, npm, Go, Java, Ruby, PHP, C/C++, and Dart ecosystems
+- `platform/automation_families.py`: shared automation runtime-family inference used by query enrichers
 
 For infrastructure parsing, YAML-family handlers are separated by domain instead of hiding everything in one monolithic file. For example, Kubernetes manifests, Argo CD, Crossplane, Helm, and Kustomize each have their own focused parser module.
 

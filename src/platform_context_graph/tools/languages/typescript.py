@@ -1,3 +1,3 @@
-"""Compatibility exports for the TypeScript parser pilot move."""
+"""Compatibility exports for the relocated typescript parser module."""
 
 from platform_context_graph.parsers.languages.typescript import *  # noqa: F403

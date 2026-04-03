@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from ...tools.scip_indexer import ScipIndexParser, ScipIndexer
+from .indexer import ScipIndexParser, ScipIndexer
 
 
 def _supplement_scip_file_data(

@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ...tools.runtime_automation_families import infer_automation_runtime_families
+from ...platform.automation_families import infer_automation_runtime_families
 from .content_enrichment_support import (
     flatten_string_values,
     load_yaml_path,

@@ -29,57 +29,57 @@ _LANGUAGE_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
         "platform_context_graph.parsers.languages.javascript",
         "JavascriptTreeSitterParser",
     ),
-    "go": ("platform_context_graph.tools.languages.go", "GoTreeSitterParser"),
+    "go": ("platform_context_graph.parsers.languages.go", "GoTreeSitterParser"),
     "typescript": (
         "platform_context_graph.parsers.languages.typescript",
         "TypescriptTreeSitterParser",
     ),
-    "cpp": ("platform_context_graph.tools.languages.cpp", "CppTreeSitterParser"),
-    "rust": ("platform_context_graph.tools.languages.rust", "RustTreeSitterParser"),
-    "c": ("platform_context_graph.tools.languages.c", "CTreeSitterParser"),
-    "java": ("platform_context_graph.tools.languages.java", "JavaTreeSitterParser"),
-    "ruby": ("platform_context_graph.tools.languages.ruby", "RubyTreeSitterParser"),
+    "cpp": ("platform_context_graph.parsers.languages.cpp", "CppTreeSitterParser"),
+    "rust": ("platform_context_graph.parsers.languages.rust", "RustTreeSitterParser"),
+    "c": ("platform_context_graph.parsers.languages.c", "CTreeSitterParser"),
+    "java": ("platform_context_graph.parsers.languages.java", "JavaTreeSitterParser"),
+    "ruby": ("platform_context_graph.parsers.languages.ruby", "RubyTreeSitterParser"),
     "c_sharp": (
-        "platform_context_graph.tools.languages.csharp",
+        "platform_context_graph.parsers.languages.csharp",
         "CSharpTreeSitterParser",
     ),
-    "php": ("platform_context_graph.tools.languages.php", "PhpTreeSitterParser"),
+    "php": ("platform_context_graph.parsers.languages.php", "PhpTreeSitterParser"),
     "kotlin": (
-        "platform_context_graph.tools.languages.kotlin",
+        "platform_context_graph.parsers.languages.kotlin",
         "KotlinTreeSitterParser",
     ),
     "scala": (
-        "platform_context_graph.tools.languages.scala",
+        "platform_context_graph.parsers.languages.scala",
         "ScalaTreeSitterParser",
     ),
     "swift": (
-        "platform_context_graph.tools.languages.swift",
+        "platform_context_graph.parsers.languages.swift",
         "SwiftTreeSitterParser",
     ),
     "haskell": (
-        "platform_context_graph.tools.languages.haskell",
+        "platform_context_graph.parsers.languages.haskell",
         "HaskellTreeSitterParser",
     ),
-    "dart": ("platform_context_graph.tools.languages.dart", "DartTreeSitterParser"),
-    "perl": ("platform_context_graph.tools.languages.perl", "PerlTreeSitterParser"),
+    "dart": ("platform_context_graph.parsers.languages.dart", "DartTreeSitterParser"),
+    "perl": ("platform_context_graph.parsers.languages.perl", "PerlTreeSitterParser"),
     "elixir": (
-        "platform_context_graph.tools.languages.elixir",
+        "platform_context_graph.parsers.languages.elixir",
         "ElixirTreeSitterParser",
     ),
     "groovy": (
-        "platform_context_graph.tools.languages.groovy",
+        "platform_context_graph.parsers.languages.groovy",
         "GroovyTreeSitterParser",
     ),
     "hcl": (
-        "platform_context_graph.tools.languages.hcl_terraform",
+        "platform_context_graph.parsers.languages.hcl_terraform",
         "HCLTerraformParser",
     ),
     "json": (
-        "platform_context_graph.tools.languages.json_config",
+        "platform_context_graph.parsers.languages.json_config",
         "JSONConfigTreeSitterParser",
     ),
     "dockerfile": (
-        "platform_context_graph.tools.languages.dockerfile",
+        "platform_context_graph.parsers.languages.dockerfile",
         "DockerfileTreeSitterParser",
     ),
 }
@@ -139,7 +139,7 @@ _PRE_SCAN_HANDLER_GROUPS: tuple[tuple[tuple[str, ...], tuple[str, str]], ...] = 
             "pre_scan_javascript",
         ),
     ),
-    ((".go",), ("platform_context_graph.tools.languages.go", "pre_scan_go")),
+    ((".go",), ("platform_context_graph.parsers.languages.go", "pre_scan_go")),
     (
         (".ts", ".cts", ".mts"),
         (
@@ -156,33 +156,36 @@ _PRE_SCAN_HANDLER_GROUPS: tuple[tuple[tuple[str, ...], tuple[str, str]], ...] = 
     ),
     (
         (".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh"),
-        ("platform_context_graph.tools.languages.cpp", "pre_scan_cpp"),
+        ("platform_context_graph.parsers.languages.cpp", "pre_scan_cpp"),
     ),
-    ((".rs",), ("platform_context_graph.tools.languages.rust", "pre_scan_rust")),
-    ((".c",), ("platform_context_graph.tools.languages.c", "pre_scan_c")),
-    ((".java",), ("platform_context_graph.tools.languages.java", "pre_scan_java")),
-    ((".rb",), ("platform_context_graph.tools.languages.ruby", "pre_scan_ruby")),
+    ((".rs",), ("platform_context_graph.parsers.languages.rust", "pre_scan_rust")),
+    ((".c",), ("platform_context_graph.parsers.languages.c", "pre_scan_c")),
+    ((".java",), ("platform_context_graph.parsers.languages.java", "pre_scan_java")),
+    ((".rb",), ("platform_context_graph.parsers.languages.ruby", "pre_scan_ruby")),
     (
         (".cs", ".csx"),
-        ("platform_context_graph.tools.languages.csharp", "pre_scan_csharp"),
+        ("platform_context_graph.parsers.languages.csharp", "pre_scan_csharp"),
     ),
     (
         (".kt",),
-        ("platform_context_graph.tools.languages.kotlin", "pre_scan_kotlin"),
+        ("platform_context_graph.parsers.languages.kotlin", "pre_scan_kotlin"),
     ),
     (
         (".scala", ".sc"),
-        ("platform_context_graph.tools.languages.scala", "pre_scan_scala"),
+        ("platform_context_graph.parsers.languages.scala", "pre_scan_scala"),
     ),
     (
         (".swift",),
-        ("platform_context_graph.tools.languages.swift", "pre_scan_swift"),
+        ("platform_context_graph.parsers.languages.swift", "pre_scan_swift"),
     ),
-    ((".dart",), ("platform_context_graph.tools.languages.dart", "pre_scan_dart")),
-    ((".pl", ".pm"), ("platform_context_graph.tools.languages.perl", "pre_scan_perl")),
+    ((".dart",), ("platform_context_graph.parsers.languages.dart", "pre_scan_dart")),
+    (
+        (".pl", ".pm"),
+        ("platform_context_graph.parsers.languages.perl", "pre_scan_perl"),
+    ),
     (
         (".ex", ".exs"),
-        ("platform_context_graph.tools.languages.elixir", "pre_scan_elixir"),
+        ("platform_context_graph.parsers.languages.elixir", "pre_scan_elixir"),
     ),
 )
 
@@ -305,7 +308,7 @@ def build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
     Returns:
         A mapping of file extensions to parser instances.
     """
-    from ..tools.languages.yaml_infra import InfraYAMLParser
+    from .languages.yaml_infra import InfraYAMLParser
 
     parsers: dict[str, Any] = {}
     for extension, language_name in _TREE_SITTER_PARSER_EXTENSIONS:
