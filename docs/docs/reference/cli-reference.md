@@ -26,6 +26,7 @@ Remote mode facts for this release:
 - It is available for a limited set of query, status, bundle-upload, and admin commands.
 - Remote `find` and `analyze` commands do not support `--visual`.
 - `pcg admin reindex` queues a reindex request for the ingester to execute. The API process does not do the full reindex work inline.
+- `pcg admin facts replay` replays dead-lettered facts-first work items back to `pending`. It requires at least one selector so operators do not accidentally replay the entire failed set.
 
 Hidden internal runtime commands exist for service containers, but this page documents the public CLI surface.
 
@@ -112,6 +113,7 @@ These options apply at the root command level.
 | Command | Purpose | Remote-aware |
 | :--- | :--- | :--- |
 | `pcg admin reindex` | Queue a remote ingester reindex request. | Yes |
+| `pcg admin facts replay` | Replay failed facts-first work items through the admin API. | Yes |
 | `pcg bundle export <file>` | Export the current graph to a `.pcg` bundle. | No |
 | `pcg bundle import <file>` | Import a `.pcg` bundle into the local database. | No |
 | `pcg bundle load <name-or-path>` | Load a local or registry bundle. | No |
@@ -180,6 +182,7 @@ Remote mode is available for:
 - `pcg index-status`
 - `pcg workspace status`
 - `pcg admin reindex`
+- `pcg admin facts replay`
 - `pcg bundle upload`
 - `pcg find name`
 - `pcg find pattern`
@@ -230,6 +233,7 @@ Then you can run:
 pcg workspace status --profile qa
 pcg find name handle_payment --profile qa
 pcg admin reindex --profile qa
+pcg admin facts replay --profile qa --work-item-id fact-work-123
 ```
 
 ### Remote mode examples
@@ -250,6 +254,18 @@ Queue a full workspace rebuild on a deployed ingester:
 
 ```bash
 pcg admin reindex --profile qa --ingester repository --scope workspace --force
+```
+
+Replay one dead-lettered facts-first work item:
+
+```bash
+pcg admin facts replay --profile qa --work-item-id fact-work-123
+```
+
+Replay failed facts-first work for one repository:
+
+```bash
+pcg admin facts replay --profile qa --repository-id repository:r_payments --limit 25
 ```
 
 Run remote query commands:

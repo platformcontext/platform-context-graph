@@ -57,6 +57,7 @@ Then use the profile:
 pcg workspace status --profile qa
 pcg find name handle_payment --profile qa
 pcg admin reindex --profile qa
+pcg admin facts replay --profile qa --work-item-id fact-work-123
 ```
 
 ## What works remotely today
@@ -66,6 +67,7 @@ These commands support remote mode:
 - `pcg index-status`
 - `pcg workspace status`
 - `pcg admin reindex`
+- `pcg admin facts replay`
 - `pcg bundle upload`
 - `pcg find name`
 - `pcg find pattern`

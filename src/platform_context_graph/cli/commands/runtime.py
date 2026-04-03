@@ -10,7 +10,8 @@ import typer
 from rich.table import Table
 
 from ..remote import remote_mode_requested
-from ..remote_commands import render_remote_workspace_status, run_remote_admin_reindex
+from ..remote_commands import render_remote_workspace_status
+from .runtime_admin import register_admin_commands
 
 
 def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
@@ -40,6 +41,7 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
 
     admin_app = typer.Typer(help="Administrative local and remote operations")
     app.add_typer(admin_app, name="admin")
+    register_admin_commands(main_module, admin_app)
 
     internal_app = typer.Typer(help="Internal runtime commands")
     app.add_typer(internal_app, name="internal")
@@ -234,51 +236,6 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
             )
             return
         main_module.workspace_status_helper()
-
-    @admin_app.command("reindex")
-    def admin_reindex(
-        service_url: str | None = typer.Option(
-            None,
-            "--service-url",
-            help="Base URL of the remote PlatformContextGraph HTTP service.",
-        ),
-        api_key: str | None = typer.Option(
-            None,
-            "--api-key",
-            help="Bearer token for the remote PlatformContextGraph HTTP service.",
-        ),
-        profile: str | None = typer.Option(
-            None,
-            "--profile",
-            help="Named remote profile used to resolve service URL and token.",
-        ),
-        ingester: str = typer.Option(
-            "repository",
-            "--ingester",
-            help="Ingester name to target for the remote reindex request.",
-        ),
-        scope: str = typer.Option(
-            "workspace",
-            "--scope",
-            help="Reindex scope. Currently only 'workspace' is supported.",
-        ),
-        force: bool = typer.Option(
-            True,
-            "--force/--no-force",
-            help="Whether the ingester should invalidate the existing checkpoint before rebuilding.",
-        ),
-    ) -> None:
-        """Queue a remote ingester reindex request through the admin API."""
-
-        run_remote_admin_reindex(
-            main_module,
-            service_url=service_url,
-            api_key=api_key,
-            profile=profile,
-            ingester=ingester,
-            scope=scope,
-            force=force,
-        )
 
     @workspace_app.command("watch")
     def workspace_watch(
