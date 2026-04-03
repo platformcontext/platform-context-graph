@@ -180,6 +180,8 @@ docker compose up --build
 
 - Developer guide: [DEVELOPING.md](DEVELOPING.md) — parser architecture, adding languages, integration testing, spec contracts
 - Docs site source: [docs/](docs/)
+- Architecture: [docs/docs/architecture.md](docs/docs/architecture.md)
+- Source layout: [docs/docs/reference/source-layout.md](docs/docs/reference/source-layout.md)
 - Quickstart: [docs/docs/getting-started/quickstart.md](docs/docs/getting-started/quickstart.md)
 - MCP Guide: [docs/docs/guides/mcp-guide.md](docs/docs/guides/mcp-guide.md)
 - Relationship Graph Examples: [docs/docs/guides/relationship-graphs.md](docs/docs/guides/relationship-graphs.md)

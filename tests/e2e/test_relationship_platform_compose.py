@@ -107,9 +107,9 @@ def _assert_repository_relationship(
         source=source,
         target=target,
     )
-    assert count >= 1, (
-        f"Expected repository relationship {source} -[{relationship_type}]-> {target}"
-    )
+    assert (
+        count >= 1
+    ), f"Expected repository relationship {source} -[{relationship_type}]-> {target}"
 
 
 def _assert_platform_relationship(
@@ -145,9 +145,9 @@ def _assert_platform_relationship(
         """,
         **params,
     )
-    assert count >= 1, (
-        f"Expected platform relationship {source} -[{relationship_type}]-> {target}"
-    )
+    assert (
+        count >= 1
+    ), f"Expected platform relationship {source} -[{relationship_type}]-> {target}"
 
 
 def _assert_workload_relationship(
@@ -212,9 +212,9 @@ def _assert_instance_platform_relationship(
         """,
         **params,
     )
-    assert count >= 1, (
-        f"Expected instance/platform relationship {source_instance} -[{relationship_type}]-> {target}"
-    )
+    assert (
+        count >= 1
+    ), f"Expected instance/platform relationship {source_instance} -[{relationship_type}]-> {target}"
 
 
 def _assert_github_actions_expectations(
@@ -396,9 +396,7 @@ def test_relationship_platform_compose_flow(
     )
     dependency_names = {
         str(row.get("name") or "")
-        for row in (service_story.get("deployment_overview") or {}).get(
-            "dependencies"
-        )
+        for row in (service_story.get("deployment_overview") or {}).get("dependencies")
         or []
         if isinstance(row, dict)
     }

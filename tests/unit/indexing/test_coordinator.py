@@ -228,7 +228,9 @@ def test_parse_executor_scope_omits_recycle_threshold_when_unset(
     monkeypatch.setenv("PCG_REPO_FILE_PARSE_MULTIPROCESS", "true")
     monkeypatch.setenv("PCG_PARSE_WORKERS", "3")
     monkeypatch.delenv("PCG_WORKER_MAX_TASKS", raising=False)
-    monkeypatch.setattr(coordinator.multiprocessing, "get_context", lambda method: method)
+    monkeypatch.setattr(
+        coordinator.multiprocessing, "get_context", lambda method: method
+    )
     monkeypatch.setattr(coordinator, "ProcessPoolExecutor", _FakeExecutor)
 
     with coordinator._parse_executor_scope():

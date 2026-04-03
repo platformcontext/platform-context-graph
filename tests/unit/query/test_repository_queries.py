@@ -123,9 +123,10 @@ def test_repository_graph_counts_excludes_class_methods_from_top_level_count() -
         "coalesce(r[$local_path_key], r.path) = $repo_path" in recorded_query["query"]
     )
     assert "[:REPO_CONTAINS]->(file:File)" in recorded_query["query"]
-    assert "[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(fn:Function)" in recorded_query[
-        "query"
-    ]
+    assert (
+        "[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(fn:Function)"
+        in recorded_query["query"]
+    )
     assert "[:IMPORTS]->(module:Module)" not in recorded_query["query"]
     assert "type(rel) = $imports_rel_type" in recorded_query["query"]
 
@@ -278,7 +279,9 @@ def test_build_repository_context_uses_repo_contains_for_file_queries(
     result = build_repository_context(RecordingSession(), "demo-repo")
 
     assert "error" not in result
-    assert any("MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)" in q for q in recorded_queries)
+    assert any(
+        "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)" in q for q in recorded_queries
+    )
     assert any(
         "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)\n              -[:CONTAINS]->(fn:Function)"
         in q

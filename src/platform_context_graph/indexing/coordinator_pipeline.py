@@ -12,10 +12,10 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from platform_context_graph.tools.graph_builder_indexing import merge_import_maps
+from platform_context_graph.collectors.git.indexing import merge_import_maps
 from platform_context_graph.utils.debug_log import emit_log_call
 
-from platform_context_graph.tools.graph_builder_persistence_worker import (
+from platform_context_graph.graph.persistence.worker import (
     get_commit_worker_connection_params,
 )
 

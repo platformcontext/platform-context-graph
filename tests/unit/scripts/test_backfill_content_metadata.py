@@ -54,7 +54,9 @@ class _FakeStore:
                 for row in rows
                 if (row["repo_id"], row["relative_path"]) > last_seen
             ]
-        limit = batch_size if remaining_limit is None else min(batch_size, remaining_limit)
+        limit = (
+            batch_size if remaining_limit is None else min(batch_size, remaining_limit)
+        )
         return rows[:limit]
 
     def update_file_metadata(self, updates: list[object]) -> int:
@@ -119,7 +121,9 @@ def test_run_backfill_updates_file_and_entity_metadata() -> None:
     assert result.scanned_files == 2
     assert result.updated_files == 2
     assert result.updated_entities == 2
-    assert store.file_updates[("repository:r_chart", "chart/templates/_helpers.tpl")] == {
+    assert store.file_updates[
+        ("repository:r_chart", "chart/templates/_helpers.tpl")
+    ] == {
         "artifact_type": "helm_helper_tpl",
         "template_dialect": "go_template",
         "iac_relevant": True,
@@ -271,8 +275,12 @@ def test_cli_reports_summary_and_accepts_repo_id_filter(
             updated_entities=4,
         )
 
-    monkeypatch.setattr(module, "get_postgres_content_provider", lambda: _FakeProvider())
-    monkeypatch.setattr(module, "PostgresBackfillStore", lambda provider: ("store", provider))
+    monkeypatch.setattr(
+        module, "get_postgres_content_provider", lambda: _FakeProvider()
+    )
+    monkeypatch.setattr(
+        module, "PostgresBackfillStore", lambda provider: ("store", provider)
+    )
     monkeypatch.setattr(module, "run_backfill", fake_run_backfill)
 
     exit_code = module.main(["--repo-id", "repository:r_test", "--limit", "3"])

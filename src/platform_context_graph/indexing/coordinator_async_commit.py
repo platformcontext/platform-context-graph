@@ -31,7 +31,7 @@ from .commit_timing import CommitTimingResult
 from .coordinator_models import RepositorySnapshot
 from .coordinator_storage import _graph_store_adapter
 
-from ..tools.graph_builder_persistence_worker import commit_batch_in_process
+from ..graph.persistence.worker import commit_batch_in_process
 
 logger = logging.getLogger(__name__)
 

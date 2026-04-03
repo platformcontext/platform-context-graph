@@ -135,7 +135,9 @@ def run_remote_admin_reindex(
     main_module.console.print(
         f"[bold cyan]Remote Reindex:[/bold cyan] {payload.get('status', 'unknown')}"
     )
-    main_module.console.print(f"[cyan]Request token:[/cyan] {payload.get('request_token')}")
+    main_module.console.print(
+        f"[cyan]Request token:[/cyan] {payload.get('request_token')}"
+    )
     main_module.console.print(
         f"[cyan]Scope:[/cyan] {payload.get('scope')} "
         f"[dim](force={payload.get('force')})[/dim]"

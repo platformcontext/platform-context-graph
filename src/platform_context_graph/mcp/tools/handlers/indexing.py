@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ....tools.package_resolver import get_local_package_path
+from ....platform.package_resolver import get_local_package_path
 from ....utils.debug_log import debug_log
 
 

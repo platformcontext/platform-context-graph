@@ -86,15 +86,17 @@ def build_catalog_from_graph(driver: Any) -> list[CatalogEntry]:
 
     graph_checkouts = [
         RepositoryCheckout(
-            checkout_id=row["repo_id"], logical_repo_id=row["repo_id"],
-            repo_name=row["repo_name"], repo_slug=row.get("repo_slug"),
-            remote_url=row.get("remote_url"), checkout_path=None,
+            checkout_id=row["repo_id"],
+            logical_repo_id=row["repo_id"],
+            repo_name=row["repo_name"],
+            repo_slug=row.get("repo_slug"),
+            remote_url=row.get("remote_url"),
+            checkout_path=None,
         )
         for row in rows
         if row.get("repo_id") and row.get("repo_name")
     ]
     return build_catalog(graph_checkouts)
-
 
 
 def aliases_for_checkout(checkout: RepositoryCheckout) -> set[str]:

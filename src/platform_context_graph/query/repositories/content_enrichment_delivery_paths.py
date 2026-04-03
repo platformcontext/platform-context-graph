@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...tools.runtime_platform_families import format_platform_kind_label
+from ...resolution.platform_families import format_platform_kind_label
 
 _GITOPS_DELIVERY_MODES = frozenset({"eks_gitops", "eks_gitops_rollback"})
 _DIRECT_DELIVERY_MODES = frozenset(
@@ -286,7 +286,9 @@ def _automation_repository_names(rows: list[dict[str, Any]]) -> list[str]:
     )
 
 
-def _github_actions_automation_repositories(github_actions: dict[str, Any]) -> list[str]:
+def _github_actions_automation_repositories(
+    github_actions: dict[str, Any],
+) -> list[str]:
     """Return ordered unique automation repositories from a GitHub Actions block."""
 
     return _ordered_unique(

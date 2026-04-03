@@ -9,7 +9,7 @@ import typing
 import pathspec
 from watchdog.events import FileSystemEventHandler
 
-from platform_context_graph.tools.graph_builder_indexing_discovery import (
+from platform_context_graph.collectors.git.discovery import (
     discover_index_files,
 )
 from platform_context_graph.utils.debug_log import info_logger

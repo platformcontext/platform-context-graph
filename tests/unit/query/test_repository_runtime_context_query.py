@@ -240,8 +240,14 @@ def test_build_relationship_summary_returns_platforms_deployment_chain_and_limit
         "RUNS_ON",
     }
     assert result["limitations"] == []
-    assert any("[:REPO_CONTAINS]->(f1:File)-[:CONTAINS]->(n1)" in query for query in session.queries)
-    assert not any("[:CONTAINS*]->(f1:File)-[:CONTAINS]->(n1)" in query for query in session.queries)
+    assert any(
+        "[:REPO_CONTAINS]->(f1:File)-[:CONTAINS]->(n1)" in query
+        for query in session.queries
+    )
+    assert not any(
+        "[:CONTAINS*]->(f1:File)-[:CONTAINS]->(n1)" in query
+        for query in session.queries
+    )
 
 
 def test_build_relationship_summary_uses_canonical_provisioning_relationship_name(

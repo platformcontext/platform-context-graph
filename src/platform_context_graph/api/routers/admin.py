@@ -42,6 +42,7 @@ class ReindexRequest(BaseModel):
     scope: str = "workspace"
     force: bool = True
 
+
 _finalization_lock = threading.Lock()
 _finalization_state: dict[str, Any] = {
     "running": False,
@@ -103,7 +104,9 @@ def _load_target_repositories(
     if requested_repo_ids:
         resolved_repo_ids = {record["repo_id"] for record in repo_records}
         missing_repo_ids = [
-            repo_id for repo_id in requested_repo_ids if repo_id not in resolved_repo_ids
+            repo_id
+            for repo_id in requested_repo_ids
+            if repo_id not in resolved_repo_ids
         ]
         if missing_repo_ids:
             raise HTTPException(
@@ -287,8 +290,7 @@ async def refinalize(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Unsupported admin refinalize stages: "
-                + ", ".join(invalid_stages)
+                "Unsupported admin refinalize stages: " + ", ".join(invalid_stages)
             ),
         )
     if payload.repo_ids and "relationship_resolution" in requested_stages:
@@ -311,8 +313,12 @@ async def refinalize(
                 "run_id": _finalization_state.get("run_id"),
                 "stages": _finalization_state.get("stages"),
                 "repo_count": _finalization_state["repo_count"],
-                "targeted_repo_ids": list(_finalization_state.get("targeted_repo_ids") or []),
-                "targeted_repo_count": _finalization_state.get("targeted_repo_count", 0),
+                "targeted_repo_ids": list(
+                    _finalization_state.get("targeted_repo_ids") or []
+                ),
+                "targeted_repo_count": _finalization_state.get(
+                    "targeted_repo_count", 0
+                ),
             }
         _finalization_state.update(
             {

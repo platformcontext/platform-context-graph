@@ -81,17 +81,13 @@ def file_exists(database: Any, repo_id: str, relative_path: str) -> bool:
     )
     db_manager = get_db_manager(database)
     with db_manager.get_driver().session() as session:
-        rows = session.run(
-            query, repo_id=repo_id, relative_path=relative_path
-        ).data()
+        rows = session.run(query, repo_id=repo_id, relative_path=relative_path).data()
     if rows:
         return bool(rows[0].get("exists", False))
     return False
 
 
-def read_file_content(
-    database: Any, repo_id: str, relative_path: str
-) -> str | None:
+def read_file_content(database: Any, repo_id: str, relative_path: str) -> str | None:
     """Read a file's content from the Postgres content store.
 
     Args:
@@ -112,9 +108,7 @@ def read_file_content(
     return None
 
 
-def read_yaml_file(
-    database: Any, repo_id: str, relative_path: str
-) -> dict | None:
+def read_yaml_file(database: Any, repo_id: str, relative_path: str) -> dict | None:
     """Read and parse a YAML file from the content store.
 
     Args:
@@ -132,16 +126,12 @@ def read_yaml_file(
     try:
         parsed = yaml.safe_load(content)
     except yaml.YAMLError:
-        logger.debug(
-            "Failed to parse YAML file %s in repo %s", relative_path, repo_id
-        )
+        logger.debug("Failed to parse YAML file %s in repo %s", relative_path, repo_id)
         return None
     return parsed if isinstance(parsed, dict) else None
 
 
-def read_yaml_document(
-    database: Any, repo_id: str, relative_path: str
-) -> Any | None:
+def read_yaml_document(database: Any, repo_id: str, relative_path: str) -> Any | None:
     """Read and parse a YAML document of any type from the content store.
 
     Unlike :func:`read_yaml_file` which only returns dicts, this accepts any
@@ -163,7 +153,5 @@ def read_yaml_document(
     try:
         return yaml.safe_load(content)
     except yaml.YAMLError:
-        logger.debug(
-            "Failed to parse YAML file %s in repo %s", relative_path, repo_id
-        )
+        logger.debug("Failed to parse YAML file %s in repo %s", relative_path, repo_id)
         return None

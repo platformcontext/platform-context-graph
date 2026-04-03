@@ -147,18 +147,14 @@ def _run_relationship_resolution(
         candidates=candidates,
         resolved=resolved,
     )
-    console.print(
-        f"  [dim]Persisted generation {generation.generation_id}[/dim]"
-    )
+    console.print(f"  [dim]Persisted generation {generation.generation_id}[/dim]")
 
     project_resolved_relationships(
         db_manager=db_manager,
         generation_id=generation.generation_id,
         resolved=resolved,
     )
-    console.print(
-        f"  [dim]Projected {len(resolved)} relationships into Neo4j[/dim]"
-    )
+    console.print(f"  [dim]Projected {len(resolved)} relationships into Neo4j[/dim]")
 
     store.activate_generation(
         scope="repo_dependencies",

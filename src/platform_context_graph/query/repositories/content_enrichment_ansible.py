@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ...tools.runtime_automation_families import infer_automation_runtime_families
+from ...platform.automation_families import infer_automation_runtime_families
 from .content_enrichment_support import (
     flatten_string_values,
     load_yaml_path,
@@ -94,9 +94,7 @@ def extract_ansible_automation_evidence(
 # ── Playbook parsing (shared logic) ────────────────────────────────────
 
 
-def _parse_playbook_row(
-    document: Any, rel_path: str
-) -> dict[str, Any] | None:
+def _parse_playbook_row(document: Any, rel_path: str) -> dict[str, Any] | None:
     """Parse a YAML playbook document into a playbook evidence row."""
 
     if not isinstance(document, list) or not document:
@@ -265,9 +263,7 @@ def _extract_top_level_playbooks_fs(repo_root: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _extract_yaml_var_sets_fs(
-    directory: Path, repo_root: Path
-) -> list[dict[str, Any]]:
+def _extract_yaml_var_sets_fs(directory: Path, repo_root: Path) -> list[dict[str, Any]]:
     """Extract YAML var-set files under one vars directory."""
 
     if not directory.exists():

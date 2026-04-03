@@ -180,7 +180,9 @@ def iter_destination_clusters_content_aware(
 
     yielded: set[str] = set()
     documents = load_yaml_documents_from_text(config_content)
-    sibling_docs = load_sibling_yaml_from_content_store(repo_id, str(config_path.parent))
+    sibling_docs = load_sibling_yaml_from_content_store(
+        repo_id, str(config_path.parent)
+    )
     for document in [*documents, *sibling_docs]:
         for cluster_name in iter_cluster_names_from_document(document):
             if cluster_name in yielded:
@@ -243,7 +245,11 @@ def iter_cluster_names_from_document(node: Any) -> Iterator[str]:
                 destination.get("clusterName"),
                 destination.get("cluster"),
             ):
-                if isinstance(value, str) and value.strip() and value.strip().lower() not in ignored:
+                if (
+                    isinstance(value, str)
+                    and value.strip()
+                    and value.strip().lower() not in ignored
+                ):
                     yield value.strip()
         for key, value in node.items():
             if str(key).lower() in cluster_keys and isinstance(value, str):

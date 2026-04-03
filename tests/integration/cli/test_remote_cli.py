@@ -123,7 +123,11 @@ def test_admin_reindex_posts_remote_request(
     _args, kwargs = mock_request.call_args
     assert kwargs["method"] == "POST"
     assert kwargs["url"] == "https://pcg.example.com/api/v0/admin/reindex"
-    assert kwargs["json"] == {"ingester": "repository", "scope": "workspace", "force": True}
+    assert kwargs["json"] == {
+        "ingester": "repository",
+        "scope": "workspace",
+        "force": True,
+    }
 
 
 @patch("platform_context_graph.cli.remote.requests.request")
@@ -167,9 +171,7 @@ def test_find_name_posts_remote_search_request(
     """Remote find-by-name should query the HTTP search API."""
 
     mock_request.return_value = _Response(
-        {
-            "ranked_results": [{"name": "handle_payment", "entity_type": "Function"}]
-        }
+        {"ranked_results": [{"name": "handle_payment", "entity_type": "Function"}]}
     )
 
     result = runner.invoke(

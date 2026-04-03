@@ -112,7 +112,7 @@ def test_commit_file_batch_to_graph_flushes_incrementally_when_buffer_grows(
         _fake_collect_file_write_data,
     )
     monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence_batch._WRITE_BATCH_FLUSH_ROW_THRESHOLD",
+        "platform_context_graph.graph.persistence.batch_support._WRITE_BATCH_FLUSH_ROW_THRESHOLD",
         3,
     )
 
@@ -187,7 +187,11 @@ def test_commit_file_batch_to_graph_consumes_write_results(monkeypatch) -> None:
         def run(self, _query, parameters=None, **kwargs):
             _ = dict(parameters or {}, **kwargs)
             self.run_calls += 1
-            return _Result(on_consume=lambda: setattr(self, "consume_calls", self.consume_calls + 1))
+            return _Result(
+                on_consume=lambda: setattr(
+                    self, "consume_calls", self.consume_calls + 1
+                )
+            )
 
         def commit(self):
             pass

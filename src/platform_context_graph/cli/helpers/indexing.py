@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from ...indexing.coordinator import describe_index_run
-from ...tools.package_resolver import get_local_package_path
+from ...platform.package_resolver import get_local_package_path
 
 
 def _api():

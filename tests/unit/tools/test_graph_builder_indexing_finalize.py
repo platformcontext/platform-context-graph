@@ -10,7 +10,9 @@ from platform_context_graph.tools.graph_builder_indexing_finalize import (
 )
 
 
-def test_finalize_index_batch_filters_to_requested_stages_and_reports_progress() -> None:
+def test_finalize_index_batch_filters_to_requested_stages_and_reports_progress() -> (
+    None
+):
     """Requested stages should run in order and emit structured progress details."""
 
     calls: list[str] = []

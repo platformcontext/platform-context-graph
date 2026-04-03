@@ -96,7 +96,10 @@ def derive_direct_generic_relationships(
     derived: list[ResolvedRelationship] = []
     for (source_entity_id, target_entity_id), items in sorted(typed_groups.items()):
         generic_key = (source_entity_id, target_entity_id, GENERIC_RELATIONSHIP_TYPE)
-        if generic_key in rejections or (source_entity_id, target_entity_id) in existing_generic_pairs:
+        if (
+            generic_key in rejections
+            or (source_entity_id, target_entity_id) in existing_generic_pairs
+        ):
             continue
         relationship_types = sorted({item.relationship_type for item in items})
         derived.append(
@@ -194,7 +197,8 @@ def derive_platform_chain_dependencies(
                         target_entity_id=target_entity_id,
                         relationship_type=GENERIC_RELATIONSHIP_TYPE,
                         confidence=min(runner.confidence, provisioner.confidence),
-                        evidence_count=runner.evidence_count + provisioner.evidence_count,
+                        evidence_count=runner.evidence_count
+                        + provisioner.evidence_count,
                         rationale=(
                             "Derived compatibility dependency from platform chain: "
                             f"{runner.relationship_type} + {provisioner.relationship_type}"

@@ -15,10 +15,7 @@ def _entrypoint_labels(entrypoints: list[dict[str, Any]]) -> list[str]:
         if not isinstance(row, dict):
             continue
         label = (
-            row.get("hostname")
-            or row.get("path")
-            or row.get("url")
-            or row.get("name")
+            row.get("hostname") or row.get("path") or row.get("url") or row.get("name")
         )
         if isinstance(label, str) and label:
             labels.append(label)
@@ -60,9 +57,7 @@ def build_workload_story_response(
         )
     entrypoint_labels = _entrypoint_labels(entrypoints)
     if entrypoint_labels:
-        story.append(
-            f"Public entrypoints: {human_list(entrypoint_labels, limit=5)}."
-        )
+        story.append(f"Public entrypoints: {human_list(entrypoint_labels, limit=5)}.")
     if cloud_resources:
         story.append(
             f"Depends on cloud resources {human_list([str(row.get('name') or '') for row in cloud_resources if isinstance(row, dict)])}."

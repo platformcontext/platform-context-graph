@@ -7,7 +7,6 @@ from typing import Any
 
 from .otel import Observation
 
-
 _MEMORY_UNSET = -1
 
 

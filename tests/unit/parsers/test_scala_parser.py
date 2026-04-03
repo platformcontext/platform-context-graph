@@ -21,11 +21,11 @@ def scala_parser():
 
 
 def test_parse_object(scala_parser, temp_test_dir):
-    code = '''object Main extends App {
+    code = """object Main extends App {
   val version = "1.0.0"
   def formatVersion: String = s"v$version"
 }
-'''
+"""
     f = temp_test_dir / "Main.scala"
     f.write_text(code)
     result = scala_parser.parse(f)
@@ -36,7 +36,7 @@ def test_parse_object(scala_parser, temp_test_dir):
 
 
 def test_parse_classes(scala_parser, temp_test_dir):
-    code = '''class Person(val name: String, val age: Int) {
+    code = """class Person(val name: String, val age: Int) {
   def greet(): String = s"Hello, I'm $name"
 }
 
@@ -47,7 +47,7 @@ case class Point(x: Double, y: Double) {
     math.sqrt(dx * dx + dy * dy)
   }
 }
-'''
+"""
     f = temp_test_dir / "classes.scala"
     f.write_text(code)
     result = scala_parser.parse(f)
@@ -58,7 +58,7 @@ case class Point(x: Double, y: Double) {
 
 
 def test_parse_traits(scala_parser, temp_test_dir):
-    code = '''sealed trait Shape {
+    code = """sealed trait Shape {
   def area: Double
   def perimeter: Double
 }
@@ -66,7 +66,7 @@ def test_parse_traits(scala_parser, temp_test_dir):
 trait Describable {
   def describe: String
 }
-'''
+"""
     f = temp_test_dir / "traits.scala"
     f.write_text(code)
     result = scala_parser.parse(f)
@@ -77,12 +77,12 @@ trait Describable {
 
 
 def test_parse_functions(scala_parser, temp_test_dir):
-    code = '''object Functional {
+    code = """object Functional {
   def transform[A, B](items: List[A])(f: A => B): List[B] = items.map(f)
   def filter[A](items: List[A])(p: A => Boolean): List[A] = items.filter(p)
   def multiply(a: Int)(b: Int): Int = a * b
 }
-'''
+"""
     f = temp_test_dir / "funcs.scala"
     f.write_text(code)
     result = scala_parser.parse(f)
@@ -93,10 +93,10 @@ def test_parse_functions(scala_parser, temp_test_dir):
 
 
 def test_parse_imports(scala_parser, temp_test_dir):
-    code = '''import scala.collection.mutable
+    code = """import scala.collection.mutable
 import java.util.{List, ArrayList}
 import scala.math._
-'''
+"""
     f = temp_test_dir / "imports.scala"
     f.write_text(code)
     result = scala_parser.parse(f)
@@ -106,12 +106,12 @@ import scala.math._
 
 
 def test_parse_variables(scala_parser, temp_test_dir):
-    code = '''object Config {
+    code = """object Config {
   val version: String = "1.0.0"
   var debug: Boolean = false
   lazy val data: List[Int] = List(1, 2, 3)
 }
-'''
+"""
     f = temp_test_dir / "vars.scala"
     f.write_text(code)
     result = scala_parser.parse(f)
@@ -121,13 +121,13 @@ def test_parse_variables(scala_parser, temp_test_dir):
 
 
 def test_parse_function_calls(scala_parser, temp_test_dir):
-    code = '''object Demo {
+    code = """object Demo {
   def run(): Unit = {
     println("hello")
     List(1, 2, 3).map(_ * 2).filter(_ > 2)
   }
 }
-'''
+"""
     f = temp_test_dir / "calls.scala"
     f.write_text(code)
     result = scala_parser.parse(f)
@@ -137,12 +137,12 @@ def test_parse_function_calls(scala_parser, temp_test_dir):
 
 
 def test_parse_abstract_class(scala_parser, temp_test_dir):
-    code = '''abstract class Service(val name: String) {
+    code = """abstract class Service(val name: String) {
   def start(): Unit
   def stop(): Unit
   def isRunning: Boolean
 }
-'''
+"""
     f = temp_test_dir / "abstract.scala"
     f.write_text(code)
     result = scala_parser.parse(f)
@@ -153,12 +153,12 @@ def test_parse_abstract_class(scala_parser, temp_test_dir):
 
 
 def test_parse_companion_object(scala_parser, temp_test_dir):
-    code = '''class Person(val name: String)
+    code = """class Person(val name: String)
 
 object Person {
   def apply(name: String): Person = new Person(name)
 }
-'''
+"""
     f = temp_test_dir / "companion.scala"
     f.write_text(code)
     result = scala_parser.parse(f)
@@ -183,7 +183,7 @@ def test_parse_function_class_context(scala_parser, temp_test_dir):
 
 
 def test_result_structure(scala_parser, temp_test_dir):
-    code = 'object Minimal\n'
+    code = "object Minimal\n"
     f = temp_test_dir / "minimal.scala"
     f.write_text(code)
     result = scala_parser.parse(f)

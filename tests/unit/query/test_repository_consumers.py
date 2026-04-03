@@ -21,7 +21,9 @@ def test_extract_consumer_repositories_excludes_control_plane_matches(
 
     monkeypatch.setattr(
         "platform_context_graph.query.content.search_file_content",
-        lambda _database, pattern: {"matches": matches if pattern == "api-node-boats" else []},
+        lambda _database, pattern: {
+            "matches": matches if pattern == "api-node-boats" else []
+        },
     )
 
     repositories = {

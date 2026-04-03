@@ -1,6 +1,6 @@
-"""Public API for parser capability spec loading, validation, and rendering."""
+"""Compatibility exports for the parser capabilities package move."""
 
-from .catalog import (
+from platform_context_graph.parsers.capabilities import (
     expected_generated_language_docs,
     load_language_capability_specs,
     render_feature_matrix,

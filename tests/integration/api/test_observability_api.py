@@ -136,12 +136,12 @@ def test_create_app_logs_json_request_records_with_request_id(
     assert response.headers["X-Request-ID"] == "req-http-123"
 
     records = [
-        json.loads(line)
-        for line in buffer.getvalue().splitlines()
-        if line.strip()
+        json.loads(line) for line in buffer.getvalue().splitlines() if line.strip()
     ]
     request_records = [
-        record for record in records if record.get("event_name") == "http.request.completed"
+        record
+        for record in records
+        if record.get("event_name") == "http.request.completed"
     ]
     assert request_records
     record = request_records[-1]
@@ -198,12 +198,12 @@ def test_create_app_logs_json_request_records_without_otel_export(
 
     assert response.status_code == 200
     request_records = [
-        json.loads(line)
-        for line in buffer.getvalue().splitlines()
-        if line.strip()
+        json.loads(line) for line in buffer.getvalue().splitlines() if line.strip()
     ]
     request_records = [
-        record for record in request_records if record.get("event_name") == "http.request.completed"
+        record
+        for record in request_records
+        if record.get("event_name") == "http.request.completed"
     ]
     assert request_records
     record = request_records[-1]

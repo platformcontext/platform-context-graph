@@ -30,9 +30,7 @@ class ContentFileEntry:
     template_dialect: str | None = None
     iac_relevant: bool = False
     commit_sha: str | None = None
-    indexed_at: datetime = field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
-    )
+    indexed_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
     def __post_init__(self) -> None:
         """Normalize stored file content for PostgreSQL text columns."""
@@ -73,9 +71,7 @@ class ContentEntityEntry:
     iac_relevant: bool = False
     start_byte: int | None = None
     end_byte: int | None = None
-    indexed_at: datetime = field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
-    )
+    indexed_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
 
     def __post_init__(self) -> None:
         """Normalize cached entity snippets for PostgreSQL text columns."""

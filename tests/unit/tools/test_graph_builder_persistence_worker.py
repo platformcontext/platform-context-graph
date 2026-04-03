@@ -12,13 +12,13 @@ from unittest.mock import MagicMock, Mock, call, patch
 import pytest
 
 from platform_context_graph.tools.graph_builder_persistence import BatchCommitResult
-from platform_context_graph.tools.graph_builder_persistence_worker import (
+from platform_context_graph.graph.persistence.worker import (
     commit_batch_in_process,
     get_commit_worker_connection_params,
 )
 
 # Reset process-level cached driver between tests to ensure isolation.
-import platform_context_graph.tools.graph_builder_persistence_worker as _worker_mod
+import platform_context_graph.graph.persistence.worker as _worker_mod
 
 
 @pytest.fixture(autouse=True)
@@ -63,14 +63,10 @@ class TestCommitBatchInProcessPicklability:
 class TestCommitBatchInProcessDelegation:
     """Verify commit_batch_in_process creates driver and delegates correctly."""
 
+    @patch("platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver")
+    @patch("platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph")
     @patch(
-        "platform_context_graph.tools.graph_builder_persistence_worker.neo4j.GraphDatabase.driver"
-    )
-    @patch(
-        "platform_context_graph.tools.graph_builder_persistence_worker.commit_file_batch_to_graph"
-    )
-    @patch(
-        "platform_context_graph.tools.graph_builder_persistence_worker._init_postgres_content_provider"
+        "platform_context_graph.graph.persistence.worker._init_postgres_content_provider"
     )
     def test_commit_batch_in_process_creates_driver_and_delegates(
         self,
@@ -132,14 +128,10 @@ class TestCommitBatchInProcessDelegation:
         # Assert - result returned correctly
         assert result == expected_result
 
+    @patch("platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver")
+    @patch("platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph")
     @patch(
-        "platform_context_graph.tools.graph_builder_persistence_worker.neo4j.GraphDatabase.driver"
-    )
-    @patch(
-        "platform_context_graph.tools.graph_builder_persistence_worker.commit_file_batch_to_graph"
-    )
-    @patch(
-        "platform_context_graph.tools.graph_builder_persistence_worker._init_postgres_content_provider"
+        "platform_context_graph.graph.persistence.worker._init_postgres_content_provider"
     )
     def test_commit_batch_in_process_passes_adaptive_config(
         self,
@@ -179,12 +171,8 @@ class TestCommitBatchInProcessDelegation:
 class TestDriverCaching:
     """Verify Neo4j driver is cached across batches in the same process."""
 
-    @patch(
-        "platform_context_graph.tools.graph_builder_persistence_worker.neo4j.GraphDatabase.driver"
-    )
-    @patch(
-        "platform_context_graph.tools.graph_builder_persistence_worker.commit_file_batch_to_graph"
-    )
+    @patch("platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver")
+    @patch("platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph")
     def test_driver_cached_across_batches(
         self,
         mock_commit_fn: Mock,
@@ -216,12 +204,8 @@ class TestDriverCaching:
         # Driver not closed (cached for process lifetime)
         mock_driver.close.assert_not_called()
 
-    @patch(
-        "platform_context_graph.tools.graph_builder_persistence_worker.neo4j.GraphDatabase.driver"
-    )
-    @patch(
-        "platform_context_graph.tools.graph_builder_persistence_worker.commit_file_batch_to_graph"
-    )
+    @patch("platform_context_graph.graph.persistence.worker.neo4j.GraphDatabase.driver")
+    @patch("platform_context_graph.graph.persistence.worker.commit_file_batch_to_graph")
     def test_driver_not_closed_on_error(
         self,
         mock_commit_fn: Mock,

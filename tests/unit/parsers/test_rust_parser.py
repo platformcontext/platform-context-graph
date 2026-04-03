@@ -21,7 +21,7 @@ def rust_parser():
 
 
 def test_parse_functions(rust_parser, temp_test_dir):
-    code = '''pub fn greet(name: &str) -> String {
+    code = """pub fn greet(name: &str) -> String {
     format!("Hello, {}!", name)
 }
 
@@ -36,7 +36,7 @@ pub fn divide(a: f64, b: f64) -> Result<f64, String> {
         Ok(a / b)
     }
 }
-'''
+"""
     f = temp_test_dir / "funcs.rs"
     f.write_text(code)
     result = rust_parser.parse(f)
@@ -50,13 +50,13 @@ pub fn divide(a: f64, b: f64) -> Result<f64, String> {
 
 
 def test_parse_structs(rust_parser, temp_test_dir):
-    code = '''pub struct Point {
+    code = """pub struct Point {
     pub x: f64,
     pub y: f64,
 }
 
 pub struct Color(pub u8, pub u8, pub u8);
-'''
+"""
     f = temp_test_dir / "structs.rs"
     f.write_text(code)
     result = rust_parser.parse(f)
@@ -67,7 +67,7 @@ pub struct Color(pub u8, pub u8, pub u8);
 
 
 def test_parse_enums(rust_parser, temp_test_dir):
-    code = '''pub enum Shape {
+    code = """pub enum Shape {
     Circle { radius: f64 },
     Rectangle { width: f64, height: f64 },
     Triangle(f64, f64, f64),
@@ -77,7 +77,7 @@ pub enum AppError {
     NotFound(String),
     Internal(Box<dyn std::error::Error>),
 }
-'''
+"""
     f = temp_test_dir / "enums.rs"
     f.write_text(code)
     result = rust_parser.parse(f)
@@ -88,7 +88,7 @@ pub enum AppError {
 
 
 def test_parse_traits(rust_parser, temp_test_dir):
-    code = '''pub trait Describable {
+    code = """pub trait Describable {
     fn describe(&self) -> String;
 }
 
@@ -98,7 +98,7 @@ pub trait Greetable {
         format!("Hello, {}!", self.name())
     }
 }
-'''
+"""
     f = temp_test_dir / "traits.rs"
     f.write_text(code)
     result = rust_parser.parse(f)
@@ -111,10 +111,10 @@ pub trait Greetable {
 
 
 def test_parse_imports(rust_parser, temp_test_dir):
-    code = '''use std::fmt;
+    code = """use std::fmt;
 use std::collections::HashMap;
 use crate::models::User;
-'''
+"""
     f = temp_test_dir / "imports.rs"
     f.write_text(code)
     result = rust_parser.parse(f)
@@ -124,13 +124,13 @@ use crate::models::User;
 
 
 def test_parse_function_calls(rust_parser, temp_test_dir):
-    code = '''fn main() {
+    code = """fn main() {
     let s = String::from("hello");
     println!("{}", s);
     let v = vec![1, 2, 3];
     v.len();
 }
-'''
+"""
     f = temp_test_dir / "calls.rs"
     f.write_text(code)
     result = rust_parser.parse(f)
@@ -140,7 +140,7 @@ def test_parse_function_calls(rust_parser, temp_test_dir):
 
 
 def test_parse_impl_block(rust_parser, temp_test_dir):
-    code = '''struct Point {
+    code = """struct Point {
     x: f64,
     y: f64,
 }
@@ -154,7 +154,7 @@ impl Point {
         ((self.x - other.x).powi(2) + (self.y - other.y).powi(2)).sqrt()
     }
 }
-'''
+"""
     f = temp_test_dir / "impl.rs"
     f.write_text(code)
     result = rust_parser.parse(f)
@@ -165,14 +165,14 @@ impl Point {
 
 
 def test_parse_generics(rust_parser, temp_test_dir):
-    code = '''pub fn largest<T: PartialOrd>(items: &[T]) -> Option<&T> {
+    code = """pub fn largest<T: PartialOrd>(items: &[T]) -> Option<&T> {
     items.iter().reduce(|a, b| if a >= b { a } else { b })
 }
 
 pub struct Wrapper<T> {
     value: T,
 }
-'''
+"""
     f = temp_test_dir / "generics.rs"
     f.write_text(code)
     result = rust_parser.parse(f)

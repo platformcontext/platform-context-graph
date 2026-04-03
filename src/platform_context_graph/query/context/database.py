@@ -210,7 +210,9 @@ def _merge_repository_context_into_workload_response(
             response["instances"] = []
     if response.get("instance") is None:
         existing_instances = list(response.get("instances") or [])
-        response["instances"] = _dedupe_entity_refs(existing_instances + derived_instances)
+        response["instances"] = _dedupe_entity_refs(
+            existing_instances + derived_instances
+        )
     return response
 
 
@@ -466,4 +468,3 @@ def db_workload_context(
     if requested_as:
         response["requested_as"] = requested_as
     return response
-

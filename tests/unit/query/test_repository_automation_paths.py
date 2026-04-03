@@ -30,9 +30,7 @@ def _make_fs_discovery_mocks(
     """Build mock functions that serve indexed_file_discovery from a local dir."""
 
     all_files = sorted(
-        str(p.relative_to(repo_root))
-        for p in repo_root.rglob("*")
-        if p.is_file()
+        str(p.relative_to(repo_root)) for p in repo_root.rglob("*") if p.is_file()
     )
 
     def discover_repo_files(
@@ -55,9 +53,7 @@ def _make_fs_discovery_mocks(
             results = [f for f in results if regex.search(f)]
         return sorted(results)
 
-    def read_file_content(
-        _database: Any, rid: str, relative_path: str
-    ) -> str | None:
+    def read_file_content(_database: Any, rid: str, relative_path: str) -> str | None:
         if rid != repo_id:
             return None
         path = repo_root / relative_path
@@ -65,9 +61,7 @@ def _make_fs_discovery_mocks(
             return None
         return path.read_text(encoding="utf-8", errors="ignore")
 
-    def read_yaml_file(
-        _database: Any, rid: str, relative_path: str
-    ) -> dict | None:
+    def read_yaml_file(_database: Any, rid: str, relative_path: str) -> dict | None:
         content = read_file_content(_database, rid, relative_path)
         if content is None:
             return None
@@ -84,7 +78,9 @@ def _make_fs_discovery_mocks(
     }
 
 
-def _patch_indexed_discovery(monkeypatch, repo_root: Path, repo_id: str = _SENTINEL_REPO_ID):
+def _patch_indexed_discovery(
+    monkeypatch, repo_root: Path, repo_id: str = _SENTINEL_REPO_ID
+):
     """Monkeypatch indexed_file_discovery in content_enrichment_workflows."""
 
     mocks = _make_fs_discovery_mocks(repo_root, repo_id)
@@ -152,9 +148,10 @@ def test_build_controller_driven_paths_combines_jenkins_ansible_and_runtime_hint
     assert workflow_hints[0]["relative_path"] == "Jenkinsfile"
     assert workflow_hints[0]["pipeline_calls"] == jenkins_metadata["pipeline_calls"]
     assert workflow_hints[0]["shell_commands"] == jenkins_metadata["shell_commands"]
-    assert workflow_hints[0]["ansible_playbook_hints"] == jenkins_metadata[
-        "ansible_playbook_hints"
-    ]
+    assert (
+        workflow_hints[0]["ansible_playbook_hints"]
+        == jenkins_metadata["ansible_playbook_hints"]
+    )
     assert ansible_hints["playbooks"][0]["relative_path"] == "deploy.yml"
     assert ansible_hints["runtime_hints"] == [
         "wordpress_website_fleet",
@@ -229,9 +226,7 @@ def test_build_controller_driven_paths_resolves_ansible_entry_points_from_jenkin
     assert ansible_hints["shell_wrappers"] == [
         {
             "relative_path": "scripts/deploy.sh",
-            "commands": [
-                "ansible-playbook deploy.yml -i inventory/dynamic_hosts.py"
-            ],
+            "commands": ["ansible-playbook deploy.yml -i inventory/dynamic_hosts.py"],
             "playbooks": ["deploy.yml"],
             "inventories": ["inventory/dynamic_hosts.py"],
         }

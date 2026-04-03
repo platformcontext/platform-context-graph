@@ -223,7 +223,7 @@ class TestHCLTerraformParser:
         """Parse locals blocks into individual local definitions."""
         f = temp_test_dir / "locals.tf"
         f.write_text(
-            'locals {\n'
+            "locals {\n"
             '  service_name = "payments-api"\n'
             "  replica_count = 3\n"
             "}\n"

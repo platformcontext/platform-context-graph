@@ -210,7 +210,9 @@ class Service with Loggable {
     f.write_text(code)
     result = dart_parser.parse(f)
 
-    log_calls = [call for call in result.get("function_calls", []) if call["name"] == "log"]
+    log_calls = [
+        call for call in result.get("function_calls", []) if call["name"] == "log"
+    ]
     assert len(log_calls) == 1
     assert log_calls[0]["context"][0] == "start"
     assert log_calls[0]["class_context"] == "Service"

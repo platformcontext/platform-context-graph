@@ -143,9 +143,7 @@ class _FakeWorkspaceProvider:
             "relative_path": relative_path,
             "start_line": start_line,
             "end_line": end_line,
-            "lines": [
-                {"line_number": start_line, "content": "workspace fallback"}
-            ],
+            "lines": [{"line_number": start_line, "content": "workspace fallback"}],
             "source_backend": "workspace",
         }
 
@@ -265,7 +263,9 @@ def test_get_entity_content_falls_back_to_workspace_when_postgres_misses() -> No
     assert workspace.entity_calls == ["content-entity:e_ab12cd34ef56"]
 
 
-def test_get_file_content_returns_not_indexed_when_workspace_fallback_is_disabled() -> None:
+def test_get_file_content_returns_not_indexed_when_workspace_fallback_is_disabled() -> (
+    None
+):
     """Return an explicit not-indexed response when Postgres misses and no workspace exists."""
 
     postgres = _FakePostgresProvider(file_result=None)

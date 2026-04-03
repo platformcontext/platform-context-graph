@@ -5,7 +5,9 @@ from platform_context_graph.query.repositories.content_enrichment_delivery_paths
 )
 
 
-def test_summarize_delivery_paths_falls_back_to_context_when_commands_are_missing() -> None:
+def test_summarize_delivery_paths_falls_back_to_context_when_commands_are_missing() -> (
+    None
+):
     result = summarize_delivery_paths(
         delivery_workflows={
             "github_actions": {

@@ -21,7 +21,7 @@ def go_parser():
 
 
 def test_parse_functions(go_parser, temp_test_dir):
-    code = '''package main
+    code = """package main
 
 import "fmt"
 
@@ -39,7 +39,7 @@ func Divide(a, b float64) (float64, error) {
     }
     return a / b, nil
 }
-'''
+"""
     f = temp_test_dir / "funcs.go"
     f.write_text(code)
     result = go_parser.parse(f)
@@ -54,7 +54,7 @@ func Divide(a, b float64) (float64, error) {
 
 
 def test_parse_structs(go_parser, temp_test_dir):
-    code = '''package main
+    code = """package main
 
 type Point struct {
     X, Y float64
@@ -64,7 +64,7 @@ type Config struct {
     Host string
     Port int
 }
-'''
+"""
     f = temp_test_dir / "structs.go"
     f.write_text(code)
     result = go_parser.parse(f)
@@ -77,7 +77,7 @@ type Config struct {
 
 
 def test_parse_interfaces(go_parser, temp_test_dir):
-    code = '''package main
+    code = """package main
 
 type Reader interface {
     Read(p []byte) (n int, err error)
@@ -91,7 +91,7 @@ type Service interface {
     Start() error
     Stop() error
 }
-'''
+"""
     f = temp_test_dir / "ifaces.go"
     f.write_text(code)
     result = go_parser.parse(f)
@@ -103,7 +103,7 @@ type Service interface {
 
 
 def test_parse_methods(go_parser, temp_test_dir):
-    code = '''package main
+    code = """package main
 
 import "fmt"
 
@@ -119,7 +119,7 @@ func (p *Point) Translate(dx, dy float64) {
     p.X += dx
     p.Y += dy
 }
-'''
+"""
     f = temp_test_dir / "methods.go"
     f.write_text(code)
     result = go_parser.parse(f)
@@ -130,14 +130,14 @@ func (p *Point) Translate(dx, dy float64) {
 
 
 def test_parse_imports(go_parser, temp_test_dir):
-    code = '''package main
+    code = """package main
 
 import (
     "fmt"
     "os"
     "strings"
 )
-'''
+"""
     f = temp_test_dir / "imports.go"
     f.write_text(code)
     result = go_parser.parse(f)
@@ -147,7 +147,7 @@ import (
 
 
 def test_parse_function_calls(go_parser, temp_test_dir):
-    code = '''package main
+    code = """package main
 
 import "fmt"
 
@@ -155,7 +155,7 @@ func main() {
     fmt.Println("hello")
     fmt.Sprintf("value: %d", 42)
 }
-'''
+"""
     f = temp_test_dir / "calls.go"
     f.write_text(code)
     result = go_parser.parse(f)
@@ -165,7 +165,7 @@ func main() {
 
 
 def test_parse_generics(go_parser, temp_test_dir):
-    code = '''package main
+    code = """package main
 
 type Ordered interface {
     ~int | ~float64 | ~string
@@ -181,7 +181,7 @@ func Min[T Ordered](a, b T) T {
 type Stack[T any] struct {
     items []T
 }
-'''
+"""
     f = temp_test_dir / "generics.go"
     f.write_text(code)
     result = go_parser.parse(f)
@@ -192,7 +192,7 @@ type Stack[T any] struct {
 
 
 def test_parse_package_vars(go_parser, temp_test_dir):
-    code = '''package main
+    code = """package main
 
 var (
     Version   = "1.0.0"
@@ -203,7 +203,7 @@ const (
     MaxRetries = 3
     Timeout    = 30
 )
-'''
+"""
     f = temp_test_dir / "vars.go"
     f.write_text(code)
     result = go_parser.parse(f)
@@ -213,7 +213,7 @@ const (
 
 
 def test_result_structure(go_parser, temp_test_dir):
-    code = 'package main\n'
+    code = "package main\n"
     f = temp_test_dir / "minimal.go"
     f.write_text(code)
     result = go_parser.parse(f)
@@ -232,7 +232,7 @@ def test_parse_empty_file(go_parser, temp_test_dir):
 
 
 def test_parse_closures(go_parser, temp_test_dir):
-    code = '''package main
+    code = """package main
 
 func Counter() func() int {
     count := 0
@@ -241,7 +241,7 @@ func Counter() func() int {
         return count
     }
 }
-'''
+"""
     f = temp_test_dir / "closures.go"
     f.write_text(code)
     result = go_parser.parse(f)

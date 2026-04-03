@@ -90,4 +90,3 @@ def test_get_runtime_status_excludes_reindex_control_fields(monkeypatch) -> None
     assert payload["scan_request_token"] == "scan-123"
     assert "reindex_request_token" not in payload
     assert "reindex_requested_at" not in payload
-

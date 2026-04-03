@@ -20,7 +20,9 @@ class PostgresProviderProtocol(Protocol):
     def delete_repository_content(self, repo_id: str) -> None:
         """Delete cached content for one repository."""
 
-    def get_file_content(self, *, repo_id: str, relative_path: str) -> dict[str, Any] | None:
+    def get_file_content(
+        self, *, repo_id: str, relative_path: str
+    ) -> dict[str, Any] | None:
         """Return cached file content when available."""
 
     def get_entity_content(self, *, entity_id: str) -> dict[str, Any] | None:

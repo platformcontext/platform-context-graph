@@ -26,14 +26,16 @@ def test_repo_sync_loop_degrades_after_manual_reindex_failure(
     monkeypatch.setattr(
         sync,
         "claim_ingester_reindex_request",
-        lambda **_kwargs: {
-            "ingester": "repository",
-            "reindex_request_token": "reindex-123",
-            "requested_force": True,
-            "requested_scope": "workspace",
-        }
-        if not completed_requests
-        else None,
+        lambda **_kwargs: (
+            {
+                "ingester": "repository",
+                "reindex_request_token": "reindex-123",
+                "requested_force": True,
+                "requested_scope": "workspace",
+            }
+            if not completed_requests
+            else None
+        ),
         raising=False,
     )
     monkeypatch.setattr(

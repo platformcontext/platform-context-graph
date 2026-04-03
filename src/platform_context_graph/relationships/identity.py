@@ -8,7 +8,9 @@ from pathlib import Path
 __all__ = ["canonical_checkout_id"]
 
 
-def canonical_checkout_id(*, logical_repo_id: str, checkout_path: str | Path | None) -> str:
+def canonical_checkout_id(
+    *, logical_repo_id: str, checkout_path: str | Path | None
+) -> str:
     """Build a stable checkout identifier for one logical repository path."""
 
     normalized_path = (

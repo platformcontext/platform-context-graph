@@ -34,7 +34,9 @@ def dedupe_relationship_evidence_facts(
     """Collapse exact duplicate evidence facts while preserving discovery order."""
 
     deduped: list[RelationshipEvidenceFact] = []
-    seen: set[tuple[str, str, str | None, str | None, str | None, str | None, float, str, str]] = set()
+    seen: set[
+        tuple[str, str, str | None, str | None, str | None, str | None, float, str, str]
+    ] = set()
     for fact in evidence_facts:
         key = (
             fact.relationship_type,

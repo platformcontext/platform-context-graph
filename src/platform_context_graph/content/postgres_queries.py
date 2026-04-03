@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..observability import trace_query
-from ..tools.languages.templated_detection import infer_content_metadata
+from ..parsers.languages.templated_detection import infer_content_metadata
 from .postgres_support import append_array_filter, snippet_for_match
 
 __all__ = [
@@ -76,24 +76,39 @@ def get_file_contents_batch(
     }
 
 
-def _resolve_row_metadata(*, relative_path: str, content: str, row: dict[str, Any]) -> dict[str, Any]:
+def _resolve_row_metadata(
+    *, relative_path: str, content: str, row: dict[str, Any]
+) -> dict[str, Any]:
     """Resolve metadata values, inferring them when legacy rows are still null."""
 
-    if not any(row.get(key) is None for key in ("artifact_type", "template_dialect", "iac_relevant")):
+    if not any(
+        row.get(key) is None
+        for key in ("artifact_type", "template_dialect", "iac_relevant")
+    ):
         return {
             "artifact_type": row["artifact_type"],
             "template_dialect": row["template_dialect"],
             "iac_relevant": row["iac_relevant"],
         }
-    inferred = infer_content_metadata(relative_path=Path(relative_path), content=content)
+    inferred = infer_content_metadata(
+        relative_path=Path(relative_path), content=content
+    )
     return {
-        "artifact_type": row["artifact_type"] if row.get("artifact_type") is not None else inferred.artifact_type,
+        "artifact_type": (
+            row["artifact_type"]
+            if row.get("artifact_type") is not None
+            else inferred.artifact_type
+        ),
         "template_dialect": (
             row["template_dialect"]
             if row.get("template_dialect") is not None
             else inferred.template_dialect
         ),
-        "iac_relevant": row["iac_relevant"] if row.get("iac_relevant") is not None else inferred.iac_relevant,
+        "iac_relevant": (
+            row["iac_relevant"]
+            if row.get("iac_relevant") is not None
+            else inferred.iac_relevant
+        ),
     }
 
 
@@ -113,7 +128,9 @@ def _resolve_entity_row_metadata(row: dict[str, Any]) -> dict[str, Any]:
     )
     return {
         "artifact_type": (
-            row["artifact_type"] if row.get("artifact_type") is not None else file_metadata["artifact_type"]
+            row["artifact_type"]
+            if row.get("artifact_type") is not None
+            else file_metadata["artifact_type"]
         ),
         "template_dialect": (
             row["template_dialect"]
@@ -121,7 +138,9 @@ def _resolve_entity_row_metadata(row: dict[str, Any]) -> dict[str, Any]:
             else file_metadata["template_dialect"]
         ),
         "iac_relevant": (
-            row["iac_relevant"] if row.get("iac_relevant") is not None else file_metadata["iac_relevant"]
+            row["iac_relevant"]
+            if row.get("iac_relevant") is not None
+            else file_metadata["iac_relevant"]
         ),
     }
 

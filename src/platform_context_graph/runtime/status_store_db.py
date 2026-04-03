@@ -506,9 +506,7 @@ class PostgresRuntimeStatusStore:
                 {"repo_ids": normalized_repo_ids},
             )
             existing_repo_ids = {
-                row["repo_id"]
-                for row in cursor.fetchall()
-                if row.get("repo_id")
+                row["repo_id"] for row in cursor.fetchall() if row.get("repo_id")
             }
             missing_repo_ids = [
                 repo_id
@@ -518,8 +516,7 @@ class PostgresRuntimeStatusStore:
             if missing_repo_ids:
                 raise ValueError(
                     "Cannot repair finalization status for repositories with missing "
-                    "durable coverage rows: "
-                    + ", ".join(sorted(missing_repo_ids))
+                    "durable coverage rows: " + ", ".join(sorted(missing_repo_ids))
                 )
 
             cursor.execute(

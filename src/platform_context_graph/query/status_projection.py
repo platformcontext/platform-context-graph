@@ -81,9 +81,7 @@ def checkpoint_status_payload(
 
     active_repo = active_repository_from_summary(summary)
     active_finalization = (
-        active_finalization_from_summary(summary)
-        if active_repo is None
-        else None
+        active_finalization_from_summary(summary) if active_repo is None else None
     )
     run_status = str(summary.get("status") or "bootstrap_pending")
     public_status = "indexing" if run_status == "running" else run_status

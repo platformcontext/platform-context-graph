@@ -175,7 +175,9 @@ class Platform(CanonicalEntity):
             provider=_normalize_token(provider),
             environment=_normalize_token(environment),
             region=_normalize_token(region),
-            locator=locator.strip() if locator is not None and locator.strip() else None,
+            locator=(
+                locator.strip() if locator is not None and locator.strip() else None
+            ),
         )
 
 
@@ -226,7 +228,9 @@ def canonical_workload_subject_id(
 ) -> str:
     """Build a canonical workload-subject identifier."""
 
-    normalized_repository_id = repository_id.strip() if repository_id is not None else None
+    normalized_repository_id = (
+        repository_id.strip() if repository_id is not None else None
+    )
     normalized_subject_type = _normalize_token(subject_type) or "none"
     normalized_name = _normalize_token(name) or "none"
     normalized_environment = _normalize_token(environment)

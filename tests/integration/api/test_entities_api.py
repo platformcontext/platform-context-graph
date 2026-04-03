@@ -90,8 +90,7 @@ def test_resolve_entity_request_normalizes_public_type_aliases() -> None:
 
     assert response.status_code == 200
     assert [
-        value.value if hasattr(value, "value") else value
-        for value in calls[0]["types"]
+        value.value if hasattr(value, "value") else value for value in calls[0]["types"]
     ] == [
         "k8s_resource",
         "k8s_resource",

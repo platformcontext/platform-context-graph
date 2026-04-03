@@ -88,7 +88,9 @@ def test_replace_generation_persists_relationship_entities(monkeypatch) -> None:
 
     entity_insert, entity_rows = cursor.executemany.call_args_list[0].args
     assert "INSERT INTO relationship_entities" in entity_insert
-    assert entity_rows[0]["entity_id"] == "platform:ecs:aws:cluster/node10:prod:us-east-1"
+    assert (
+        entity_rows[0]["entity_id"] == "platform:ecs:aws:cluster/node10:prod:us-east-1"
+    )
     assert entity_rows[0]["entity_type"] == "Platform"
     assert entity_rows[0]["repository_id"] is None
     assert entity_rows[0]["subject_type"] is None

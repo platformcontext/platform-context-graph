@@ -24,7 +24,9 @@ def test_fixture_set_names_lists_supported_corpora() -> None:
     assert fixture_set_names() == ("prompt_contract", "relationship_platform")
 
 
-def test_resolve_fixture_set_defaults_to_prompt_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_fixture_set_defaults_to_prompt_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The seed script should keep the historical prompt-contract default."""
 
     monkeypatch.delenv("PCG_E2E_FIXTURE_SET", raising=False)
@@ -36,7 +38,9 @@ def test_resolve_fixture_set_defaults_to_prompt_contract(monkeypatch: pytest.Mon
     assert repositories[0] == "argocd_comprehensive"
 
 
-def test_resolve_fixture_set_supports_relationship_platform(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_fixture_set_supports_relationship_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The new synthetic relationship-platform corpus should be selectable."""
 
     monkeypatch.setenv("PCG_E2E_FIXTURE_SET", "relationship_platform")

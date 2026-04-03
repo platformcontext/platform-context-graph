@@ -6,11 +6,11 @@ import re
 from pathlib import Path
 from typing import Sequence
 
-from ..tools.graph_builder_platforms import (
+from ..resolution.platforms import (
     extract_terraform_platform_name,
     infer_terraform_platform_kind,
 )
-from ..tools.runtime_platform_families import (
+from ..resolution.platform_families import (
     lookup_runtime_family,
     matches_service_module_source,
     terraform_platform_evidence_kind,

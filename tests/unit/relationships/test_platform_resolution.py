@@ -12,7 +12,9 @@ from platform_context_graph.relationships.platform_resolution import (
 )
 
 
-def _resolved_keys(items: list[ResolvedRelationship]) -> set[tuple[str | None, str | None, str]]:
+def _resolved_keys(
+    items: list[ResolvedRelationship],
+) -> set[tuple[str | None, str | None, str]]:
     """Return the stable tuple form used by the mixed-entity assertions."""
 
     return {
@@ -21,7 +23,9 @@ def _resolved_keys(items: list[ResolvedRelationship]) -> set[tuple[str | None, s
     }
 
 
-def test_platform_chain_derives_depends_on_from_runs_on_and_provisions_platform() -> None:
+def test_platform_chain_derives_depends_on_from_runs_on_and_provisions_platform() -> (
+    None
+):
     """RUNS_ON + PROVISIONS_PLATFORM should derive a repo-level compatibility edge."""
 
     _candidates, resolved = resolve_entity_relationships(
@@ -122,7 +126,9 @@ def test_platform_chain_derives_depends_on_for_eks_platforms() -> None:
     }
 
 
-def test_entity_resolver_does_not_emit_generic_dependency_to_platform_entities() -> None:
+def test_entity_resolver_does_not_emit_generic_dependency_to_platform_entities() -> (
+    None
+):
     """Generic compatibility edges should stay repo-to-repo, not repo-to-platform."""
 
     _candidates, resolved = resolve_entity_relationships(
@@ -150,7 +156,9 @@ def test_entity_resolver_does_not_emit_generic_dependency_to_platform_entities()
     }
 
 
-def test_entity_resolver_respects_generic_rejection_for_platform_chain_derivation() -> None:
+def test_entity_resolver_respects_generic_rejection_for_platform_chain_derivation() -> (
+    None
+):
     """Rejecting the compatibility edge should keep the typed platform edges intact."""
 
     _candidates, resolved = resolve_entity_relationships(
@@ -204,7 +212,9 @@ def test_entity_resolver_respects_generic_rejection_for_platform_chain_derivatio
     }
 
 
-def test_entity_resolver_keeps_repo_ids_on_repo_backed_direct_compatibility_edges() -> None:
+def test_entity_resolver_keeps_repo_ids_on_repo_backed_direct_compatibility_edges() -> (
+    None
+):
     """Repo-backed typed edges should retain repo ids on derived compatibility edges."""
 
     _candidates, resolved = resolve_entity_relationships(

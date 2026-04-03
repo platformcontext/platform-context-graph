@@ -17,6 +17,8 @@ from ..visualizer import (
     visualize_dependencies,
     visualize_inheritance_tree,
 )
+
+
 def register_analyze_graph_commands(main_module: Any, app: typer.Typer) -> typer.Typer:
     """Register graph-oriented ``pcg analyze`` commands.
 

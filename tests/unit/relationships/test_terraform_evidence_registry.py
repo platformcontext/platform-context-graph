@@ -264,9 +264,7 @@ class TestCloudflareExtractors:
         assert len(results) >= 1
         assert results[0].candidate_name == "search-worker"
 
-    def test_dns_record_extracts_name(
-        self, sample_context: ExtractionContext
-    ) -> None:
+    def test_dns_record_extracts_name(self, sample_context: ExtractionContext) -> None:
         import platform_context_graph.relationships.terraform_evidence  # noqa: F401
 
         extractors = get_extractors_for_type("cloudflare_dns_record")

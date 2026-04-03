@@ -142,7 +142,9 @@ def test_search_infra_resources_includes_argocd_applicationsets() -> None:
         }
     )
 
-    result = search_infra_resources(db, query="api-node-boats", types=["argocd"], limit=10)
+    result = search_infra_resources(
+        db, query="api-node-boats", types=["argocd"], limit=10
+    )
 
     assert result["category"] == "argocd"
     assert result["results"]["argocd_applicationsets"] == [
@@ -278,9 +280,13 @@ def test_infra_queries_use_repo_contains_for_flat_repo_file_lookups():
     )
     get_ecosystem_overview(db)
 
-    assert any("[:REPO_CONTAINS]->(f:File)" in q or "[:REPO_CONTAINS]->(f)" in q for q in recorded_queries)
-    assert not any(
-        "MATCH (repo:Repository)-[:CONTAINS*]->(f:File)" in q
+    assert any(
+        "[:REPO_CONTAINS]->(f:File)" in q or "[:REPO_CONTAINS]->(f)" in q
         for q in recorded_queries
     )
-    assert any("OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)" in q for q in recorded_queries)
+    assert not any(
+        "MATCH (repo:Repository)-[:CONTAINS*]->(f:File)" in q for q in recorded_queries
+    )
+    assert any(
+        "OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(f:File)" in q for q in recorded_queries
+    )

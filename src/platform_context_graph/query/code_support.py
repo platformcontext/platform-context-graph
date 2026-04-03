@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ..repository_identity import build_repo_access, relative_path_from_local
-from ..tools.code_finder import CodeFinder
+from .code_finder import CodeFinder
 from .repositories import (
     _canonical_repository_ref,
     _get_db_manager,
@@ -116,7 +116,9 @@ def result_repository_metadata(
         if not isinstance(item, str) or (key != "path" and not key.endswith("_path")):
             continue
         path_candidate = Path(item)
-        cache_key = str(path_candidate.resolve()) if path_candidate.is_absolute() else item
+        cache_key = (
+            str(path_candidate.resolve()) if path_candidate.is_absolute() else item
+        )
         if cache_key not in repository_cache:
             repository_cache[cache_key] = resolve_repo_metadata_for_result_path(
                 database,

@@ -69,7 +69,9 @@ def build_deployment_story_fallback(
 
     if not deployment_controllers:
         return []
-    controller_summary = _human_join([str(value).strip() for value in deployment_controllers])
+    controller_summary = _human_join(
+        [str(value).strip() for value in deployment_controllers]
+    )
     if not controller_summary:
         return []
     variant_names = _human_join(

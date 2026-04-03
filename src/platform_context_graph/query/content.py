@@ -34,7 +34,9 @@ def _resolve_repo_identifier(database: Any, repo_id: str) -> str:
     return str(repo.get("id") or repo_id)
 
 
-def get_file_content(database: Any, *, repo_id: str, relative_path: str) -> dict[str, Any]:
+def get_file_content(
+    database: Any, *, repo_id: str, relative_path: str
+) -> dict[str, Any]:
     """Return file content for one repo-relative path.
 
     Args:

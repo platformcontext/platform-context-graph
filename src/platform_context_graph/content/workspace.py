@@ -14,7 +14,7 @@ from ..repository_identity import (
     relative_path_from_local,
     repository_metadata,
 )
-from ..tools.dependency_catalog import dependency_ignore_enabled, is_dependency_path
+from ..platform.dependency_catalog import dependency_ignore_enabled, is_dependency_path
 
 __all__ = [
     "WorkspaceContentProvider",
@@ -340,9 +340,9 @@ class WorkspaceContentProvider:
 def _dependency_path_blocked(relative_path: str) -> bool:
     """Return whether workspace fallback should reject one repo-relative path."""
 
-    return dependency_ignore_enabled(get_config_value_fn=os.getenv) and is_dependency_path(
-        relative_path
-    )
+    return dependency_ignore_enabled(
+        get_config_value_fn=os.getenv
+    ) and is_dependency_path(relative_path)
 
 
 def _slice_file_lines(path: Path, *, start_line: int, end_line: int) -> str:

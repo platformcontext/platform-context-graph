@@ -6,7 +6,6 @@ import pytest
 
 from platform_context_graph.utils.tree_sitter_manager import get_tree_sitter_manager
 
-
 # ---------------------------------------------------------------------------
 # Python
 # ---------------------------------------------------------------------------

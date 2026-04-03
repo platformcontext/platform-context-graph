@@ -29,7 +29,9 @@ def test_repository_routes_expose_context_and_stats_by_canonical_id() -> None:
         stats_calls.append({"database": database, **kwargs})
         return {"success": True, "stats": {"files": 10}}
 
-    def get_repository_coverage(database: object, **kwargs: object) -> dict[str, object]:
+    def get_repository_coverage(
+        database: object, **kwargs: object
+    ) -> dict[str, object]:
         coverage_calls.append({"database": database, **kwargs})
         return {
             "run_id": "run-123",
@@ -107,7 +109,9 @@ def test_repository_context_route_preserves_platforms_and_limitations() -> None:
 def test_run_level_repository_coverage_route_passes_filters() -> None:
     coverage_calls: list[dict[str, object]] = []
 
-    def list_repository_coverage(database: object, **kwargs: object) -> dict[str, object]:
+    def list_repository_coverage(
+        database: object, **kwargs: object
+    ) -> dict[str, object]:
         coverage_calls.append({"database": database, **kwargs})
         return {"run_id": "run-123", "repositories": []}
 

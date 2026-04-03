@@ -10,7 +10,9 @@ from platform_context_graph.tools.runtime_platform_families import (
 )
 
 
-def test_infer_terraform_runtime_family_kind_detects_ecs_from_cluster_resource() -> None:
+def test_infer_terraform_runtime_family_kind_detects_ecs_from_cluster_resource() -> (
+    None
+):
     """Cluster resource types should resolve through the shared family registry."""
 
     content = 'resource "aws_ecs_cluster" "node10" { name = "node10" }\n'

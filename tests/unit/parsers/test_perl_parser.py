@@ -21,7 +21,7 @@ def perl_parser():
 
 
 def test_parse_subroutines(perl_parser, temp_test_dir):
-    code = '''use strict;
+    code = """use strict;
 use warnings;
 
 sub greet {
@@ -33,7 +33,7 @@ sub add {
     my ($a, $b) = @_;
     return $a + $b;
 }
-'''
+"""
     f = temp_test_dir / "funcs.pl"
     f.write_text(code)
     result = perl_parser.parse(f)
@@ -46,7 +46,7 @@ sub add {
 
 
 def test_parse_packages(perl_parser, temp_test_dir):
-    code = '''package Animal;
+    code = """package Animal;
 
 sub new {
     my ($class, %args) = @_;
@@ -56,7 +56,7 @@ sub new {
 sub name { return $_[0]->{name} }
 
 1;
-'''
+"""
     f = temp_test_dir / "Animal.pl"
     f.write_text(code)
     result = perl_parser.parse(f)
@@ -67,11 +67,11 @@ sub name { return $_[0]->{name} }
 
 
 def test_parse_imports(perl_parser, temp_test_dir):
-    code = '''use strict;
+    code = """use strict;
 use warnings;
 use File::Basename;
 use List::Util qw(sum reduce);
-'''
+"""
     f = temp_test_dir / "imports.pl"
     f.write_text(code)
     result = perl_parser.parse(f)
@@ -81,12 +81,12 @@ use List::Util qw(sum reduce);
 
 
 def test_parse_function_calls(perl_parser, temp_test_dir):
-    code = '''sub demo {
+    code = """sub demo {
     print "hello\\n";
     my @sorted = sort @items;
     my $len = length("test");
 }
-'''
+"""
     f = temp_test_dir / "calls.pl"
     f.write_text(code)
     result = perl_parser.parse(f)
@@ -96,10 +96,10 @@ def test_parse_function_calls(perl_parser, temp_test_dir):
 
 
 def test_parse_variables(perl_parser, temp_test_dir):
-    code = '''my $name = "World";
+    code = """my $name = "World";
 my @numbers = (1, 2, 3);
 my %config = (host => "localhost", port => 8080);
-'''
+"""
     f = temp_test_dir / "vars.pl"
     f.write_text(code)
     result = perl_parser.parse(f)
@@ -109,7 +109,7 @@ my %config = (host => "localhost", port => 8080);
 
 
 def test_result_structure(perl_parser, temp_test_dir):
-    code = 'sub placeholder {}\n'
+    code = "sub placeholder {}\n"
     f = temp_test_dir / "minimal.pl"
     f.write_text(code)
     result = perl_parser.parse(f)

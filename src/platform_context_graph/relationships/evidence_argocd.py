@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Sequence
 
 from ..observability import get_observability
-from ..tools.graph_builder_platforms import infer_gitops_platform_id
+from ..resolution.platforms import infer_gitops_platform_id
 from .evidence_argocd_support import (
     append_matched_evidence,
     argocd_source_references_content_aware,
@@ -147,7 +147,7 @@ def discover_argocd_evidence(
                                         config_content
                                     ):
                                         config_deploy_urls.extend(
-                                                iter_deploy_urls_from_document(doc)
+                                            iter_deploy_urls_from_document(doc)
                                         )
                                 else:
                                     config_deploy_urls.extend(
@@ -208,9 +208,7 @@ def discover_argocd_evidence(
                                                 extra_details={
                                                     "control_plane_repo_id": checkout.logical_repo_id,
                                                     "config_repo_id": entry.repo_id,
-                                                    "config_path": str(
-                                                        config_relative
-                                                    ),
+                                                    "config_path": str(config_relative),
                                                     "deployed_repo_id": source_repo_id,
                                                     "deployed_entity_id": source_entity_id,
                                                     "deployed_repo_match": source_alias,
@@ -263,9 +261,7 @@ def discover_argocd_evidence(
                                             extra_details={
                                                 "control_plane_repo_id": checkout.logical_repo_id,
                                                 "config_repo_id": entry.repo_id,
-                                                "config_path": str(
-                                                    config_relative
-                                                ),
+                                                "config_path": str(config_relative),
                                                 "deployed_repo_id": source_repo_id,
                                                 "deployed_entity_id": source_entity_id,
                                                 "deployed_repo_match": source_alias,

@@ -114,7 +114,9 @@ def test_delete_repository_rejects_empty_identifier() -> None:
     assert session.calls == []
 
 
-def test_delete_repository_logs_missing_repository_at_debug_only(tmp_path: Path) -> None:
+def test_delete_repository_logs_missing_repository_at_debug_only(
+    tmp_path: Path,
+) -> None:
     """Missing repositories should be treated as a debug-only no-op."""
 
     repo_path = tmp_path / "orders-api"

@@ -21,41 +21,47 @@ from ..relationships import (
 from ..repository_identity import git_remote_for_path, repository_metadata
 from ..utils.debug_log import debug_log, error_logger, info_logger, warning_logger
 from ..utils.debug_log import debug_logger
-from .graph_builder_indexing import (
+from ..collectors.git.indexing import (
     build_graph_from_path_async as _build_graph_from_path_async,
     collect_supported_files as _collect_supported_files,
     estimate_processing_time as _estimate_processing_time,
     get_ignored_dir_names as _get_ignored_dir_names,
 )
-from .graph_builder_mutations import (
+from ..graph.persistence import (
     delete_file_from_graph as _delete_file_from_graph,
     delete_repository_from_graph as _delete_repository_from_graph,
     update_file_in_graph as _update_file_in_graph,
 )
-from .graph_builder_parsers import (
+from ..parsers.registry import (
     TreeSitterParser,
     build_parser_registry,
     parse_file as _parse_file,
     pre_scan_for_imports as _pre_scan_for_imports,
 )
-from .graph_builder_persistence import (
+from ..graph.persistence import (
     add_file_to_graph as _add_file_to_graph,
     add_repository_to_graph as _add_repository_to_graph,
     commit_file_batch_to_graph as _commit_file_batch_to_graph,
 )
-from .graph_builder_relationships import (
+from ..graph.persistence.calls import (
     create_all_function_calls as _create_all_function_calls,
-    create_all_infra_links as _create_all_infra_links,
-    create_all_inheritance_links as _create_all_inheritance_links,
-    create_csharp_inheritance_and_interfaces as _create_csharp_inheritance_and_interfaces,
     create_function_calls as _create_function_calls,
-    create_inheritance_links as _create_inheritance_links,
     name_from_symbol as _name_from_symbol,
     safe_run_create as _safe_run_create,
 )
-from .graph_builder_schema import create_schema as _create_schema
-from .graph_builder_scip import build_graph_from_scip as _build_graph_from_scip
-from .graph_builder_workloads import materialize_workloads as _materialize_workloads
+from ..graph.persistence.inheritance import (
+    create_all_inheritance_links as _create_all_inheritance_links,
+    create_csharp_inheritance_and_interfaces as _create_csharp_inheritance_and_interfaces,
+    create_inheritance_links as _create_inheritance_links,
+)
+from ..relationships.infra_links import (
+    create_all_infra_links as _create_all_infra_links,
+)
+from ..graph.schema import create_schema as _create_schema
+from ..parsers.scip import build_graph_from_scip as _build_graph_from_scip
+from ..resolution.workloads.materialization import (
+    materialize_workloads as _materialize_workloads,
+)
 
 
 class GraphBuilder:

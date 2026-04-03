@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from platform_context_graph.tools import graph_builder_persistence_batch
+from platform_context_graph.graph.persistence import (
+    batching as graph_builder_persistence_batch,
+)
 
 
 def test_flush_write_batches_chunks_variable_rows(monkeypatch) -> None:
@@ -188,12 +190,13 @@ def test_summarize_entity_source_files_uses_repo_relative_top_files() -> None:
             for index in range(5)
         ]
         + [
-            {"file_path": str(repo_root / "src" / "medium.php"), "uid": f"medium-{index}"}
+            {
+                "file_path": str(repo_root / "src" / "medium.php"),
+                "uid": f"medium-{index}",
+            }
             for index in range(3)
         ]
-        + [
-            {"file_path": str(repo_root / "vendor" / "small.php"), "uid": "small-1"}
-        ]
+        + [{"file_path": str(repo_root / "vendor" / "small.php"), "uid": "small-1"}]
     )
 
     summary = graph_builder_persistence_batch.summarize_entity_source_files(

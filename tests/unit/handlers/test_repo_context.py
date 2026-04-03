@@ -159,7 +159,9 @@ class TestGetRepoContext:
                 "TerragruntConfig": MockResult(records=[]),
                 "type(rel) IN": MockResult(records=[]),
                 "Tier": MockResult(single_record=tier_record),
-                "MATCH (r:Repository)-[rel]->(dep:Repository)": MockResult(single_record=deps_record),
+                "MATCH (r:Repository)-[rel]->(dep:Repository)": MockResult(
+                    single_record=deps_record
+                ),
                 "<-[rel]-(dep:Repository)": MockResult(single_record=dependents_record),
             }
         )
@@ -282,7 +284,12 @@ def test_trace_deployment_chain_uses_repo_contains_for_repo_to_file_lookups(
         del kwargs
         recorded_queries.append(query)
         if "MATCH (r:Repository)" in query and "RETURN r.name as name" in query:
-            return MockResult(single_record={"name": "api-node-boats", "path": "/repos/api-node-boats"})
+            return MockResult(
+                single_record={
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                }
+            )
         return MockResult(records=[])
 
     session.run = recording_run
@@ -377,8 +384,12 @@ def test_find_blast_radius_uses_repo_contains_for_flat_repo_file_lookups():
     find_blast_radius(db, "terraform-aws-vpc", "terraform_module")
     find_blast_radius(db, "composite-postgres", "crossplane_xrd")
 
-    assert any("MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)" in q for q in recorded_queries)
-    assert not any("MATCH (repo:Repository)-[:CONTAINS*]->(f)" in q for q in recorded_queries)
+    assert any(
+        "MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)" in q for q in recorded_queries
+    )
+    assert not any(
+        "MATCH (repo:Repository)-[:CONTAINS*]->(f)" in q for q in recorded_queries
+    )
 
 
 def test_find_blast_radius_filters_placeholder_null_rows() -> None:
@@ -404,7 +415,6 @@ def test_find_blast_radius_filters_placeholder_null_rows() -> None:
     assert result["affected"] == []
     assert result["affected_count"] == 0
     assert "note" not in result
-
 
 
 class TestRepoSummary:
@@ -767,10 +777,10 @@ class TestRepoSummary:
                     ],
                 }
             ],
-                "deployment_artifacts": {
-                    "charts": [
-                        {
-                            "repo_url": "boatsgroup.pe.jfrog.io",
+            "deployment_artifacts": {
+                "charts": [
+                    {
+                        "repo_url": "boatsgroup.pe.jfrog.io",
                         "chart": "bg-helm/api-node-template",
                         "version": "0.2.1",
                         "release_name": "api-node-boats",
@@ -784,54 +794,54 @@ class TestRepoSummary:
                     {
                         "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
                         "tag": "3.21.0",
-                            "source_repo": "helm-charts",
-                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
-                            "environment": "bg-qa",
-                        }
-                    ],
-                    "kustomize_resources": [
-                        {
-                            "resource_path": "argocd/api-node-boats/base/xirsarole.yaml",
-                            "kind": "XIRSARole",
-                            "name": "api-node-boats",
-                            "source_repo": "helm-charts",
-                            "relative_path": "argocd/api-node-boats/base/kustomization.yaml",
-                            "environment": None,
-                        }
-                    ],
-                    "kustomize_patches": [
-                        {
-                            "patch_path": "argocd/api-node-boats/overlays/bg-qa/xirsarole-patch.yaml",
-                            "target_kind": "XIRSARole",
-                            "target_name": "api-node-boats",
-                            "source_repo": "helm-charts",
-                            "relative_path": "argocd/api-node-boats/overlays/bg-qa/kustomization.yaml",
-                            "environment": "bg-qa",
-                        }
-                    ],
-                    "config_paths": [
-                        {
-                            "path": "/configd/api-node-boats/*",
-                            "source_repo": "helm-charts",
-                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
-                            "environment": None,
-                        },
-                        {
-                            "path": "/api/api-node-boats/*",
-                            "source_repo": "helm-charts",
-                            "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
-                            "environment": None,
-                        },
-                        {
-                            "path": "/configd/api-node-boats/*",
-                            "source_repo": "terraform-stack-node10",
-                            "relative_path": "shared/iam.tf",
-                            "environment": None,
-                        },
-                    ],
-                    "service_ports": [
-                        {
-                            "port": "3081",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                        "environment": "bg-qa",
+                    }
+                ],
+                "kustomize_resources": [
+                    {
+                        "resource_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                        "kind": "XIRSARole",
+                        "name": "api-node-boats",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/base/kustomization.yaml",
+                        "environment": None,
+                    }
+                ],
+                "kustomize_patches": [
+                    {
+                        "patch_path": "argocd/api-node-boats/overlays/bg-qa/xirsarole-patch.yaml",
+                        "target_kind": "XIRSARole",
+                        "target_name": "api-node-boats",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/kustomization.yaml",
+                        "environment": "bg-qa",
+                    }
+                ],
+                "config_paths": [
+                    {
+                        "path": "/configd/api-node-boats/*",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                        "environment": None,
+                    },
+                    {
+                        "path": "/api/api-node-boats/*",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                        "environment": None,
+                    },
+                    {
+                        "path": "/configd/api-node-boats/*",
+                        "source_repo": "terraform-stack-node10",
+                        "relative_path": "shared/iam.tf",
+                        "environment": None,
+                    },
+                ],
+                "service_ports": [
+                    {
+                        "port": "3081",
                         "source_repo": "helm-charts",
                         "relative_path": "argocd/api-node-boats/base/values.yaml",
                         "environment": None,
@@ -1033,9 +1043,7 @@ class TestRepoSummary:
                             "boatsgroup/core-engineering-automation"
                         ],
                         "platform_kinds": ["ecs"],
-                        "platforms": [
-                            "platform:ecs:aws:cluster/node10:prod:us-east-1"
-                        ],
+                        "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
                         "deployment_sources": [],
                         "config_sources": [],
                         "provisioning_repositories": ["terraform-stack-node10"],
@@ -1106,9 +1114,7 @@ class TestRepoSummary:
             "Confirmed runtime environments: prod. Configuration also references: bg-qa.",
         ]
 
-    def test_repo_summary_story_surfaces_controller_driven_paths(
-        self, monkeypatch
-    ):
+    def test_repo_summary_story_surfaces_controller_driven_paths(self, monkeypatch):
         monkeypatch.setattr(
             "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
             lambda *_args, **_kwargs: {
@@ -1122,7 +1128,10 @@ class TestRepoSummary:
                 },
                 "code": {"functions": 2, "classes": 0},
                 "infrastructure": {},
-                "ecosystem": {"dependencies": ["terraform-stack-mws"], "dependents": []},
+                "ecosystem": {
+                    "dependencies": ["terraform-stack-mws"],
+                    "dependents": [],
+                },
                 "coverage": {
                     "completeness_state": "complete",
                     "discovered_file_count": 48,
@@ -1203,9 +1212,7 @@ class TestRepoSummary:
             "Configuration references environments prod, but runtime evidence has not confirmed deployed environments.",
         ]
 
-    def test_repo_summary_notes_config_environments_beyond_runtime(
-        self, monkeypatch
-    ):
+    def test_repo_summary_notes_config_environments_beyond_runtime(self, monkeypatch):
         monkeypatch.setattr(
             "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
             lambda *_args, **_kwargs: {
@@ -1270,9 +1277,7 @@ class TestRepoSummary:
         assert "confirmed runtime environments: bg-qa" in result["note"].lower()
         assert "configuration also references: prod" in result["note"].lower()
 
-    def test_repo_summary_notes_pending_finalization_truthfully(
-        self, monkeypatch
-    ):
+    def test_repo_summary_notes_pending_finalization_truthfully(self, monkeypatch):
         monkeypatch.setattr(
             "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
             lambda *_args, **_kwargs: {
@@ -1360,7 +1365,9 @@ class TestTraceDeploymentChain:
                 "limitations": [],
             },
         )
-        repo_record = MockRecord({"name": "api-node-search", "path": "/repos/api-node-search"})
+        repo_record = MockRecord(
+            {"name": "api-node-search", "path": "/repos/api-node-search"}
+        )
 
         db = make_mock_db(
             {
@@ -1532,7 +1539,9 @@ class TestTraceDeploymentChain:
                 "limitations": ["dns_unknown", "entrypoint_unknown"],
             },
         )
-        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        repo_record = MockRecord(
+            {"name": "api-node-boats", "path": "/repos/api-node-boats"}
+        )
         db = make_mock_db(
             {
                 "RETURN r.name as name, r.path as path": MockResult(
@@ -1610,9 +1619,7 @@ class TestTraceDeploymentChain:
                     "deployment_sources": [],
                     "config_sources": [],
                     "provisioning_repositories": ["terraform-stack-ecs"],
-                    "platforms": [
-                        "platform:ecs:aws:cluster/node10:prod:us-east-1"
-                    ],
+                    "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
                     "environments": ["prod"],
                 }
             ],
@@ -1684,7 +1691,9 @@ class TestTraceDeploymentChain:
                 "limitations": [],
             },
         )
-        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        repo_record = MockRecord(
+            {"name": "api-node-boats", "path": "/repos/api-node-boats"}
+        )
         db = make_mock_db(
             {
                 "RETURN r.name as name, r.path as path": MockResult(
@@ -1786,7 +1795,9 @@ class TestTraceDeploymentChain:
                 "limitations": [],
             },
         )
-        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        repo_record = MockRecord(
+            {"name": "api-node-boats", "path": "/repos/api-node-boats"}
+        )
 
         db = make_mock_db(
             {
@@ -1851,7 +1862,9 @@ class TestTraceDeploymentChain:
                 "limitations": [],
             },
         )
-        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        repo_record = MockRecord(
+            {"name": "api-node-boats", "path": "/repos/api-node-boats"}
+        )
         db = make_mock_db(
             {
                 "RETURN r.name as name, r.path as path": MockResult(
@@ -1929,7 +1942,9 @@ class TestTraceDeploymentChain:
                 "limitations": [],
             },
         )
-        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        repo_record = MockRecord(
+            {"name": "api-node-boats", "path": "/repos/api-node-boats"}
+        )
 
         db = make_mock_db(
             {
@@ -1957,7 +1972,7 @@ class TestTraceDeploymentChain:
                             "resource_type": "aws_codedeploy_deployment_group",
                             "file": "shared/ecs.tf",
                             "repository": "terraform-stack-node10",
-                        }
+                        },
                     ]
                 ),
                 "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(tf:TerraformResource)": MockResult(
@@ -1995,7 +2010,7 @@ class TestTraceDeploymentChain:
                             "zone_id": "Z123456",
                             "deploy_entry_point": "api-node-boats-batch.js",
                             "repository": "terraform-stack-node10",
-                        }
+                        },
                     ]
                 ),
                 "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)-[:CONTAINS]->(mod:TerraformModule)": MockResult(
@@ -2041,7 +2056,7 @@ class TestTraceDeploymentChain:
                 "resource_type": "aws_codedeploy_deployment_group",
                 "file": "shared/ecs.tf",
                 "repository": "terraform-stack-node10",
-            }
+            },
         ]
         assert result["terraform_modules"] == [
             {
@@ -2069,7 +2084,7 @@ class TestTraceDeploymentChain:
                 "deploy_entry_point": "api-node-boats-batch.js",
                 "repository": "terraform-stack-node10",
                 "source_repository": None,
-            }
+            },
         ]
         assert result["terragrunt_configs"] == [
             {
@@ -2095,7 +2110,7 @@ class TestTraceDeploymentChain:
                         "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
                         "version": "~> 3.0",
                         "source_repository": None,
-                    }
+                    },
                 ],
                 "terragrunt_configs": [
                     {
@@ -2120,7 +2135,7 @@ class TestTraceDeploymentChain:
                     "resource_type": "aws_codedeploy_deployment_group",
                     "repository": "terraform-stack-node10",
                     "file": "shared/ecs.tf",
-                }
+                },
             ]
         }
         assert result["deployment_overview"]["provisioning_source_chains"] == [
@@ -2138,7 +2153,7 @@ class TestTraceDeploymentChain:
                         "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
                         "version": "~> 3.0",
                         "source_repository": None,
-                    }
+                    },
                 ],
                 "terragrunt_configs": [
                     {
@@ -2184,7 +2199,9 @@ class TestTraceDeploymentChain:
                 "limitations": [],
             },
         )
-        repo_record = MockRecord({"name": "api-node-boats", "path": "/repos/api-node-boats"})
+        repo_record = MockRecord(
+            {"name": "api-node-boats", "path": "/repos/api-node-boats"}
+        )
 
         db = make_mock_db(
             {

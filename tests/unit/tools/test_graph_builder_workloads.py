@@ -14,7 +14,9 @@ from platform_context_graph.tools.graph_builder_workloads import materialize_wor
 
 
 class _FakeResult:
-    def __init__(self, *, records=None, nodes_deleted: int = 0, relationships_deleted: int = 0):
+    def __init__(
+        self, *, records=None, nodes_deleted: int = 0, relationships_deleted: int = 0
+    ):
         self._records = records or []
         self._nodes_deleted = nodes_deleted
         self._relationships_deleted = relationships_deleted

@@ -56,9 +56,7 @@ def extract_related_deployment_artifacts(
                 if file_exists(database, repo_id, source_path):
                     parsed_direct = read_yaml_file(database, repo_id, source_path)
                     if parsed_direct is not None:
-                        direct_environment = infer_environment_from_path(
-                            source_path
-                        )
+                        direct_environment = infer_environment_from_path(source_path)
                         charts.extend(
                             _extract_chart_rows(
                                 parsed_direct,
@@ -91,9 +89,7 @@ def extract_related_deployment_artifacts(
                         database, repo_id, candidate_pattern
                     )
                     for relative_path in matched_files:
-                        parsed = read_yaml_file(
-                            database, repo_id, relative_path
-                        )
+                        parsed = read_yaml_file(database, repo_id, relative_path)
                         if parsed is None:
                             continue
                         environment = infer_environment_from_path(relative_path)
@@ -154,9 +150,7 @@ def extract_related_deployment_artifacts(
     }
 
 
-def _resolve_pattern(
-    database: Any, repo_id: str, pattern: str
-) -> list[str]:
+def _resolve_pattern(database: Any, repo_id: str, pattern: str) -> list[str]:
     """Resolve a glob-style or exact path pattern to indexed file paths.
 
     If the pattern contains no wildcard characters it is treated as an exact

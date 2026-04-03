@@ -123,9 +123,7 @@ def test_shared_service_signatures_stay_keyword_only_and_stable():
         code.get_code_relationships,
         ["query_type", "target", "context", "repo_id", "scope"],
     )
-    assert_kwonly(
-        code.find_dead_code, ["repo_id", "scope", "exclude_decorated_with"]
-    )
+    assert_kwonly(code.find_dead_code, ["repo_id", "scope", "exclude_decorated_with"])
     assert_kwonly(
         code.get_complexity,
         ["mode", "limit", "function_name", "path", "repo_id", "scope"],
@@ -363,7 +361,10 @@ def test_resolve_entity_discovers_live_workloads_from_runtime_and_argocd_metadat
                 return FakeResult(records=[])
             if "MATCH (i:WorkloadInstance)" in query:
                 return FakeResult(records=[])
-            if "MATCH (repo:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(k:K8sResource)" in query:
+            if (
+                "MATCH (repo:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(k:K8sResource)"
+                in query
+            ):
                 return FakeResult(
                     records=[
                         {

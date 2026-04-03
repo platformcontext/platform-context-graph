@@ -77,6 +77,8 @@ Do not write new flat file-discovery queries as `Repository -[:CONTAINS*]-> File
 | `postgres_generation.py` | Bulk generation persistence helpers |
 | `postgres_support.py` | Postgres schema bootstrap for relationship tables |
 | `state.py` | Shared relationship store lifecycle |
+| `cross_repo_linker.py` | Cross-repository infrastructure and deployment linking for ecosystem graphs |
+| `cross_repo_linker_support.py` | Repository-reference matching helpers used by the cross-repo linker |
 
 ## Design Rules
 

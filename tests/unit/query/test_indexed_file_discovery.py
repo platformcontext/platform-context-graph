@@ -123,14 +123,10 @@ class TestDiscoverRepoFiles:
     def test_returns_matching_files_with_pattern(self) -> None:
         """Files filtered by regex pattern are returned."""
 
-        session = _StubSession(
-            [{"relative_path": "roles/nginx/tasks/main.yml"}]
-        )
+        session = _StubSession([{"relative_path": "roles/nginx/tasks/main.yml"}])
         db = _StubDB(session)
 
-        result = discover_repo_files(
-            db, REPO_ID, pattern="roles/.*/tasks/main\\.y.*ml"
-        )
+        result = discover_repo_files(db, REPO_ID, pattern="roles/.*/tasks/main\\.y.*ml")
 
         assert result == ["roles/nginx/tasks/main.yml"]
         assert session.last_params["pattern"] == "roles/.*/tasks/main\\.y.*ml"
@@ -163,9 +159,7 @@ class TestDiscoverRepoFiles:
     def test_combined_prefix_and_suffix(self) -> None:
         """Both prefix and suffix can be supplied together."""
 
-        session = _StubSession(
-            [{"relative_path": ".github/workflows/ci.yml"}]
-        )
+        session = _StubSession([{"relative_path": ".github/workflows/ci.yml"}])
         db = _StubDB(session)
 
         result = discover_repo_files(
@@ -218,10 +212,14 @@ class TestFileExists:
 class TestReadFileContent:
     """Tests for read_file_content."""
 
-    def test_returns_content_when_available(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_content_when_available(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Content string is returned when the content store has it."""
 
-        def _fake_get_file_content(_db: Any, *, repo_id: str, relative_path: str) -> dict:
+        def _fake_get_file_content(
+            _db: Any, *, repo_id: str, relative_path: str
+        ) -> dict:
             return {"available": True, "content": "hello world"}
 
         monkeypatch.setattr(
@@ -234,10 +232,14 @@ class TestReadFileContent:
 
         assert result == "hello world"
 
-    def test_returns_none_when_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_none_when_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """None is returned when the content store has no content."""
 
-        def _fake_get_file_content(_db: Any, *, repo_id: str, relative_path: str) -> dict:
+        def _fake_get_file_content(
+            _db: Any, *, repo_id: str, relative_path: str
+        ) -> dict:
             return {"available": False, "content": None}
 
         monkeypatch.setattr(
@@ -250,10 +252,14 @@ class TestReadFileContent:
 
         assert result is None
 
-    def test_returns_none_when_content_not_string(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_none_when_content_not_string(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """None is returned when content is not a string."""
 
-        def _fake_get_file_content(_db: Any, *, repo_id: str, relative_path: str) -> dict:
+        def _fake_get_file_content(
+            _db: Any, *, repo_id: str, relative_path: str
+        ) -> dict:
             return {"available": True, "content": 12345}
 
         monkeypatch.setattr(
@@ -275,12 +281,16 @@ class TestReadFileContent:
 class TestReadYamlFile:
     """Tests for read_yaml_file."""
 
-    def test_returns_parsed_dict_for_valid_yaml(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_parsed_dict_for_valid_yaml(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """A dict is returned when the YAML is valid."""
 
         yaml_content = "name: my-app\nversion: 1.0\n"
 
-        def _fake_get_file_content(_db: Any, *, repo_id: str, relative_path: str) -> dict:
+        def _fake_get_file_content(
+            _db: Any, *, repo_id: str, relative_path: str
+        ) -> dict:
             return {"available": True, "content": yaml_content}
 
         monkeypatch.setattr(
@@ -293,10 +303,14 @@ class TestReadYamlFile:
 
         assert result == {"name": "my-app", "version": 1.0}
 
-    def test_returns_none_for_invalid_yaml(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_none_for_invalid_yaml(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """None is returned when the YAML is unparseable."""
 
-        def _fake_get_file_content(_db: Any, *, repo_id: str, relative_path: str) -> dict:
+        def _fake_get_file_content(
+            _db: Any, *, repo_id: str, relative_path: str
+        ) -> dict:
             return {"available": True, "content": "{{invalid: yaml: ["}
 
         monkeypatch.setattr(
@@ -309,10 +323,14 @@ class TestReadYamlFile:
 
         assert result is None
 
-    def test_returns_none_for_non_dict_yaml(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_none_for_non_dict_yaml(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """None is returned when the YAML parses to a non-dict (e.g. a list)."""
 
-        def _fake_get_file_content(_db: Any, *, repo_id: str, relative_path: str) -> dict:
+        def _fake_get_file_content(
+            _db: Any, *, repo_id: str, relative_path: str
+        ) -> dict:
             return {"available": True, "content": "- item1\n- item2\n"}
 
         monkeypatch.setattr(
@@ -325,10 +343,14 @@ class TestReadYamlFile:
 
         assert result is None
 
-    def test_returns_none_for_missing_file(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_none_for_missing_file(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """None is returned when the file is not in the content store."""
 
-        def _fake_get_file_content(_db: Any, *, repo_id: str, relative_path: str) -> dict:
+        def _fake_get_file_content(
+            _db: Any, *, repo_id: str, relative_path: str
+        ) -> dict:
             return {"available": False, "content": None}
 
         monkeypatch.setattr(

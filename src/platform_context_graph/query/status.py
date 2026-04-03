@@ -197,6 +197,8 @@ def resolve_index_status_target(
                 return Path(local_path).resolve()
 
     return candidate
+
+
 def _describe_index_run(target: str | Path) -> dict[str, Any] | None:
     """Lazily import the coordinator status helper to avoid circular imports."""
 
@@ -265,12 +267,8 @@ def _runtime_status_should_yield_to_checkpoint(
     if checkpoint_status != "indexing":
         return False
     if runtime_status != "indexing":
-        return (
-            checkpoint_updated_at is not None
-            and (
-                runtime_updated_at is None
-                or checkpoint_updated_at >= runtime_updated_at
-            )
+        return checkpoint_updated_at is not None and (
+            runtime_updated_at is None or checkpoint_updated_at >= runtime_updated_at
         )
     if checkpoint_updated_at is None or runtime_updated_at is None:
         return False
@@ -358,8 +356,11 @@ def get_ingester_status(
         if store is not None and store.enabled:
             result = _select_runtime_status_payload(store, ingester=ingester)
             if result is not None:
-                if checkpoint_fallback is not None and _runtime_status_should_yield_to_checkpoint(
-                    result, checkpoint_fallback
+                if (
+                    checkpoint_fallback is not None
+                    and _runtime_status_should_yield_to_checkpoint(
+                        result, checkpoint_fallback
+                    )
                 ):
                     return checkpoint_fallback
                 return result

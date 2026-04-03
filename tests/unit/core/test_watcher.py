@@ -152,6 +152,7 @@ def test_repository_event_handlers_keep_workspace_repo_updates_partitioned(
     file_b.write_text("print('b')\n", encoding="utf-8")
 
     update_calls: list[tuple[Path, Path]] = []
+
     def _collect_supported_files(path: Path) -> list[Path]:
         return sorted(
             candidate
@@ -293,6 +294,7 @@ def test_repository_event_handler_initial_scan_skips_gitignored_files(
     )
 
     parse_calls: list[Path] = []
+
     def _collect_supported_files(path: Path) -> list[Path]:
         return sorted(
             candidate
@@ -346,6 +348,7 @@ def test_repository_event_handler_gitignore_change_removes_newly_ignored_files(
     )
 
     delete_file_from_graph = MagicMock()
+
     def _collect_supported_files(path: Path) -> list[Path]:
         return sorted(
             candidate

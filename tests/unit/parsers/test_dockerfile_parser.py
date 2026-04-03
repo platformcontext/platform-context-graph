@@ -76,13 +76,14 @@ def test_parse_dockerfile_extracts_ports_args_envs_and_labels(tmp_path: Path) ->
         ("PORT", "8080"),
         ("DEBUG", "false"),
     }
-    assert {(item["name"], item["port"], item["protocol"]) for item in result["dockerfile_ports"]} == {
+    assert {
+        (item["name"], item["port"], item["protocol"])
+        for item in result["dockerfile_ports"]
+    } == {
         ("runtime:8080", "8080", "tcp"),
         ("runtime:9090", "9090", "tcp"),
     }
-    assert {
-        (item["name"], item["value"]) for item in result["dockerfile_labels"]
-    } == {
+    assert {(item["name"], item["value"]) for item in result["dockerfile_labels"]} == {
         ("maintainer", "pcg"),
         (
             "org.opencontainers.image.source",

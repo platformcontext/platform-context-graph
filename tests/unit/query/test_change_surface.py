@@ -273,7 +273,9 @@ def test_find_change_surface_ignores_db_edges_without_canonical_endpoints():
 def test_explain_dependency_path_links_repo_to_deployment_source_via_argocd_name():
     def repository_lookup(_query, **kwargs):
         entity_id = kwargs["id"]
-        name = "api-node-search" if entity_id == "repository:r_5c50d0d3" else "helm-charts"
+        name = (
+            "api-node-search" if entity_id == "repository:r_5c50d0d3" else "helm-charts"
+        )
         path = f"/data/repos/{name}"
         return MockResult(
             single_record=MockRecord(
@@ -319,7 +321,9 @@ def test_explain_dependency_path_links_repo_to_deployment_source_via_argocd_name
 def test_find_change_surface_links_repo_to_deployment_source_via_argocd_name():
     def repository_lookup(_query, **kwargs):
         entity_id = kwargs["id"]
-        name = "api-node-search" if entity_id == "repository:r_5c50d0d3" else "helm-charts"
+        name = (
+            "api-node-search" if entity_id == "repository:r_5c50d0d3" else "helm-charts"
+        )
         path = f"/data/repos/{name}"
         return MockResult(
             single_record=MockRecord(
@@ -363,7 +367,9 @@ def test_find_change_surface_links_repo_to_deployment_source_via_argocd_name():
 def test_workload_paths_and_change_surface_expand_through_graph_backed_instances():
     def repository_lookup(_query, **kwargs):
         entity_id = kwargs["id"]
-        name = "api-node-search" if entity_id == "repository:r_5c50d0d3" else "helm-charts"
+        name = (
+            "api-node-search" if entity_id == "repository:r_5c50d0d3" else "helm-charts"
+        )
         return MockResult(
             single_record=MockRecord(
                 {

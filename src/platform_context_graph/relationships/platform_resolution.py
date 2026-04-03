@@ -45,7 +45,9 @@ def resolve_entity_relationships(
         )
         if source_entity_id is None or target_entity_id is None:
             continue
-        grouped[(source_entity_id, target_entity_id, fact.relationship_type)].append(fact)
+        grouped[(source_entity_id, target_entity_id, fact.relationship_type)].append(
+            fact
+        )
 
     candidates = suppress_generic_relationship_candidates(
         [
@@ -55,9 +57,11 @@ def resolve_entity_relationships(
                 relationship_type=relationship_type,
                 facts=facts,
             )
-            for (source_entity_id, target_entity_id, relationship_type), facts in sorted(
-                grouped.items()
-            )
+            for (
+                source_entity_id,
+                target_entity_id,
+                relationship_type,
+            ), facts in sorted(grouped.items())
         ]
     )
 
@@ -73,8 +77,12 @@ def resolve_entity_relationships(
         not in rejections
         and candidate.confidence >= inferred_confidence_threshold
     ]
-    resolved = _apply_explicit_assertions(resolved=resolved, assertions=explicit_assertions)
-    resolved.extend(derive_direct_generic_relationships(resolved=resolved, rejections=rejections))
+    resolved = _apply_explicit_assertions(
+        resolved=resolved, assertions=explicit_assertions
+    )
+    resolved.extend(
+        derive_direct_generic_relationships(resolved=resolved, rejections=rejections)
+    )
     resolved.extend(
         derive_platform_chain_dependencies(resolved=resolved, rejections=rejections)
     )
@@ -114,7 +122,9 @@ def _build_candidate(
         evidence_count=len(facts),
         rationale="; ".join(
             value
-            for value in dict.fromkeys(fact.rationale for fact in facts if fact.rationale)
+            for value in dict.fromkeys(
+                fact.rationale for fact in facts if fact.rationale
+            )
         ),
         details={
             "evidence_kinds": sorted({fact.evidence_kind for fact in facts}),
@@ -155,7 +165,9 @@ def _group_assertions(
         ] = assertion
 
     rejections = {
-        key for key, assertion in latest_decisions.items() if assertion.decision == "reject"
+        key
+        for key, assertion in latest_decisions.items()
+        if assertion.decision == "reject"
     }
     explicit_assertions = {
         key: assertion
@@ -191,30 +203,36 @@ def _apply_explicit_assertions(
 
     updated = list(resolved)
     existing_keys = {
-        (item.source_entity_id or "", item.target_entity_id or "", item.relationship_type)
+        (
+            item.source_entity_id or "",
+            item.target_entity_id or "",
+            item.relationship_type,
+        )
         for item in updated
     }
     for key, assertion in sorted(assertions.items()):
         if key in existing_keys:
             updated = [
-                item
-                if (
-                    item.source_entity_id or "",
-                    item.target_entity_id or "",
-                    item.relationship_type,
-                )
-                != key
-                else ResolvedRelationship(
-                    source_repo_id=item.source_repo_id or assertion.source_repo_id,
-                    target_repo_id=item.target_repo_id or assertion.target_repo_id,
-                    source_entity_id=key[0],
-                    target_entity_id=key[1],
-                    relationship_type=assertion.relationship_type,
-                    confidence=1.0,
-                    evidence_count=item.evidence_count,
-                    rationale=assertion.reason,
-                    resolution_source="assertion",
-                    details={**item.details, "actor": assertion.actor},
+                (
+                    item
+                    if (
+                        item.source_entity_id or "",
+                        item.target_entity_id or "",
+                        item.relationship_type,
+                    )
+                    != key
+                    else ResolvedRelationship(
+                        source_repo_id=item.source_repo_id or assertion.source_repo_id,
+                        target_repo_id=item.target_repo_id or assertion.target_repo_id,
+                        source_entity_id=key[0],
+                        target_entity_id=key[1],
+                        relationship_type=assertion.relationship_type,
+                        confidence=1.0,
+                        evidence_count=item.evidence_count,
+                        rationale=assertion.reason,
+                        resolution_source="assertion",
+                        details={**item.details, "actor": assertion.actor},
+                    )
                 )
                 for item in updated
             ]
