@@ -140,7 +140,7 @@ def test_project_git_fact_records_merges_files_and_entities() -> None:
     ]
     expected_file_path = str((Path("/tmp/service").resolve() / "src/app.py"))
 
-    project_git_fact_records(builder=builder, fact_records=fact_records)
+    projected = project_git_fact_records(builder=builder, fact_records=fact_records)
 
     assert any(
         "MERGE (f:File {path: $file_path})" in query
@@ -162,6 +162,11 @@ def test_project_git_fact_records_merges_files_and_entities() -> None:
         and params["line_number"] == 10
         for query, params in session.calls
     )
+    assert projected == {
+        "repositories": 1,
+        "files": 1,
+        "entities": 1,
+    }
 
 
 def test_project_parsed_entity_facts_uses_full_parsed_file_payload_when_available() -> (

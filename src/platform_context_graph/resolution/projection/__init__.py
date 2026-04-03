@@ -21,32 +21,27 @@ def project_git_fact_records(
     """Project repository, file, and entity graph state from Git fact records."""
 
     records = list(fact_records)
+    projected_counts = {
+        "repositories": 0,
+        "files": 0,
+        "entities": 0,
+    }
 
     def _write(tx: object) -> None:
         """Execute projection writes inside one managed graph transaction."""
 
-        project_repository_facts(tx, records)
-        project_file_facts(tx, records, warning_logger_fn=warning_logger_fn)
-        project_parsed_entity_facts(tx, records)
+        projected_counts["repositories"] = project_repository_facts(tx, records)
+        projected_counts["files"] = project_file_facts(
+            tx,
+            records,
+            warning_logger_fn=warning_logger_fn,
+        )
+        projected_counts["entities"] = project_parsed_entity_facts(tx, records)
 
     with builder.driver.session() as session:
         run_managed_write(session, _write)
 
-    return {
-        "repositories": len(
-            [record for record in records if record.fact_type.startswith("Repository")]
-        ),
-        "files": len(
-            [record for record in records if record.fact_type.startswith("File")]
-        ),
-        "entities": len(
-            [
-                record
-                for record in records
-                if record.fact_type.startswith("ParsedEntity")
-            ]
-        ),
-    }
+    return projected_counts
 
 
 __all__ = [

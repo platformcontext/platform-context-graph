@@ -60,7 +60,7 @@ def test_fact_store_cursor_uses_pool_connection(monkeypatch) -> None:
     def _ensure_schema(_conn):
         yield None
 
-    monkeypatch.setattr(store, "_ensure_schema", lambda conn: None)
+    monkeypatch.setattr(store, "_ensure_schema", _ensure_schema)
 
     with store._cursor() as cursor:
         assert cursor is mock_cursor

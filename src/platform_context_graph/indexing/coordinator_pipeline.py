@@ -827,8 +827,9 @@ async def process_repository_snapshots(
                             batch_size=batch_size,
                         )
                     )
+                    to_thread_fn = getattr(asyncio_module, "to_thread", asyncio.to_thread)
                     if facts_first_mode:
-                        commit_timing_result = await asyncio.to_thread(
+                        commit_timing_result = await to_thread_fn(
                             commit_repository_snapshot_fn,
                             builder,
                             snapshot,
@@ -862,7 +863,7 @@ async def process_repository_snapshots(
                         )
                     else:
                         # CW == 1: sync commit via asyncio.to_thread
-                        commit_timing_result = await asyncio.to_thread(
+                        commit_timing_result = await to_thread_fn(
                             commit_repository_snapshot_fn,
                             builder,
                             snapshot,

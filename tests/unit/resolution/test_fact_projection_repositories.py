@@ -102,7 +102,7 @@ def test_project_git_fact_records_merges_repository_nodes() -> None:
     ]
     expected_repo_path = str(Path("/tmp/service").resolve())
 
-    project_git_fact_records(builder=builder, fact_records=fact_records)
+    projected = project_git_fact_records(builder=builder, fact_records=fact_records)
 
     assert any(
         "MERGE (r:Repository {id: $repo_id})" in query
@@ -111,3 +111,8 @@ def test_project_git_fact_records_merges_repository_nodes() -> None:
         and params["name"] == "service"
         for query, params in session.calls
     )
+    assert projected == {
+        "repositories": 1,
+        "files": 0,
+        "entities": 0,
+    }

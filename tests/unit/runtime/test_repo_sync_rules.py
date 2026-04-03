@@ -65,7 +65,6 @@ def test_config_from_env_explicit_mode_uses_exact_repository_rules(
         json.dumps(
             [
                 {"type": "exact", "value": "org/service-a"},
-                {"type": "regex", "value": r"^org/service-[bc]$"},
                 {"type": "exact", "value": "org/service-b"},
             ]
         ),
@@ -76,9 +75,25 @@ def test_config_from_env_explicit_mode_uses_exact_repository_rules(
     assert config.repositories == ["org/service-a", "org/service-b"]
     assert config.repository_rules == (
         RepoSyncRepositoryRule(kind="exact", value="org/service-a"),
-        RepoSyncRepositoryRule(kind="regex", value=r"^org/service-[bc]$"),
         RepoSyncRepositoryRule(kind="exact", value="org/service-b"),
     )
+
+
+def test_config_from_env_explicit_mode_rejects_regex_rules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit mode should fail clearly when structured rules include regex."""
+
+    repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
+
+    monkeypatch.setenv("PCG_REPO_SOURCE_MODE", "explicit")
+    monkeypatch.setenv(
+        "PCG_REPOSITORY_RULES_JSON",
+        json.dumps([{"type": "regex", "value": r"^org/service-[bc]$"}]),
+    )
+
+    with pytest.raises(ValueError, match="only supports exact rules"):
+        repo_sync.RepoSyncConfig.from_env(component="repo-sync")
 
 
 def test_git_discovery_applies_exact_and_regex_include_rules(

@@ -13,7 +13,7 @@ from platform_context_graph.repository_identity import git_remote_for_path
 from platform_context_graph.repository_identity import repository_metadata
 
 
-def utc_now() -> Any:
+def utc_now() -> datetime:
     """Return the current UTC timestamp for fact runtime writes."""
 
     return datetime.now(tz=timezone.utc)

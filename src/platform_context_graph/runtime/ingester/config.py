@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+
 @dataclass(frozen=True, slots=True)
 class RepoSyncRepositoryRule:
     """Include rule for selecting repositories to sync.
@@ -152,6 +153,32 @@ def extract_exact_repository_ids(
     return exact_repositories
 
 
+def validate_repository_rules_for_source_mode(
+    *,
+    source_mode: str,
+    repository_rules: Sequence[RepoSyncRepositoryRule],
+) -> None:
+    """Validate repository rules for source modes with strict exact-match inputs.
+
+    Args:
+        source_mode: Repo source mode selected for the runtime.
+        repository_rules: Structured include rules loaded from JSON.
+
+    Raises:
+        ValueError: If explicit/filesystem modes include non-exact rules.
+    """
+
+    if source_mode not in {"explicit", "filesystem"}:
+        return
+    non_exact_rules = [rule.value for rule in repository_rules if rule.kind != "exact"]
+    if non_exact_rules:
+        raise ValueError(
+            "PCG_REPOSITORY_RULES_JSON only supports exact rules when "
+            f"PCG_REPO_SOURCE_MODE={source_mode!r}; "
+            f"found non-exact rules: {non_exact_rules}"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class RepoSyncConfig:
     """Runtime configuration for repository synchronization jobs.
@@ -202,6 +229,10 @@ class RepoSyncConfig:
         source_mode = os.getenv("PCG_REPO_SOURCE_MODE", "githubOrg")
         repository_rules = parse_repository_rules_json(
             os.getenv("PCG_REPOSITORY_RULES_JSON")
+        )
+        validate_repository_rules_for_source_mode(
+            source_mode=source_mode,
+            repository_rules=repository_rules,
         )
         repositories = (
             extract_exact_repository_ids(repository_rules)
