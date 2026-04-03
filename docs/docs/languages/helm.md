@@ -1,13 +1,13 @@
 # Helm Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/helm.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/helm.yaml`
 
 ## Parser Contract
 - Language: `helm`
 - Family: `iac`
 - Parser: `InfraYAMLParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/yaml_infra.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/yaml_infra.py`
 - Fixture repo: `tests/fixtures/ecosystems/helm_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_yaml_infra_parser.py`
 - Integration test suite: `tests/integration/test_iac_graph.py::TestHelmGraph`

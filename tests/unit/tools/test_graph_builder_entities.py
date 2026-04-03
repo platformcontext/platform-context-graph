@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from platform_context_graph.tools.graph_builder_entities import (
+from platform_context_graph.graph.persistence.entities import (
     build_entity_merge_statement,
 )
 

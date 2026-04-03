@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from platform_context_graph.tools.languages import yaml_infra_support
+from platform_context_graph.parsers.languages import yaml_infra_support
 
 
 def test_safe_load_all_recovers_from_jinja_loop_blocks(monkeypatch) -> None:

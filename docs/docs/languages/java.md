@@ -1,13 +1,13 @@
 # Java Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/java.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/java.yaml`
 
 ## Parser Contract
 - Language: `java`
 - Family: `language`
 - Parser: `JavaTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/java.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/java.py`
 - Fixture repo: `tests/fixtures/ecosystems/java_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_java_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestJavaGraph`

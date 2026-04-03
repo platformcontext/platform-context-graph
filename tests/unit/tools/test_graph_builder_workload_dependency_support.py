@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_context_graph.tools.graph_builder_workload_dependency_support import (
+from platform_context_graph.resolution.workloads.dependency_support import (
     _load_runtime_dependency_targets,
 )
 

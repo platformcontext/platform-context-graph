@@ -1,13 +1,13 @@
 # Ruby Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/ruby.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/ruby.yaml`
 
 ## Parser Contract
 - Language: `ruby`
 - Family: `language`
 - Parser: `RubyTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/ruby.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/ruby.py`
 - Fixture repo: `tests/fixtures/ecosystems/ruby_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_ruby_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestRubyGraph`

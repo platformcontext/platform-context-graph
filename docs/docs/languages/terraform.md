@@ -1,13 +1,13 @@
 # Terraform Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/terraform.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/terraform.yaml`
 
 ## Parser Contract
 - Language: `terraform`
 - Family: `iac`
 - Parser: `HCLTerraformParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/hcl_terraform.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/hcl_terraform.py`
 - Fixture repo: `tests/fixtures/ecosystems/terraform_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_hcl_terraform_parser.py`
 - Integration test suite: `tests/integration/test_iac_graph.py::TestTerraformGraph`

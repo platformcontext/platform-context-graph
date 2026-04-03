@@ -17,7 +17,7 @@ class TestPythonVariableScope:
     @pytest.fixture(scope="class")
     def parser(self):
         """Build a Python parser backed by the real tree-sitter grammar."""
-        from platform_context_graph.tools.languages.python import (
+        from platform_context_graph.parsers.languages.python import (
             PythonTreeSitterParser,
         )
 
@@ -105,7 +105,7 @@ class TestGoVariableScope:
     @pytest.fixture(scope="class")
     def parser(self):
         """Build a Go parser backed by the real tree-sitter grammar."""
-        from platform_context_graph.tools.languages.go import GoTreeSitterParser
+        from platform_context_graph.parsers.languages.go import GoTreeSitterParser
 
         manager = get_tree_sitter_manager()
         if not manager.is_language_available("go"):
@@ -187,7 +187,7 @@ class TestTypeScriptVariableScope:
     @pytest.fixture(scope="class")
     def parser(self):
         """Build a TypeScript parser backed by the real tree-sitter grammar."""
-        from platform_context_graph.tools.languages.typescript import (
+        from platform_context_graph.parsers.languages.typescript import (
             TypescriptTreeSitterParser,
         )
 

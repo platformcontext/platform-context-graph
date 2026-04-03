@@ -2,7 +2,7 @@ language: ruby
 title: Ruby Parser
 family: language
 parser: RubyTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/ruby.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/ruby.py
 doc_path: docs/docs/languages/ruby.md
 fixture_repo: tests/fixtures/ecosystems/ruby_comprehensive/
 unit_test_file: tests/unit/parsers/test_ruby_parser.py

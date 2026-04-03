@@ -2,7 +2,7 @@ language: perl
 title: Perl Parser
 family: language
 parser: PerlTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/perl.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/perl.py
 doc_path: docs/docs/languages/perl.md
 fixture_repo: tests/fixtures/ecosystems/perl_comprehensive/
 unit_test_file: tests/unit/parsers/test_perl_parser.py

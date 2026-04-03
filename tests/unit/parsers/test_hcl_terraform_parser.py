@@ -2,7 +2,7 @@
 
 import pytest
 
-from platform_context_graph.tools.languages.hcl_terraform import (
+from platform_context_graph.parsers.languages.hcl_terraform import (
     HCLTerraformParser,
 )
 

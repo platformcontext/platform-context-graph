@@ -1,13 +1,13 @@
 # Swift Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/swift.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/swift.yaml`
 
 ## Parser Contract
 - Language: `swift`
 - Family: `language`
 - Parser: `SwiftTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/swift.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/swift.py`
 - Fixture repo: `tests/fixtures/ecosystems/swift_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_swift_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestSwiftGraph`

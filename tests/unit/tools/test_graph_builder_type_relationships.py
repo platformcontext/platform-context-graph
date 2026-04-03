@@ -4,7 +4,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from platform_context_graph.tools.graph_builder_type_relationships import (
+from platform_context_graph.graph.persistence.inheritance import (
     create_inheritance_links,
 )
 

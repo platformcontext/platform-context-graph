@@ -48,7 +48,6 @@ Here are the available settings you can configure.
 | :--- | :--- | :--- |
 | **`DEFAULT_DATABASE`** | `falkordb` | The database engine to use (`neo4j`, `falkordb`, or `kuzudb`). |
 | **`ENABLE_AUTO_WATCH`** | `false` | If `true`, `pcg index` will automatically start watching for changes. |
-| **`PARALLEL_WORKERS`** | `4` | Legacy fallback for parse-worker count when `PCG_PARSE_WORKERS` is unset. |
 | **`CACHE_ENABLED`** | `true` | Caches file hashes to speed up re-indexing. |
 
 ### Logging And Tracing
@@ -92,7 +91,6 @@ Notes:
 - `PCG_REPO_FILE_PARSE_MULTIPROCESS` enables the process-pool parse engine; leave it `false` until you want the heavier worker-process path.
 - `PCG_MULTIPROCESS_START_METHOD` now defaults to `spawn` because it is the most reliable choice for the parser-heavy process-pool path across local macOS and Linux containers.
 - `PCG_WORKER_MAX_TASKS` is now opt-in. The default leaves parse workers alive for the whole run because recycling long-lived parser workers can stall large local and containerized indexing jobs.
-- `PARALLEL_WORKERS` is still honored as a backward-compatible fallback when `PCG_PARSE_WORKERS` is not set.
 - `pcg index` and `pcg watch` now print the effective worker/debounce values they are using so local runs match the documented configuration.
 
 ### Indexing Scope

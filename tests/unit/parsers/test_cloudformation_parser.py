@@ -4,11 +4,11 @@ import json
 
 import pytest
 
-from platform_context_graph.tools.languages.cloudformation import (
+from platform_context_graph.parsers.languages.cloudformation import (
     is_cloudformation_template,
     parse_cloudformation_template,
 )
-from platform_context_graph.tools.languages.yaml_infra import InfraYAMLParser
+from platform_context_graph.parsers.languages.yaml_infra import InfraYAMLParser
 
 
 class TestCloudFormationDetection:

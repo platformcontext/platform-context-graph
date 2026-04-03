@@ -6,7 +6,7 @@ from pathlib import Path
 import threading
 from types import SimpleNamespace
 
-from platform_context_graph.tools import graph_builder_parsers
+from platform_context_graph.parsers import registry as parser_registry
 
 
 def test_build_parser_registry_skips_unavailable_language(monkeypatch, caplog) -> None:
@@ -18,10 +18,10 @@ def test_build_parser_registry_skips_unavailable_language(monkeypatch, caplog) -
                 raise ValueError("Language 'c_sharp' is not available")
             self.language_name = language_name
 
-    monkeypatch.setattr(graph_builder_parsers, "TreeSitterParser", FakeTreeSitterParser)
-    caplog.set_level(logging.WARNING, logger=graph_builder_parsers.__name__)
+    monkeypatch.setattr(parser_registry, "TreeSitterParser", FakeTreeSitterParser)
+    caplog.set_level(logging.WARNING, logger=parser_registry.__name__)
 
-    registry = graph_builder_parsers.build_parser_registry(lambda _key: "false")
+    registry = parser_registry.build_parser_registry(lambda _key: "false")
 
     assert ".cs" not in registry
     assert registry[".py"].language_name == "python"
@@ -34,7 +34,7 @@ def test_build_parser_registry_skips_unavailable_language(monkeypatch, caplog) -
 def test_build_parser_registry_keeps_available_language() -> None:
     """Known-good languages should still be registered normally."""
 
-    registry = graph_builder_parsers.build_parser_registry(lambda _key: "false")
+    registry = parser_registry.build_parser_registry(lambda _key: "false")
 
     assert ".py" in registry
     assert ".js" in registry
@@ -43,7 +43,7 @@ def test_build_parser_registry_keeps_available_language() -> None:
 def test_build_parser_registry_uses_dedicated_tsx_parser() -> None:
     """TSX files should use the JSX-aware parser rather than plain TypeScript."""
 
-    registry = graph_builder_parsers.build_parser_registry(lambda _key: "false")
+    registry = parser_registry.build_parser_registry(lambda _key: "false")
 
     assert ".tsx" in registry
     assert (
@@ -59,9 +59,9 @@ def test_build_parser_registry_registers_common_extension_aliases(monkeypatch) -
         def __init__(self, language_name: str) -> None:
             self.language_name = language_name
 
-    monkeypatch.setattr(graph_builder_parsers, "TreeSitterParser", FakeTreeSitterParser)
+    monkeypatch.setattr(parser_registry, "TreeSitterParser", FakeTreeSitterParser)
 
-    registry = graph_builder_parsers.build_parser_registry(lambda _key: "false")
+    registry = parser_registry.build_parser_registry(lambda _key: "false")
 
     assert registry[".cc"].language_name == "cpp"
     assert registry[".cxx"].language_name == "cpp"
@@ -93,27 +93,27 @@ def test_tree_sitter_parser_creates_distinct_parsers_per_thread(
             return {"parser_token": self.parser["token"]}
 
     monkeypatch.setattr(
-        graph_builder_parsers,
+        parser_registry,
         "get_tree_sitter_manager",
         lambda: FakeManager(),
     )
     monkeypatch.setattr(
-        graph_builder_parsers,
+        parser_registry,
         "Parser",
         lambda _language: {"token": next(created_tokens)},
     )
     monkeypatch.setattr(
-        graph_builder_parsers,
+        parser_registry,
         "_load_attribute",
         lambda *_args, **_kwargs: FakeLanguageParser,
     )
     monkeypatch.setattr(
-        graph_builder_parsers,
+        parser_registry,
         "_LANGUAGE_SPECIFIC_PARSERS",
         {"python": (".languages.python", "PythonTreeSitterParser")},
     )
 
-    parser = graph_builder_parsers.TreeSitterParser("python")
+    parser = parser_registry.TreeSitterParser("python")
     sample_path = Path("sample.py")
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -127,7 +127,7 @@ def test_tree_sitter_parser_creates_distinct_parsers_per_thread(
 def test_build_parser_registry_registers_raw_text_search_parsers() -> None:
     """Registry should include non-code search handlers and Dockerfile parsing."""
 
-    registry = graph_builder_parsers.build_parser_registry(lambda _key: "false")
+    registry = parser_registry.build_parser_registry(lambda _key: "false")
 
     assert ".j2" in registry
     assert ".tpl" in registry
@@ -148,7 +148,7 @@ def test_parse_file_for_indexing_worker_uses_local_parser_registry(
     dockerfile = repo_path / "Dockerfile"
     dockerfile.write_text("FROM python:3.12-slim\n", encoding="utf-8")
 
-    result = graph_builder_parsers.parse_file_for_indexing_worker(
+    result = parser_registry.parse_file_for_indexing_worker(
         repo_path,
         dockerfile,
         False,
@@ -166,7 +166,7 @@ def test_parse_file_for_indexing_worker_uses_local_parser_registry(
 def test_build_parser_registry_uses_tree_sitter_for_hcl() -> None:
     """Terraform files should be registered through the tree-sitter wrapper."""
 
-    registry = graph_builder_parsers.build_parser_registry(lambda _key: "true")
+    registry = parser_registry.build_parser_registry(lambda _key: "true")
 
     assert ".tf" in registry
     assert ".hcl" in registry
@@ -177,7 +177,7 @@ def test_build_parser_registry_uses_tree_sitter_for_hcl() -> None:
 def test_build_parser_registry_uses_tree_sitter_for_json() -> None:
     """JSON config files should be registered through the tree-sitter wrapper."""
 
-    registry = graph_builder_parsers.build_parser_registry(lambda key: "true")
+    registry = parser_registry.build_parser_registry(lambda key: "true")
 
     assert ".json" in registry
     assert registry[".json"].__class__.__name__ == "TreeSitterParser"
@@ -195,10 +195,10 @@ def test_parse_file_uses_structured_parser_for_dockerfile(tmp_path: Path) -> Non
         encoding="utf-8",
     )
     builder = SimpleNamespace(
-        parsers=graph_builder_parsers.build_parser_registry(lambda _key: "false")
+        parsers=parser_registry.build_parser_registry(lambda _key: "false")
     )
 
-    result = graph_builder_parsers.parse_file(
+    result = parser_registry.parse_file(
         builder,
         repo_path,
         dockerfile,
@@ -237,10 +237,10 @@ def test_parse_file_uses_structured_parser_for_jenkinsfile(tmp_path: Path) -> No
         encoding="utf-8",
     )
     builder = SimpleNamespace(
-        parsers=graph_builder_parsers.build_parser_registry(lambda _key: "false")
+        parsers=parser_registry.build_parser_registry(lambda _key: "false")
     )
 
-    result = graph_builder_parsers.parse_file(
+    result = parser_registry.parse_file(
         builder,
         repo_path,
         jenkinsfile,
@@ -267,10 +267,10 @@ def test_parse_file_uses_raw_text_parser_for_conf_j2(tmp_path: Path) -> None:
     file_path.parent.mkdir()
     file_path.write_text("ServerName {{ host_name }}\n", encoding="utf-8")
     builder = SimpleNamespace(
-        parsers=graph_builder_parsers.build_parser_registry(lambda _key: "false")
+        parsers=parser_registry.build_parser_registry(lambda _key: "false")
     )
 
-    result = graph_builder_parsers.parse_file(
+    result = parser_registry.parse_file(
         builder,
         repo_path,
         file_path,
@@ -321,7 +321,7 @@ def test_pre_scan_for_imports_includes_c_java_ruby_and_csharp_together(
         lambda files, _parser: {"csharp": [str(path) for path in files]},
     )
 
-    imports_map = graph_builder_parsers.pre_scan_for_imports(
+    imports_map = parser_registry.pre_scan_for_imports(
         builder,
         [c_file, java_file, ruby_file, csharp_file],
     )

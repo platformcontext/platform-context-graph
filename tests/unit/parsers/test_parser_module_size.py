@@ -16,7 +16,7 @@ def test_handwritten_parser_facades_stay_under_500_lines() -> None:
         Path(__file__).resolve().parents[3]
         / "src"
         / "platform_context_graph"
-        / "tools"
+        / "parsers"
         / "languages"
     )
 

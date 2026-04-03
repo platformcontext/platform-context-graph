@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from platform_context_graph.tools.languages.json_config import (
+from platform_context_graph.parsers.languages.json_config import (
     JSONConfigTreeSitterParser,
 )
 

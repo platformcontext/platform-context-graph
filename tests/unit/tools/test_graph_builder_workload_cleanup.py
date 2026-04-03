@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from platform_context_graph.tools.graph_builder_workloads import materialize_workloads
+from platform_context_graph.resolution.workloads.materialization import materialize_workloads
 
 
 class _FakeResult:

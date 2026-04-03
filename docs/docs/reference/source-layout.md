@@ -23,7 +23,7 @@ PlatformContextGraph keeps the importable Python package under `src/platform_con
 | `resolution/` | Resolution Engine orchestration, fact projection, workload/platform materialization, and future shared resolution logic |
 | `relationships/` | evidence-backed repo relationship discovery, resolution, persistence, and projection |
 | `runtime/` | repo sync, bootstrap indexing, resolution-engine runtime loops, and long-running runtime helpers |
-| `tools/` | `GraphBuilder`, compatibility shims, and remaining legacy helpers |
+| `tools/` | `GraphBuilder`, code-finder/query helpers, cross-repo linking entrypoints, and generated tool-facing artifacts |
 | `utils/` | reusable helper utilities that do not belong to a higher-level subsystem |
 | `viz/` | visualization-serving support code |
 

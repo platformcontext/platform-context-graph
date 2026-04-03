@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_context_graph.tools.languages.typescriptjsx import (
+from platform_context_graph.parsers.languages.typescriptjsx import (
     TypescriptJSXTreeSitterParser,
 )
 from platform_context_graph.utils.tree_sitter_manager import get_tree_sitter_manager

@@ -9,10 +9,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from platform_context_graph.tools import graph_builder_parsers
-from platform_context_graph.tools.graph_builder_indexing_execution import (
+from platform_context_graph.collectors.git.parse_execution import (
     parse_repository_snapshot_async,
 )
+from platform_context_graph.parsers import registry as parser_registry
 
 
 class _NullSpan:
@@ -35,7 +35,7 @@ def _build_builder_registry(
     get_config_value_fn: Callable[[str], str],
 ) -> SimpleNamespace:
     return SimpleNamespace(
-        parsers=graph_builder_parsers.build_parser_registry(get_config_value_fn)
+        parsers=parser_registry.build_parser_registry(get_config_value_fn)
     )
 
 
@@ -53,7 +53,7 @@ def test_parse_worker_entrypoint_matches_direct_parser_output(
     )
 
     builder = _build_builder_registry(lambda _key: "false")
-    direct_result = graph_builder_parsers.parse_file(
+    direct_result = parser_registry.parse_file(
         builder,
         repo_path,
         dockerfile,
@@ -63,7 +63,7 @@ def test_parse_worker_entrypoint_matches_direct_parser_output(
         error_logger_fn=_no_op,
         warning_logger_fn=_no_op,
     )
-    worker_result = graph_builder_parsers.parse_file_for_indexing_worker(
+    worker_result = parser_registry.parse_file_for_indexing_worker(
         repo_path,
         dockerfile,
         False,
@@ -112,7 +112,7 @@ async def test_parse_repository_snapshot_uses_process_pool_dispatch_when_enabled
     recording_executor = _RecordingExecutor()
     monkeypatch.setenv("PCG_REPO_FILE_PARSE_MULTIPROCESS", "true")
     monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_indexing_execution.get_observability",
+        "platform_context_graph.collectors.git.parse_execution.get_observability",
         lambda: fake_observability,
     )
 

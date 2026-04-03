@@ -2,7 +2,7 @@ language: terraform
 title: Terraform Parser
 family: iac
 parser: HCLTerraformParser
-parser_entrypoint: src/platform_context_graph/tools/languages/hcl_terraform.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/hcl_terraform.py
 doc_path: docs/docs/languages/terraform.md
 fixture_repo: tests/fixtures/ecosystems/terraform_comprehensive/
 unit_test_file: tests/unit/parsers/test_hcl_terraform_parser.py

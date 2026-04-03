@@ -152,8 +152,7 @@ def _normalize_batch_commit_result(
 def _parse_worker_count() -> int:
     """Return the configured repository-parse concurrency."""
 
-    legacy_default = _positive_int_env("PARALLEL_WORKERS", 4)
-    return _positive_int_env("PCG_PARSE_WORKERS", legacy_default)
+    return _positive_int_env("PCG_PARSE_WORKERS", 4)
 
 
 def _repo_file_parse_multiprocess_enabled() -> bool:

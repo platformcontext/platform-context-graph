@@ -50,7 +50,7 @@ src/platform_context_graph/
   relationships/  # relationship helpers and linking
   resolution/     # fact projection and workload/platform materialization
   runtime/        # long-running runtime loops
-  tools/          # stable facade + compatibility shims
+  tools/          # GraphBuilder facade + remaining tool-facing query/linking surfaces
 ```
 
 ## Local Development

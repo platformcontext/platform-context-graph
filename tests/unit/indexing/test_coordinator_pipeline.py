@@ -46,7 +46,7 @@ def _load_pipeline_modules() -> tuple[ModuleType, ModuleType]:
             "platform_context_graph",
             "platform_context_graph.indexing",
             "platform_context_graph.tools",
-            "platform_context_graph.tools.graph_builder_indexing",
+            "platform_context_graph.collectors.git.indexing",
             "platform_context_graph.indexing.coordinator_models",
             "platform_context_graph.indexing.coordinator_pipeline",
         )
@@ -67,8 +67,8 @@ def _load_pipeline_modules() -> tuple[ModuleType, ModuleType]:
             sys.modules["platform_context_graph.tools"] = tools_pkg
 
             _load_module(
-                "platform_context_graph.tools.graph_builder_indexing",
-                PACKAGE_ROOT / "tools" / "graph_builder_indexing.py",
+                "platform_context_graph.collectors.git.indexing",
+                PACKAGE_ROOT / "collectors" / "git" / "indexing.py",
             )
             models = _load_module(
                 "platform_context_graph.indexing.coordinator_models",

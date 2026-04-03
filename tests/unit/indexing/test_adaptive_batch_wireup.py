@@ -35,13 +35,13 @@ class TestCommitSnapshotUsesAdaptiveConfig:
 
     def test_persistence_accepts_adaptive_flush_threshold(self):
         """should_flush_batches should accept a custom threshold parameter."""
-        from platform_context_graph.tools.graph_builder_persistence_batch import (
+        from platform_context_graph.graph.persistence.batching import (
             should_flush_batches,
         )
 
         # Verify the function accepts a threshold override
         # Empty accumulator should not trigger flush regardless of threshold
-        from platform_context_graph.tools.graph_builder_persistence_batch import (
+        from platform_context_graph.graph.persistence.batching import (
             empty_accumulator,
         )
 
@@ -50,7 +50,7 @@ class TestCommitSnapshotUsesAdaptiveConfig:
 
     def test_persistence_flushes_at_custom_threshold(self):
         """should_flush_batches with low threshold should trigger earlier."""
-        from platform_context_graph.tools.graph_builder_persistence_batch import (
+        from platform_context_graph.graph.persistence.batching import (
             should_flush_batches,
             empty_accumulator,
             pending_row_count,
@@ -72,7 +72,7 @@ class TestEntityBatchSizeOverride:
 
     def test_flush_write_batches_accepts_entity_batch_size(self):
         """flush_write_batches should accept an entity_batch_size override."""
-        from platform_context_graph.tools.graph_builder_persistence_batch import (
+        from platform_context_graph.graph.persistence.batching import (
             flush_write_batches,
         )
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from platform_context_graph.tools.languages.dockerfile import DockerfileTreeSitterParser
-from platform_context_graph.tools.graph_builder_parsers import TreeSitterParser
+from platform_context_graph.parsers.languages.dockerfile import DockerfileTreeSitterParser
+from platform_context_graph.parsers.registry import TreeSitterParser
 
 
 def _parser() -> DockerfileTreeSitterParser:

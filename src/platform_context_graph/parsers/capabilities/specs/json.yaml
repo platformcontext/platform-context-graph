@@ -2,7 +2,7 @@ language: json
 title: JSON Config Parser
 family: language
 parser: JSONConfigTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/json_config.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/json_config.py
 doc_path: docs/docs/languages/json.md
 fixture_repo: tests/fixtures/ecosystems/json_comprehensive/
 unit_test_file: tests/unit/parsers/test_json_parser.py

@@ -1,13 +1,13 @@
 # CloudFormation Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/cloudformation.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/cloudformation.yaml`
 
 ## Parser Contract
 - Language: `cloudformation`
 - Family: `iac`
 - Parser: `InfraYAMLParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/yaml_infra.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/yaml_infra.py`
 - Fixture repo: `tests/fixtures/ecosystems/cloudformation_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_cloudformation_parser.py`
 - Integration test suite: `tests/integration/test_iac_graph.py::TestCloudFormationGraph`

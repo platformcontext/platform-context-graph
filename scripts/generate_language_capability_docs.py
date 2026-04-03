@@ -51,7 +51,7 @@ def _validate_language_capability_specs(root: Path) -> list[str]:
     """
 
     _ensure_repo_src_on_path()
-    from platform_context_graph.tools.parser_capabilities import (
+    from platform_context_graph.parsers.capabilities import (
         validate_language_capability_specs,
     )
 
@@ -70,7 +70,7 @@ def _write_generated_language_docs(root: Path, *, check: bool) -> list[str]:
     """
 
     _ensure_repo_src_on_path()
-    from platform_context_graph.tools.parser_capabilities import (
+    from platform_context_graph.parsers.capabilities import (
         write_generated_language_docs,
     )
 

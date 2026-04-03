@@ -1,8 +1,10 @@
 # Tools Package
 
-This package is now primarily a compatibility boundary.
+This package now holds the remaining first-class tool surfaces that are still
+part of the public package layout.
 
-During Phase 1, canonical ownership moved into clearer top-level packages:
+Canonical ownership for parser, collector, graph, and resolution internals now
+lives in the top-level packages below:
 
 - `collectors/` for source-specific collection logic
 - `parsers/` for parser-platform code
@@ -10,11 +12,13 @@ During Phase 1, canonical ownership moved into clearer top-level packages:
 - `query/` for read-side search and analysis helpers
 - `resolution/` for workload and platform materialization logic
 
-`tools/` still contains:
+`tools/` intentionally still contains:
 
 - the stable `GraphBuilder` facade
-- legacy import shims that preserve existing callers and tests
-- a smaller set of not-yet-migrated legacy helpers that Phase 1 has not retired yet
+- code-finder and advanced language query surfaces
+- cross-repo linker entrypoints
+- query-language helper toolkits
+- generated artifacts such as `scip_pb2.py`
 
 If you are adding new functionality, prefer the canonical packages above rather
 than defaulting to `tools/`.

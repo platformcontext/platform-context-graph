@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from platform_context_graph.tools.parser_capabilities import (
+from platform_context_graph.parsers.capabilities import (
     expected_generated_language_docs,
     render_feature_matrix,
 )

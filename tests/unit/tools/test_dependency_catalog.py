@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from platform_context_graph.tools.dependency_catalog import (
+from platform_context_graph.platform.dependency_catalog import (
     dependency_roots_by_ecosystem,
     is_dependency_path,
 )
@@ -15,8 +15,8 @@ def test_dependency_catalog_covers_supported_parser_capabilities() -> None:
         Path(__file__).resolve().parents[3]
         / "src"
         / "platform_context_graph"
-        / "tools"
-        / "parser_capabilities"
+        / "parsers"
+        / "capabilities"
         / "specs"
     )
     supported_ecosystems = {spec.stem for spec in specs_dir.glob("*.yaml")}

@@ -21,7 +21,7 @@ from platform_context_graph.indexing.coordinator_storage import (
     _load_snapshot_metadata,
     _save_snapshot,
 )
-from platform_context_graph.tools.graph_builder_schema import (
+from platform_context_graph.graph.schema.builder import (
     _schema_statements_for_capabilities,
 )
 

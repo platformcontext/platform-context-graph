@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_context_graph.tools.languages.swift import (
+from platform_context_graph.parsers.languages.swift import (
     SwiftTreeSitterParser,
     pre_scan_swift,
 )

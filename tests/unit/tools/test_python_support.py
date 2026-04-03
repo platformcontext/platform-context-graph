@@ -4,7 +4,7 @@ from pathlib import Path
 
 import nbformat
 
-from platform_context_graph.tools.languages import python_support
+from platform_context_graph.parsers.languages import python_support
 
 
 def test_convert_notebook_to_temp_python_falls_back_without_nbconvert_template(

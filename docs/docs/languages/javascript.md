@@ -1,13 +1,13 @@
 # JavaScript Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/javascript.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/javascript.yaml`
 
 ## Parser Contract
 - Language: `javascript`
 - Family: `language`
 - Parser: `JavascriptTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/javascript.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/javascript.py`
 - Fixture repo: `tests/fixtures/ecosystems/javascript_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_javascript_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestJavaScriptGraph`

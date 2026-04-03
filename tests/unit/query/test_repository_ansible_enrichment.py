@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-from platform_context_graph.tools.runtime_automation_families import (
+from platform_context_graph.platform.automation_families import (
     infer_automation_runtime_families,
 )
 

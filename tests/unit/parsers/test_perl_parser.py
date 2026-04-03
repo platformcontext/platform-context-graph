@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_context_graph.tools.languages.perl import PerlTreeSitterParser
+from platform_context_graph.parsers.languages.perl import PerlTreeSitterParser
 from platform_context_graph.utils.tree_sitter_manager import get_tree_sitter_manager
 
 

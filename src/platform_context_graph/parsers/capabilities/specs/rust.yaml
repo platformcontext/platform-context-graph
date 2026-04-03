@@ -2,7 +2,7 @@ language: rust
 title: Rust Parser
 family: language
 parser: RustTreeSitterParser
-parser_entrypoint: src/platform_context_graph/tools/languages/rust.py
+parser_entrypoint: src/platform_context_graph/parsers/languages/rust.py
 doc_path: docs/docs/languages/rust.md
 fixture_repo: tests/fixtures/ecosystems/rust_comprehensive/
 unit_test_file: tests/unit/parsers/test_rust_parser.py

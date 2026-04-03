@@ -147,7 +147,7 @@ The source package is organized by responsibility under `src/platform_context_gr
 - `query/` — shared read/query layer
 - `resolution/` — Resolution Engine orchestration plus fact projection and materialization helpers
 - `runtime/` — runtime role management, ingester, and status helpers
-- `tools/` — `GraphBuilder` facade plus compatibility shims and remaining legacy helpers
+- `tools/` — `GraphBuilder` facade plus the remaining tool-facing query and linking surfaces
 
 See [Source Layout](reference/source-layout.md) for the full package map.
 

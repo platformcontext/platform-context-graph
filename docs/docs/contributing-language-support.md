@@ -5,7 +5,7 @@ Parser support in PlatformContextGraph is spec-driven. Each parser has a machine
 The canonical source of truth for each language or IaC parser:
 
 ```
-src/platform_context_graph/tools/parser_capabilities/specs/<language>.yaml
+src/platform_context_graph/parsers/capabilities/specs/<language>.yaml
 ```
 
 The generated outputs:

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from platform_context_graph.tools.languages import templated_detection
+from platform_context_graph.parsers.languages import templated_detection
 
 
 def test_classify_helm_template_yaml_returns_go_template() -> None:

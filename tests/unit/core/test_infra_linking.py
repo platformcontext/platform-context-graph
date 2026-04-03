@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from platform_context_graph.tools.languages.yaml_infra import InfraYAMLParser
+from platform_context_graph.parsers.languages.yaml_infra import InfraYAMLParser
 
 
 class TestContainerImageExtraction:

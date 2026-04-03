@@ -21,7 +21,7 @@ from ...runtime.status_store_runtime import (
     update_latest_repository_coverage_finalization,
 )
 from ...tools.graph_builder import GraphBuilder
-from ...tools.graph_builder_indexing_finalize import finalize_index_batch
+from ...collectors.git.finalize import finalize_index_batch
 from ...utils.debug_log import info_logger, warning_logger
 
 router = APIRouter(prefix="/admin", tags=["admin"])

@@ -1,13 +1,13 @@
 # JSON Config Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/json.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/json.yaml`
 
 ## Parser Contract
 - Language: `json`
 - Family: `language`
 - Parser: `JSONConfigTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/json_config.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/json_config.py`
 - Fixture repo: `tests/fixtures/ecosystems/json_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_json_parser.py`
 - Integration test suite: `tests/integration/test_json_graph.py::TestJSONGraph`

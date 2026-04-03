@@ -1,13 +1,13 @@
 # Elixir Parser
 
 This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/tools/parser_capabilities/specs/elixir.yaml`
+Canonical source: `src/platform_context_graph/parsers/capabilities/specs/elixir.yaml`
 
 ## Parser Contract
 - Language: `elixir`
 - Family: `language`
 - Parser: `ElixirTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/tools/languages/elixir.py`
+- Entrypoint: `src/platform_context_graph/parsers/languages/elixir.py`
 - Fixture repo: `tests/fixtures/ecosystems/elixir_comprehensive/`
 - Unit test suite: `tests/unit/parsers/test_elixir_parser.py`
 - Integration test suite: `tests/integration/test_language_graph.py::TestElixirGraph`
