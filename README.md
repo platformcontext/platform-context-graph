@@ -74,7 +74,7 @@ So we rebuilt it into that.
 
 **Blast radius and change surface** — Before you merge, see what breaks. Transitive dependency analysis across repos and infrastructure boundaries.
 
-**Deployable service architecture** — Stateless API Deployment + stateful Ingester StatefulSet. Neo4j for the graph, Postgres for portable content retrieval. Helm chart, Kustomize manifests, and ArgoCD overlays included.
+**Deployable service architecture** — Stateless API Deployment + stateful Ingester StatefulSet + standalone Resolution Engine Deployment. Neo4j for the graph, Postgres for portable content retrieval and fact storage. Helm chart, Kustomize manifests, and ArgoCD overlays included.
 
 **Portable content model** — Queries return `repo_id + relative_path`, not server filesystem paths. The Postgres content store means the API serves source code without needing the repo checked out locally.
 
@@ -140,7 +140,7 @@ pcg serve start --host 0.0.0.0 --port 8080
 
 **HTTP API** — OpenAPI-backed API for service-to-service automation, internal tools, and agent frameworks.
 
-**Deployable Service** — Run PCG as a networked service with a stateless API runtime, a stateful repository ingester, external Neo4j, and external Postgres.
+**Deployable Service** — Run PCG as a networked service with a stateless API runtime, a stateful repository ingester, a standalone Resolution Engine, external Neo4j, and external Postgres.
 
 ## Deploy
 

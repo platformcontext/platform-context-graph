@@ -36,6 +36,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-ingester" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "pcg.resolutionEngineFullname" -}}
+{{- printf "%s-resolution-engine" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "pcg.apiSelectorLabels" -}}
 {{- include "pcg.selectorLabels" . }}
 app.kubernetes.io/component: api
@@ -44,6 +48,11 @@ app.kubernetes.io/component: api
 {{- define "pcg.ingesterSelectorLabels" -}}
 {{- include "pcg.selectorLabels" . }}
 app.kubernetes.io/component: ingester
+{{- end -}}
+
+{{- define "pcg.resolutionEngineSelectorLabels" -}}
+{{- include "pcg.selectorLabels" . }}
+app.kubernetes.io/component: resolution-engine
 {{- end -}}
 
 {{- define "pcg.serviceAccountName" -}}

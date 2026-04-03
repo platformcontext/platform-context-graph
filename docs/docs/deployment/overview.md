@@ -6,6 +6,7 @@ PlatformContextGraph can be run locally or as a networked service, but the publi
 - **external Postgres for indexed content retrieval and search**
 - **stateless API runtime for HTTP and MCP**
 - **stateful repository ingester runtime for sync and indexing**
+- **standalone resolution-engine runtime for queued fact projection**
 - **API can serve before ingestion catches up**
 
 ## Choose a deployment path
@@ -20,7 +21,7 @@ Use [Helm](helm.md) when you want the real deployment path for Kubernetes, EKS, 
 
 ### Docker Compose
 
-Use [Docker Compose](docker-compose.md) for local end-to-end testing with Neo4j, bootstrap indexing, and the combined service.
+Use [Docker Compose](docker-compose.md) for local end-to-end testing with Neo4j, bootstrap indexing, API, repo-sync, and the standalone resolution-engine runtime.
 
 ### Argo CD
 
@@ -31,6 +32,7 @@ Use [Argo CD](argocd.md) when you want GitOps-managed deployment with the public
 The chart and deployable-service story assume:
 
 - an API `Deployment`
+- a Resolution Engine `Deployment`
 - a repository ingester `StatefulSet`
 - attached workspace storage only on the ingester
 - external Neo4j credentials provided through environment or secret management
@@ -42,4 +44,3 @@ The repository ingester is responsible for ongoing rediscovery:
 - when `repositoryRules` are configured, it applies exact and regex filters against normalized `org/repo` identifiers
 - it re-indexes the shared workspace when repositories were cloned or updated
 - it reports stale local checkouts that no longer match current discovery, but does not remove them automatically
-

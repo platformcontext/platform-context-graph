@@ -32,6 +32,10 @@ service:
 api:
   replicas: 1
 
+resolutionEngine:
+  enabled: true
+  replicas: 1
+
 observability:
   environment: ""
   otel:
@@ -52,7 +56,7 @@ observability:
       - /api/v0/redoc
     metricExportIntervalSeconds: 30
 
-worker:
+ingester:
   replicas: 1
   persistence:
     enabled: true

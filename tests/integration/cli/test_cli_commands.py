@@ -261,6 +261,17 @@ class TestCLICommands:
         assert result.exit_code == 0
         mock_run_repo_sync_loop.assert_called_once_with(interval_seconds=42)
 
+    @patch(
+        "platform_context_graph.resolution.orchestration.start_resolution_engine"
+    )
+    def test_internal_resolution_engine_command_uses_python_runtime(
+        self, mock_start_resolution_engine
+    ):
+        result = runner.invoke(app, ["internal", "resolution-engine"])
+
+        assert result.exit_code == 0
+        mock_start_resolution_engine.assert_called_once_with()
+
     @patch("platform_context_graph.cli.main.workspace_plan_helper")
     def test_workspace_plan_command_uses_workspace_helper(
         self,

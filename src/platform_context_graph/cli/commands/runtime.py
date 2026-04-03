@@ -294,6 +294,15 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
             effective_interval = int(os.getenv("PCG_REPO_SYNC_INTERVAL_SECONDS", "900"))
         main_module.run_repo_sync_loop(interval_seconds=effective_interval)
 
+    @internal_app.command("resolution-engine", hidden=True)
+    def internal_resolution_engine() -> None:
+        """Run the standalone facts projection engine."""
+        from platform_context_graph.resolution.orchestration import (
+            start_resolution_engine,
+        )
+
+        start_resolution_engine()
+
     @app.command("m", rich_help_panel="Shortcuts")
     def mcp_setup_alias() -> None:
         """Run the ``pcg mcp setup`` shortcut."""
