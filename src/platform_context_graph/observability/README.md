@@ -16,9 +16,9 @@ Current ground rules:
 Service-facing telemetry expectations:
 
 - API and MCP expose request, latency, and error telemetry
-- the Git collector exposes repository queue wait, parse, fact emission, and commit/projection telemetry
-- the Resolution Engine exposes work-item claim, completion/failure, fact-load, and per-stage projection telemetry
-- the facts queue exposes backlog depth and oldest-item age by work type and status
+- the Git collector exposes repository queue wait, parse, fact emission, commit/projection, and fact-store SQL telemetry
+- the Resolution Engine exposes claim latency, idle sleep, active-worker count, work-item completion/failure, fact-load, per-stage projection timings, stage output counts, and stage failure taxonomy
+- the facts queue exposes SQL operation telemetry plus backlog depth and oldest-item age by work type and status
 
 Metric labels should stay low-cardinality. Repository ids, run ids, snapshot ids,
 and work-item ids belong on spans and structured logs, not on metric labels.

@@ -10,13 +10,18 @@ import pytest
 
 from platform_context_graph.collectors.git.types import RepositoryParseSnapshot
 from platform_context_graph.facts.storage.models import FactRecordRow
+from platform_context_graph.facts.storage.models import FactRunRow
+from platform_context_graph.facts.storage.postgres import PostgresFactStore
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
+from platform_context_graph.facts.work_queue.models import FactWorkQueueSnapshotRow
+from platform_context_graph.facts.work_queue.postgres import PostgresFactWorkQueue
 from platform_context_graph.indexing.coordinator_facts import emit_repository_snapshot_facts
 from platform_context_graph.observability import initialize_observability
 from platform_context_graph.observability import reset_observability_for_tests
 from platform_context_graph.resolution.orchestration.engine import project_work_item
 from platform_context_graph.resolution.orchestration.runtime import (
     run_resolution_iteration,
+    start_resolution_engine,
 )
 
 
@@ -138,6 +143,18 @@ class _InMemoryWorkQueue:
         raise AssertionError(
             f"Unexpected fail_work_item({work_item_id}, {error_message}, {terminal})"
         )
+
+    def list_queue_snapshot(self) -> list[FactWorkQueueSnapshotRow]:
+        """Return one stable queue snapshot row for gauge coverage tests."""
+
+        return [
+            FactWorkQueueSnapshotRow(
+                work_type="project-git-facts",
+                status="pending",
+                depth=1 if self.item is not None else 0,
+                oldest_age_seconds=12.0 if self.item is not None else 0.0,
+            )
+        ]
 
 
 def test_emit_repository_snapshot_facts_emits_otel_spans_and_metrics(
@@ -294,6 +311,20 @@ def test_resolution_iteration_and_projection_emit_runtime_telemetry(
     )
     assert _matching_values(
         points,
+        "pcg_resolution_claim_duration_seconds",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.work_type": "project-git-facts",
+            "pcg.outcome": "claimed",
+        },
+    )
+    assert _matching_values(
+        points,
+        "pcg_resolution_workers_active",
+        **{"pcg.component": "resolution-engine"},
+    )
+    assert _matching_values(
+        points,
         "pcg_resolution_stage_duration_seconds",
         **{
             "pcg.component": "resolution-engine",
@@ -303,9 +334,423 @@ def test_resolution_iteration_and_projection_emit_runtime_telemetry(
     )
     assert _matching_values(
         points,
-        "pcg_resolution_facts_loaded_total",
+        "pcg_resolution_stage_output_total",
         **{
             "pcg.component": "resolution-engine",
             "pcg.work_type": "project-git-facts",
+            "pcg.stage": "project_facts",
+        },
+    )
+    assert _matching_values(
+        points,
+        "pcg_fact_queue_depth",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.work_type": "project-git-facts",
+            "pcg.queue_status": "pending",
+        },
+    )
+
+
+def test_resolution_stage_failures_emit_error_class_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stage failures should emit low-cardinality error-class counters."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    span_exporter = InMemorySpanExporter()
+    metric_reader = InMemoryMetricReader()
+    initialize_observability(
+        component="resolution-engine",
+        span_exporter=span_exporter,
+        metric_reader=metric_reader,
+    )
+
+    fact_store = _InMemoryFactStore()
+    fact_store.records = [
+        FactRecordRow(
+            fact_id="fact:file",
+            fact_type="FileObserved",
+            repository_id="github.com/acme/service",
+            checkout_path="/tmp/service",
+            relative_path="src/app.py",
+            source_system="git",
+            source_run_id="run-123",
+            source_snapshot_id="snapshot-abc",
+            payload={"language": "python"},
+            observed_at=_utc_now(),
+            ingested_at=_utc_now(),
+            provenance={},
+        )
+    ]
+
+    with pytest.raises(RuntimeError, match="stage-boom"):
+        project_work_item(
+            FactWorkItemRow(
+                work_item_id="work-2",
+                work_type="project-git-facts",
+                repository_id="github.com/acme/service",
+                source_run_id="run-123",
+            ),
+            builder=object(),
+            fact_store=fact_store,
+            fact_projector=lambda **_kwargs: {"repositories": 1},
+            relationship_projector=lambda **_kwargs: (_ for _ in ()).throw(
+                RuntimeError("stage-boom")
+            ),
+            workload_projector=lambda **_kwargs: {"workloads_projected": 1},
+            platform_projector=lambda **_kwargs: {
+                "infrastructure_platform_edges_projected": 1
+            },
+        )
+
+    points = _metric_points(metric_reader)
+    assert _matching_values(
+        points,
+        "pcg_resolution_stage_failures_total",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.work_type": "project-git-facts",
+            "pcg.stage": "project_relationships",
+            "pcg.error_class": "RuntimeError",
+        },
+    )
+def test_postgres_fact_store_operations_emit_spans_and_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Postgres fact-store operations should expose SQL telemetry."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from contextlib import contextmanager
+    from unittest.mock import MagicMock
+
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    span_exporter = InMemorySpanExporter()
+    metric_reader = InMemoryMetricReader()
+    initialize_observability(
+        component="ingester",
+        span_exporter=span_exporter,
+        metric_reader=metric_reader,
+    )
+
+    store = PostgresFactStore("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = [
+        {
+            "fact_id": "fact:file",
+            "fact_type": "FileObserved",
+            "repository_id": "github.com/acme/service",
+            "checkout_path": "/tmp/service",
+            "relative_path": "src/app.py",
+            "source_system": "git",
+            "source_run_id": "run-123",
+            "source_snapshot_id": "snapshot-abc",
+            "payload": {"language": "python"},
+            "observed_at": _utc_now(),
+            "ingested_at": _utc_now(),
+            "provenance": {},
+        }
+    ]
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    store.upsert_fact_run(
+        FactRunRow(
+            source_run_id="run-123",
+            source_system="git",
+            source_snapshot_id="snapshot-abc",
+            repository_id="github.com/acme/service",
+            status="pending",
+            started_at=_utc_now(),
+        )
+    )
+    store.upsert_facts(
+        [
+            FactRecordRow(
+                fact_id="fact:file",
+                fact_type="FileObserved",
+                repository_id="github.com/acme/service",
+                checkout_path="/tmp/service",
+                relative_path="src/app.py",
+                source_system="git",
+                source_run_id="run-123",
+                source_snapshot_id="snapshot-abc",
+                payload={"language": "python"},
+                observed_at=_utc_now(),
+                ingested_at=_utc_now(),
+                provenance={},
+            )
+        ]
+    )
+    store.list_facts(
+        repository_id="github.com/acme/service",
+        source_run_id="run-123",
+    )
+
+    span_names = {span.name for span in span_exporter.get_finished_spans()}
+    points = _metric_points(metric_reader)
+
+    assert "pcg.fact_store.upsert_fact_run" in span_names
+    assert "pcg.fact_store.upsert_facts" in span_names
+    assert "pcg.fact_store.list_facts" in span_names
+    assert _matching_values(
+        points,
+        "pcg_fact_store_operations_total",
+        **{
+            "pcg.component": "ingester",
+            "pcg.backend": "postgres",
+            "pcg.operation": "upsert_facts",
+            "pcg.outcome": "success",
+        },
+    )
+    assert _matching_values(
+        points,
+        "pcg_fact_store_operation_duration_seconds",
+        **{
+            "pcg.component": "ingester",
+            "pcg.backend": "postgres",
+            "pcg.operation": "list_facts",
+            "pcg.outcome": "success",
+        },
+    )
+    assert _matching_values(
+        points,
+        "pcg_fact_store_rows_total",
+        **{
+            "pcg.component": "ingester",
+            "pcg.backend": "postgres",
+            "pcg.operation": "upsert_facts",
+        },
+    )
+
+
+def test_postgres_fact_queue_operations_emit_spans_and_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Postgres fact-queue operations should expose SQL telemetry."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from contextlib import contextmanager
+    from unittest.mock import MagicMock
+
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    span_exporter = InMemorySpanExporter()
+    metric_reader = InMemoryMetricReader()
+    initialize_observability(
+        component="resolution-engine",
+        span_exporter=span_exporter,
+        metric_reader=metric_reader,
+    )
+
+    queue = PostgresFactWorkQueue("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchone.return_value = {
+        "work_item_id": "work-1",
+        "work_type": "project-git-facts",
+        "repository_id": "github.com/acme/service",
+        "source_run_id": "run-123",
+        "lease_owner": "resolution-worker-1",
+        "lease_expires_at": _utc_now(),
+        "status": "leased",
+        "attempt_count": 1,
+        "last_error": None,
+        "created_at": _utc_now(),
+        "updated_at": _utc_now(),
+    }
+    cursor.fetchall.return_value = [
+        {
+            "work_type": "project-git-facts",
+            "status": "pending",
+            "depth": 2,
+            "oldest_age_seconds": 30.0,
+        }
+    ]
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(queue, "_cursor", _cursor)
+
+    queue.enqueue_work_item(
+        FactWorkItemRow(
+            work_item_id="work-1",
+            work_type="project-git-facts",
+            repository_id="github.com/acme/service",
+            source_run_id="run-123",
+            status="pending",
+            attempt_count=0,
+            created_at=_utc_now(),
+            updated_at=_utc_now(),
+        )
+    )
+    queue.claim_work_item(
+        lease_owner="resolution-worker-1",
+        lease_ttl_seconds=60,
+    )
+    queue.complete_work_item(work_item_id="work-1")
+    queue.list_queue_snapshot()
+
+    span_names = {span.name for span in span_exporter.get_finished_spans()}
+    points = _metric_points(metric_reader)
+
+    assert "pcg.fact_queue.enqueue_work_item" in span_names
+    assert "pcg.fact_queue.claim_work_item" in span_names
+    assert "pcg.fact_queue.complete_work_item" in span_names
+    assert "pcg.fact_queue.list_queue_snapshot" in span_names
+    assert _matching_values(
+        points,
+        "pcg_fact_queue_operations_total",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.backend": "postgres",
+            "pcg.operation": "claim_work_item",
+            "pcg.outcome": "success",
+        },
+    )
+    assert _matching_values(
+        points,
+        "pcg_fact_queue_operation_duration_seconds",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.backend": "postgres",
+            "pcg.operation": "list_queue_snapshot",
+            "pcg.outcome": "success",
+        },
+    )
+
+
+def test_resolution_engine_emits_claim_idle_and_stage_failure_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolution-engine runtime should expose worker and stage telemetry."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+
+    reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    span_exporter = InMemorySpanExporter()
+    metric_reader = InMemoryMetricReader()
+    initialize_observability(
+        component="resolution-engine",
+        span_exporter=span_exporter,
+        metric_reader=metric_reader,
+    )
+
+    empty_queue = _InMemoryWorkQueue()
+    empty_queue.item = None
+
+    with pytest.raises(RuntimeError, match="stop after idle"):
+        start_resolution_engine(
+            queue=empty_queue,
+            sleep_fn=lambda _seconds: (_ for _ in ()).throw(
+                RuntimeError("stop after idle")
+            ),
+            run_once=False,
+        )
+
+    fact_store = _InMemoryFactStore()
+    fact_store.records = [
+        FactRecordRow(
+            fact_id="fact:file",
+            fact_type="FileObserved",
+            repository_id="github.com/acme/service",
+            checkout_path="/tmp/service",
+            relative_path="src/app.py",
+            source_system="git",
+            source_run_id="run-123",
+            source_snapshot_id="snapshot-abc",
+            payload={"language": "python"},
+            observed_at=_utc_now(),
+            ingested_at=_utc_now(),
+            provenance={},
+        )
+    ]
+
+    with pytest.raises(ValueError, match="bad relationship stage"):
+        project_work_item(
+            FactWorkItemRow(
+                work_item_id="work-99",
+                work_type="project-git-facts",
+                repository_id="github.com/acme/service",
+                source_run_id="run-123",
+                attempt_count=1,
+            ),
+            builder=object(),
+            fact_store=fact_store,
+            fact_projector=lambda **_kwargs: {"repositories": 1, "files": 1},
+            relationship_projector=lambda **_kwargs: (_ for _ in ()).throw(
+                ValueError("bad relationship stage")
+            ),
+            workload_projector=lambda **_kwargs: {"workloads_projected": 1},
+            platform_projector=lambda **_kwargs: {
+                "infrastructure_platform_edges_projected": 1
+            },
+        )
+
+    points = _metric_points(metric_reader)
+
+    assert _matching_values(
+        points,
+        "pcg_resolution_claim_duration_seconds",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.work_type": "none",
+            "pcg.outcome": "empty",
+        },
+    )
+    assert _matching_values(
+        points,
+        "pcg_resolution_idle_sleep_seconds",
+        **{"pcg.component": "resolution-engine"},
+    )
+    assert _matching_values(
+        points,
+        "pcg_resolution_stage_output_total",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.work_type": "project-git-facts",
+            "pcg.stage": "project_facts",
+        },
+    )
+    assert _matching_values(
+        points,
+        "pcg_resolution_stage_failures_total",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.work_type": "project-git-facts",
+            "pcg.stage": "project_relationships",
+            "pcg.error_class": "ValueError",
         },
     )

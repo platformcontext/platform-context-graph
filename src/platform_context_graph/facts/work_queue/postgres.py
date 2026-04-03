@@ -5,7 +5,11 @@ from __future__ import annotations
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+import time
 from typing import Any
+
+from platform_context_graph.observability import current_component
+from platform_context_graph.observability import get_observability
 
 from .models import FactWorkItemRow
 from .models import FactWorkQueueSnapshotRow
@@ -82,8 +86,10 @@ class PostgresFactWorkQueue:
     def enqueue_work_item(self, entry: FactWorkItemRow) -> None:
         """Insert or update a pending work item."""
 
-        with self._cursor() as cursor:
-            cursor.execute(
+        self._record_operation(
+            operation="enqueue_work_item",
+            row_count=1,
+            callback=lambda: self._execute(
                 """
                 INSERT INTO fact_work_items (
                     work_item_id,
@@ -122,7 +128,8 @@ class PostgresFactWorkQueue:
                     updated_at = EXCLUDED.updated_at
                 """,
                 _work_item_params(entry),
-            )
+            ),
+        )
 
     def claim_work_item(
         self,
@@ -134,8 +141,9 @@ class PostgresFactWorkQueue:
 
         now = _utc_now()
         lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
-        with self._cursor() as cursor:
-            cursor.execute(
+        row = self._record_operation(
+            operation="claim_work_item",
+            callback=lambda: self._fetchone(
                 """
                 WITH claimable AS (
                     SELECT work_item_id
@@ -172,8 +180,8 @@ class PostgresFactWorkQueue:
                     "lease_expires_at": lease_expires_at,
                     "now": now,
                 },
-            )
-            row = cursor.fetchone()
+            ),
+        )
         return FactWorkItemRow(**row) if row else None
 
     def lease_work_item(
@@ -187,8 +195,9 @@ class PostgresFactWorkQueue:
 
         now = _utc_now()
         lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
-        with self._cursor() as cursor:
-            cursor.execute(
+        row = self._record_operation(
+            operation="lease_work_item",
+            callback=lambda: self._fetchone(
                 """
                 UPDATE fact_work_items
                 SET lease_owner = %(lease_owner)s,
@@ -220,8 +229,8 @@ class PostgresFactWorkQueue:
                     "lease_expires_at": lease_expires_at,
                     "now": now,
                 },
-            )
-            row = cursor.fetchone()
+            ),
+        )
         return FactWorkItemRow(**row) if row else None
 
     def fail_work_item(
@@ -233,8 +242,10 @@ class PostgresFactWorkQueue:
     ) -> None:
         """Mark one work item as retryable or terminally failed."""
 
-        with self._cursor() as cursor:
-            cursor.execute(
+        self._record_operation(
+            operation="fail_work_item",
+            row_count=1,
+            callback=lambda: self._execute(
                 """
                 UPDATE fact_work_items
                 SET status = %(status)s,
@@ -251,13 +262,16 @@ class PostgresFactWorkQueue:
                     "last_error": error_message,
                     "updated_at": _utc_now(),
                 },
-            )
+            ),
+        )
 
     def complete_work_item(self, *, work_item_id: str) -> None:
         """Mark one work item completed and clear its lease."""
 
-        with self._cursor() as cursor:
-            cursor.execute(
+        self._record_operation(
+            operation="complete_work_item",
+            row_count=1,
+            callback=lambda: self._execute(
                 """
                 UPDATE fact_work_items
                 SET status = 'completed',
@@ -271,14 +285,16 @@ class PostgresFactWorkQueue:
                     "work_item_id": work_item_id,
                     "updated_at": _utc_now(),
                 },
-            )
+            ),
+        )
 
     def list_queue_snapshot(self) -> list[FactWorkQueueSnapshotRow]:
         """Return aggregated queue depth and oldest age by work type and status."""
 
         now = _utc_now()
-        with self._cursor() as cursor:
-            cursor.execute(
+        rows = self._record_operation(
+            operation="list_queue_snapshot",
+            callback=lambda: self._fetchall(
                 """
                 SELECT work_type,
                        status,
@@ -291,8 +307,9 @@ class PostgresFactWorkQueue:
                 GROUP BY work_type, status
                 """,
                 {"now": now},
-            )
-            rows = cursor.fetchall()
+            ),
+            row_count=None,
+        )
         return [
             FactWorkQueueSnapshotRow(
                 work_type=row["work_type"],
@@ -302,6 +319,81 @@ class PostgresFactWorkQueue:
             )
             for row in rows
         ]
+
+    def _component(self) -> str:
+        """Return the logical component for emitted telemetry."""
+
+        runtime = get_observability()
+        return current_component() or runtime.component
+
+    def _execute(self, query: str, params: dict[str, Any]) -> None:
+        """Execute one SQL statement through the managed cursor."""
+
+        with self._cursor() as cursor:
+            cursor.execute(query, params)
+
+    def _fetchone(self, query: str, params: dict[str, Any]) -> dict[str, Any] | None:
+        """Execute one SQL read and return one row when present."""
+
+        with self._cursor() as cursor:
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+        return dict(row) if row is not None else None
+
+    def _fetchall(self, query: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        """Execute one SQL read and return all fetched rows."""
+
+        with self._cursor() as cursor:
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+        return list(rows)
+
+    def _record_operation(
+        self,
+        *,
+        operation: str,
+        callback: Any,
+        row_count: int | None = None,
+    ) -> Any:
+        """Wrap one queue operation with OTEL spans and metrics."""
+
+        observability = get_observability()
+        component = self._component()
+        started = time.perf_counter()
+        with observability.start_span(
+            f"pcg.fact_queue.{operation}",
+            component=component,
+            attributes={
+                "pcg.backend": "postgres",
+                "pcg.operation": operation,
+            },
+        ) as span:
+            try:
+                result = callback()
+            except Exception as exc:
+                if span is not None:
+                    span.record_exception(exc)
+                observability.record_fact_queue_operation(
+                    component=component,
+                    operation=operation,
+                    outcome="error",
+                    duration_seconds=max(time.perf_counter() - started, 0.0),
+                    row_count=row_count,
+                )
+                raise
+        result_row_count = row_count
+        if isinstance(result, list):
+            result_row_count = len(result)
+        elif isinstance(result, dict):
+            result_row_count = 1
+        observability.record_fact_queue_operation(
+            component=component,
+            operation=operation,
+            outcome="success",
+            duration_seconds=max(time.perf_counter() - started, 0.0),
+            row_count=result_row_count,
+        )
+        return result
 
     def close(self) -> None:
         """Close the shared PostgreSQL connection if it is open."""

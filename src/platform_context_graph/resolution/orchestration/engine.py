@@ -18,6 +18,20 @@ from platform_context_graph.resolution.projection.workloads import (
 )
 
 
+def _metric_output_count(metrics: Any) -> int:
+    """Return a best-effort projected output count from nested stage metrics."""
+
+    if isinstance(metrics, bool):
+        return 0
+    if isinstance(metrics, int):
+        return metrics
+    if isinstance(metrics, dict):
+        return sum(_metric_output_count(value) for value in metrics.values())
+    if isinstance(metrics, (list, tuple, set)):
+        return sum(_metric_output_count(value) for value in metrics)
+    return 0
+
+
 def project_work_item(
     work_item: FactWorkItemRow,
     *,
@@ -52,15 +66,24 @@ def project_work_item(
         },
     ):
         load_started = time.perf_counter()
-        with observability.start_span(
-            "pcg.resolution.load_facts",
-            component="resolution-engine",
-            attributes={"pcg.facts.work_item_id": work_item.work_item_id},
-        ):
-            fact_records: list[FactRecordRow] = fact_store.list_facts(
-                repository_id=work_item.repository_id,
-                source_run_id=work_item.source_run_id,
+        try:
+            with observability.start_span(
+                "pcg.resolution.load_facts",
+                component="resolution-engine",
+                attributes={"pcg.facts.work_item_id": work_item.work_item_id},
+            ):
+                fact_records: list[FactRecordRow] = fact_store.list_facts(
+                    repository_id=work_item.repository_id,
+                    source_run_id=work_item.source_run_id,
+                )
+        except Exception as exc:
+            observability.record_resolution_stage_failure(
+                component="resolution-engine",
+                work_type=work_item.work_type,
+                stage="load_facts",
+                error_class=type(exc).__name__,
             )
+            raise
         observability.record_resolution_stage_duration(
             component="resolution-engine",
             work_type=work_item.work_type,
@@ -80,12 +103,27 @@ def project_work_item(
                 component="resolution-engine",
                 attributes={"pcg.facts.work_item_id": work_item.work_item_id},
             ):
-                metrics = callback()
+                try:
+                    metrics = callback()
+                except Exception as exc:
+                    observability.record_resolution_stage_failure(
+                        component="resolution-engine",
+                        work_type=work_item.work_type,
+                        stage=stage,
+                        error_class=type(exc).__name__,
+                    )
+                    raise
             observability.record_resolution_stage_duration(
                 component="resolution-engine",
                 work_type=work_item.work_type,
                 stage=stage,
                 duration_seconds=max(time.perf_counter() - started, 0.0),
+            )
+            observability.record_resolution_stage_output(
+                component="resolution-engine",
+                work_type=work_item.work_type,
+                stage=stage,
+                output_count=_metric_output_count(metrics),
             )
             return metrics
 

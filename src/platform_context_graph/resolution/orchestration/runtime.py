@@ -66,12 +66,24 @@ def run_resolution_iteration(
             "pcg.queue.lease_ttl_seconds": lease_ttl_seconds,
         },
     ):
+        claim_started = time.perf_counter()
         work_item = queue.claim_work_item(
             lease_owner=lease_owner,
             lease_ttl_seconds=lease_ttl_seconds,
         )
+        claim_duration = max(time.perf_counter() - claim_started, 0.0)
         _refresh_queue_metrics(queue)
         if work_item is None:
+            observability.set_resolution_workers_active(
+                component="resolution-engine",
+                active_count=0,
+            )
+            observability.record_resolution_claim(
+                component="resolution-engine",
+                work_type="none",
+                outcome="empty",
+                duration_seconds=claim_duration,
+            )
             observability.record_resolution_work_item(
                 component="resolution-engine",
                 work_type="none",
@@ -80,6 +92,16 @@ def run_resolution_iteration(
             )
             return False
 
+        observability.record_resolution_claim(
+            component="resolution-engine",
+            work_type=work_item.work_type,
+            outcome="claimed",
+            duration_seconds=claim_duration,
+        )
+        observability.set_resolution_workers_active(
+            component="resolution-engine",
+            active_count=1,
+        )
         try:
             projector(work_item)
         except Exception as exc:
@@ -103,6 +125,11 @@ def run_resolution_iteration(
                 work_type=work_item.work_type,
                 outcome="completed",
                 duration_seconds=max(time.perf_counter() - iteration_started, 0.0),
+            )
+        finally:
+            observability.set_resolution_workers_active(
+                component="resolution-engine",
+                active_count=0,
             )
 
     return True
@@ -141,4 +168,11 @@ def start_resolution_engine(
         if run_once:
             return
         if not processed:
-            sleep_fn(idle_sleep_seconds)
+            sleep_started = time.perf_counter()
+            try:
+                sleep_fn(idle_sleep_seconds)
+            finally:
+                get_observability().record_resolution_idle_sleep(
+                    component="resolution-engine",
+                    duration_seconds=max(time.perf_counter() - sleep_started, 0.0),
+                )

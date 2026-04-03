@@ -16,6 +16,7 @@ class RuntimeFactResolutionMetricsMixin:
     _fact_resolution_instruments: dict[str, Any]
     _fact_queue_depth: dict[tuple[tuple[str, str], ...], int]
     _fact_queue_oldest_age_seconds: dict[tuple[tuple[str, str], ...], float]
+    _resolution_workers_active: dict[tuple[tuple[str, str], ...], int]
 
     def record_fact_emission(
         self,
@@ -194,6 +195,191 @@ class RuntimeFactResolutionMetricsMixin:
                 },
             )
 
+    def record_fact_store_operation(
+        self,
+        *,
+        component: str,
+        operation: str,
+        outcome: str,
+        duration_seconds: float,
+        row_count: int | None = None,
+    ) -> None:
+        """Record one fact-store operation and its duration."""
+
+        if not self.enabled:
+            return
+        attrs = {
+            "pcg.component": component,
+            "pcg.backend": "postgres",
+            "pcg.operation": operation,
+            "pcg.outcome": outcome,
+        }
+        operations_total = self._fact_resolution_instruments.get(
+            "fact_store_operations_total"
+        )
+        operation_duration = self._fact_resolution_instruments.get(
+            "fact_store_operation_duration"
+        )
+        rows_total = self._fact_resolution_instruments.get("fact_store_rows_total")
+        if operations_total is not None:
+            operations_total.add(1, attrs)
+        if operation_duration is not None:
+            operation_duration.record(duration_seconds, attrs)
+        if row_count is not None and rows_total is not None:
+            rows_total.add(
+                row_count,
+                {
+                    "pcg.component": component,
+                    "pcg.backend": "postgres",
+                    "pcg.operation": operation,
+                },
+            )
+
+    def record_fact_queue_operation(
+        self,
+        *,
+        component: str,
+        operation: str,
+        outcome: str,
+        duration_seconds: float,
+        row_count: int | None = None,
+    ) -> None:
+        """Record one fact-queue operation and its duration."""
+
+        if not self.enabled:
+            return
+        attrs = {
+            "pcg.component": component,
+            "pcg.backend": "postgres",
+            "pcg.operation": operation,
+            "pcg.outcome": outcome,
+        }
+        operations_total = self._fact_resolution_instruments.get(
+            "fact_queue_operations_total"
+        )
+        operation_duration = self._fact_resolution_instruments.get(
+            "fact_queue_operation_duration"
+        )
+        rows_total = self._fact_resolution_instruments.get("fact_queue_rows_total")
+        if operations_total is not None:
+            operations_total.add(1, attrs)
+        if operation_duration is not None:
+            operation_duration.record(duration_seconds, attrs)
+        if row_count is not None and rows_total is not None:
+            rows_total.add(
+                row_count,
+                {
+                    "pcg.component": component,
+                    "pcg.backend": "postgres",
+                    "pcg.operation": operation,
+                },
+            )
+
+    def set_resolution_workers_active(
+        self,
+        *,
+        component: str,
+        active_count: int,
+    ) -> None:
+        """Set the current number of active resolution workers."""
+
+        key = tuple(sorted({"pcg.component": component}.items()))
+        with self._lock:
+            self._resolution_workers_active[key] = max(active_count, 0)
+
+    def record_resolution_claim(
+        self,
+        *,
+        component: str,
+        work_type: str,
+        outcome: str,
+        duration_seconds: float,
+    ) -> None:
+        """Record one claim attempt by outcome."""
+
+        if not self.enabled:
+            return
+        claim_duration = self._fact_resolution_instruments.get(
+            "resolution_claim_duration"
+        )
+        if claim_duration is not None:
+            claim_duration.record(
+                duration_seconds,
+                {
+                    "pcg.component": component,
+                    "pcg.work_type": work_type,
+                    "pcg.outcome": outcome,
+                },
+            )
+
+    def record_resolution_idle_sleep(
+        self,
+        *,
+        component: str,
+        duration_seconds: float,
+    ) -> None:
+        """Record one idle sleep interval for the Resolution Engine."""
+
+        if not self.enabled:
+            return
+        idle_sleep = self._fact_resolution_instruments.get("resolution_idle_sleep")
+        if idle_sleep is not None:
+            idle_sleep.record(
+                duration_seconds,
+                {"pcg.component": component},
+            )
+
+    def record_resolution_stage_output(
+        self,
+        *,
+        component: str,
+        work_type: str,
+        stage: str,
+        output_count: int,
+    ) -> None:
+        """Record projected output volume for one resolution stage."""
+
+        if not self.enabled or output_count <= 0:
+            return
+        stage_output_total = self._fact_resolution_instruments.get(
+            "resolution_stage_output_total"
+        )
+        if stage_output_total is not None:
+            stage_output_total.add(
+                output_count,
+                {
+                    "pcg.component": component,
+                    "pcg.work_type": work_type,
+                    "pcg.stage": stage,
+                },
+            )
+
+    def record_resolution_stage_failure(
+        self,
+        *,
+        component: str,
+        work_type: str,
+        stage: str,
+        error_class: str,
+    ) -> None:
+        """Record one failed resolution stage grouped by error class."""
+
+        if not self.enabled:
+            return
+        stage_failures_total = self._fact_resolution_instruments.get(
+            "resolution_stage_failures_total"
+        )
+        if stage_failures_total is not None:
+            stage_failures_total.add(
+                1,
+                {
+                    "pcg.component": component,
+                    "pcg.work_type": work_type,
+                    "pcg.stage": stage,
+                    "pcg.error_class": error_class,
+                },
+            )
+
     def _observe_fact_queue_depth(self, _options: Any) -> list[Observation]:
         """Produce facts queue depth observations."""
 
@@ -214,6 +400,15 @@ class RuntimeFactResolutionMetricsMixin:
                 for key, value in sorted(self._fact_queue_oldest_age_seconds.items())
             ]
 
+    def _observe_resolution_workers_active(self, _options: Any) -> list[Observation]:
+        """Produce current resolution worker active-count observations."""
+
+        with self._lock:
+            return [
+                Observation(value, dict(key))
+                for key, value in sorted(self._resolution_workers_active.items())
+            ]
+
 
 def setup_fact_resolution_instruments(runtime: Any) -> None:
     """Initialize facts and resolution instruments for one runtime."""
@@ -221,36 +416,23 @@ def setup_fact_resolution_instruments(runtime: Any) -> None:
     if not runtime.enabled or runtime.meter is None:
         return
 
-    runtime._fact_resolution_instruments["fact_records_total"] = (
-        runtime.meter.create_counter("pcg_fact_records_total")
-    )
-    runtime._fact_resolution_instruments["fact_emission_duration"] = (
-        runtime.meter.create_histogram(
-            "pcg_fact_emission_duration_seconds",
-            unit="s",
-        )
-    )
-    runtime._fact_resolution_instruments["fact_work_items_total"] = (
-        runtime.meter.create_counter("pcg_fact_work_items_total")
-    )
-    runtime._fact_resolution_instruments["resolution_work_items_total"] = (
-        runtime.meter.create_counter("pcg_resolution_work_items_total")
-    )
-    runtime._fact_resolution_instruments["resolution_work_item_duration"] = (
-        runtime.meter.create_histogram(
-            "pcg_resolution_work_item_duration_seconds",
-            unit="s",
-        )
-    )
-    runtime._fact_resolution_instruments["resolution_stage_duration"] = (
-        runtime.meter.create_histogram(
-            "pcg_resolution_stage_duration_seconds",
-            unit="s",
-        )
-    )
-    runtime._fact_resolution_instruments["resolution_facts_loaded_total"] = (
-        runtime.meter.create_counter("pcg_resolution_facts_loaded_total")
-    )
+    runtime._fact_resolution_instruments["fact_records_total"] = runtime.meter.create_counter("pcg_fact_records_total")
+    runtime._fact_resolution_instruments["fact_emission_duration"] = runtime.meter.create_histogram("pcg_fact_emission_duration_seconds", unit="s")
+    runtime._fact_resolution_instruments["fact_work_items_total"] = runtime.meter.create_counter("pcg_fact_work_items_total")
+    runtime._fact_resolution_instruments["resolution_work_items_total"] = runtime.meter.create_counter("pcg_resolution_work_items_total")
+    runtime._fact_resolution_instruments["resolution_work_item_duration"] = runtime.meter.create_histogram("pcg_resolution_work_item_duration_seconds", unit="s")
+    runtime._fact_resolution_instruments["resolution_stage_duration"] = runtime.meter.create_histogram("pcg_resolution_stage_duration_seconds", unit="s")
+    runtime._fact_resolution_instruments["resolution_facts_loaded_total"] = runtime.meter.create_counter("pcg_resolution_facts_loaded_total")
+    runtime._fact_resolution_instruments["fact_store_operations_total"] = runtime.meter.create_counter("pcg_fact_store_operations_total")
+    runtime._fact_resolution_instruments["fact_store_operation_duration"] = runtime.meter.create_histogram("pcg_fact_store_operation_duration_seconds", unit="s")
+    runtime._fact_resolution_instruments["fact_store_rows_total"] = runtime.meter.create_counter("pcg_fact_store_rows_total")
+    runtime._fact_resolution_instruments["fact_queue_operations_total"] = runtime.meter.create_counter("pcg_fact_queue_operations_total")
+    runtime._fact_resolution_instruments["fact_queue_operation_duration"] = runtime.meter.create_histogram("pcg_fact_queue_operation_duration_seconds", unit="s")
+    runtime._fact_resolution_instruments["fact_queue_rows_total"] = runtime.meter.create_counter("pcg_fact_queue_rows_total")
+    runtime._fact_resolution_instruments["resolution_claim_duration"] = runtime.meter.create_histogram("pcg_resolution_claim_duration_seconds", unit="s")
+    runtime._fact_resolution_instruments["resolution_idle_sleep"] = runtime.meter.create_histogram("pcg_resolution_idle_sleep_seconds", unit="s")
+    runtime._fact_resolution_instruments["resolution_stage_output_total"] = runtime.meter.create_counter("pcg_resolution_stage_output_total")
+    runtime._fact_resolution_instruments["resolution_stage_failures_total"] = runtime.meter.create_counter("pcg_resolution_stage_failures_total")
     runtime.meter.create_observable_gauge(
         "pcg_fact_queue_depth",
         callbacks=[runtime._observe_fact_queue_depth],
@@ -259,6 +441,10 @@ def setup_fact_resolution_instruments(runtime: Any) -> None:
         "pcg_fact_queue_oldest_age_seconds",
         callbacks=[runtime._observe_fact_queue_oldest_age_seconds],
         unit="s",
+    )
+    runtime.meter.create_observable_gauge(
+        "pcg_resolution_workers_active",
+        callbacks=[runtime._observe_resolution_workers_active],
     )
 
 

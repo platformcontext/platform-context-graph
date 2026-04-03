@@ -27,6 +27,8 @@ Operational visibility for this package now includes:
 - fact emission spans at the repository snapshot boundary
 - fact record volume and emission-duration metrics
 - fact work-item lifecycle counters
+- Postgres fact-store operation spans, counters, durations, and row-volume metrics
+- Postgres fact-queue operation spans, counters, durations, and row-volume metrics
 - facts queue depth and oldest-item age gauges when the Postgres queue backend is used
 
 This package should continue to grow as new collectors emit source observations

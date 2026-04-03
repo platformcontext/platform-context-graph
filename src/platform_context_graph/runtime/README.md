@@ -20,8 +20,8 @@ The deployed service shape is easiest to reason about as three primary roles:
 For SRE and tuning work, the important telemetry split is:
 
 - **API**: request latency, errors, and tool invocation timing
-- **Repository ingester / Git collector**: repository queue wait, parse, fact emission, commit/projection timing, and per-repo graph/content write durations
-- **Resolution Engine**: work-item claim outcomes, queue backlog gauges, fact-load timing, and projection stage durations
+- **Repository ingester / Git collector**: repository queue wait, parse, fact emission, commit/projection timing, per-repo graph/content write durations, and fact-store SQL timings
+- **Resolution Engine**: work-item claim latency, queue backlog gauges, idle sleep, active-worker count, fact-load timing, projection stage durations, stage output counts, and stage failure/error-class metrics
 
 Internally, the Git path now flows like this:
 

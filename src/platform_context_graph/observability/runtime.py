@@ -81,9 +81,8 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         init=False, default_factory=dict
     )
     _fact_queue_depth: dict[ActiveStateKey, int] = field(init=False, default_factory=dict)
-    _fact_queue_oldest_age_seconds: dict[ActiveStateKey, float] = field(
-        init=False, default_factory=dict
-    )
+    _fact_queue_oldest_age_seconds: dict[ActiveStateKey, float] = field(init=False, default_factory=dict)
+    _resolution_workers_active: dict[ActiveStateKey, int] = field(init=False, default_factory=dict)
     _process_rss_bytes: int = field(init=False, default=-1)
     _cgroup_memory_bytes: int = field(init=False, default=-1)
     _cgroup_memory_limit_bytes: int = field(init=False, default=-1)

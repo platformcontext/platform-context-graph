@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import threading
 from contextlib import contextmanager
+import time
 from typing import Any
+
+from platform_context_graph.observability import current_component
+from platform_context_graph.observability import get_observability
 
 from .models import FactRecordRow
 from .models import FactRunRow
@@ -159,19 +163,26 @@ class PostgresFactStore:
     def upsert_fact_run(self, entry: FactRunRow) -> None:
         """Insert or update one fact run row."""
 
-        with self._cursor() as cursor:
-            cursor.execute(_FACT_RUN_UPSERT_SQL, _fact_run_params(entry))
+        self._record_operation(
+            operation="upsert_fact_run",
+            row_count=1,
+            callback=lambda: self._execute(
+                _FACT_RUN_UPSERT_SQL,
+                _fact_run_params(entry),
+            ),
+        )
 
     def upsert_facts(self, entries: list[FactRecordRow]) -> None:
         """Insert or update fact records in one batch."""
 
         if not entries:
             return
-        with self._cursor() as cursor:
-            cursor.executemany(
-                _FACT_RECORD_UPSERT_SQL,
-                [_fact_record_params(entry) for entry in entries],
-            )
+        rows = [_fact_record_params(entry) for entry in entries]
+        self._record_operation(
+            operation="upsert_facts",
+            row_count=len(rows),
+            callback=lambda: self._executemany(_FACT_RECORD_UPSERT_SQL, rows),
+        )
 
     def list_facts(
         self,
@@ -181,8 +192,9 @@ class PostgresFactStore:
     ) -> list[FactRecordRow]:
         """Return fact records for one repository/run pair."""
 
-        with self._cursor() as cursor:
-            cursor.execute(
+        rows = self._record_operation(
+            operation="list_facts",
+            callback=lambda: self._fetchall(
                 """
                 SELECT fact_id,
                        fact_type,
@@ -205,18 +217,83 @@ class PostgresFactStore:
                     "repository_id": repository_id,
                     "source_run_id": source_run_id,
                 },
-            )
-            rows = cursor.fetchall()
+            ),
+        )
         return [FactRecordRow(**row) for row in rows]
 
-    def close(self) -> None:
-        """Close the underlying PostgreSQL connection when it exists."""
+    def _component(self) -> str:
+        """Return the logical component for telemetry emitted by this store."""
 
-        with self._lock:
-            if self._conn is not None and not self._conn.closed:
-                self._conn.close()
-            self._conn = None
-            self._initialized = False
+        runtime = get_observability()
+        return current_component() or runtime.component
+
+    def _execute(self, query: str, params: dict[str, Any]) -> None:
+        """Execute one SQL statement through the managed cursor."""
+
+        with self._cursor() as cursor:
+            cursor.execute(query, params)
+
+    def _executemany(self, query: str, rows: list[dict[str, Any]]) -> None:
+        """Execute one SQL batch through the managed cursor."""
+
+        with self._cursor() as cursor:
+            cursor.executemany(query, rows)
+
+    def _fetchall(
+        self,
+        query: str,
+        params: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Execute one SQL read and return all fetched rows."""
+
+        with self._cursor() as cursor:
+            cursor.execute(query, params)
+            fetched_rows = cursor.fetchall()
+        return list(fetched_rows)
+
+    def _record_operation(
+        self,
+        *,
+        operation: str,
+        callback: Any,
+        row_count: int | None = None,
+    ) -> Any:
+        """Wrap one fact-store operation with OTEL spans and metrics."""
+
+        observability = get_observability()
+        component = self._component()
+        started = time.perf_counter()
+        with observability.start_span(
+            f"pcg.fact_store.{operation}",
+            component=component,
+            attributes={
+                "pcg.backend": "postgres",
+                "pcg.operation": operation,
+                **({"pcg.rows": row_count} if row_count is not None else {}),
+            },
+        ) as span:
+            try:
+                result = callback()
+            except Exception as exc:
+                if span is not None:
+                    span.record_exception(exc)
+                observability.record_fact_store_operation(
+                    component=component,
+                    operation=operation,
+                    outcome="error",
+                    duration_seconds=max(time.perf_counter() - started, 0.0),
+                    row_count=row_count,
+                )
+                raise
+        result_row_count = len(result) if isinstance(result, list) else row_count
+        observability.record_fact_store_operation(
+            component=component,
+            operation=operation,
+            outcome="success",
+            duration_seconds=max(time.perf_counter() - started, 0.0),
+            row_count=result_row_count,
+        )
+        return result
 
     def close(self) -> None:
         """Close the shared PostgreSQL connection if it is open."""
