@@ -536,6 +536,15 @@ def test_compose_stack_propagates_worker_tuning_envs(
         assert envs["OTEL_METRICS_EXPORTER"] == "otlp"
         assert envs["OTEL_LOGS_EXPORTER"] == "none"
 
+    for service_name in [
+        "platform-context-graph",
+        "repo-sync",
+        "resolution-engine",
+    ]:
+        envs = _compose_service_envs(services[service_name])
+        assert envs["PCG_PROMETHEUS_METRICS_ENABLED"] == "true"
+        assert envs["PCG_PROMETHEUS_METRICS_PORT"] == "9464"
+
     assert OTEL_COLLECTOR_CONFIG_FILE.exists()
     collector_config = yaml.safe_load(OTEL_COLLECTOR_CONFIG_FILE.read_text())
     assert collector_config["receivers"]["otlp"]["protocols"]["grpc"]["endpoint"] == (
@@ -547,6 +556,25 @@ def test_compose_stack_propagates_worker_tuning_envs(
     assert collector_config["service"]["pipelines"]["metrics"]["exporters"] == [
         "prometheus"
     ]
+
+
+@pytest.mark.parametrize("compose_file", [COMPOSE_FILE, COMPOSE_TEMPLATE_FILE])
+def test_compose_stack_exposes_runtime_metrics_ports(compose_file: Path) -> None:
+    """Expose per-runtime Prometheus scrape ports for local verification."""
+
+    data = yaml.safe_load(compose_file.read_text())
+    services = data["services"]
+
+    assert "${PCG_API_METRICS_PORT:-19464}:9464" in services["platform-context-graph"][
+        "ports"
+    ]
+    assert "${PCG_INGESTER_METRICS_PORT:-19465}:9464" in services["repo-sync"][
+        "ports"
+    ]
+    assert (
+        "${PCG_RESOLUTION_ENGINE_METRICS_PORT:-19466}:9464"
+        in services["resolution-engine"]["ports"]
+    )
 
 
 @pytest.mark.parametrize("compose_file", [COMPOSE_FILE, COMPOSE_TEMPLATE_FILE])

@@ -105,6 +105,7 @@ services:
     command: ["pcg", "serve", "start", "--host", "0.0.0.0", "--port", "8080"]
     ports:
       - "${PCG_HTTP_PORT:-8080}:8080"
+      - "${PCG_API_METRICS_PORT:-19464}:9464"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687
@@ -134,6 +135,8 @@ services:
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: none
+      PCG_PROMETHEUS_METRICS_ENABLED: "true"
+      PCG_PROMETHEUS_METRICS_PORT: "9464"
     volumes:
       - pcg_data:/data
       - ./:/app-src
@@ -160,6 +163,8 @@ services:
     command: ["pcg", "internal", "repo-sync-loop"]
     healthcheck:
       disable: true
+    ports:
+      - "${PCG_INGESTER_METRICS_PORT:-19465}:9464"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687
@@ -189,6 +194,8 @@ services:
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: none
+      PCG_PROMETHEUS_METRICS_ENABLED: "true"
+      PCG_PROMETHEUS_METRICS_PORT: "9464"
     volumes:
       - pcg_data:/data
       - ./:/app-src
@@ -212,6 +219,8 @@ services:
     command: ["pcg", "internal", "resolution-engine"]
     healthcheck:
       disable: true
+    ports:
+      - "${PCG_RESOLUTION_ENGINE_METRICS_PORT:-19466}:9464"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687
@@ -241,6 +250,8 @@ services:
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: none
+      PCG_PROMETHEUS_METRICS_ENABLED: "true"
+      PCG_PROMETHEUS_METRICS_PORT: "9464"
     volumes:
       - pcg_data:/data
       - ./:/app-src
