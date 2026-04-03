@@ -41,4 +41,15 @@ CREATE TABLE IF NOT EXISTS fact_replay_events (
 
 CREATE INDEX IF NOT EXISTS fact_replay_events_work_item_idx
     ON fact_replay_events (work_item_id, created_at);
+
+CREATE TABLE IF NOT EXISTS fact_backfill_requests (
+    backfill_request_id TEXT PRIMARY KEY,
+    repository_id TEXT NULL,
+    source_run_id TEXT NULL,
+    operator_note TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS fact_backfill_requests_repo_idx
+    ON fact_backfill_requests (repository_id, source_run_id, created_at);
 """

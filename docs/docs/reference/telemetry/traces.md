@@ -58,13 +58,16 @@ Why it matters:
 - `pcg.fact_queue.fail_work_item`
 - `pcg.fact_queue.complete_work_item`
 - `pcg.fact_queue.replay_failed_work_items`
+- `pcg.fact_queue.dead_letter_work_items`
+- `pcg.fact_queue.request_backfill`
+- `pcg.fact_queue.list_replay_events`
 - `pcg.fact_queue.list_queue_snapshot`
 
 Why it matters:
 
 - shows the actual SQL-boundary cost of the new facts-first architecture
 - gives direct proof when Postgres becomes the bottleneck
-- includes the operator replay path for dead-lettered work items
+- includes the operator replay, dead-letter, audit, and backfill request paths for recovery workflows
 
 ### Resolution Engine
 

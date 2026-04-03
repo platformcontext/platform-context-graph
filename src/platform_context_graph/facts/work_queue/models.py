@@ -55,3 +55,14 @@ class FactReplayEventRow:
     failure_class: str | None = None
     operator_note: str | None = None
     created_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FactBackfillRequestRow:
+    """One durable operator-created backfill request."""
+
+    backfill_request_id: str
+    repository_id: str | None = None
+    source_run_id: str | None = None
+    operator_note: str | None = None
+    created_at: datetime | None = None

@@ -58,6 +58,7 @@ pcg workspace status --profile qa
 pcg find name handle_payment --profile qa
 pcg admin reindex --profile qa
 pcg admin facts replay --profile qa --work-item-id fact-work-123
+pcg admin facts list --profile qa --status failed
 ```
 
 ## What works remotely today
@@ -68,6 +69,11 @@ These commands support remote mode:
 - `pcg workspace status`
 - `pcg admin reindex`
 - `pcg admin facts replay`
+- `pcg admin facts dead-letter`
+- `pcg admin facts backfill`
+- `pcg admin facts list`
+- `pcg admin facts decisions`
+- `pcg admin facts replay-events`
 - `pcg bundle upload`
 - `pcg find name`
 - `pcg find pattern`

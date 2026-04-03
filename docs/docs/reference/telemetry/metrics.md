@@ -354,6 +354,36 @@ Each metric entry includes:
 - Description: Stage failures grouped by stage name and error class.
 - How to leverage: This is the key stage-level incident triage metric. It tells you which stage is breaking and whether failures are dominated by one error class.
 
+### `pcg_resolution_failure_classifications_total`
+
+- Type: Counter
+- Description: Count of classified Resolution Engine failures by failure class and retry disposition.
+- How to leverage: Use this to separate retryable timeouts from input bugs or dependency outages before deciding whether to replay, scale, or rollback.
+
+### `pcg_projection_decisions_total`
+
+- Type: Counter
+- Description: Count of persisted projection decisions by decision type and confidence band.
+- How to leverage: Watch for sudden changes in decision mix or confidence distribution after parser, resolution, or workload/platform changes.
+
+### `pcg_projection_confidence_score`
+
+- Type: Histogram
+- Description: Distribution of persisted projection confidence scores.
+- How to leverage: Use this to detect semantic drift. A falling confidence distribution is often the first sign that evidence quality degraded before graph correctness visibly breaks.
+
+### `pcg_projection_decision_evidence_total`
+
+- Type: Counter
+- Description: Count of bounded evidence rows attached to persisted projection decisions.
+- How to leverage: Correlate with decision volume to understand whether resolution is becoming more inference-heavy or more directly fact-backed.
+
+### `pcg_admin_fact_actions_total`
+
+- Type: Counter
+- Description: Count of admin fact actions such as replay, work-item listing, dead-letter, backfill requests, and replay-event inspection.
+- How to leverage: Use this as an operator-intervention signal during incidents and as an audit-friendly indicator that a recovery workflow is being exercised.
+
 ## Graph And Storage
 
 ### `pcg_graph_write_batch_duration_seconds`

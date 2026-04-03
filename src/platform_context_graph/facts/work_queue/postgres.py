@@ -5,20 +5,29 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from contextlib import contextmanager
-from datetime import timedelta
 import time
+from contextlib import contextmanager
 from typing import Any
 
 from platform_context_graph.observability import current_component
 from platform_context_graph.observability import get_observability
 
+from .claims import claim_work_item
+from .claims import complete_work_item
+from .claims import enqueue_work_item
+from .claims import fail_work_item
+from .claims import lease_work_item
+from .inspection import list_queue_snapshot
+from .inspection import list_work_items
+from .models import FactBackfillRequestRow
+from .models import FactReplayEventRow
 from .models import FactWorkItemRow
 from .models import FactWorkQueueSnapshotRow
 from .replay import replay_failed_work_items
+from .recovery import dead_letter_work_items
+from .recovery import list_replay_events
+from .recovery import request_backfill
 from .schema import FACT_WORK_QUEUE_SCHEMA
-from .support import utc_now
-from .support import work_item_params
 
 try:
     import psycopg
@@ -157,80 +166,7 @@ class PostgresFactWorkQueue:
     def enqueue_work_item(self, entry: FactWorkItemRow) -> None:
         """Insert or update a pending work item."""
 
-        self._record_operation(
-            operation="enqueue_work_item",
-            row_count=1,
-            callback=lambda: self._execute(
-                """
-                INSERT INTO fact_work_items (
-                    work_item_id,
-                    work_type,
-                    repository_id,
-                    source_run_id,
-                    lease_owner,
-                    lease_expires_at,
-                    status,
-                    attempt_count,
-                    last_error,
-                    failure_stage,
-                    error_class,
-                    failure_class,
-                    failure_code,
-                    retry_disposition,
-                    dead_lettered_at,
-                    last_attempt_started_at,
-                    last_attempt_finished_at,
-                    next_retry_at,
-                    operator_note,
-                    created_at,
-                    updated_at
-                ) VALUES (
-                    %(work_item_id)s,
-                    %(work_type)s,
-                    %(repository_id)s,
-                    %(source_run_id)s,
-                    %(lease_owner)s,
-                    %(lease_expires_at)s,
-                    %(status)s,
-                    %(attempt_count)s,
-                    %(last_error)s,
-                    %(failure_stage)s,
-                    %(error_class)s,
-                    %(failure_class)s,
-                    %(failure_code)s,
-                    %(retry_disposition)s,
-                    %(dead_lettered_at)s,
-                    %(last_attempt_started_at)s,
-                    %(last_attempt_finished_at)s,
-                    %(next_retry_at)s,
-                    %(operator_note)s,
-                    %(created_at)s,
-                    %(updated_at)s
-                )
-                ON CONFLICT (work_item_id) DO UPDATE
-                SET work_type = EXCLUDED.work_type,
-                    repository_id = EXCLUDED.repository_id,
-                    source_run_id = EXCLUDED.source_run_id,
-                    lease_owner = EXCLUDED.lease_owner,
-                    lease_expires_at = EXCLUDED.lease_expires_at,
-                    status = EXCLUDED.status,
-                    attempt_count = EXCLUDED.attempt_count,
-                    last_error = EXCLUDED.last_error,
-                    failure_stage = EXCLUDED.failure_stage,
-                    error_class = EXCLUDED.error_class,
-                    failure_class = EXCLUDED.failure_class,
-                    failure_code = EXCLUDED.failure_code,
-                    retry_disposition = EXCLUDED.retry_disposition,
-                    dead_lettered_at = EXCLUDED.dead_lettered_at,
-                    last_attempt_started_at = EXCLUDED.last_attempt_started_at,
-                    last_attempt_finished_at = EXCLUDED.last_attempt_finished_at,
-                    next_retry_at = EXCLUDED.next_retry_at,
-                    operator_note = EXCLUDED.operator_note,
-                    updated_at = EXCLUDED.updated_at
-                """,
-                work_item_params(entry),
-            ),
-        )
+        enqueue_work_item(self, entry)
 
     def claim_work_item(
         self,
@@ -240,65 +176,11 @@ class PostgresFactWorkQueue:
     ) -> FactWorkItemRow | None:
         """Claim one pending work item and return the leased row."""
 
-        now = utc_now()
-        lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
-        row = self._record_operation(
-            operation="claim_work_item",
-            callback=lambda: self._fetchone(
-                """
-                WITH claimable AS (
-                    SELECT work_item_id
-                    FROM fact_work_items
-                    WHERE status = 'pending'
-                      AND (
-                        lease_expires_at IS NULL
-                        OR lease_expires_at <= %(now)s
-                      )
-                      AND (
-                        next_retry_at IS NULL
-                        OR next_retry_at <= %(now)s
-                      )
-                    ORDER BY updated_at ASC
-                    LIMIT 1
-                )
-                UPDATE fact_work_items
-                SET lease_owner = %(lease_owner)s,
-                    lease_expires_at = %(lease_expires_at)s,
-                    status = 'leased',
-                    attempt_count = fact_work_items.attempt_count + 1,
-                    last_attempt_started_at = %(now)s,
-                    updated_at = %(now)s
-                WHERE work_item_id IN (SELECT work_item_id FROM claimable)
-                RETURNING work_item_id,
-                          work_type,
-                          repository_id,
-                          source_run_id,
-                          lease_owner,
-                          lease_expires_at,
-                          status,
-                          attempt_count,
-                          last_error,
-                          failure_stage,
-                          error_class,
-                          failure_class,
-                          failure_code,
-                          retry_disposition,
-                          dead_lettered_at,
-                          last_attempt_started_at,
-                          last_attempt_finished_at,
-                          next_retry_at,
-                          operator_note,
-                          created_at,
-                          updated_at
-                """,
-                {
-                    "lease_owner": lease_owner,
-                    "lease_expires_at": lease_expires_at,
-                    "now": now,
-                },
-            ),
+        return claim_work_item(
+            self,
+            lease_owner=lease_owner,
+            lease_ttl_seconds=lease_ttl_seconds,
         )
-        return FactWorkItemRow(**row) if row else None
 
     def lease_work_item(
         self,
@@ -309,60 +191,12 @@ class PostgresFactWorkQueue:
     ) -> FactWorkItemRow | None:
         """Lease one specific work item when it is still claimable."""
 
-        now = utc_now()
-        lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
-        row = self._record_operation(
-            operation="lease_work_item",
-            callback=lambda: self._fetchone(
-                """
-                UPDATE fact_work_items
-                SET lease_owner = %(lease_owner)s,
-                    lease_expires_at = %(lease_expires_at)s,
-                    status = 'leased',
-                    attempt_count = fact_work_items.attempt_count + 1,
-                    last_attempt_started_at = %(now)s,
-                    updated_at = %(now)s
-                WHERE work_item_id = %(work_item_id)s
-                  AND status = 'pending'
-                  AND (
-                    lease_expires_at IS NULL
-                    OR lease_expires_at <= %(now)s
-                  )
-                  AND (
-                    next_retry_at IS NULL
-                    OR next_retry_at <= %(now)s
-                  )
-                RETURNING work_item_id,
-                          work_type,
-                          repository_id,
-                          source_run_id,
-                          lease_owner,
-                          lease_expires_at,
-                          status,
-                          attempt_count,
-                          last_error,
-                          failure_stage,
-                          error_class,
-                          failure_class,
-                          failure_code,
-                          retry_disposition,
-                          dead_lettered_at,
-                          last_attempt_started_at,
-                          last_attempt_finished_at,
-                          next_retry_at,
-                          operator_note,
-                          created_at,
-                          updated_at
-                """,
-                {
-                    "work_item_id": work_item_id,
-                    "lease_owner": lease_owner,
-                    "lease_expires_at": lease_expires_at,
-                    "now": now,
-                },
-            ),
+        return lease_work_item(
+            self,
+            work_item_id=work_item_id,
+            lease_owner=lease_owner,
+            lease_ttl_seconds=lease_ttl_seconds,
         )
-        return FactWorkItemRow(**row) if row else None
 
     def fail_work_item(
         self,
@@ -380,76 +214,44 @@ class PostgresFactWorkQueue:
     ) -> None:
         """Mark one work item as retryable or terminally failed."""
 
-        updated_at = utc_now()
-        dead_lettered_at = updated_at if terminal else None
-        self._record_operation(
-            operation="fail_work_item",
-            row_count=1,
-            callback=lambda: self._execute(
-                """
-                UPDATE fact_work_items
-                SET status = %(status)s,
-                    lease_owner = NULL,
-                    lease_expires_at = NULL,
-                    last_error = %(last_error)s,
-                    failure_stage = %(failure_stage)s,
-                    error_class = %(error_class)s,
-                    failure_class = %(failure_class)s,
-                    failure_code = %(failure_code)s,
-                    retry_disposition = %(retry_disposition)s,
-                    dead_lettered_at = %(dead_lettered_at)s,
-                    last_attempt_finished_at = %(updated_at)s,
-                    next_retry_at = %(next_retry_at)s,
-                    operator_note = %(operator_note)s,
-                    updated_at = %(updated_at)s
-                WHERE work_item_id = %(work_item_id)s
-                """,
-                {
-                    "work_item_id": work_item_id,
-                    "status": "failed" if terminal else "pending",
-                    "last_error": error_message,
-                    "failure_stage": failure_stage,
-                    "error_class": error_class,
-                    "failure_class": failure_class,
-                    "failure_code": failure_code,
-                    "retry_disposition": retry_disposition,
-                    "dead_lettered_at": dead_lettered_at,
-                    "next_retry_at": None if terminal else next_retry_at,
-                    "operator_note": operator_note,
-                    "updated_at": updated_at,
-                },
-            ),
+        fail_work_item(
+            self,
+            work_item_id=work_item_id,
+            error_message=error_message,
+            terminal=terminal,
+            failure_stage=failure_stage,
+            error_class=error_class,
+            failure_class=failure_class,
+            failure_code=failure_code,
+            retry_disposition=retry_disposition,
+            next_retry_at=next_retry_at,
+            operator_note=operator_note,
         )
 
     def complete_work_item(self, *, work_item_id: str) -> None:
         """Mark one work item completed and clear its lease."""
 
-        self._record_operation(
-            operation="complete_work_item",
-            row_count=1,
-            callback=lambda: self._execute(
-                """
-                UPDATE fact_work_items
-                SET status = 'completed',
-                    lease_owner = NULL,
-                    lease_expires_at = NULL,
-                    last_error = NULL,
-                    last_attempt_finished_at = %(updated_at)s,
-                    next_retry_at = NULL,
-                    updated_at = %(updated_at)s
-                WHERE work_item_id = %(work_item_id)s
-                """,
-                {
-                    "work_item_id": work_item_id,
-                    "updated_at": utc_now(),
-                },
-            ),
-        )
+        complete_work_item(self, work_item_id=work_item_id)
 
     def replay_failed_work_items(self, **kwargs: Any) -> list[FactWorkItemRow]:
         """Replay terminally failed work items by returning them to pending."""
 
         return replay_failed_work_items(self, **kwargs)
+
+    def dead_letter_work_items(self, **kwargs: Any) -> list[FactWorkItemRow]:
+        """Move selected work items into durable dead-letter state."""
+
+        return dead_letter_work_items(self, **kwargs)
+
+    def request_backfill(self, **kwargs: Any) -> FactBackfillRequestRow:
+        """Persist one durable operator backfill request."""
+
+        return request_backfill(self, **kwargs)
+
+    def list_replay_events(self, **kwargs: Any) -> list[FactReplayEventRow]:
+        """List durable replay audit rows."""
+
+        return list_replay_events(self, **kwargs)
 
     def list_work_items(
         self,
@@ -463,84 +265,20 @@ class PostgresFactWorkQueue:
     ) -> list[FactWorkItemRow]:
         """Return work items filtered by status and failure selectors."""
 
-        rows = self._record_operation(
-            operation="list_work_items",
-            callback=lambda: self._fetchall(
-                """
-                SELECT work_item_id,
-                       work_type,
-                       repository_id,
-                       source_run_id,
-                       lease_owner,
-                       lease_expires_at,
-                       status,
-                       attempt_count,
-                       last_error,
-                       failure_stage,
-                       error_class,
-                       failure_class,
-                       failure_code,
-                       retry_disposition,
-                       dead_lettered_at,
-                       last_attempt_started_at,
-                       last_attempt_finished_at,
-                       next_retry_at,
-                       operator_note,
-                       created_at,
-                       updated_at
-                FROM fact_work_items
-                WHERE (%(statuses)s IS NULL OR status = ANY(%(statuses)s))
-                  AND (%(repository_id)s IS NULL OR repository_id = %(repository_id)s)
-                  AND (%(source_run_id)s IS NULL OR source_run_id = %(source_run_id)s)
-                  AND (%(work_type)s IS NULL OR work_type = %(work_type)s)
-                  AND (%(failure_class)s IS NULL OR failure_class = %(failure_class)s)
-                ORDER BY updated_at DESC, work_item_id DESC
-                LIMIT %(limit)s
-                """,
-                {
-                    "statuses": statuses or None,
-                    "repository_id": repository_id,
-                    "source_run_id": source_run_id,
-                    "work_type": work_type,
-                    "failure_class": failure_class,
-                    "limit": max(limit, 1),
-                },
-            ),
-            row_count=None,
+        return list_work_items(
+            self,
+            statuses=statuses,
+            repository_id=repository_id,
+            source_run_id=source_run_id,
+            work_type=work_type,
+            failure_class=failure_class,
+            limit=limit,
         )
-        return [FactWorkItemRow(**row) for row in rows]
 
     def list_queue_snapshot(self) -> list[FactWorkQueueSnapshotRow]:
         """Return aggregated queue depth and oldest age by work type and status."""
 
-        now = utc_now()
-        rows = self._record_operation(
-            operation="list_queue_snapshot",
-            callback=lambda: self._fetchall(
-                """
-                SELECT work_type,
-                       status,
-                       COUNT(*) AS depth,
-                       COALESCE(
-                         EXTRACT(EPOCH FROM (%(now)s - MIN(created_at))),
-                         0
-                       ) AS oldest_age_seconds
-                FROM fact_work_items
-                GROUP BY work_type, status
-                """,
-                {"now": now},
-            ),
-            row_count=None,
-        )
-        return [
-            FactWorkQueueSnapshotRow(
-                work_type=row["work_type"],
-                status=row["status"],
-                depth=int(row["depth"]),
-                oldest_age_seconds=float(row["oldest_age_seconds"] or 0.0),
-            )
-            for row in rows
-        ]
+        return list_queue_snapshot(self)
 
     def _component(self) -> str:
         """Return the logical component for emitted telemetry."""

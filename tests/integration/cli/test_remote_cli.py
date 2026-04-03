@@ -272,6 +272,146 @@ def test_admin_facts_decisions_posts_remote_request(
 
 
 @patch("platform_context_graph.cli.remote.requests.request")
+def test_admin_facts_dead_letter_posts_remote_request(
+    mock_request: MagicMock,
+) -> None:
+    """`pcg admin facts dead-letter` should post the dead-letter selector payload."""
+
+    mock_request.return_value = _Response({"count": 1, "items": []})
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "dead-letter",
+            "--service-url",
+            "https://pcg.example.com",
+            "--repository-id",
+            "repository:r_payments",
+            "--failure-class",
+            "manual_override",
+            "--note",
+            "manual stop",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _args, kwargs = mock_request.call_args
+    assert kwargs["method"] == "POST"
+    assert kwargs["url"] == "https://pcg.example.com/api/v0/admin/facts/dead-letter"
+    assert kwargs["json"] == {
+        "work_item_ids": None,
+        "repository_id": "repository:r_payments",
+        "source_run_id": None,
+        "work_type": None,
+        "failure_class": "manual_override",
+        "operator_note": "manual stop",
+        "limit": 100,
+    }
+
+
+@patch("platform_context_graph.cli.remote.requests.request")
+def test_admin_facts_backfill_posts_remote_request(
+    mock_request: MagicMock,
+) -> None:
+    """`pcg admin facts backfill` should create a remote backfill request."""
+
+    mock_request.return_value = _Response(
+        {
+            "status": "accepted",
+            "backfill_request": {
+                "backfill_request_id": "fact-backfill:1",
+            },
+        }
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "backfill",
+            "--service-url",
+            "https://pcg.example.com",
+            "--repository-id",
+            "repository:r_payments",
+            "--source-run-id",
+            "run-123",
+            "--note",
+            "refresh after replay",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "fact-backfill:1" in _combined_output(result)
+    _args, kwargs = mock_request.call_args
+    assert kwargs["method"] == "POST"
+    assert kwargs["url"] == "https://pcg.example.com/api/v0/admin/facts/backfill"
+    assert kwargs["json"] == {
+        "repository_id": "repository:r_payments",
+        "source_run_id": "run-123",
+        "operator_note": "refresh after replay",
+    }
+
+
+def test_admin_facts_backfill_requires_scope_selector() -> None:
+    """The CLI should reject unbounded backfill requests."""
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "backfill",
+            "--service-url",
+            "https://pcg.example.com",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "At least one selector" in _combined_output(result)
+
+
+@patch("platform_context_graph.cli.remote.requests.request")
+def test_admin_facts_replay_events_posts_remote_request(
+    mock_request: MagicMock,
+) -> None:
+    """`pcg admin facts replay-events` should query replay audit rows remotely."""
+
+    mock_request.return_value = _Response({"count": 1, "events": []})
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "replay-events",
+            "--service-url",
+            "https://pcg.example.com",
+            "--repository-id",
+            "repository:r_payments",
+            "--work-item-id",
+            "work-1",
+            "--failure-class",
+            "timeout",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _args, kwargs = mock_request.call_args
+    assert kwargs["method"] == "POST"
+    assert kwargs["url"] == "https://pcg.example.com/api/v0/admin/facts/replay-events/query"
+    assert kwargs["json"] == {
+        "repository_id": "repository:r_payments",
+        "source_run_id": None,
+        "work_item_id": "work-1",
+        "failure_class": "timeout",
+        "limit": 100,
+    }
+
+
+@patch("platform_context_graph.cli.remote.requests.request")
 def test_analyze_callers_posts_code_relationship_request(
     mock_request: MagicMock,
 ) -> None:

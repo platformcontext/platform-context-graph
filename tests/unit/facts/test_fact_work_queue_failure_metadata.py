@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-import platform_context_graph.facts.work_queue.postgres as queue_mod
+import platform_context_graph.facts.work_queue.claims as claims_mod
 from platform_context_graph.facts.work_queue.failure_types import FailureClass
 from platform_context_graph.facts.work_queue.failure_types import FailureDisposition
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
@@ -79,7 +79,7 @@ def test_claim_work_item_respects_next_retry_window(monkeypatch) -> None:
         yield cursor
 
     monkeypatch.setattr(queue, "_cursor", _cursor)
-    monkeypatch.setattr(queue_mod, "utc_now", _utc_now)
+    monkeypatch.setattr(claims_mod, "utc_now", _utc_now)
 
     queue.claim_work_item(
         lease_owner="resolution-worker-1",
@@ -103,7 +103,7 @@ def test_fail_work_item_records_retryable_failure_metadata(monkeypatch) -> None:
         yield cursor
 
     monkeypatch.setattr(queue, "_cursor", _cursor)
-    monkeypatch.setattr(queue_mod, "utc_now", _utc_now)
+    monkeypatch.setattr(claims_mod, "utc_now", _utc_now)
 
     next_retry_at = datetime(2026, 4, 3, 12, 5, tzinfo=timezone.utc)
     queue.fail_work_item(
@@ -141,7 +141,7 @@ def test_fail_work_item_records_dead_letter_metadata(monkeypatch) -> None:
         yield cursor
 
     monkeypatch.setattr(queue, "_cursor", _cursor)
-    monkeypatch.setattr(queue_mod, "utc_now", _utc_now)
+    monkeypatch.setattr(claims_mod, "utc_now", _utc_now)
 
     queue.fail_work_item(
         work_item_id="work-1",

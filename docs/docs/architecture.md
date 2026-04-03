@@ -6,11 +6,15 @@ It runs in two modes: locally as a CLI and stdio MCP server, or as a deployed se
 
 Internally, Phase 1 reorganized the monorepo around canonical package boundaries
 instead of treating `tools/` as the default home for indexing logic. Phase 2
-switches Git indexing to a facts-first write path:
+switched Git indexing to a facts-first write path, and Phase 3 is now maturing
+that runtime with explicit recovery controls and explainable projection
+decisions:
 
 - the Git collector parses repositories and emits durable facts into Postgres
 - the fact work queue coordinates projection work
 - the Resolution Engine owns canonical graph projection
+- durable failure taxonomy and operator recovery state live with the queue
+- projection decisions and evidence are persisted beside facts in Postgres
 - query surfaces continue reading the canonical graph and content store
 
 For the current Git cutover, the same Resolution Engine projection path can be
@@ -32,6 +36,8 @@ graph TD
     FactQueue["Postgres Fact Work Queue"]
     Graph["Graph Persistence + Schema"]
     Resolution["Fact Projection + Workload/Platform Materialization"]
+    Decisions["Projection Decisions + Evidence"]
+    Recovery["Recovery Metadata + Replay / Backfill Audit"]
     DB[(Graph Database)]
     FS[File System]
     IaC[Terraform / Helm / K8s / Argo CD]
@@ -49,6 +55,8 @@ graph TD
     Facts -- "9. Enqueue projection work" --> FactQueue
     FactQueue -- "10. Claim work" --> ResolutionEngine
     ResolutionEngine -- "11. Project graph state" --> Graph
+    ResolutionEngine -- "11b. Persist decisions and evidence" --> Decisions
+    FactQueue -- "11c. Persist failures / replay / backfill state" --> Recovery
     Graph -- "12. Store nodes and edges" --> DB
     Graph -- "13. Dual-write file and entity content" --> Content
     ResolutionEngine -- "14. Materialize workloads and platform edges" --> DB
@@ -63,10 +71,10 @@ graph TD
 | **HTTP API** | OpenAPI-backed surface for automation and service-to-service use. |
 | **Query Layer** | Entity-first query model shared by CLI, MCP, and HTTP. |
 | **Collectors** | Source-specific discovery and indexing support. Git is the current canonical collector family and now stops at fact emission instead of owning final graph writes. |
-| **Facts Layer** | Typed fact models, durable Postgres-backed fact storage, and the fact work queue. |
+| **Facts Layer** | Typed fact models, durable Postgres-backed fact storage, the fact work queue, and operator recovery state. |
 | **Parsers** | Parser registry, language parsers, raw-text handling, capability specs, and SCIP parser/runtime helpers. |
 | **Graph Layer** | Canonical schema plus graph persistence helpers for files, entities, inheritance, and call relationships. |
-| **Resolution** | Resolution Engine orchestration plus fact-to-graph projection, workload materialization, and platform inference. |
+| **Resolution** | Resolution Engine orchestration plus fact-to-graph projection, workload materialization, platform inference, and persisted projection decisions. |
 | **Database Layer** | Graph storage. Neo4j is the canonical backend for deployed services. |
 | **Content Store** | PostgreSQL-backed file and entity content cache for deployed API and MCP runtimes. |
 | **Git Collector Runtime** | Long-running repository sync, parse execution, fact emission, and retry/backoff. |
@@ -104,7 +112,27 @@ serves independently.
    separate service hop.
 6. The Resolution Engine projection path writes repository, file, entity, relationship,
    workload, and platform graph state.
-7. Query surfaces continue reading the canonical graph and content store as before.
+7. The Resolution Engine persists projection decisions and bounded evidence
+   records for important stages such as relationships, workloads, and platforms.
+8. Query surfaces continue reading the canonical graph and content store as before.
+
+### Phase 3 Recovery And Explainability
+
+The facts-first runtime now preserves more meaning in Postgres instead of
+keeping it only in logs:
+
+- work items store durable failure class, failure stage, retry disposition, and
+  dead-letter timestamps
+- replay actions are audited in replay-event rows
+- operator backfill requests are stored durably
+- projection decisions record confidence, reasoning, and bounded evidence
+
+That means on-call and platform engineers can answer:
+
+- what failed
+- why it was classified as retryable, manual-review, or terminal
+- what an operator replayed or dead-lettered
+- why one workload/platform/relationship projection was accepted
 
 ### Service Telemetry
 
@@ -113,6 +141,7 @@ Each primary runtime now has a clear OTEL surface:
 - **API runtime**: HTTP and MCP request spans, durations, and error counters
 - **Git collector**: repository queue wait, parse, fact emission, commit/projection, per-repo write timings, Postgres fact-store operation telemetry, and fact-store pool saturation telemetry
 - **Resolution Engine**: work-item claim latency, empty-poll outcomes, idle-sleep timing, active-worker gauge, retry age, dead-letter telemetry, fact load spans, per-stage projection timings, stage output counts, and stage failure/error-class counters
+- **Phase 3 maturity layer**: durable failure-class metrics, projection-decision counts and confidence-band signals, replay/backfill admin action metrics, and structured decision logs
 - **Facts layer**: Postgres fact-store and fact-queue spans, durations, operation counters, row-volume counters, pool size/availability/waiting telemetry, and queue backlog gauges
 - **Fact work queue**: independently sampled queue depth and oldest-item age by work type and status for backlog tracking and autoscaling decisions
 
@@ -146,6 +175,7 @@ The source package is organized by responsibility under `src/platform_context_gr
 - `platform/` — shared platform/runtime primitives such as dependency rules, package resolution, and automation-family inference
 - `query/` — shared read/query layer
 - `resolution/` — Resolution Engine orchestration plus fact projection and materialization helpers
+- `resolution/decisions/` — persisted projection decisions and bounded evidence
 - `runtime/` — runtime role management, ingester, and status helpers
 - `tools/` — `GraphBuilder` facade plus the remaining tool-facing query and linking surfaces
 

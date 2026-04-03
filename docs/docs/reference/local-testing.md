@@ -38,6 +38,7 @@ export PYTHONPATH=src
 | CLI/runtime wiring | `PYTHONPATH=src uv run pytest tests/integration/cli/test_cli_commands.py -q` |
 | Compose, Helm, or deployable runtime shape | `PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q` and `helm lint deploy/helm/platform-context-graph` |
 | Facts-first indexing, queue, or resolution flow | `PYTHONPATH=src:. uv run pytest tests/integration/indexing/test_git_facts_end_to_end.py tests/integration/indexing/test_git_facts_projection_parity.py -q` |
+| Phase 3 recovery controls (`admin_facts`, queue recovery helpers, replay events, backfill) | `PYTHONPATH=src:. uv run pytest tests/unit/facts/test_fact_work_queue_recovery.py tests/unit/api/test_admin_facts_recovery_router.py tests/integration/cli/test_remote_cli.py -q` |
 | Facts-first telemetry or queue scaling | `PYTHONPATH=src:. uv run pytest tests/unit/observability/test_fact_resolution_telemetry.py tests/unit/observability/test_fact_runtime_scaling_telemetry.py tests/unit/observability/test_resolution_queue_sampler.py tests/unit/observability/test_facts_first_logging.py -q` |
 | Admin replay flow | `PYTHONPATH=src uv run pytest tests/integration/api/test_admin_facts_replay.py tests/integration/cli/test_admin_facts_replay_cli.py -q` |
 | Python file layout/quality gates | `python3 scripts/check_python_file_lengths.py --max-lines 500` and `git diff --check` |
@@ -115,7 +116,19 @@ PYTHONPATH=src:. uv run pytest \
   tests/unit/observability/test_facts_first_logging.py -q
 ```
 
-### 5. Docs build if docs or instruction files changed
+### 5. Recovery and admin validation if Phase 3 controls changed
+
+If you touched queue recovery, replay/backfill controls, admin facts routers, or
+remote CLI operator flows:
+
+```bash
+PYTHONPATH=src:. uv run pytest \
+  tests/unit/facts/test_fact_work_queue_recovery.py \
+  tests/unit/api/test_admin_facts_recovery_router.py \
+  tests/integration/cli/test_remote_cli.py -q
+```
+
+### 6. Docs build if docs or instruction files changed
 
 ```bash
 uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
@@ -138,6 +151,10 @@ PYTHONPATH=src:. uv run pytest \
   tests/unit/observability/test_fact_runtime_scaling_telemetry.py \
   tests/unit/observability/test_resolution_queue_sampler.py \
   tests/unit/observability/test_facts_first_logging.py -q
+PYTHONPATH=src:. uv run pytest \
+  tests/unit/facts/test_fact_work_queue_recovery.py \
+  tests/unit/api/test_admin_facts_recovery_router.py \
+  tests/integration/cli/test_remote_cli.py -q
 python3 scripts/check_python_file_lengths.py --max-lines 500
 git diff --check
 uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \

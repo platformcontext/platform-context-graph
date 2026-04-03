@@ -44,6 +44,7 @@ flowchart LR
   C --> D["Postgres fact work queue"]
   D --> E["Resolution Engine"]
   E --> F["Canonical graph + content projection"]
+  E --> J["Projection decisions + evidence"]
   F --> G["Neo4j"]
   F --> H["Postgres content store"]
   I["API / MCP"] --> G
@@ -146,7 +147,9 @@ it when the queue is growing because the Resolution Engine is saturated.
 - fact loading from Postgres
 - graph projection
 - workload and platform materialization
+- projection decision persistence and bounded evidence recording
 - retries, dead-letter handling, and replay path
+- operator recovery visibility for replay-event and backfill-driven workflows
 
 ### Entry command
 
@@ -169,6 +172,7 @@ pcg internal resolution-engine
 - active workers
 - per-stage projection duration
 - per-stage output count
+- projection decision volume and confidence-band drift
 - retry and dead-letter pressure
 - Postgres queue/fact-store pool saturation
 
