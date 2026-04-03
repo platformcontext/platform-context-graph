@@ -495,7 +495,4 @@ def setup_fact_resolution_instruments(runtime: Any) -> None:
     setup_fact_scaling_instruments(runtime)
 
 
-__all__ = [
-    "RuntimeFactResolutionMetricsMixin",
-    "setup_fact_resolution_instruments",
-]
+__all__ = ["RuntimeFactResolutionMetricsMixin", "setup_fact_resolution_instruments"]

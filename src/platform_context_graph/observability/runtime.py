@@ -17,7 +17,6 @@ from .otel import (
     ActiveStateKey,
     FastAPI,
     FastAPIInstrumentor,
-    Observation,
     REQUEST_CONTEXT_UNSET,
     MeterProvider,
     MetricReader,
@@ -62,20 +61,16 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
     meter: Any = field(init=False, default=None)
     _active_runs: dict[ActiveStateKey, int] = field(init=False, default_factory=dict)
     _active_repositories: dict[ActiveStateKey, int] = field(
-        init=False,
-        default_factory=dict,
+        init=False, default_factory=dict
     )
     _checkpoint_pending_repositories: dict[ActiveStateKey, int] = field(
-        init=False,
-        default_factory=dict,
+        init=False, default_factory=dict
     )
     _index_snapshot_queue_depth: dict[ActiveStateKey, int] = field(
-        init=False,
-        default_factory=dict,
+        init=False, default_factory=dict
     )
     _index_parse_tasks_active: dict[ActiveStateKey, int] = field(
-        init=False,
-        default_factory=dict,
+        init=False, default_factory=dict
     )
     _fact_resolution_instruments: dict[str, Any] = field(
         init=False, default_factory=dict

@@ -297,11 +297,36 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
     @internal_app.command("resolution-engine", hidden=True)
     def internal_resolution_engine() -> None:
         """Run the standalone facts projection engine."""
+        import asyncio
+        from functools import partial
+
+        from platform_context_graph.core import get_database_manager
+        from platform_context_graph.core.job_manager import JobManager
+        from platform_context_graph.facts.state import (
+            get_fact_store,
+            get_fact_work_queue,
+        )
         from platform_context_graph.resolution.orchestration import (
+            project_work_item,
             start_resolution_engine,
         )
+        from platform_context_graph.tools.graph_builder import GraphBuilder
 
-        start_resolution_engine()
+        queue = get_fact_work_queue()
+        if queue is None:
+            raise typer.Exit(
+                "Resolution engine requires PCG_POSTGRES_DSN or PCG_FACT_STORE_DSN"
+            )
+        fact_store = get_fact_store()
+        db_manager = get_database_manager()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        builder = GraphBuilder(db_manager, JobManager(), loop)
+        projector = partial(project_work_item, builder=builder, fact_store=fact_store)
+        start_resolution_engine(queue=queue, projector=projector)
 
     @app.command("m", rich_help_panel="Shortcuts")
     def mcp_setup_alias() -> None:
