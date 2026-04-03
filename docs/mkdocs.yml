@@ -32,6 +32,7 @@ nav:
     - Windows Setup: getting-started/windows-setup.md
   - Deploy:
     - Overview: deployment/overview.md
+    - Service Runtimes: deployment/service-runtimes.md
     - Docker Compose: deployment/docker-compose.md
     - Helm: deployment/helm.md
     - Minimal Manifests: deployment/manifests.md
@@ -66,6 +67,7 @@ nav:
     - Graph Model: concepts/graph-model.md
     - Modes: concepts/modes.md
     - Source Layout: reference/source-layout.md
+    - Local Testing: reference/local-testing.md
     - CLI K.I.S.S.: reference/cli-kiss.md
     - CLI Reference: reference/cli-reference.md
     - CLI Indexing: reference/cli-indexing.md

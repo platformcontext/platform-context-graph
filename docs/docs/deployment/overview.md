@@ -38,6 +38,10 @@ The chart and deployable-service story assume:
 - external Neo4j credentials provided through environment or secret management
 - external Postgres credentials provided through environment or secret management
 
+Use [Service Runtimes](service-runtimes.md) when you need the operator view of
+what each runtime does, how it starts, and which workload should be tuned or
+scaled first.
+
 The repository ingester is responsible for ongoing rediscovery:
 
 - it re-evaluates the configured repository source on each sync cycle

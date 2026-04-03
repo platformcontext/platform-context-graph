@@ -1,332 +1,156 @@
 # PlatformContextGraph
 
-Code-to-cloud context graph. Connects source code (30+ languages via tree-sitter), infrastructure-as-code (Terraform, Helm, K8s, ArgoCD, Crossplane, CloudFormation), and derived relationships across repositories. Exposes via CLI, MCP, and HTTP API.
+Code-to-cloud context graph for CLI, MCP, and HTTP API workflows. The current
+platform shape is a three-service, facts-first system:
 
-## Architecture
+- **API** for HTTP + MCP reads
+- **Ingester** for repo sync, parse, and fact emission
+- **Resolution Engine** for queued fact projection into the canonical graph
 
-Two services, shared backing stores:
+## Read These First
 
-| Service | Role | K8s Shape |
-|---|---|---|
-| **Ingestor** | Git sync, parse, Neo4j/Postgres writes, finalization | StatefulSet + PVC |
-| **API/MCP** | HTTP + MCP read surface, query dispatch | Stateless Deployment |
+Before changing runtime, deployment, facts-first flow, or observability behavior,
+read these pages in this order:
 
-**Backing stores:** Neo4j (graph), PostgreSQL (content, coverage, relationships, runtime status).
+1. `docs/docs/deployment/service-runtimes.md`
+2. `docs/docs/reference/local-testing.md`
+3. `docs/docs/reference/telemetry/index.md`
+4. `docs/docs/architecture.md`
+
+## Runtime Contract
+
+| Runtime | Responsibility | Command | K8s shape |
+| --- | --- | --- | --- |
+| API | HTTP API, MCP, admin endpoints, canonical graph reads | `pcg serve start --host 0.0.0.0 --port 8080` | `Deployment` |
+| Ingester | Repo sync, Git collector, parse, fact emission | `pcg internal repo-sync-loop` | `StatefulSet` + PVC |
+| Resolution Engine | Claim fact work items and project graph state | `pcg internal resolution-engine` | `Deployment` |
+| Bootstrap Index | One-shot initial sync/index seed | `pcg internal bootstrap-index` | one-shot runtime |
+
+Shared backing stores:
+
+- **Neo4j** for the canonical graph
+- **Postgres** for facts, work queue, content store, and runtime metadata
 
 ## Source Layout
 
-```
+```text
 src/platform_context_graph/
   api/            # FastAPI routers
-  cli/            # CLI entrypoints, config catalog (all defaults live here)
-  content/        # Postgres content store (dual-write + retrieval)
-  indexing/        # Coordinator, pipeline, checkpoint, finalization, coverage
-  mcp/            # MCP server, transport, tool registry, handlers
-  observability/  # OTEL bootstrap, metrics, spans
-  query/          # Shared read layer (Cypher queries, story builders)
-  relationships/  # Post-index relationship pipeline
-  runtime/ingester/ # Sync loop, bootstrap, git ops, workspace lock
-  tools/          # Graph builder, parsers, persistence, schema
-    languages/    # Per-language tree-sitter parsers
+  app/            # service-role metadata and entrypoint contract
+  cli/            # CLI wiring and config catalog
+  collectors/     # Git collector implementation
+  content/        # Postgres content store
+  facts/          # durable facts and fact queue
+  graph/          # canonical graph persistence and schema
+  indexing/       # coordinator and indexing orchestration
+  mcp/            # MCP server and transport
+  observability/  # OTEL metrics, traces, and structured logs
+  parsers/        # parser registry, languages, SCIP
+  query/          # read/query layer
+  relationships/  # relationship helpers and linking
+  resolution/     # fact projection and workload/platform materialization
+  runtime/        # long-running runtime loops
+  tools/          # stable facade + compatibility shims
 ```
 
-## Running Locally
+## Local Development
 
-### Full stack (docker-compose)
-
-**IMPORTANT:** Use `docker-compose` (hyphenated), not `docker compose` (space). The project uses Docker Compose v5.
+### Full stack
 
 ```bash
-# Default: indexes tests/fixtures/ecosystems/
-docker-compose up --build -d
-
-# With real repos: use absolute paths (not $HOME or ~), Docker can't resolve them
-PCG_FILESYSTEM_HOST_ROOT=/Users/allen/pcg-test-workspace docker-compose up --build -d
-
-# Force clean start (wipes Neo4j, Postgres, checkpoints):
-docker-compose down -v
-PCG_FILESYSTEM_HOST_ROOT=/Users/allen/pcg-test-workspace docker-compose up --build --force-recreate -d
-
-# Check bootstrap progress:
-docker-compose logs bootstrap-index 2>&1 | rg "Finalization timings|supported=|entity_counts"
-
-# Check API is up:
-curl -s http://localhost:8080/api/v0/health
-
-# Read auto-generated API key:
-docker exec platform-context-graph-platform-context-graph-1 cat /data/.platform-context-graph/.env
+docker compose up --build
 ```
 
-Starts: Neo4j (7474/7687), Postgres (5432), bootstrap-index (one-shot), API (8080), repo-sync (loop).
+This starts:
 
-Port overrides if ports conflict:
+- Neo4j
+- Postgres
+- OTEL collector
+- Jaeger
+- `bootstrap-index`
+- `platform-context-graph`
+- `repo-sync`
+- `resolution-engine`
+
+Useful checks:
+
 ```bash
-NEO4J_HTTP_PORT=17474 NEO4J_BOLT_PORT=17687 PCG_HTTP_PORT=18080 docker-compose up --build -d
+docker compose ps
+docker compose logs bootstrap-index | tail -50
+docker compose logs repo-sync | tail -50
+docker compose logs resolution-engine | tail -50
+curl -s http://localhost:8080/health
 ```
 
-**Docker gotcha:** `/tmp` paths don't mount into Docker Desktop on macOS. Use paths under `~/` or `/Users/`. Symlinks to host paths don't work inside containers -- copy repos to a flat directory instead.
+### Direct-command environment
 
-### Environment for direct commands
-
-When running tests or scripts outside docker against the docker-compose stack:
+When running commands directly against the local Compose stack:
 
 ```bash
 export NEO4J_URI=bolt://localhost:7687
 export NEO4J_USERNAME=neo4j
 export NEO4J_PASSWORD=change-me
-export DATABASE_TYPE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
 export PYTHONPATH=src
 ```
 
-Default passwords are `change-me` for both Neo4j and Postgres (from `.env.example` / `docker-compose.yaml`). The API auto-generates a bearer token at startup -- read it with `cat /data/.platform-context-graph/.env` inside the API container.
+## Verification Defaults
 
-### Tests
-
-```bash
-# Unit tests (no external deps)
-PYTHONPATH=src uv run python -m pytest tests/unit/ -q --tb=short
-
-# Parser tests only
-PYTHONPATH=src uv run python -m pytest tests/unit/parsers/ -q --tb=line
-
-# Integration tests (needs docker-compose stack)
-NEO4J_URI=bolt://localhost:7687 NEO4J_USERNAME=neo4j NEO4J_PASSWORD=change-me \
-  DATABASE_TYPE=neo4j \
-  PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph \
-  PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph \
-  PYTHONPATH=src uv run python -m pytest tests/integration/ -v --tb=short
-
-# Specific integration suites
-# ... tests/integration/test_language_graph.py    -- language graph verification
-# ... tests/integration/test_iac_graph.py         -- IaC graph verification
-# ... tests/integration/test_full_flow.py         -- cross-repo linking
-# ... tests/integration/test_mcp_language_queries.py -- MCP tool routing
-```
-
-### Pre-PR checks
+Use `docs/docs/reference/local-testing.md` as the source of truth. These are the
+common gates:
 
 ```bash
+PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q
+PYTHONPATH=src uv run pytest tests/integration/cli/test_cli_commands.py -q
+PYTHONPATH=src:. uv run pytest \
+  tests/integration/indexing/test_git_facts_end_to_end.py \
+  tests/integration/indexing/test_git_facts_projection_parity.py -q
+PYTHONPATH=src:. uv run pytest \
+  tests/unit/observability/test_fact_resolution_telemetry.py \
+  tests/unit/observability/test_fact_runtime_scaling_telemetry.py \
+  tests/unit/observability/test_resolution_queue_sampler.py \
+  tests/unit/observability/test_facts_first_logging.py -q
 python3 scripts/check_python_file_lengths.py --max-lines 500
-python3 scripts/check_python_docstrings.py
-uv run black --check src tests
-PYTHONPATH=src uv run python -m pytest tests/unit/ -q --tb=short
+git diff --check
+uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
+  mkdocs build --strict --clean --config-file docs/mkdocs.yml
 ```
 
-### Real-repo integration validation (REQUIRED before any PR touching ingestion)
+## Facts-First Flow
 
-Changes to the ingestion pipeline, parsers, persistence, or finalization must be validated against a real multi-repo corpus via docker-compose before pushing. Unit tests alone are not sufficient.
+The canonical Git path is now:
 
-**Corpus** (10 repos with cross-repo dependencies, ~2,688 parseable files):
+```text
+sync -> discover -> parse -> emit facts -> enqueue work -> resolution-engine -> graph/content projection
+```
+
+Important ownership boundaries:
+
+- `app/` decides which runtime starts
+- `collectors/` owns Git collection
+- `facts/` owns durable facts and the work queue
+- `resolution/` owns queued projection
+- `graph/` owns canonical graph writes
+- `query/` owns read surfaces
+
+Do not collapse these boundaries casually. They are the foundation for future
+collectors, scaling, and backend work.
+
+## Deployment Notes
+
+Build once:
 
 ```bash
-# Set up workspace with symlinks
-mkdir -p /tmp/pcg-test-workspace
-ln -sf ~/repos/mobius/iac-eks-argocd           /tmp/pcg-test-workspace/iac-eks-argocd
-ln -sf ~/repos/mobius/helm-charts              /tmp/pcg-test-workspace/helm-charts
-ln -sf ~/repos/mobius/iac-eks-addons           /tmp/pcg-test-workspace/iac-eks-addons
-ln -sf ~/repos/mobius/iac-eks-crossplane       /tmp/pcg-test-workspace/iac-eks-crossplane
-ln -sf ~/repos/mobius/iac-eks-observability    /tmp/pcg-test-workspace/iac-eks-observability
-ln -sf ~/repos/mobius/crossplane-xrd-irsa-role /tmp/pcg-test-workspace/crossplane-xrd-irsa-role
-ln -sf ~/repos/terraform-modules/terraform-module-core-irsa /tmp/pcg-test-workspace/terraform-module-core-irsa
-ln -sf ~/repos/services/api-node-boats         /tmp/pcg-test-workspace/api-node-boats
-ln -sf ~/repos/services/api-node-bw-home       /tmp/pcg-test-workspace/api-node-bw-home
-ln -sf ~/repos/terraform-stacks/terraform-stack-boattrader /tmp/pcg-test-workspace/terraform-stack-boattrader
-
-# Index against running docker-compose stack
-NEO4J_URI=bolt://localhost:7687 NEO4J_USERNAME=neo4j NEO4J_PASSWORD=change-me \
-  DATABASE_TYPE=neo4j \
-  PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph \
-  PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:5432/platform_context_graph \
-  PYTHONPATH=src uv run pcg index /tmp/pcg-test-workspace
+docker build -t platform-context-graph:dev -f Dockerfile .
 ```
 
-**Pass criteria:** All 10 repos in graph, cross-repo relationships resolved, zero Variable nodes (when INDEX_VARIABLES=false), API serves context. See `~/PRD-pcg-ingestion-remediation.md` "What Pass Means for Each Phase" for the full verification script.
+Helm renders the same image into:
 
-### Index a local repo
+- API `Deployment`
+- Resolution Engine `Deployment`
+- Ingester `StatefulSet`
 
-```bash
-PYTHONPATH=src uv run pcg index /path/to/repo
-```
-
-### Query Neo4j directly
-
-```bash
-PYTHONPATH=src uv run python -c "
-import os; os.environ.setdefault('DATABASE_TYPE', 'neo4j')
-from platform_context_graph.core import get_database_manager
-db = get_database_manager()
-driver = db.get_driver()
-with driver.session() as s:
-    repos = s.run('MATCH (r:Repository) RETURN r.name ORDER BY r.name').data()
-    print(f'Total repos: {len(repos)}')
-"
-```
-
-## Ingestion Pipeline
-
-```
-Discovery -> Sync -> Parse -> Snapshot -> Queue -> Commit -> Finalization
-```
-
-1. **Discovery** (`tools/graph_builder_indexing_discovery.py`): Walk filesystem, honor .gitignore/.pcgignore, exclude dependency dirs, group by git repo.
-2. **Sync** (`runtime/ingester/sync.py`): Git clone/fetch. Lock-protected workspace.
-3. **Parse** (`tools/graph_builder_indexing_execution.py`): Tree-sitter for code and HCL/Terraform. YAML dispatch for K8s, ArgoCD, Crossplane, Helm, CloudFormation. Returns `RepositorySnapshot`.
-4. **Snapshot** (`indexing/coordinator_storage.py`): Write file data to NDJSON on PVC, clear from memory.
-5. **Queue** (`indexing/coordinator_pipeline.py`): Bounded `asyncio.Queue(maxsize=PCG_INDEX_QUEUE_DEPTH)`.
-6. **Commit** (`indexing/coordinator_pipeline.py`): Single consumer. Neo4j UNWIND + Postgres dual-write per file batch.
-7. **Finalization** (`tools/graph_builder_indexing_execution.py:441`): inheritance, function_calls, infra_links, workloads, relationship_resolution.
-
-**Key config** (defaults in `cli/config_catalog.py`):
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `PCG_PARSE_WORKERS` | 4 | Concurrent repo parse slots |
-| `PCG_COMMIT_WORKERS` | 1 | Concurrent repo commit consumers |
-| `PCG_INDEX_QUEUE_DEPTH` | 8 | Max queued parsed repos |
-| `PCG_REPO_FILE_PARSE_MULTIPROCESS` | false | Process pool for file parsing |
-| `PCG_REPO_FILE_PARSE_CONCURRENCY` | 1 | Files parsed concurrently in one repo |
-| `PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE` | 5 | Files per Neo4j transaction |
-| `PCG_FILE_BATCH_SIZE` | 50 | Files per commit batch |
-| `INDEX_VARIABLES` | false | Variable node creation (disabled — low signal, high volume) |
-| `PCG_IGNORE_DEPENDENCY_DIRS` | true | Exclude vendor/node_modules/etc |
-| `PCG_MAX_CALLS_PER_FILE` | 50 | Max function calls resolved per file during finalization (see below) |
-
-## API/MCP Surface
-
-Stateless FastAPI reading Neo4j + Postgres.
-
-- `GET /api/v0/health`
-- `GET /api/v0/repositories` / `/{id}/context` / `/{id}/story` / `/{id}/stats` / `/{id}/coverage`
-- `GET /api/v0/ingesters` / `/{ingester}`
-- `POST /api/v0/content/files/read` (repo_id + relative_path)
-- `POST /api/v0/code/search` / `/relationships` / `/dead-code` / `/complexity`
-- MCP: same tools via `/mcp/message`
-
-Query layer in `query/`. Content store in `content/`. Story builders in `query/story_*.py`.
-
-## Terraform Provider Schema
-
-Resource type support for Terraform evidence extraction is driven by provider schemas generated from real Terraform provider binaries. The schema is the single source of truth for which resource types exist.
-
-### How it works
-
-1. Compressed provider schemas ship inside the Python package at `relationships/terraform_evidence/schemas/<provider>-<version>.json.gz`
-2. At import time, `terraform_evidence/__init__.py` auto-registers extractors for all schema-known resource types that have inferable identity-key attributes (name, *_name, *_identifier)
-3. Resource types without name-like attributes (sub-resources, policies, attachments) are skipped
-4. Zero manual extractor files — everything is schema-driven
-5. Schemas are bundled as package data, so they work in Docker, pip installs, and development
-
-**Current coverage:**
-
-| Provider | Version | Resource Types |
-|---|---|---|
-| AWS (`hashicorp/aws`) | 5.100.0 | 1,526 |
-| Azure (`hashicorp/azurerm`) | 4.66.0 | 1,124 |
-| GCP (`hashicorp/google`) | 6.50.0 | 1,096 |
-| Alibaba Cloud (`aliyun/alicloud`) | 1.273.0 | 1,125 |
-| Oracle Cloud (`oracle/oci`) | 6.37.0 | 813 |
-| Cloudflare (`cloudflare/cloudflare`) | 5.18.0 | 215 |
-| Kubernetes (`hashicorp/kubernetes`) | 2.38.0 | 82 |
-| Helm (`hashicorp/helm`) | 2.17.0 | 1 |
-| Random (`hashicorp/random`) | 3.8.1 | 10 |
-| TLS (`hashicorp/tls`) | 4.2.1 | 4 |
-| Time (`hashicorp/time`) | 0.13.1 | 4 |
-| Local (`hashicorp/local`) | 2.7.0 | 2 |
-| Archive (`hashicorp/archive`) | 2.7.1 | 1 |
-| Null (`hashicorp/null`) | 3.2.4 | 1 |
-| HTTP (`hashicorp/http`) | 3.5.0 | 0 |
-| External (`hashicorp/external`) | 2.3.5 | 0 |
-| **Total** | | **6,004** |
-
-### Schema file naming convention
-
-Schemas follow `<provider>-<version>.json.gz`:
-- `aws-5.100.0.json.gz`
-- `azurerm-4.66.0.json.gz`
-- `google-6.50.0.json.gz`
-- `cloudflare-5.18.0.json.gz`
-
-The version is the exact provider version resolved by `terraform init`, extracted from `.terraform.lock.hcl`.
-
-### Updating provider versions
-
-```bash
-# 1. Edit the version constraint in terraform_providers/<provider>/versions.tf
-# 2. Regenerate the raw schema (requires terraform CLI)
-./scripts/generate_terraform_provider_schema.sh <provider>
-
-# 3. Package the schema into the Python package (versioned + compressed)
-./scripts/package_terraform_schemas.sh <provider>
-
-# 4. Verify
-PYTHONPATH=src uv run python -m pytest tests/unit/relationships/test_terraform_provider_schema.py -v
-```
-
-### Adding a new provider (open-source contribution)
-
-1. Create `terraform_providers/<provider>/versions.tf` with provider block
-2. Run `./scripts/generate_terraform_provider_schema.sh <provider>` to generate the raw schema
-3. Run `./scripts/package_terraform_schemas.sh <provider>` to compress and version it
-4. Add service category mappings to `SERVICE_CATEGORIES` in `provider_schema.py` (optional — unmapped services default to "infrastructure")
-5. Commit the `.json.gz` file — it ships with the package
-6. Done — schema-driven registration handles the rest automatically
-
-### Key files
-
-| File | Purpose |
-|---|---|
-| `terraform_providers/<provider>/versions.tf` | Provider version constraints for schema extraction |
-| `schemas/<provider>.json` | Raw generated schemas (gitignored, regenerate locally) |
-| `relationships/terraform_evidence/schemas/<provider>-<version>.json.gz` | **Bundled schemas (committed, ships with package)** |
-| `relationships/terraform_evidence/provider_schema.py` | Schema loader, identity-key inference, category classification |
-| `relationships/terraform_evidence/generic.py` | Schema-driven extractor factory + registration |
-| `relationships/terraform_evidence/__init__.py` | Orchestrator, calls `register_schema_driven_extractors()` |
-| `scripts/generate_terraform_provider_schema.sh` | Generates raw schemas from terraform providers |
-| `scripts/package_terraform_schemas.sh` | Compresses and versions schemas for distribution |
-
-### Config
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `PCG_TERRAFORM_SCHEMA_DIR` | Package `schemas/` directory | Directory containing provider schema JSON files. Override to use custom schemas. |
-
-## Active Work
-
-See `~/PRD-pcg-ingestion-remediation.md` for the current remediation plan. Execution order:
-- **Phase 1 (ship now):** Wire `INDEX_VARIABLES=false`, disable global call fallback (precision-over-recall tradeoff -- loses cross-repo name-only CALLS edges), add per-label entity metrics and per-stage finalization timing. Run Tier 1 corpus.
-- **Phase 1B (benchmark-gated):** A/B test tx batch size (5/10/25) and multiprocess parsing against Tier 1 numbers. Run Tier 2 stress corpus.
-- **Phase 2 (after numbers):** Batch Postgres writes, scope relationship projection, move per-repo finalization stages to post-commit.
-- **Phase 3 (evidence-gated):** Concurrent commit (needs lock contention data), scope-filter variables, per-repo call resolution, graph DB prototype.
-
-### PCG_MAX_CALLS_PER_FILE tuning guide
-
-During finalization, the `function_calls` stage resolves CALLS edges by running Cypher queries against Neo4j for each function call in each file. This is the most expensive finalization stage.
-
-`PCG_MAX_CALLS_PER_FILE` caps how many calls per file are resolved. Calls beyond the cap are silently dropped — they don't produce CALLS edges but they don't generate Cypher queries either.
-
-**What happens as you increase the cap:**
-- More CALLS edges are created, giving richer cross-function dependency graphs
-- Finalization takes longer — each additional call generates a Cypher round-trip to Neo4j
-- For files with hundreds of calls (vendor JS, minified code, large PHP), the extra edges are overwhelmingly unresolvable (single-letter names, common utility names) and produce no useful graph signal
-- At cap=500 on `websites-php-youboat` (14,615 files), finalization projected ~20 hours
-- At cap=50, the same repo finalizes in ~25 minutes
-
-**What happens as you decrease the cap:**
-- Finalization is faster
-- Some legitimate cross-function edges in large source files may be missed
-- The first N calls in a file are the most likely to resolve (contextual resolution matches by name + file path, and import-linked calls appear early)
-
-**Recommendations:**
-- `50` (default): good for most workloads. Covers same-file and import-linked calls.
-- `25`: aggressive. Use for large monorepos with many utility/vendor files where finalization speed matters more than call graph completeness.
-- `200-500`: use only when deep cross-file call graphs are critical and the repo has few large JS/PHP files.
-
-## Code Style
-
-- Python 3.10+, formatted with `black`
-- Max 500 lines per file (checked by `scripts/check_python_file_lengths.py`)
-- Docstrings required (checked by `scripts/check_python_docstrings.py`)
-- Parser capability specs in `tools/parser_capabilities/specs/*.yaml`
-- Generated docs from specs: `PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py`
+The operator view of that contract lives in
+`docs/docs/deployment/service-runtimes.md`.
