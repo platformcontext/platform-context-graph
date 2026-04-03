@@ -12,6 +12,7 @@ from platform_context_graph.facts.emission.git_snapshot import (
 from platform_context_graph.facts.models.base import stable_fact_id
 from platform_context_graph.facts.state import get_fact_store
 from platform_context_graph.facts.state import get_fact_work_queue
+from platform_context_graph.facts.state import get_projection_decision_store
 from platform_context_graph.facts.state import git_facts_first_enabled
 from platform_context_graph.facts.storage.models import FactRunRow
 from platform_context_graph.observability import get_observability
@@ -49,6 +50,7 @@ def project_repository_snapshot_facts(
     fact_emission_result: GitSnapshotFactEmissionResult,
     fact_store: object | None = None,
     work_queue: object | None = None,
+    decision_store: object | None = None,
     graph_store: object,
     project_work_item_fn: Callable[..., dict[str, Any] | None] = project_work_item,
     lease_owner: str = "indexing",
@@ -69,6 +71,7 @@ def project_repository_snapshot_facts(
 
     store = fact_store or get_fact_store()
     queue = work_queue or get_fact_work_queue()
+    decisions = decision_store or get_projection_decision_store()
     if store is None or queue is None:
         raise RuntimeError("facts-first indexing requires a configured fact runtime")
 
@@ -134,6 +137,7 @@ def project_repository_snapshot_facts(
             work_item,
             builder=builder,
             fact_store=store,
+            decision_store=decisions,
             info_logger_fn=info_logger_fn,
             debug_log_fn=debug_log_fn,
             warning_logger_fn=warning_logger_fn,
@@ -195,6 +199,7 @@ def commit_repository_snapshot_from_facts(
     fact_emission_result: GitSnapshotFactEmissionResult,
     fact_store: object | None = None,
     work_queue: object | None = None,
+    decision_store: object | None = None,
     graph_store: object,
     project_work_item_fn: Callable[..., dict[str, Any] | None] = project_work_item,
     lease_owner: str = "indexing",
@@ -214,6 +219,7 @@ def commit_repository_snapshot_from_facts(
         fact_emission_result=fact_emission_result,
         fact_store=fact_store,
         work_queue=work_queue,
+        decision_store=decision_store,
         graph_store=graph_store,
         project_work_item_fn=project_work_item_fn,
         lease_owner=lease_owner,

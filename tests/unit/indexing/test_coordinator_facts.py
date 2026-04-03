@@ -64,6 +64,7 @@ def test_commit_repository_snapshot_from_facts_resets_repo_and_projects_work_ite
     work_queue = MagicMock()
     work_queue.lease_work_item.return_value = work_item
     fact_store = MagicMock()
+    decision_store = MagicMock()
     projector = MagicMock(return_value={"facts": {"repositories": 1}})
 
     result = commit_repository_snapshot_from_facts(
@@ -78,6 +79,7 @@ def test_commit_repository_snapshot_from_facts_resets_repo_and_projects_work_ite
         ),
         fact_store=fact_store,
         work_queue=work_queue,
+        decision_store=decision_store,
         graph_store=graph_store,
         project_work_item_fn=projector,
         lease_owner="indexing-worker",
@@ -100,6 +102,7 @@ def test_commit_repository_snapshot_from_facts_resets_repo_and_projects_work_ite
         work_item,
         builder=builder,
         fact_store=fact_store,
+        decision_store=decision_store,
         info_logger_fn=ANY,
         debug_log_fn=ANY,
         warning_logger_fn=ANY,
