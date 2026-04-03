@@ -203,3 +203,23 @@ class PostgresFactWorkQueue:
                     "updated_at": _utc_now(),
                 },
             )
+
+    def complete_work_item(self, *, work_item_id: str) -> None:
+        """Mark one work item completed and clear its lease."""
+
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE fact_work_items
+                SET status = 'completed',
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    last_error = NULL,
+                    updated_at = %(updated_at)s
+                WHERE work_item_id = %(work_item_id)s
+                """,
+                {
+                    "work_item_id": work_item_id,
+                    "updated_at": _utc_now(),
+                },
+            )

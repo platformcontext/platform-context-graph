@@ -37,8 +37,8 @@ def test_get_service_entrypoint_returns_git_collector_spec() -> None:
     )
 
 
-def test_get_service_entrypoint_returns_resolution_engine_placeholder() -> None:
-    """The resolution engine role should exist as a future explicit boundary."""
+def test_get_service_entrypoint_returns_resolution_engine_spec() -> None:
+    """The resolution engine role should resolve to a real entrypoint."""
 
     service_entrypoints = importlib.import_module(
         "platform_context_graph.app.service_entrypoints"
@@ -48,7 +48,11 @@ def test_get_service_entrypoint_returns_resolution_engine_placeholder() -> None:
 
     assert spec.service_role == "resolution-engine"
     assert spec.runtime_role == "combined"
-    assert spec.implemented is False
+    assert spec.implemented is True
+    assert (
+        spec.import_path
+        == "platform_context_graph.resolution.orchestration.runtime:start_resolution_engine"
+    )
 
 
 def test_get_service_entrypoint_rejects_unknown_role() -> None:
