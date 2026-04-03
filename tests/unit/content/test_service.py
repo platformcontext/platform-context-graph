@@ -230,6 +230,47 @@ def test_get_file_content_falls_back_to_workspace_when_postgres_misses() -> None
     assert workspace.file_calls == [("repository:r_ab12cd34", "src/payments.py")]
 
 
+def test_get_file_content_falls_back_when_postgres_returns_unavailable() -> None:
+    """Use workspace reads when Postgres returns an unavailable file payload."""
+
+    postgres = _FakePostgresProvider(
+        file_result={
+            "available": False,
+            "repo_id": "repository:r_ab12cd34",
+            "relative_path": "src/payments.py",
+            "content": None,
+            "source_backend": "unavailable",
+            "index_status": "not_indexed",
+        }
+    )
+    workspace = _FakeWorkspaceProvider(
+        file_result={
+            "available": True,
+            "repo_id": "repository:r_ab12cd34",
+            "relative_path": "src/payments.py",
+            "content": "workspace fallback",
+            "line_count": 3,
+            "language": "python",
+            "source_backend": "workspace",
+        }
+    )
+
+    service = ContentService(
+        postgres_provider=postgres,
+        workspace_provider=workspace,
+    )
+
+    result = service.get_file_content(
+        repo_id="repository:r_ab12cd34",
+        relative_path="src/payments.py",
+    )
+
+    assert result["content"] == "workspace fallback"
+    assert result["source_backend"] == "workspace"
+    assert postgres.file_calls == [("repository:r_ab12cd34", "src/payments.py")]
+    assert workspace.file_calls == [("repository:r_ab12cd34", "src/payments.py")]
+
+
 def test_get_entity_content_falls_back_to_workspace_when_postgres_misses() -> None:
     """Resolve entity source from the workspace when Postgres has no cached row."""
 
@@ -249,6 +290,33 @@ def test_get_entity_content_falls_back_to_workspace_when_postgres_misses() -> No
             "source_backend": "workspace",
         }
     )
+
+    service = ContentService(
+        postgres_provider=postgres,
+        workspace_provider=workspace,
+    )
+
+    result = service.get_entity_content(entity_id="content-entity:e_ab12cd34ef56")
+
+    assert result["entity_id"] == "content-entity:e_ab12cd34ef56"
+    assert result["source_backend"] == "workspace"
+    assert postgres.entity_calls == ["content-entity:e_ab12cd34ef56"]
+    assert workspace.entity_calls == ["content-entity:e_ab12cd34ef56"]
+
+
+def test_get_entity_content_falls_back_when_postgres_returns_unavailable() -> None:
+    """Use workspace entity content when Postgres returns an unavailable payload."""
+
+    postgres = _FakePostgresProvider(
+        entity_result={
+            "available": False,
+            "entity_id": "content-entity:e_ab12cd34ef56",
+            "content": None,
+            "source_backend": "unavailable",
+            "index_status": "not_indexed",
+        }
+    )
+    workspace = _FakeWorkspaceProvider()
 
     service = ContentService(
         postgres_provider=postgres,
@@ -289,6 +357,39 @@ def test_get_file_content_returns_not_indexed_when_workspace_fallback_is_disable
         "index_status": "not_indexed",
     }
     assert postgres.file_calls == [("repository:r_ab12cd34", "src/payments.py")]
+
+
+def test_get_file_lines_fall_back_when_postgres_returns_unavailable() -> None:
+    """Use workspace file lines when Postgres returns an unavailable payload."""
+
+    postgres = _FakePostgresProvider(
+        file_result={
+            "available": False,
+            "repo_id": "repository:r_ab12cd34",
+            "relative_path": "src/payments.py",
+            "content": None,
+            "source_backend": "unavailable",
+            "index_status": "not_indexed",
+        }
+    )
+    workspace = _FakeWorkspaceProvider()
+
+    service = ContentService(
+        postgres_provider=postgres,
+        workspace_provider=workspace,
+    )
+
+    result = service.get_file_lines(
+        repo_id="repository:r_ab12cd34",
+        relative_path="src/payments.py",
+        start_line=1,
+        end_line=1,
+    )
+
+    assert result["source_backend"] == "workspace"
+    assert result["lines"] == [{"line_number": 1, "content": "workspace fallback"}]
+    assert postgres.file_calls == [("repository:r_ab12cd34", "src/payments.py")]
+    assert workspace.line_calls == [("repository:r_ab12cd34", "src/payments.py", 1, 1)]
 
 
 def test_search_routes_to_postgres_content_store() -> None:

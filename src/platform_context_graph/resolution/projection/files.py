@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import Callable
 from typing import Iterable
 
+from platform_context_graph.content.ingest import repository_metadata_from_row
 from platform_context_graph.facts.storage.models import FactRecordRow
+from platform_context_graph.graph.persistence.content_store import content_dual_write
 
 from .common import run_write_query
 from .repositories import _normalized_fact_type
@@ -14,6 +16,7 @@ from .repositories import _normalized_fact_type
 CollectDirectoryChainRowsFn = Callable[
     ..., tuple[list[dict[str, str]], list[dict[str, str]]]
 ]
+ContentDualWriteFn = Callable[..., None]
 FlushDirectoryChainRowsFn = Callable[..., None]
 
 
@@ -153,6 +156,7 @@ def project_file_facts(
     fact_records: Iterable[FactRecordRow],
     *,
     warning_logger_fn: object | None = None,
+    content_dual_write_fn: ContentDualWriteFn = content_dual_write,
     collect_directory_chain_rows_fn: CollectDirectoryChainRowsFn = (
         collect_directory_chain_rows
     ),
@@ -169,6 +173,30 @@ def project_file_facts(
             continue
         repo_path = Path(fact_record.checkout_path).resolve()
         file_path = repo_path / fact_record.relative_path
+        parsed_file_data = fact_record.payload.get("parsed_file_data")
+        if isinstance(parsed_file_data, dict):
+            file_data = dict(parsed_file_data)
+            file_data.setdefault("path", str(file_path))
+            file_data.setdefault("repo_path", str(repo_path))
+            file_data["is_dependency"] = bool(
+                fact_record.payload.get("is_dependency", False)
+            )
+            repository = repository_metadata_from_row(
+                row={
+                    "id": fact_record.repository_id,
+                    "name": repo_path.name,
+                    "path": str(repo_path),
+                    "local_path": str(repo_path),
+                    "has_remote": False,
+                },
+                repo_path=repo_path,
+            )
+            content_dual_write_fn(
+                file_data,
+                file_path.name,
+                repository,
+                warning_logger_fn,
+            )
         run_write_query(
             tx,
             """

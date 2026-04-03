@@ -238,8 +238,8 @@ class TestMCPServer:
             "results": {"ranked_results": []},
         }
 
-    def test_find_code_wrapper_defaults_match_http_contract(self, mock_server):
-        """Canonical MCP search defaults should mirror the HTTP code search route."""
+    def test_find_code_wrapper_defaults_to_exact_symbol_search(self, mock_server):
+        """The MCP search tool should default to exact symbol lookup."""
 
         with patch(
             "platform_context_graph.mcp.server.code_queries.search_code"
@@ -256,7 +256,7 @@ class TestMCPServer:
             query="Payment_API",
             repo_id="repository:r_ab12cd34",
             scope="auto",
-            exact=False,
+            exact=True,
             limit=10,
             edit_distance=None,
         )
@@ -285,7 +285,7 @@ class TestMCPServer:
             query="Payment_API",
             repo_id="repository:r_ab12cd34",
             scope="auto",
-            exact=False,
+            exact=True,
             limit=10,
             edit_distance=None,
         )

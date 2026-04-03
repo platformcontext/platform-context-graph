@@ -12,6 +12,7 @@ from platform_context_graph.resolution.projection import project_git_fact_record
 from platform_context_graph.resolution.projection.entities import (
     project_parsed_entity_facts,
 )
+from platform_context_graph.resolution.projection.files import project_file_facts
 
 
 def _utc_now() -> datetime:
@@ -240,3 +241,60 @@ def test_project_parsed_entity_facts_uses_full_parsed_file_payload_when_availabl
     assert captured["write_data"]["entities_by_label"]["K8sResource"] == [
         {"name": "orders"}
     ]
+
+
+def test_project_file_facts_dual_writes_content_for_parsed_file_payload() -> None:
+    """File projection should repopulate the content store from stored file facts."""
+
+    captured: dict[str, Any] = {}
+    fact_records = [
+        FactRecordRow(
+            fact_id="fact:file",
+            fact_type="FileObserved",
+            repository_id="repository:r_service",
+            checkout_path="/tmp/service",
+            relative_path="src/app.py",
+            source_system="git",
+            source_run_id="run-123",
+            source_snapshot_id="snapshot-abc",
+            payload={
+                "language": "python",
+                "is_dependency": False,
+                "parsed_file_data": {
+                    "lang": "python",
+                    "path": "/tmp/service/src/app.py",
+                    "repo_path": "/tmp/service",
+                    "functions": [{"name": "handler", "line_number": 10}],
+                },
+            },
+            observed_at=_utc_now(),
+            ingested_at=_utc_now(),
+            provenance={},
+        )
+    ]
+
+    def _content_dual_write(
+        file_data: dict[str, Any],
+        file_name: str,
+        repository: dict[str, Any],
+        warning_logger_fn: Any,
+    ) -> None:
+        del warning_logger_fn
+        captured["file_data"] = file_data
+        captured["file_name"] = file_name
+        captured["repository"] = repository
+
+    session = _FakeSession()
+    projected = project_file_facts(
+        session,
+        fact_records,
+        content_dual_write_fn=_content_dual_write,
+        collect_directory_chain_rows_fn=lambda *_args, **_kwargs: ([], []),
+        flush_directory_chain_rows_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert projected == 1
+    assert captured["file_name"] == "app.py"
+    assert captured["file_data"]["path"] == "/tmp/service/src/app.py"
+    assert captured["repository"]["id"] == "repository:r_service"
+    assert captured["repository"]["local_path"] == str(Path("/tmp/service").resolve())

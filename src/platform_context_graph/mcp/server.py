@@ -235,7 +235,7 @@ class MCPServer(
             if not fuzzy_search:
                 edit_distance = None
         else:
-            exact = bool(exact_arg) if exact_arg is not None else False
+            exact = bool(exact_arg) if exact_arg is not None else True
             limit = require_int_argument(args, "limit", default=10, minimum=1)
             edit_distance = args.get("edit_distance")
 
