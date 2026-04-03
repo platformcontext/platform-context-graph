@@ -17,6 +17,7 @@ from ..visualizer import (
     visualize_dependencies,
     visualize_inheritance_tree,
 )
+from .analyze_graph_support import render_call_chains
 
 
 def register_analyze_graph_commands(main_module: Any, app: typer.Typer) -> typer.Typer:
@@ -297,42 +298,7 @@ def register_analyze_graph_commands(main_module: Any, app: typer.Typer) -> typer
                 visualize_call_chain(results, from_func, to_func)
                 return
 
-            for index, chain in enumerate(results, 1):
-                main_module.console.print(
-                    f"\n[bold cyan]Call Chain #{index} (length: {chain.get('chain_length', 0)}):[/bold cyan]"
-                )
-                functions = chain.get("function_chain", [])
-                call_details = chain.get("call_details", [])
-
-                for position, function_info in enumerate(functions):
-                    indent = "  " * position
-                    main_module.console.print(
-                        f"{indent}[cyan]{function_info.get('name', 'Unknown')}[/cyan] "
-                        f"[dim]({function_info.get('path', '')}:{function_info.get('line_number', '')})[/dim]"
-                    )
-
-                    if position < len(functions) - 1 and position < len(call_details):
-                        detail = call_details[position]
-                        line = detail.get("call_line", "?")
-                        args_value = detail.get("args", [])
-                        args_info = ""
-                        if args_value:
-                            if isinstance(args_value, list):
-                                clean_args = [
-                                    str(arg)
-                                    for arg in args_value
-                                    if str(arg) not in ("(", ")", ",")
-                                ]
-                                args_str = ", ".join(clean_args)
-                            else:
-                                args_str = str(args_value)
-                            if len(args_str) > 50:
-                                args_str = args_str[:47] + "..."
-                            args_info = f" [dim]({args_str})[/dim]"
-
-                        main_module.console.print(
-                            f"{indent}  ⬇ [dim]calls at line {line}[/dim]{args_info}"
-                        )
+            render_call_chains(main_module.console, results)
         finally:
             db_manager.close_driver()
 
