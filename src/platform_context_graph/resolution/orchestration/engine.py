@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from datetime import timezone
 import time
 from typing import Any
 
@@ -11,6 +13,12 @@ from platform_context_graph.observability import get_observability
 from platform_context_graph.observability.facts_first_logs import (
     log_resolution_stage_failure,
     log_resolution_work_item,
+)
+from platform_context_graph.resolution.decisions.recording import (
+    build_projection_decision,
+)
+from platform_context_graph.resolution.decisions.recording import (
+    build_projection_evidence,
 )
 from platform_context_graph.resolution.projection import project_git_fact_records
 from platform_context_graph.resolution.projection.relationships import (
@@ -36,11 +44,48 @@ def _metric_output_count(metrics: Any) -> int:
     return 0
 
 
+def _utc_now() -> datetime:
+    """Return the current UTC timestamp."""
+
+    return datetime.now(tz=timezone.utc)
+
+
+def _record_projection_decision(
+    *,
+    decision_store: Any | None,
+    stage: str,
+    work_item: FactWorkItemRow,
+    fact_records: list[FactRecordRow],
+    metrics: Any,
+) -> None:
+    """Persist one bounded projection decision when a store is configured."""
+
+    if decision_store is None:
+        return
+    created_at = _utc_now()
+    decision = build_projection_decision(
+        stage=stage,
+        work_item=work_item,
+        fact_records=fact_records,
+        output_count=_metric_output_count(metrics),
+        created_at=created_at,
+    )
+    decision_store.upsert_decision(decision)
+    evidence = build_projection_evidence(
+        decision=decision,
+        fact_records=fact_records,
+        created_at=created_at,
+    )
+    if evidence:
+        decision_store.insert_evidence(evidence)
+
+
 def project_work_item(
     work_item: FactWorkItemRow,
     *,
     builder: Any | None = None,
     fact_store: Any | None = None,
+    decision_store: Any | None = None,
     fact_projector: Any = project_git_fact_records,
     relationship_projector: Any = project_git_relationship_fact_records,
     workload_projector: Any = project_workload_facts,
@@ -154,6 +199,13 @@ def project_work_item(
                 warning_logger_fn=warning_logger_fn,
             ),
         )
+        _record_projection_decision(
+            decision_store=decision_store,
+            stage="project_relationships",
+            work_item=work_item,
+            fact_records=fact_records,
+            metrics=relationship_metrics,
+        )
         workload_metrics = _run_stage(
             "project_workloads",
             lambda: workload_projector(
@@ -162,12 +214,26 @@ def project_work_item(
                 info_logger_fn=info_logger_fn,
             ),
         )
+        _record_projection_decision(
+            decision_store=decision_store,
+            stage="project_workloads",
+            work_item=work_item,
+            fact_records=fact_records,
+            metrics=workload_metrics,
+        )
         platform_metrics = _run_stage(
             "project_platforms",
             lambda: platform_projector(
                 builder=builder,
                 fact_records=fact_records,
             ),
+        )
+        _record_projection_decision(
+            decision_store=decision_store,
+            stage="project_platforms",
+            work_item=work_item,
+            fact_records=fact_records,
+            metrics=platform_metrics,
         )
         log_resolution_work_item(
             "projected",
