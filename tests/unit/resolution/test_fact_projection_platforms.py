@@ -1,4 +1,4 @@
-"""Tests for infrastructure platform materialization from stored facts."""
+"""Tests for platform projection from stored facts."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def _utc_now() -> datetime:
 
 
 class _FakeSession:
-    """Simple context-managed session stub."""
+    """Minimal context-managed fake session."""
 
     def __enter__(self) -> "_FakeSession":
         """Enter the fake session context."""
@@ -32,30 +32,29 @@ class _FakeSession:
 
 
 class _FakeDriver:
-    """Expose one session via the driver interface."""
+    """Expose one reusable fake session via the driver interface."""
 
     def __init__(self, session: _FakeSession) -> None:
-        """Bind the fake driver to a session."""
+        """Bind the fake driver to one captured session."""
 
         self._session = session
 
     def session(self) -> _FakeSession:
-        """Return the bound fake session."""
+        """Return the captured fake session."""
 
         return self._session
 
 
-def test_project_platform_facts_targets_repository_paths_from_facts() -> None:
-    """Platform materialization should scope itself to repository facts."""
+def test_project_platform_facts_targets_projected_repositories() -> None:
+    """Platform projection should target the same resolved repository paths."""
 
-    session = _FakeSession()
-    builder = type("FakeBuilder", (), {"driver": _FakeDriver(session)})()
+    captured: dict[str, object] = {}
     fact_records = [
         FactRecordRow(
             fact_id="fact:repo",
             fact_type="RepositoryObserved",
-            repository_id="github.com/acme/service",
-            checkout_path="/tmp/service",
+            repository_id="github.com/acme/infra",
+            checkout_path="/tmp/infra",
             relative_path=None,
             source_system="git",
             source_run_id="run-123",
@@ -66,18 +65,23 @@ def test_project_platform_facts_targets_repository_paths_from_facts() -> None:
             provenance={},
         )
     ]
-    captured: dict[str, object] = {}
+    session = _FakeSession()
+    builder = type(
+        "FakeBuilder",
+        (),
+        {"driver": _FakeDriver(session)},
+    )()
 
     def _materialize_platforms(
-        graph_session: object,
+        session_arg: object,
         *,
         repo_paths: list[Path] | None,
         progress_callback: object | None = None,
     ) -> dict[str, int]:
-        captured["session"] = graph_session
+        captured["session"] = session_arg
         captured["repo_paths"] = repo_paths
         captured["progress_callback"] = progress_callback
-        return {"infrastructure_platform_edges_projected": 2}
+        return {"infrastructure_platform_edges_projected": 1}
 
     metrics = project_platform_facts(
         builder=builder,
@@ -85,6 +89,6 @@ def test_project_platform_facts_targets_repository_paths_from_facts() -> None:
         materialize_platforms_fn=_materialize_platforms,
     )
 
-    assert metrics == {"infrastructure_platform_edges_projected": 2}
+    assert metrics == {"infrastructure_platform_edges_projected": 1}
     assert captured["session"] is session
-    assert captured["repo_paths"] == [Path("/tmp/service").resolve()]
+    assert captured["repo_paths"] == [Path("/tmp/infra").resolve()]

@@ -1,4 +1,4 @@
-"""Tests for workload materialization from stored facts."""
+"""Tests for workload projection from stored facts."""
 
 from __future__ import annotations
 
@@ -18,10 +18,10 @@ def _utc_now() -> datetime:
     return datetime(2026, 4, 2, 12, 0, tzinfo=timezone.utc)
 
 
-def test_project_workload_facts_targets_repository_paths_from_facts() -> None:
-    """Workload materialization should scope itself to repository facts."""
+def test_project_workload_facts_targets_projected_repositories() -> None:
+    """Workload projection should forward targeted repo paths to the materializer."""
 
-    builder = SimpleNamespace()
+    captured: dict[str, object] = {}
     fact_records = [
         FactRecordRow(
             fact_id="fact:repo",
@@ -38,19 +38,21 @@ def test_project_workload_facts_targets_repository_paths_from_facts() -> None:
             provenance={},
         )
     ]
-    captured: dict[str, object] = {}
 
     def _materialize_workloads(
-        graph_builder: object,
+        builder: object,
         *,
         info_logger_fn: object,
         committed_repo_paths: list[Path] | None,
         progress_callback: object | None = None,
     ) -> dict[str, int]:
-        captured["builder"] = graph_builder
+        captured["builder"] = builder
         captured["repo_paths"] = committed_repo_paths
         captured["progress_callback"] = progress_callback
-        return {"workloads_projected": 1, "runtime_platform_edges_projected": 1}
+        assert callable(info_logger_fn)
+        return {"workloads_projected": 2}
+
+    builder = SimpleNamespace()
 
     metrics = project_workload_facts(
         builder=builder,
@@ -59,9 +61,6 @@ def test_project_workload_facts_targets_repository_paths_from_facts() -> None:
         info_logger_fn=lambda *_args, **_kwargs: None,
     )
 
-    assert metrics == {
-        "workloads_projected": 1,
-        "runtime_platform_edges_projected": 1,
-    }
+    assert metrics == {"workloads_projected": 2}
     assert captured["builder"] is builder
     assert captured["repo_paths"] == [Path("/tmp/service").resolve()]

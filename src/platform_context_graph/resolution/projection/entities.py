@@ -10,9 +10,12 @@ from platform_context_graph.facts.storage.models import FactRecordRow
 
 from .common import run_write_query
 from .common import validate_cypher_identifier
+from .files import iter_file_facts
 from .repositories import _normalized_fact_type
 
 BuildEntityMergeStatementFn = Callable[..., tuple[str, dict[str, object]]]
+CollectFileWriteDataFn = Callable[..., dict[str, object]]
+FlushWriteBatchesFn = Callable[..., dict[str, object]]
 
 
 def build_entity_merge_statement(
@@ -76,6 +79,8 @@ def project_parsed_entity_facts(
     tx: object,
     fact_records: Iterable[FactRecordRow],
     *,
+    collect_file_write_data_fn: CollectFileWriteDataFn | None = None,
+    flush_write_batches_fn: FlushWriteBatchesFn | None = None,
     build_entity_merge_statement_fn: BuildEntityMergeStatementFn = (
         build_entity_merge_statement
     ),
@@ -83,8 +88,48 @@ def project_parsed_entity_facts(
     """Project parsed entity facts into graph nodes contained by File nodes."""
 
     projected = 0
+    projected_file_keys: set[tuple[str, str]] = set()
+    for file_fact in iter_file_facts(fact_records):
+        if not file_fact.relative_path:
+            continue
+        parsed_file_data = file_fact.payload.get("parsed_file_data")
+        if not isinstance(parsed_file_data, dict):
+            continue
+        if collect_file_write_data_fn is None:
+            from platform_context_graph.graph.persistence import collect_file_write_data
+
+            collect_file_write_data_fn = collect_file_write_data
+        if flush_write_batches_fn is None:
+            from platform_context_graph.graph.persistence import flush_write_batches
+
+            flush_write_batches_fn = flush_write_batches
+        file_path = str(
+            parsed_file_data.get("path")
+            or (Path(file_fact.checkout_path) / file_fact.relative_path)
+        )
+        file_data = dict(parsed_file_data)
+        file_data.setdefault("path", file_path)
+        file_data.setdefault("repo_path", file_fact.checkout_path)
+        file_data["is_dependency"] = bool(file_fact.payload.get("is_dependency", False))
+        write_data = collect_file_write_data_fn(
+            file_data,
+            file_path,
+            max_entity_value_length=None,
+        )
+        flush_write_batches_fn(tx, write_data)
+        entity_rows = sum(
+            len(rows) for rows in write_data.get("entities_by_label", {}).values()
+        )
+        projected += entity_rows
+        projected_file_keys.add((file_fact.checkout_path, file_fact.relative_path))
+
     for fact_record in iter_parsed_entity_facts(fact_records):
         if not fact_record.relative_path:
+            continue
+        if (
+            fact_record.checkout_path,
+            fact_record.relative_path,
+        ) in projected_file_keys:
             continue
         file_path = str(
             Path(fact_record.checkout_path).resolve() / fact_record.relative_path

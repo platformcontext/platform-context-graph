@@ -9,6 +9,9 @@ from typing import Any
 
 from platform_context_graph.facts.storage.models import FactRecordRow
 from platform_context_graph.resolution.projection import project_git_fact_records
+from platform_context_graph.resolution.projection.entities import (
+    project_parsed_entity_facts,
+)
 
 
 def _utc_now() -> datetime:
@@ -158,3 +161,82 @@ def test_project_git_fact_records_merges_files_and_entities() -> None:
         and params["line_number"] == 10
         for query, params in session.calls
     )
+
+
+def test_project_parsed_entity_facts_uses_full_parsed_file_payload_when_available() -> (
+    None
+):
+    """Projection should reuse stored parsed file payloads for rich entity labels."""
+
+    captured: dict[str, Any] = {}
+    fact_records = [
+        FactRecordRow(
+            fact_id="fact:file",
+            fact_type="FileObserved",
+            repository_id="github.com/acme/service",
+            checkout_path="/tmp/service",
+            relative_path="infra/app.yaml",
+            source_system="git",
+            source_run_id="run-123",
+            source_snapshot_id="snapshot-abc",
+            payload={
+                "language": "yaml",
+                "is_dependency": False,
+                "parsed_file_data": {
+                    "lang": "yaml",
+                    "k8s_resources": [
+                        {
+                            "name": "orders",
+                            "line_number": 3,
+                            "kind": "Deployment",
+                        }
+                    ],
+                },
+            },
+            observed_at=_utc_now(),
+            ingested_at=_utc_now(),
+            provenance={},
+        )
+    ]
+
+    def _collect_file_write_data(
+        file_data: dict[str, Any],
+        file_path: str,
+        *,
+        max_entity_value_length: int | None = None,
+    ) -> dict[str, Any]:
+        captured["file_data"] = file_data
+        captured["file_path"] = file_path
+        captured["max_entity_value_length"] = max_entity_value_length
+        return {
+            "entities_by_label": {"K8sResource": [{"name": "orders"}]},
+            "params_rows": [],
+            "module_rows": [],
+            "nested_fn_rows": [],
+            "class_fn_rows": [],
+            "module_inclusion_rows": [],
+            "js_import_rows": [],
+            "generic_import_rows": [],
+        }
+
+    def _flush_write_batches(
+        tx: object,
+        write_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        captured["tx"] = tx
+        captured["write_data"] = write_data
+        return {"entity:K8sResource": {"total_rows": 1}}
+
+    projected = project_parsed_entity_facts(
+        object(),
+        fact_records,
+        collect_file_write_data_fn=_collect_file_write_data,
+        flush_write_batches_fn=_flush_write_batches,
+    )
+
+    assert projected == 1
+    assert captured["file_path"] == str(Path("/tmp/service/infra/app.yaml"))
+    assert captured["file_data"]["k8s_resources"][0]["kind"] == "Deployment"
+    assert captured["write_data"]["entities_by_label"]["K8sResource"] == [
+        {"name": "orders"}
+    ]
