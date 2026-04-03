@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import time
 from typing import Any
+from dataclasses import replace
 
 from platform_context_graph.facts.emission.git_snapshot import (
     GitSnapshotFactEmissionResult,
@@ -90,28 +91,33 @@ def project_repository_snapshot_facts(
             "pcg.queue.lease_ttl_seconds": lease_ttl_seconds,
         },
     ) as span:
-        work_item = queue.lease_work_item(
-            work_item_id=fact_emission_result.work_item_id,
-            lease_owner=lease_owner,
-            lease_ttl_seconds=lease_ttl_seconds,
-        )
-        if work_item is None:
-            observability.record_fact_work_item(
-                component="ingester",
-                work_type="project-git-facts",
-                outcome="lease_miss",
-            )
-            log_inline_projection(
-                "lease_missed",
-                repository_id=fact_emission_result.repository_id,
-                source_run_id=fact_emission_result.source_run_id,
+        work_item = fact_emission_result.work_item
+        if work_item is not None and work_item.status == "leased":
+            if work_item.lease_owner != lease_owner:
+                work_item = replace(work_item, lease_owner=lease_owner)
+        else:
+            work_item = queue.lease_work_item(
                 work_item_id=fact_emission_result.work_item_id,
+                lease_owner=lease_owner,
+                lease_ttl_seconds=lease_ttl_seconds,
             )
-            refresh_fact_queue_metrics(queue, component="ingester")
-            raise RuntimeError(
-                "facts-first projection could not lease work item "
-                f"{fact_emission_result.work_item_id}"
-            )
+            if work_item is None:
+                observability.record_fact_work_item(
+                    component="ingester",
+                    work_type="project-git-facts",
+                    outcome="lease_miss",
+                )
+                log_inline_projection(
+                    "lease_missed",
+                    repository_id=fact_emission_result.repository_id,
+                    source_run_id=fact_emission_result.source_run_id,
+                    work_item_id=fact_emission_result.work_item_id,
+                )
+                refresh_fact_queue_metrics(queue, component="ingester")
+                raise RuntimeError(
+                    "facts-first projection could not lease work item "
+                    f"{fact_emission_result.work_item_id}"
+                )
         if span is not None:
             span.set_attribute("pcg.queue.attempt_count", work_item.attempt_count)
         observability.record_fact_work_item(

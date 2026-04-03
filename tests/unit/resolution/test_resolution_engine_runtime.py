@@ -240,3 +240,36 @@ def test_project_work_item_records_projection_decisions() -> None:
         "project_platforms",
     ]
     assert decision_store.insert_evidence.call_count == 3
+
+
+def test_project_work_item_clears_repository_state_before_projection() -> None:
+    """Standalone resolution should clear repo graph/content state before projection."""
+
+    fact_store = MagicMock()
+    fact_store.list_facts.return_value = []
+    builder = MagicMock()
+    builder._content_provider = MagicMock(enabled=True)
+
+    project_work_item(
+        FactWorkItemRow(
+            work_item_id="work-5",
+            work_type="project-git-facts",
+            repository_id="github.com/acme/service",
+            source_run_id="run-123",
+        ),
+        builder=builder,
+        fact_store=fact_store,
+        fact_projector=lambda **_kwargs: {"files": 0},
+        relationship_projector=lambda **_kwargs: {"files": 0, "imports": 0},
+        workload_projector=lambda **_kwargs: {"workloads_projected": 0},
+        platform_projector=lambda **_kwargs: {
+            "infrastructure_platform_edges_projected": 0
+        },
+    )
+
+    builder.delete_repository_from_graph.assert_called_once_with(
+        "github.com/acme/service"
+    )
+    builder._content_provider.delete_repository_content.assert_called_once_with(
+        "github.com/acme/service"
+    )

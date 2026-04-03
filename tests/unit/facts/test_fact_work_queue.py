@@ -83,6 +83,30 @@ def test_claim_work_item_returns_leased_row(monkeypatch) -> None:
     assert row.status == "leased"
 
 
+def test_claim_work_item_can_reclaim_expired_leased_rows(monkeypatch) -> None:
+    """Expired inline-owned leases should be reclaimable by the resolution engine."""
+
+    queue = PostgresFactWorkQueue("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchone.return_value = None
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(queue, "_cursor", _cursor)
+
+    queue.claim_work_item(
+        lease_owner="resolution-worker-1",
+        lease_ttl_seconds=60,
+    )
+
+    query, _params = cursor.execute.call_args.args
+    assert "status = 'pending'" in query
+    assert "status = 'leased'" in query
+    assert "lease_expires_at <= %(now)s" in query
+
+
 def test_fail_work_item_marks_retryable_and_terminal_states(monkeypatch) -> None:
     """Failing work should support retryable and terminal outcomes."""
 

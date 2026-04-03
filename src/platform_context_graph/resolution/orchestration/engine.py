@@ -97,6 +97,17 @@ def _record_projection_decision(
     )
 
 
+def _clear_repository_projection_state(*, builder: Any, repository_id: str) -> None:
+    """Delete existing graph and content state before reprojection."""
+
+    delete_repository = getattr(builder, "delete_repository_from_graph", None)
+    if callable(delete_repository):
+        delete_repository(repository_id)
+    content_provider = getattr(builder, "_content_provider", None)
+    if content_provider is not None and getattr(content_provider, "enabled", False):
+        content_provider.delete_repository_content(repository_id)
+
+
 def project_work_item(
     work_item: FactWorkItemRow,
     *,
@@ -131,6 +142,10 @@ def project_work_item(
             "pcg.queue.attempt_count": work_item.attempt_count,
         },
     ):
+        _clear_repository_projection_state(
+            builder=builder,
+            repository_id=work_item.repository_id,
+        )
         load_started = time.perf_counter()
         try:
             with observability.start_span(

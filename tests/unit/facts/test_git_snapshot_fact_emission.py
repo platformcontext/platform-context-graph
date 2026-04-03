@@ -215,6 +215,40 @@ def test_emit_git_snapshot_facts_persists_run_facts_and_work_item() -> None:
     assert file_fact_row.payload["parsed_file_data"]["lang"] == "python"
 
 
+def test_emit_git_snapshot_facts_preleases_inline_projection_work_item() -> None:
+    """Inline-owned emission should enqueue a leased work item for bootstrap."""
+
+    fact_store = MagicMock()
+    work_queue = MagicMock()
+    snapshot = RepositoryParseSnapshot(
+        repo_path="/tmp/service",
+        file_count=0,
+        imports_map={},
+        file_data=[],
+    )
+
+    emitted = emit_git_snapshot_facts(
+        snapshot=snapshot,
+        repository_id="github.com/acme/service",
+        source_run_id="run-123",
+        source_snapshot_id="snapshot-abc",
+        is_dependency=False,
+        fact_store=fact_store,
+        work_queue=work_queue,
+        observed_at=_utc_now(),
+        inline_projection_owner="indexing",
+        inline_projection_lease_ttl_seconds=300,
+    )
+
+    queued_row = work_queue.enqueue_work_item.call_args.args[0]
+    assert queued_row.status == "leased"
+    assert queued_row.lease_owner == "indexing"
+    assert queued_row.attempt_count == 1
+    assert queued_row.last_attempt_started_at == _utc_now()
+    assert emitted.work_item is not None
+    assert emitted.work_item.status == "leased"
+
+
 def test_process_repository_snapshots_emits_facts_before_queueing_commits(
     tmp_path: Path,
 ) -> None:

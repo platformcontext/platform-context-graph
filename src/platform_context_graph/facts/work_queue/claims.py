@@ -106,11 +106,20 @@ def claim_work_item(
             WITH claimable AS (
                 SELECT work_item_id
                 FROM fact_work_items
-                WHERE status = 'pending'
-                  AND (
-                    lease_expires_at IS NULL
-                    OR lease_expires_at <= %(now)s
-                  )
+                WHERE (
+                    (
+                        status = 'pending'
+                        AND (
+                            lease_expires_at IS NULL
+                            OR lease_expires_at <= %(now)s
+                        )
+                    )
+                    OR (
+                        status = 'leased'
+                        AND lease_expires_at IS NOT NULL
+                        AND lease_expires_at <= %(now)s
+                    )
+                )
                   AND (
                     next_retry_at IS NULL
                     OR next_retry_at <= %(now)s
