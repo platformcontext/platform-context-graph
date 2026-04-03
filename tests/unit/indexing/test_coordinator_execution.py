@@ -107,9 +107,7 @@ except Exception:
             "platform_context_graph.collectors.git.parse_worker"
         )
         collectors_git_parse_worker.init_parse_worker = lambda *_args, **_kwargs: None
-        collectors_git_parse_worker.parse_file_in_worker = (
-            lambda *_args, **_kwargs: {}
-        )
+        collectors_git_parse_worker.parse_file_in_worker = lambda *_args, **_kwargs: {}
         sys.modules["platform_context_graph.collectors.git.parse_worker"] = (
             collectors_git_parse_worker
         )
@@ -118,12 +116,8 @@ if "platform_context_graph.graph.persistence.worker" not in sys.modules:
     graph_persistence_worker = ModuleType(
         "platform_context_graph.graph.persistence.worker"
     )
-    graph_persistence_worker.get_commit_worker_connection_params = (
-        lambda: {}
-    )
-    graph_persistence_worker.commit_batch_in_process = (
-        lambda *_args, **_kwargs: None
-    )
+    graph_persistence_worker.get_commit_worker_connection_params = lambda: {}
+    graph_persistence_worker.commit_batch_in_process = lambda *_args, **_kwargs: None
     sys.modules["platform_context_graph.graph.persistence.worker"] = (
         graph_persistence_worker
     )
@@ -132,9 +126,7 @@ if "platform_context_graph.indexing.coordinator_coverage" not in sys.modules:
     coordinator_coverage_module = ModuleType(
         "platform_context_graph.indexing.coordinator_coverage"
     )
-    coordinator_coverage_module.publish_run_repository_coverage = (
-        lambda **_kwargs: None
-    )
+    coordinator_coverage_module.publish_run_repository_coverage = lambda **_kwargs: None
     sys.modules["platform_context_graph.indexing.coordinator_coverage"] = (
         coordinator_coverage_module
     )
@@ -151,17 +143,15 @@ if "platform_context_graph.runtime.roles" not in sys.modules:
     runtime_package = ModuleType("platform_context_graph.runtime")
     runtime_package.__path__ = [str(PACKAGE_ROOT / "runtime")]
     runtime_roles_module = ModuleType("platform_context_graph.runtime.roles")
-    runtime_status_store_module = ModuleType("platform_context_graph.runtime.status_store")
+    runtime_status_store_module = ModuleType(
+        "platform_context_graph.runtime.status_store"
+    )
     runtime_roles_module.workspace_fallback_enabled = lambda: False
     sys.modules["platform_context_graph.runtime"] = runtime_package
     sys.modules["platform_context_graph.runtime.roles"] = runtime_roles_module
     runtime_status_store_module.get_status_store = lambda *_args, **_kwargs: None
-    runtime_status_store_module.get_repository_coverage = (
-        lambda *_args, **_kwargs: None
-    )
-    runtime_status_store_module.list_repository_coverage = (
-        lambda *_args, **_kwargs: []
-    )
+    runtime_status_store_module.get_repository_coverage = lambda *_args, **_kwargs: None
+    runtime_status_store_module.list_repository_coverage = lambda *_args, **_kwargs: []
     runtime_status_store_module.update_runtime_ingester_status = (
         lambda *_args, **_kwargs: None
     )
@@ -481,10 +471,11 @@ def test_execute_index_run_uses_facts_first_projection_when_enabled(
     assert len(commit_factory_calls) == 1
     assert emitter_factory_calls[0]["fact_store"].enabled is True
     assert emitter_factory_calls[0]["work_queue"].enabled is True
-    assert commit_factory_calls[0]["fact_store"] is emitter_factory_calls[0]["fact_store"]
     assert (
-        commit_factory_calls[0]["work_queue"]
-        is emitter_factory_calls[0]["work_queue"]
+        commit_factory_calls[0]["fact_store"] is emitter_factory_calls[0]["fact_store"]
+    )
+    assert (
+        commit_factory_calls[0]["work_queue"] is emitter_factory_calls[0]["work_queue"]
     )
     assert commit_factory_calls[0]["fact_emission_results"] is emitter_fact_results
     assert result.status == "completed"

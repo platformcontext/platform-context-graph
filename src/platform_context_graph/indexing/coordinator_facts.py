@@ -40,6 +40,8 @@ __all__ = [
     "git_facts_first_enabled",
     "project_repository_snapshot_facts",
 ]
+
+
 def project_repository_snapshot_facts(
     builder: object,
     snapshot: object,

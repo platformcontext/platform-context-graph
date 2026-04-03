@@ -119,7 +119,9 @@ def _load_coordinator_module() -> ModuleType:
                 collectors_indexing
             )
 
-            parse_worker = ModuleType("platform_context_graph.collectors.git.parse_worker")
+            parse_worker = ModuleType(
+                "platform_context_graph.collectors.git.parse_worker"
+            )
             parse_worker.init_parse_worker = lambda: None
             sys.modules["platform_context_graph.collectors.git.parse_worker"] = (
                 parse_worker
@@ -154,9 +156,10 @@ def _load_coordinator_module() -> ModuleType:
                 "platform_context_graph.repository_identity"
             )
             repository_identity.git_remote_for_path = lambda _path: None
-            repository_identity.repository_metadata = (
-                lambda **kwargs: {"id": kwargs["local_path"], "name": kwargs["name"]}
-            )
+            repository_identity.repository_metadata = lambda **kwargs: {
+                "id": kwargs["local_path"],
+                "name": kwargs["name"],
+            }
             sys.modules["platform_context_graph.repository_identity"] = (
                 repository_identity
             )
@@ -181,9 +184,7 @@ def _load_coordinator_module() -> ModuleType:
             coordinator_runtime_status = ModuleType(
                 "platform_context_graph.indexing.coordinator_runtime_status"
             )
-            coordinator_runtime_status.publish_runtime_progress = (
-                lambda **_kwargs: None
-            )
+            coordinator_runtime_status.publish_runtime_progress = lambda **_kwargs: None
             sys.modules[
                 "platform_context_graph.indexing.coordinator_runtime_status"
             ] = coordinator_runtime_status
@@ -214,9 +215,7 @@ def _load_coordinator_module() -> ModuleType:
             )
             coordinator_storage._load_or_create_run = lambda *_args, **_kwargs: None
             coordinator_storage._load_run_state_by_id = lambda *_args, **_kwargs: None
-            coordinator_storage._load_snapshot_metadata = (
-                lambda *_args, **_kwargs: None
-            )
+            coordinator_storage._load_snapshot_metadata = lambda *_args, **_kwargs: None
             coordinator_storage._matching_run_states = lambda *_args, **_kwargs: []
             coordinator_storage._persist_run_state = lambda *_args, **_kwargs: None
             coordinator_storage._record_checkpoint_metric = (
@@ -228,9 +227,7 @@ def _load_coordinator_module() -> ModuleType:
             coordinator_storage._save_snapshot_file_data = (
                 lambda *_args, **_kwargs: None
             )
-            coordinator_storage._save_snapshot_metadata = (
-                lambda *_args, **_kwargs: None
-            )
+            coordinator_storage._save_snapshot_metadata = lambda *_args, **_kwargs: None
             coordinator_storage._update_pending_repository_gauge = (
                 lambda *_args, **_kwargs: None
             )
@@ -415,14 +412,20 @@ def test_execute_index_run_uses_facts_first_handlers_and_skips_legacy_finalize(
         "_iter_snapshot_file_data_batches",
         lambda *_args, **_kwargs: iter(()),
     )
-    monkeypatch.setattr(COORDINATOR, "_iter_snapshot_file_data", lambda *_args: iter(()))
-    monkeypatch.setattr(COORDINATOR, "_record_checkpoint_metric", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        COORDINATOR, "_iter_snapshot_file_data", lambda *_args: iter(())
+    )
+    monkeypatch.setattr(
+        COORDINATOR, "_record_checkpoint_metric", lambda **_kwargs: None
+    )
     monkeypatch.setattr(
         COORDINATOR,
         "_update_pending_repository_gauge",
         lambda **_kwargs: None,
     )
-    monkeypatch.setattr(COORDINATOR, "_publish_runtime_progress", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        COORDINATOR, "_publish_runtime_progress", lambda **_kwargs: None
+    )
     monkeypatch.setattr(COORDINATOR, "_utc_now", lambda: "2026-01-01T00:00:00Z")
 
     @contextmanager

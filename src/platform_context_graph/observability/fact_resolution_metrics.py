@@ -9,6 +9,7 @@ from .fact_scaling_metrics import RuntimeFactScalingMetricsMixin
 from .fact_scaling_metrics import setup_fact_scaling_instruments
 from .otel import Observation
 
+
 class RuntimeFactResolutionMetricsMixin(RuntimeFactScalingMetricsMixin):
     """Provide facts-first and resolution-engine metric helpers."""
 
@@ -409,6 +410,7 @@ class RuntimeFactResolutionMetricsMixin(RuntimeFactScalingMetricsMixin):
                 Observation(value, dict(key))
                 for key, value in sorted(self._resolution_workers_active.items())
             ]
+
 
 def setup_fact_resolution_instruments(runtime: Any) -> None:
     """Initialize facts and resolution instruments for one runtime."""

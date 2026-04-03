@@ -98,9 +98,7 @@ def test_emitted_git_facts_preserve_workload_and_platform_repo_inputs() -> None:
         progress_callback=workload_progress,
     )
     platform_metrics = project_platform_facts(
-        builder=SimpleNamespace(
-            driver=SimpleNamespace(session=lambda: _Session())
-        ),
+        builder=SimpleNamespace(driver=SimpleNamespace(session=lambda: _Session())),
         fact_records=fact_records,
         materialize_platforms_fn=_materialize_platforms,
         progress_callback=platform_progress,

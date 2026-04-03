@@ -107,6 +107,18 @@ def _fact_record_from_file_fact(fact: FileObservedFact) -> FactRecordRow:
     )
 
 
+def _sanitize_for_json(value: Any) -> Any:
+    """Recursively convert Path objects to strings for JSON serialization."""
+
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _sanitize_for_json(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return type(value)(_sanitize_for_json(item) for item in value)
+    return value
+
+
 def _file_fact_payload_from_snapshot_entry(
     *,
     entry: dict[str, Any],
@@ -115,7 +127,7 @@ def _file_fact_payload_from_snapshot_entry(
     """Return the persisted file-fact payload for one parsed snapshot entry."""
 
     parsed_file_data = {
-        key: value
+        key: _sanitize_for_json(value)
         for key, value in entry.items()
         if key not in {"path", "repo_path", "is_dependency"}
     }

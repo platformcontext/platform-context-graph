@@ -19,10 +19,12 @@ from .schema import FACT_STORE_SCHEMA
 try:
     import psycopg
     from psycopg.rows import dict_row
+    from psycopg.types.json import Jsonb
     from psycopg_pool import ConnectionPool as _ConnectionPool
 except ImportError:  # pragma: no cover - exercised without optional dependency.
     psycopg = None
     dict_row = None
+    Jsonb = None
     _ConnectionPool = None
 
 _logger = logging.getLogger(__name__)
@@ -123,10 +125,10 @@ def _fact_record_params(entry: FactRecordRow) -> dict[str, Any]:
         "source_system": entry.source_system,
         "source_run_id": entry.source_run_id,
         "source_snapshot_id": entry.source_snapshot_id,
-        "payload": entry.payload,
+        "payload": Jsonb(entry.payload),
         "observed_at": entry.observed_at,
         "ingested_at": entry.ingested_at,
-        "provenance": entry.provenance,
+        "provenance": Jsonb(entry.provenance),
     }
 
 

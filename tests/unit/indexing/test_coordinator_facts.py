@@ -234,7 +234,9 @@ def test_create_facts_first_commit_callback_reuses_cached_emission_result() -> N
         source_run_id="run-123",
         fact_store=store,
         work_queue=queue,
-        fact_emission_results={str(Path(snapshot.repo_path).resolve()): emission_result},
+        fact_emission_results={
+            str(Path(snapshot.repo_path).resolve()): emission_result
+        },
         observed_at_fn=_utc_now,
     )
 
@@ -296,15 +298,17 @@ def test_create_facts_first_commit_callback_builds_deterministic_fallback_ids() 
     )
 
     with pytest.raises(RuntimeError, match="projection failed"):
-            callback(
-                builder,
-                snapshot,
-                is_dependency=False,
-                project_repository_snapshot_facts_fn=project_snapshot,
-                graph_store_adapter_fn=lambda _builder: "graph-store",
-            )
+        callback(
+            builder,
+            snapshot,
+            is_dependency=False,
+            project_repository_snapshot_facts_fn=project_snapshot,
+            graph_store_adapter_fn=lambda _builder: "graph-store",
+        )
 
-    forwarded_emission_result = project_snapshot.call_args.kwargs["fact_emission_result"]
+    forwarded_emission_result = project_snapshot.call_args.kwargs[
+        "fact_emission_result"
+    ]
     assert forwarded_emission_result.source_run_id == "run-123"
     assert forwarded_emission_result.repository_id.startswith("repository:")
     assert forwarded_emission_result.source_snapshot_id

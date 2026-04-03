@@ -101,6 +101,7 @@ def project_work_item(
         )
 
         def _run_stage(stage: str, callback: Any) -> dict[str, Any]:
+            """Execute a projection stage with observability and error handling."""
             started = time.perf_counter()
             with observability.start_span(
                 f"pcg.resolution.{stage}",

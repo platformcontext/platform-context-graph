@@ -16,7 +16,9 @@ from platform_context_graph.facts.work_queue.models import FactWorkItemRow
 from platform_context_graph.indexing.coordinator_facts import (
     commit_repository_snapshot_from_facts,
 )
-from platform_context_graph.indexing.coordinator_facts import create_snapshot_fact_emitter
+from platform_context_graph.indexing.coordinator_facts import (
+    create_snapshot_fact_emitter,
+)
 
 
 def _utc_now() -> datetime:
@@ -34,7 +36,9 @@ class _InMemoryFactStore:
         self.enabled = True
 
     def upsert_fact_run(self, entry: FactRunRow) -> None:
-        self.runs = [row for row in self.runs if row.source_run_id != entry.source_run_id]
+        self.runs = [
+            row for row in self.runs if row.source_run_id != entry.source_run_id
+        ]
         self.runs.append(entry)
 
     def upsert_facts(self, entries: list[FactRecordRow]) -> None:

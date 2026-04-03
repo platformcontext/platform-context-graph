@@ -15,7 +15,9 @@ from platform_context_graph.facts.storage.postgres import PostgresFactStore
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
 from platform_context_graph.facts.work_queue.models import FactWorkQueueSnapshotRow
 from platform_context_graph.facts.work_queue.postgres import PostgresFactWorkQueue
-from platform_context_graph.indexing.coordinator_facts import emit_repository_snapshot_facts
+from platform_context_graph.indexing.coordinator_facts import (
+    emit_repository_snapshot_facts,
+)
 from platform_context_graph.observability import initialize_observability
 from platform_context_graph.observability import reset_observability_for_tests
 from platform_context_graph.resolution.orchestration.engine import project_work_item
@@ -423,6 +425,8 @@ def test_resolution_stage_failures_emit_error_class_metrics(
             "pcg.error_class": "RuntimeError",
         },
     )
+
+
 def test_postgres_fact_store_operations_emit_spans_and_metrics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

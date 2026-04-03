@@ -567,9 +567,7 @@ async def execute_index_run(
         facts_first_enabled = facts_first_projection_enabled()
         fact_store = get_fact_store() if facts_first_enabled else None
         fact_work_queue = get_fact_work_queue() if facts_first_enabled else None
-        if facts_first_enabled and (
-            fact_store is None or fact_work_queue is None
-        ):
+        if facts_first_enabled and (fact_store is None or fact_work_queue is None):
             raise RuntimeError(
                 "facts-first indexing requires configured fact store and work queue"
             )

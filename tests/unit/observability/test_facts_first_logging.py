@@ -87,7 +87,9 @@ def test_emit_repository_snapshot_facts_logs_emission_summary(
 
     records = _parse_records(buffer)
     emitted = [
-        record for record in records if record.get("event_name") == "facts.snapshot.emitted"
+        record
+        for record in records
+        if record.get("event_name") == "facts.snapshot.emitted"
     ]
     assert emitted
     assert emitted[-1]["extra_keys"]["source_run_id"] == "run-123"

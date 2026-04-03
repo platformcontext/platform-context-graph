@@ -30,6 +30,8 @@ except ImportError:  # pragma: no cover - exercised without optional dependency.
     _ConnectionPool = None
 
 _logger = logging.getLogger(__name__)
+
+
 class PostgresFactWorkQueue:
     """Persist and lease fact work items in PostgreSQL."""
 
@@ -93,6 +95,7 @@ class PostgresFactWorkQueue:
             available=int(stats.get("pool_available", 0)),
             waiting=int(stats.get("requests_waiting", 0)),
         )
+
     def refresh_pool_metrics(self, *, component: str) -> None:
         """Refresh queue pool metrics for independent samplers."""
 
