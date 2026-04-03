@@ -120,6 +120,7 @@ async def process_repository_snapshots(
     snapshot_file_data_exists_fn: Any,
     save_snapshot_metadata_fn: Any,
     save_snapshot_file_data_fn: Any,
+    emit_snapshot_facts_fn: Any | None = None,
     persist_run_state_fn: Any,
     record_checkpoint_metric_fn: Any,
     update_pending_repository_gauge_fn: Any,
@@ -474,6 +475,13 @@ async def process_repository_snapshots(
                             imports_map=snapshot.imports_map,
                         ),
                     )
+                    if callable(emit_snapshot_facts_fn):
+                        emit_snapshot_facts_fn(
+                            run_id=run_state.run_id,
+                            repo_path=repo_path,
+                            snapshot=snapshot,
+                            is_dependency=is_dependency,
+                        )
                     snapshot.file_data = []
                     record_checkpoint_metric_fn(
                         component=component,
@@ -800,10 +808,12 @@ async def process_repository_snapshots(
                         "pcg.index.commit_workers": commit_concurrency,
                     },
                 ):
-                    _iter_fn = lambda repo_path, batch_size: iter_snapshot_file_data_batches_fn(
-                        run_state.run_id,
-                        repo_path,
-                        batch_size=batch_size,
+                    _iter_fn = lambda repo_path, batch_size: (
+                        iter_snapshot_file_data_batches_fn(
+                            run_state.run_id,
+                            repo_path,
+                            batch_size=batch_size,
+                        )
                     )
                     if _commit_process_pool is not None:
                         # CW > 1: use ProcessPoolExecutor for true parallelism
@@ -891,7 +901,7 @@ async def process_repository_snapshots(
                 )
                 log_memory_usage(
                     info_logger_fn,
-                    context=("Repository commit memory " f"repo={repo_path.resolve()}"),
+                    context=(f"Repository commit memory repo={repo_path.resolve()}"),
                 )
                 mem_sample = read_memory_usage_sample()
                 record_memory_sample(repo_tel, "commit_end", mem_sample)
