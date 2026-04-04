@@ -1,6 +1,6 @@
 # PlatformContextGraph
 
-**A deployable, Kubernetes-native context graph that connects code to cloud infrastructure.**
+**A self-hosted Code-to-cloud context graph for engineering teams and AI systems.**
 
 <p align="center">
   <a href="LICENSE">
@@ -18,84 +18,28 @@
   <img src="https://img.shields.io/badge/helm-OCI-0F1689?style=flat-square&logo=helm&logoColor=white" alt="Helm OCI Chart">
 </p>
 
-## Why Teams Use PCG
+PlatformContextGraph (PCG) builds one queryable model across source code,
+Terraform, Helm, Kubernetes, Argo CD, Crossplane, and runtime topology. It is
+designed for teams that need to answer questions that span repositories,
+services, workloads, and infrastructure without stitching the answer together by
+hand.
 
-Your AI assistant can read your code. It cannot see the Terraform that provisions your database, the ArgoCD application that deploys your service, the three other repos whose workloads share that RDS instance, or the queue consumer that breaks when you change an API contract. Engineers fill that gap by hand — switching between repos, cloud consoles, IaC files, and the person who set it all up two years ago.
+PCG exposes the same graph through:
 
-PlatformContextGraph builds one queryable graph across source code, Terraform, Helm, Kubernetes, ArgoCD, Crossplane, CloudFormation, and running workloads. Then it exposes that graph through CLI, MCP, and HTTP API so both engineers and AI assistants can trace dependencies, assess blast radius, and compare environments before they ship.
-
-**What you can ask:**
-
-_Code understanding & search:_
-
-- _"Who calls `process_payment` across all indexed repos?"_ → `analyze_code_relationships`
-- _"What implements this interface?"_ → `find_code`
-- _"Show me the most complex functions in this repo"_ → `find_most_complex_functions`
-- _"What code is dead — defined but never called?"_ → `find_dead_code`
-
-_Change impact & safety:_
-
-- _"What breaks if I change this service?"_ → `find_blast_radius`
-- _"What's the blast radius of modifying this Terraform module?"_ → `find_change_surface`
-- _"Explain how these two repos are connected"_ → `explain_dependency_path`
-
-_Infrastructure & deployment tracing:_
-
-- _"What infrastructure does this service depend on?"_ → `trace_deployment_chain`
-- _"Trace this RDS instance back to the code that defines it"_ → `trace_resource_to_code`
-- _"How does prod differ from staging for this workload?"_ → `compare_environments`
-- _"What workloads share this database?"_ → `find_infra_resources` / `analyze_infra_relationships`
-
-**Who uses it:**
-
-- **Software engineers** — callers, callees, dead code, complexity hotspots, and blast radius before you merge.
-- **Platform / DevOps / SRE** — deployment chains, shared infrastructure, environment comparison, incident tracing.
-- **Security & compliance** — trace dependencies across repos, find what services access a shared resource, audit infrastructure relationships.
-- **Architects & tech leads** — ecosystem overview, cross-repo dependency health, complexity hotspots, change surface analysis.
-- **New engineers** — repo and service context, dependency explanations, deployment topology without tribal knowledge.
-
-Open source. Apache 2.0 licensed. Self-hosted. No telemetry. [30+ language parsers](docs/docs/contributing-language-support.md), first-class IaC support, extensible by design.
-
-[Why PCG →](docs/docs/why-pcg.md) · [Quickstart →](docs/docs/getting-started/quickstart.md) · [MCP Guide →](docs/docs/guides/mcp-guide.md) · [Relationship Graph Examples →](docs/docs/guides/relationship-graphs.md)
-
-## What is this
-
-PlatformContextGraph started as a fork of [CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext), which builds a graph of source code relationships for AI-assisted development. That was a good starting point, but we needed more. PlatformContextGraph is a **Code-to-cloud context graph** for teams that need to connect source code, infrastructure, and running workloads in one place.
-
-We needed the graph to understand infrastructure — Terraform modules, Helm charts, Kubernetes manifests, ArgoCD Applications, Crossplane XRDs, CloudFormation stacks. We needed to trace from a running workload back to the repo and code that defines it. We needed it to run on the network as a service, not just on a developer's laptop. And we needed it deployable to Kubernetes with proper separation of API and ingester workloads.
-
-So we rebuilt it into that.
-
-## What we built that's new
-
-**IaC-native graph** — First-class parsers for Terraform/HCL, Kubernetes manifests, ArgoCD Applications and ApplicationSets, Crossplane XRDs, CloudFormation, Helm, and Kustomize. Infrastructure is a first-class citizen in the graph, not an afterthought.
-
-**Bidirectional tracing** — Trace from a cloud resource back to the repo and code that defines it, or from code forward to what it deploys. `trace_resource_to_code`, `trace_deployment_chain`, `explain_dependency_path`.
-
-**Blast radius and change surface** — Before you merge, see what breaks. Transitive dependency analysis across repos and infrastructure boundaries.
-
-**Deployable service architecture** — Stateless API Deployment + stateful Ingester StatefulSet + standalone Resolution Engine Deployment. Neo4j for the graph, Postgres for portable content retrieval and fact storage. Helm chart, Kustomize manifests, and ArgoCD overlays included.
-
-**Portable content model** — Queries return `repo_id + relative_path`, not server filesystem paths. The Postgres content store means the API serves source code without needing the repo checked out locally.
-
-**Three interfaces, one query model** — CLI for local dev, MCP for AI assistants, HTTP API for automation. Same capabilities everywhere.
-
-**Multi-repo ecosystem indexing** — Index entire orgs. Cross-repo dependency resolution. Environment comparison across prod, staging, and dev.
-
-**Repo-scoped ingest boundaries** — Repo and workspace indexing honor each repository's own `.gitignore` by default, so generated and published assets stay out of routine ingest unless explicitly targeted.
-
-**30+ language parsers** — Python, Go, TypeScript, Java, Rust, C/C++, and more via tree-sitter.
-
-## Quick Navigation
-
-- CLI: local indexing, search, and graph-backed analysis
-- MCP: AI-assistant access to code and infrastructure context
-- HTTP API: automation and service-to-service access
-- Deploy: Docker Compose, Helm, Kustomize, and ArgoCD flows
+- a local CLI for indexing and analysis
+- MCP for AI development tools
+- an HTTP API for automation and internal platforms
+- a deployable service shape for continuous indexing and shared use
 
 ## Quick Start
 
-Install the CLI tool:
+Choose the path that matches what you want to do first.
+
+## Choose Your First Run
+
+### Try it locally with the CLI
+
+Install the CLI:
 
 ```bash
 uv tool install platform-context-graph
@@ -108,90 +52,157 @@ uv sync
 uv run pcg --help
 ```
 
-Index a repository:
+Index a repository and ask a question:
 
 ```bash
 pcg index .
-```
-
-Run a query:
-
-```bash
 pcg analyze callers process_payment
 ```
 
-Start MCP:
+### Run the full platform locally
 
-```bash
-pcg mcp start
-```
-
-Start the combined HTTP API + MCP service:
-
-```bash
-pcg serve start --host 0.0.0.0 --port 8080
-```
-
-## Interfaces
-
-**CLI** — `pcg` for local indexing, repository management, search, and graph-backed analysis.
-
-**MCP** — Connect PCG to AI development tools so questions resolve against real code and infrastructure context.
-
-**HTTP API** — OpenAPI-backed API for service-to-service automation, internal tools, and agent frameworks.
-
-**Deployable Service** — Run PCG as a networked service with a stateless API runtime, a stateful repository ingester, a standalone Resolution Engine, external Neo4j, and external Postgres.
-
-## Deploy
-
-Minimal Kubernetes manifests:
-
-```bash
-kubectl apply -k deploy/manifests/minimal
-```
-
-Helm:
-
-```bash
-helm install platform-context-graph ./deploy/helm/platform-context-graph
-```
-
-Public distribution targets:
-
-- Docker image: `ghcr.io/platformcontext/platform-context-graph`
-- OCI Helm chart: `oci://ghcr.io/platformcontext/charts/platform-context-graph`
-
-The chart is designed for the production shape used in EKS:
-
-- external Neo4j
-- external Postgres for indexed content retrieval and search
-- API `Deployment` for HTTP + MCP
-- repository ingester `StatefulSet` with attached workspace storage
-- repo rediscovery filtered by exact/regex repository rules over normalized `org/repo` identifiers
-- flexible exposure through `ClusterIP`, `Ingress`, `HTTPRoute`, or `LoadBalancer`
-
-For local end-to-end testing:
+Bring up the full stack with Docker Compose:
 
 ```bash
 docker compose up --build
 ```
 
-## Documentation
+This starts:
 
-- Developer guide: [DEVELOPING.md](DEVELOPING.md) — parser architecture, adding languages, integration testing, spec contracts
-- Docs site source: [docs/](docs/)
-- Architecture: [docs/docs/architecture.md](docs/docs/architecture.md)
-- Service Runtimes: [docs/docs/deployment/service-runtimes.md](docs/docs/deployment/service-runtimes.md)
-- Source layout: [docs/docs/reference/source-layout.md](docs/docs/reference/source-layout.md)
-- Local testing: [docs/docs/reference/local-testing.md](docs/docs/reference/local-testing.md)
-- Quickstart: [docs/docs/getting-started/quickstart.md](docs/docs/getting-started/quickstart.md)
-- MCP Guide: [docs/docs/guides/mcp-guide.md](docs/docs/guides/mcp-guide.md)
-- Relationship Graph Examples: [docs/docs/guides/relationship-graphs.md](docs/docs/guides/relationship-graphs.md)
-- HTTP API: [docs/docs/reference/http-api.md](docs/docs/reference/http-api.md)
-- Deployment Overview: [docs/docs/deployment/overview.md](docs/docs/deployment/overview.md)
+- Neo4j
+- Postgres
+- OpenTelemetry collector
+- Jaeger
+- a one-shot bootstrap indexer
+- the API runtime
+- the ingester runtime
+- the resolution-engine runtime
+
+### Deploy to Kubernetes
+
+Use Helm for the supported split-service deployment shape:
+
+```bash
+helm install platform-context-graph ./deploy/helm/platform-context-graph
+```
+
+For the operator view of the deployed services, start with
+[Service Runtimes](docs/docs/deployment/service-runtimes.md) and
+[Deployment Overview](docs/docs/deployment/overview.md).
+
+## How It Works
+
+PCG now uses a facts-first indexing flow for deployed Git ingestion.
+
+```mermaid
+flowchart LR
+  A["Git collector"] --> B["Parse repository snapshot"]
+  B --> C["Postgres fact store"]
+  C --> D["Fact work queue"]
+  D --> E["Resolution Engine"]
+  E --> F["Canonical graph projection"]
+  F --> G["Neo4j"]
+  F --> H["Postgres content store"]
+  I["CLI / MCP / HTTP API"] --> G
+  I --> H
+```
+
+In practice, that means:
+
+1. the ingester discovers repositories and parses a snapshot
+2. repository, file, and entity facts are written to Postgres
+3. the resolution-engine claims the queued work
+4. canonical graph, relationships, workloads, and platform edges are projected
+5. API, MCP, and CLI analysis surfaces read the resulting graph and content
+
+## Runtime Model
+
+The deployed platform has three long-running runtimes plus one one-shot helper:
+
+| Runtime | What it owns | Default command |
+| --- | --- | --- |
+| API | HTTP API, MCP surface, graph and content reads, admin endpoints | `pcg serve start --host 0.0.0.0 --port 8080` |
+| Ingester | repo sync, workspace ownership, parsing, fact emission | `pcg internal repo-sync-loop` |
+| Resolution Engine | queue draining, fact loading, projection, retries, recovery | `pcg internal resolution-engine` |
+| Bootstrap Index | initial one-shot indexing before steady-state sync | `pcg internal bootstrap-index` |
+
+See [Service Runtimes](docs/docs/deployment/service-runtimes.md) for the
+complete runtime contract.
+
+## Observability
+
+PCG ships with first-class observability for operators and performance work:
+
+- OTLP metrics and traces
+- JSON logs
+- direct Prometheus-format `/metrics` endpoints per runtime
+- optional Kubernetes `ServiceMonitor` resources for API, ingester, and
+  resolution-engine
+
+In local Compose runs, you can inspect the runtime scrape endpoints directly:
+
+- API: `http://localhost:19464/metrics`
+- Ingester: `http://localhost:19465/metrics`
+- Resolution Engine: `http://localhost:19466/metrics`
+
+See:
+
+- [Telemetry Overview](docs/docs/reference/telemetry/index.md)
+- [Telemetry Metrics](docs/docs/reference/telemetry/metrics.md)
+- [Docker Compose](docs/docs/deployment/docker-compose.md)
+- [Helm Deployment](docs/docs/deployment/helm.md)
+
+## What You Can Ask
+
+Examples:
+
+- "Who calls `process_payment` across all indexed repos?"
+- "What infrastructure does this service depend on?"
+- "Trace this resource back to the code that defines it."
+- "What breaks if I change this Terraform module?"
+- "How does prod differ from staging for this workload?"
+
+## Quick Navigation
+
+- CLI: local indexing, search, and graph-backed analysis
+- MCP: AI tooling and assistant integrations
+- HTTP API: automation and internal platforms
+- Deploy: Docker Compose, Helm, and GitOps deployment paths
+
+## Documentation Paths
+
+Start with the path that matches what you are doing:
+
+- Getting started:
+  [Quickstart](docs/docs/getting-started/quickstart.md)
+- AI tooling:
+  [MCP Guide](docs/docs/guides/mcp-guide.md)
+- Deployment:
+  [Deployment Overview](docs/docs/deployment/overview.md)
+- Operations:
+  [Service Runtimes](docs/docs/deployment/service-runtimes.md)
+- Architecture:
+  [System Architecture](docs/docs/architecture.md)
+- Verification:
+  [Local Testing Runbook](docs/docs/reference/local-testing.md)
+
+## Project Notes
+
+PlatformContextGraph started as a fork of
+[CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext), then
+evolved into a broader code-to-cloud graph with deployable service runtimes,
+facts-first ingestion, richer recovery controls, and service-oriented
+observability.
+
+PCG is self-hosted and does not require outbound vendor telemetry. When
+observability is enabled, it uses your configured OTLP and Prometheus targets.
 
 ## Acknowledgment
 
-PlatformContextGraph builds on the original [CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext) project by [Shashank Shekhar Singh](https://github.com/Shashankss1205) and its contributors. Their work established the foundation this repository started from.
+PlatformContextGraph builds on the original
+[CodeGraphContext](https://github.com/CodeGraphContext/CodeGraphContext)
+project by
+[Shashank Shekhar Singh](https://github.com/Shashankss1205) and its
+contributors.
 
 See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for the attribution note.

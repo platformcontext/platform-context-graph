@@ -13,7 +13,7 @@ the comparison baseline for the planned ArcadeDB evaluation.
 **Key findings:**
 
 - 132 non-outlier repos indexed in **12 minutes** (parse + commit + projection)
-- One PHP repo (`api-php-boatwizardwebsolutions`) stalled the entire pipeline
+- One large legacy PHP repository (`php-outlier-large`) stalled the entire pipeline
   for **2+ hours** due to a single `executemany` transaction writing 60+ GB of
   TOAST data at 10.1 MB/s
 - Postgres TOAST storage dominates: `fact_records` consumes **99%+** of total
@@ -88,7 +88,7 @@ PHP monster bottleneck.
 ### Pipeline Stall Phase (21:56 - ongoing)
 
 Single `executemany` transaction in `facts/storage/postgres.py` writing all
-JSONB facts for `api-php-boatwizardwebsolutions` in one transaction. The
+JSONB facts for `php-outlier-large` in one transaction. The
 entire pipeline is blocked because:
 
 1. Facts are invisible until the transaction commits (MVCC)
@@ -119,7 +119,7 @@ files are structurally simpler than Node.js files for the AST parser.
 | Tiny (<5s) | 35 | 2.1s | Dominated by fixed overhead |
 | Small (5-30s) | 79 | 11.5s | Normal range |
 | Medium (30-120s) | 4 | 67.9s | Graph write intensive |
-| Large (2-10min) | 1 | 134.3s | `aquasolyachtsales` |
+| Large (2-10min) | 1 | 134.3s | `service-outlier-large` |
 
 Median commit time: **7.7s**. Mean: **11.6s**.
 
@@ -129,7 +129,7 @@ Median commit time: **7.7s**. Mean: **11.6s**.
 
 | Repo | Files | Parse | Commit | Storage Impact |
 |---|---|---|---|---|
-| `api-php-boatwizardwebsolutions` | 7,240 | 361s | 2h+ (ongoing) | 60+ GB TOAST |
+| `php-outlier-large` | 7,240 | 361s | 2h+ (ongoing) | 60+ GB TOAST |
 
 **Root cause:** 7,240 PHP files (28,499 total files, 612 MB on disk) in a
 legacy PHP application with 890 subdirectories under `files/pls/`. Each PHP
@@ -152,12 +152,12 @@ projection rather than parsing.
 
 | Repo | Files | Parse | Commit | Ratio | Likely Cause |
 |---|---|---|---|---|---|
-| `aquasolyachtsales` | 305 | 10.3s | 134.3s | 13.1x | Complex graph relationships |
-| `api-node-template` | 66 | 5.3s | 82.2s | 15.6x | Template generates many entities |
-| `article-indexer` | 46 | 2.5s | 48.7s | 19.3x | Heavy content store writes |
-| `automate-brochure-templates` | 14 | 0.3s | 11.3s | 33.1x | Fixed overhead dominates |
-| `automate-build-packer` | 15 | 0.4s | 11.4s | 30.4x | Fixed overhead dominates |
-| `automate-build-docker` | 16 | 0.4s | 11.5s | 26.9x | Fixed overhead dominates |
+| `service-outlier-large` | 305 | 10.3s | 134.3s | 13.1x | Complex graph relationships |
+| `service-template-outlier` | 66 | 5.3s | 82.2s | 15.6x | Template generates many entities |
+| `content-heavy-outlier` | 46 | 2.5s | 48.7s | 19.3x | Heavy content store writes |
+| `small-fixed-overhead-a` | 14 | 0.3s | 11.3s | 33.1x | Fixed overhead dominates |
+| `small-fixed-overhead-b` | 15 | 0.4s | 11.4s | 30.4x | Fixed overhead dominates |
+| `small-fixed-overhead-c` | 16 | 0.4s | 11.5s | 26.9x | Fixed overhead dominates |
 
 **Finding:** Repos with < 20 files show a **~11 second minimum commit
 duration** regardless of size. This fixed overhead includes: Neo4j schema
@@ -168,16 +168,16 @@ projection (3 decision types), and workload materialization.
 
 | Repo | Files | Parse | Commit | Total |
 |---|---|---|---|---|
-| `api-node-boattrader` | 903 | 88.0s | 27.0s | 115.0s |
-| `api-node-datax` | 377 | 52.5s | 16.2s | 68.6s |
-| `api-node-boats` | 539 | 45.1s | 28.2s | 73.3s |
-| `api-node-platform` | 748 | 41.7s | 102.9s | 144.6s |
-| `api-node-fsbo` | 338 | 41.3s | 28.8s | 70.1s |
-| `api-node-communicator` | 435 | 40.2s | 37.9s | 78.1s |
-| `api-node-engines` | 170 | 39.9s | 6.3s | 46.1s |
-| `api-node-boats-temp` | 449 | 34.2s | 23.9s | 58.1s |
+| `node-api-outlier-a` | 903 | 88.0s | 27.0s | 115.0s |
+| `node-api-outlier-b` | 377 | 52.5s | 16.2s | 68.6s |
+| `node-api-outlier-c` | 539 | 45.1s | 28.2s | 73.3s |
+| `node-api-outlier-d` | 748 | 41.7s | 102.9s | 144.6s |
+| `node-api-outlier-e` | 338 | 41.3s | 28.8s | 70.1s |
+| `node-api-outlier-f` | 435 | 40.2s | 37.9s | 78.1s |
+| `node-api-outlier-g` | 170 | 39.9s | 6.3s | 46.1s |
+| `node-api-outlier-h` | 449 | 34.2s | 23.9s | 58.1s |
 
-The `api-node-*` family of repos are consistently the slowest parsers in
+The `node-api-outlier-*` family is consistently the slowest parser cohort in
 the Node.js category, with parse rates of 7-18 files/sec.
 
 ## Storage Profile

@@ -1,192 +1,127 @@
 # System Architecture
 
-PlatformContextGraph (PCG) is a code-to-cloud context graph that connects repositories, infrastructure definitions, runtime topology, and graph-backed query surfaces.
+PlatformContextGraph connects source code, infrastructure definitions, workload
+topology, and graph-backed query surfaces in one model.
 
-It runs in two modes: locally as a CLI and stdio MCP server, or as a deployed service that exposes HTTP API and MCP while continuously maintaining graph state.
+It runs in two practical modes:
 
-Internally, Phase 1 reorganized the monorepo around canonical package boundaries
-instead of treating `tools/` as the default home for indexing logic. Phase 2
-switched Git indexing to a facts-first write path, and Phase 3 is now maturing
-that runtime with explicit recovery controls and explainable projection
-decisions:
+- **local mode** for CLI and stdio MCP workflows
+- **deployed mode** for the shared API, ingester, and resolution-engine
 
-- the Git collector parses repositories and emits durable facts into Postgres
-- the fact work queue coordinates projection work
-- the Resolution Engine owns canonical graph projection
-- durable failure taxonomy and operator recovery state live with the queue
-- projection decisions and evidence are persisted beside facts in Postgres
-- query surfaces continue reading the canonical graph and content store
+Phase 1 clarified package ownership, Phase 2 switched Git indexing to a
+facts-first write path, and Phase 3 added durable recovery and explainability on
+top of that runtime.
 
-For the current Git cutover, the same Resolution Engine projection path can be
-driven in-process by the indexing coordinator so one indexing run still
-completes deterministically without depending on a separate runtime hop.
-
-## High-Level Diagram
+## Local Request Path
 
 ```mermaid
-graph TD
-    Client[CLI / AI Client / HTTP Caller]
-    API["PCG API Runtime"]
-    Ingester["Git Collector Runtime"]
-    ResolutionEngine["Resolution Engine Runtime"]
-    Query[Query Layer]
-    Collectors["Collectors (Git today)"]
-    Parsers["Parsers Platform"]
-    Facts["Postgres Fact Store"]
-    FactQueue["Postgres Fact Work Queue"]
-    Graph["Graph Persistence + Schema"]
-    Resolution["Fact Projection + Workload/Platform Materialization"]
-    Decisions["Projection Decisions + Evidence"]
-    Recovery["Recovery Metadata + Replay / Backfill Audit"]
-    DB[(Graph Database)]
-    FS[File System]
-    IaC[Terraform / Helm / K8s / Argo CD]
-    Content[(Postgres Content Store)]
-
-    Client -- "1. Query (CLI / MCP / HTTP)" --> API
-    API -- "2. Resolve request" --> Query
-    Query -- "3. Read graph" --> DB
-    Query -- "3b. Read cached source / search content" --> Content
-    Ingester -- "4. Sync repos and invoke indexing pipeline" --> Collectors
-    Collectors -- "5. Discover files and snapshots" --> FS
-    Collectors -- "6. Invoke parser registry" --> Parsers
-    Parsers -- "7. Parse code and IaC" --> IaC
-    Collectors -- "8. Emit repository/file/entity facts" --> Facts
-    Facts -- "9. Enqueue projection work" --> FactQueue
-    FactQueue -- "10. Claim work" --> ResolutionEngine
-    ResolutionEngine -- "11. Project graph state" --> Graph
-    ResolutionEngine -- "11b. Persist decisions and evidence" --> Decisions
-    FactQueue -- "11c. Persist failures / replay / backfill state" --> Recovery
-    Graph -- "12. Store nodes and edges" --> DB
-    Graph -- "13. Dual-write file and entity content" --> Content
-    ResolutionEngine -- "14. Materialize workloads and platform edges" --> DB
+flowchart LR
+  A["CLI or stdio MCP client"] --> B["Shared query layer"]
+  B --> C["Neo4j"]
+  B --> D["Postgres content store or local workspace fallback"]
 ```
 
-## Components
+## Deployed Data Plane
+
+```mermaid
+flowchart LR
+  A["Ingester"] --> B["Parse repository snapshot"]
+  B --> C["Postgres fact store"]
+  C --> D["Fact work queue"]
+  D --> E["Resolution Engine"]
+  E --> F["Canonical graph projection"]
+  F --> G["Neo4j"]
+  F --> H["Postgres content store"]
+  I["API / MCP"] --> G
+  I --> H
+```
+
+## Deployed Control Plane
+
+```mermaid
+flowchart LR
+  A["Fact work queue"] --> B["Failure class and retry state"]
+  A --> C["Replay and dead-letter audit"]
+  D["Resolution Engine"] --> E["Projection decisions"]
+  E --> F["Confidence and bounded evidence"]
+  G["Admin API and CLI"] --> C
+  G --> E
+```
+
+## Component Responsibilities
 
 | Component | Responsibility |
-| :--- | :--- |
-| **CLI** | Local command surface for indexing, search, analysis, setup, and runtime management. |
-| **MCP Server** | JSON-RPC surface for AI development tools. |
-| **HTTP API** | OpenAPI-backed surface for automation and service-to-service use. |
-| **Query Layer** | Entity-first query model shared by CLI, MCP, and HTTP. |
-| **Collectors** | Source-specific discovery and indexing support. Git is the current canonical collector family and now stops at fact emission instead of owning final graph writes. |
-| **Facts Layer** | Typed fact models, durable Postgres-backed fact storage, the fact work queue, and operator recovery state. |
-| **Parsers** | Parser registry, language parsers, raw-text handling, capability specs, and SCIP parser/runtime helpers. |
-| **Graph Layer** | Canonical schema plus graph persistence helpers for files, entities, inheritance, and call relationships. |
-| **Resolution** | Resolution Engine orchestration plus fact-to-graph projection, workload materialization, platform inference, and persisted projection decisions. |
-| **Database Layer** | Graph storage. Neo4j is the canonical backend for deployed services. |
-| **Content Store** | PostgreSQL-backed file and entity content cache for deployed API and MCP runtimes. |
-| **Git Collector Runtime** | Long-running repository sync, parse execution, fact emission, and retry/backoff. |
-| **Resolution Engine Runtime** | Background or in-process projection of queued facts into the canonical graph. |
-| **Observability** | Shared OTEL instrumentation for API, MCP, Git collector, facts queue, and Resolution Engine signals. |
+| --- | --- |
+| CLI | Local indexing, analysis, setup, and runtime management |
+| MCP | AI-oriented query surface over the same shared model |
+| HTTP API | OpenAPI-backed automation surface plus admin endpoints |
+| Query layer | Shared read model used by CLI, MCP, and HTTP |
+| Collectors | Source-specific discovery and ingestion helpers |
+| Parsers | Language and IaC parsing, capability specs, and SCIP helpers |
+| Facts layer | Typed facts, Postgres fact storage, queue state, recovery state |
+| Resolution | Fact-to-graph projection, workload/platform materialization, decisions |
+| Graph layer | Canonical schema and persistence helpers for graph writes |
+| Content store | Postgres-backed file and entity content cache |
+| Observability | OTEL metrics, traces, and structured logs across runtimes |
 
-## Interfaces
+## Facts-First Flow
 
-CLI, MCP, and HTTP API are the primary interfaces. All three share the same query layer — there is no separate UI frontend.
+1. The ingester discovers repositories and parses a repository snapshot.
+2. Repository, file, and entity facts are written to Postgres.
+3. A fact work item is enqueued for that snapshot.
+4. The resolution-engine claims the work item and loads the stored facts.
+5. The resolution-engine projects repository, file, entity, relationship,
+   workload, and platform state into Neo4j.
+6. The same projection pass dual-writes file and entity content into Postgres.
+7. Query surfaces continue reading the canonical graph and content store.
 
-The docs site (built with MkDocs) is the public reference surface.
+For the current Git cutover, the indexing coordinator can still drive the same
+resolution path in-process so one indexing run completes deterministically even
+without a separate runtime hop.
 
-## Data Flow
+## Recovery And Explainability
 
-### Indexing
+Phase 3 keeps more operational meaning in Postgres instead of only in logs:
 
-`pcg index .` or the deployed Git collector scans repositories, parses code and
-IaC, emits repository/file/entity facts into Postgres, and then projects the
-canonical graph from those facts.
+- work items store durable failure class, failure stage, and retry disposition
+- replay actions are recorded as replay-event rows
+- backfill requests are stored durably
+- projection decisions store confidence, reasoning, and bounded evidence
 
-When the content store is configured, the same indexing pass also writes file content and entity snippets into Postgres.
-
-In Kubernetes, the Git collector owns repo sync, retries, discovery, parsing,
-and fact emission. The Resolution Engine owns graph projection. The API runtime
-serves independently.
-
-### Facts-First Git Flow
-
-1. The Git collector discovers repositories and parses a repository snapshot.
-2. The collector persists repository, file, and parsed-entity facts in Postgres.
-3. The collector enqueues one fact projection work item for that repository snapshot.
-4. The Resolution Engine claims the work item and loads the stored facts.
-5. During indexing cutover, the coordinator can also drive that same work-item
-   projection path in-process so one run still completes end-to-end without a
-   separate service hop.
-6. The Resolution Engine projection path writes repository, file, entity, relationship,
-   workload, and platform graph state.
-7. The Resolution Engine persists projection decisions and bounded evidence
-   records for important stages such as relationships, workloads, and platforms.
-8. Query surfaces continue reading the canonical graph and content store as before.
-
-### Phase 3 Recovery And Explainability
-
-The facts-first runtime now preserves more meaning in Postgres instead of
-keeping it only in logs:
-
-- work items store durable failure class, failure stage, retry disposition, and
-  dead-letter timestamps
-- replay actions are audited in replay-event rows
-- operator backfill requests are stored durably
-- projection decisions record confidence, reasoning, and bounded evidence
-
-That means on-call and platform engineers can answer:
+That lets operators answer:
 
 - what failed
-- why it was classified as retryable, manual-review, or terminal
-- what an operator replayed or dead-lettered
-- why one workload/platform/relationship projection was accepted
+- whether it was retryable or terminal
+- what was replayed or dead-lettered
+- why a relationship, workload, or platform inference was accepted
 
-### Service Telemetry
+## Runtime Ownership
 
-Each primary runtime now has a clear OTEL surface:
+| Runtime | Owns |
+| --- | --- |
+| API | HTTP and MCP serving, graph reads, content reads, admin surface |
+| Ingester | repo sync, parsing, fact emission, workspace ownership |
+| Resolution Engine | queue draining, projection, retries, replay, recovery |
+| Bootstrap Index | one-shot initial indexing in local/full-stack workflows |
 
-- **API runtime**: HTTP and MCP request spans, durations, and error counters
-- **Git collector**: repository queue wait, parse, fact emission, commit/projection, per-repo write timings, Postgres fact-store operation telemetry, and fact-store pool saturation telemetry
-- **Resolution Engine**: work-item claim latency, empty-poll outcomes, idle-sleep timing, active-worker gauge, retry age, dead-letter telemetry, fact load spans, per-stage projection timings, stage output counts, and stage failure/error-class counters
-- **Phase 3 maturity layer**: durable failure-class metrics, projection-decision counts and confidence-band signals, replay/backfill admin action metrics, and structured decision logs
-- **Facts layer**: Postgres fact-store and fact-queue spans, durations, operation counters, row-volume counters, pool size/availability/waiting telemetry, and queue backlog gauges
-- **Fact work queue**: independently sampled queue depth and oldest-item age by work type and status for backlog tracking and autoscaling decisions
+The content store is owned by the projection path, not by the raw parser. The
+ingester emits facts; the resolution-engine turns those facts into canonical
+graph and content state.
 
-These signals are designed to support on-call debugging, backlog monitoring,
-performance tuning, and future scale decisions without adding repository or
-work-item identifiers to metric labels.
+## Observability Model
 
-See also:
+Each primary runtime has a distinct telemetry surface:
+
+- **API**: HTTP/MCP latency, error rate, graph query latency
+- **Ingester**: repo queue wait, parse timing, fact emission timing, workspace
+  pressure
+- **Resolution Engine**: queue depth and age, claim latency, projection stage
+  timing, retries, dead letters, decision volume
+- **Facts layer**: fact-store and queue SQL latency, row volume, pool
+  saturation, backlog
+
+See:
 
 - [Telemetry Overview](reference/telemetry/index.md)
-- [Telemetry Metrics](reference/telemetry/metrics.md)
-- [Telemetry Traces](reference/telemetry/traces.md)
-- [Telemetry Logs](reference/telemetry/logs.md)
-
-### Querying
-
-1. A user or agent asks a question.
-2. CLI, MCP, or HTTP resolves the request into the shared query layer.
-3. The query layer reads the graph and, when needed, the content store.
-4. Deployed API and MCP runtimes read content from Postgres and report unavailable content until the ingester has populated it.
-
-## Source Tree
-
-The source package is organized by responsibility under `src/platform_context_graph/`:
-
-- `app/` — service-role entrypoints
-- `collectors/` — source-specific collection logic
-- `facts/` — typed fact models, Postgres storage, queue state, and source-specific fact emission
-- `graph/` — canonical graph schema and persistence helpers
-- `parsers/` — parser registry, raw-text support, parser capabilities, and SCIP
-- `platform/` — shared platform/runtime primitives such as dependency rules, package resolution, and automation-family inference
-- `query/` — shared read/query layer
-- `resolution/` — Resolution Engine orchestration plus fact projection and materialization helpers
-- `resolution/decisions/` — persisted projection decisions and bounded evidence
-- `runtime/` — runtime role management, ingester, and status helpers
-- `tools/` — `GraphBuilder` facade plus the remaining tool-facing query and linking surfaces
-
-See [Source Layout](reference/source-layout.md) for the full package map.
-
-## Key Technologies
-
-- **Language:** Python 3.10+
-- **Parsing:** Tree-sitter plus infrastructure-specific parsers
-- **Protocol:** Model Context Protocol (MCP)
-- **HTTP:** FastAPI + OpenAPI
-- **Database:** Neo4j
-- **Content Store:** PostgreSQL
-- **Packaging:** Docker, Helm, Argo CD
+- [Service Runtimes](deployment/service-runtimes.md)
+- [Source Layout](reference/source-layout.md)
