@@ -124,6 +124,11 @@ def project_work_item(
 ) -> dict[str, Any] | None:
     """Project one work item into canonical graph state.
 
+    Loads facts partitioned by type to keep peak memory proportional to
+    file count rather than total fact count.  Entity facts (the bulk) are
+    streamed in batches so a single 200K-fact repository never materialises
+    the full result set in Python.
+
     Args:
         work_item: The claimed work item to process.
     """
@@ -146,17 +151,46 @@ def project_work_item(
             builder=builder,
             repository_id=work_item.repository_id,
         )
+
+        # ----------------------------------------------------------------
+        # Partitioned fact loading: load by type to bound peak memory.
+        # Repository + file facts are loaded eagerly (bounded by file count).
+        # Entity facts are streamed in batches during projection.
+        # ----------------------------------------------------------------
         load_started = time.perf_counter()
+        list_by_type = getattr(type(fact_store), "list_facts_by_type", None)
         try:
             with observability.start_span(
                 "pcg.resolution.load_facts",
                 component="resolution-engine",
                 attributes={"pcg.facts.work_item_id": work_item.work_item_id},
             ):
-                fact_records: list[FactRecordRow] = fact_store.list_facts(
-                    repository_id=work_item.repository_id,
-                    source_run_id=work_item.source_run_id,
-                )
+                if callable(list_by_type):
+                    repo_facts = fact_store.list_facts_by_type(
+                        repository_id=work_item.repository_id,
+                        source_run_id=work_item.source_run_id,
+                        fact_type="RepositoryObserved",
+                    )
+                    file_facts = fact_store.list_facts_by_type(
+                        repository_id=work_item.repository_id,
+                        source_run_id=work_item.source_run_id,
+                        fact_type="FileObserved",
+                    )
+                    graph_facts: list[FactRecordRow] = repo_facts + file_facts
+                    entity_batches = _load_entity_batches(
+                        fact_store, work_item,
+                    )
+                    total_fact_count = (
+                        len(graph_facts) + sum(len(b) for b in entity_batches)
+                    )
+                else:
+                    # Fallback for stores without partitioned loading (tests).
+                    graph_facts = fact_store.list_facts(
+                        repository_id=work_item.repository_id,
+                        source_run_id=work_item.source_run_id,
+                    )
+                    entity_batches = []
+                    total_fact_count = len(graph_facts)
         except Exception as exc:
             observability.record_resolution_stage_failure(
                 component="resolution-engine",
@@ -174,7 +208,7 @@ def project_work_item(
         observability.record_resolution_facts_loaded(
             component="resolution-engine",
             work_type=work_item.work_type,
-            fact_count=len(fact_records),
+            fact_count=total_fact_count,
         )
 
         def _run_stage(stage: str, callback: Any) -> dict[str, Any]:
@@ -218,15 +252,28 @@ def project_work_item(
             )
             return metrics
 
+        # -- Stage 1: repos + files + entities-from-file-payloads ----------
         fact_metrics = _run_stage(
             "project_facts",
-            lambda: fact_projector(builder=builder, fact_records=fact_records),
+            lambda: fact_projector(builder=builder, fact_records=graph_facts),
         )
+
+        # -- Stage 1b: stream standalone entity facts in batches -----------
+        if entity_batches:
+            entity_extra = _run_stage(
+                "project_entity_batches",
+                lambda: _project_entity_batches(builder, entity_batches, graph_facts),
+            )
+            fact_metrics["entities"] = (
+                fact_metrics.get("entities", 0) + entity_extra.get("entities", 0)
+            )
+
+        # -- Stage 2: relationships ----------------------------------------
         relationship_metrics = _run_stage(
             "project_relationships",
             lambda: relationship_projector(
                 builder=builder,
-                fact_records=fact_records,
+                fact_records=graph_facts,
                 debug_log_fn=debug_log_fn,
                 warning_logger_fn=warning_logger_fn,
             ),
@@ -235,14 +282,16 @@ def project_work_item(
             decision_store=decision_store,
             stage="project_relationships",
             work_item=work_item,
-            fact_records=fact_records,
+            fact_records=graph_facts,
             metrics=relationship_metrics,
         )
+
+        # -- Stage 3: workloads --------------------------------------------
         workload_metrics = _run_stage(
             "project_workloads",
             lambda: workload_projector(
                 builder=builder,
-                fact_records=fact_records,
+                fact_records=graph_facts,
                 info_logger_fn=info_logger_fn,
             ),
         )
@@ -250,23 +299,26 @@ def project_work_item(
             decision_store=decision_store,
             stage="project_workloads",
             work_item=work_item,
-            fact_records=fact_records,
+            fact_records=graph_facts,
             metrics=workload_metrics,
         )
+
+        # -- Stage 4: platforms --------------------------------------------
         platform_metrics = _run_stage(
             "project_platforms",
             lambda: platform_projector(
                 builder=builder,
-                fact_records=fact_records,
+                fact_records=graph_facts,
             ),
         )
         _record_projection_decision(
             decision_store=decision_store,
             stage="project_platforms",
             work_item=work_item,
-            fact_records=fact_records,
+            fact_records=graph_facts,
             metrics=platform_metrics,
         )
+
         log_resolution_work_item(
             "projected",
             repository_id=work_item.repository_id,
@@ -274,7 +326,7 @@ def project_work_item(
             work_item_id=work_item.work_item_id,
             work_type=work_item.work_type,
             attempt_count=work_item.attempt_count,
-            fact_count=len(fact_records),
+            fact_count=total_fact_count,
             output_count=_metric_output_count(
                 {
                     "facts": fact_metrics,
@@ -290,3 +342,97 @@ def project_work_item(
         "workloads": workload_metrics,
         "platforms": platform_metrics,
     }
+
+
+def _load_entity_batches(
+    fact_store: Any,
+    work_item: FactWorkItemRow,
+) -> list[list[FactRecordRow]]:
+    """Load entity fact batches when the store supports partitioned reads."""
+
+    iter_batches = getattr(type(fact_store), "iter_fact_batches", None)
+    if not callable(iter_batches):
+        return []
+    return fact_store.iter_fact_batches(
+        repository_id=work_item.repository_id,
+        source_run_id=work_item.source_run_id,
+        fact_type="ParsedEntityObserved",
+        batch_size=2000,
+    )
+
+
+def _project_entity_batches(
+    builder: Any,
+    entity_batches: list[list[FactRecordRow]],
+    graph_facts: list[FactRecordRow],
+) -> dict[str, int]:
+    """Project standalone entity facts that were streamed separately.
+
+    Entities already projected from FileObserved payloads (via
+    ``project_parsed_entity_facts``) are skipped using the same
+    file-key deduplication the original code path uses.
+    """
+
+    from platform_context_graph.resolution.projection.entities import (
+        iter_parsed_entity_facts,
+        build_entity_merge_statement,
+    )
+    from platform_context_graph.resolution.projection.files import iter_file_facts
+    from platform_context_graph.resolution.projection.common import (
+        run_managed_write,
+        run_write_query,
+    )
+
+    # Build the set of file keys already projected from FileObserved payloads.
+    projected_file_keys: set[tuple[str, str]] = set()
+    for file_fact in iter_file_facts(graph_facts):
+        if not file_fact.relative_path:
+            continue
+        parsed_file_data = file_fact.payload.get("parsed_file_data")
+        if isinstance(parsed_file_data, dict):
+            projected_file_keys.add(
+                (file_fact.checkout_path, file_fact.relative_path)
+            )
+
+    projected = 0
+
+    def _write_batch(tx: object, batch: list[FactRecordRow]) -> int:
+        count = 0
+        for fact_record in iter_parsed_entity_facts(batch):
+            if not fact_record.relative_path:
+                continue
+            if (
+                fact_record.checkout_path,
+                fact_record.relative_path,
+            ) in projected_file_keys:
+                continue
+            from pathlib import Path
+
+            file_path = str(
+                Path(fact_record.checkout_path).resolve() / fact_record.relative_path
+            )
+            entity_payload = {
+                "name": str(fact_record.payload.get("entity_name") or ""),
+                "line_number": int(fact_record.payload.get("start_line") or 0),
+                "end_line": int(fact_record.payload.get("end_line") or 0),
+                "lang": fact_record.payload.get("language"),
+            }
+            query, params = build_entity_merge_statement(
+                label=str(fact_record.payload.get("entity_kind") or ""),
+                item=entity_payload,
+                file_path=file_path,
+                use_uid_identity=False,
+            )
+            run_write_query(tx, query, **params)
+            count += 1
+        return count
+
+    with builder.driver.session() as session:
+        for batch in entity_batches:
+            def _write(tx: object, _batch: list[FactRecordRow] = batch) -> None:
+                nonlocal projected
+                projected += _write_batch(tx, _batch)
+
+            run_managed_write(session, _write)
+
+    return {"entities": projected}

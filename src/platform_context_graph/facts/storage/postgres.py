@@ -15,123 +15,23 @@ from platform_context_graph.observability import get_observability
 from .models import FactRecordRow
 from .models import FactRunRow
 from .schema import FACT_STORE_SCHEMA
+from .sql import FACT_RECORD_UPSERT_SQL
+from .sql import FACT_RUN_UPSERT_SQL
+from .sql import fact_record_params
+from .sql import fact_run_params
 
 try:
     import psycopg
     from psycopg.rows import dict_row
-    from psycopg.types.json import Jsonb
     from psycopg_pool import ConnectionPool as _ConnectionPool
 except ImportError:  # pragma: no cover - exercised without optional dependency.
     psycopg = None
     dict_row = None
-    Jsonb = None
     _ConnectionPool = None
 
 _logger = logging.getLogger(__name__)
 
 _FACT_UPSERT_BATCH_SIZE = int(os.getenv("PCG_FACT_UPSERT_BATCH_SIZE", "2000"))
-
-_FACT_RUN_UPSERT_SQL = """
-INSERT INTO fact_runs (
-    source_run_id,
-    source_system,
-    source_snapshot_id,
-    repository_id,
-    status,
-    started_at,
-    completed_at
-) VALUES (
-    %(source_run_id)s,
-    %(source_system)s,
-    %(source_snapshot_id)s,
-    %(repository_id)s,
-    %(status)s,
-    %(started_at)s,
-    %(completed_at)s
-)
-ON CONFLICT (source_run_id) DO UPDATE
-SET source_system = EXCLUDED.source_system,
-    source_snapshot_id = EXCLUDED.source_snapshot_id,
-    repository_id = EXCLUDED.repository_id,
-    status = EXCLUDED.status,
-    started_at = EXCLUDED.started_at,
-    completed_at = EXCLUDED.completed_at
-"""
-
-_FACT_RECORD_UPSERT_SQL = """
-INSERT INTO fact_records (
-    fact_id,
-    fact_type,
-    repository_id,
-    checkout_path,
-    relative_path,
-    source_system,
-    source_run_id,
-    source_snapshot_id,
-    payload,
-    observed_at,
-    ingested_at,
-    provenance
-) VALUES (
-    %(fact_id)s,
-    %(fact_type)s,
-    %(repository_id)s,
-    %(checkout_path)s,
-    %(relative_path)s,
-    %(source_system)s,
-    %(source_run_id)s,
-    %(source_snapshot_id)s,
-    %(payload)s,
-    %(observed_at)s,
-    %(ingested_at)s,
-    %(provenance)s
-)
-ON CONFLICT (fact_id) DO UPDATE
-SET fact_type = EXCLUDED.fact_type,
-    repository_id = EXCLUDED.repository_id,
-    checkout_path = EXCLUDED.checkout_path,
-    relative_path = EXCLUDED.relative_path,
-    source_system = EXCLUDED.source_system,
-    source_run_id = EXCLUDED.source_run_id,
-    source_snapshot_id = EXCLUDED.source_snapshot_id,
-    payload = EXCLUDED.payload,
-    observed_at = EXCLUDED.observed_at,
-    ingested_at = EXCLUDED.ingested_at,
-    provenance = EXCLUDED.provenance
-"""
-
-
-def _fact_run_params(entry: FactRunRow) -> dict[str, Any]:
-    """Return SQL parameters for one fact run row."""
-
-    return {
-        "source_run_id": entry.source_run_id,
-        "source_system": entry.source_system,
-        "source_snapshot_id": entry.source_snapshot_id,
-        "repository_id": entry.repository_id,
-        "status": entry.status,
-        "started_at": entry.started_at,
-        "completed_at": entry.completed_at,
-    }
-
-
-def _fact_record_params(entry: FactRecordRow) -> dict[str, Any]:
-    """Return SQL parameters for one fact record row."""
-
-    return {
-        "fact_id": entry.fact_id,
-        "fact_type": entry.fact_type,
-        "repository_id": entry.repository_id,
-        "checkout_path": entry.checkout_path,
-        "relative_path": entry.relative_path,
-        "source_system": entry.source_system,
-        "source_run_id": entry.source_run_id,
-        "source_snapshot_id": entry.source_snapshot_id,
-        "payload": Jsonb(entry.payload),
-        "observed_at": entry.observed_at,
-        "ingested_at": entry.ingested_at,
-        "provenance": Jsonb(entry.provenance),
-    }
 
 
 class PostgresFactStore:
@@ -272,8 +172,8 @@ class PostgresFactStore:
             operation="upsert_fact_run",
             row_count=1,
             callback=lambda: self._execute(
-                _FACT_RUN_UPSERT_SQL,
-                _fact_run_params(entry),
+                FACT_RUN_UPSERT_SQL,
+                fact_run_params(entry),
             ),
         )
 
@@ -282,11 +182,11 @@ class PostgresFactStore:
 
         if not entries:
             return
-        rows = [_fact_record_params(entry) for entry in entries]
+        rows = [fact_record_params(entry) for entry in entries]
         self._record_operation(
             operation="upsert_facts",
             row_count=len(rows),
-            callback=lambda: self._executemany(_FACT_RECORD_UPSERT_SQL, rows),
+            callback=lambda: self._executemany(FACT_RECORD_UPSERT_SQL, rows),
         )
 
     def list_facts(
@@ -325,6 +225,109 @@ class PostgresFactStore:
             ),
         )
         return [FactRecordRow(**row) for row in rows]
+
+    def list_facts_by_type(
+        self,
+        *,
+        repository_id: str,
+        source_run_id: str,
+        fact_type: str,
+    ) -> list[FactRecordRow]:
+        """Return fact records filtered by type for one repository/run pair.
+
+        Filters at the SQL level using the composite index
+        ``fact_records_repo_run_type_idx(repository_id, source_run_id, fact_type)``
+        so Postgres never reads rows outside the requested type.
+
+        Args:
+            repository_id: Canonical repository identifier
+                (e.g. ``"repository:my-app"``).
+            source_run_id: The fact run that produced these records.
+            fact_type: One of ``"RepositoryObserved"``, ``"FileObserved"``,
+                or ``"ParsedEntityObserved"``.
+
+        Returns:
+            All matching fact records ordered by
+            ``(relative_path NULLS FIRST, fact_id)``.
+        """
+        from .queries import list_facts_by_type as _list_facts_by_type
+
+        return _list_facts_by_type(
+            cursor_factory=self._cursor,
+            record_operation=self._record_operation,
+            repository_id=repository_id,
+            source_run_id=source_run_id,
+            fact_type=fact_type,
+        )
+
+    def iter_fact_batches(
+        self,
+        *,
+        repository_id: str,
+        source_run_id: str,
+        fact_type: str,
+        batch_size: int = 2000,
+    ) -> list[list[FactRecordRow]]:
+        """Load fact records in batches using keyset pagination.
+
+        Returns a list of batches rather than holding a database cursor
+        open across the full projection pipeline.  Each batch is bounded
+        by ``batch_size`` rows, keeping peak Python memory proportional
+        to one batch (~1 MB) rather than the entire result set.
+
+        Uses ``(relative_path, fact_id)`` as the seek cursor, which is
+        O(log n) per page via the composite index — unlike LIMIT/OFFSET
+        which is O(n) for deep pages.
+
+        Args:
+            repository_id: Canonical repository identifier.
+            source_run_id: The fact run that produced these records.
+            fact_type: Fact type to paginate (typically
+                ``"ParsedEntityObserved"``).
+            batch_size: Maximum rows per batch.  Defaults to 2 000,
+                which at ~450 bytes/row keeps each batch under ~1 MB.
+
+        Returns:
+            List of batches, each containing up to ``batch_size`` records.
+            Empty list if no matching records exist.
+        """
+        from .queries import iter_fact_batches as _iter_fact_batches
+
+        return _iter_fact_batches(
+            cursor_factory=self._cursor,
+            record_operation=self._record_operation,
+            repository_id=repository_id,
+            source_run_id=source_run_id,
+            fact_type=fact_type,
+            batch_size=batch_size,
+        )
+
+    def count_facts(
+        self,
+        *,
+        repository_id: str,
+        source_run_id: str,
+    ) -> int:
+        """Return the total fact count for one repository/run pair.
+
+        Uses a simple ``COUNT(*)`` which Postgres resolves via an
+        index-only scan on ``fact_records_repository_run_idx``.
+
+        Args:
+            repository_id: Canonical repository identifier.
+            source_run_id: The fact run that produced these records.
+
+        Returns:
+            Total number of fact records for the repository/run pair.
+        """
+        from .queries import count_facts as _count_facts
+
+        return _count_facts(
+            cursor_factory=self._cursor,
+            record_operation=self._record_operation,
+            repository_id=repository_id,
+            source_run_id=source_run_id,
+        )
 
     def _component(self) -> str:
         """Return the logical component for telemetry emitted by this store."""
