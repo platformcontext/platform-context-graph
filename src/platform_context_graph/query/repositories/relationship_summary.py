@@ -31,13 +31,23 @@ __all__ = ["build_relationship_summary"]
 
 
 def build_relationship_summary(
-    session: Any, repo_ref: dict[str, Any]
+    session: Any,
+    repo_ref: dict[str, Any],
+    relationship_types: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Build the shared runtime/deployment summary for one repository."""
+    """Build the shared runtime/deployment summary for one repository.
+
+    Callers that already fetched graph relationship types may pass them in to
+    avoid a second metadata round-trip.
+    """
 
     coverage_row = get_runtime_repository_coverage(repo_id=repo_ref["id"])
     coverage = coverage_summary_from_row(coverage_row)
-    runtime_platforms = _fetch_runtime_platforms(session, repo_ref)
+    runtime_platforms = _fetch_runtime_platforms(
+        session,
+        repo_ref,
+        relationship_types=relationship_types,
+    )
     provisioned_platforms = _fetch_provisioned_platforms(session, repo_ref)
     platforms = _dedupe_rows(runtime_platforms + provisioned_platforms)
     deploys_from = _fetch_deploys_from(session, repo_ref)
@@ -115,11 +125,14 @@ def _query_params(repo_ref: dict[str, Any]) -> dict[str, Any]:
 
 
 def _fetch_runtime_platforms(
-    session: Any, repo_ref: dict[str, Any]
+    session: Any,
+    repo_ref: dict[str, Any],
+    relationship_types: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Return runtime platforms reached through workload instances."""
 
-    available_relationship_types = graph_relationship_types(session)
+    if relationship_types is None:
+        relationship_types = graph_relationship_types(session)
     direct_rows = session.run(
         f"""
         MATCH (r:Repository)-[:RUNS_ON]->(p:Platform)
@@ -136,7 +149,7 @@ def _fetch_runtime_platforms(
         **_query_params(repo_ref),
     ).data()
     instance_rows: list[dict[str, Any]] = []
-    if "INSTANCE_OF" in available_relationship_types:
+    if "INSTANCE_OF" in relationship_types:
         instance_rows = session.run(
             f"""
             MATCH (r:Repository)

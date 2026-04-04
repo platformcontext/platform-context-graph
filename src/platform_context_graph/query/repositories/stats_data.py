@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from .common import canonical_repository_ref, resolve_repository
+from .common import (
+    canonical_repository_ref,
+    graph_relationship_types,
+    resolve_repository,
+)
 from .graph_counts import repository_graph_counts
 from .relationship_summary import build_relationship_summary
 
@@ -26,8 +30,17 @@ def build_repository_stats(session: Any, repo_id: str | None) -> dict[str, Any]:
             return {"success": False, "error": f"Repository not found: {repo_id}"}
 
         repo_ref = canonical_repository_ref(repo)
-        counts = repository_graph_counts(session, repo)
-        relationship_summary = build_relationship_summary(session, repo_ref)
+        relationship_types = graph_relationship_types(session)
+        counts = repository_graph_counts(
+            session,
+            repo,
+            relationship_types=relationship_types,
+        )
+        relationship_summary = build_relationship_summary(
+            session,
+            repo_ref,
+            relationship_types=relationship_types,
+        )
         return {
             "success": True,
             "repository": repo_ref,

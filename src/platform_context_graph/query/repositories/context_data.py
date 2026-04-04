@@ -53,6 +53,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
 
     scope = repository_scope(repo)
     repo_ref = canonical_repository_ref(repo)
+    relationship_types = graph_relationship_types(session)
     file_stats = session.run(
         f"""
         MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File)
@@ -68,7 +69,11 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         ext = file_row.get("ext", "")
         ext_counts[ext] = ext_counts.get(ext, 0) + 1
 
-    counts = repository_graph_counts(session, repo)
+    counts = repository_graph_counts(
+        session,
+        repo,
+        relationship_types=relationship_types,
+    )
     languages = sorted(
         {
             LANGUAGE_BY_EXTENSION[ext]
@@ -113,7 +118,11 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         **scope,
     ).data()
     ecosystem = _fetch_ecosystem(session, repo)
-    relationship_summary = build_relationship_summary(session, repo_ref)
+    relationship_summary = build_relationship_summary(
+        session,
+        repo_ref,
+        relationship_types=relationship_types,
+    )
     coverage_summary = relationship_summary["coverage"]
     if (
         coverage_summary is not None
