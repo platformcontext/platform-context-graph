@@ -152,8 +152,8 @@ def service_name_for_component(component: str) -> str:
 
     if component == "resolution-engine":
         return "platform-context-graph-resolution-engine"
-    if component in {"bootstrap-index", "repo-sync", "ingester", "ingestor", "repository"}:
-        return "platform-context-graph-ingestor"
+    if component in {"bootstrap-index", "repo-sync", "ingester", "ingester", "repository"}:
+        return "platform-context-graph-ingester"
     return "platform-context-graph-api"
 
 

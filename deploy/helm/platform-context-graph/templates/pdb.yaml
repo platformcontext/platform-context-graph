@@ -30,13 +30,13 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "pcg.ingestorFullname" . }}
+  name: {{ include "pcg.ingesterFullname" . }}
   labels:
     {{- include "pcg.labels" . | nindent 4 }}
-    app.kubernetes.io/component: ingestor
+    app.kubernetes.io/component: ingester
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      {{- include "pcg.ingestorSelectorLabels" . | nindent 6 }}
+      {{- include "pcg.ingesterSelectorLabels" . | nindent 6 }}
 {{- end }}

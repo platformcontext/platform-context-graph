@@ -83,7 +83,7 @@ exposure:
     hostnames: []
     parentRefs: []
 
-ingestor:
+ingester:
   replicas: 1
   revisionHistoryLimit: 3
   persistence:

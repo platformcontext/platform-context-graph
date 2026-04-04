@@ -14,7 +14,7 @@ Use this page when you need the operator view of PlatformContextGraph:
 | Runtime | Owns | Default command | Storage access | Metrics exposure | Kubernetes shape |
 | --- | --- | --- | --- | --- | --- |
 | API | HTTP API, MCP, query reads, admin endpoints | `pcg serve start --host 0.0.0.0 --port 8080` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
-| Ingestor | repo sync, parsing, fact emission, workspace ownership | `pcg internal repo-sync-loop` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
+| Ingester | repo sync, parsing, fact emission, workspace ownership | `pcg internal repo-sync-loop` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `pcg internal resolution-engine` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Bootstrap Index | one-shot initial indexing | `pcg internal bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
 
@@ -22,7 +22,7 @@ Use this page when you need the operator view of PlatformContextGraph:
 
 ```mermaid
 flowchart LR
-  A["Ingestor"] --> B["Parse repository snapshot"]
+  A["Ingester"] --> B["Parse repository snapshot"]
   B --> C["Postgres fact store"]
   C --> D["Fact work queue"]
   D --> E["Resolution Engine"]
@@ -37,7 +37,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   A["bootstrap-index"] --> B["Initial one-shot indexing"]
-  C["ingestor"] --> D["Ongoing sync and fact emission"]
+  C["ingester"] --> D["Ongoing sync and fact emission"]
   D --> E["Fact work queue"]
   E --> F["resolution-engine"]
   G["platform-context-graph API"] --> H["Graph + content reads"]
@@ -74,7 +74,7 @@ flowchart LR
 
 Scale the API when request traffic rises. Do not scale it to fix queue backlog.
 
-## Ingestor
+## Ingester
 
 ### Responsibilities
 
@@ -86,12 +86,12 @@ Scale the API when request traffic rises. Do not scale it to fix queue backlog.
 
 ### Why it stays stateful
 
-The ingestor is the only long-running runtime that should mount the workspace
+The ingester is the only long-running runtime that should mount the workspace
 PVC in Kubernetes.
 
 ### Deployments
 
-- Compose service: `ingestor`
+- Compose service: `ingester`
 - Helm template: `deploy/helm/platform-context-graph/templates/statefulset.yaml`
 - IaC chart template: `chart/templates/statefulset.yaml`
 
@@ -103,7 +103,7 @@ PVC in Kubernetes.
 - fact-store SQL latency
 - workspace disk pressure
 
-Scale or tune the ingestor when parsing is the bottleneck or workspace pressure
+Scale or tune the ingester when parsing is the bottleneck or workspace pressure
 is rising.
 
 ## Resolution Engine
@@ -167,7 +167,7 @@ Helm can expose the same runtime metrics over dedicated ports and can also
 render `ServiceMonitor` resources for:
 
 - API
-- Ingestor
+- Ingester
 - Resolution Engine
 
 `ServiceMonitor` does not apply to the bootstrap helper because it is not a
@@ -175,8 +175,8 @@ steady-state Kubernetes service in the public chart.
 
 ## Operator Defaults
 
-- treat API, ingestor, and resolution-engine as separate scaling units
-- keep the workspace mounted only on the ingestor in Kubernetes
+- treat API, ingester, and resolution-engine as separate scaling units
+- keep the workspace mounted only on the ingester in Kubernetes
 - use direct `/metrics` endpoints for local verification
 - use `ServiceMonitor` only for the long-running Kubernetes runtimes
 - use the [Telemetry Overview](../reference/telemetry/index.md) to decide which

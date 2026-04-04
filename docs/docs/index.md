@@ -95,7 +95,7 @@ flowchart LR
   resource and trace back to the defining code.
 - **Impact analysis**: estimate blast radius and shared infrastructure impact
   before you merge or deploy.
-- **Shared operator model**: API, ingestor, and resolution-engine use one
+- **Shared operator model**: API, ingester, and resolution-engine use one
   coherent facts-first workflow and one observability story.
 
 ## Keep Going

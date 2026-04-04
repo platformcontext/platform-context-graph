@@ -24,10 +24,10 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "pcg.ingestorMetricsServiceName" . }}
+  name: {{ include "pcg.ingesterMetricsServiceName" . }}
   labels:
     {{- include "pcg.labels" . | nindent 4 }}
-    app.kubernetes.io/component: ingestor
+    app.kubernetes.io/component: ingester
     {{- with .Values.observability.prometheus.serviceMonitor.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -35,7 +35,7 @@ spec:
   selector:
     matchLabels:
       {{- include "pcg.labels" . | nindent 6 }}
-      app.kubernetes.io/component: ingestor
+      app.kubernetes.io/component: ingester
   endpoints:
     - port: metrics
       path: {{ .Values.observability.prometheus.path | quote }}

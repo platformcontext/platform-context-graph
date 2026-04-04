@@ -2,7 +2,7 @@
 
 For the operator-facing logs guide, see [Telemetry Logs](telemetry/logs.md).
 
-PlatformContextGraph writes one JSON document per log line everywhere: API, MCP, ingestor, Falkor worker, and local CLI commands.
+PlatformContextGraph writes one JSON document per log line everywhere: API, MCP, ingester, Falkor worker, and local CLI commands.
 
 That is the standard on purpose. We want logs that are easy to ship, easy to parse, and easy to turn into dashboards without writing a custom parser for every service.
 
@@ -45,7 +45,7 @@ The common fields are there so Loki, Elasticsearch, Grafana, or anything else th
 
 - `service_name`, `service_namespace`, and `service_version` identify the runtime
 - `component` and `transport` identify where the log came from
-- `runtime_role` tells you whether the process is acting as the API, the internal `ingester` runtime role used by the ingestor service, the worker, or the CLI
+- `runtime_role` tells you whether the process is acting as the API, the internal `ingester` runtime role used by the ingester service, the worker, or the CLI
 - `trace_id` and `span_id` let you jump from logs into the matching Jaeger trace
 - `request_id` and `correlation_id` keep a request together across boundaries
 

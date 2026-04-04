@@ -2,14 +2,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "pcg.ingestorMetricsServiceName" . }}
+  name: {{ include "pcg.ingesterMetricsServiceName" . }}
   labels:
     {{- include "pcg.labels" . | nindent 4 }}
-    app.kubernetes.io/component: ingestor
+    app.kubernetes.io/component: ingester
 spec:
   clusterIP: None
   selector:
-    {{- include "pcg.ingestorSelectorLabels" . | nindent 4 }}
+    {{- include "pcg.ingesterSelectorLabels" . | nindent 4 }}
   ports:
     - name: metrics
       port: {{ .Values.observability.prometheus.port }}

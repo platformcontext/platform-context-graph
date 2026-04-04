@@ -8,7 +8,7 @@ The repository includes a Docker Compose stack that mirrors the deployable-servi
 4. start Jaeger for trace inspection
 5. bootstrap index fixture repos
 6. start the HTTP API + MCP service
-7. run the ingestor service, which keeps the repo-sync loop running in the background
+7. run the ingester service, which keeps the repo-sync loop running in the background
 8. run the standalone resolution-engine loop
 
 Compose files:
@@ -25,7 +25,7 @@ This stack cannot run a real Kubernetes `ServiceMonitor`, but it can run the
 same thing a `ServiceMonitor` would scrape:
 
 - a Prometheus-format `/metrics` endpoint on `platform-context-graph`
-- a Prometheus-format `/metrics` endpoint on `ingestor`
+- a Prometheus-format `/metrics` endpoint on `ingester`
 - a Prometheus-format `/metrics` endpoint on `resolution-engine`
 
 For the admin re-finalize flow specifically, use the compose-backed verification wrapper:
@@ -45,7 +45,7 @@ That script:
 
 Set `PCG_KEEP_COMPOSE_STACK=true` if you want the stack left running after the verification completes.
 
-By default, the bootstrap, ingestor, and resolution-engine services mount the fixture ecosystems tree from
+By default, the bootstrap, ingester, and resolution-engine services mount the fixture ecosystems tree from
 `./tests/fixtures/ecosystems` into `/fixtures` so the stack stays safe for local smoke testing.
 
 The runtime services export OTLP traces and metrics to the local collector by default, and the
@@ -100,7 +100,7 @@ The indexing services also honor worker-tuning controls from the environment:
 - `PCG_WORKER_MAX_TASKS`
 - `PCG_INDEX_QUEUE_DEPTH`
 
-Compose passes those values through to `bootstrap-index`, `ingestor`,
+Compose passes those values through to `bootstrap-index`, `ingester`,
 `resolution-engine`, and `platform-context-graph`, so local and containerized
 runs stay aligned.
 

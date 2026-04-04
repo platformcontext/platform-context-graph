@@ -148,5 +148,5 @@ These attributes are especially useful for narrowing traces:
 ## Best Practices
 
 - Use metrics to choose the right trace first.
-- Filter by `service.name` to separate API, ingestor, and resolution-engine behavior.
+- Filter by `service.name` to separate API, ingester, and resolution-engine behavior.
 - Use `request_id`, `correlation_id`, `run_id`, and `work_item_id` to jump from logs into traces quickly.

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: platform-context-graph
-description: PlatformContextGraph API and repository ingestor workloads with MCP, indexing, and repo sync.
+description: PlatformContextGraph API and repository ingester workloads with MCP, indexing, and repo sync.
 type: application
 version: 0.1.6
 appVersion: "v0.0.43"

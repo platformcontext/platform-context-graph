@@ -115,7 +115,7 @@ These options apply at the root command level.
 
 | Command | Purpose | Remote-aware |
 | :--- | :--- | :--- |
-| `pcg admin reindex` | Queue a remote ingestor reindex request. | Yes |
+| `pcg admin reindex` | Queue a remote ingester reindex request. | Yes |
 | `pcg admin facts replay` | Replay failed facts-first work items through the admin API. | Yes |
 | `pcg admin facts dead-letter` | Move selected facts-first work items into terminal failed state. | Yes |
 | `pcg admin facts backfill` | Create a durable fact backfill request. | Yes |
@@ -265,7 +265,7 @@ Check checkpointed run status:
 pcg index-status f53c7855e3a12baf --profile qa
 ```
 
-Queue a full workspace rebuild on a deployed ingestor:
+Queue a full workspace rebuild on a deployed ingester:
 
 ```bash
 pcg admin reindex --profile qa --ingester repository --scope workspace --force
@@ -359,7 +359,7 @@ Use remote mode when:
 
 - you want to inspect a deployed PCG service
 - you want CLI-driven status checks against a hosted workspace
-- you want to queue a hosted ingestor reindex
+- you want to queue a hosted ingester reindex
 - you want to upload a `.pcg` bundle into a deployed service
 
 ## Related docs

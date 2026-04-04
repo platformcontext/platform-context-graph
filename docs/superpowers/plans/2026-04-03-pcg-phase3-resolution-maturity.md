@@ -334,7 +334,7 @@ Expected: PASS.
 
 Use the updated local-testing and service-runtimes docs to validate:
 - API
-- Ingestor
+- Ingester
 - Resolution Engine
 - replay and dead-letter controls
 - confidence/provenance visibility

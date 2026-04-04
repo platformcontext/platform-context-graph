@@ -6,7 +6,7 @@ topology, and graph-backed query surfaces in one model.
 It runs in two practical modes:
 
 - **local mode** for CLI and stdio MCP workflows
-- **deployed mode** for the shared API, ingestor, and resolution-engine
+- **deployed mode** for the shared API, ingester, and resolution-engine
 
 Phase 1 clarified package ownership, Phase 2 switched Git indexing to a
 facts-first write path, and Phase 3 added durable recovery and explainability on
@@ -66,7 +66,7 @@ flowchart LR
 
 ## Facts-First Flow
 
-1. The ingestor discovers repositories and parses a repository snapshot.
+1. The ingester discovers repositories and parses a repository snapshot.
 2. Repository, file, and entity facts are written to Postgres.
 3. A fact work item is enqueued for that snapshot.
 4. The resolution-engine claims the work item and loads the stored facts.
@@ -100,12 +100,12 @@ That lets operators answer:
 | Runtime | Owns |
 | --- | --- |
 | API | HTTP and MCP serving, graph reads, content reads, admin surface |
-| Ingestor | repo sync, parsing, fact emission, workspace ownership |
+| Ingester | repo sync, parsing, fact emission, workspace ownership |
 | Resolution Engine | queue draining, projection, retries, replay, recovery |
 | Bootstrap Index | one-shot initial indexing in local/full-stack workflows |
 
 The content store is owned by the projection path, not by the raw parser. The
-ingestor emits facts; the resolution-engine turns those facts into canonical
+ingester emits facts; the resolution-engine turns those facts into canonical
 graph and content state.
 
 ## Observability Model

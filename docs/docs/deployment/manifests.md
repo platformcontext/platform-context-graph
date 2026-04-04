@@ -18,7 +18,7 @@ This example is **not** the full split-service production shape.
 
 It does **not** include:
 
-- the ingestor runtime
+- the ingester runtime
 - the resolution-engine runtime
 - the facts-first queue-backed deployment flow
 - Prometheus `ServiceMonitor` resources

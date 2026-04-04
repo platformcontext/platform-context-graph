@@ -14,7 +14,7 @@ Use this page to choose where to look first.
 | --- | --- | --- |
 | API is slow or erroring | API metrics | API traces and logs |
 | backlog is growing | queue depth and queue age metrics | resolution-engine traces and queue logs |
-| one repository is slow | ingestor metrics | ingestor traces and resolution-engine stage timings |
+| one repository is slow | ingester metrics | ingester traces and resolution-engine stage timings |
 | graph writes are slow | resolution metrics | Neo4j traces and graph persistence logs |
 | content reads are missing or slow | API metrics and content metrics | content traces and logs |
 | replay or dead-letter behavior looks wrong | recovery metrics | recovery traces and admin/replay logs |
@@ -80,7 +80,7 @@ flowchart LR
 - In Docker Compose, validate runtime metrics by curling the direct `/metrics`
   endpoints.
 - In Kubernetes, Helm can expose dedicated metrics ports and render
-  `ServiceMonitor` resources for the API, ingestor, and resolution-engine.
+  `ServiceMonitor` resources for the API, ingester, and resolution-engine.
 - Bootstrap indexing is a local or operator-run one-shot activity, not a
   steady-state `ServiceMonitor` target in the public chart.
 
