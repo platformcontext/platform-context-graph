@@ -278,3 +278,74 @@ def test_pipeline_keeps_threaded_fallback_after_concurrent_repo_completion(
     assert any(
         "falling back to threaded parsing" in warning.lower() for warning in warnings
     )
+
+
+def test_pipeline_updates_parse_strategy_span_attributes_after_fallback(
+    tmp_path: Path,
+) -> None:
+    """Fallback repos should update span attributes to the effective strategy."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    file_path = repo / "main.py"
+    file_path.write_text("print('ok')\n", encoding="utf-8")
+    parse_executor = object()
+    span_attributes: dict[str, dict[str, Any]] = {}
+
+    class _SpanRecorder:
+        """Capture span attributes that are updated after span start."""
+
+        def __init__(self, span_name: str):
+            self._span_name = span_name
+
+        def set_attribute(self, key: str, value: Any) -> None:
+            span_attributes.setdefault(self._span_name, {})[key] = value
+
+        def record_exception(self, _exc: Exception) -> None:
+            return None
+
+    @contextmanager
+    def telemetry_span_scope(span_name: str, **_kwargs: Any):
+        yield _SpanRecorder(span_name)
+
+    telemetry = SimpleNamespace(
+        start_span=telemetry_span_scope,
+        record_index_repositories=_noop,
+        record_index_repository_duration=_noop,
+    )
+
+    async def parse_snapshot(
+        _builder: Any, repo_path: Path, repo_files: list[Path], **kwargs: Any
+    ):
+        if kwargs["parse_executor"] is parse_executor:
+            raise BrokenProcessPool("worker died")
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={},
+            file_data=[],
+        )
+
+    committed_repo_paths, run_state, warnings = asyncio.run(
+        _run_pipeline(
+            [repo],
+            {repo: [file_path]},
+            parse_snapshot,
+            parse_executor=parse_executor,
+            parse_strategy="multiprocess",
+            telemetry=telemetry,
+        )
+    )
+
+    repo_state = run_state.repositories[str(repo.resolve())]
+    assert committed_repo_paths == [repo.resolve()]
+    assert repo_state.status == "completed"
+    assert any(
+        "falling back to threaded parsing" in warning.lower() for warning in warnings
+    )
+    assert span_attributes["pcg.index.repository"]["pcg.index.parse_strategy"] == (
+        "threaded"
+    )
+    assert span_attributes["pcg.index.repository.parse"]["pcg.index.parse_strategy"] == (
+        "threaded"
+    )

@@ -62,6 +62,13 @@ def _count_snapshot_entities(file_data: list[dict[str, Any]]) -> int:
     return total
 
 
+def _set_span_attribute_if_supported(span: Any, key: str, value: Any) -> None:
+    """Set a telemetry span attribute when the span supports mutation."""
+
+    if hasattr(span, "set_attribute"):
+        span.set_attribute(key, value)
+
+
 def prepare_repository_snapshots(
     *,
     run_state: Any,
@@ -290,7 +297,7 @@ async def process_repository_snapshots(
                     "pcg.index.parse_strategy": effective_parse_strategy,
                     "pcg.index.parse_workers": parse_workers,
                 },
-            ):
+            ) as repository_span:
                 queue_wait_started = time.perf_counter()
                 with telemetry.start_span(
                     "pcg.index.repository.queue_wait",
@@ -342,7 +349,7 @@ async def process_repository_snapshots(
                             "pcg.index.parse_strategy": effective_parse_strategy,
                             "pcg.index.parse_workers": parse_workers,
                         },
-                    ):
+                    ) as parse_span:
                         started = time.perf_counter()
                         repo_state.started_at = utc_now_fn()
                         repo_state.finished_at = None
@@ -418,6 +425,16 @@ async def process_repository_snapshots(
                             source=source,
                             parse_workers=parse_workers,
                             parse_strategy=effective_parse_strategy,
+                        )
+                        _set_span_attribute_if_supported(
+                            repository_span,
+                            "pcg.index.parse_strategy",
+                            effective_parse_strategy,
+                        )
+                        _set_span_attribute_if_supported(
+                            parse_span,
+                            "pcg.index.parse_strategy",
+                            effective_parse_strategy,
                         )
                         (
                             current_parse_executor,
