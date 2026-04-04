@@ -403,6 +403,8 @@ def _project_entity_batches(
     with builder.driver.session() as session:
         for batch in entity_batches:
             def _write(tx: object, _batch: list[FactRecordRow] = batch) -> None:
+                """Project one bounded parsed-entity batch inside a managed write."""
+
                 nonlocal projected
                 projected += _project_standalone_entity_facts(
                     tx,
