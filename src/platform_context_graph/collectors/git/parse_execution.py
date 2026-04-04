@@ -80,6 +80,33 @@ def _repo_file_parse_strategy(*, parse_executor: Any | None) -> str:
     return "threaded"
 
 
+async def _cancel_and_drain_parse_tasks(
+    tasks: list[Any],
+    *,
+    asyncio_module: Any,
+) -> None:
+    """Cancel unfinished parse tasks and drain all outcomes.
+
+    Draining the tasks prevents asyncio from logging "Task exception was never
+    retrieved" when one repository parse failure leaves sibling tasks behind.
+    """
+
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+
+    gather = getattr(asyncio_module, "gather", None)
+    if callable(gather):
+        await gather(*tasks, return_exceptions=True)
+        return
+
+    for task in tasks:
+        try:
+            await task
+        except BaseException:  # pragma: no cover - fallback for test doubles only.
+            continue
+
+
 async def parse_repository_snapshot_async(
     builder: Any,
     repo_path: Path,
@@ -344,14 +371,21 @@ async def parse_repository_snapshot_async(
             asyncio_module.create_task(_parse_with_semaphore(index, file_path))
             for index, file_path in enumerate(repo_files)
         ]
+        tasks_drained = False
         try:
             for completed_task in asyncio_module.as_completed(tasks):
                 _record_parse_result(*(await completed_task))
                 await asyncio_module.sleep(0)
+        except Exception:
+            await _cancel_and_drain_parse_tasks(tasks, asyncio_module=asyncio_module)
+            tasks_drained = True
+            raise
         finally:
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
+            if not tasks_drained:
+                await _cancel_and_drain_parse_tasks(
+                    tasks,
+                    asyncio_module=asyncio_module,
+                )
     else:
         for index, file_path in enumerate(repo_files):
             active_parse_tasks = 1
