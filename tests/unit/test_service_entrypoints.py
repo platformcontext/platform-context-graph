@@ -47,7 +47,7 @@ def test_get_service_entrypoint_returns_resolution_engine_spec() -> None:
     spec = service_entrypoints.get_service_entrypoint("resolution-engine")
 
     assert spec.service_role == "resolution-engine"
-    assert spec.runtime_role == "combined"
+    assert spec.runtime_role == "resolution-engine"
     assert spec.implemented is True
     assert (
         spec.import_path

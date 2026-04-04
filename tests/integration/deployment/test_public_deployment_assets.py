@@ -250,7 +250,10 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert "PCG_REPOSITORY_RULES_JSON" in worker_env_names
     assert "PCG_REPOS_DIR" in worker_env_names
     assert "/data" not in api_volume_mounts
-    assert resolution_engine_env_items["PCG_RUNTIME_ROLE"]["value"] == "combined"
+    assert (
+        resolution_engine_env_items["PCG_RUNTIME_ROLE"]["value"]
+        == "resolution-engine"
+    )
     assert "PCG_API_KEY" not in resolution_engine_env_items
     assert "/data" not in resolution_engine_volume_mounts
     assert "/data" in worker_volume_mounts
@@ -534,7 +537,7 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
     assert service_envs["PCG_RUNTIME_ROLE"] == "api"
     assert service_envs["PCG_AUTO_GENERATE_API_KEY"] == "true"
     resolution_engine_envs = _compose_service_envs(services["resolution-engine"])
-    assert resolution_engine_envs["PCG_RUNTIME_ROLE"] == "combined"
+    assert resolution_engine_envs["PCG_RUNTIME_ROLE"] == "resolution-engine"
 
 
 @pytest.mark.parametrize("compose_file", [COMPOSE_FILE, COMPOSE_TEMPLATE_FILE])
