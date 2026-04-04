@@ -264,6 +264,7 @@ class TestCLICommands:
     @patch(
         "platform_context_graph.resolution.orchestration.start_resolution_engine"
     )
+    @patch("platform_context_graph.facts.state.get_projection_decision_store")
     @patch("platform_context_graph.facts.state.get_fact_work_queue")
     @patch("platform_context_graph.facts.state.get_fact_store")
     @patch("platform_context_graph.core.get_database_manager")
@@ -276,10 +277,12 @@ class TestCLICommands:
         mock_get_database_manager,
         mock_get_fact_store,
         mock_get_fact_work_queue,
+        mock_get_projection_decision_store,
         mock_start_resolution_engine,
     ):
         mock_get_fact_work_queue.return_value = object()
         mock_get_fact_store.return_value = object()
+        mock_get_projection_decision_store.return_value = object()
         mock_get_database_manager.return_value = object()
         mock_job_manager.return_value = object()
         mock_graph_builder.return_value = object()
@@ -293,6 +296,7 @@ class TestCLICommands:
         assert kwargs["projector"].keywords == {
             "builder": mock_graph_builder.return_value,
             "fact_store": mock_get_fact_store.return_value,
+            "decision_store": mock_get_projection_decision_store.return_value,
         }
 
     @patch("platform_context_graph.cli.main.workspace_plan_helper")

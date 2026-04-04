@@ -83,6 +83,30 @@ def test_claim_work_item_returns_leased_row(monkeypatch) -> None:
     assert row.status == "leased"
 
 
+def test_claim_work_item_can_reclaim_expired_leased_rows(monkeypatch) -> None:
+    """Expired inline-owned leases should be reclaimable by the resolution engine."""
+
+    queue = PostgresFactWorkQueue("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchone.return_value = None
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(queue, "_cursor", _cursor)
+
+    queue.claim_work_item(
+        lease_owner="resolution-worker-1",
+        lease_ttl_seconds=60,
+    )
+
+    query, _params = cursor.execute.call_args.args
+    assert "status = 'pending'" in query
+    assert "status = 'leased'" in query
+    assert "lease_expires_at <= %(now)s" in query
+
+
 def test_fail_work_item_marks_retryable_and_terminal_states(monkeypatch) -> None:
     """Failing work should support retryable and terminal outcomes."""
 
@@ -98,7 +122,7 @@ def test_fail_work_item_marks_retryable_and_terminal_states(monkeypatch) -> None
     queue.fail_work_item(work_item_id="work-1", error_message="boom", terminal=False)
     retry_query, retry_params = cursor.execute.call_args.args
 
-    assert "attempt_count = fact_work_items.attempt_count + 1" in retry_query
+    assert "attempt_count =" not in retry_query
     assert retry_params["status"] == "pending"
     assert retry_params["last_error"] == "boom"
 
@@ -177,8 +201,10 @@ def test_replay_failed_work_items_resets_attempts_and_status(monkeypatch) -> Non
     rows = queue.replay_failed_work_items(work_item_ids=["work-1"], limit=10)
 
     assert [row.work_item_id for row in rows] == ["work-1"]
-    query, params = cursor.execute.call_args.args
+    query, params = cursor.execute.call_args_list[0].args
     assert "status = 'failed'" in query
     assert "attempt_count = 0" in query
+    assert "dead_lettered_at = NULL" in query
+    assert "next_retry_at = NULL" in query
     assert params["work_item_ids"] == ["work-1"]
     assert params["limit"] == 10

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import builtins as py_builtins
 
 import platform_context_graph.graph.persistence.calls as call_relationships
+import platform_context_graph.graph.persistence.call_row_prep as call_row_prep
 from platform_context_graph.graph.persistence.calls import (
     _contextual_call_batch_queries,
     _contextual_repo_scoped_batch_query,
@@ -67,6 +68,27 @@ class _FakeSession:
             matched_ids = [row["row_id"] for row in final_params["rows"]]
             return _FakeResult({"matched_row_ids": matched_ids})
         return _FakeResult({"created": 1})
+
+
+class _IterableOnlyResult:
+    def __init__(self, rows: list[dict[str, str]]) -> None:
+        self._rows = rows
+
+    def __iter__(self):
+        return iter(self._rows)
+
+    def data(self) -> list[dict[str, str]]:
+        raise AssertionError("data() should not be called for name scans")
+
+
+class _IterableOnlySession:
+    def __init__(self, rows: list[dict[str, str]]) -> None:
+        self.rows = rows
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def run(self, query: str, params: dict[str, object] | None = None):
+        self.calls.append((query, params or {}))
+        return _IterableOnlyResult(self.rows)
 
 
 class _FakeSessionContext:
@@ -222,6 +244,68 @@ def test_create_all_function_calls_batches_across_files() -> None:
     unwind_calls = [(q, p) for q, p in session.calls if "UNWIND $rows AS row" in q]
     assert len(unwind_calls) == 1
     assert [len(params["rows"]) for _query, params in unwind_calls] == [2]
+
+
+def test_build_known_callable_names_by_family_iterates_rows_lazily() -> None:
+    """Known-name scans should not require eager `.data()` materialization."""
+
+    session = _IterableOnlySession(
+        rows=[
+            {"name": "render", "lang": "javascript"},
+            {"name": "setup", "lang": "typescript"},
+        ]
+    )
+
+    result = call_relationships._build_known_callable_names_by_family(session)
+
+    assert "render" in result["javascript"]
+    assert "setup" in result["typescript"]
+    assert len(session.calls) == 2
+
+
+def test_prepare_call_rows_stops_after_max_calls_per_file(monkeypatch) -> None:
+    """Per-file call caps should stop row preparation early."""
+
+    resolve_calls = 0
+
+    def _fake_resolve_call_target(*_args, **_kwargs):
+        nonlocal resolve_calls
+        resolve_calls += 1
+        return "/tmp/repo/main.py"
+
+    monkeypatch.setattr(
+        call_row_prep,
+        "_resolve_call_target",
+        _fake_resolve_call_target,
+    )
+
+    file_data = {
+        "path": "/tmp/repo/main.py",
+        "repo_path": "/tmp/repo",
+        "functions": [],
+        "classes": [],
+        "imports": [],
+        "function_calls": [
+            {"name": f"call_{index}", "line_number": index, "args": []}
+            for index in range(20)
+        ],
+    }
+
+    contextual_rows, file_level_rows, next_row_id = (
+        call_relationships._prepare_call_rows(
+            file_data,
+            {},
+            caller_file_path="/tmp/repo/main.py",
+            get_config_value_fn=lambda _key: None,
+            warning_logger_fn=lambda *_args, **_kwargs: None,
+            start_row_id=0,
+            max_calls_per_file=5,
+        )
+    )
+
+    assert resolve_calls == 5
+    assert len(contextual_rows) + len(file_level_rows) == 5
+    assert next_row_id == 5
 
 
 def test_create_all_function_calls_returns_resolution_metrics(

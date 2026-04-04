@@ -4,42 +4,25 @@ This roadmap is the single public place for forward-looking project direction.
 
 ## Current phase
 
-PCG is finishing **Phase 2: facts-first Git projection**.
+PCG is in **Phase 3: resolution maturity**.
 
-Phase 2 establishes the runtime architecture that future work builds on:
+Phase 3 builds on the facts-first runtime established in Phase 2:
 
 - Git indexing writes durable facts into Postgres
 - a Postgres work queue coordinates projection work
 - the `resolution-engine` owns canonical graph projection
-- deployed runtime shape is now `api` + `ingester` + `resolution-engine`
+- deployed runtime shape is `api` + `ingester` + `resolution-engine`
 - telemetry, logs, traces, and operator runbooks align to the real service shape
 
-The immediate goal is Phase 2 closeout:
+The immediate goal in Phase 3 is to make the system easier to operate and trust:
 
-- complete staging and end-to-end validation
-- fix any remaining defects found in real environments
-- merge the app and IaC changes
-- do a short stabilization pass after merge
+- classify fact-projection failures durably instead of relying on logs alone
+- add operator-grade replay, dead-letter, audit, and backfill controls
+- persist projection decisions with evidence and confidence summaries
+- expose richer admin and CLI inspection surfaces for work items and decisions
+- strengthen documentation and test guidance before the next architectural step
 
 ## Next phase
-
-### Phase 3: Resolution Maturity
-
-This is the next priority after Phase 2 merges.
-
-- stronger identity resolution rules
-- richer provenance and confidence handling
-- better replay, backfill, and admin workflows
-- tighter projection parity and correctness checks
-- more operational controls around failures and recovery
-
-Why it comes next:
-
-- the facts-first architecture is now in place
-- the next highest-value work is making resolution more trustworthy and operable
-- future collectors will benefit from stronger canonical resolution semantics
-
-## After that
 
 ### Phase 4: Backend And Scale Decision
 
@@ -55,6 +38,8 @@ Why it comes before the next collector:
 
 - it is better to understand scaling limits before adding another major source
 - the new telemetry should drive the backend discussion instead of assumptions
+
+## After that
 
 ### Phase 5: Multi-Collector Expansion
 

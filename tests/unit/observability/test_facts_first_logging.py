@@ -172,3 +172,43 @@ def test_project_work_item_logs_stage_failure_context(
     assert failures
     assert failures[-1]["extra_keys"]["stage"] == "project_relationships"
     assert failures[-1]["extra_keys"]["work_item_id"] == "work-9"
+
+
+def test_project_work_item_logs_projection_decision_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Projection decisions should emit structured decision breadcrumbs."""
+
+    buffer = _configure_buffer(monkeypatch)
+    fact_store = MagicMock()
+    fact_store.list_facts.return_value = []
+    decision_store = SimpleNamespace(
+        upsert_decision=lambda _decision: None,
+        insert_evidence=lambda _evidence: None,
+    )
+
+    project_work_item(
+        FactWorkItemRow(
+            work_item_id="work-10",
+            work_type="project-git-facts",
+            repository_id="repository:r_payments",
+            source_run_id="run-123",
+        ),
+        builder=SimpleNamespace(),
+        fact_store=fact_store,
+        decision_store=decision_store,
+        fact_projector=lambda **_kwargs: {"files": 0},
+        relationship_projector=lambda **_kwargs: {"files": 1},
+        workload_projector=lambda **_kwargs: {"workloads_projected": 1},
+        platform_projector=lambda **_kwargs: {"infrastructure_platform_edges_projected": 1},
+    )
+
+    records = _parse_records(buffer)
+    decisions = [
+        record
+        for record in records
+        if record.get("event_name") == "resolution.decision.recorded"
+    ]
+    assert decisions
+    assert decisions[-1]["extra_keys"]["work_item_id"] == "work-10"
+    assert decisions[-1]["extra_keys"]["decision_type"] == "project_platforms"

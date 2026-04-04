@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +28,7 @@ class GitSnapshotFactEmissionResult:
     source_snapshot_id: str
     work_item_id: str
     fact_count: int
+    work_item: FactWorkItemRow | None = None
 
 
 def build_git_snapshot_id(
@@ -212,22 +215,28 @@ def emit_git_snapshot_facts(
     fact_store: Any,
     work_queue: Any,
     observed_at: Any,
+    inline_projection_owner: str | None = None,
+    inline_projection_lease_ttl_seconds: int = 300,
 ) -> GitSnapshotFactEmissionResult:
     """Persist fact rows and enqueue one projection work item for a snapshot."""
 
     checkout_path = str(Path(snapshot.repo_path).resolve())
-    provenance = FactProvenance(
+    base_provenance = FactProvenance(
         source_system="git",
         source_run_id=source_run_id,
         source_snapshot_id=source_snapshot_id,
         observed_at=observed_at,
-        details={"imports_map": snapshot.imports_map},
+        details={},
+    )
+    repository_provenance = replace(
+        base_provenance,
+        details={"imports_map": snapshot.imports_map} if snapshot.imports_map else {},
     )
     repository_fact = RepositoryObservedFact(
         repository_id=repository_id,
         checkout_path=checkout_path,
         is_dependency=is_dependency,
-        provenance=provenance,
+        provenance=repository_provenance,
     )
     file_fact_rows: list[FactRecordRow] = []
     file_facts = []
@@ -238,7 +247,7 @@ def emit_git_snapshot_facts(
             relative_path=str(Path(entry["path"]).resolve().relative_to(checkout_path)),
             language=entry.get("lang"),
             is_dependency=is_dependency,
-            provenance=provenance,
+            provenance=base_provenance,
         )
         file_facts.append(file_fact)
         file_fact_row = _fact_record_from_file_fact(file_fact)
@@ -264,7 +273,7 @@ def emit_git_snapshot_facts(
     entity_facts = _iter_entity_facts(
         repository_id=repository_id,
         checkout_path=checkout_path,
-        provenance=provenance,
+        provenance=base_provenance,
         file_data=snapshot.file_data,
     )
 
@@ -290,19 +299,29 @@ def emit_git_snapshot_facts(
         source_run_id=source_run_id,
         source_snapshot_id=source_snapshot_id,
     )
-    work_queue.enqueue_work_item(
-        FactWorkItemRow(
-            work_item_id=work_item_id,
-            work_type="project-git-facts",
-            repository_id=repository_id,
-            source_run_id=source_run_id,
-            status="pending",
-        )
+    initial_work_item = FactWorkItemRow(
+        work_item_id=work_item_id,
+        work_type="project-git-facts",
+        repository_id=repository_id,
+        source_run_id=source_run_id,
+        lease_owner=inline_projection_owner,
+        lease_expires_at=(
+            observed_at + timedelta(seconds=inline_projection_lease_ttl_seconds)
+            if inline_projection_owner is not None
+            else None
+        ),
+        status="leased" if inline_projection_owner is not None else "pending",
+        attempt_count=1 if inline_projection_owner is not None else 0,
+        last_attempt_started_at=observed_at if inline_projection_owner is not None else None,
+        created_at=observed_at,
+        updated_at=observed_at,
     )
+    work_queue.enqueue_work_item(initial_work_item)
     return GitSnapshotFactEmissionResult(
         repository_id=repository_id,
         source_run_id=source_run_id,
         source_snapshot_id=source_snapshot_id,
         work_item_id=work_item_id,
         fact_count=1 + len(file_facts) + len(entity_facts),
+        work_item=initial_work_item,
     )

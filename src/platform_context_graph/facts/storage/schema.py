@@ -28,4 +28,11 @@ CREATE TABLE IF NOT EXISTS fact_records (
 
 CREATE INDEX IF NOT EXISTS fact_records_repository_run_idx
     ON fact_records (repository_id, source_run_id);
+
+CREATE INDEX IF NOT EXISTS fact_records_repo_run_type_idx
+    ON fact_records (repository_id, source_run_id, fact_type);
+
+CREATE INDEX IF NOT EXISTS fact_records_entity_keyset_idx
+    ON fact_records (repository_id, source_run_id, relative_path, fact_id)
+    WHERE fact_type = 'ParsedEntityObserved';
 """

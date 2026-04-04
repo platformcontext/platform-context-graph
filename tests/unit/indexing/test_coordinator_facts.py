@@ -64,6 +64,7 @@ def test_commit_repository_snapshot_from_facts_resets_repo_and_projects_work_ite
     work_queue = MagicMock()
     work_queue.lease_work_item.return_value = work_item
     fact_store = MagicMock()
+    decision_store = MagicMock()
     projector = MagicMock(return_value={"facts": {"repositories": 1}})
 
     result = commit_repository_snapshot_from_facts(
@@ -78,6 +79,7 @@ def test_commit_repository_snapshot_from_facts_resets_repo_and_projects_work_ite
         ),
         fact_store=fact_store,
         work_queue=work_queue,
+        decision_store=decision_store,
         graph_store=graph_store,
         project_work_item_fn=projector,
         lease_owner="indexing-worker",
@@ -100,6 +102,7 @@ def test_commit_repository_snapshot_from_facts_resets_repo_and_projects_work_ite
         work_item,
         builder=builder,
         fact_store=fact_store,
+        decision_store=decision_store,
         info_logger_fn=ANY,
         debug_log_fn=ANY,
         warning_logger_fn=ANY,
@@ -160,6 +163,64 @@ def test_commit_repository_snapshot_from_facts_marks_projection_failures_retryab
         terminal=False,
     )
     work_queue.complete_work_item.assert_not_called()
+
+
+def test_commit_repository_snapshot_from_facts_uses_inline_owned_work_item(
+    tmp_path: Path,
+) -> None:
+    """Inline-owned emissions should skip the second lease call entirely."""
+
+    repo_path = tmp_path / "payments"
+    snapshot = RepositorySnapshot(
+        repo_path=str(repo_path),
+        file_count=1,
+        imports_map={},
+        file_data=[],
+    )
+    builder = SimpleNamespace(
+        _content_provider=SimpleNamespace(
+            enabled=True,
+            delete_repository_content=MagicMock(),
+        ),
+    )
+    graph_store = SimpleNamespace(delete_repository=MagicMock())
+    work_queue = MagicMock()
+    fact_store = MagicMock()
+    projector = MagicMock(return_value={"facts": {"repositories": 1}})
+
+    result = commit_repository_snapshot_from_facts(
+        builder=builder,
+        snapshot=snapshot,
+        fact_emission_result=GitSnapshotFactEmissionResult(
+            repository_id="repository:r_123",
+            source_run_id="run-123",
+            source_snapshot_id="snapshot-abc",
+            work_item_id="work-1",
+            fact_count=3,
+            work_item=FactWorkItemRow(
+                work_item_id="work-1",
+                work_type="project-git-facts",
+                repository_id="repository:r_123",
+                source_run_id="run-123",
+                status="leased",
+                lease_owner="indexing",
+                lease_expires_at=_utc_now(),
+                attempt_count=1,
+                created_at=_utc_now(),
+                updated_at=_utc_now(),
+            ),
+        ),
+        fact_store=fact_store,
+        work_queue=work_queue,
+        graph_store=graph_store,
+        project_work_item_fn=projector,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert result.graph_batch_count == 1
+    work_queue.lease_work_item.assert_not_called()
+    projector.assert_called_once()
+    work_queue.complete_work_item.assert_called_once_with(work_item_id="work-1")
 
 
 def test_commit_repository_snapshot_from_facts_does_not_clear_state_on_lease_miss(

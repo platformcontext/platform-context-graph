@@ -354,6 +354,98 @@ Each metric entry includes:
 - Description: Stage failures grouped by stage name and error class.
 - How to leverage: This is the key stage-level incident triage metric. It tells you which stage is breaking and whether failures are dominated by one error class.
 
+### `pcg_resolution_failure_classifications_total`
+
+- Type: Counter
+- Description: Count of classified Resolution Engine failures by failure class and retry disposition.
+- How to leverage: Use this to separate retryable timeouts from input bugs or dependency outages before deciding whether to replay, scale, or rollback.
+
+### `pcg_projection_decisions_total`
+
+- Type: Counter
+- Description: Count of persisted projection decisions by decision type and confidence band.
+- How to leverage: Watch for sudden changes in decision mix or confidence distribution after parser, resolution, or workload/platform changes.
+
+### `pcg_projection_confidence_score`
+
+- Type: Histogram
+- Description: Distribution of persisted projection confidence scores.
+- How to leverage: Use this to detect semantic drift. A falling confidence distribution is often the first sign that evidence quality degraded before graph correctness visibly breaks.
+
+### `pcg_projection_decision_evidence_total`
+
+- Type: Counter
+- Description: Count of bounded evidence rows attached to persisted projection decisions.
+- How to leverage: Correlate with decision volume to understand whether resolution is becoming more inference-heavy or more directly fact-backed.
+
+### `pcg_admin_fact_actions_total`
+
+- Type: Counter
+- Description: Count of admin fact actions such as replay, work-item listing, dead-letter, backfill requests, and replay-event inspection.
+- How to leverage: Use this as an operator-intervention signal during incidents and as an audit-friendly indicator that a recovery workflow is being exercised.
+
+## Projection Hot Paths
+
+### `pcg_resolution_file_projection_batch_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of each bounded file-projection batch inside the facts-first projection path.
+- How to leverage: Use this to see whether giant repos are slowing down in file/content projection before relationship or workload stages even start.
+
+### `pcg_resolution_file_projection_batch_files_total`
+
+- Type: Counter
+- Description: Total file facts processed through bounded file-projection batches.
+- How to leverage: Pair the rate of this metric with `pcg_resolution_file_projection_batch_duration_seconds` to estimate effective file projection throughput.
+
+### `pcg_resolution_directory_flush_rows_total`
+
+- Type: Counter
+- Description: Total directory-chain and containment rows flushed during file projection, labeled by `pcg.row_kind`.
+- How to leverage: Useful for spotting repos whose directory fan-out makes containment writes disproportionately expensive.
+
+### `pcg_content_file_batch_upsert_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of chunked Postgres file-content upsert batches.
+- How to leverage: Use this to separate slow file projection from slow content-store writes, especially when Postgres IO or WAL pressure rises.
+
+### `pcg_content_file_batch_upsert_rows_total`
+
+- Type: Counter
+- Description: Total file-content rows written through chunked Postgres upsert batches.
+- How to leverage: Compare the rate of this metric with the corresponding duration histogram to see whether chunking improved content-store throughput.
+
+### `pcg_call_prefilter_known_name_scan_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of known-callable-name scans used by CALLS prefiltering, labeled by scan variant.
+- How to leverage: If relationship projection slows down before actual edge creation, this tells you whether the name-scan phase is the culprit.
+
+### `pcg_call_prep_calls_inspected_total`
+
+- Type: Counter
+- Description: Total raw call records inspected during call-row preparation, labeled by language.
+- How to leverage: Use it to quantify how much relationship work each language family is actually driving during large-repo runs.
+
+### `pcg_call_prep_calls_capped_total`
+
+- Type: Counter
+- Description: Total raw call records skipped because `PCG_MAX_CALLS_PER_FILE` capped preparation work.
+- How to leverage: Rising values mean the cap is actively protecting stability. Use it alongside correctness checks before deciding to raise the cap.
+
+### `pcg_inheritance_batch_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of batched inheritance and interface flushes.
+- How to leverage: Useful for identifying when inheritance fan-out, especially in C# or class-heavy repos, starts dominating relationship time.
+
+### `pcg_inheritance_batch_rows_total`
+
+- Type: Counter
+- Description: Total inheritance and interface rows flushed, labeled by batch mode.
+- How to leverage: Pair with the inheritance duration histogram to see whether slower batches are simply larger or genuinely less efficient.
+
 ## Graph And Storage
 
 ### `pcg_graph_write_batch_duration_seconds`

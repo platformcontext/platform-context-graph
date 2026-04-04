@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/component: ingester
 spec:
   replicas: {{ .Values.ingester.replicas }}
+  revisionHistoryLimit: {{ .Values.ingester.revisionHistoryLimit }}
   serviceName: {{ include "pcg.ingesterHeadlessServiceName" . }}
   selector:
     matchLabels:
@@ -81,6 +82,7 @@ spec:
               value: {{ .Values.neo4j.uri | quote }}
             {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}
             {{- include "pcg.renderOtelEnv" (dict "Values" .Values "component" "ingester") | nindent 12 }}
+            {{- include "pcg.renderPrometheusEnv" . | nindent 12 }}
             - name: NEO4J_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -114,6 +116,12 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.repoSync.auth.token.secretName }}
                   key: {{ .Values.repoSync.auth.token.tokenKey }}
+            {{- end }}
+          ports:
+            {{- if .Values.observability.prometheus.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.observability.prometheus.port }}
+              protocol: TCP
             {{- end }}
           volumeMounts:
             - name: data

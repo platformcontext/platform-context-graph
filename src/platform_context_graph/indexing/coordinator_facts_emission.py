@@ -49,6 +49,8 @@ def emit_repository_snapshot_facts(
     fact_store: object | None = None,
     work_queue: object | None = None,
     observed_at_fn: Callable[[], Any] = utc_now,
+    inline_projection_owner: str | None = "indexing",
+    inline_projection_lease_ttl_seconds: int = 300,
 ) -> GitSnapshotFactEmissionResult:
     """Persist facts for one parsed repository snapshot."""
 
@@ -85,6 +87,8 @@ def emit_repository_snapshot_facts(
             fact_store=store,
             work_queue=queue,
             observed_at=observed_at,
+            inline_projection_owner=inline_projection_owner,
+            inline_projection_lease_ttl_seconds=inline_projection_lease_ttl_seconds,
         )
     observability.record_fact_emission(
         component="ingester",
@@ -116,6 +120,8 @@ def create_snapshot_fact_emitter(
     fact_store: object | None = None,
     work_queue: object | None = None,
     observed_at_fn: Callable[[], Any] = utc_now,
+    inline_projection_owner: str | None = "indexing",
+    inline_projection_lease_ttl_seconds: int = 300,
 ) -> Callable[..., GitSnapshotFactEmissionResult]:
     """Build the snapshot callback that persists facts for one run."""
 
@@ -139,6 +145,8 @@ def create_snapshot_fact_emitter(
             fact_store=fact_store,
             work_queue=work_queue,
             observed_at_fn=observed_at_fn,
+            inline_projection_owner=inline_projection_owner,
+            inline_projection_lease_ttl_seconds=inline_projection_lease_ttl_seconds,
         )
         emission_results[str(repo_path.resolve())] = result
         return result

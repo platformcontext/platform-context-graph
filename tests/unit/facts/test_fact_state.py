@@ -46,21 +46,37 @@ def test_get_fact_runtime_uses_shared_postgres_instances(monkeypatch) -> None:
         def close(self) -> None:
             return None
 
+    class _FakeDecisionStore:
+        def __init__(self, dsn: str) -> None:
+            created.append(("decision_store", dsn))
+
+        def close(self) -> None:
+            return None
+
     monkeypatch.setenv("PCG_POSTGRES_DSN", "postgresql://facts")
     monkeypatch.setattr(fact_state, "PostgresFactStore", _FakeStore)
     monkeypatch.setattr(fact_state, "PostgresFactWorkQueue", _FakeQueue)
+    monkeypatch.setattr(
+        fact_state,
+        "PostgresProjectionDecisionStore",
+        _FakeDecisionStore,
+    )
     fact_state.reset_facts_runtime_for_tests()
 
     first_store = fact_state.get_fact_store()
     second_store = fact_state.get_fact_store()
     first_queue = fact_state.get_fact_work_queue()
     second_queue = fact_state.get_fact_work_queue()
+    first_decision_store = fact_state.get_projection_decision_store()
+    second_decision_store = fact_state.get_projection_decision_store()
 
     assert first_store is second_store
     assert first_queue is second_queue
+    assert first_decision_store is second_decision_store
     assert created == [
         ("store", "postgresql://facts"),
         ("queue", "postgresql://facts"),
+        ("decision_store", "postgresql://facts"),
     ]
 
     fact_state.reset_facts_runtime_for_tests()
@@ -71,4 +87,5 @@ def test_facts_package_exports_state_helpers() -> None:
 
     assert callable(facts.get_fact_store)
     assert callable(facts.get_fact_work_queue)
+    assert callable(facts.get_projection_decision_store)
     assert callable(facts.git_facts_first_enabled)

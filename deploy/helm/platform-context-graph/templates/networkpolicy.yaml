@@ -17,6 +17,10 @@ spec:
     - ports:
         - protocol: TCP
           port: {{ .Values.service.port }}
+        {{- if .Values.observability.prometheus.enabled }}
+        - protocol: TCP
+          port: {{ .Values.observability.prometheus.port }}
+        {{- end }}
   egress:
     - {}
 ---
@@ -35,7 +39,14 @@ spec:
   policyTypes:
     - Ingress
     - Egress
-  ingress: []
+  ingress:
+    {{- if .Values.observability.prometheus.enabled }}
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.observability.prometheus.port }}
+    {{- else }}
+    []
+    {{- end }}
   egress:
     - {}
 {{- end }}
@@ -55,7 +66,14 @@ spec:
   policyTypes:
     - Ingress
     - Egress
-  ingress: []
+  ingress:
+    {{- if .Values.observability.prometheus.enabled }}
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.observability.prometheus.port }}
+    {{- else }}
+    []
+    {{- end }}
   egress:
     - {}
 {{- end }}

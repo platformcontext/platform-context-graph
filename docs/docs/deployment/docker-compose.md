@@ -21,6 +21,13 @@ Run it with:
 docker compose up --build
 ```
 
+This stack cannot run a real Kubernetes `ServiceMonitor`, but it can run the
+same thing a `ServiceMonitor` would scrape:
+
+- a Prometheus-format `/metrics` endpoint on `platform-context-graph`
+- a Prometheus-format `/metrics` endpoint on `repo-sync`
+- a Prometheus-format `/metrics` endpoint on `resolution-engine`
+
 For the admin re-finalize flow specifically, use the compose-backed verification wrapper:
 
 ```bash
@@ -47,6 +54,44 @@ inspect spans. The collector also exposes Prometheus-format metrics on
 `http://localhost:9464/metrics` by default, so local OTLP metric export has a real sink instead of
 failing with `UNIMPLEMENTED`.
 
+For direct runtime scraping, Compose also enables per-runtime Prometheus endpoints:
+
+- API: `http://localhost:19464/metrics`
+- Ingester: `http://localhost:19465/metrics`
+- Resolution Engine: `http://localhost:19466/metrics`
+
+Those defaults are configurable through:
+
+- `PCG_API_METRICS_PORT`
+- `PCG_INGESTER_METRICS_PORT`
+- `PCG_RESOLUTION_ENGINE_METRICS_PORT`
+
+## Local Metrics Checks
+
+To verify the endpoints manually:
+
+```bash
+curl http://localhost:19464/metrics | head
+curl http://localhost:19465/metrics | head
+curl http://localhost:19466/metrics | head
+```
+
+To watch one runtime live:
+
+```bash
+watch -n 2 'curl -fsS http://localhost:19466/metrics | rg "^pcg_" | head -40'
+```
+
+To see live counters change while you exercise the stack, open two terminals:
+
+```bash
+watch -n 2 'curl -fsS http://localhost:19464/metrics | rg "^(pcg_http|pcg_mcp)" | head -40'
+```
+
+```bash
+watch -n 2 'curl -fsS http://localhost:19466/metrics | rg "^(pcg_fact|pcg_resolution)" | head -60'
+```
+
 The indexing services also honor worker-tuning controls from the environment:
 
 - `PCG_REPO_FILE_PARSE_MULTIPROCESS`
@@ -59,21 +104,22 @@ Compose passes those values through to `bootstrap-index`, `repo-sync`,
 `resolution-engine`, and `platform-context-graph`, so local and containerized
 runs stay aligned.
 
-For a real local end-to-end run against a host directory, override the host-side source root with
-an absolute path:
+For a real local end-to-end run against a host directory, override the host-side
+source root with an absolute path:
 
 ```bash
-PCG_FILESYSTEM_HOST_ROOT="$HOME/repos/mobius" \
+PCG_FILESYSTEM_HOST_ROOT="$HOME/repos/example-org" \
 docker compose up --build
 ```
 
 Use an absolute host path for `PCG_FILESYSTEM_HOST_ROOT`; do not rely on a literal `~` in Compose
 environment values.
 
-When Docker runs through Colima, prefer a host path under your home directory such as
-`$HOME/temp-repos-mount` or `$HOME/repos/mobius`. Colima does not reliably expose arbitrary `/tmp`
-content into the Linux VM, so a source tree copied to `/tmp/temp-repos` on macOS can appear empty
-inside the Compose containers even though the bind mount renders successfully.
+When Docker runs through Colima, prefer a host path under your home directory
+such as `$HOME/temp-repos-mount` or `$HOME/repos/example-org`. Colima does not
+reliably expose arbitrary `/tmp` content into the Linux VM, so a source tree
+copied to `/tmp/temp-repos` on macOS can appear empty inside the Compose
+containers even though the bind mount renders successfully.
 
 If you already have Neo4j or another copy of PlatformContextGraph bound to the default local ports,
 override the published host ports:
@@ -86,6 +132,9 @@ PCG_HTTP_PORT=18080 \
 JAEGER_UI_PORT=26686 \
 OTEL_COLLECTOR_OTLP_GRPC_PORT=24317 \
 OTEL_COLLECTOR_PROMETHEUS_PORT=29464 \
+PCG_API_METRICS_PORT=21464 \
+PCG_INGESTER_METRICS_PORT=21465 \
+PCG_RESOLUTION_ENGINE_METRICS_PORT=21466 \
 docker compose up --build
 ```
 
@@ -95,6 +144,7 @@ This stack is intended for:
 - validating fixture-driven indexing flows
 - live trace inspection through the bundled Jaeger UI
 - live OTEL metric inspection through the collector Prometheus endpoint
+- live direct runtime scrape inspection with `curl` or `watch`
 - exercising indexing worker controls in the same environment shape used by CI
 
 It also exercises the content-store contract:

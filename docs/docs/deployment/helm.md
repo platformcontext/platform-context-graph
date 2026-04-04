@@ -42,6 +42,7 @@ helm template platform-context-graph ./deploy/helm/platform-context-graph
 | `ingester.*` | Ingester replica count, PVC size, and resource settings |
 | `repoSync.source.rules` | Structured include rules for Git discovery |
 | `observability.otel.*` | OTLP settings for traces and metrics |
+| `observability.prometheus.*` | Prometheus scrape endpoint and `ServiceMonitor` settings |
 | `env.PCG_LOG_FORMAT` | Shared log format. Keep this at `json` in deployed environments. |
 
 Typical OTEL collector override:
@@ -73,6 +74,26 @@ It also sets a distinct `OTEL_SERVICE_NAME` per runtime so traces stay easy to s
 - `platform-context-graph-api`
 - `platform-context-graph-resolution-engine`
 - `platform-context-graph-ingester`
+
+If you want Prometheus to scrape the runtimes directly instead of only consuming OTLP-exported metrics through a collector, enable the Prometheus block too:
+
+```yaml
+observability:
+  prometheus:
+    enabled: true
+    port: 9464
+    path: /metrics
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+      scrapeTimeout: 10s
+```
+
+That renders:
+
+- a dedicated metrics port on the API, ingester, and resolution-engine containers
+- a dedicated metrics `Service` for each runtime
+- optional `ServiceMonitor` objects so Prometheus Operator can discover them automatically
 
 Typical override for a small deployment:
 

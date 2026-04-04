@@ -305,6 +305,7 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
         from platform_context_graph.facts.state import (
             get_fact_store,
             get_fact_work_queue,
+            get_projection_decision_store,
         )
         from platform_context_graph.resolution.orchestration import (
             project_work_item,
@@ -318,6 +319,7 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
                 "Resolution engine requires PCG_POSTGRES_DSN or PCG_FACT_STORE_DSN"
             )
         fact_store = get_fact_store()
+        decision_store = get_projection_decision_store()
         db_manager = get_database_manager()
         try:
             loop = asyncio.get_running_loop()
@@ -325,7 +327,12 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
         builder = GraphBuilder(db_manager, JobManager(), loop)
-        projector = partial(project_work_item, builder=builder, fact_store=fact_store)
+        projector = partial(
+            project_work_item,
+            builder=builder,
+            fact_store=fact_store,
+            decision_store=decision_store,
+        )
         start_resolution_engine(queue=queue, projector=projector)
 
     @app.command("m", rich_help_panel="Shortcuts")

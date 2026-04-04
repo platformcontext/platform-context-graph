@@ -359,7 +359,7 @@ def filesystem_sync_all_impl(
     discovered = list_repo_identifiers_fn(config, token=None)
     config.repos_dir.mkdir(parents=True, exist_ok=True)
     for path in config.repos_dir.iterdir():
-        if path.name.startswith(".pcg-"):
+        if path.name.startswith(".pcg-") or path.name == ".pcgignore":
             continue
         if path.is_dir():
             shutil.rmtree(path)

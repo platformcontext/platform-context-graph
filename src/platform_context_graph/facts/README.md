@@ -33,6 +33,9 @@ Operational visibility for this package now includes:
 - facts queue depth and oldest-item age gauges when the Postgres queue backend is used
 - retry-age and dead-letter telemetry for fact work items processed through the Resolution Engine
 - dead-letter replay through the admin replay workflow backed by the same Postgres queue state
+- manual dead-letter actions with durable operator notes
+- replay-event inspection for incident audit trails
+- durable backfill-request records for repo/run recovery workflows
 - structured log breadcrumbs for snapshot emission and inline projection lease/failure/completion
 
 This package should continue to grow as new collectors emit source observations

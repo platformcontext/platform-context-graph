@@ -42,6 +42,28 @@ services:
       POSTGRES_DB: platform_context_graph
       POSTGRES_USER: pcg
       POSTGRES_PASSWORD: ${PCG_POSTGRES_PASSWORD:-change-me}
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=${PCG_PG_SHARED_BUFFERS:-4GB}"
+      - "-c"
+      - "work_mem=${PCG_PG_WORK_MEM:-16MB}"
+      - "-c"
+      - "maintenance_work_mem=${PCG_PG_MAINTENANCE_WORK_MEM:-512MB}"
+      - "-c"
+      - "max_wal_size=${PCG_PG_MAX_WAL_SIZE:-8GB}"
+      - "-c"
+      - "wal_buffers=${PCG_PG_WAL_BUFFERS:-64MB}"
+      - "-c"
+      - "effective_cache_size=${PCG_PG_EFFECTIVE_CACHE_SIZE:-32GB}"
+      - "-c"
+      - "synchronous_commit=${PCG_PG_SYNCHRONOUS_COMMIT:-off}"
+      - "-c"
+      - "default_toast_compression=${PCG_PG_TOAST_COMPRESSION:-lz4}"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "random_page_cost=1.1"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -54,9 +76,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["pcg", "internal", "bootstrap-index"]
     healthcheck:
       disable: true
+    ports:
+      - "${PCG_BOOTSTRAP_METRICS_PORT:-19467}:9464"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687
@@ -74,7 +97,7 @@ services:
       PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
       PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
       PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-1}"
+      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
       INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
       PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
@@ -88,6 +111,14 @@ services:
       - pcg_data:/data
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
+      - ${PCG_PCGIGNORE_PATH:-/dev/null}:/tmp/pcgignore-source:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /data/repos && \
+        if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi && \
+        exec pcg internal bootstrap-index
     depends_on:
       neo4j:
         condition: service_healthy
@@ -105,6 +136,7 @@ services:
     command: ["pcg", "serve", "start", "--host", "0.0.0.0", "--port", "8080"]
     ports:
       - "${PCG_HTTP_PORT:-8080}:8080"
+      - "${PCG_API_METRICS_PORT:-19464}:9464"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687
@@ -124,7 +156,7 @@ services:
       PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
       PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
       PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-1}"
+      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
       INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
       PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
@@ -134,6 +166,8 @@ services:
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: none
+      PCG_PROMETHEUS_METRICS_ENABLED: "true"
+      PCG_PROMETHEUS_METRICS_PORT: "9464"
     volumes:
       - pcg_data:/data
       - ./:/app-src
@@ -157,9 +191,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["pcg", "internal", "repo-sync-loop"]
     healthcheck:
       disable: true
+    ports:
+      - "${PCG_INGESTER_METRICS_PORT:-19465}:9464"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687
@@ -179,7 +214,7 @@ services:
       PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
       PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
       PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-1}"
+      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
       INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
       PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
@@ -189,10 +224,19 @@ services:
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: none
+      PCG_PROMETHEUS_METRICS_ENABLED: "true"
+      PCG_PROMETHEUS_METRICS_PORT: "9464"
     volumes:
       - pcg_data:/data
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
+      - ${PCG_PCGIGNORE_PATH:-/dev/null}:/tmp/pcgignore-source:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi && \
+        exec pcg internal repo-sync-loop
     depends_on:
       neo4j:
         condition: service_healthy
@@ -212,6 +256,8 @@ services:
     command: ["pcg", "internal", "resolution-engine"]
     healthcheck:
       disable: true
+    ports:
+      - "${PCG_RESOLUTION_ENGINE_METRICS_PORT:-19466}:9464"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687
@@ -231,7 +277,7 @@ services:
       PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
       PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
       PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-1}"
+      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
       INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
       PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
@@ -241,6 +287,8 @@ services:
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: none
+      PCG_PROMETHEUS_METRICS_ENABLED: "true"
+      PCG_PROMETHEUS_METRICS_PORT: "9464"
     volumes:
       - pcg_data:/data
       - ./:/app-src

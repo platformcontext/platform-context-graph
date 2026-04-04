@@ -14,7 +14,7 @@ from platform_context_graph.observability.facts_first_logs import (
     log_resolution_work_item,
 )
 
-from .engine import project_work_item
+from .failure_classification import classify_resolution_failure
 
 ProjectorFn = Callable[[FactWorkItemRow], None]
 
@@ -23,6 +23,14 @@ def _utc_now() -> datetime:
     """Return the current UTC timestamp."""
 
     return datetime.now(tz=timezone.utc)
+
+
+def _default_projector(work_item: FactWorkItemRow) -> None:
+    """Load the default projector lazily to keep runtime imports light."""
+
+    from .engine import project_work_item
+
+    project_work_item(work_item)
 
 
 def _refresh_queue_metrics(queue: object) -> None:
@@ -73,7 +81,7 @@ def _run_queue_metrics_sampler(
 def run_resolution_iteration(
     *,
     queue: object,
-    projector: ProjectorFn = project_work_item,
+    projector: ProjectorFn = _default_projector,
     lease_owner: str,
     lease_ttl_seconds: int,
     max_attempts: int = 3,
@@ -152,11 +160,20 @@ def run_resolution_iteration(
         try:
             projector(work_item)
         except Exception as exc:
+            failure = classify_resolution_failure(
+                exc,
+                failure_stage="project_work_item",
+            )
             terminal = work_item.attempt_count >= max_attempts
             queue.fail_work_item(
                 work_item_id=work_item.work_item_id,
                 error_message=str(exc),
                 terminal=terminal,
+                failure_stage=failure.failure_stage,
+                error_class=failure.error_class,
+                failure_class=failure.failure_class,
+                failure_code=failure.failure_code,
+                retry_disposition=failure.retry_disposition,
             )
             log_resolution_work_item(
                 "dead_lettered" if terminal else "failed",
@@ -165,15 +182,21 @@ def run_resolution_iteration(
                 work_item_id=work_item.work_item_id,
                 work_type=work_item.work_type,
                 attempt_count=work_item.attempt_count,
-                error_class=type(exc).__name__,
+                error_class=failure.error_class,
             )
             if terminal:
                 observability.record_fact_queue_dead_letter(
                     component="resolution-engine",
                     work_type=work_item.work_type,
-                    error_class=type(exc).__name__,
+                    error_class=failure.error_class,
                     age_seconds=work_item_age_seconds,
                 )
+            observability.record_resolution_failure_classification(
+                component="resolution-engine",
+                work_type=work_item.work_type,
+                failure_class=str(failure.failure_class),
+                retry_disposition=str(failure.retry_disposition),
+            )
             _refresh_queue_metrics(queue)
             observability.record_resolution_work_item(
                 component="resolution-engine",
@@ -216,7 +239,7 @@ def start_resolution_engine(
     idle_sleep_seconds: float = 1.0,
     queue_metrics_refresh_seconds: float = 15.0,
     run_once: bool = False,
-    projector: ProjectorFn = project_work_item,
+    projector: ProjectorFn = _default_projector,
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> None:
     """Run the long-lived Resolution Engine loop.

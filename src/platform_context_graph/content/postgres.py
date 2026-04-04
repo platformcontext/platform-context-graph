@@ -24,6 +24,13 @@ from .postgres_queries import (
 from .postgres_support import (
     FILE_SCHEMA,
 )
+from .postgres_file_ops import _FILE_UPSERT_SQL
+from .postgres_file_ops import _file_batch_size
+from .postgres_file_ops import _file_entry_params
+from .postgres_file_ops import upsert_file_batch_rows
+from .postgres_entity_ops import _ENTITY_UPSERT_SQL
+from .postgres_entity_ops import _entity_batch_size
+from .postgres_entity_ops import _entity_entry_params
 
 try:
     import psycopg
@@ -40,111 +47,6 @@ except ImportError:  # pragma: no cover - pool is optional; falls back to single
 __all__ = [
     "PostgresContentProvider",
 ]
-
-DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE = 500
-
-_FILE_UPSERT_SQL = """
-INSERT INTO content_files (
-    repo_id, relative_path, commit_sha, content, content_hash,
-    line_count, language, artifact_type, template_dialect,
-    iac_relevant, indexed_at
-) VALUES (
-    %(repo_id)s, %(relative_path)s, %(commit_sha)s, %(content)s,
-    %(content_hash)s, %(line_count)s, %(language)s, %(artifact_type)s,
-    %(template_dialect)s, %(iac_relevant)s, %(indexed_at)s
-)
-ON CONFLICT (repo_id, relative_path) DO UPDATE
-SET commit_sha = EXCLUDED.commit_sha,
-    content = EXCLUDED.content,
-    content_hash = EXCLUDED.content_hash,
-    line_count = EXCLUDED.line_count,
-    language = EXCLUDED.language,
-    artifact_type = EXCLUDED.artifact_type,
-    template_dialect = EXCLUDED.template_dialect,
-    iac_relevant = EXCLUDED.iac_relevant,
-    indexed_at = EXCLUDED.indexed_at
-"""
-
-_ENTITY_UPSERT_SQL = """
-INSERT INTO content_entities (
-    entity_id, repo_id, relative_path, entity_type, entity_name,
-    start_line, end_line, start_byte, end_byte, language,
-    artifact_type, template_dialect, iac_relevant,
-    source_cache, indexed_at
-) VALUES (
-    %(entity_id)s, %(repo_id)s, %(relative_path)s, %(entity_type)s,
-    %(entity_name)s, %(start_line)s, %(end_line)s, %(start_byte)s,
-    %(end_byte)s, %(language)s, %(artifact_type)s,
-    %(template_dialect)s, %(iac_relevant)s, %(source_cache)s,
-    %(indexed_at)s
-)
-ON CONFLICT (entity_id) DO UPDATE
-SET repo_id = EXCLUDED.repo_id,
-    relative_path = EXCLUDED.relative_path,
-    entity_type = EXCLUDED.entity_type,
-    entity_name = EXCLUDED.entity_name,
-    start_line = EXCLUDED.start_line,
-    end_line = EXCLUDED.end_line,
-    start_byte = EXCLUDED.start_byte,
-    end_byte = EXCLUDED.end_byte,
-    language = EXCLUDED.language,
-    artifact_type = EXCLUDED.artifact_type,
-    template_dialect = EXCLUDED.template_dialect,
-    iac_relevant = EXCLUDED.iac_relevant,
-    source_cache = EXCLUDED.source_cache,
-    indexed_at = EXCLUDED.indexed_at
-"""
-
-
-def _file_entry_params(entry: ContentFileEntry) -> dict[str, Any]:
-    """Return the parameter dict for one file upsert row."""
-    return {
-        "repo_id": entry.repo_id,
-        "relative_path": entry.relative_path,
-        "commit_sha": entry.commit_sha,
-        "content": entry.content,
-        "content_hash": entry.content_hash,
-        "line_count": entry.line_count,
-        "language": entry.language,
-        "artifact_type": entry.artifact_type,
-        "template_dialect": entry.template_dialect,
-        "iac_relevant": entry.iac_relevant,
-        "indexed_at": entry.indexed_at,
-    }
-
-
-def _entity_entry_params(entry: ContentEntityEntry) -> dict[str, Any]:
-    """Return the parameter dict for one entity upsert row."""
-    return {
-        "entity_id": entry.entity_id,
-        "repo_id": entry.repo_id,
-        "relative_path": entry.relative_path,
-        "entity_type": entry.entity_type,
-        "entity_name": entry.entity_name,
-        "start_line": entry.start_line,
-        "end_line": entry.end_line,
-        "start_byte": entry.start_byte,
-        "end_byte": entry.end_byte,
-        "language": entry.language,
-        "artifact_type": entry.artifact_type,
-        "template_dialect": entry.template_dialect,
-        "iac_relevant": entry.iac_relevant,
-        "source_cache": entry.source_cache,
-        "indexed_at": entry.indexed_at,
-    }
-
-
-def _entity_batch_size(entry_count: int) -> int:
-    """Return the clamped entity upsert batch size from configuration."""
-
-    raw = os.getenv("PCG_CONTENT_ENTITY_UPSERT_BATCH_SIZE")
-    try:
-        return max(
-            1,
-            min(int(raw or DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE), entry_count),
-        )
-    except ValueError:
-        return min(DEFAULT_CONTENT_ENTITY_UPSERT_BATCH_SIZE, entry_count)
 
 
 class PostgresContentProvider:
@@ -190,12 +92,26 @@ class PostgresContentProvider:
         return psycopg is not None and bool(self._dsn)
 
     def _ensure_schema(self, conn: Any) -> None:
-        """Run schema DDL once across the lifetime of the provider."""
+        """Run schema DDL once across the lifetime of the provider.
+
+        Uses a lightweight existence check before attempting DDL so that
+        concurrent writers are never blocked by ``CREATE INDEX IF NOT EXISTS``
+        acquiring a ``ShareLock`` on the table.
+        """
 
         if self._initialized:
             return
         with self._schema_lock:
             if not self._initialized:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT 1 FROM information_schema.tables "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'content_files'"
+                    )
+                    if cur.fetchone() is not None:
+                        self._initialized = True
+                        return
                 with conn.cursor() as cur:
                     cur.execute(FILE_SCHEMA)
                 self._initialized = True
@@ -243,21 +159,37 @@ class PostgresContentProvider:
                 cursor.execute(_FILE_UPSERT_SQL, _file_entry_params(entry))
 
     def upsert_file_batch(self, entries: Sequence[ContentFileEntry]) -> None:
-        """Insert or update file-content rows via a single ``executemany`` call."""
+        """Insert or update file-content rows in bounded executemany chunks."""
 
         if not entries:
             return
 
-        with get_observability().start_span(
+        batch_size = _file_batch_size(len(entries))
+        observability = get_observability()
+        started = time.perf_counter()
+        outcome = "success"
+        with observability.start_span(
             "pcg.content.postgres.upsert_file_batch",
             attributes={
                 "pcg.content.file_count": len(entries),
                 "pcg.content.repo_id": entries[0].repo_id,
+                "pcg.content.chunk_count": (len(entries) + batch_size - 1)
+                // batch_size,
             },
         ):
-            rows = [_file_entry_params(e) for e in entries]
-            with self._cursor() as cursor:
-                cursor.executemany(_FILE_UPSERT_SQL, rows)
+            try:
+                with self._cursor() as cursor:
+                    upsert_file_batch_rows(cursor, entries, batch_size=batch_size)
+            except Exception:
+                outcome = "error"
+                raise
+            finally:
+                observability.record_content_file_batch_upsert(
+                    component=observability.component,
+                    outcome=outcome,
+                    row_count=len(entries),
+                    duration_seconds=time.perf_counter() - started,
+                )
 
     def upsert_entities(
         self,
@@ -368,8 +300,12 @@ class PostgresContentProvider:
             cursor.execute(
                 """
                 SELECT
-                    (SELECT count(*) FROM content_files WHERE repo_id = %(repo_id)s) AS file_count,
-                    (SELECT count(*) FROM content_entities WHERE repo_id = %(repo_id)s) AS entity_count
+                    (SELECT count(*)
+                     FROM content_files
+                     WHERE repo_id = %(repo_id)s) AS file_count,
+                    (SELECT count(*)
+                     FROM content_entities
+                     WHERE repo_id = %(repo_id)s) AS entity_count
                 """,
                 {"repo_id": repo_id},
             )

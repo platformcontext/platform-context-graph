@@ -107,21 +107,29 @@ Why it matters:
 - `resolution.work_item.completed`
 - `resolution.work_item.failed`
 - `resolution.work_item.dead_lettered`
+- `resolution.decision.recorded`
 - `resolution.stage.failed`
 
 Why it matters:
 
 - explains whether the failure happened during fact load, relationship projection, workload/platform materialization, or final work-item completion
 - gives on-call responders the exact `work_item_id`, `source_run_id`, and error class needed to replay or investigate
+- records explainable confidence decisions so operators can inspect why a relationship, workload, or platform edge was produced
 
 ### Admin and operator workflow
 
 - `admin.facts.replayed`
+- `admin.facts.work_items.listed`
+- `admin.facts.decisions.listed`
+- `admin.facts.dead_lettered`
+- `admin.facts.backfill.requested`
+- `admin.facts.replay_events.listed`
 
 Why it matters:
 
 - records deliberate replay actions against dead-lettered fact work items so incident timelines stay auditable
 - provides a direct breadcrumb when retry pressure drops because an operator manually replayed failed work
+- makes queue inspection, dead-letter overrides, and backfill requests visible in the same incident timeline as runtime failures
 
 ## What Belongs In `extra_keys`
 

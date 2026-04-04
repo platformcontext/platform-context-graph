@@ -1,77 +1,63 @@
 # Service Runtimes
 
-PlatformContextGraph runs as a three-service platform with one shared image and
-one shared facts-first data flow.
+Use this page when you need the operator view of PlatformContextGraph:
 
-Use this page when you need to answer:
+- which services exist
+- what each service owns
+- which command starts each service
+- which service should be tuned or scaled
+- where metrics are exposed
+- where `ServiceMonitor` applies
 
-- What services exist in the deployed platform?
-- What does each service own?
-- What command starts each service?
-- How are the services built and deployed?
-- Which service should be tuned or scaled first?
+## Runtime Contract
 
-## Runtime Map
+| Runtime | Owns | Default command | Storage access | Metrics exposure | Kubernetes shape |
+| --- | --- | --- | --- | --- | --- |
+| API | HTTP API, MCP, query reads, admin endpoints | `pcg serve start --host 0.0.0.0 --port 8080` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
+| Ingester | repo sync, parsing, fact emission, workspace ownership | `pcg internal repo-sync-loop` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
+| Resolution Engine | queue draining, projection, retries, replay, recovery | `pcg internal resolution-engine` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
+| Bootstrap Index | one-shot initial indexing | `pcg internal bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
 
-| Runtime | Primary responsibility | CLI command | Code entrypoint | K8s shape |
-| --- | --- | --- | --- | --- |
-| **API** | Serve HTTP API and MCP, read canonical graph and content | `pcg serve start --host 0.0.0.0 --port 8080` | `platform_context_graph.cli.main:start_service` | `Deployment` |
-| **Ingester** | Sync repositories, run Git collector, emit facts, drive indexing | `pcg internal repo-sync-loop` | `platform_context_graph.runtime.ingester:run_repo_sync_loop` | `StatefulSet` |
-| **Resolution Engine** | Claim fact work items, resolve/project graph state | `pcg internal resolution-engine` | `platform_context_graph.resolution.orchestration.runtime:start_resolution_engine` | `Deployment` |
-| **Bootstrap Index** | One-shot initial sync/index pass before steady-state loops | `pcg internal bootstrap-index` | `platform_context_graph.cli.main:run_bootstrap_index` | Compose one-shot / init-style runtime |
-
-## Shared Build Contract
-
-All runtimes are built from the same repository and the same Docker image:
-
-```bash
-docker build -t platform-context-graph:dev -f Dockerfile .
-```
-
-What changes between runtimes is the command and environment, not the image:
-
-- Compose uses the same image with different `command:` values.
-- Helm uses the same image repository and tag across API, ingester, and
-  resolution-engine.
-- Argo CD deploys the Helm chart that renders those workload-specific commands.
-
-## End-To-End Flow
+## Deployed Flow
 
 ```mermaid
 flowchart LR
-  A["Ingester"] --> B["Git discovery + parse"]
+  A["Ingester"] --> B["Parse repository snapshot"]
   B --> C["Postgres fact store"]
-  C --> D["Postgres fact work queue"]
+  C --> D["Fact work queue"]
   D --> E["Resolution Engine"]
-  E --> F["Canonical graph + content projection"]
-  F --> G["Neo4j"]
-  F --> H["Postgres content store"]
-  I["API / MCP"] --> G
-  I --> H
+  E --> F["Neo4j"]
+  E --> G["Postgres content store"]
+  H["API / MCP"] --> F
+  H --> G
 ```
 
-## API Runtime
+## Local Full-Stack Flow
 
-### What it owns
+```mermaid
+flowchart LR
+  A["bootstrap-index"] --> B["Initial one-shot indexing"]
+  C["repo-sync"] --> D["Ongoing sync and fact emission"]
+  D --> E["Fact work queue"]
+  E --> F["resolution-engine"]
+  G["platform-context-graph API"] --> H["Graph + content reads"]
+```
 
-- HTTP API
-- MCP-over-HTTP / combined service surface
-- graph-backed query flows
-- content-store reads
-- admin endpoints
+## API
 
-### What it does not own
+### Responsibilities
+
+- serve HTTP and MCP requests
+- read canonical graph state from Neo4j
+- read file and entity content from Postgres
+- serve operator/admin endpoints
+
+### Does not own
 
 - repository sync
 - parsing
 - fact emission
 - queued projection work
-
-### Entry command
-
-```bash
-pcg serve start --host 0.0.0.0 --port 8080
-```
 
 ### Deployments
 
@@ -83,45 +69,29 @@ pcg serve start --host 0.0.0.0 --port 8080
 
 - request latency and error rate
 - MCP/tool latency
-- graph query latency
 - content read latency
+- graph query latency
 
-Scale the API when request traffic rises. Do not scale it to fix backlog in the
-facts queue.
+Scale the API when request traffic rises. Do not scale it to fix queue backlog.
 
-## Ingester Runtime
+## Ingester
 
-### What it owns
+### Responsibilities
 
-- repository discovery and sync
-- workspace maintenance
-- Git collector execution
-- file parsing and snapshot creation
-- fact emission into Postgres
-- one indexing run’s inline projection path during cutover
+- discover and sync repositories
+- own the shared workspace in Kubernetes
+- parse repository snapshots
+- emit facts into Postgres
+- drive deterministic inline projection during indexing cutover
 
 ### Why it stays stateful
 
-The ingester owns the shared repository workspace and should be the only runtime
-with the workspace PVC mounted in Kubernetes.
-
-### Entry commands
-
-Steady-state loop:
-
-```bash
-pcg internal repo-sync-loop
-```
-
-One-shot bootstrap:
-
-```bash
-pcg internal bootstrap-index
-```
+The ingester is the only long-running runtime that should mount the workspace
+PVC in Kubernetes.
 
 ### Deployments
 
-- Compose services: `bootstrap-index`, `repo-sync`
+- Compose service: `repo-sync`
 - Helm template: `deploy/helm/platform-context-graph/templates/statefulset.yaml`
 - IaC chart template: `chart/templates/statefulset.yaml`
 
@@ -130,29 +100,21 @@ pcg internal bootstrap-index
 - repository queue wait
 - parse duration
 - fact emission duration
-- fact store SQL latency
-- inline projection timing
+- fact-store SQL latency
 - workspace disk pressure
 
-Scale or tune the ingester when parse throughput is the bottleneck. Do not scale
-it when the queue is growing because the Resolution Engine is saturated.
+Scale or tune the ingester when parsing is the bottleneck or workspace pressure
+is rising.
 
-## Resolution Engine Runtime
+## Resolution Engine
 
-### What it owns
+### Responsibilities
 
-- fact work-item claiming
-- queue backlog draining
-- fact loading from Postgres
-- graph projection
-- workload and platform materialization
-- retries, dead-letter handling, and replay path
-
-### Entry command
-
-```bash
-pcg internal resolution-engine
-```
+- claim fact work items
+- load facts from Postgres
+- project repository, file, entity, relationship, workload, and platform state
+- persist projection decisions and bounded evidence
+- manage retry, replay, dead-letter, and recovery workflows
 
 ### Deployments
 
@@ -163,62 +125,61 @@ pcg internal resolution-engine
 
 ### Signals to watch
 
-- queue depth
-- queue oldest age
+- queue depth and queue age
 - claim latency
-- active workers
 - per-stage projection duration
-- per-stage output count
+- per-stage output counts
 - retry and dead-letter pressure
-- Postgres queue/fact-store pool saturation
+- Postgres queue and fact-store saturation
 
-Scale the Resolution Engine when queue age rises and workers stay busy. If claim
-latency or Postgres pool contention rises at the same time, fix database pressure
-before scaling workers blindly.
+Scale the resolution-engine when queue age rises and workers remain busy. If
+queue age rises together with Postgres contention, fix database pressure before
+adding more workers.
 
-## Bootstrap Index Runtime
+## Bootstrap Index
 
-Bootstrap indexing is not a long-running service, but operators still need to
-understand it because it is part of the deployment story.
+Bootstrap indexing is a one-shot operator activity, not a long-running
+Kubernetes workload in the public Helm chart.
 
-It exists to:
+Use it when you want to:
 
-- materialize the initial repository set
-- seed graph/content state
-- reduce “cold empty graph” time after deploy
+- materialize an initial repository set quickly
+- reduce cold-start time on a brand-new environment
+- validate end-to-end indexing against a known repository set
 
-It should finish and exit. If it stays running or restarts repeatedly, treat that
-as a deployment incident.
+Today it is packaged directly in Docker Compose and can also be run manually as
+a direct process. Treat repeated restarts or long-running bootstrap activity as
+an incident.
 
-## Build And Run Each Runtime Locally
+## Metrics And ServiceMonitor
 
-Build once:
+### Local Compose
 
-```bash
-docker build -t platform-context-graph:dev -f Dockerfile .
-```
+Compose exposes direct runtime scrape endpoints you can curl:
 
-Run with Compose:
+- API: `http://localhost:19464/metrics`
+- Ingester: `http://localhost:19465/metrics`
+- Resolution Engine: `http://localhost:19466/metrics`
 
-```bash
-docker compose up --build
-```
+### Kubernetes
 
-Run as direct local processes against an existing stack:
+Helm can expose the same runtime metrics over dedicated ports and can also
+render `ServiceMonitor` resources for:
 
-```bash
-PYTHONPATH=src uv run pcg serve start --host 0.0.0.0 --port 8080
-PYTHONPATH=src uv run pcg internal repo-sync-loop
-PYTHONPATH=src uv run pcg internal resolution-engine
-PYTHONPATH=src uv run pcg internal bootstrap-index
-```
+- API
+- Ingester
+- Resolution Engine
+
+`ServiceMonitor` does not apply to the bootstrap helper because it is not a
+steady-state Kubernetes service in the public chart.
 
 ## Operator Defaults
 
-- Treat **API**, **Ingester**, and **Resolution Engine** as separate scaling units.
-- Treat **Bootstrap Index** as a one-shot deployment activity, not a steady-state
-  workload.
-- Use the [Telemetry Overview](../reference/telemetry/index.md) to decide which
-  signal to inspect first.
-- Use the [Local Testing Runbook](../reference/local-testing.md) before calling a
-  change ready.
+- treat API, ingester, and resolution-engine as separate scaling units
+- keep the workspace mounted only on the ingester in Kubernetes
+- use direct `/metrics` endpoints for local verification
+- use `ServiceMonitor` only for the long-running Kubernetes runtimes
+- use the [Telemetry Overview](../reference/telemetry/index.md) to decide which
+  signal to inspect first
+- use the [Local Testing Runbook](../reference/local-testing.md) before calling
+  a change ready
