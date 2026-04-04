@@ -81,6 +81,7 @@ def test_internal_resolution_engine_sets_resolution_engine_runtime_role(
 ) -> None:
     """Set the standalone runtime role before bootstrapping the engine."""
 
+    captured_runtime_roles: list[str | None] = []
     mock_get_fact_work_queue.return_value = object()
     mock_get_fact_store.return_value = object()
     mock_get_projection_decision_store.return_value = object()
@@ -88,9 +89,18 @@ def test_internal_resolution_engine_sets_resolution_engine_runtime_role(
     mock_job_manager.return_value = object()
     mock_graph_builder.return_value = object()
     monkeypatch.delenv("PCG_RUNTIME_ROLE", raising=False)
+    mock_initialize_observability.side_effect = (
+        lambda **_kwargs: captured_runtime_roles.append(
+            os.environ.get("PCG_RUNTIME_ROLE")
+        )
+    )
 
-    result = runner.invoke(app, ["internal", "resolution-engine"])
+    try:
+        result = runner.invoke(app, ["internal", "resolution-engine"])
+    finally:
+        monkeypatch.delenv("PCG_RUNTIME_ROLE", raising=False)
 
     assert result.exit_code == 0
     assert mock_initialize_observability.called
-    assert os.environ["PCG_RUNTIME_ROLE"] == "resolution-engine"
+    assert captured_runtime_roles == ["resolution-engine"]
+    assert os.environ.get("PCG_RUNTIME_ROLE") is None
