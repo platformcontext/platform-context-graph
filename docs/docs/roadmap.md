@@ -11,7 +11,7 @@ Phase 3 builds on the facts-first runtime established in Phase 2:
 - Git indexing writes durable facts into Postgres
 - a Postgres work queue coordinates projection work
 - the `resolution-engine` owns canonical graph projection
-- deployed runtime shape is `api` + `ingester` + `resolution-engine`
+- deployed runtime shape is `api` + `ingestor` + `resolution-engine`
 - telemetry, logs, traces, and operator runbooks align to the real service shape
 
 The immediate goal in Phase 3 is to make the system easier to operate and trust:

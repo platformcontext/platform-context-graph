@@ -32,8 +32,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-api" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "pcg.ingesterHeadlessServiceName" -}}
-{{- printf "%s-ingester" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- define "pcg.ingestorFullname" -}}
+{{- printf "%s-ingestor" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "pcg.resolutionEngineFullname" -}}
@@ -44,8 +44,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-api-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "pcg.ingesterMetricsServiceName" -}}
-{{- printf "%s-ingester-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- define "pcg.ingestorMetricsServiceName" -}}
+{{- printf "%s-ingestor-metrics" (include "pcg.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "pcg.resolutionEngineMetricsServiceName" -}}
@@ -57,9 +57,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: api
 {{- end -}}
 
-{{- define "pcg.ingesterSelectorLabels" -}}
+{{- define "pcg.ingestorSelectorLabels" -}}
 {{- include "pcg.selectorLabels" . }}
-app.kubernetes.io/component: ingester
+app.kubernetes.io/component: ingestor
 {{- end -}}
 
 {{- define "pcg.resolutionEngineSelectorLabels" -}}
@@ -76,8 +76,8 @@ app.kubernetes.io/component: resolution-engine
 {{- end -}}
 
 {{- define "pcg.dataClaimName" -}}
-{{- if .Values.ingester.persistence.existingClaim -}}
-{{- .Values.ingester.persistence.existingClaim -}}
+{{- if .Values.ingestor.persistence.existingClaim -}}
+{{- .Values.ingestor.persistence.existingClaim -}}
 {{- else -}}
 {{- printf "%s-data" (include "pcg.fullname" .) -}}
 {{- end -}}

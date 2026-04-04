@@ -155,7 +155,7 @@ Each metric entry includes:
 ### `pcg_ingester_scan_requests_total`
 
 - Type: Counter
-- Description: Count of ingester scan-loop requests for repository discovery/sync.
+- Description: Count of ingestor scan-loop requests for repository discovery/sync.
 - How to leverage: Use this to separate sync cadence from actual indexing throughput.
 
 ### `pcg_index_repo_graph_write_duration_seconds`

@@ -2,21 +2,21 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "pcg.fullname" . }}
+  name: {{ include "pcg.ingestorFullname" . }}
   labels:
     {{- include "pcg.labels" . | nindent 4 }}
-    app.kubernetes.io/component: ingester
+    app.kubernetes.io/component: ingestor
 spec:
-  replicas: {{ .Values.ingester.replicas }}
-  revisionHistoryLimit: {{ .Values.ingester.revisionHistoryLimit }}
-  serviceName: {{ include "pcg.ingesterHeadlessServiceName" . }}
+  replicas: {{ .Values.ingestor.replicas }}
+  revisionHistoryLimit: {{ .Values.ingestor.revisionHistoryLimit }}
+  serviceName: {{ include "pcg.ingestorFullname" . }}
   selector:
     matchLabels:
-      {{- include "pcg.ingesterSelectorLabels" . | nindent 6 }}
+      {{- include "pcg.ingestorSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "pcg.ingesterSelectorLabels" . | nindent 8 }}
+        {{- include "pcg.ingestorSelectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -41,7 +41,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: repo-sync
+        - name: ingestor
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["pcg", "internal", "repo-sync-loop"]
@@ -81,7 +81,7 @@ spec:
             - name: NEO4J_URI
               value: {{ .Values.neo4j.uri | quote }}
             {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}
-            {{- include "pcg.renderOtelEnv" (dict "Values" .Values "component" "ingester") | nindent 12 }}
+            {{- include "pcg.renderOtelEnv" (dict "Values" .Values "component" "ingestor") | nindent 12 }}
             {{- include "pcg.renderPrometheusEnv" . | nindent 12 }}
             - name: NEO4J_USERNAME
               valueFrom:
@@ -138,18 +138,18 @@ spec:
               readOnly: true
             {{- end }}
           resources:
-            {{- toYaml .Values.ingester.resources | nindent 12 }}
+            {{- toYaml .Values.ingestor.resources | nindent 12 }}
       volumes:
         - name: tmp
           emptyDir: {}
         - name: pcgignore
           configMap:
             name: {{ include "pcg.fullname" . }}-pcgignore
-        {{- if and .Values.ingester.persistence.enabled .Values.ingester.persistence.existingClaim }}
+        {{- if and .Values.ingestor.persistence.enabled .Values.ingestor.persistence.existingClaim }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "pcg.dataClaimName" . }}
-        {{- else if not .Values.ingester.persistence.enabled }}
+        {{- else if not .Values.ingestor.persistence.enabled }}
         - name: data
           emptyDir: {}
         {{- end }}
@@ -164,7 +164,7 @@ spec:
               - key: {{ .Values.repoSync.auth.ssh.knownHostsKey }}
                 path: known_hosts
         {{- end }}
-  {{- if and .Values.ingester.persistence.enabled (not .Values.ingester.persistence.existingClaim) }}
+  {{- if and .Values.ingestor.persistence.enabled (not .Values.ingestor.persistence.existingClaim) }}
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -172,12 +172,12 @@ spec:
           {{- include "pcg.selectorLabels" . | nindent 10 }}
       spec:
         accessModes:
-          {{- toYaml .Values.ingester.persistence.accessModes | nindent 10 }}
-        {{- if .Values.ingester.persistence.storageClass }}
-        storageClassName: {{ .Values.ingester.persistence.storageClass | quote }}
+          {{- toYaml .Values.ingestor.persistence.accessModes | nindent 10 }}
+        {{- if .Values.ingestor.persistence.storageClass }}
+        storageClassName: {{ .Values.ingestor.persistence.storageClass | quote }}
         {{- end }}
         resources:
           requests:
-            storage: {{ .Values.ingester.persistence.size }}
+            storage: {{ .Values.ingestor.persistence.size }}
   {{- end }}
 {{- end }}

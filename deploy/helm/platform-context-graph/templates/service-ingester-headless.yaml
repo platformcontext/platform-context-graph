@@ -2,14 +2,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "pcg.ingesterHeadlessServiceName" . }}
+  name: {{ include "pcg.ingestorFullname" . }}
   labels:
     {{- include "pcg.labels" . | nindent 4 }}
-    app.kubernetes.io/component: ingester
+    app.kubernetes.io/component: ingestor
 spec:
   clusterIP: None
   selector:
-    {{- include "pcg.ingesterSelectorLabels" . | nindent 4 }}
+    {{- include "pcg.ingestorSelectorLabels" . | nindent 4 }}
   ports:
     - name: noop
       port: 80

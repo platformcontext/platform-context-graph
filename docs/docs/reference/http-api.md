@@ -17,7 +17,7 @@ The public HTTP API exposes two surfaces:
 - a read/query surface for context, code, infra, and content retrieval
 - a small ingester control surface for runtime status and manual scan requests
 
-Use it to resolve entities, fetch context, search code, trace infra, compare environments, and inspect the deployed ingester state.
+Use it to resolve entities, fetch context, search code, trace infra, compare environments, and inspect the deployed ingestor state.
 
 Use the CLI for local indexing workflows. Use the Helm runtime for deployment-managed repository ingestion and steady-state sync.
 
@@ -247,11 +247,11 @@ If a downstream workflow needs local file operations on a user machine, use `rep
 For local or deployed indexing workflows, use the CLI and deployment runtime:
 
 - local: `pcg index <path>`
-- Kubernetes: repository ingestion is deployment-managed through the ingester runtime
+- Kubernetes: repository ingestion is deployment-managed through the ingestor runtime
 
 ## Ingester API
 
-Use these routes to inspect or control deployed ingesters without reaching into Kubernetes directly.
+Use these routes to inspect or control the deployed ingestor runtime without reaching into Kubernetes directly.
 
 - `GET /api/v0/ingesters`
 - `GET /api/v0/ingesters/{ingester}`
@@ -269,7 +269,7 @@ Status responses are designed for remote operation and include:
 - repository progress counts
 - failure counts and last error details
 
-Manual scan requests are persisted for the ingester runtime to claim asynchronously; the API does not perform the scan inline.
+Manual scan requests are persisted for the ingestor runtime to claim asynchronously; the API does not perform the scan inline.
 
 ## Bundle Import API
 

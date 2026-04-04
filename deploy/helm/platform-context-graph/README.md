@@ -1,12 +1,12 @@
 # PlatformContextGraph Helm Chart
 
-This chart deploys PlatformContextGraph as separate API, ingester, and resolution-engine workloads with:
+This chart deploys PlatformContextGraph as separate API, ingestor, and resolution-engine workloads with:
 
 - External Neo4j and Postgres connectivity
 - A stateless API `Deployment` for HTTP API + MCP
-- A stateful repository ingester `StatefulSet` for repo sync and indexing
+- A stateful repository ingestor `StatefulSet` for repo sync and indexing
 - A stateless Resolution Engine `Deployment` for facts queue projection
-- Optional Prometheus scrape endpoints and `ServiceMonitor` resources for API, ingester, and resolution-engine
+- Optional Prometheus scrape endpoints and `ServiceMonitor` resources for API, ingestor, and resolution-engine
 - Flexible service exposure (ClusterIP, LoadBalancer, Ingress, Gateway API)
 - Hardened defaults such as public API docs disabled unless explicitly re-enabled
 
@@ -33,7 +33,7 @@ api:
       cpu: 250m
       memory: 512Mi
 
-ingester:
+ingestor:
   resources:
     requests:
       cpu: 500m

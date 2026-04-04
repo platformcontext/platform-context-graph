@@ -56,7 +56,7 @@ observability:
       - /api/v0/redoc
     metricExportIntervalSeconds: 30
 
-ingester:
+ingestor:
   replicas: 1
   persistence:
     enabled: true

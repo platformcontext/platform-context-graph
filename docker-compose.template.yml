@@ -161,7 +161,7 @@ services:
       bootstrap-index:
         condition: service_completed_successfully
 
-  repo-sync:
+  ingestor:
     build:
       context: .
       dockerfile: Dockerfile

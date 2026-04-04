@@ -52,7 +52,7 @@ Here are the available settings you can configure.
 
 ### Logging And Tracing
 
-These settings control the shared structured logging and OTEL tracing behavior used by the API, MCP runtime, ingester, Falkor worker, and local CLI.
+These settings control the shared structured logging and OTEL tracing behavior used by the API, MCP runtime, ingestor, Falkor worker, and local CLI.
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
@@ -131,20 +131,20 @@ Notes:
 - content search routes and MCP search tools require PostgreSQL and return an error when the content store is disabled
 - portable source retrieval uses `repo_id + relative_path` for files and `entity_id` for content-bearing entities
 
-### Ingester Runtime
+### Ingestor Runtime
 
-These settings matter for deployable-service installs that use the repository ingester runtime.
+These settings matter for deployable-service installs that use the repository ingestor runtime.
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
-| **`PCG_RUNTIME_ROLE`** | `combined` | Runtime identity. Deployed split runtimes use `api` or `ingester`. |
+| **`PCG_RUNTIME_ROLE`** | `combined` | Internal runtime identity. Deployed split runtimes use `api` or `ingester`; the public service name for that second runtime is the ingestor. |
 | **`PCG_REPO_SOURCE_MODE`** | `githubOrg` | Repository discovery mode. Supported modes include `githubOrg`, `explicit`, and `filesystem`. |
 | **`PCG_GITHUB_ORG`** | unset | GitHub organization used for repository discovery in `githubOrg` mode. |
 | **`PCG_REPOSITORY_RULES_JSON`** | unset | Structured exact/regex include rules applied to normalized `org/repo` identifiers during repo rediscovery. Exact rules also define repository IDs for `explicit` and `filesystem` source modes. |
 | **`PCG_REPOS_DIR`** | `/data/repos` | Shared workspace directory for cloned repositories. |
 | **`PCG_REPO_LIMIT`** | `4000` | Maximum repositories to discover from GitHub in one cycle. |
-| **`PCG_REPO_SYNC_INITIAL_DELAY_SECONDS`** | `30` | Delay before the ingester begins its first sync cycle. |
-| **`PCG_REPO_SYNC_INTERVAL_SECONDS`** | `900` | Delay between ingester sync cycles after a completed pass. |
+| **`PCG_REPO_SYNC_INITIAL_DELAY_SECONDS`** | `30` | Delay before the ingestor begins its first sync cycle. |
+| **`PCG_REPO_SYNC_INTERVAL_SECONDS`** | `900` | Delay between ingestor sync cycles after a completed pass. |
 
 `PCG_REPOSITORY_RULES_JSON` accepts either a list of rules or an object with `exact` and `regex` keys. Example:
 
@@ -155,7 +155,7 @@ These settings matter for deployable-service installs that use the repository in
 ]
 ```
 
-The repository ingester re-discovers repositories on each cycle, applies these rules, updates matching checkouts, and reports stale local checkouts that no longer match the discovery result.
+The repository ingestor re-discovers repositories on each cycle, applies these rules, updates matching checkouts, and reports stale local checkouts that no longer match the discovery result.
 
 ---
 
@@ -183,7 +183,7 @@ pcg config reset
 ## `pcg workspace` Commands
 
 Use the workspace command group when you want local CLI behavior to follow the same
-repository-source contract as the cloud ingester.
+repository-source contract as the cloud ingestor.
 
 ```bash
 pcg workspace plan

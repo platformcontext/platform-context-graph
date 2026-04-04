@@ -48,7 +48,7 @@ Core strengths:
 
 - one graph for code and infrastructure
 - the same query model over CLI, MCP, and HTTP API
-- deployable shared service with API, ingester, and resolution-engine runtimes
+- deployable shared service with API, ingestor, and resolution-engine runtimes
 - facts-first indexing for durability, recovery, and operator visibility
 - direct code-to-cloud tracing, blast radius, and environment comparison
 
@@ -103,7 +103,7 @@ This starts:
 - Jaeger
 - a one-shot bootstrap indexer
 - the API runtime
-- the ingester runtime
+- the ingestor runtime
 - the resolution-engine runtime
 
 ### Deploy to Kubernetes
@@ -137,7 +137,7 @@ flowchart LR
 
 In practice, that means:
 
-1. the ingester discovers repositories and parses a snapshot
+1. the ingestor discovers repositories and parses a snapshot
 2. repository, file, and entity facts are written to Postgres
 3. the resolution-engine claims the queued work
 4. canonical graph, relationships, workloads, and platform edges are projected
@@ -150,7 +150,7 @@ The deployed platform has three long-running runtimes plus one one-shot helper:
 | Runtime | What it owns | Default command |
 | --- | --- | --- |
 | API | HTTP API, MCP surface, graph and content reads, admin endpoints | `pcg serve start --host 0.0.0.0 --port 8080` |
-| Ingester | repo sync, workspace ownership, parsing, fact emission | `pcg internal repo-sync-loop` |
+| Ingestor | repo sync, workspace ownership, parsing, fact emission | `pcg internal repo-sync-loop` |
 | Resolution Engine | queue draining, fact loading, projection, retries, recovery | `pcg internal resolution-engine` |
 | Bootstrap Index | initial one-shot indexing before steady-state sync | `pcg internal bootstrap-index` |
 
@@ -164,7 +164,7 @@ PCG ships with first-class observability for operators and performance work:
 - OTLP metrics and traces
 - JSON logs
 - direct Prometheus-format `/metrics` endpoints per runtime
-- optional Kubernetes `ServiceMonitor` resources for API, ingester, and
+- optional Kubernetes `ServiceMonitor` resources for API, ingestor, and
   resolution-engine
 
 In local Compose runs, you can inspect the runtime scrape endpoints directly:

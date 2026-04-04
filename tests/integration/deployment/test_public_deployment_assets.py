@@ -152,7 +152,7 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     worker_container = next(
         container
         for container in worker_pod_spec["containers"]
-        if container["name"] == "repo-sync"
+        if container["name"] == "ingestor"
     )
 
     assert api_pod_spec.get("initContainers", []) == []
@@ -172,7 +172,7 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     ]
     assert worker_container["command"] == ["pcg", "internal", "repo-sync-loop"]
     assert (
-        worker_statefulset["spec"]["serviceName"] == "platform-context-graph-ingester"
+        worker_statefulset["spec"]["serviceName"] == "platform-context-graph-ingestor"
     )
     assert api_deployment["spec"]["revisionHistoryLimit"] == 3
     assert resolution_engine_deployment["spec"]["revisionHistoryLimit"] == 3
@@ -180,20 +180,20 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert worker_statefulset["spec"]["selector"]["matchLabels"] == {
         "app.kubernetes.io/name": "platform-context-graph",
         "app.kubernetes.io/instance": "platform-context-graph",
-        "app.kubernetes.io/component": "ingester",
+        "app.kubernetes.io/component": "ingestor",
     }
 
     ingester_service = next(
         doc
         for doc in docs
         if doc["kind"] == "Service"
-        and doc["metadata"]["name"] == "platform-context-graph-ingester"
+        and doc["metadata"]["name"] == "platform-context-graph-ingestor"
     )
     assert ingester_service["spec"]["clusterIP"] == "None"
     assert ingester_service["spec"]["selector"] == {
         "app.kubernetes.io/name": "platform-context-graph",
         "app.kubernetes.io/instance": "platform-context-graph",
-        "app.kubernetes.io/component": "ingester",
+        "app.kubernetes.io/component": "ingestor",
     }
 
     api_env_names = {env["name"] for env in api_container.get("env", [])}
@@ -273,7 +273,7 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
     worker_container = next(
         container
         for container in worker_pod_spec["containers"]
-        if container["name"] == "repo-sync"
+        if container["name"] == "ingestor"
     )
 
     expected_pod_security = {
@@ -377,7 +377,7 @@ def test_default_chart_renders_network_policies_for_all_runtime_workloads() -> N
         policy
         for policy in policies
         if policy["spec"]["podSelector"]["matchLabels"]["app.kubernetes.io/component"]
-        == "ingester"
+        == "ingestor"
     )
 
     assert api_policy["spec"]["policyTypes"] == ["Ingress", "Egress"]
@@ -469,7 +469,7 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
     assert "postgres" in services
     assert "platform-context-graph" in services
     assert "neo4j" in services
-    assert "repo-sync" in services
+    assert "ingestor" in services
     assert "resolution-engine" in services
 
     postgres = services["postgres"]
@@ -481,7 +481,7 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
     for service_name in [
         "bootstrap-index",
         "platform-context-graph",
-        "repo-sync",
+        "ingestor",
         "resolution-engine",
     ]:
         envs = _compose_service_envs(services[service_name])
@@ -537,7 +537,7 @@ def test_compose_stack_propagates_worker_tuning_envs(
     for service_name in [
         "bootstrap-index",
         "platform-context-graph",
-        "repo-sync",
+        "ingestor",
         "resolution-engine",
     ]:
         envs = _compose_service_envs(services[service_name])
@@ -549,7 +549,7 @@ def test_compose_stack_propagates_worker_tuning_envs(
     for service_name in [
         "bootstrap-index",
         "platform-context-graph",
-        "repo-sync",
+        "ingestor",
         "resolution-engine",
     ]:
         envs = _compose_service_envs(services[service_name])
@@ -562,7 +562,7 @@ def test_compose_stack_propagates_worker_tuning_envs(
 
     for service_name in [
         "platform-context-graph",
-        "repo-sync",
+        "ingestor",
         "resolution-engine",
     ]:
         envs = _compose_service_envs(services[service_name])
@@ -593,7 +593,7 @@ def test_compose_stack_exposes_runtime_metrics_ports(compose_file: Path) -> None
         "${PCG_API_METRICS_PORT:-19464}:9464"
         in services["platform-context-graph"]["ports"]
     )
-    assert "${PCG_INGESTER_METRICS_PORT:-19465}:9464" in services["repo-sync"]["ports"]
+    assert "${PCG_INGESTER_METRICS_PORT:-19465}:9464" in services["ingestor"]["ports"]
     assert (
         "${PCG_RESOLUTION_ENGINE_METRICS_PORT:-19466}:9464"
         in services["resolution-engine"]["ports"]
@@ -618,7 +618,7 @@ def test_compose_stack_parameterizes_local_passwords(compose_file: Path) -> None
     for service_name in [
         "bootstrap-index",
         "platform-context-graph",
-        "repo-sync",
+        "ingestor",
         "resolution-engine",
     ]:
         envs = _compose_service_envs(services[service_name])
@@ -647,15 +647,15 @@ def test_compose_stack_includes_service_and_external_test_database() -> None:
 
     assert "platform-context-graph" in services
     assert "neo4j" in services
-    assert "repo-sync" in services
+    assert "ingestor" in services
     assert "resolution-engine" in services
     assert "postgres" in services
-    repo_sync_service = services["repo-sync"]
-    assert "entrypoint" in repo_sync_service
+    ingestor_service = services["ingestor"]
+    assert "entrypoint" in ingestor_service
     assert "exec pcg internal repo-sync-loop" in "\n".join(
-        repo_sync_service["entrypoint"]
+        ingestor_service["entrypoint"]
     )
-    assert services["repo-sync"]["healthcheck"] == {"disable": True}
+    assert services["ingestor"]["healthcheck"] == {"disable": True}
     assert services["resolution-engine"]["command"] == [
         "pcg",
         "internal",
@@ -695,7 +695,7 @@ def test_chart_renders_otel_env_for_all_runtime_containers_when_enabled() -> Non
     expected_service_names = [
         "platform-context-graph-api",
         "platform-context-graph-resolution-engine",
-        "platform-context-graph-ingester",
+        "platform-context-graph-ingestor",
     ]
 
     for pod_spec, expected_service_name in zip(
@@ -741,7 +741,7 @@ def test_chart_renders_prometheus_metrics_services_and_service_monitors() -> Non
     }
     expected_metrics_names = [
         "platform-context-graph-api-metrics",
-        "platform-context-graph-ingester-metrics",
+        "platform-context-graph-ingestor-metrics",
         "platform-context-graph-resolution-engine-metrics",
     ]
 
@@ -899,7 +899,7 @@ def test_compose_stack_supports_filesystem_host_root_override() -> None:
 
     rendered = yaml.safe_load(result.stdout)
 
-    for service_name in ["bootstrap-index", "repo-sync", "resolution-engine"]:
+    for service_name in ["bootstrap-index", "ingestor", "resolution-engine"]:
         volumes = rendered["services"][service_name]["volumes"]
         assert any(
             volume.get("type") == "bind"

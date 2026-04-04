@@ -303,10 +303,10 @@ def test_content_provider_metrics_record_hits_and_workspace_fallbacks(
     )
 
 
-def test_ingester_scan_request_metrics_and_service_name_use_ingester_identity(
+def test_ingester_scan_request_metrics_and_service_name_use_ingestor_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Repository ingester control events should emit on the ingester service."""
+    """Repository ingester control events should emit on the ingestor service."""
 
     pytest.importorskip("opentelemetry.sdk")
     from opentelemetry.sdk.metrics.export import InMemoryMetricReader
@@ -341,7 +341,7 @@ def test_ingester_scan_request_metrics_and_service_name_use_ingester_identity(
 
     assert (
         otel.service_name_for_component("repository")
-        == "platform-context-graph-ingester"
+        == "platform-context-graph-ingestor"
     )
     assert _matching_values(
         points,

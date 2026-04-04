@@ -9,7 +9,7 @@ The Helm chart is the primary Kubernetes deployment artifact for PlatformContext
 The chart deploys three workloads:
 
 - **API Deployment** — stateless, serves HTTP and MCP. Does not mount the repository workspace.
-- **Ingester StatefulSet** — singleton, owns the shared workspace PVC, repository sync, and indexing lifecycle.
+- **Ingestor StatefulSet** — singleton, owns the shared workspace PVC, repository sync, and indexing lifecycle.
 - **Resolution Engine Deployment** — stateless, claims queued fact work and projects canonical graph state. Does not mount the repository workspace.
 
 Both connect to external Neo4j and external Postgres.
@@ -39,7 +39,7 @@ helm template platform-context-graph ./deploy/helm/platform-context-graph
 | `contentStore.dsn` | External PostgreSQL DSN for content search and cached source retrieval |
 | `api.*` | API replica count and resource settings |
 | `resolutionEngine.*` | Resolution Engine enablement, replica count, and resource settings |
-| `ingester.*` | Ingester replica count, PVC size, and resource settings |
+| `ingestor.*` | Ingestor replica count, PVC size, and resource settings |
 | `repoSync.source.rules` | Structured include rules for Git discovery |
 | `observability.otel.*` | OTLP settings for traces and metrics |
 | `observability.prometheus.*` | Prometheus scrape endpoint and `ServiceMonitor` settings |
@@ -67,13 +67,13 @@ The chart renders the same OTEL environment contract into all runtime workloads:
 
 - the API `Deployment`
 - the Resolution Engine `Deployment`
-- the ingester `StatefulSet`, including bootstrap and repo-sync containers where applicable
+- the ingestor `StatefulSet`, including the background repo-sync loop where applicable
 
 It also sets a distinct `OTEL_SERVICE_NAME` per runtime so traces stay easy to split in Jaeger:
 
 - `platform-context-graph-api`
 - `platform-context-graph-resolution-engine`
-- `platform-context-graph-ingester`
+- `platform-context-graph-ingestor`
 
 If you want Prometheus to scrape the runtimes directly instead of only consuming OTLP-exported metrics through a collector, enable the Prometheus block too:
 
@@ -91,7 +91,7 @@ observability:
 
 That renders:
 
-- a dedicated metrics port on the API, ingester, and resolution-engine containers
+- a dedicated metrics port on the API, ingestor, and resolution-engine containers
 - a dedicated metrics `Service` for each runtime
 - optional `ServiceMonitor` objects so Prometheus Operator can discover them automatically
 
@@ -111,7 +111,7 @@ resolutionEngine:
       cpu: 500m
       memory: 1Gi
 
-ingester:
+ingestor:
   resources:
     requests:
       cpu: 500m
@@ -136,7 +136,7 @@ Do not enable both ingress and gateway at the same time.
 
 ## Repository Rules
 
-The ingester discovers and filters repositories using structured rules. Rules match against normalized `org/repo` identifiers and support both exact and regex patterns.
+The ingestor discovers and filters repositories using structured rules. Rules match against normalized `org/repo` identifiers and support both exact and regex patterns.
 
 ```yaml
 repoSync:
@@ -148,7 +148,7 @@ repoSync:
 
 The chart renders these into `PCG_REPOSITORY_RULES_JSON`.
 
-On each sync cycle the ingester:
+On each sync cycle the ingestor:
 
 1. Re-evaluates the configured rules against available repositories
 2. Clones or updates matching repositories
@@ -170,7 +170,7 @@ That gives you:
 
 - newline-delimited JSON logs on stdout for log shipping
 - OTEL traces for Jaeger and other trace backends
-- shared request and trace correlation fields across API, MCP, ingester, and resolution-engine logs
+- shared request and trace correlation fields across API, MCP, ingestor, and resolution-engine logs
 
 PCG does not require the OTEL logs signal. The intended deployment shape is JSON stdout for logs and OTLP for traces.
 
