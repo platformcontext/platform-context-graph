@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -220,18 +221,22 @@ def emit_git_snapshot_facts(
     """Persist fact rows and enqueue one projection work item for a snapshot."""
 
     checkout_path = str(Path(snapshot.repo_path).resolve())
-    provenance = FactProvenance(
+    base_provenance = FactProvenance(
         source_system="git",
         source_run_id=source_run_id,
         source_snapshot_id=source_snapshot_id,
         observed_at=observed_at,
-        details={"imports_map": snapshot.imports_map},
+        details={},
+    )
+    repository_provenance = replace(
+        base_provenance,
+        details={"imports_map": snapshot.imports_map} if snapshot.imports_map else {},
     )
     repository_fact = RepositoryObservedFact(
         repository_id=repository_id,
         checkout_path=checkout_path,
         is_dependency=is_dependency,
-        provenance=provenance,
+        provenance=repository_provenance,
     )
     file_fact_rows: list[FactRecordRow] = []
     file_facts = []
@@ -242,7 +247,7 @@ def emit_git_snapshot_facts(
             relative_path=str(Path(entry["path"]).resolve().relative_to(checkout_path)),
             language=entry.get("lang"),
             is_dependency=is_dependency,
-            provenance=provenance,
+            provenance=base_provenance,
         )
         file_facts.append(file_fact)
         file_fact_row = _fact_record_from_file_fact(file_fact)
@@ -268,7 +273,7 @@ def emit_git_snapshot_facts(
     entity_facts = _iter_entity_facts(
         repository_id=repository_id,
         checkout_path=checkout_path,
-        provenance=provenance,
+        provenance=base_provenance,
         file_data=snapshot.file_data,
     )
 

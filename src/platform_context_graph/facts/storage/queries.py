@@ -27,7 +27,6 @@ Typical usage::
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from typing import Any, Callable, Generator
 
 from .models import FactRecordRow
@@ -124,13 +123,12 @@ def iter_fact_batches(
     source_run_id: str,
     fact_type: str,
     batch_size: int = 2000,
-) -> list[list[FactRecordRow]]:
+) -> Generator[list[FactRecordRow], None, None]:
     """Load fact records in batches using keyset pagination.
 
-    Returns a list of batches (each a ``list[FactRecordRow]``) rather than
-    holding a database cursor open across the full projection pipeline.
-    Each batch is bounded by ``batch_size`` rows, keeping peak Python memory
-    proportional to one batch rather than the entire result set.
+    Yields one batch at a time rather than materialising the full result set
+    in Python. Each batch is bounded by ``batch_size`` rows, keeping peak
+    memory proportional to one batch rather than the entire result set.
 
     Keyset pagination uses ``(relative_path, fact_id)`` as the seek cursor,
     which is O(log n) per page via the composite index — unlike LIMIT/OFFSET
@@ -146,10 +144,8 @@ def iter_fact_batches(
             ~450 bytes/row keeps each batch under ~1 MB of Python heap.
 
     Returns:
-        List of batches, each containing up to ``batch_size`` fact records.
-        Empty list if no matching records exist.
+        Batches of fact records, each containing up to ``batch_size`` rows.
     """
-    batches: list[list[FactRecordRow]] = []
     last_path: str | None = None
     last_id: str | None = None
 
@@ -214,15 +210,13 @@ def iter_fact_batches(
             break
 
         batch = _rows_to_records(rows)
-        batches.append(batch)
         last_row = batch[-1]
         last_path = last_row.relative_path
         last_id = last_row.fact_id
+        yield batch
 
         if len(rows) < batch_size:
             break
-
-    return batches
 
 
 def count_facts(

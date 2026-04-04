@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from platform_context_graph.facts.storage.models import FactRecordRow
+from platform_context_graph.resolution.orchestration.engine import (
+    _project_entity_batches,
+)
 from platform_context_graph.resolution.projection import project_git_fact_records
 from platform_context_graph.resolution.projection.entities import (
     project_parsed_entity_facts,
@@ -156,10 +159,14 @@ def test_project_git_fact_records_merges_files_and_entities() -> None:
         for query, params in session.calls
     )
     assert any(
-        "MERGE (n:Function" in query
-        and params["name"] == "handler"
-        and params["file_path"] == expected_file_path
-        and params["line_number"] == 10
+        "UNWIND $rows AS row" in query
+        and "MERGE (n:Function" in query
+        and any(
+            row["name"] == "handler"
+            and row["file_path"] == expected_file_path
+            and row["line_number"] == 10
+            for row in params.get("rows", [])
+        )
         for query, params in session.calls
     )
     assert projected == {
@@ -303,3 +310,91 @@ def test_project_file_facts_dual_writes_content_for_parsed_file_payload() -> Non
     assert captured["file_data"]["path"] == "/tmp/service/src/app.py"
     assert captured["repository"]["id"] == "repository:r_service"
     assert captured["repository"]["local_path"] == str(Path("/tmp/service").resolve())
+
+
+def test_project_entity_batches_uses_unwind_writes_for_standalone_entities() -> None:
+    """Standalone entity batches should flush via UNWIND instead of per-row writes."""
+
+    session = _FakeSession()
+    builder = type(
+        "FakeBuilder",
+        (),
+        {"driver": _FakeDriver(session)},
+    )()
+
+    entity_batches = [
+        [
+            FactRecordRow(
+                fact_id="fact:entity:1",
+                fact_type="ParsedEntityObserved",
+                repository_id="github.com/acme/service",
+                checkout_path="/tmp/service",
+                relative_path="src/app.py",
+                source_system="git",
+                source_run_id="run-123",
+                source_snapshot_id="snapshot-abc",
+                payload={
+                    "entity_kind": "Function",
+                    "entity_name": "handler_one",
+                    "start_line": 10,
+                    "end_line": 20,
+                    "language": "python",
+                },
+                observed_at=_utc_now(),
+                ingested_at=_utc_now(),
+                provenance={},
+            ),
+            FactRecordRow(
+                fact_id="fact:entity:2",
+                fact_type="ParsedEntityObserved",
+                repository_id="github.com/acme/service",
+                checkout_path="/tmp/service",
+                relative_path="src/app.py",
+                source_system="git",
+                source_run_id="run-123",
+                source_snapshot_id="snapshot-abc",
+                payload={
+                    "entity_kind": "Function",
+                    "entity_name": "handler_two",
+                    "start_line": 30,
+                    "end_line": 40,
+                    "language": "python",
+                },
+                observed_at=_utc_now(),
+                ingested_at=_utc_now(),
+                provenance={},
+            ),
+            FactRecordRow(
+                fact_id="fact:entity:3",
+                fact_type="ParsedEntityObserved",
+                repository_id="github.com/acme/service",
+                checkout_path="/tmp/service",
+                relative_path="src/app.py",
+                source_system="git",
+                source_run_id="run-123",
+                source_snapshot_id="snapshot-abc",
+                payload={
+                    "entity_kind": "Function",
+                    "entity_name": "handler_three",
+                    "start_line": 50,
+                    "end_line": 60,
+                    "language": "python",
+                },
+                observed_at=_utc_now(),
+                ingested_at=_utc_now(),
+                provenance={},
+            ),
+        ]
+    ]
+
+    metrics = _project_entity_batches(builder, entity_batches, [])
+
+    unwind_calls = [
+        (query, params)
+        for query, params in session.calls
+        if "UNWIND $rows AS row" in query and "MERGE (n:Function" in query
+    ]
+
+    assert metrics == {"entities": 3}
+    assert len(unwind_calls) == 1
+    assert len(unwind_calls[0][1]["rows"]) == 3

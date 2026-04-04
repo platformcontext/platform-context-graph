@@ -7,6 +7,7 @@ import os
 import threading
 from contextlib import contextmanager
 import time
+from collections.abc import Iterator
 from typing import Any
 
 from platform_context_graph.observability import current_component
@@ -267,13 +268,12 @@ class PostgresFactStore:
         source_run_id: str,
         fact_type: str,
         batch_size: int = 2000,
-    ) -> list[list[FactRecordRow]]:
+    ) -> Iterator[list[FactRecordRow]]:
         """Load fact records in batches using keyset pagination.
 
-        Returns a list of batches rather than holding a database cursor
-        open across the full projection pipeline.  Each batch is bounded
-        by ``batch_size`` rows, keeping peak Python memory proportional
-        to one batch (~1 MB) rather than the entire result set.
+        Yields one batch at a time rather than holding the full result
+        set in Python. Each batch is bounded by ``batch_size`` rows,
+        keeping peak memory proportional to one batch (~1 MB).
 
         Uses ``(relative_path, fact_id)`` as the seek cursor, which is
         O(log n) per page via the composite index — unlike LIMIT/OFFSET
@@ -288,8 +288,7 @@ class PostgresFactStore:
                 which at ~450 bytes/row keeps each batch under ~1 MB.
 
         Returns:
-            List of batches, each containing up to ``batch_size`` records.
-            Empty list if no matching records exist.
+            Iterator of batches, each containing up to ``batch_size`` records.
         """
         from .queries import iter_fact_batches as _iter_fact_batches
 

@@ -249,6 +249,56 @@ def test_emit_git_snapshot_facts_preleases_inline_projection_work_item() -> None
     assert emitted.work_item.status == "leased"
 
 
+def test_emit_git_snapshot_facts_keeps_import_map_only_on_repository_fact() -> None:
+    """Only the repository fact should carry the imports map in provenance."""
+
+    fact_store = MagicMock()
+    work_queue = MagicMock()
+    snapshot = RepositoryParseSnapshot(
+        repo_path="/tmp/service",
+        file_count=1,
+        imports_map={"handler": ["src/app.py"]},
+        file_data=[
+            {
+                "path": "/tmp/service/src/app.py",
+                "repo_path": "/tmp/service",
+                "lang": "python",
+                "functions": [
+                    {
+                        "name": "handler",
+                        "line_number": 10,
+                        "end_line": 20,
+                    }
+                ],
+            }
+        ],
+    )
+
+    emit_git_snapshot_facts(
+        snapshot=snapshot,
+        repository_id="github.com/acme/service",
+        source_run_id="run-123",
+        source_snapshot_id="snapshot-abc",
+        is_dependency=False,
+        fact_store=fact_store,
+        work_queue=work_queue,
+        observed_at=_utc_now(),
+    )
+
+    fact_rows = fact_store.upsert_facts.call_args.args[0]
+    repository_row = next(
+        row for row in fact_rows if row.fact_type == "RepositoryObserved"
+    )
+    file_row = next(row for row in fact_rows if row.fact_type == "FileObserved")
+    entity_row = next(
+        row for row in fact_rows if row.fact_type == "ParsedEntityObserved"
+    )
+
+    assert repository_row.provenance["imports_map"] == {"handler": ["src/app.py"]}
+    assert "imports_map" not in file_row.provenance
+    assert "imports_map" not in entity_row.provenance
+
+
 def test_process_repository_snapshots_emits_facts_before_queueing_commits(
     tmp_path: Path,
 ) -> None:

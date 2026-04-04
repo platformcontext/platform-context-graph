@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from datetime import timezone
 import time
+from collections.abc import Iterable
 from typing import Any
 
 from platform_context_graph.facts.storage.models import FactRecordRow
@@ -177,11 +178,19 @@ def project_work_item(
                         fact_type="FileObserved",
                     )
                     graph_facts: list[FactRecordRow] = repo_facts + file_facts
-                    entity_batches = _load_entity_batches(
-                        fact_store, work_item,
-                    )
+                    count_facts = getattr(type(fact_store), "count_facts", None)
                     total_fact_count = (
-                        len(graph_facts) + sum(len(b) for b in entity_batches)
+                        fact_store.count_facts(
+                            repository_id=work_item.repository_id,
+                            source_run_id=work_item.source_run_id,
+                        )
+                        if callable(count_facts)
+                        else len(graph_facts)
+                    )
+                    entity_batches = (
+                        _load_entity_batches(fact_store, work_item)
+                        if total_fact_count > len(graph_facts)
+                        else None
                     )
                 else:
                     # Fallback for stores without partitioned loading (tests).
@@ -189,7 +198,7 @@ def project_work_item(
                         repository_id=work_item.repository_id,
                         source_run_id=work_item.source_run_id,
                     )
-                    entity_batches = []
+                    entity_batches = None
                     total_fact_count = len(graph_facts)
         except Exception as exc:
             observability.record_resolution_stage_failure(
@@ -259,7 +268,7 @@ def project_work_item(
         )
 
         # -- Stage 1b: stream standalone entity facts in batches -----------
-        if entity_batches:
+        if entity_batches is not None:
             entity_extra = _run_stage(
                 "project_entity_batches",
                 lambda: _project_entity_batches(builder, entity_batches, graph_facts),
@@ -347,12 +356,12 @@ def project_work_item(
 def _load_entity_batches(
     fact_store: Any,
     work_item: FactWorkItemRow,
-) -> list[list[FactRecordRow]]:
+) -> Iterable[list[FactRecordRow]] | None:
     """Load entity fact batches when the store supports partitioned reads."""
 
     iter_batches = getattr(type(fact_store), "iter_fact_batches", None)
     if not callable(iter_batches):
-        return []
+        return None
     return fact_store.iter_fact_batches(
         repository_id=work_item.repository_id,
         source_run_id=work_item.source_run_id,
@@ -363,7 +372,7 @@ def _load_entity_batches(
 
 def _project_entity_batches(
     builder: Any,
-    entity_batches: list[list[FactRecordRow]],
+    entity_batches: Iterable[list[FactRecordRow]],
     graph_facts: list[FactRecordRow],
 ) -> dict[str, int]:
     """Project standalone entity facts that were streamed separately.
@@ -374,14 +383,10 @@ def _project_entity_batches(
     """
 
     from platform_context_graph.resolution.projection.entities import (
-        iter_parsed_entity_facts,
-        build_entity_merge_statement,
+        _project_standalone_entity_facts,
     )
     from platform_context_graph.resolution.projection.files import iter_file_facts
-    from platform_context_graph.resolution.projection.common import (
-        run_managed_write,
-        run_write_query,
-    )
+    from platform_context_graph.resolution.projection.common import run_managed_write
 
     # Build the set of file keys already projected from FileObserved payloads.
     projected_file_keys: set[tuple[str, str]] = set()
@@ -395,43 +400,15 @@ def _project_entity_batches(
             )
 
     projected = 0
-
-    def _write_batch(tx: object, batch: list[FactRecordRow]) -> int:
-        count = 0
-        for fact_record in iter_parsed_entity_facts(batch):
-            if not fact_record.relative_path:
-                continue
-            if (
-                fact_record.checkout_path,
-                fact_record.relative_path,
-            ) in projected_file_keys:
-                continue
-            from pathlib import Path
-
-            file_path = str(
-                Path(fact_record.checkout_path).resolve() / fact_record.relative_path
-            )
-            entity_payload = {
-                "name": str(fact_record.payload.get("entity_name") or ""),
-                "line_number": int(fact_record.payload.get("start_line") or 0),
-                "end_line": int(fact_record.payload.get("end_line") or 0),
-                "lang": fact_record.payload.get("language"),
-            }
-            query, params = build_entity_merge_statement(
-                label=str(fact_record.payload.get("entity_kind") or ""),
-                item=entity_payload,
-                file_path=file_path,
-                use_uid_identity=False,
-            )
-            run_write_query(tx, query, **params)
-            count += 1
-        return count
-
     with builder.driver.session() as session:
         for batch in entity_batches:
             def _write(tx: object, _batch: list[FactRecordRow] = batch) -> None:
                 nonlocal projected
-                projected += _write_batch(tx, _batch)
+                projected += _project_standalone_entity_facts(
+                    tx,
+                    _batch,
+                    projected_file_keys=projected_file_keys,
+                )
 
             run_managed_write(session, _write)
 
