@@ -22,6 +22,7 @@ from platform_context_graph.runtime.ingester import (
 )
 from platform_context_graph.mcp import MCPServer
 from platform_context_graph.observability import configure_logging
+from platform_context_graph.versioning import ensure_v_prefix
 
 from ..paths import get_app_env_file
 from . import config_manager
@@ -108,9 +109,9 @@ def _configure_library_loggers() -> None:
 def get_version() -> str:
     """Return the installed package version or a development fallback."""
     try:
-        return pkg_version("platform-context-graph")
+        return ensure_v_prefix(pkg_version("platform-context-graph"))
     except PackageNotFoundError:
-        return "0.0.0 (dev)"
+        return ensure_v_prefix("0.0.0 (dev)")
 
 
 def _interactive_terminal_attached() -> bool:

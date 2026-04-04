@@ -26,6 +26,7 @@ from starlette.responses import Response
 from ..cli.config_manager import get_config_value
 from ..core.pcg_bundle import PCGBundle
 from ..observability import initialize_observability
+from ..versioning import ensure_v_prefix
 from ..domain.responses import IngesterScanRequestResponse, IngesterStatusResponse
 from ..query import status as status_queries
 from .dependencies import get_database, get_query_services
@@ -48,7 +49,7 @@ from .routers import (
 )
 
 API_TITLE = "PlatformContextGraph HTTP API"
-API_FALLBACK_VERSION = "0.0.0 (dev)"
+API_FALLBACK_VERSION = "v0.0.0 (dev)"
 API_V0_PREFIX = "/api/v0"
 API_V0_OPENAPI_URL = f"{API_V0_PREFIX}/openapi.json"
 API_V0_DOCS_URL = f"{API_V0_PREFIX}/docs"
@@ -71,7 +72,7 @@ __all__ = [
 def _get_api_version() -> str:
     """Return the installed package version or a development fallback."""
     try:
-        return pkg_version("platform-context-graph")
+        return ensure_v_prefix(pkg_version("platform-context-graph"))
     except PackageNotFoundError:
         return API_FALLBACK_VERSION
 

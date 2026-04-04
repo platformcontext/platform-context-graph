@@ -58,7 +58,7 @@ Interpretation:
 | Postgres | Default Docker image, default config |
 | Neo4j | Community edition, Docker |
 | Source data | 896 repos, 24 GB on disk (`/tmp/pcg-e2e-full`) |
-| PCG version | 0.0.42 |
+| PCG version | v0.0.42 |
 | Commit workers | 2 (`PCG_COMMIT_WORKERS=2`) |
 | Parse strategy | threaded, 4 workers |
 | Mode | facts-first (inline projection) |
