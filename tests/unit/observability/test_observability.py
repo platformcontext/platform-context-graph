@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import inspect
 from collections.abc import Iterable
+from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -77,6 +78,29 @@ def test_initialize_observability_skips_instrumentation_when_sdk_disabled(
         runtime = observability.initialize_observability(component="api", app=app)
 
     assert runtime.enabled is False
+
+
+def test_package_version_returns_raw_semver_for_otel_resource() -> None:
+    """Keep the OTEL service.version resource attribute semver-like."""
+
+    otel = importlib.import_module("platform_context_graph.observability.otel")
+
+    with pytest.MonkeyPatch.context() as patch_ctx:
+        patch_ctx.setattr(otel, "pkg_version", lambda _name: "0.0.44")
+        assert otel.package_version() == "0.0.44"
+
+
+def test_package_version_falls_back_to_zero_when_distribution_missing() -> None:
+    """Use an unprefixed fallback when package metadata is unavailable."""
+
+    otel = importlib.import_module("platform_context_graph.observability.otel")
+
+    def _raise_missing(_name: str) -> str:
+        raise PackageNotFoundError
+
+    with pytest.MonkeyPatch.context() as patch_ctx:
+        patch_ctx.setattr(otel, "pkg_version", _raise_missing)
+        assert otel.package_version() == "0.0.0"
 
 
 def test_initialize_observability_instruments_fastapi_once_and_honors_exclusions(

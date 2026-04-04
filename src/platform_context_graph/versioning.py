@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import re
+
+
+_PREFIXED_VERSION_PATTERN = re.compile(r"^[vV]\d")
+
 
 def ensure_v_prefix(version: str) -> str:
     """Return a normalized user-facing version string with ``v`` prefix.
@@ -20,6 +25,6 @@ def ensure_v_prefix(version: str) -> str:
     cleaned = version.strip()
     if not cleaned:
         return "v0.0.0"
-    if cleaned.startswith(("v", "V")):
+    if _PREFIXED_VERSION_PATTERN.match(cleaned):
         return f"v{cleaned[1:]}"
     return f"v{cleaned}"

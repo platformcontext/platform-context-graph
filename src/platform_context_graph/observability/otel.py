@@ -10,8 +10,6 @@ from importlib.metadata import PackageNotFoundError, version as pkg_version
 from typing import Any
 from uuid import uuid4
 
-from ..versioning import ensure_v_prefix
-
 try:
     from fastapi import FastAPI
     from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
@@ -85,14 +83,14 @@ def package_version() -> str:
     """Return the installed package version.
 
     Returns:
-        The installed distribution version, or ``"v0.0.0"`` when the package
+        The installed distribution version, or ``"0.0.0"`` when the package
         metadata is unavailable in the current environment.
     """
 
     try:
-        return ensure_v_prefix(pkg_version("platform-context-graph"))
+        return pkg_version("platform-context-graph")
     except PackageNotFoundError:
-        return "v0.0.0"
+        return "0.0.0"
 
 
 def env_truthy(name: str) -> bool:
