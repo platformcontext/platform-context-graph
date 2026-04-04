@@ -9,6 +9,8 @@ from typing import Any
 import typer
 from rich.table import Table
 
+from platform_context_graph.observability import initialize_observability
+
 from ..remote import remote_mode_requested
 from ..remote_commands import render_remote_workspace_status
 from .runtime_admin import register_admin_commands
@@ -313,6 +315,8 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
         )
         from platform_context_graph.tools.graph_builder import GraphBuilder
 
+        os.environ.setdefault("PCG_RUNTIME_ROLE", "resolution-engine")
+        initialize_observability(component="resolution-engine")
         queue = get_fact_work_queue()
         if queue is None:
             raise typer.Exit(

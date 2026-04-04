@@ -1,4 +1,4 @@
-"""Runtime role helpers for split API and ingester processes."""
+"""Runtime role helpers for split API, ingester, and resolution processes."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ __all__ = [
     "workspace_fallback_enabled",
 ]
 
-_VALID_ROLES = {"api", "ingester", "combined"}
+_VALID_ROLES = {"api", "ingester", "resolution-engine", "combined"}
 _FALSEY = {"0", "false", "no", "off"}
 
 
@@ -18,8 +18,9 @@ def get_runtime_role() -> str:
     """Return the configured runtime role.
 
     Returns:
-        One of ``api``, ``ingester``, or ``combined``. Unknown values fall back to
-        ``combined`` for compatibility with existing local flows.
+        One of ``api``, ``ingester``, ``resolution-engine``, or ``combined``.
+        Unknown values fall back to ``combined`` for compatibility with
+        existing local flows.
     """
 
     raw = os.getenv("PCG_RUNTIME_ROLE", "combined").strip().lower()
