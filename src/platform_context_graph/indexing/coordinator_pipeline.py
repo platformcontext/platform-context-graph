@@ -45,7 +45,10 @@ from .repo_classification import (
     classify_repo_runtime,
     load_repo_class_overrides,
 )
-from .parse_recovery import parse_repository_snapshot_with_recovery
+from .parse_recovery import (
+    merge_parse_runtime_state,
+    parse_repository_snapshot_with_recovery,
+)
 
 _ENTITY_FIELDS = ("functions", "classes", "variables", "interfaces", "structs", "enums")
 
@@ -301,6 +304,8 @@ async def process_repository_snapshots(
                 ):
                     await parse_semaphore.acquire()
                 queue_wait_duration = time.perf_counter() - queue_wait_started
+                effective_parse_executor = current_parse_executor
+                effective_parse_strategy = current_parse_strategy
                 repo_tel.parse_queue_wait_seconds = queue_wait_duration
                 try:
                     if hasattr(telemetry, "record_index_stage_duration"):
@@ -414,8 +419,15 @@ async def process_repository_snapshots(
                             parse_workers=parse_workers,
                             parse_strategy=effective_parse_strategy,
                         )
-                        current_parse_executor = effective_parse_executor
-                        current_parse_strategy = effective_parse_strategy
+                        (
+                            current_parse_executor,
+                            current_parse_strategy,
+                        ) = merge_parse_runtime_state(
+                            current_parse_executor=current_parse_executor,
+                            current_parse_strategy=current_parse_strategy,
+                            effective_parse_executor=effective_parse_executor,
+                            effective_parse_strategy=effective_parse_strategy,
+                        )
                         parse_duration = time.perf_counter() - parse_started
                         record_memory_sample(
                             repo_tel, "parse_end", read_memory_usage_sample()

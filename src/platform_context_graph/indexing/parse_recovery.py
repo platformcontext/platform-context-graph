@@ -9,6 +9,25 @@ from typing import Any
 from platform_context_graph.utils.debug_log import emit_log_call
 
 
+def merge_parse_runtime_state(
+    *,
+    current_parse_executor: Any | None,
+    current_parse_strategy: str,
+    effective_parse_executor: Any | None,
+    effective_parse_strategy: str,
+) -> tuple[Any | None, str]:
+    """Merge per-repo parse state back into the run-level parse mode.
+
+    Once one repository degrades the run to threaded parsing, the shared
+    run-level state must remain threaded for the rest of the indexing run even
+    if another concurrently finishing repository still used the old pool.
+    """
+
+    if current_parse_executor is None or current_parse_strategy == "threaded":
+        return None, "threaded"
+    return effective_parse_executor, effective_parse_strategy
+
+
 async def parse_repository_snapshot_with_recovery(
     *,
     parse_repository_snapshot_async_fn: Any,

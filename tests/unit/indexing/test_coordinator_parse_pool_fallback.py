@@ -72,6 +72,7 @@ async def _run_pipeline(
     repo_file_sets: dict[Path, list[Path]],
     parse_fn: Any,
     *,
+    parse_worker_count: int = 4,
     parse_executor: Any | None = None,
     parse_strategy: str = "threaded",
     telemetry: Any | None = None,
@@ -95,7 +96,7 @@ async def _run_pipeline(
         asyncio_module=asyncio,
         info_logger_fn=lambda *_args, **_kwargs: None,
         warning_logger_fn=warnings.append,
-        parse_worker_count_fn=lambda: 4,
+        parse_worker_count_fn=lambda: parse_worker_count,
         index_queue_depth_fn=lambda _workers: 8,
         parse_repository_snapshot_async_fn=parse_fn,
         commit_repository_snapshot_fn=lambda *_args, **_kwargs: None,
@@ -205,3 +206,75 @@ def test_pipeline_does_not_record_exception_on_closed_repository_span(
     assert repo_state.status == "failed"
     assert repo_state.error == "boom"
     assert any("boom" in warning for warning in warnings)
+
+
+def test_pipeline_keeps_threaded_fallback_after_concurrent_repo_completion(
+    tmp_path: Path,
+) -> None:
+    """Once downgraded, the run should not promote itself back to multiprocess."""
+
+    repo_a = tmp_path / "repo-a"
+    repo_b = tmp_path / "repo-b"
+    repo_c = tmp_path / "repo-c"
+    for repo in (repo_a, repo_b, repo_c):
+        repo.mkdir()
+        (repo / "main.py").write_text("print('ok')\n", encoding="utf-8")
+
+    parse_executor = object()
+    release_success = asyncio.Event()
+    repo_b_started = asyncio.Event()
+    observed_executors: dict[str, list[Any | None]] = {
+        repo.name: [] for repo in (repo_a, repo_b, repo_c)
+    }
+
+    async def parse_snapshot(
+        _builder: Any, repo_path: Path, repo_files: list[Path], **kwargs: Any
+    ):
+        observed_executors[repo_path.name].append(kwargs["parse_executor"])
+        if repo_path.name == "repo-a" and kwargs["parse_executor"] is parse_executor:
+            await repo_b_started.wait()
+            raise BrokenProcessPool("worker died")
+        if repo_path.name == "repo-b" and kwargs["parse_executor"] is parse_executor:
+            repo_b_started.set()
+            await release_success.wait()
+        return RepositorySnapshot(
+            repo_path=str(repo_path.resolve()),
+            file_count=len(repo_files),
+            imports_map={},
+            file_data=[],
+        )
+
+    async def run() -> tuple[list[Path], IndexRunState, list[str]]:
+        pipeline_task = asyncio.create_task(
+            _run_pipeline(
+                [repo_a, repo_b, repo_c],
+                {
+                    repo_a: [repo_a / "main.py"],
+                    repo_b: [repo_b / "main.py"],
+                    repo_c: [repo_c / "main.py"],
+                },
+                parse_snapshot,
+                parse_worker_count=2,
+                parse_executor=parse_executor,
+                parse_strategy="multiprocess",
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        release_success.set()
+        return await pipeline_task
+
+    committed_repo_paths, run_state, warnings = asyncio.run(run())
+
+    assert set(committed_repo_paths) == {
+        repo_a.resolve(),
+        repo_b.resolve(),
+        repo_c.resolve(),
+    }
+    assert run_state.repositories[str(repo_c.resolve())].status == "completed"
+    assert observed_executors["repo-a"] == [parse_executor, None]
+    assert observed_executors["repo-b"] == [parse_executor]
+    assert observed_executors["repo-c"] == [None]
+    assert any(
+        "falling back to threaded parsing" in warning.lower() for warning in warnings
+    )
