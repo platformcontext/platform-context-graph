@@ -18,6 +18,23 @@ Use this page when you need the operator view of PlatformContextGraph:
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `pcg internal resolution-engine` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Bootstrap Index | one-shot initial indexing | `pcg internal bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
 
+## Naming Note
+
+The public runtime name is `ingester`.
+
+The internal process that runs inside that runtime is still
+`pcg internal repo-sync-loop`.
+
+That distinction is intentional:
+
+- operators scale, monitor, and troubleshoot the `ingester` runtime
+- the process entrypoint remains `repo-sync-loop` because it names the internal
+  long-running sync loop, not the deployable service boundary
+
+Keep the public runtime, Kubernetes workload, service labels, dashboards, and
+documentation on `ingester`. Keep `repo-sync-loop` for the internal command and
+implementation details.
+
 ## Deployed Flow
 
 ```mermaid
@@ -37,7 +54,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   A["bootstrap-index"] --> B["Initial one-shot indexing"]
-  C["repo-sync"] --> D["Ongoing sync and fact emission"]
+  C["ingester"] --> D["Ongoing sync and fact emission"]
   D --> E["Fact work queue"]
   E --> F["resolution-engine"]
   G["platform-context-graph API"] --> H["Graph + content reads"]
@@ -91,7 +108,7 @@ PVC in Kubernetes.
 
 ### Deployments
 
-- Compose service: `repo-sync`
+- Compose service: `ingester`
 - Helm template: `deploy/helm/platform-context-graph/templates/statefulset.yaml`
 - IaC chart template: `chart/templates/statefulset.yaml`
 

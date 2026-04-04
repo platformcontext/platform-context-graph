@@ -45,7 +45,7 @@ The common fields are there so Loki, Elasticsearch, Grafana, or anything else th
 
 - `service_name`, `service_namespace`, and `service_version` identify the runtime
 - `component` and `transport` identify where the log came from
-- `runtime_role` tells you whether the process is acting as the API, ingester, worker, or CLI
+- `runtime_role` tells you whether the process is acting as the API, the internal `ingester` runtime role used by the ingester service, the worker, or the CLI
 - `trace_id` and `span_id` let you jump from logs into the matching Jaeger trace
 - `request_id` and `correlation_id` keep a request together across boundaries
 

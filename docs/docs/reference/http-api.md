@@ -251,7 +251,7 @@ For local or deployed indexing workflows, use the CLI and deployment runtime:
 
 ## Ingester API
 
-Use these routes to inspect or control deployed ingesters without reaching into Kubernetes directly.
+Use these routes to inspect or control the deployed ingester runtime without reaching into Kubernetes directly.
 
 - `GET /api/v0/ingesters`
 - `GET /api/v0/ingesters/{ingester}`

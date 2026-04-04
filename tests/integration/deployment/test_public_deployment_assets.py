@@ -152,9 +152,15 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     worker_container = next(
         container
         for container in worker_pod_spec["containers"]
-        if container["name"] == "repo-sync"
+        if container["name"] == "ingester"
+    )
+    worker_init_container = next(
+        container
+        for container in worker_pod_spec["initContainers"]
+        if container["name"] == "workspace-setup"
     )
 
+    assert worker_statefulset["metadata"]["name"] == "platform-context-graph"
     assert api_pod_spec.get("initContainers", []) == []
     assert api_container["command"] == [
         "pcg",
@@ -171,9 +177,17 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         "resolution-engine",
     ]
     assert worker_container["command"] == ["pcg", "internal", "repo-sync-loop"]
+    assert worker_init_container["command"] == [
+        "sh",
+        "-c",
+        "set -eu\nmkdir -p /data/repos\ncp /var/run/pcg-config/.pcgignore /data/repos/.pcgignore\nchown 10001:10001 /data /data/repos /data/repos/.pcgignore\n",
+    ]
     assert (
         worker_statefulset["spec"]["serviceName"] == "platform-context-graph-ingester"
     )
+    assert worker_statefulset["spec"]["volumeClaimTemplates"][0]["metadata"][
+        "name"
+    ] == "data"
     assert api_deployment["spec"]["revisionHistoryLimit"] == 3
     assert resolution_engine_deployment["spec"]["revisionHistoryLimit"] == 3
     assert worker_statefulset["spec"]["revisionHistoryLimit"] == 3
@@ -218,6 +232,10 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         volume_mount["mountPath"]
         for volume_mount in worker_container.get("volumeMounts", [])
     }
+    worker_init_volume_mounts = {
+        volume_mount["mountPath"]
+        for volume_mount in worker_init_container.get("volumeMounts", [])
+    }
 
     assert "PCG_REPOSITORY_RULES_JSON" not in api_env_names
     assert "PCG_REPOS_DIR" not in api_env_names
@@ -236,6 +254,8 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert "PCG_API_KEY" not in resolution_engine_env_items
     assert "/data" not in resolution_engine_volume_mounts
     assert "/data" in worker_volume_mounts
+    assert "/data/repos/.pcgignore" not in worker_volume_mounts
+    assert worker_init_volume_mounts == {"/data", "/tmp", "/var/run/pcg-config"}
 
 
 def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> None:
@@ -273,7 +293,12 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
     worker_container = next(
         container
         for container in worker_pod_spec["containers"]
-        if container["name"] == "repo-sync"
+        if container["name"] == "ingester"
+    )
+    worker_init_container = next(
+        container
+        for container in worker_pod_spec["initContainers"]
+        if container["name"] == "workspace-setup"
     )
 
     expected_pod_security = {
@@ -288,6 +313,14 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
         "readOnlyRootFilesystem": True,
         "capabilities": {"drop": ["ALL"]},
     }
+    expected_init_container_security = {
+        "runAsNonRoot": False,
+        "runAsUser": 0,
+        "runAsGroup": 0,
+        "allowPrivilegeEscalation": False,
+        "readOnlyRootFilesystem": True,
+        "capabilities": {"drop": ["ALL"]},
+    }
 
     assert api_pod_spec["securityContext"] == expected_pod_security
     assert resolution_engine_pod_spec["securityContext"] == expected_pod_security
@@ -295,6 +328,7 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
     assert api_container["securityContext"] == expected_container_security
     assert resolution_engine_container["securityContext"] == expected_container_security
     assert worker_container["securityContext"] == expected_container_security
+    assert worker_init_container["securityContext"] == expected_init_container_security
 
     api_env = {
         env["name"]: env["value"]
@@ -469,7 +503,7 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
     assert "postgres" in services
     assert "platform-context-graph" in services
     assert "neo4j" in services
-    assert "repo-sync" in services
+    assert "ingester" in services
     assert "resolution-engine" in services
 
     postgres = services["postgres"]
@@ -481,7 +515,7 @@ def test_compose_stack_includes_local_postgres_and_content_store_envs(
     for service_name in [
         "bootstrap-index",
         "platform-context-graph",
-        "repo-sync",
+        "ingester",
         "resolution-engine",
     ]:
         envs = _compose_service_envs(services[service_name])
@@ -537,7 +571,7 @@ def test_compose_stack_propagates_worker_tuning_envs(
     for service_name in [
         "bootstrap-index",
         "platform-context-graph",
-        "repo-sync",
+        "ingester",
         "resolution-engine",
     ]:
         envs = _compose_service_envs(services[service_name])
@@ -549,7 +583,7 @@ def test_compose_stack_propagates_worker_tuning_envs(
     for service_name in [
         "bootstrap-index",
         "platform-context-graph",
-        "repo-sync",
+        "ingester",
         "resolution-engine",
     ]:
         envs = _compose_service_envs(services[service_name])
@@ -562,7 +596,7 @@ def test_compose_stack_propagates_worker_tuning_envs(
 
     for service_name in [
         "platform-context-graph",
-        "repo-sync",
+        "ingester",
         "resolution-engine",
     ]:
         envs = _compose_service_envs(services[service_name])
@@ -593,7 +627,7 @@ def test_compose_stack_exposes_runtime_metrics_ports(compose_file: Path) -> None
         "${PCG_API_METRICS_PORT:-19464}:9464"
         in services["platform-context-graph"]["ports"]
     )
-    assert "${PCG_INGESTER_METRICS_PORT:-19465}:9464" in services["repo-sync"]["ports"]
+    assert "${PCG_INGESTER_METRICS_PORT:-19465}:9464" in services["ingester"]["ports"]
     assert (
         "${PCG_RESOLUTION_ENGINE_METRICS_PORT:-19466}:9464"
         in services["resolution-engine"]["ports"]
@@ -618,7 +652,7 @@ def test_compose_stack_parameterizes_local_passwords(compose_file: Path) -> None
     for service_name in [
         "bootstrap-index",
         "platform-context-graph",
-        "repo-sync",
+        "ingester",
         "resolution-engine",
     ]:
         envs = _compose_service_envs(services[service_name])
@@ -647,15 +681,15 @@ def test_compose_stack_includes_service_and_external_test_database() -> None:
 
     assert "platform-context-graph" in services
     assert "neo4j" in services
-    assert "repo-sync" in services
+    assert "ingester" in services
     assert "resolution-engine" in services
     assert "postgres" in services
-    repo_sync_service = services["repo-sync"]
-    assert "entrypoint" in repo_sync_service
+    ingester_service = services["ingester"]
+    assert "entrypoint" in ingester_service
     assert "exec pcg internal repo-sync-loop" in "\n".join(
-        repo_sync_service["entrypoint"]
+        ingester_service["entrypoint"]
     )
-    assert services["repo-sync"]["healthcheck"] == {"disable": True}
+    assert services["ingester"]["healthcheck"] == {"disable": True}
     assert services["resolution-engine"]["command"] == [
         "pcg",
         "internal",
@@ -701,10 +735,7 @@ def test_chart_renders_otel_env_for_all_runtime_containers_when_enabled() -> Non
     for pod_spec, expected_service_name in zip(
         pod_specs, expected_service_names, strict=True
     ):
-        for container in [
-            *pod_spec.get("initContainers", []),
-            *pod_spec.get("containers", []),
-        ]:
+        for container in pod_spec.get("containers", []):
             env_by_name = {
                 env["name"]: env.get("value", "")
                 for env in container.get("env", [])
@@ -791,10 +822,7 @@ def test_chart_renders_content_store_envs_for_all_runtime_containers() -> None:
     statefulset = next(doc for doc in docs if doc["kind"] == "StatefulSet")
     pod_spec = statefulset["spec"]["template"]["spec"]
 
-    for container in [
-        *pod_spec.get("initContainers", []),
-        *pod_spec.get("containers", []),
-    ]:
+    for container in pod_spec.get("containers", []):
         env_by_name = {
             env["name"]: env.get("value", "")
             for env in container.get("env", [])
@@ -899,7 +927,7 @@ def test_compose_stack_supports_filesystem_host_root_override() -> None:
 
     rendered = yaml.safe_load(result.stdout)
 
-    for service_name in ["bootstrap-index", "repo-sync", "resolution-engine"]:
+    for service_name in ["bootstrap-index", "ingester", "resolution-engine"]:
         volumes = rendered["services"][service_name]["volumes"]
         assert any(
             volume.get("type") == "bind"

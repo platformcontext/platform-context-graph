@@ -9,7 +9,7 @@ metadata:
 spec:
   replicas: {{ .Values.ingester.replicas }}
   revisionHistoryLimit: {{ .Values.ingester.revisionHistoryLimit }}
-  serviceName: {{ include "pcg.ingesterHeadlessServiceName" . }}
+  serviceName: {{ include "pcg.ingesterFullname" . }}
   selector:
     matchLabels:
       {{- include "pcg.ingesterSelectorLabels" . | nindent 6 }}
@@ -40,8 +40,30 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        - name: workspace-setup
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              mkdir -p /data/repos
+              cp /var/run/pcg-config/.pcgignore /data/repos/.pcgignore
+              chown 10001:10001 /data /data/repos /data/repos/.pcgignore
+          securityContext:
+            {{- toYaml .Values.initContainerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: pcgignore-config
+              mountPath: /var/run/pcg-config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
       containers:
-        - name: repo-sync
+        - name: ingester
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["pcg", "internal", "repo-sync-loop"]
@@ -128,10 +150,6 @@ spec:
               mountPath: /data
             - name: tmp
               mountPath: /tmp
-            - name: pcgignore
-              mountPath: /data/repos/.pcgignore
-              subPath: .pcgignore
-              readOnly: true
             {{- if eq .Values.repoSync.auth.method "ssh" }}
             - name: ssh-auth
               mountPath: /var/run/secrets/pcg-ssh
@@ -142,7 +160,7 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
-        - name: pcgignore
+        - name: pcgignore-config
           configMap:
             name: {{ include "pcg.fullname" . }}-pcgignore
         {{- if and .Values.ingester.persistence.enabled .Values.ingester.persistence.existingClaim }}

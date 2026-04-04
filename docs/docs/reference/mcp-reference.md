@@ -87,7 +87,7 @@ Tools for inspecting the status of the deployed ingester runtimes.
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
 | **`list_ingesters`** | Show the latest persisted status for all configured ingesters. | "What ingesters are configured and what state are they in?" |
-| **`get_ingester_status`** | Show detailed status for one ingester, including retry timing and repo progress counts. | "What is the repository ingester doing right now?" |
+| **`get_ingester_status`** | Show detailed status for one ingester runtime, including retry timing and repo progress counts. | "What is the repository ingester doing right now?" |
 
 ## Job Control
 

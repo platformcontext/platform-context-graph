@@ -31,7 +31,7 @@ class TestRecordRepoGraphWriteDuration:
         mixin = _build_v2_mixin(enabled=True)
         mixin.index_repo_graph_write_duration = _FakeInstrument()
         mixin.record_repo_graph_write_duration(
-            component="ingestor",
+            component="ingester",
             mode="full",
             source="cli",
             repo_class="large",
@@ -51,7 +51,7 @@ class TestRecordRepoGraphWriteDuration:
         mixin = _build_v2_mixin(enabled=False)
         mixin.index_repo_graph_write_duration = _FakeInstrument()
         mixin.record_repo_graph_write_duration(
-            component="ingestor",
+            component="ingester",
             mode="full",
             source="cli",
             repo_class="large",
@@ -68,7 +68,7 @@ class TestRecordRepoGraphWriteDuration:
         mixin.index_repo_graph_write_duration = None
         # Should not raise
         mixin.record_repo_graph_write_duration(
-            component="ingestor",
+            component="ingester",
             mode="full",
             source="cli",
             repo_class="large",
@@ -87,7 +87,7 @@ class TestRecordRepoContentWriteDuration:
         mixin = _build_v2_mixin(enabled=True)
         mixin.index_repo_content_write_duration = _FakeInstrument()
         mixin.record_repo_content_write_duration(
-            component="ingestor",
+            component="ingester",
             mode="full",
             source="cli",
             repo_class="medium",
@@ -110,7 +110,7 @@ class TestRecordFallbackResolution:
         mixin = _build_v2_mixin(enabled=True)
         mixin.index_fallback_resolution_total = _FakeInstrument()
         mixin.record_fallback_resolution(
-            component="ingestor",
+            component="ingester",
             mode="full",
             source="cli",
             repo_class="small",
@@ -134,7 +134,7 @@ class TestRecordAmbiguousResolution:
         mixin = _build_v2_mixin(enabled=True)
         mixin.index_ambiguous_resolution_total = _FakeInstrument()
         mixin.record_ambiguous_resolution(
-            component="ingestor",
+            component="ingester",
             mode="full",
             source="cli",
             repo_class="xlarge",
@@ -158,7 +158,7 @@ class TestRepoClassOnExistingMetrics:
         mixin = _build_v2_mixin(enabled=True)
         mixin.index_repository_duration = _FakeInstrument()
         mixin.record_index_repository_duration(
-            component="ingestor",
+            component="ingester",
             mode="full",
             source="cli",
             status="completed",
@@ -176,7 +176,7 @@ class TestRepoClassOnExistingMetrics:
         mixin = _build_v2_mixin(enabled=True)
         mixin.index_repository_duration = _FakeInstrument()
         mixin.record_index_repository_duration(
-            component="ingestor",
+            component="ingester",
             mode="full",
             source="cli",
             status="completed",
@@ -193,7 +193,7 @@ class TestRepoClassOnExistingMetrics:
         mixin = _build_v2_mixin(enabled=True)
         mixin.index_repositories_total = _FakeInstrument()
         mixin.record_index_repositories(
-            component="ingestor",
+            component="ingester",
             phase="commit",
             count=5,
             mode="full",
@@ -211,7 +211,7 @@ class TestRepoClassOnExistingMetrics:
         mixin = _build_v2_mixin(enabled=True)
         mixin.index_stage_duration = _FakeInstrument()
         mixin.record_index_stage_duration(
-            component="ingestor",
+            component="ingester",
             mode="full",
             source="cli",
             stage="parse",
@@ -231,7 +231,7 @@ class TestRepoClassOnExistingMetrics:
         mixin = _build_v2_mixin(enabled=True)
         mixin.index_checkpoints_total = _FakeInstrument()
         mixin.record_index_checkpoint(
-            component="ingestor",
+            component="ingester",
             mode="full",
             source="cli",
             operation="save",

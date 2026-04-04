@@ -30,7 +30,7 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "pcg.fullname" . }}-ingester
+  name: {{ include "pcg.ingesterFullname" . }}
   labels:
     {{- include "pcg.labels" . | nindent 4 }}
     app.kubernetes.io/component: ingester

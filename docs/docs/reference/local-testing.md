@@ -60,7 +60,7 @@ This brings up:
 - Jaeger
 - `bootstrap-index`
 - `platform-context-graph`
-- `repo-sync`
+- `ingester`
 - `resolution-engine`
 
 Useful checks:
@@ -68,7 +68,7 @@ Useful checks:
 ```bash
 docker compose ps
 docker compose logs bootstrap-index | tail -50
-docker compose logs repo-sync | tail -50
+docker compose logs ingester | tail -50
 docker compose logs resolution-engine | tail -50
 curl -s http://localhost:8080/health
 ```

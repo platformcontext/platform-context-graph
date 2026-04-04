@@ -187,7 +187,7 @@ services:
       timeout: 5s
       retries: 10
 
-  repo-sync:
+  ingester:
     build:
       context: .
       dockerfile: Dockerfile

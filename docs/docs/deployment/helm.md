@@ -67,7 +67,7 @@ The chart renders the same OTEL environment contract into all runtime workloads:
 
 - the API `Deployment`
 - the Resolution Engine `Deployment`
-- the ingester `StatefulSet`, including bootstrap and repo-sync containers where applicable
+- the ingester `StatefulSet`, including the background repo-sync loop where applicable
 
 It also sets a distinct `OTEL_SERVICE_NAME` per runtime so traces stay easy to split in Jaeger:
 

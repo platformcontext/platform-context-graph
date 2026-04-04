@@ -137,7 +137,7 @@ These settings matter for deployable-service installs that use the repository in
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
-| **`PCG_RUNTIME_ROLE`** | `combined` | Runtime identity. Deployed split runtimes use `api` or `ingester`. |
+| **`PCG_RUNTIME_ROLE`** | `combined` | Internal runtime identity. Deployed split runtimes use `api` or `ingester`; the public service name for that second runtime is the ingester. |
 | **`PCG_REPO_SOURCE_MODE`** | `githubOrg` | Repository discovery mode. Supported modes include `githubOrg`, `explicit`, and `filesystem`. |
 | **`PCG_GITHUB_ORG`** | unset | GitHub organization used for repository discovery in `githubOrg` mode. |
 | **`PCG_REPOSITORY_RULES_JSON`** | unset | Structured exact/regex include rules applied to normalized `org/repo` identifiers during repo rediscovery. Exact rules also define repository IDs for `explicit` and `filesystem` source modes. |

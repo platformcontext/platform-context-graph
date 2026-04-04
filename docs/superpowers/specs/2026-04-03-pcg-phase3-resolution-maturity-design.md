@@ -11,7 +11,7 @@ the Resolution Engine projects canonical graph state, and staging can run the
 full three-service shape:
 
 - API
-- Ingestor
+- Ingester
 - Resolution Engine
 
 That architecture is now honest, but it is still immature in two important
@@ -258,7 +258,7 @@ Recommended initial tables:
 
 ## Service Responsibilities
 
-### Ingestor
+### Ingester
 
 Still owns:
 
