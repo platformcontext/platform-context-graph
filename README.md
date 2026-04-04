@@ -24,6 +24,34 @@ designed for teams that need to answer questions that span repositories,
 services, workloads, and infrastructure without stitching the answer together by
 hand.
 
+## Why Teams Use PCG
+
+PCG is useful when the answer is spread across code, infrastructure, and runtime
+context instead of sitting in one repository.
+
+What that looks like in practice:
+
+- **Software engineers**
+  - "Who calls `process_payment` across all indexed repos?"
+  - "What breaks if I change this shared client or interface?"
+- **DevOps and platform engineers**
+  - "What deploys this service, and which repos feed that deployment path?"
+  - "What infrastructure does this workload depend on?"
+- **SRE and on-call**
+  - "What other workloads share this database or queue?"
+  - "Is the backlog growing because of parsing, Postgres, or graph projection?"
+- **AI-assisted development**
+  - "Trace this cloud resource back to the code that defines it."
+  - "Explain how these two services are connected."
+
+Core strengths:
+
+- one graph for code and infrastructure
+- the same query model over CLI, MCP, and HTTP API
+- deployable shared service with API, ingester, and resolution-engine runtimes
+- facts-first indexing for durability, recovery, and operator visibility
+- direct code-to-cloud tracing, blast radius, and environment comparison
+
 PCG exposes the same graph through:
 
 - a local CLI for indexing and analysis

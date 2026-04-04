@@ -34,7 +34,12 @@ def test_get_version_returns_dev_when_distribution_is_missing():
         raise AssertionError(f"unexpected package lookup: {package_name}")
 
     with patch.object(main, "pkg_version", side_effect=fake_pkg_version):
-        assert main.get_version() == "0.0.0 (dev)"
+        assert main.get_version() == "v0.0.0 (dev)"
+
+
+def test_get_version_adds_v_prefix_for_installed_distribution():
+    with patch.object(main, "pkg_version", return_value="0.0.43"):
+        assert main.get_version() == "v0.0.43"
 
 
 def test_resolve_cli_command_uses_platform_context_graph_module():

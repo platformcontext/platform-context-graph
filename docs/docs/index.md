@@ -12,6 +12,23 @@ run AI tooling against real system context instead of partial local state.
 [MCP Guide](guides/mcp-guide.md){ .md-button }
 [HTTP API](reference/http-api.md){ .md-button }
 
+## Why Teams Reach For PCG
+
+- **Engineers** use it to trace callers, dependencies, and cross-repo impact.
+- **Platform and DevOps teams** use it to connect code, deploy paths, and
+  infrastructure ownership.
+- **SRE and on-call** use it to inspect shared resources, queue pressure, and
+  deployment relationships during incidents.
+- **AI tooling** uses it through MCP and HTTP to answer questions against the
+  real system, not just one checkout.
+
+Examples:
+
+- "Who calls `process_payment` across all indexed repos?"
+- "What deploys this service into QA and prod?"
+- "Which workloads share this database?"
+- "Trace this resource back to the code that defines it."
+
 ## Get Started
 
 ## Choose Your Path
