@@ -13,8 +13,6 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ...facts.state import get_fact_work_queue
-from ...observability import get_observability
 from ..dependencies import get_database
 from ...query.status import request_ingester_reindex_control
 from ...core.jobs import JobManager
@@ -24,6 +22,8 @@ from ...runtime.status_store_runtime import (
 from ...tools.graph_builder import GraphBuilder
 from ...collectors.git.finalize import finalize_index_batch
 from ...utils.debug_log import info_logger, warning_logger
+from .admin_facts import ReplayFailedFactsRequest
+from .admin_facts import replay_failed_facts
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 _SUPPORTED_ADMIN_STAGES = frozenset({"workloads", "relationship_resolution"})
@@ -43,18 +43,6 @@ class ReindexRequest(BaseModel):
     ingester: str = "repository"
     scope: str = "workspace"
     force: bool = True
-
-
-class ReplayFailedFactsRequest(BaseModel):
-    """Request body for replaying dead-lettered fact work items."""
-
-    work_item_ids: list[str] | None = None
-    repository_id: str | None = None
-    source_run_id: str | None = None
-    work_type: str | None = None
-    failure_class: str | None = None
-    operator_note: str | None = None
-    limit: int = 100
 
 
 _finalization_lock = threading.Lock()
@@ -427,79 +415,4 @@ async def reindex(
         "force": bool(result.get("requested_force", payload.force)),
         "scope": result.get("requested_scope") or normalized_scope,
         "run_id": result.get("run_id"),
-    }
-
-
-@router.post("/facts/replay")
-async def replay_failed_facts(
-    payload: ReplayFailedFactsRequest,
-) -> dict[str, Any]:
-    """Replay terminally failed fact-projection work items."""
-
-    if not any(
-        (
-            payload.work_item_ids,
-            payload.repository_id,
-            payload.source_run_id,
-            payload.work_type,
-            payload.failure_class,
-        )
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "admin facts replay requires at least one selector: "
-                "work_item_ids, repository_id, source_run_id, work_type, "
-                "or failure_class"
-            ),
-        )
-    queue = get_fact_work_queue()
-    if queue is None or not getattr(queue, "enabled", True):
-        raise HTTPException(
-            status_code=503,
-            detail="facts-first work queue is not configured",
-        )
-
-    replayed = queue.replay_failed_work_items(
-        work_item_ids=payload.work_item_ids,
-        repository_id=payload.repository_id,
-        source_run_id=payload.source_run_id,
-        work_type=payload.work_type,
-        failure_class=payload.failure_class,
-        operator_note=payload.operator_note,
-        limit=max(payload.limit, 1),
-    )
-    info_logger(
-        "Replayed terminal fact work items",
-        event_name="admin.facts.replayed",
-        extra_keys={
-            "replayed_count": len(replayed),
-            "work_item_ids": [row.work_item_id for row in replayed],
-            "repository_id": payload.repository_id,
-            "source_run_id": payload.source_run_id,
-            "work_type": payload.work_type,
-            "failure_class": payload.failure_class,
-            "operator_note": payload.operator_note,
-            "limit": payload.limit,
-        },
-    )
-    get_observability().record_admin_fact_action(
-        component="api",
-        action="replay_failed_work_items",
-        outcome="success",
-    )
-    return {
-        "status": "replayed",
-        "replayed_count": len(replayed),
-        "work_item_ids": [row.work_item_id for row in replayed],
-        "replayed": [
-            {
-                "work_item_id": row.work_item_id,
-                "repository_id": row.repository_id,
-                "source_run_id": row.source_run_id,
-                "work_type": row.work_type,
-                "failure_class": row.failure_class,
-            }
-            for row in replayed
-        ],
     }

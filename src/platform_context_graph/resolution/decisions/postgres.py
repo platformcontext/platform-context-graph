@@ -128,6 +128,15 @@ class PostgresProjectionDecisionStore:
 
         return psycopg is not None and bool(self._dsn)
 
+    def close(self) -> None:
+        """Close the shared PostgreSQL connection if it is open."""
+
+        with self._conn_lock:
+            if self._conn is not None and not self._conn.closed:
+                self._conn.close()
+            self._conn = None
+            self._initialized = False
+
     def _ensure_schema(self, conn: Any) -> None:
         """Run decision-store DDL once across the lifetime of the store.
 
@@ -158,9 +167,7 @@ class PostgresProjectionDecisionStore:
         """Yield a dict-row cursor and bootstrap schema on first use."""
 
         if not self.enabled:
-            raise RuntimeError(
-                "projection decision store requires psycopg and a DSN"
-            )
+            raise RuntimeError("projection decision store requires psycopg and a DSN")
         with self._conn_lock:
             if self._conn is None or self._conn.closed:
                 self._conn = psycopg.connect(self._dsn, autocommit=True)
@@ -180,7 +187,9 @@ class PostgresProjectionDecisionStore:
 
         if not entries:
             return
-        self._executemany(_INSERT_EVIDENCE_SQL, [_evidence_params(row) for row in entries])
+        self._executemany(
+            _INSERT_EVIDENCE_SQL, [_evidence_params(row) for row in entries]
+        )
 
     def list_decisions(
         self,

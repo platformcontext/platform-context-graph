@@ -322,6 +322,12 @@ class PostgresFactWorkQueue:
             rows = cursor.fetchall()
         return list(rows)
 
+    def _executemany(self, query: str, rows: list[dict[str, Any]]) -> None:
+        """Execute one batched SQL write through the managed cursor."""
+
+        with self._cursor() as cursor:
+            cursor.executemany(query, rows)
+
     def _record_operation(
         self,
         *,

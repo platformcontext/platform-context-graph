@@ -204,5 +204,7 @@ def test_replay_failed_work_items_resets_attempts_and_status(monkeypatch) -> Non
     query, params = cursor.execute.call_args_list[0].args
     assert "status = 'failed'" in query
     assert "attempt_count = 0" in query
+    assert "dead_lettered_at = NULL" in query
+    assert "next_retry_at = NULL" in query
     assert params["work_item_ids"] == ["work-1"]
     assert params["limit"] == 10

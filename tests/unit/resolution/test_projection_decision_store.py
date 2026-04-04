@@ -133,3 +133,17 @@ def test_list_decisions_and_evidence_round_trip(monkeypatch) -> None:
     assert decisions[0].confidence_score == 0.75
     assert evidence[0].decision_id == "decision-1"
     assert evidence[0].evidence_kind == "inferred"
+
+
+def test_close_closes_open_connection() -> None:
+    """Closing the store should close the managed PostgreSQL connection."""
+
+    store = PostgresProjectionDecisionStore("postgresql://example")
+    connection = MagicMock()
+    connection.closed = False
+    store._conn = connection
+
+    store.close()
+
+    connection.close.assert_called_once_with()
+    assert store._conn is None

@@ -162,3 +162,29 @@ def test_fail_work_item_records_dead_letter_metadata(monkeypatch) -> None:
     assert params["dead_lettered_at"] == _utc_now()
     assert params["next_retry_at"] is None
     assert params["operator_note"] == "manual cleanup required"
+
+
+def test_complete_work_item_clears_failure_metadata(monkeypatch) -> None:
+    """Completing work should clear durable failure metadata fields."""
+
+    queue = PostgresFactWorkQueue("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(queue, "_cursor", _cursor)
+    monkeypatch.setattr(claims_mod, "utc_now", _utc_now)
+
+    queue.complete_work_item(work_item_id="work-1")
+
+    query, params = cursor.execute.call_args.args
+    assert "failure_stage = NULL" in query
+    assert "error_class = NULL" in query
+    assert "failure_class = NULL" in query
+    assert "failure_code = NULL" in query
+    assert "retry_disposition = NULL" in query
+    assert "dead_lettered_at = NULL" in query
+    assert "operator_note = NULL" in query
+    assert params["work_item_id"] == "work-1"

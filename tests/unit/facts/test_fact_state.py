@@ -87,5 +87,5 @@ def test_facts_package_exports_state_helpers() -> None:
 
     assert callable(facts.get_fact_store)
     assert callable(facts.get_fact_work_queue)
-    assert callable(fact_state.get_projection_decision_store)
+    assert callable(facts.get_projection_decision_store)
     assert callable(facts.git_facts_first_enabled)

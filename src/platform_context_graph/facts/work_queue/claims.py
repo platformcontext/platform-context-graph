@@ -303,8 +303,16 @@ def complete_work_item(queue: Any, *, work_item_id: str) -> None:
                 lease_owner = NULL,
                 lease_expires_at = NULL,
                 last_error = NULL,
+                failure_stage = NULL,
+                error_class = NULL,
+                failure_class = NULL,
+                failure_code = NULL,
+                retry_disposition = NULL,
+                dead_lettered_at = NULL,
                 last_attempt_finished_at = %(updated_at)s,
+                last_attempt_started_at = NULL,
                 next_retry_at = NULL,
+                operator_note = NULL,
                 updated_at = %(updated_at)s
             WHERE work_item_id = %(work_item_id)s
             """,

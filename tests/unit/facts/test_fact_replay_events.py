@@ -64,8 +64,8 @@ def test_replay_failed_work_items_records_replay_events(monkeypatch) -> None:
     assert "failure_class = %(failure_class)s" in replay_query
     assert replay_params["failure_class"] == "timeout"
     assert replay_params["operator_note"] == "operator replay"
-    queue._execute.assert_called_once()
-    event_query, event_params = queue._execute.call_args.args
+    queue._executemany.assert_called_once()
+    event_query, event_params = queue._executemany.call_args.args
     assert "INSERT INTO fact_replay_events" in event_query
-    assert event_params["replay_event_id"] == "fact-replay:uuid-1"
-    assert event_params["operator_note"] == "operator replay"
+    assert event_params[0]["replay_event_id"] == "fact-replay:uuid-1"
+    assert event_params[0]["operator_note"] == "operator replay"
