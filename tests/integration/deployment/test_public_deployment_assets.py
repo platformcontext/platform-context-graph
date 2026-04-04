@@ -154,6 +154,11 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         for container in worker_pod_spec["containers"]
         if container["name"] == "ingestor"
     )
+    worker_init_container = next(
+        container
+        for container in worker_pod_spec["initContainers"]
+        if container["name"] == "workspace-setup"
+    )
 
     assert api_pod_spec.get("initContainers", []) == []
     assert api_container["command"] == [
@@ -171,6 +176,11 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         "resolution-engine",
     ]
     assert worker_container["command"] == ["pcg", "internal", "repo-sync-loop"]
+    assert worker_init_container["command"] == [
+        "sh",
+        "-c",
+        "set -eu\nmkdir -p /data/repos\ncp /var/run/pcg-config/.pcgignore /data/repos/.pcgignore\nchown 10001:10001 /data /data/repos /data/repos/.pcgignore\n",
+    ]
     assert (
         worker_statefulset["spec"]["serviceName"] == "platform-context-graph-ingestor"
     )
@@ -218,6 +228,10 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         volume_mount["mountPath"]
         for volume_mount in worker_container.get("volumeMounts", [])
     }
+    worker_init_volume_mounts = {
+        volume_mount["mountPath"]
+        for volume_mount in worker_init_container.get("volumeMounts", [])
+    }
 
     assert "PCG_REPOSITORY_RULES_JSON" not in api_env_names
     assert "PCG_REPOS_DIR" not in api_env_names
@@ -236,6 +250,8 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert "PCG_API_KEY" not in resolution_engine_env_items
     assert "/data" not in resolution_engine_volume_mounts
     assert "/data" in worker_volume_mounts
+    assert "/data/repos/.pcgignore" not in worker_volume_mounts
+    assert worker_init_volume_mounts == {"/data", "/tmp", "/var/run/pcg-config"}
 
 
 def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> None:
@@ -275,6 +291,11 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
         for container in worker_pod_spec["containers"]
         if container["name"] == "ingestor"
     )
+    worker_init_container = next(
+        container
+        for container in worker_pod_spec["initContainers"]
+        if container["name"] == "workspace-setup"
+    )
 
     expected_pod_security = {
         "runAsNonRoot": True,
@@ -288,6 +309,14 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
         "readOnlyRootFilesystem": True,
         "capabilities": {"drop": ["ALL"]},
     }
+    expected_init_container_security = {
+        "runAsNonRoot": False,
+        "runAsUser": 0,
+        "runAsGroup": 0,
+        "allowPrivilegeEscalation": False,
+        "readOnlyRootFilesystem": True,
+        "capabilities": {"drop": ["ALL"]},
+    }
 
     assert api_pod_spec["securityContext"] == expected_pod_security
     assert resolution_engine_pod_spec["securityContext"] == expected_pod_security
@@ -295,6 +324,7 @@ def test_default_chart_renders_runtime_security_contexts_and_tmp_mounts() -> Non
     assert api_container["securityContext"] == expected_container_security
     assert resolution_engine_container["securityContext"] == expected_container_security
     assert worker_container["securityContext"] == expected_container_security
+    assert worker_init_container["securityContext"] == expected_init_container_security
 
     api_env = {
         env["name"]: env["value"]
@@ -701,10 +731,7 @@ def test_chart_renders_otel_env_for_all_runtime_containers_when_enabled() -> Non
     for pod_spec, expected_service_name in zip(
         pod_specs, expected_service_names, strict=True
     ):
-        for container in [
-            *pod_spec.get("initContainers", []),
-            *pod_spec.get("containers", []),
-        ]:
+        for container in pod_spec.get("containers", []):
             env_by_name = {
                 env["name"]: env.get("value", "")
                 for env in container.get("env", [])
@@ -791,10 +818,7 @@ def test_chart_renders_content_store_envs_for_all_runtime_containers() -> None:
     statefulset = next(doc for doc in docs if doc["kind"] == "StatefulSet")
     pod_spec = statefulset["spec"]["template"]["spec"]
 
-    for container in [
-        *pod_spec.get("initContainers", []),
-        *pod_spec.get("containers", []),
-    ]:
+    for container in pod_spec.get("containers", []):
         env_by_name = {
             env["name"]: env.get("value", "")
             for env in container.get("env", [])
