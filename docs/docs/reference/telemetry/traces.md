@@ -75,6 +75,7 @@ Why it matters:
 - `pcg.resolution.project_work_item`
 - `pcg.resolution.load_facts`
 - `pcg.resolution.project_facts`
+- `pcg.resolution.project_file_batch`
 - `pcg.resolution.project_relationships`
 - `pcg.resolution.project_workloads`
 - `pcg.resolution.project_platforms`
@@ -82,18 +83,23 @@ Why it matters:
 Why it matters:
 
 - shows whether time is lost in claim, fact loading, relationship projection, workload materialization, or platform inference
+- makes large-repo file projection visible as its own span instead of blending it into `project_facts`
 
 ### Graph and Content Persistence
 
 - `pcg.graph.commit_chunk`
 - `pcg.content.dual_write`
 - `pcg.content.dual_write_batch`
+- `pcg.content.postgres.upsert_file_batch`
+- `pcg.calls.known_name_scan`
+- `pcg.inheritance.flush_batch`
 - `pcg.neo4j.query`
 
 Why it matters:
 
 - lets you see where write latency is really being spent
 - useful when graph or content persistence becomes the tail-latency driver
+- shows whether large-repo slowdowns are now in content batch writes, CALLS prefilter scans, or inheritance flushing
 
 ## Important Span Attributes
 
@@ -125,13 +131,19 @@ These attributes are especially useful for narrowing traces:
 
 1. Start with `pcg_index_repository_duration_seconds`.
 2. Open the `pcg.index.repository` trace for the slow repo.
-3. Compare parse span, fact emission span, and inline projection span.
+3. Compare parse span, fact emission span, `pcg.resolution.project_file_batch`, and `pcg.resolution.project_relationships`.
 
 ### Graph writes are slow
 
 1. Start with `pcg_graph_write_batch_duration_seconds`.
 2. Open the related `pcg.graph.commit_chunk` trace.
 3. Inspect nested `pcg.neo4j.query` spans to see which Cypher operation dominates.
+
+### A giant repo is threatening memory or throughput
+
+1. Start with `pcg_resolution_file_projection_batch_duration_seconds`, `pcg_content_file_batch_upsert_duration_seconds`, and `pcg_call_prep_calls_capped_total`.
+2. Open traces for `pcg.resolution.project_file_batch`, `pcg.content.postgres.upsert_file_batch`, `pcg.calls.known_name_scan`, and `pcg.inheritance.flush_batch`.
+3. Decide whether the hot path is still file/content IO or has moved into relationship preparation and flushes.
 
 ## Best Practices
 

@@ -21,6 +21,7 @@ import builtins as _py_builtins
 from collections import Counter
 from typing import Any
 
+from ...observability import get_observability
 from .call_prefilter import compatible_languages
 
 _PYTHON_BUILTIN_NAMES: frozenset[str] = frozenset(dir(_py_builtins))
@@ -120,7 +121,8 @@ def prepare_call_rows(
     call_limit = None if max_calls_per_file is None else max(0, max_calls_per_file)
     inspected_calls = 0
 
-    for call in file_data.get("function_calls", []):
+    raw_calls = file_data.get("function_calls", [])
+    for call in raw_calls:
         if call_limit is not None and inspected_calls >= call_limit:
             break
         inspected_calls += 1
@@ -208,6 +210,17 @@ def prepare_call_rows(
             )
         else:
             file_level_rows.append(call_params)
+
+    capped_calls = 0
+    if call_limit is not None and len(raw_calls) > inspected_calls:
+        capped_calls = len(raw_calls) - inspected_calls
+    observability = get_observability()
+    observability.record_call_prep_counts(
+        component=observability.component,
+        language=str(file_data.get("lang") or "unknown"),
+        inspected_count=inspected_calls,
+        capped_count=capped_calls,
+    )
 
     return contextual_rows, file_level_rows, next_row_id
 

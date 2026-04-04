@@ -71,33 +71,56 @@ When PCG indexes a directory, it walks upward to find the nearest `.pcgignore` a
 Create a file named `.pcgignore` in your project root with content like this:
 
 ```text
-# Build and coverage artifacts
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# JavaScript / TypeScript
+node_modules/
+.pnpm-store/
+.parcel-cache/
+*.tsbuildinfo
+
+# Elixir / Dart / Haskell
+_build/
+.elixir_ls/
+.dart_tool/
+.stack-work/
+
+# Minified and bundled assets
+*.min.js
+*.min.css
+*.min.json
+*.bundle.js
+*.chunk.js
+*.js.map
+*.css.map
+
+# Terraform and local state
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*tfplan*
+charts/*.tgz
+
+# General generated output
 dist/
 build/
-target/
+out/
 coverage/
-htmlcov/
-*.egg-info/
-
-# Optional: skip tests if you only want runtime code and IaC
-tests/
-spec/
-**/*_test.py
-**/*.test.js
-
-# Project-specific generated files
-docs/site/
-generated/
-tmp/
-fixtures/output/
-
-# Secrets and local-only config
-.env
-*.pem
-secrets.json
-terraform.tfstate
-terraform.tfstate.backup
+*.log
+*.tmp
 ```
+
+Prefer cache, build, minified, and local-state artifacts. Be careful with broad
+top-level names like `vendor/`, `bin/`, `charts/`, or lockfiles unless you are
+certain they are generated in your repo. In many ecosystems those can be real,
+tracked source inputs.
 
 ## IaC Note
 

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 from typing import Iterable
+
+from ...observability import get_observability
 
 _LANGUAGE_FAMILIES: dict[str, str] = {
     "javascript": "js_family",
@@ -68,17 +71,28 @@ def build_known_callable_names(session: Any) -> frozenset[str]:
     Returns:
         A frozenset of all callable names in the graph.
     """
+    observability = get_observability()
+    started = time.perf_counter()
     names: set[str] = set()
-    for label in ("Function", "Class"):
-        rows = _iter_query_rows(
-            session.run(
-                f"MATCH (n:{label}) RETURN DISTINCT n.name AS name",
+    with observability.start_span(
+        "pcg.calls.known_name_scan",
+        attributes={"pcg.variant": "flat"},
+    ):
+        for label in ("Function", "Class"):
+            rows = _iter_query_rows(
+                session.run(
+                    f"MATCH (n:{label}) RETURN DISTINCT n.name AS name",
+                )
             )
-        )
-        for row in rows:
-            name = row.get("name")
-            if name:
-                names.add(name)
+            for row in rows:
+                name = row.get("name")
+                if name:
+                    names.add(name)
+    observability.record_call_prefilter_known_name_scan(
+        component=observability.component,
+        variant="flat",
+        duration_seconds=time.perf_counter() - started,
+    )
     return frozenset(names)
 
 
@@ -98,19 +112,25 @@ def build_known_callable_names_by_family(
         A mapping of language name to the frozenset of callable names
         visible to that language's family.
     """
+    observability = get_observability()
+    started = time.perf_counter()
     by_lang: dict[str, set[str]] = {}
-    for label in ("Function", "Class"):
-        rows = _iter_query_rows(
-            session.run(
-                f"MATCH (n:{label}) RETURN DISTINCT n.name AS name, n.lang AS lang",
+    with observability.start_span(
+        "pcg.calls.known_name_scan",
+        attributes={"pcg.variant": "family"},
+    ):
+        for label in ("Function", "Class"):
+            rows = _iter_query_rows(
+                session.run(
+                    f"MATCH (n:{label}) RETURN DISTINCT n.name AS name, n.lang AS lang",
+                )
             )
-        )
-        for row in rows:
-            name = row.get("name")
-            lang = row.get("lang")
-            if not name or not lang:
-                continue
-            by_lang.setdefault(lang, set()).add(name)
+            for row in rows:
+                name = row.get("name")
+                lang = row.get("lang")
+                if not name or not lang:
+                    continue
+                by_lang.setdefault(lang, set()).add(name)
 
     # Merge names within the same family.
     result: dict[str, frozenset[str]] = {}
@@ -124,6 +144,11 @@ def build_known_callable_names_by_family(
                     merged.update(other_names)
             seen_families[family] = frozenset(merged)
         result[lang] = seen_families[family]
+    observability.record_call_prefilter_known_name_scan(
+        component=observability.component,
+        variant="family",
+        duration_seconds=time.perf_counter() - started,
+    )
     return result
 
 

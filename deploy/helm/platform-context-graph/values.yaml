@@ -172,47 +172,104 @@ repoSync:
 pcgignore: |
   # Python
   __pycache__/
-  *.pyc
-  *.pyo
-  *.pyd
-  .Python
+  *.py[cod]
   .venv/
   env/
   venv/
+  .tox/
+  .nox/
+  .pytest_cache/
+  .mypy_cache/
+  .ruff_cache/
+  .pyre/
+  .hypothesis/
+  .ipynb_checkpoints/
+  .eggs/
+  *.egg-info/
+  htmlcov/
+  coverage.xml
 
-  # Node / JavaScript
+  # JavaScript / TypeScript
   node_modules/
   bower_components/
+  jspm_packages/
   .npm/
+  .pnpm-store/
   .yarn/
+  .parcel-cache/
+  .next/
+  .nuxt/
+  .svelte-kit/
+  .docusaurus/
+  .vite/
+  *.tsbuildinfo
 
-  # Python packaging
-  *.egg-info/
-  *.egg/
-  .eggs/
-
-  # Java / JVM
+  # JVM / Kotlin / Scala / Groovy
   .gradle/
   .m2/
+  .bloop/
+  .metals/
+  .bsp/
+  .kotlin/
   *.class
-  *.jar
-
-  # Ruby
-  .bundle/
 
   # Go
-  vendor/
+  *.test
+  *.coverprofile
+  coverage.out
+  profile.cov
 
-  # PHP
-  vendor/
-
-  # .NET / C#
-  packages/
-  bin/
-  obj/
+  # PHP / Ruby
+  composer.phar
+  .bundle/
+  vendor/bundle/
 
   # Rust
   target/
+
+  # .NET / C#
+  packages/
+  obj/
+  .vs/
+  TestResult*/
+  *.trx
+
+  # Swift / Apple
+  .build/
+  .swiftpm/
+  xcuserdata/
+  Carthage/Build/
+  fastlane/report.xml
+  fastlane/Preview.html
+  fastlane/test_output
+
+  # Elixir
+  _build/
+  deps/
+  cover/
+  .elixir_ls/
+  erl_crash.dump
+
+  # Dart / Flutter
+  .dart_tool/
+  .flutter-plugins
+  .flutter-plugins-dependencies
+
+  # Haskell
+  dist-newstyle/
+  .stack-work/
+  .hpc/
+
+  # Perl
+  blib/
+  .build/
+  .carmel/
+
+  # C / C++
+  CMakeFiles/
+  CMakeCache.txt
+  cmake_install.cmake
+  *.dSYM/
 
   # IDEs and editors
   .idea/
@@ -230,33 +287,43 @@ pcgignore: |
   cdk.out/
   .serverless/
   .aws-sam/
+  *.tfstate
+  *.tfstate.*
+  .terraform.tfstate.lock.info
+  *.tfvars
+  *.tfvars.json
+  override.tf
+  override.tf.json
+  *_override.tf
+  *_override.tf.json
+  *tfplan*
+  crash.log
+  crash.*.log
+  charts/*.tgz
 
   # Build artifacts and output
   dist/
   build/
   out/
-
-  # Vendored and third-party dependencies
-  third_party/
-  third-party/
-  externals/
+  coverage/
 
   # Minified and generated files
   *.min.js
   *.min.css
+  *.min.json
   *.bundle.js
   *.chunk.js
   *.min.map
+  *.js.map
+  *.css.map
 
   # Coverage, databases, and temp data
-  .pytest_cache/
-  coverage/
-  htmlcov/
   *.log
   *.sqlite3
   *.db
   *.tmp
   *.temp
+  *.bak
 
 nodeSelector: {}
 tolerations: []

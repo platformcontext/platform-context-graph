@@ -8,9 +8,14 @@ from typing import Any
 from .fact_scaling_metrics import RuntimeFactScalingMetricsMixin
 from .fact_scaling_metrics import setup_fact_scaling_instruments
 from .otel import Observation
+from .projection_hot_path_metrics import RuntimeProjectionHotPathMetricsMixin
+from .projection_hot_path_metrics import setup_projection_hot_path_instruments
 
 
-class RuntimeFactResolutionMetricsMixin(RuntimeFactScalingMetricsMixin):
+class RuntimeFactResolutionMetricsMixin(
+    RuntimeProjectionHotPathMetricsMixin,
+    RuntimeFactScalingMetricsMixin,
+):
     """Provide facts-first and resolution-engine metric helpers."""
 
     enabled: bool
@@ -568,9 +573,9 @@ def setup_fact_resolution_instruments(runtime: Any) -> None:
     runtime._fact_resolution_instruments["resolution_stage_failures_total"] = (
         runtime.meter.create_counter("pcg_resolution_stage_failures_total")
     )
-    runtime._fact_resolution_instruments[
-        "resolution_failure_classifications_total"
-    ] = runtime.meter.create_counter("pcg_resolution_failure_classifications_total")
+    runtime._fact_resolution_instruments["resolution_failure_classifications_total"] = (
+        runtime.meter.create_counter("pcg_resolution_failure_classifications_total")
+    )
     runtime._fact_resolution_instruments["projection_decisions_total"] = (
         runtime.meter.create_counter("pcg_projection_decisions_total")
     )
@@ -597,6 +602,7 @@ def setup_fact_resolution_instruments(runtime: Any) -> None:
         callbacks=[runtime._observe_resolution_workers_active],
     )
     setup_fact_scaling_instruments(runtime)
+    setup_projection_hot_path_instruments(runtime)
 
 
 __all__ = ["RuntimeFactResolutionMetricsMixin", "setup_fact_resolution_instruments"]

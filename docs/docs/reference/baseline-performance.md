@@ -22,6 +22,33 @@ the comparison baseline for the planned ArcadeDB evaluation.
 - Resolution engine successfully claimed and re-projected 11 work items with
   zero failures
 
+## What To Watch In The Next Large-Repo Run
+
+The most important live signals after the hot-path fixes are:
+
+- `pcg_resolution_file_projection_batch_duration_seconds`
+- `pcg_content_file_batch_upsert_duration_seconds`
+- `pcg_call_prefilter_known_name_scan_duration_seconds`
+- `pcg_call_prep_calls_capped_total`
+- `pcg_inheritance_batch_duration_seconds`
+
+Use them together with:
+
+- `pcg_resolution_stage_duration_seconds{stage="project_facts"}`
+- `pcg_resolution_stage_duration_seconds{stage="project_relationships"}`
+- `pcg_process_rss_bytes`
+- `pcg_cgroup_memory_bytes`
+
+Interpretation:
+
+- If memory stays flat while `pcg_resolution_file_projection_batch_duration_seconds`
+  remains bounded, the entity and file streaming changes are doing their job.
+- If file projection is healthy but `project_relationships` still spikes, the next
+  bottleneck has moved into CALLS or inheritance work rather than fact loading.
+- If `pcg_call_prep_calls_capped_total` rises sharply on one repo, the call cap is
+  protecting stability and should be reviewed together with correctness sampling
+  before raising it.
+
 ## Test Environment
 
 | Component | Details |

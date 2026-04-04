@@ -25,6 +25,7 @@ from .postgres_support import (
     FILE_SCHEMA,
 )
 from .postgres_file_ops import _FILE_UPSERT_SQL
+from .postgres_file_ops import _file_batch_size
 from .postgres_file_ops import _file_entry_params
 from .postgres_file_ops import upsert_file_batch_rows
 from .postgres_entity_ops import _ENTITY_UPSERT_SQL
@@ -163,15 +164,32 @@ class PostgresContentProvider:
         if not entries:
             return
 
-        with get_observability().start_span(
+        batch_size = _file_batch_size(len(entries))
+        observability = get_observability()
+        started = time.perf_counter()
+        outcome = "success"
+        with observability.start_span(
             "pcg.content.postgres.upsert_file_batch",
             attributes={
                 "pcg.content.file_count": len(entries),
                 "pcg.content.repo_id": entries[0].repo_id,
+                "pcg.content.chunk_count": (len(entries) + batch_size - 1)
+                // batch_size,
             },
         ):
-            with self._cursor() as cursor:
-                upsert_file_batch_rows(cursor, entries)
+            try:
+                with self._cursor() as cursor:
+                    upsert_file_batch_rows(cursor, entries, batch_size=batch_size)
+            except Exception:
+                outcome = "error"
+                raise
+            finally:
+                observability.record_content_file_batch_upsert(
+                    component=observability.component,
+                    outcome=outcome,
+                    row_count=len(entries),
+                    duration_seconds=time.perf_counter() - started,
+                )
 
     def upsert_entities(
         self,

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 from typing import Any, Iterable
+
+from ...observability import get_observability
 
 
 def create_inheritance_links(
@@ -207,14 +210,29 @@ def _flush_inheritance_rows(session: Any, rows: list[dict[str, str]]) -> None:
 
     if not rows:
         return
-    session.run(
-        """
-        UNWIND $rows AS row
-        MATCH (child:Class {name: row.child_name, path: row.file_path})
-        MATCH (parent:Class {name: row.parent_name, path: row.resolved_parent_file_path})
-        MERGE (child)-[:INHERITS]->(parent)
-        """,
-        rows=rows,
+    observability = get_observability()
+    started = time.perf_counter()
+    with observability.start_span(
+        "pcg.inheritance.flush_batch",
+        attributes={
+            "pcg.mode": "inherits",
+            "pcg.row_count": len(rows),
+        },
+    ):
+        session.run(
+            """
+            UNWIND $rows AS row
+            MATCH (child:Class {name: row.child_name, path: row.file_path})
+            MATCH (parent:Class {name: row.parent_name, path: row.resolved_parent_file_path})
+            MERGE (child)-[:INHERITS]->(parent)
+            """,
+            rows=rows,
+        )
+    observability.record_inheritance_batch(
+        component=observability.component,
+        mode="inherits",
+        row_count=len(rows),
+        duration_seconds=time.perf_counter() - started,
     )
 
 
@@ -225,28 +243,57 @@ def _flush_csharp_inheritance_rows(
 ) -> None:
     """Write batched C# inheritance and interface rows in one or two queries."""
 
+    observability = get_observability()
     if inheritance_rows:
-        session.run(
-            """
-            UNWIND $rows AS row
-            MATCH (child {name: row.child_name, path: row.file_path})
-            WHERE child:Class OR child:Record OR child:Interface
-            MATCH (parent {name: row.parent_name})
-            WHERE parent:Class OR parent:Record OR parent:Interface
-            MERGE (child)-[:INHERITS]->(parent)
-            """,
-            rows=inheritance_rows,
+        started = time.perf_counter()
+        with observability.start_span(
+            "pcg.inheritance.flush_batch",
+            attributes={
+                "pcg.mode": "csharp_inherits",
+                "pcg.row_count": len(inheritance_rows),
+            },
+        ):
+            session.run(
+                """
+                UNWIND $rows AS row
+                MATCH (child {name: row.child_name, path: row.file_path})
+                WHERE child:Class OR child:Record OR child:Interface
+                MATCH (parent {name: row.parent_name})
+                WHERE parent:Class OR parent:Record OR parent:Interface
+                MERGE (child)-[:INHERITS]->(parent)
+                """,
+                rows=inheritance_rows,
+            )
+        observability.record_inheritance_batch(
+            component=observability.component,
+            mode="csharp_inherits",
+            row_count=len(inheritance_rows),
+            duration_seconds=time.perf_counter() - started,
         )
     if interface_rows:
-        session.run(
-            """
-            UNWIND $rows AS row
-            MATCH (child {name: row.child_name, path: row.file_path})
-            WHERE child:Class OR child:Struct OR child:Record
-            MATCH (iface:Interface {name: row.interface_name})
-            MERGE (child)-[:IMPLEMENTS]->(iface)
-            """,
-            rows=interface_rows,
+        started = time.perf_counter()
+        with observability.start_span(
+            "pcg.inheritance.flush_batch",
+            attributes={
+                "pcg.mode": "csharp_implements",
+                "pcg.row_count": len(interface_rows),
+            },
+        ):
+            session.run(
+                """
+                UNWIND $rows AS row
+                MATCH (child {name: row.child_name, path: row.file_path})
+                WHERE child:Class OR child:Struct OR child:Record
+                MATCH (iface:Interface {name: row.interface_name})
+                MERGE (child)-[:IMPLEMENTS]->(iface)
+                """,
+                rows=interface_rows,
+            )
+        observability.record_inheritance_batch(
+            component=observability.component,
+            mode="csharp_implements",
+            row_count=len(interface_rows),
+            duration_seconds=time.perf_counter() - started,
         )
 
 
