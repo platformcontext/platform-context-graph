@@ -77,14 +77,16 @@ def test_emitted_git_facts_preserve_relationship_projection_inputs() -> None:
 
     def _capture_calls(builder, all_file_data, imports_map, **kwargs):  # type: ignore[no-untyped-def]
         captured["calls_builder"] = builder
-        captured["calls_files"] = all_file_data
+        captured["calls_streamed"] = not isinstance(all_file_data, list)
+        captured["calls_files"] = list(all_file_data)
         captured["calls_imports"] = imports_map
         captured["calls_kwargs"] = kwargs
         return {"total_rows": 1}
 
     def _capture_inheritance(builder, all_file_data, imports_map):  # type: ignore[no-untyped-def]
         captured["inheritance_builder"] = builder
-        captured["inheritance_files"] = all_file_data
+        captured["inheritance_streamed"] = not isinstance(all_file_data, list)
+        captured["inheritance_files"] = list(all_file_data)
         captured["inheritance_imports"] = imports_map
 
     metrics = project_git_relationship_fact_records(
@@ -125,6 +127,8 @@ def test_emitted_git_facts_preserve_relationship_projection_inputs() -> None:
         },
     ]
     assert metrics["files"] == 2
+    assert captured["calls_streamed"] is True
+    assert captured["inheritance_streamed"] is True
     assert captured["calls_files"] == expected_files
     assert captured["inheritance_files"] == expected_files
     assert captured["calls_imports"] == {"Base": ["/tmp/service/src/base.py"]}

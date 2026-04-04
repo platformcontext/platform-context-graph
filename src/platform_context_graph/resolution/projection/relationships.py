@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from typing import Iterable
+from typing import Iterator
 
 from platform_context_graph.facts.storage.models import FactRecordRow
 
@@ -31,17 +32,46 @@ def collect_relationship_projection_inputs(
 ) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
     """Rebuild file-data and imports-map inputs from persisted Git facts."""
 
-    records = list(fact_records)
+    file_facts, imports_map = collect_relationship_projection_fact_inputs(fact_records)
+    return list(iter_relationship_file_data(file_facts)), imports_map
+
+
+def collect_relationship_projection_fact_inputs(
+    fact_records: Iterable[FactRecordRow],
+) -> tuple[list[FactRecordRow], dict[str, list[str]]]:
+    """Collect the bounded inputs needed for relationship projection.
+
+    The production relationship projector only needs:
+    - repository-level ``imports_map`` provenance
+    - qualifying ``FileObserved`` facts
+
+    Returning file-fact references instead of reconstructed file payload dicts
+    avoids holding a second repo-wide copy of ``parsed_file_data`` in memory.
+    """
+
     imports_map: dict[str, list[str]] = {}
-    for repository_fact in iter_repository_facts(records):
+    file_facts: list[FactRecordRow] = []
+    for repository_fact in iter_repository_facts(fact_records):
         repo_imports_map = repository_fact.provenance.get("imports_map")
         if isinstance(repo_imports_map, dict):
             _merge_import_maps(imports_map, repo_imports_map)
 
-    all_file_data: list[dict[str, Any]] = []
-    for file_fact in iter_file_facts(records):
+    for file_fact in iter_file_facts(fact_records):
         if not file_fact.relative_path:
             continue
+        parsed_file_data = file_fact.payload.get("parsed_file_data")
+        if not isinstance(parsed_file_data, dict):
+            continue
+        file_facts.append(file_fact)
+    return file_facts, imports_map
+
+
+def iter_relationship_file_data(
+    file_facts: Iterable[FactRecordRow],
+) -> Iterator[dict[str, Any]]:
+    """Yield normalized file payloads one at a time for relationship stages."""
+
+    for file_fact in file_facts:
         parsed_file_data = file_fact.payload.get("parsed_file_data")
         if not isinstance(parsed_file_data, dict):
             continue
@@ -53,8 +83,7 @@ def collect_relationship_projection_inputs(
         file_data["path"] = file_path
         file_data["repo_path"] = repo_path
         file_data["is_dependency"] = bool(file_fact.payload.get("is_dependency", False))
-        all_file_data.append(file_data)
-    return all_file_data, imports_map
+        yield file_data
 
 
 def project_git_relationship_fact_records(
@@ -77,25 +106,29 @@ def project_git_relationship_fact_records(
             create_all_inheritance_links as create_all_inheritance_links_fn,
         )
 
-    all_file_data, imports_map = collect_relationship_projection_inputs(fact_records)
-    if not all_file_data:
+    file_facts, imports_map = collect_relationship_projection_fact_inputs(fact_records)
+    if not file_facts:
         return {
             "files": 0,
             "imports": 0,
             "call_metrics": {},
         }
 
-    create_all_inheritance_links_fn(builder, all_file_data, imports_map)
+    create_all_inheritance_links_fn(
+        builder,
+        iter_relationship_file_data(file_facts),
+        imports_map,
+    )
     call_metrics = create_all_function_calls_fn(
         builder,
-        all_file_data,
+        iter_relationship_file_data(file_facts),
         imports_map,
         debug_log_fn=debug_log_fn,
         get_config_value_fn=lambda _key: None,
         warning_logger_fn=warning_logger_fn,
     )
     return {
-        "files": len(all_file_data),
+        "files": len(file_facts),
         "imports": len(imports_map),
         "call_metrics": call_metrics,
     }
@@ -123,7 +156,9 @@ def project_relationship_facts(
 
 
 __all__ = [
+    "collect_relationship_projection_fact_inputs",
     "collect_relationship_projection_inputs",
+    "iter_relationship_file_data",
     "project_relationship_facts",
     "project_git_relationship_fact_records",
 ]
