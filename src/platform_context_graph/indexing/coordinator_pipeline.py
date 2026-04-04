@@ -611,8 +611,6 @@ async def process_repository_snapshots(
         commit_concurrency = 1
     else:
         commit_concurrency = max(1, min(parsed, 32))
-    if facts_first_mode:
-        commit_concurrency = 1
     emit_log_call(
         info_logger_fn,
         f"Commit worker config: PCG_COMMIT_WORKERS={raw!r}, "
@@ -625,10 +623,12 @@ async def process_repository_snapshots(
         },
     )
 
-    # Create ProcessPoolExecutor when commit_concurrency > 1 for true parallelism
+    # Create ProcessPoolExecutor when commit_concurrency > 1 for true parallelism.
+    # In facts-first mode, the commit callback needs unserialisable objects
+    # (builder, fact_store, work_queue) so we use asyncio.to_thread instead.
     _commit_process_pool: ProcessPoolExecutor | None = None
     _connection_params: dict[str, str | None] | None = None
-    if commit_concurrency > 1:
+    if commit_concurrency > 1 and not facts_first_mode:
         mp_start_method = os.getenv("PCG_MULTIPROCESS_START_METHOD", "spawn")
         mp_context = multiprocessing.get_context(mp_start_method)
         _commit_process_pool = ProcessPoolExecutor(

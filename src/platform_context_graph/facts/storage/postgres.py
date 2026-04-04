@@ -29,6 +29,8 @@ except ImportError:  # pragma: no cover - exercised without optional dependency.
 
 _logger = logging.getLogger(__name__)
 
+_FACT_UPSERT_BATCH_SIZE = int(os.getenv("PCG_FACT_UPSERT_BATCH_SIZE", "2000"))
+
 _FACT_RUN_UPSERT_SQL = """
 INSERT INTO fact_runs (
     source_run_id,
@@ -172,12 +174,26 @@ class PostgresFactStore:
         return psycopg is not None and bool(self._dsn)
 
     def _ensure_schema(self, conn: Any) -> None:
-        """Run fact-store DDL once across the lifetime of the store."""
+        """Run fact-store DDL once across the lifetime of the store.
+
+        Uses a lightweight existence check before attempting DDL so that
+        concurrent writers are never blocked by ``CREATE INDEX IF NOT EXISTS``
+        acquiring a ``ShareLock`` on the table.
+        """
 
         if self._initialized:
             return
         with self._schema_lock:
             if not self._initialized:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT 1 FROM information_schema.tables "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'fact_records'"
+                    )
+                    if cursor.fetchone() is not None:
+                        self._initialized = True
+                        return
                 with conn.cursor() as cursor:
                     cursor.execute(FACT_STORE_SCHEMA)
                 self._initialized = True
@@ -323,10 +339,32 @@ class PostgresFactStore:
             cursor.execute(query, params)
 
     def _executemany(self, query: str, rows: list[dict[str, Any]]) -> None:
-        """Execute one SQL batch through the managed cursor."""
+        """Execute one SQL batch through the managed cursor in chunks.
 
-        with self._cursor() as cursor:
-            cursor.executemany(query, rows)
+        Large batches are split into chunks of ``_FACT_UPSERT_BATCH_SIZE``
+        rows (default 2000, configurable via ``PCG_FACT_UPSERT_BATCH_SIZE``).
+        Each chunk commits independently under autocommit mode, preventing a
+        single massive repo from creating a multi-hour transaction that stalls
+        the entire pipeline.
+        """
+
+        batch_size = _FACT_UPSERT_BATCH_SIZE
+        if len(rows) <= batch_size:
+            with self._cursor() as cursor:
+                cursor.executemany(query, rows)
+            return
+
+        total = len(rows)
+        for offset in range(0, total, batch_size):
+            chunk = rows[offset : offset + batch_size]
+            with self._cursor() as cursor:
+                cursor.executemany(query, chunk)
+            if offset + batch_size < total:
+                _logger.debug(
+                    "Fact upsert chunk committed: %d/%d rows",
+                    min(offset + batch_size, total),
+                    total,
+                )
 
     def _fetchall(
         self,

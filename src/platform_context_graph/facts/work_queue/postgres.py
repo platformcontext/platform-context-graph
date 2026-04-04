@@ -81,12 +81,26 @@ class PostgresFactWorkQueue:
         return psycopg is not None and bool(self._dsn)
 
     def _ensure_schema(self, conn: Any) -> None:
-        """Run queue DDL once across the lifetime of the queue."""
+        """Run queue DDL once across the lifetime of the queue.
+
+        Uses a lightweight existence check before attempting DDL so that
+        concurrent writers are never blocked by ``CREATE INDEX IF NOT EXISTS``
+        acquiring a ``ShareLock`` on the table.
+        """
 
         if self._initialized:
             return
         with self._schema_lock:
             if not self._initialized:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT 1 FROM information_schema.tables "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'fact_work_items'"
+                    )
+                    if cursor.fetchone() is not None:
+                        self._initialized = True
+                        return
                 with conn.cursor() as cursor:
                     cursor.execute(FACT_WORK_QUEUE_SCHEMA)
                 self._initialized = True

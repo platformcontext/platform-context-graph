@@ -42,6 +42,28 @@ services:
       POSTGRES_DB: platform_context_graph
       POSTGRES_USER: pcg
       POSTGRES_PASSWORD: ${PCG_POSTGRES_PASSWORD:-change-me}
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=${PCG_PG_SHARED_BUFFERS:-4GB}"
+      - "-c"
+      - "work_mem=${PCG_PG_WORK_MEM:-16MB}"
+      - "-c"
+      - "maintenance_work_mem=${PCG_PG_MAINTENANCE_WORK_MEM:-512MB}"
+      - "-c"
+      - "max_wal_size=${PCG_PG_MAX_WAL_SIZE:-8GB}"
+      - "-c"
+      - "wal_buffers=${PCG_PG_WAL_BUFFERS:-64MB}"
+      - "-c"
+      - "effective_cache_size=${PCG_PG_EFFECTIVE_CACHE_SIZE:-32GB}"
+      - "-c"
+      - "synchronous_commit=${PCG_PG_SYNCHRONOUS_COMMIT:-off}"
+      - "-c"
+      - "default_toast_compression=${PCG_PG_TOAST_COMPRESSION:-lz4}"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "random_page_cost=1.1"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -57,6 +79,8 @@ services:
     command: ["pcg", "internal", "bootstrap-index"]
     healthcheck:
       disable: true
+    ports:
+      - "${PCG_BOOTSTRAP_METRICS_PORT:-19467}:9464"
     environment:
       DEFAULT_DATABASE: neo4j
       NEO4J_URI: bolt://neo4j:7687
@@ -74,7 +98,7 @@ services:
       PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
       PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
       PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-1}"
+      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
       INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
       PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
@@ -125,7 +149,7 @@ services:
       PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
       PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
       PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-1}"
+      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
       INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
       PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
@@ -184,7 +208,7 @@ services:
       PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
       PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
       PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-1}"
+      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
       INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
       PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
@@ -240,7 +264,7 @@ services:
       PCG_PARSE_WORKERS: "${PCG_PARSE_WORKERS:-4}"
       PCG_WORKER_MAX_TASKS: "${PCG_WORKER_MAX_TASKS:-}"
       PCG_INDEX_QUEUE_DEPTH: "${PCG_INDEX_QUEUE_DEPTH:-8}"
-      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-1}"
+      PCG_COMMIT_WORKERS: "${PCG_COMMIT_WORKERS:-2}"
       INDEX_VARIABLES: "${INDEX_VARIABLES:-false}"
       PCG_MAX_CALLS_PER_FILE: "${PCG_MAX_CALLS_PER_FILE:-50}"
       PCG_DEPLOYMENT_ENVIRONMENT: local-compose
