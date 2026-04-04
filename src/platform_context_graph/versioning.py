@@ -4,15 +4,17 @@ from __future__ import annotations
 
 
 def ensure_v_prefix(version: str) -> str:
-    """Return a user-facing version string prefixed with ``v``.
+    """Return a normalized user-facing version string with ``v`` prefix.
 
     Args:
         version: Raw version string from packaging metadata or config.
 
     Returns:
-        Version text with a leading ``v`` when the input looks like a release
-        version. Development fallback strings such as ``"0.0.0 (dev)"`` are
-        also normalized to the same style for consistent CLI and API output.
+        Version text normalized to use a lowercase leading ``v`` for any
+        non-empty input. Development fallback strings such as
+        ``"0.0.0 (dev)"`` are normalized to the same style for consistent CLI
+        and API output. Empty or whitespace-only input falls back to
+        ``"v0.0.0"``.
     """
 
     cleaned = version.strip()
