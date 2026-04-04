@@ -76,7 +76,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["pcg", "internal", "bootstrap-index"]
     healthcheck:
       disable: true
     ports:
@@ -112,6 +111,14 @@ services:
       - pcg_data:/data
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
+      - ${PCG_PCGIGNORE_PATH:-/dev/null}:/tmp/pcgignore-source:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /data/repos && \
+        if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi && \
+        exec pcg internal bootstrap-index
     depends_on:
       neo4j:
         condition: service_healthy
@@ -184,7 +191,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["pcg", "internal", "repo-sync-loop"]
     healthcheck:
       disable: true
     ports:
@@ -224,6 +230,13 @@ services:
       - pcg_data:/data
       - ./:/app-src
       - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
+      - ${PCG_PCGIGNORE_PATH:-/dev/null}:/tmp/pcgignore-source:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi && \
+        exec pcg internal repo-sync-loop
     depends_on:
       neo4j:
         condition: service_healthy

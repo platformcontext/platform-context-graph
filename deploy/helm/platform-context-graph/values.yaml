@@ -173,23 +173,54 @@ pcgignore: |
   # Python
   __pycache__/
   *.pyc
+  *.pyo
+  *.pyd
+  .Python
   .venv/
-  .env
+  env/
+  venv/
 
-  # Node
+  # Node / JavaScript
   node_modules/
+  bower_components/
+  .npm/
+  .yarn/
 
-  # Build artifacts
-  dist/
-  build/
+  # Python packaging
+  *.egg-info/
+  *.egg/
+  .eggs/
+
+  # Java / JVM
+  .gradle/
+  .m2/
+  *.class
+  *.jar
+
+  # Ruby
+  .bundle/
+
+  # Go
+  vendor/
+
+  # PHP
+  vendor/
+
+  # .NET / C#
+  packages/
+  bin/
+  obj/
+
+  # Rust
   target/
-  out/
 
-  # IDEs
+  # IDEs and editors
   .idea/
   .vscode/
+  *.swp
+  *.swo
 
-  # Git and cache directories
+  # Git and IaC cache directories
   .git/
   .terraform/
   .terragrunt-cache/
@@ -200,12 +231,32 @@ pcgignore: |
   .serverless/
   .aws-sam/
 
-  # Coverage and temp data
+  # Build artifacts and output
+  dist/
+  build/
+  out/
+
+  # Vendored and third-party dependencies
+  third_party/
+  third-party/
+  externals/
+
+  # Minified and generated files
+  *.min.js
+  *.min.css
+  *.bundle.js
+  *.chunk.js
+  *.min.map
+
+  # Coverage, databases, and temp data
   .pytest_cache/
   coverage/
   htmlcov/
   *.log
   *.sqlite3
+  *.db
+  *.tmp
+  *.temp
 
 nodeSelector: {}
 tolerations: []
