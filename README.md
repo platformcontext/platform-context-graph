@@ -154,6 +154,10 @@ The deployed platform has three long-running runtimes plus one one-shot helper:
 | Resolution Engine | queue draining, fact loading, projection, retries, recovery | `pcg internal resolution-engine` |
 | Bootstrap Index | initial one-shot indexing before steady-state sync | `pcg internal bootstrap-index` |
 
+The public runtime name is `ingester`. The internal command remains
+`pcg internal repo-sync-loop`. This keeps operator-facing naming stable while
+preserving a specific name for the long-running repository sync process.
+
 See [Service Runtimes](docs/docs/deployment/service-runtimes.md) for the
 complete runtime contract.
 
