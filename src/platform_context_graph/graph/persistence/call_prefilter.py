@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from typing import Any
+from typing import Iterable
 
 _LANGUAGE_FAMILIES: dict[str, str] = {
     "javascript": "js_family",
@@ -69,10 +70,15 @@ def build_known_callable_names(session: Any) -> frozenset[str]:
     """
     names: set[str] = set()
     for label in ("Function", "Class"):
-        rows = session.run(
-            f"MATCH (n:{label}) RETURN DISTINCT n.name AS name",
-        ).data()
-        names.update(row["name"] for row in rows if row.get("name"))
+        rows = _iter_query_rows(
+            session.run(
+                f"MATCH (n:{label}) RETURN DISTINCT n.name AS name",
+            )
+        )
+        for row in rows:
+            name = row.get("name")
+            if name:
+                names.add(name)
     return frozenset(names)
 
 
@@ -94,9 +100,11 @@ def build_known_callable_names_by_family(
     """
     by_lang: dict[str, set[str]] = {}
     for label in ("Function", "Class"):
-        rows = session.run(
-            f"MATCH (n:{label}) RETURN DISTINCT n.name AS name, n.lang AS lang",
-        ).data()
+        rows = _iter_query_rows(
+            session.run(
+                f"MATCH (n:{label}) RETURN DISTINCT n.name AS name, n.lang AS lang",
+            )
+        )
         for row in rows:
             name = row.get("name")
             lang = row.get("lang")
@@ -117,3 +125,15 @@ def build_known_callable_names_by_family(
             seen_families[family] = frozenset(merged)
         result[lang] = seen_families[family]
     return result
+
+
+def _iter_query_rows(result: Any) -> Iterable[dict[str, Any]]:
+    """Yield Neo4j rows without forcing eager materialization."""
+
+    try:
+        return iter(result)
+    except TypeError:
+        data_fn = getattr(result, "data", None)
+        if callable(data_fn):
+            return data_fn()
+        raise

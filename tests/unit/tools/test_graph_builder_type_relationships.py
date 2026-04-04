@@ -5,6 +5,7 @@ from time import perf_counter
 from typing import Any
 
 from platform_context_graph.graph.persistence.inheritance import (
+    create_all_inheritance_links,
     create_inheritance_links,
 )
 
@@ -112,3 +113,52 @@ def test_create_inheritance_links_benchmark_fixture_records_query_count(
     record_property("resolved_inheritance_edges", class_count * base_count)
     record_property("query_count", len(session.calls))
     record_property("duration_seconds", round(elapsed, 6))
+
+
+def test_create_all_inheritance_links_batches_rows_across_files() -> None:
+    """Cross-file inheritance finalization should batch rows into one query."""
+
+    session = RecordingSession()
+    builder = type(
+        "Builder",
+        (),
+        {
+            "driver": type(
+                "Driver", (), {"session": lambda self: _SessionContext(session)}
+            )()
+        },
+    )()
+    all_file_data = [
+        {
+            "path": "/tmp/repo/a.py",
+            "classes": [{"name": "ChildA", "bases": ["BaseOne"]}],
+            "imports": [{"name": "pkg.base_one.BaseOne"}],
+        },
+        {
+            "path": "/tmp/repo/b.py",
+            "classes": [{"name": "ChildB", "bases": ["BaseTwo"]}],
+            "imports": [{"name": "pkg.base_two.BaseTwo"}],
+        },
+    ]
+    imports_map = {
+        "BaseOne": ["/tmp/repo/pkg/base_one/BaseOne.py"],
+        "BaseTwo": ["/tmp/repo/pkg/base_two/BaseTwo.py"],
+    }
+
+    create_all_inheritance_links(builder, all_file_data, imports_map)
+
+    assert len(session.calls) == 1
+    query, params = session.calls[0]
+    assert "UNWIND $rows AS row" in query
+    assert len(params["rows"]) == 2
+
+
+class _SessionContext:
+    def __init__(self, session: RecordingSession) -> None:
+        self._session = session
+
+    def __enter__(self) -> RecordingSession:
+        return self._session
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None

@@ -15,6 +15,9 @@ from platform_context_graph.resolution.projection import project_git_fact_record
 from platform_context_graph.resolution.projection.entities import (
     project_parsed_entity_facts,
 )
+from platform_context_graph.resolution.projection.files import (
+    collect_directory_chain_rows,
+)
 from platform_context_graph.resolution.projection.files import project_file_facts
 
 
@@ -256,7 +259,7 @@ def test_project_parsed_entity_facts_uses_full_parsed_file_payload_when_availabl
 
 
 def test_project_file_facts_dual_writes_content_for_parsed_file_payload() -> None:
-    """File projection should repopulate the content store from stored file facts."""
+    """File projection should repopulate the content store via batch writes."""
 
     captured: dict[str, Any] = {}
     fact_records = [
@@ -285,31 +288,128 @@ def test_project_file_facts_dual_writes_content_for_parsed_file_payload() -> Non
         )
     ]
 
-    def _content_dual_write(
-        file_data: dict[str, Any],
-        file_name: str,
+    def _unexpected_single_write(
+        *_args: object,
+        **_kwargs: object,
+    ) -> None:
+        raise AssertionError("project_file_facts should use batch content writes")
+
+    def _content_dual_write_batch(
+        file_data_list: list[dict[str, Any]],
         repository: dict[str, Any],
         warning_logger_fn: Any,
+        *,
+        content_batch_size: int | None = None,
     ) -> None:
-        del warning_logger_fn
-        captured["file_data"] = file_data
-        captured["file_name"] = file_name
+        del warning_logger_fn, content_batch_size
+        captured["file_data_list"] = file_data_list
         captured["repository"] = repository
 
     session = _FakeSession()
     projected = project_file_facts(
         session,
         fact_records,
-        content_dual_write_fn=_content_dual_write,
+        content_dual_write_fn=_unexpected_single_write,
+        content_dual_write_batch_fn=_content_dual_write_batch,
         collect_directory_chain_rows_fn=lambda *_args, **_kwargs: ([], []),
         flush_directory_chain_rows_fn=lambda *_args, **_kwargs: None,
+        file_batch_size=10,
     )
 
     assert projected == 1
-    assert captured["file_name"] == "app.py"
-    assert captured["file_data"]["path"] == "/tmp/service/src/app.py"
+    assert len(captured["file_data_list"]) == 1
+    assert captured["file_data_list"][0]["path"] == "/tmp/service/src/app.py"
     assert captured["repository"]["id"] == "repository:r_service"
     assert captured["repository"]["local_path"] == str(Path("/tmp/service").resolve())
+
+
+def test_project_file_facts_batches_content_and_directory_flushes() -> None:
+    """File projection should batch content writes and flush directory rows per chunk."""
+
+    captured: dict[str, Any] = {
+        "content_batches": [],
+        "flush_sizes": [],
+    }
+    fact_records = []
+    for index in range(3):
+        fact_records.append(
+            FactRecordRow(
+                fact_id=f"fact:file:{index}",
+                fact_type="FileObserved",
+                repository_id="repository:r_service",
+                checkout_path="/tmp/service",
+                relative_path=f"src/file_{index}.py",
+                source_system="git",
+                source_run_id="run-123",
+                source_snapshot_id="snapshot-abc",
+                payload={
+                    "language": "python",
+                    "is_dependency": False,
+                    "parsed_file_data": {
+                        "lang": "python",
+                        "path": f"/tmp/service/src/file_{index}.py",
+                        "repo_path": "/tmp/service",
+                        "functions": [
+                            {"name": f"handler_{index}", "line_number": 10 + index}
+                        ],
+                    },
+                },
+                observed_at=_utc_now(),
+                ingested_at=_utc_now(),
+                provenance={},
+            )
+        )
+
+    def _unexpected_single_write(
+        *_args: object,
+        **_kwargs: object,
+    ) -> None:
+        raise AssertionError("project_file_facts should use batch content writes")
+
+    def _content_dual_write_batch(
+        file_data_list: list[dict[str, Any]],
+        repository: dict[str, Any],
+        warning_logger_fn: Any,
+        *,
+        content_batch_size: int | None = None,
+    ) -> None:
+        del warning_logger_fn, content_batch_size
+        captured["content_batches"].append(
+            {
+                "file_names": [file_data["path"] for file_data in file_data_list],
+                "repository_id": repository["id"],
+            }
+        )
+
+    def _flush_directory_chain_rows(
+        tx: object,
+        dir_rows: list[dict[str, str]],
+        containment_rows: list[dict[str, str]],
+    ) -> None:
+        del tx
+        captured["flush_sizes"].append((len(dir_rows), len(containment_rows)))
+
+    session = _FakeSession()
+    projected = project_file_facts(
+        session,
+        fact_records,
+        content_dual_write_fn=_unexpected_single_write,
+        content_dual_write_batch_fn=_content_dual_write_batch,
+        collect_directory_chain_rows_fn=collect_directory_chain_rows,
+        flush_directory_chain_rows_fn=_flush_directory_chain_rows,
+        file_batch_size=2,
+    )
+
+    assert projected == 3
+    assert [batch["repository_id"] for batch in captured["content_batches"]] == [
+        "repository:r_service",
+        "repository:r_service",
+    ]
+    assert len(captured["content_batches"]) == 2
+    assert len(captured["content_batches"][0]["file_names"]) == 2
+    assert len(captured["content_batches"][1]["file_names"]) == 1
+    assert len(captured["flush_sizes"]) == 2
+    assert all(dir_count > 0 for dir_count, _ in captured["flush_sizes"])
 
 
 def test_project_entity_batches_uses_unwind_writes_for_standalone_entities() -> None:
