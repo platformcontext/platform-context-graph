@@ -1,26 +1,26 @@
 # Baseline Performance: Neo4j + Postgres (v0.0.42)
 
-Date: 2026-04-03
+Date: 2026-04-04 (Run #5 -- first complete 896-repo run)
 Configuration: CW=2, facts-first mode, 896 repos (24 GB source), Docker Compose on 123 GiB RAM instance
 
 ## Executive Summary
 
 Full 896-repo e2e benchmark using Neo4j + Postgres as the backing stores.
-This document captures per-repo-size performance curves, outlier analysis,
-storage characteristics, and Postgres tuning recommendations. It serves as
-the comparison baseline for the planned ArcadeDB evaluation.
+This is the **first complete run** in project history -- previous runs stalled
+(Run #1), OOM'd (Run #2), or were interrupted (Runs #3/#4). It serves as the
+comparison baseline for the planned ArcadeDB evaluation.
 
 **Key findings:**
 
-- 132 non-outlier repos indexed in **12 minutes** (parse + commit + projection)
-- One PHP repo (`api-php-boatwizardwebsolutions`) stalled the entire pipeline
-  for **2+ hours** due to a single `executemany` transaction writing 60+ GB of
-  TOAST data at 10.1 MB/s
-- Postgres TOAST storage dominates: `fact_records` consumes **99%+** of total
-  database size
-- Zero deadlocks or blocked locks throughout the run (schema lock fix validated)
-- Resolution engine successfully claimed and re-projected 11 work items with
-  zero failures
+- All **896 repos** indexed in **~3 hours 37 minutes** (parse + commit + projection)
+- **8,994,038 facts** stored in Postgres (21 GB total database)
+- **1,445,012 nodes** and **31,072,991 relationships** in Neo4j
+- **154,636 files** parsed across all repos
+- **Zero OOM events** despite five repos with 7K--12K files each
+- **Zero fatal errors** -- 6 transient Neo4j deadlocks, all auto-recovered
+- Peak memory: 19.87 GiB (spike during large repo parse, released after)
+- Partitioned streaming projection validated: memory proportional to batch
+  size (~2K rows), not total repo size
 
 ## Test Environment
 
@@ -28,343 +28,298 @@ the comparison baseline for the planned ArcadeDB evaluation.
 |---|---|
 | Instance | 123.1 GiB RAM, multi-core |
 | Storage | 484 GB root volume (ext4) |
-| Postgres | Default Docker image, default config |
+| Postgres | Default Docker image, tuned config (see Tuning section) |
 | Neo4j | Community edition, Docker |
-| Source data | 896 repos, 24 GB on disk (`/tmp/pcg-e2e-full`) |
+| Source data | 896 repos, 24 GB on disk |
 | PCG version | 0.0.42 |
 | Commit workers | 2 (`PCG_COMMIT_WORKERS=2`) |
 | Parse strategy | threaded, 4 workers |
 | Mode | facts-first (inline projection) |
+| pcgignore | Helm default patterns (vendor/, node_modules/, dist/, etc.) |
+| Fact upsert batch | 2,000 rows (`PCG_FACT_UPSERT_BATCH_SIZE`) |
 
 ## Timeline
 
-| Time (UTC) | T+ | Event |
-|---|---|---|
-| 21:28 | 0min | `docker compose up --build` |
-| 21:38 | 10min | Bootstrap starts prescan |
-| 21:44 | 16min | First repos parsed (15), first Neo4j nodes (1,689) |
-| 21:49 | 21min | Steady state: 90 parsed, 32,982 nodes |
-| 21:55 | 27min | PHP monster parse completes (361s for 7,240 files) |
-| 21:56 | 28min | Pipeline stalls: PHP monster enters fact emission |
-| 22:00 | 32min | Resolution engine finishes 11 re-projections |
-| 22:00-23:50 | 32-142min | PHP monster `executemany` transaction at 10.1 MB/s |
-| 23:50 | 142min | **Run stopped** -- 68 GB fact_records, 1h 53min txn |
+| T+ | Event |
+|---|---|
+| 0min | `docker compose up --build`, bootstrap lock acquired |
+| 7min | All 896 repos discovered |
+| 10min | First 70 repos parsed, 50K facts |
+| 15min | 108 parsed, PHP monster parse complete (237s) |
+| 37min | PHP monster commit complete (1,203s / 20 min) |
+| 80min | 620 parsed (69%), steady 5 repos/min |
+| 107min | search-api-legacy (12K files) parsing, bootstrap spike 19.87 GiB |
+| 117min | search-api-legacy done, resolution spike 11.57 GiB, then released |
+| 137min | 733 parsed (82%), rate 5 repos/min, all memory at baseline |
+| 157min | 839 parsed (94%), Neo4j crossed 1M nodes |
+| 172min | websites-php-youboat (12,747 files) parsing -- largest repo |
+| 182min | wordpress (8,431 files) parsing |
+| 192min | 895 parsed, big commits draining |
+| 212min | wordpress commit done (1,349s). youboat last commit running |
+| **217min** | **896/896 complete. youboat commit: 2,070s (34.5 min)** |
 
-### Active Ingestion Phase (21:44 - 21:56)
+## Repo Size Distribution
 
-12 minutes to parse 133 repos, commit 119, and project 132 work items into
-the canonical graph. This is the "normal" operating performance before the
-PHP monster bottleneck.
-
-**Throughput:** ~11 repos/min parse, ~10 repos/min commit
-
-### Pipeline Stall Phase (21:56 - ongoing)
-
-Single `executemany` transaction in `facts/storage/postgres.py` writing all
-JSONB facts for `api-php-boatwizardwebsolutions` in one transaction. The
-entire pipeline is blocked because:
-
-1. Facts are invisible until the transaction commits (MVCC)
-2. No work item gets enqueued until facts are committed
-3. The commit worker holding this connection cannot pick up new work
-4. All alphabetically-earlier repos already completed
-
-## Per-Repo-Size Performance Curve
-
-### Parse Phase
-
-| Size Bucket | Repos | Avg Files | Avg Duration | Parse Rate |
+| Size Bucket | Repos | Avg Files | Total Files | % of Corpus |
 |---|---|---|---|---|
-| 1-10 files | 20 | 4 | 0.6s | 6.7 f/s |
-| 11-50 files | 50 | 28 | 2.2s | 12.7 f/s |
-| 51-200 files | 41 | 105 | 8.9s | 11.8 f/s |
-| 201-1000 files | 15 | 388 | 30.1s | 12.9 f/s |
-| 1000+ files | 1 | 7,240 | 361.4s | 20.0 f/s |
+| Tiny (1--10 files) | 302 | 4 | 1,153 | 0.7% |
+| Small (11--50) | 353 | 24 | 8,415 | 5.4% |
+| Medium (51--200) | 129 | 95 | 12,236 | 7.9% |
+| Large (201--1,000) | 80 | 487 | 38,935 | 25.2% |
+| XL (1,001--5,000) | 27 | 1,537 | 41,512 | 26.8% |
+| Monster (5,000+) | 5 | 10,477 | 52,385 | 33.9% |
+| **Total** | **896** | **173** | **154,636** | **100%** |
 
-Parse rate is relatively stable at 10-20 files/sec across all size buckets.
-The PHP monster actually parses *faster* per file (20.0 f/s) because PHP
-files are structurally simpler than Node.js files for the AST parser.
+The 5 monster repos (0.6% of repos) contain 34% of all files and dominate
+total runtime.
 
-### Commit Phase
+## Parse Performance
 
-| Size Bucket | Repos | Avg Duration | Notes |
+| Statistic | Value |
+|---|---|
+| Total duration (sum) | 5,730s |
+| Mean | 6.4s |
+| Median | 0.3s |
+| P90 | 6.3s |
+| P95 | 17.4s |
+| P99 | 188.8s |
+| Max | 479.8s (wordpress) |
+
+### Slowest Parses
+
+| Repo | Files | Parse Time | Rate (f/s) |
 |---|---|---|---|
-| Tiny (<5s) | 35 | 2.1s | Dominated by fixed overhead |
-| Small (5-30s) | 79 | 11.5s | Normal range |
-| Medium (30-120s) | 4 | 67.9s | Graph write intensive |
-| Large (2-10min) | 1 | 134.3s | `aquasolyachtsales` |
+| wordpress | 8,431 | 479.8s | 17.6 |
+| websites-php-youboat | 12,747 | 408.7s | 31.2 |
+| boattrader-legacy | 12,124 | 450.9s | 26.9 |
+| portal-java-ycm | -- | 334.0s | -- |
+| portal-nextjs-platform | -- | 281.9s | -- |
+| search-api-legacy | 12,014 | 253.2s | 47.4 |
+| api-php-boatwizardwebsolutions | 7,069 | 236.9s | 29.8 |
+| portal-react-platform | -- | 211.1s | -- |
 
-Median commit time: **7.7s**. Mean: **11.6s**.
+PHP files parse faster per-file (30+ f/s) than Node.js/Java repos (10--20 f/s)
+because PHP ASTs are structurally simpler.
 
-## Outlier Analysis
+## Commit Performance
 
-### Tier 1: Extreme Pipeline Stall
+| Statistic | Value |
+|---|---|
+| Total duration (sum) | 24,683s |
+| Mean | 27.5s |
+| Median | 3.5s |
+| P90 | 33.0s |
+| P95 | 68.5s |
+| P99 | 363.8s |
+| Max | 2,564.7s (boattrader-legacy) |
 
-| Repo | Files | Parse | Commit | Storage Impact |
+### Slowest Commits (Top 10)
+
+| Repo | Files | Commit Time | Notes |
+|---|---|---|---|
+| boattrader-legacy | 12,124 | 2,565s (43 min) | Largest commit |
+| search-api-legacy | 12,014 | 2,241s (37 min) | |
+| websites-php-youboat | 12,747 | 2,070s (34.5 min) | Most files |
+| portal-java-ycm | -- | 1,594s (26.6 min) | Java monorepo |
+| wordpress | 8,431 | 1,349s (22.5 min) | |
+| api-php-boatwizardwebsolutions | 7,069 | 1,203s (20 min) | PHP monster |
+| webapp-grails-imt | -- | 1,066s (17.8 min) | Grails monorepo |
+| portal-boattrader-zf1 | -- | 785s (13 min) | |
+| marketing.boatsgroupwebsites.com | -- | 377s (6.3 min) | |
+| webapp-react-leadsmart | -- | 364s (6.1 min) | |
+
+Commit includes: graph writes, content store, fact emission, inline
+projection, and workload materialization. Large repos dominate because
+graph writes scale with entity count.
+
+## Memory Profile
+
+### Peak Memory by Phase
+
+| Container | Peak | During | Baseline |
+|---|---|---|---|
+| bootstrap-index | **19.87 GiB** | search-api-legacy parse | 4.2 GiB |
+| resolution-engine | **12.0 GiB** | search-api-legacy projection | 0.8 GiB |
+| postgres | 5.16 GiB | Steady during writes | 4.9 GiB |
+| neo4j | 4.4 GiB | Graph write burst | 2.8 GiB |
+
+### Spike-and-Release Pattern (validated)
+
+Large repos cause temporary memory spikes that reliably drop back to
+baseline after processing completes:
+
+| Repo | Peak Bootstrap | After Release | Peak Resolution | After Release |
 |---|---|---|---|---|
-| `api-php-boatwizardwebsolutions` | 7,240 | 361s | 2h+ (ongoing) | 60+ GB TOAST |
+| PHP monster (7K files) | 16 GiB | 4.4 GiB | -- | -- |
+| search-api-legacy (12K) | 19.87 GiB | 4.3 GiB | 11.57 GiB | 1.2 GiB |
+| websites-php-youboat (12.7K) | 15.23 GiB | 4.5 GiB | 12.0 GiB | 1.8 GiB |
+| wordpress (8.4K) | -- | -- | 12.0 GiB | 1.8 GiB |
 
-**Root cause:** 7,240 PHP files (28,499 total files, 612 MB on disk) in a
-legacy PHP application with 890 subdirectories under `files/pls/`. Each PHP
-file generates multiple JSONB fact records (functions, classes, parameters,
-imports). The `executemany()` call wraps all INSERTs into a single
-transaction, creating a multi-hour TOAST write that saturates Postgres at
-100% CPU.
-
-**Storage expansion ratio:** 612 MB source to 60+ GB TOAST = **~100:1**
-(compared to ~2:1 for typical Node.js repos).
-
-**Impact:** Entire pipeline stalled for the duration. No other repos can
-parse, commit, or project while this transaction runs.
-
-### Tier 2: Commit-Heavy Anomalies (commit/parse > 10x)
-
-These repos have disproportionately slow commit phases relative to parse,
-indicating the bottleneck is in graph writes, content store, or inline
-projection rather than parsing.
-
-| Repo | Files | Parse | Commit | Ratio | Likely Cause |
-|---|---|---|---|---|---|
-| `aquasolyachtsales` | 305 | 10.3s | 134.3s | 13.1x | Complex graph relationships |
-| `api-node-template` | 66 | 5.3s | 82.2s | 15.6x | Template generates many entities |
-| `article-indexer` | 46 | 2.5s | 48.7s | 19.3x | Heavy content store writes |
-| `automate-brochure-templates` | 14 | 0.3s | 11.3s | 33.1x | Fixed overhead dominates |
-| `automate-build-packer` | 15 | 0.4s | 11.4s | 30.4x | Fixed overhead dominates |
-| `automate-build-docker` | 16 | 0.4s | 11.5s | 26.9x | Fixed overhead dominates |
-
-**Finding:** Repos with < 20 files show a **~11 second minimum commit
-duration** regardless of size. This fixed overhead includes: Neo4j schema
-operations, content store writes, fact emission, work item enqueue, inline
-projection (3 decision types), and workload materialization.
-
-### Tier 3: Parse-Heavy Repos (>30s parse)
-
-| Repo | Files | Parse | Commit | Total |
-|---|---|---|---|---|
-| `api-node-boattrader` | 903 | 88.0s | 27.0s | 115.0s |
-| `api-node-datax` | 377 | 52.5s | 16.2s | 68.6s |
-| `api-node-boats` | 539 | 45.1s | 28.2s | 73.3s |
-| `api-node-platform` | 748 | 41.7s | 102.9s | 144.6s |
-| `api-node-fsbo` | 338 | 41.3s | 28.8s | 70.1s |
-| `api-node-communicator` | 435 | 40.2s | 37.9s | 78.1s |
-| `api-node-engines` | 170 | 39.9s | 6.3s | 46.1s |
-| `api-node-boats-temp` | 449 | 34.2s | 23.9s | 58.1s |
-
-The `api-node-*` family of repos are consistently the slowest parsers in
-the Node.js category, with parse rates of 7-18 files/sec.
+The streaming projection keeps peak memory proportional to one batch
+(~2,000 rows / ~1 MB), not the total fact count. Without this fix,
+Run #2 OOM'd at 98 GiB on a 216K-fact repo.
 
 ## Storage Profile
 
-### Table Sizes (at 132 repos committed, pre-PHP-monster)
+### Postgres Table Sizes (final)
 
-| Table | Size | Rows | Notes |
-|---|---|---|---|
-| `fact_records` | 5.5 GB | 132,399 | 99% of DB; TOAST dominated |
-| `content_entities` | 129 MB | 121,245 | ~10.4 entities/file |
-| `content_files` | 66 MB | 11,604 | |
-| `projection_decision_evidence` | 2.5 MB | 6,768 | |
-| `projection_decisions` | 568 KB | 396 | 3 decisions per repo |
-| `runtime_repository_coverage` | 456 KB | 896 | All repos tracked |
-| `fact_work_items` | 160 KB | 132 | |
-
-### TOAST Overhead
-
-`fact_records` heap size: 102 MB. TOAST + indexes: 5.4 GB.
-**Ratio: 53:1 TOAST-to-heap** for the first 132 repos.
-
-Average fact record size: **41.5 KB** (including TOAST).
-The `payload` and `provenance` JSONB columns are the dominant contributors.
-
-### PHP Monster Storage Impact
-
-| Metric | Pre-PHP | During PHP | Growth |
-|---|---|---|---|
-| `fact_records` | 5.5 GB | 60+ GB (ongoing) | +55+ GB |
-| Database total | 5.9 GB | 60+ GB (ongoing) | +55+ GB |
-| Postgres RSS | 253 MiB | 1.85 GiB | +1.6 GiB |
-| Write rate | - | 10.1 MB/s steady | - |
-| Transaction duration | - | 2h+ (ongoing) | - |
-
-**Source-to-TOAST expansion:**
-
-| Repo Type | Source Size | TOAST Size | Ratio |
-|---|---|---|---|
-| Typical Node.js/Terraform | ~2-3 GB total | 5.5 GB | ~2:1 |
-| PHP monster (single repo) | 612 MB | 68 GB (at stop) | ~111:1 |
-
-**Run was stopped at 68 GB** after 1h 53min of continuous writes. The
-transaction had not yet committed. Estimated total if allowed to complete:
-80-100 GB based on the steady 10.1 MB/s write rate and no sign of slowing.
-
-## Neo4j Graph Profile (at 132 repos)
-
-### Node Distribution
-
-| Label | Count | % |
+| Table | Size | Notes |
 |---|---|---|
-| Parameter | 15,973 | 31.3% |
-| Function | 15,790 | 30.9% |
-| File | 11,604 | 22.7% |
-| Module | 4,541 | 8.9% |
-| Directory | 1,651 | 3.2% |
-| Class | 632 | 1.2% |
-| Interface | 394 | 0.8% |
-| Workload | 132 | 0.3% |
-| Repository | 132 | 0.3% |
-| TerraformDataSource | 64 | 0.1% |
-| **Total** | **51,039** | |
+| content_entities | 11 GB | Parsed entities (functions, classes, etc.) |
+| fact_records | 8.6 GB | 8,994,038 rows; TOAST dominated |
+| content_files | 936 MB | File content store |
+| projection_decision_evidence | 13 MB | |
+| projection_decisions | 3.2 MB | |
+| runtime_repository_coverage | 704 KB | All 896 repos tracked |
+| fact_work_items | 520 KB | |
+| **Total database** | **21 GB** | |
 
-### Relationship Distribution
-
-| Type | Count | % |
-|---|---|---|
-| CALLS | 42,138 | 35.0% |
-| CONTAINS | 27,713 | 23.0% |
-| IMPORTS | 22,630 | 18.8% |
-| HAS_PARAMETER | 16,290 | 13.5% |
-| REPO_CONTAINS | 11,604 | 9.6% |
-| DEFINES | 132 | 0.1% |
-| DEPENDS_ON | 56 | <0.1% |
-| INHERITS | 40 | <0.1% |
-| **Total** | **~120,603** | |
-
-**Density:** 2.36 relationships per node.
-
-## Resolution Engine Metrics
-
-The resolution engine operated alongside bootstrap's inline projection:
+### Storage Ratios
 
 | Metric | Value |
 |---|---|
-| Work items claimed | 11 |
-| Work items completed | 11 |
-| Empty polls | 2,769 |
-| Avg work item duration | 0.41s |
-| Facts loaded | 760 (across 11 items) |
+| Source data | 24 GB (896 repos on disk) |
+| Postgres total | 21 GB |
+| Source-to-DB ratio | 0.88:1 (DB smaller than source) |
+| Avg fact record size | ~980 bytes |
+| Avg content entity size | ~90 bytes |
 
-### Projection Stage Durations (resolution engine, 11 items)
+## Neo4j Graph Profile
 
-| Stage | Total | Avg | Outputs |
-|---|---|---|---|
-| load_facts | 0.039s | 3.5ms | - |
-| project_facts | 1.55s | 141ms | 404 |
-| project_relationships | 2.37s | 216ms | 426 |
-| project_workloads | 0.14s | 12.6ms | 88 |
-| project_platforms | 0.03s | 2.7ms | - |
+### Node Distribution (1,445,012 total)
 
-### Projection Decision Confidence
-
-| Decision Type | Confidence | Band |
+| Label | Count | % |
 |---|---|---|
-| project_relationships | 0.75 avg | medium |
-| project_workloads | 0.90 avg | high |
-| project_platforms | 0.90 avg | high |
+| Function | 751,564 | 52.0% |
+| Parameter | 250,367 | 17.3% |
+| File | 154,588 | 10.7% |
+| TerraformVariable | 69,266 | 4.8% |
+| Class | 47,457 | 3.3% |
+| TerraformResource | 37,173 | 2.6% |
+| TerraformLocal | 33,353 | 2.3% |
+| Module | 31,913 | 2.2% |
+| TerraformDataSource | 19,050 | 1.3% |
+| Directory | 15,087 | 1.0% |
+| TerraformOutput | 14,155 | 1.0% |
+| TerraformModule | 6,230 | 0.4% |
+| Interface | 5,555 | 0.4% |
+| TerraformProvider | 5,515 | 0.4% |
+| Repository | 896 | 0.1% |
 
-### Neo4j Query Performance (resolution engine)
+### Relationship Distribution (31,072,991 total)
 
-| Operation | Count | Total | Avg |
-|---|---|---|---|
-| CREATE | 87 | 2.66s | 30.5ms |
-| MATCH | 240 | 0.11s | 0.44ms |
-| UNWIND | 27 | 0.04s | 1.6ms |
-| CALL | 2 | 0.21s | 107ms |
-
-All Neo4j operations completed in < 5 seconds. Zero query timeouts.
-
-## Resource Utilization
-
-### Peak Resource Usage
-
-| Container | CPU | Memory | Phase |
-|---|---|---|---|
-| bootstrap-index | 106% | 11.5 GiB | Active parsing |
-| postgres | 101% | 1.85 GiB | PHP monster TOAST writes |
-| neo4j | 487% | 1.77 GiB | Batch graph projection |
-| resolution-engine | 0.23% | 142 MiB | Idle (polling) |
-| API | 0.18% | 162 MiB | Idle |
-
-### Steady-State During PHP Monster Stall
-
-| Container | CPU | Memory | Notes |
-|---|---|---|---|
-| bootstrap-index | 24% | 11.25 GiB | Idle, waiting on commit |
-| postgres | 101% | 1.85 GiB | Saturated on TOAST writes |
-| neo4j | 0.3% | 1.52 GiB | Idle |
-| resolution-engine | 0.2% | 142 MiB | Idle, empty polls |
-
-## Postgres Tuning Recommendations
-
-### Baseline Config (all Postgres defaults)
-
-| Setting | Default | Issue |
+| Type | Count | % |
 |---|---|---|
-| `shared_buffers` | 128 MB | Far too small for TOAST write buffers |
-| `work_mem` | 4 MB | Adequate for our simple queries |
-| `maintenance_work_mem` | 64 MB | Slow index creation during DDL |
-| `max_wal_size` | 1 GB | Checkpoints every ~100s at 10.1 MB/s write rate |
-| `wal_buffers` | 4 MB | Insufficient for sustained bulk writes |
-| `effective_cache_size` | 4 GB | Misleads planner on 123 GiB instance |
-| `synchronous_commit` | on | Limits write throughput during bulk loads |
-| `default_toast_compression` | pglz | Slower than lz4 for our JSONB workload |
-| `effective_io_concurrency` | 16 | Underutilizes SSD capabilities |
+| CALLS | 28,862,735 | 92.9% |
+| CONTAINS | 1,471,077 | 4.7% |
+| HAS_PARAMETER | 383,699 | 1.2% |
+| IMPORTS | 198,890 | 0.6% |
+| REPO_CONTAINS | 154,588 | 0.5% |
+| INHERITS | 1,002 | <0.1% |
+| DEFINES | 896 | <0.1% |
+| DEPENDS_ON | 62 | <0.1% |
+| PROVISIONS_PLATFORM | 42 | <0.1% |
 
-### Applied Tuning (validated against benchmark data)
+**Density:** 21.5 relationships per node (dominated by CALLS edges from
+PHP/JS function resolution).
 
-| Setting | Value | Workload Justification |
+## Resolution Engine Metrics
+
+| Metric | Value |
+|---|---|
+| Inline projections (bootstrap) | 896 |
+| Resolution engine re-projections | 20 |
+| Total work items projected | 916 |
+| Transient Neo4j deadlocks | 6 (all auto-recovered) |
+| Fatal projection errors | 0 |
+
+## Error Summary
+
+| Error Type | Count | Impact |
 |---|---|---|
-| `shared_buffers` | 4 GB | 3% of 123 GiB RAM; other services use 13+ GiB. TOAST writes are sequential so diminishing returns beyond 4 GB |
-| `work_mem` | 16 MB | No complex queries (no JOINs/sorts). Only `list_facts` does ORDER BY on indexed column |
-| `maintenance_work_mem` | 512 MB | DDL runs once at startup (14 CREATE INDEX). Fast completion avoids startup lock contention |
-| `max_wal_size` | 8 GB | At measured 10.1 MB/s write rate, checkpoints now every ~13 min instead of ~100s. Reduces I/O contention |
-| `wal_buffers` | 64 MB | Buffers ~6s of WAL at sustained write rate |
-| `effective_cache_size` | 32 GB | ~25% of instance RAM. Planner hint only |
-| `synchronous_commit` | off | Batches WAL flushes for 2-3x bulk write throughput. Risk: up to 600ms data loss on crash; acceptable for re-runnable ingestion |
-| `default_toast_compression` | lz4 | 3-5x faster than pglz. Direct hit on our bottleneck (TOAST writes are 99% of I/O) |
-| `effective_io_concurrency` | 200 | SSD/NVMe optimization |
-| `random_page_cost` | 1.1 | SSD tuning (default 4.0 is for spinning disks) |
+| Neo4j TransientError.DeadlockDetected | 6 | Auto-recovered, zero data loss |
+| Fatal errors | 0 | -- |
+| OOM events | 0 | -- |
+| Application exceptions | 0 | -- |
 
-### Application-Level Optimizations (applied)
+All 6 deadlocks occurred in `call_batches.py` during concurrent call
+resolution (bootstrap + resolution engine writing to overlapping nodes).
+The retry logic in the driver handled all cases transparently.
 
-1. **Chunked executemany** (applied in `facts/storage/postgres.py`):
-   Batches of 2,000 rows (configurable via `PCG_FACT_UPSERT_BATCH_SIZE`).
-   Each chunk commits independently under autocommit mode. The PHP monster's
-   estimated 500K+ facts now process as ~250 independent transactions of
-   ~5-10 seconds each instead of one 2-hour transaction. Pipeline can
-   interleave other work between chunks.
+## Run Comparison
 
-### Future Optimizations (not yet applied)
+| | Run #1 | Run #2 | Run #5 |
+|---|---|---|---|
+| Date | Apr 3 | Apr 3 | **Apr 4** |
+| Config | Vanilla | + chunked INSERT | **+ streaming + keyset** |
+| Repos completed | 132 (15%) | ~132 (OOM) | **896 (100%)** |
+| Outcome | Stalled | OOM killed | **Complete** |
+| Wall clock | 142min (stopped) | ~45min (crashed) | **217min (done)** |
+| Facts | 132,399 | ~216K then OOM | **8,994,038** |
+| DB size | 68 GB (stalled) | unknown | **21 GB** |
+| Neo4j nodes | 51,039 | -- | **1,445,012** |
+| Neo4j rels | 120,603 | -- | **31,072,991** |
+| OOM events | 0 | 1 | **0** |
+| Peak memory | 11.5 GiB | 98 GiB (OOM) | **19.87 GiB** |
 
-1. **COPY instead of INSERT:** Use `psycopg3.copy` with binary mode for
-   bulk fact loads. Expected 3-10x improvement over `executemany`.
+### PHP Monster Comparison
 
-2. **JSONB compression:** Store `payload` and `provenance` as pre-compressed
-   `bytea` with zstd instead of raw `Jsonb`. Application-managed compression
-   typically achieves 5-10x better ratios than TOAST's pglz.
+| | Run #1 | Run #5 |
+|---|---|---|
+| Files indexed | 7,240 | 7,069 (pcgignore=171) |
+| Parse time | 361s | 237s |
+| Commit time | 2h+ (never finished) | **1,203s (20 min)** |
+| Pipeline stall | YES (2+ hours) | **NO** |
+| DB impact | 68 GB (single txn) | ~4 GB (chunked) |
 
-3. **Vendor/generated file exclusion:** Add `.pcgignore` rules for known
-   vendor directories (`vendor/`, `node_modules/`) to skip parsing generated
-   or third-party code that inflates fact storage without adding value.
+### What Changed Between Runs
 
-## Validation
+1. **Chunked executemany** (Run #2+): 2,000-row batches instead of one
+   mega-transaction. Prevents multi-hour TOAST writes.
+2. **Partitioned streaming projection** (Run #3+): Load facts by type at
+   SQL level. Entity facts streamed in 2,000-row batches via keyset
+   pagination. Peak memory proportional to batch, not total repo.
+3. **Entity keyset partial index** (Run #4+):
+   `fact_records_entity_keyset_idx ON (repository_id, source_run_id, relative_path, fact_id) WHERE fact_type = 'ParsedEntityObserved'`
+   gives O(log n) batch loading.
+4. **pcgignore** (Run #3+): Excludes vendor/generated files at discovery
+   time, reducing parse and fact volume.
 
-- **Zero blocked locks** throughout the entire run
-- **Zero deadlocks** -- schema lock fix (`SELECT 1 FROM information_schema.tables`
-  before DDL) validated under concurrent load
-- **Zero application errors** across all services (bootstrap, resolution
-  engine, API)
-- **11 of 11** resolution engine work items completed successfully
-- **132 of 132** inline projection work items completed
-- **31 JSON parse errors** for Jinja template files (expected, harmless)
+## Postgres Tuning (Applied)
+
+| Setting | Value | Justification |
+|---|---|---|
+| `shared_buffers` | 4 GB | 3% of 123 GiB; TOAST writes are sequential |
+| `work_mem` | 16 MB | Simple queries, no complex JOINs |
+| `maintenance_work_mem` | 512 MB | Fast DDL at startup |
+| `max_wal_size` | 8 GB | Checkpoints every ~13 min at write rate |
+| `wal_buffers` | 64 MB | Buffers ~6s of WAL |
+| `effective_cache_size` | 32 GB | ~25% of RAM, planner hint |
+| `synchronous_commit` | off | 2-3x bulk write throughput |
+| `default_toast_compression` | lz4 | 3-5x faster than pglz |
+| `effective_io_concurrency` | 200 | SSD optimization |
+| `random_page_cost` | 1.1 | SSD tuning |
+
+## Future Optimizations
+
+1. **COPY instead of INSERT:** `psycopg3.copy` with binary mode for bulk
+   fact loads. Expected 3-10x over `executemany`.
+2. **JSONB compression:** Pre-compressed `bytea` with zstd instead of raw
+   JSONB. 5-10x better ratios than TOAST.
+3. **Expanded pcgignore:** Add patterns for `files/pls/` directories in
+   legacy PHP repos to exclude bloated vendor trees.
+4. **Neo4j deadlock mitigation:** Serialize call resolution per-repo or
+   use advisory locks to prevent concurrent writes to shared nodes.
 
 ## Comparison Notes for ArcadeDB Evaluation
 
 When comparing against ArcadeDB, use these as the baseline targets:
 
-1. **Parse throughput:** 10-20 files/sec (language-dependent)
-2. **Commit throughput:** median 7.7s, mean 11.6s per repo
-3. **Fixed commit overhead:** ~11s minimum regardless of repo size
-4. **Graph write latency:** Neo4j CREATE avg 30.5ms, MATCH avg 0.44ms
-5. **Storage efficiency:** 41.5 KB/fact average (TOAST dominated)
-6. **Pipeline stall risk:** Single large repo can block entire pipeline
-7. **Total time for 132 normal repos:** 12 minutes end-to-end
-8. **Resolution engine projection:** 0.41s avg per work item
+1. **Total throughput:** 896 repos in 217 min (~4.1 repos/min sustained)
+2. **Parse throughput:** median 0.3s, mean 6.4s per repo
+3. **Commit throughput:** median 3.5s, mean 27.5s per repo
+4. **Monster repo commit:** 20-43 min for 7K-12K file repos
+5. **Storage efficiency:** 21 GB for 8.9M facts + 154K files
+6. **Graph size:** 1.4M nodes, 31M rels, density 21.5 rels/node
+7. **Memory ceiling:** 19.87 GiB peak, returns to 4 GiB baseline
+8. **Reliability:** Zero OOM, zero fatal errors, 6 transient deadlocks
