@@ -1,63 +1,60 @@
 # PlatformContextGraph
 
-**Code-to-cloud context graph for AI-assisted engineering.**
+**Code-to-cloud context graph for engineers, operators, and AI systems.**
 
-PlatformContextGraph gives AI systems and engineers a queryable map of code, dependencies, infrastructure, workloads, and deployment topology. Use it to answer code-level questions, trace cloud resources back to source, and power development, debugging, and re-architecture workflows with graph-backed context.
+PlatformContextGraph gives you one queryable model across repositories,
+infrastructure, workloads, and deployment topology. Use it to answer code
+questions, trace infrastructure back to source, inspect shared dependencies, and
+run AI tooling against real system context instead of partial local state.
 
-[Get Started](getting-started/quickstart.md){ .md-button .md-button--primary }
-[Deploy](deployment/overview.md){ .md-button }
-[HTTP API](reference/http-api.md){ .md-button }
+[Quickstart](getting-started/quickstart.md){ .md-button .md-button--primary }
+[Deployment Overview](deployment/overview.md){ .md-button }
 [MCP Guide](guides/mcp-guide.md){ .md-button }
-[Relationship Graphs](guides/relationship-graphs.md){ .md-button }
+[HTTP API](reference/http-api.md){ .md-button }
 
-## Why PCG
+## Why Teams Reach For PCG
 
-- **One graph for code and infrastructure.** Index source code, Terraform, Helm, Kubernetes, Argo CD, Crossplane, and CloudFormation in the same model.
-- **Built for AI workflows.** The same query model is available over CLI, MCP, and HTTP API.
-- **Service and workload aware.** Reason about workloads, shared infrastructure, and environment drift.
-- **Portable source retrieval.** Resolve files by `repo_id + relative_path` and entities by `entity_id`, backed by Postgres content search.
-- **Deployable as a service.** Run locally with Docker Compose or deploy to Kubernetes with Helm and Argo CD.
+- **Engineers** use it to trace callers, dependencies, and cross-repo impact.
+- **Platform and DevOps teams** use it to connect code, deploy paths, and
+  infrastructure ownership.
+- **SRE and on-call** use it to inspect shared resources, queue pressure, and
+  deployment relationships during incidents.
+- **AI tooling** uses it through MCP and HTTP to answer questions against the
+  real system, not just one checkout.
 
-## Primary Interfaces
+Examples:
 
-### CLI
+- "Who calls `process_payment` across all indexed repos?"
+- "What deploys this service into QA and prod?"
+- "Which workloads share this database?"
+- "Trace this resource back to the code that defines it."
 
-`pcg` for local indexing, repository management, search, and graph-backed analysis.
+## Get Started
 
-### MCP
+## Choose Your Path
 
-Connect PCG to AI development tools so questions resolve against real code and infrastructure context.
+### Try PCG locally
 
-### HTTP API
-
-OpenAPI-backed API for service-to-service automation, internal tools, and agent frameworks.
-
-### Deployable Service
-
-Run PCG as a networked service with a stateless API runtime, a stateful repository ingester, a standalone Resolution Engine, and HTTP + MCP access over one surface.
-
-## Common Workflows
-
-- **Code relationships:** search for symbols, callers, callees, and complex or dead code without needing infrastructure mapping.
-- **Code-to-cloud tracing:** start from a workload, resource, queue, bucket, image, or Terraform module and walk back to repos and code.
-- **Change impact analysis:** find the blast radius of a repository, workload, API, or shared infrastructure component.
-- **Environment comparison:** compare stage and prod workload instances, backing resources, and configuration-linked dependencies.
-
-## Start Where You Are
-
-### Local development
+Use the CLI when you want to index one repository quickly and ask questions
+immediately.
 
 - [Installation](getting-started/installation.md)
 - [Quickstart](getting-started/quickstart.md)
 - [CLI Reference](reference/cli-reference.md)
 
-### AI-assisted workflows
+### Connect an AI client
+
+Use MCP when you want an assistant to ask graph-backed questions over your code
+and infrastructure.
 
 - [MCP Guide](guides/mcp-guide.md)
 - [MCP Reference](reference/mcp-reference.md)
 - [MCP Cookbook](reference/mcp-cookbook.md)
 
-### Deployable service
+### Run the platform
+
+Use the deployment docs when you want the shared multi-service runtime with
+continuous indexing, queue-backed projection, and operator observability.
 
 - [Deployment Overview](deployment/overview.md)
 - [Service Runtimes](deployment/service-runtimes.md)
@@ -65,11 +62,45 @@ Run PCG as a networked service with a stateless API runtime, a stateful reposito
 - [Helm](deployment/helm.md)
 - [Argo CD](deployment/argocd.md)
 
-### Deep dives
+### Understand the model
 
-- [Shared Infra Trace](guides/shared-infra-trace.md)
-- [Relationship Graph Examples](guides/relationship-graphs.md)
-- [Fixture Ecosystems](guides/fixture-ecosystems.md)
+Use the concept and architecture docs when you want to understand the internal
+workflow, graph model, and runtime boundaries.
+
+- [How It Works](concepts/how-it-works.md)
 - [Graph Model](concepts/graph-model.md)
-- [Architecture](architecture.md)
-- [Local Testing](reference/local-testing.md)
+- [System Architecture](architecture.md)
+- [Telemetry Overview](reference/telemetry/index.md)
+
+## Runtime Flow
+
+```mermaid
+flowchart LR
+  A["Ingester"] --> B["Parse repository snapshot"]
+  B --> C["Postgres fact store"]
+  C --> D["Fact work queue"]
+  D --> E["Resolution Engine"]
+  E --> F["Canonical graph projection"]
+  F --> G["Neo4j"]
+  F --> H["Postgres content store"]
+  I["CLI / MCP / HTTP API"] --> G
+  I --> H
+```
+
+## What PCG Does Well
+
+- **Cross-repository analysis**: callers, callees, dead code, and complexity
+  across large repository sets.
+- **Code-to-cloud tracing**: start from a workload, deployment object, or cloud
+  resource and trace back to the defining code.
+- **Impact analysis**: estimate blast radius and shared infrastructure impact
+  before you merge or deploy.
+- **Shared operator model**: API, ingester, and resolution-engine use one
+  coherent facts-first workflow and one observability story.
+
+## Keep Going
+
+- [Use Cases](use-cases.md)
+- [Relationship Graph Examples](guides/relationship-graphs.md)
+- [Local Testing Runbook](reference/local-testing.md)
+- [Troubleshooting](reference/troubleshooting.md)

@@ -238,17 +238,12 @@ def create_all_function_calls(
                     get_config_value_fn=resolved_get_config_value_fn,
                     warning_logger_fn=resolved_warning_logger_fn,
                     start_row_id=next_row_id,
+                    max_calls_per_file=effective_cap,
                     known_callable_names_by_family=known_names_by_family,
                     unresolved_counter=unresolved_counter,
                     prefiltered_counter=prefiltered_counter,
                 )
             )
-            total_rows = len(file_contextual_rows) + len(file_level_batch_rows)
-            if total_rows > effective_cap:
-                file_contextual_rows = file_contextual_rows[:effective_cap]
-                file_level_batch_rows = file_level_batch_rows[
-                    : max(0, effective_cap - len(file_contextual_rows))
-                ]
             if file_contextual_rows:
                 contextual_buffer.extend(file_contextual_rows)
                 if len(contextual_buffer) >= _CALL_RELATIONSHIP_BUFFER_FLUSH_ROWS:

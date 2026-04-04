@@ -24,7 +24,10 @@ theme:
         name: Switch to light mode
 
 nav:
-  - Home: index.md
+  - Home:
+    - Overview: index.md
+    - Why PCG: why-pcg.md
+    - Use Cases: use-cases.md
   - Get Started:
     - Prerequisites: getting-started/prerequisites.md
     - Installation: getting-started/installation.md
@@ -37,51 +40,51 @@ nav:
     - Helm: deployment/helm.md
     - Minimal Manifests: deployment/manifests.md
     - Argo CD: deployment/argocd.md
+    - Local Testing: reference/local-testing.md
+    - Baseline Performance: reference/baseline-performance.md
   - Guides:
-    - MCP Guide: guides/mcp-guide.md
-    - Terraform Providers:
-      - Overview: guides/terraform-providers/index.md
-      - Adding Providers: guides/terraform-providers/adding-providers.md
-      - Updating Providers: guides/terraform-providers/updating-providers.md
-      - Service Categories: guides/terraform-providers/service-categories.md
+    - Connect an MCP Client: guides/mcp-guide.md
+    - Explore Relationship Graphs: guides/relationship-graphs.md
+    - Visualize Query Results: guides/visualization.md
+    - Work With Bundles: guides/bundles.md
     - Neo4j Setup: guides/neo4j-setup.md
     - Shared Infra Trace: guides/shared-infra-trace.md
-    - Relationship Graph Examples: guides/relationship-graphs.md
     - Fixture Ecosystems: guides/fixture-ecosystems.md
-    - Visualization: guides/visualization.md
-    - Bundles: guides/bundles.md
     - CI/CD: guides/ci-cd.md
   - API & MCP:
     - HTTP API: reference/http-api.md
     - MCP Reference: reference/mcp-reference.md
     - MCP Cookbook: reference/mcp-cookbook.md
   - Reference:
-    - Architecture: architecture.md
-    - Telemetry:
-      - Overview: reference/telemetry/index.md
-      - Metrics: reference/telemetry/metrics.md
-      - Traces: reference/telemetry/traces.md
-      - Logs: reference/telemetry/logs.md
-    - Relationship Mapping: reference/relationship-mapping.md
-    - How It Works: concepts/how-it-works.md
-    - Graph Model: concepts/graph-model.md
-    - Modes: concepts/modes.md
-    - Source Layout: reference/source-layout.md
-    - Local Testing: reference/local-testing.md
-    - CLI K.I.S.S.: reference/cli-kiss.md
     - CLI Reference: reference/cli-reference.md
     - CLI Indexing: reference/cli-indexing.md
     - CLI Analysis: reference/cli-analysis.md
     - CLI System: reference/cli-system.md
     - Configuration: reference/configuration.md
+    - How It Works: concepts/how-it-works.md
+    - Graph Model: concepts/graph-model.md
+    - Modes: concepts/modes.md
+    - Architecture: architecture.md
+    - Relationship Mapping: reference/relationship-mapping.md
     - ".pcgignore": reference/pcgignore.md
     - Troubleshooting: reference/troubleshooting.md
+    - Telemetry:
+      - Overview: reference/telemetry/index.md
+      - Metrics: reference/telemetry/metrics.md
+      - Traces: reference/telemetry/traces.md
+      - Logs: reference/telemetry/logs.md
+    - Source Layout: reference/source-layout.md
+    - Language Support: contributing-language-support.md
+    - Language Feature Matrix: languages/feature-matrix.md
+    - PHP Parser: languages/php.md
   - Project:
-    - Why PCG: why-pcg.md
-    - Use Cases: use-cases.md
+    - Terraform Providers:
+      - Overview: guides/terraform-providers/index.md
+      - Adding Providers: guides/terraform-providers/adding-providers.md
+      - Updating Providers: guides/terraform-providers/updating-providers.md
+      - Service Categories: guides/terraform-providers/service-categories.md
     - Roadmap: roadmap.md
     - Contributing: contributing.md
-    - Language Support: contributing-language-support.md
     - License: license.md
 
 markdown_extensions:

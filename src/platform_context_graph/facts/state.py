@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import threading
 
+from platform_context_graph.resolution.decisions import PostgresProjectionDecisionStore
+
 from .storage import PostgresFactStore
 from .work_queue import PostgresFactWorkQueue
 
@@ -14,6 +16,7 @@ __all__ = [
     "facts_runtime_ready",
     "get_fact_store",
     "get_fact_work_queue",
+    "get_projection_decision_store",
     "git_facts_first_enabled",
     "reset_fact_runtime_for_tests",
     "reset_facts_runtime_for_tests",
@@ -22,6 +25,7 @@ __all__ = [
 _LOCK = threading.Lock()
 _FACT_STORE: PostgresFactStore | None = None
 _FACT_WORK_QUEUE: PostgresFactWorkQueue | None = None
+_PROJECTION_DECISION_STORE: PostgresProjectionDecisionStore | None = None
 
 
 def _facts_dsn() -> str | None:
@@ -62,10 +66,28 @@ def get_fact_work_queue() -> PostgresFactWorkQueue | None:
         return _FACT_WORK_QUEUE
 
 
+def get_projection_decision_store() -> PostgresProjectionDecisionStore | None:
+    """Return the shared projection decision store when configured."""
+
+    global _PROJECTION_DECISION_STORE
+    dsn = _facts_dsn()
+    if not dsn:
+        return None
+
+    with _LOCK:
+        if _PROJECTION_DECISION_STORE is None:
+            _PROJECTION_DECISION_STORE = PostgresProjectionDecisionStore(dsn)
+        return _PROJECTION_DECISION_STORE
+
+
 def facts_runtime_ready() -> bool:
     """Return whether both fact persistence and queue runtime are configured."""
 
-    return get_fact_store() is not None and get_fact_work_queue() is not None
+    return (
+        get_fact_store() is not None
+        and get_fact_work_queue() is not None
+        and get_projection_decision_store() is not None
+    )
 
 
 def git_facts_first_enabled() -> bool:
@@ -94,6 +116,7 @@ def reset_facts_runtime_for_tests() -> None:
 
     global _FACT_STORE
     global _FACT_WORK_QUEUE
+    global _PROJECTION_DECISION_STORE
 
     with _LOCK:
         if _FACT_STORE is not None:
@@ -104,8 +127,13 @@ def reset_facts_runtime_for_tests() -> None:
             close_queue = getattr(_FACT_WORK_QUEUE, "close", None)
             if callable(close_queue):
                 close_queue()
+        if _PROJECTION_DECISION_STORE is not None:
+            close_store = getattr(_PROJECTION_DECISION_STORE, "close", None)
+            if callable(close_store):
+                close_store()
         _FACT_STORE = None
         _FACT_WORK_QUEUE = None
+        _PROJECTION_DECISION_STORE = None
 
 
 def reset_fact_runtime_for_tests() -> None:

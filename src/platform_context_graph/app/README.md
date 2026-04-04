@@ -20,9 +20,9 @@ Each role should also be observable as its own service:
 
 - `api` reports API and MCP request telemetry
 - `git-collector` reports collector/indexing and fact-emission telemetry
-- `resolution-engine` reports queue-claim and projection telemetry
+- `resolution-engine` reports queue-claim, recovery, and projection-decision telemetry
 
-The important Phase 2 boundary is that `app/` decides *which* service role
+The important Phase 2/3 boundary is that `app/` decides *which* service role
 starts, while `facts/`, `collectors/`, `graph/`, and `resolution/` own the
 runtime behavior behind that role.
 

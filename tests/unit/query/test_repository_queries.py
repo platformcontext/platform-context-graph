@@ -82,12 +82,20 @@ class FinderLike:
 def test_repository_graph_counts_excludes_class_methods_from_top_level_count() -> None:
     """Top-level function counts must exclude functions also contained by classes."""
 
-    recorded_query: dict[str, str] = {}
+    recorded_queries: list[str] = []
 
     class RecordingSession:
         def run(self, query, **kwargs):
             del kwargs
-            recorded_query["query"] = query
+            recorded_queries.append(query)
+            if "CALL db.relationshipTypes()" in query:
+                return MockResult(
+                    records=[
+                        {"relationshipType": "CONTAINS"},
+                        {"relationshipType": "REPO_CONTAINS"},
+                        {"relationshipType": "IMPORTS"},
+                    ]
+                )
             return MockResult(
                 single_record=MockRecord(
                     {
@@ -115,20 +123,110 @@ def test_repository_graph_counts_excludes_class_methods_from_top_level_count() -
     assert counts["top_level_function_count"] == 17908
     assert counts["class_method_count"] == 22363
     assert counts["total_function_count"] == 40271
-    assert "CALL (r) {" in recorded_query["query"]
-    assert "WITH r" not in recorded_query["query"]
-    assert "NOT EXISTS {" in recorded_query["query"]
-    assert "(:Class)-[:CONTAINS]->(fn)" in recorded_query["query"]
+    count_query = recorded_queries[-1]
+    assert "CALL (r) {" in count_query
+    assert "WITH r" not in count_query
+    assert "NOT EXISTS {" in count_query
+    assert "(:Class)-[:CONTAINS]->(counted)" in count_query
     assert (
-        "coalesce(r[$local_path_key], r.path) = $repo_path" in recorded_query["query"]
+        "coalesce(r[$local_path_key], r.path) = $repo_path" in count_query
     )
-    assert "[:REPO_CONTAINS]->(file:File)" in recorded_query["query"]
+    assert "[:REPO_CONTAINS]->(counted:File)" in count_query
     assert (
-        "[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(fn:Function)"
-        in recorded_query["query"]
+        "[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(counted:Function)"
+        in count_query
     )
-    assert "[:IMPORTS]->(module:Module)" not in recorded_query["query"]
-    assert "type(rel) = $imports_rel_type" in recorded_query["query"]
+    assert "[:IMPORTS]->(module:Module)" not in count_query
+    assert "type(rel) = $imports_rel_type" in count_query
+
+
+def test_repository_graph_counts_skips_missing_relationship_types() -> None:
+    """Graph counts should avoid explicit missing-type matches on a fresh graph."""
+
+    recorded_queries: list[str] = []
+
+    class RecordingSession:
+        def run(self, query, **kwargs):
+            del kwargs
+            recorded_queries.append(query)
+            if "CALL db.relationshipTypes()" in query:
+                return MockResult(
+                    records=[
+                        {"relationshipType": "IMPORTS"},
+                    ]
+                )
+            return MockResult(
+                single_record=MockRecord(
+                    {
+                        "root_file_count": 0,
+                        "root_directory_count": 0,
+                        "file_count": 0,
+                        "top_level_function_count": 0,
+                        "class_method_count": 0,
+                        "total_function_count": 0,
+                        "class_count": 0,
+                        "module_count": 0,
+                    }
+                )
+            )
+
+    counts = repository_graph_counts(
+        RecordingSession(),
+        {
+            "id": "repository:r_empty",
+            "path": "/repos/empty",
+            "local_path": "/repos/empty",
+        },
+    )
+
+    assert counts["file_count"] == 0
+    assert counts["module_count"] == 0
+    assert len(recorded_queries) == 2
+    assert "CALL db.relationshipTypes()" in recorded_queries[0]
+    assert "[:REPO_CONTAINS]" not in recorded_queries[1]
+    assert "[:CONTAINS]" not in recorded_queries[1]
+    assert "0 AS root_file_count" in recorded_queries[1]
+    assert "0 AS file_count" in recorded_queries[1]
+    assert "0 AS top_level_function_count" in recorded_queries[1]
+
+
+def test_repository_graph_counts_uses_provided_relationship_types() -> None:
+    """Callers should be able to reuse a pre-fetched relationship type set."""
+
+    recorded_queries: list[str] = []
+
+    class RecordingSession:
+        def run(self, query, **kwargs):
+            del kwargs
+            recorded_queries.append(query)
+            return MockResult(
+                single_record=MockRecord(
+                    {
+                        "root_file_count": 1,
+                        "root_directory_count": 2,
+                        "file_count": 3,
+                        "top_level_function_count": 4,
+                        "class_method_count": 5,
+                        "total_function_count": 6,
+                        "class_count": 7,
+                        "module_count": 8,
+                    }
+                )
+            )
+
+    counts = repository_graph_counts(
+        RecordingSession(),
+        {
+            "id": "repository:r_cached",
+            "path": "/repos/cached",
+            "local_path": "/repos/cached",
+        },
+        relationship_types={"CONTAINS", "REPO_CONTAINS", "IMPORTS"},
+    )
+
+    assert counts["module_count"] == 8
+    assert len(recorded_queries) == 1
+    assert "CALL db.relationshipTypes()" not in recorded_queries[0]
 
 
 def test_resolve_repository_uses_dynamic_optional_repository_keys() -> None:

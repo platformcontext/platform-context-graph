@@ -46,9 +46,9 @@ Use these tools when the user is asking for a narrative answer such as
 
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
-| **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for api-node-boats." |
+| **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for payments-api." |
 | **`get_workload_story`** | Return a structured workload story using canonical workload identity, optionally scoped to one environment. | "Show me how payments-api is deployed in prod." |
-| **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. | "What can you tell me about api-node-boats in QA?" |
+| **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. | "What can you tell me about payments-api in QA?" |
 | **`get_repo_context`** | Durable drill-down for repository details after the story answer. | "Show me the full repo context behind that story." |
 | **`get_workload_context`** | Durable drill-down for workload details after the story answer. | "Show me the workload context behind that story." |
 | **`get_service_context`** | Service alias drill-down for service-shaped prompts. | "Show me the service context behind that story." |
@@ -87,7 +87,7 @@ Tools for inspecting the status of the deployed ingester runtimes.
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
 | **`list_ingesters`** | Show the latest persisted status for all configured ingesters. | "What ingesters are configured and what state are they in?" |
-| **`get_ingester_status`** | Show detailed status for one ingester, including retry timing and repo progress counts. | "What is the repository ingester doing right now?" |
+| **`get_ingester_status`** | Show detailed status for one ingester runtime, including retry timing and repo progress counts. | "What is the repository ingester doing right now?" |
 
 ## Job Control
 

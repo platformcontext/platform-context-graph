@@ -26,6 +26,16 @@ containerSecurityContext:
     drop:
       - ALL
 
+initContainerSecurityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
 service:
   type: ClusterIP
   port: 8080
@@ -40,6 +50,7 @@ apiAuth:
 
 api:
   replicas: 1
+  revisionHistoryLimit: 3
   resources:
     requests:
       cpu: 500m
@@ -51,6 +62,7 @@ api:
 resolutionEngine:
   enabled: true
   replicas: 1
+  revisionHistoryLimit: 3
   resources:
     requests:
       cpu: 500m
@@ -73,6 +85,7 @@ exposure:
 
 ingester:
   replicas: 1
+  revisionHistoryLimit: 3
   persistence:
     enabled: true
     existingClaim: ""
@@ -120,6 +133,16 @@ observability:
       - /api/v0/docs
       - /api/v0/redoc
     metricExportIntervalSeconds: 30
+  prometheus:
+    enabled: false
+    host: 0.0.0.0
+    port: 9464
+    path: /metrics
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+      scrapeTimeout: 10s
+      labels: {}
 
 neo4j:
   uri: bolt://neo4j:7687
@@ -159,24 +182,112 @@ repoSync:
 pcgignore: |
   # Python
   __pycache__/
-  *.pyc
+  *.py[cod]
   .venv/
-  .env
+  env/
+  venv/
+  .tox/
+  .nox/
+  .pytest_cache/
+  .mypy_cache/
+  .ruff_cache/
+  .pyre/
+  .hypothesis/
+  .ipynb_checkpoints/
+  .eggs/
+  *.egg-info/
+  htmlcov/
+  coverage.xml
 
-  # Node
+  # JavaScript / TypeScript
   node_modules/
+  bower_components/
+  jspm_packages/
+  .npm/
+  .pnpm-store/
+  .yarn/
+  .parcel-cache/
+  .next/
+  .nuxt/
+  .svelte-kit/
+  .docusaurus/
+  .vite/
+  *.tsbuildinfo
 
-  # Build artifacts
-  dist/
-  build/
+  # JVM / Kotlin / Scala / Groovy
+  .gradle/
+  .m2/
+  .bloop/
+  .metals/
+  .bsp/
+  .kotlin/
+  *.class
+
+  # Go
+  *.test
+  *.coverprofile
+  coverage.out
+  profile.cov
+
+  # PHP / Ruby
+  composer.phar
+  .bundle/
+  vendor/bundle/
+
+  # Rust
   target/
-  out/
 
-  # IDEs
+  # .NET / C#
+  packages/
+  obj/
+  .vs/
+  TestResult*/
+  *.trx
+
+  # Swift / Apple
+  .build/
+  .swiftpm/
+  xcuserdata/
+  Carthage/Build/
+  fastlane/report.xml
+  fastlane/Preview.html
+  fastlane/test_output
+
+  # Elixir
+  _build/
+  deps/
+  cover/
+  .elixir_ls/
+  erl_crash.dump
+
+  # Dart / Flutter
+  .dart_tool/
+  .flutter-plugins
+  .flutter-plugins-dependencies
+
+  # Haskell
+  dist-newstyle/
+  .stack-work/
+  .hpc/
+
+  # Perl
+  blib/
+  .build/
+  .carmel/
+
+  # C / C++
+  CMakeFiles/
+  CMakeCache.txt
+  cmake_install.cmake
+  *.dSYM/
+
+  # IDEs and editors
   .idea/
   .vscode/
+  *.swp
+  *.swo
 
-  # Git and cache directories
+  # Git and IaC cache directories
   .git/
   .terraform/
   .terragrunt-cache/
@@ -186,13 +297,43 @@ pcgignore: |
   cdk.out/
   .serverless/
   .aws-sam/
+  *.tfstate
+  *.tfstate.*
+  .terraform.tfstate.lock.info
+  *.tfvars
+  *.tfvars.json
+  override.tf
+  override.tf.json
+  *_override.tf
+  *_override.tf.json
+  *tfplan*
+  crash.log
+  crash.*.log
+  charts/*.tgz
 
-  # Coverage and temp data
-  .pytest_cache/
+  # Build artifacts and output
+  dist/
+  build/
+  out/
   coverage/
-  htmlcov/
+
+  # Minified and generated files
+  *.min.js
+  *.min.css
+  *.min.json
+  *.bundle.js
+  *.chunk.js
+  *.min.map
+  *.js.map
+  *.css.map
+
+  # Coverage, databases, and temp data
   *.log
   *.sqlite3
+  *.db
+  *.tmp
+  *.temp
+  *.bak
 
 nodeSelector: {}
 tolerations: []

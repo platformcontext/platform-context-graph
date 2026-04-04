@@ -67,7 +67,7 @@ When deployed as a service, PCG runs in one of three roles:
 
 - **combined** (default) — serves HTTP API and processes indexing
 - **api** — serves HTTP API only, reads from the graph
-- **ingester** — processes indexing jobs only, writes to the graph
+- **ingester** — the deployed indexing runtime. Internally this still uses the `ingester` runtime role and processes indexing jobs only, writing facts and projected graph state.
 
 Split roles when you need to scale API serving and indexing independently. See [Deployment Overview](../deployment/overview.md) for details.
 

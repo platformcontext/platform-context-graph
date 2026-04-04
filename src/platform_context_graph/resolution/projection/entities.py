@@ -88,6 +88,7 @@ def project_parsed_entity_facts(
     """Project parsed entity facts into graph nodes contained by File nodes."""
 
     projected = 0
+    del build_entity_merge_statement_fn
     projected_file_keys: set[tuple[str, str]] = set()
     for file_fact in iter_file_facts(fact_records):
         if not file_fact.relative_path:
@@ -122,8 +123,37 @@ def project_parsed_entity_facts(
         )
         projected += entity_rows
         projected_file_keys.add((file_fact.checkout_path, file_fact.relative_path))
+    projected += _project_standalone_entity_facts(
+        tx,
+        iter_parsed_entity_facts(fact_records),
+        projected_file_keys=projected_file_keys,
+        flush_write_batches_fn=flush_write_batches_fn,
+    )
+    return projected
 
-    for fact_record in iter_parsed_entity_facts(fact_records):
+
+def _project_standalone_entity_facts(
+    tx: object,
+    fact_records: Iterable[FactRecordRow],
+    *,
+    projected_file_keys: set[tuple[str, str]],
+    flush_write_batches_fn: FlushWriteBatchesFn | None = None,
+) -> int:
+    """Project parsed-entity facts that are not already in file payloads."""
+
+    if flush_write_batches_fn is None:
+        from platform_context_graph.graph.persistence import flush_write_batches
+
+        flush_write_batches_fn = flush_write_batches
+
+    from platform_context_graph.graph.persistence.batch_support import (
+        empty_accumulator,
+    )
+    from platform_context_graph.graph.persistence.unwind import entity_props_for_unwind
+
+    batches = empty_accumulator()
+    projected = 0
+    for fact_record in fact_records:
         if not fact_record.relative_path:
             continue
         if (
@@ -134,24 +164,28 @@ def project_parsed_entity_facts(
         file_path = str(
             Path(fact_record.checkout_path).resolve() / fact_record.relative_path
         )
-        entity_payload = {
-            "name": str(fact_record.payload.get("entity_name") or ""),
-            "line_number": int(fact_record.payload.get("start_line") or 0),
-            "end_line": int(fact_record.payload.get("end_line") or 0),
-            "lang": fact_record.payload.get("language"),
-        }
-        query, params = build_entity_merge_statement_fn(
-            label=str(fact_record.payload.get("entity_kind") or ""),
-            item=entity_payload,
-            file_path=file_path,
-            use_uid_identity=False,
+        row = entity_props_for_unwind(
+            str(fact_record.payload.get("entity_kind") or ""),
+            {
+                "name": str(fact_record.payload.get("entity_name") or ""),
+                "line_number": int(fact_record.payload.get("start_line") or 0),
+                "end_line": int(fact_record.payload.get("end_line") or 0),
+                "lang": fact_record.payload.get("language"),
+            },
+            file_path,
+            False,
         )
-        run_write_query(tx, query, **params)
+        label = str(fact_record.payload.get("entity_kind") or "")
+        batches["entities_by_label"].setdefault(label, []).append(row)
         projected += 1
+
+    if projected:
+        flush_write_batches_fn(tx, batches)
     return projected
 
 
 __all__ = [
+    "_project_standalone_entity_facts",
     "build_entity_merge_statement",
     "iter_parsed_entity_facts",
     "project_parsed_entity_facts",

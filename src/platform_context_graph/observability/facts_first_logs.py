@@ -57,3 +57,13 @@ def log_resolution_stage_failure(**extra_keys: Any) -> None:
         event_name="resolution.stage.failed",
         extra_keys=extra_keys,
     )
+
+
+def log_projection_decision(**extra_keys: Any) -> None:
+    """Emit one persisted projection decision log event."""
+
+    info_logger(
+        "Resolution Engine recorded one projection decision",
+        event_name="resolution.decision.recorded",
+        extra_keys=extra_keys,
+    )

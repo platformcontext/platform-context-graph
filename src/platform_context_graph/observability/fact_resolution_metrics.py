@@ -5,12 +5,17 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from .fact_resolution_instruments import setup_fact_resolution_instruments
+from .fact_resolution_observers import RuntimeFactResolutionObserverMixin
 from .fact_scaling_metrics import RuntimeFactScalingMetricsMixin
-from .fact_scaling_metrics import setup_fact_scaling_instruments
-from .otel import Observation
+from .projection_hot_path_metrics import RuntimeProjectionHotPathMetricsMixin
 
 
-class RuntimeFactResolutionMetricsMixin(RuntimeFactScalingMetricsMixin):
+class RuntimeFactResolutionMetricsMixin(
+    RuntimeFactResolutionObserverMixin,
+    RuntimeProjectionHotPathMetricsMixin,
+    RuntimeFactScalingMetricsMixin,
+):
     """Provide facts-first and resolution-engine metric helpers."""
 
     enabled: bool
@@ -382,117 +387,94 @@ class RuntimeFactResolutionMetricsMixin(RuntimeFactScalingMetricsMixin):
                 },
             )
 
-    def _observe_fact_queue_depth(self, _options: Any) -> list[Observation]:
-        """Produce facts queue depth observations."""
+    def record_resolution_failure_classification(
+        self,
+        *,
+        component: str,
+        work_type: str,
+        failure_class: str,
+        retry_disposition: str,
+    ) -> None:
+        """Record one classified resolution failure."""
 
-        with self._lock:
-            return [
-                Observation(value, dict(key))
-                for key, value in sorted(self._fact_queue_depth.items())
-            ]
-
-    def _observe_fact_queue_oldest_age_seconds(
-        self, _options: Any
-    ) -> list[Observation]:
-        """Produce oldest facts queue age observations."""
-
-        with self._lock:
-            return [
-                Observation(value, dict(key))
-                for key, value in sorted(self._fact_queue_oldest_age_seconds.items())
-            ]
-
-    def _observe_resolution_workers_active(self, _options: Any) -> list[Observation]:
-        """Produce current resolution worker active-count observations."""
-
-        with self._lock:
-            return [
-                Observation(value, dict(key))
-                for key, value in sorted(self._resolution_workers_active.items())
-            ]
-
-
-def setup_fact_resolution_instruments(runtime: Any) -> None:
-    """Initialize facts and resolution instruments for one runtime."""
-
-    if not runtime.enabled or runtime.meter is None:
-        return
-
-    runtime._fact_resolution_instruments["fact_records_total"] = (
-        runtime.meter.create_counter("pcg_fact_records_total")
-    )
-    runtime._fact_resolution_instruments["fact_emission_duration"] = (
-        runtime.meter.create_histogram("pcg_fact_emission_duration_seconds", unit="s")
-    )
-    runtime._fact_resolution_instruments["fact_work_items_total"] = (
-        runtime.meter.create_counter("pcg_fact_work_items_total")
-    )
-    runtime._fact_resolution_instruments["resolution_work_items_total"] = (
-        runtime.meter.create_counter("pcg_resolution_work_items_total")
-    )
-    runtime._fact_resolution_instruments["resolution_work_item_duration"] = (
-        runtime.meter.create_histogram(
-            "pcg_resolution_work_item_duration_seconds", unit="s"
+        if not self.enabled:
+            return
+        failures_total = self._fact_resolution_instruments.get(
+            "resolution_failure_classifications_total"
         )
-    )
-    runtime._fact_resolution_instruments["resolution_stage_duration"] = (
-        runtime.meter.create_histogram(
-            "pcg_resolution_stage_duration_seconds", unit="s"
+        if failures_total is not None:
+            failures_total.add(
+                1,
+                {
+                    "pcg.component": component,
+                    "pcg.work_type": work_type,
+                    "pcg.failure_class": failure_class,
+                    "pcg.retry_disposition": retry_disposition,
+                },
+            )
+
+    def record_projection_decision(
+        self,
+        *,
+        component: str,
+        decision_type: str,
+        confidence_score: float,
+        evidence_count: int,
+    ) -> None:
+        """Record one persisted projection decision and its confidence band."""
+
+        if not self.enabled:
+            return
+        if confidence_score >= 0.85:
+            confidence_band = "high"
+        elif confidence_score >= 0.7:
+            confidence_band = "medium"
+        else:
+            confidence_band = "low"
+        attrs = {
+            "pcg.component": component,
+            "pcg.decision_type": decision_type,
+            "pcg.confidence_band": confidence_band,
+        }
+        decisions_total = self._fact_resolution_instruments.get(
+            "projection_decisions_total"
         )
-    )
-    runtime._fact_resolution_instruments["resolution_facts_loaded_total"] = (
-        runtime.meter.create_counter("pcg_resolution_facts_loaded_total")
-    )
-    runtime._fact_resolution_instruments["fact_store_operations_total"] = (
-        runtime.meter.create_counter("pcg_fact_store_operations_total")
-    )
-    runtime._fact_resolution_instruments["fact_store_operation_duration"] = (
-        runtime.meter.create_histogram(
-            "pcg_fact_store_operation_duration_seconds", unit="s"
+        confidence_histogram = self._fact_resolution_instruments.get(
+            "projection_confidence_score"
         )
-    )
-    runtime._fact_resolution_instruments["fact_store_rows_total"] = (
-        runtime.meter.create_counter("pcg_fact_store_rows_total")
-    )
-    runtime._fact_resolution_instruments["fact_queue_operations_total"] = (
-        runtime.meter.create_counter("pcg_fact_queue_operations_total")
-    )
-    runtime._fact_resolution_instruments["fact_queue_operation_duration"] = (
-        runtime.meter.create_histogram(
-            "pcg_fact_queue_operation_duration_seconds", unit="s"
+        evidence_total = self._fact_resolution_instruments.get(
+            "projection_decision_evidence_total"
         )
-    )
-    runtime._fact_resolution_instruments["fact_queue_rows_total"] = (
-        runtime.meter.create_counter("pcg_fact_queue_rows_total")
-    )
-    runtime._fact_resolution_instruments["resolution_claim_duration"] = (
-        runtime.meter.create_histogram(
-            "pcg_resolution_claim_duration_seconds", unit="s"
+        if decisions_total is not None:
+            decisions_total.add(1, attrs)
+        if confidence_histogram is not None:
+            confidence_histogram.record(confidence_score, attrs)
+        if evidence_count > 0 and evidence_total is not None:
+            evidence_total.add(evidence_count, attrs)
+
+    def record_admin_fact_action(
+        self,
+        *,
+        component: str,
+        action: str,
+        outcome: str,
+    ) -> None:
+        """Record one admin facts-first control-plane action."""
+
+        if not self.enabled:
+            return
+        actions_total = self._fact_resolution_instruments.get(
+            "admin_fact_actions_total"
         )
-    )
-    runtime._fact_resolution_instruments["resolution_idle_sleep"] = (
-        runtime.meter.create_histogram("pcg_resolution_idle_sleep_seconds", unit="s")
-    )
-    runtime._fact_resolution_instruments["resolution_stage_output_total"] = (
-        runtime.meter.create_counter("pcg_resolution_stage_output_total")
-    )
-    runtime._fact_resolution_instruments["resolution_stage_failures_total"] = (
-        runtime.meter.create_counter("pcg_resolution_stage_failures_total")
-    )
-    runtime.meter.create_observable_gauge(
-        "pcg_fact_queue_depth",
-        callbacks=[runtime._observe_fact_queue_depth],
-    )
-    runtime.meter.create_observable_gauge(
-        "pcg_fact_queue_oldest_age_seconds",
-        callbacks=[runtime._observe_fact_queue_oldest_age_seconds],
-        unit="s",
-    )
-    runtime.meter.create_observable_gauge(
-        "pcg_resolution_workers_active",
-        callbacks=[runtime._observe_resolution_workers_active],
-    )
-    setup_fact_scaling_instruments(runtime)
+        if actions_total is not None:
+            actions_total.add(
+                1,
+                {
+                    "pcg.component": component,
+                    "pcg.action": action,
+                    "pcg.outcome": outcome,
+                },
+            )
 
 
 __all__ = ["RuntimeFactResolutionMetricsMixin", "setup_fact_resolution_instruments"]

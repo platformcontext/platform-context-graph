@@ -21,6 +21,7 @@ import builtins as _py_builtins
 from collections import Counter
 from typing import Any
 
+from ...observability import get_observability
 from .call_prefilter import compatible_languages
 
 _PYTHON_BUILTIN_NAMES: frozenset[str] = frozenset(dir(_py_builtins))
@@ -56,6 +57,7 @@ def prepare_call_rows(
     get_config_value_fn: Any,
     warning_logger_fn: Any,
     start_row_id: int,
+    max_calls_per_file: int | None = None,
     known_callable_names: frozenset[str] | None = None,
     known_callable_names_by_family: dict[str, frozenset[str]] | None = None,
     unresolved_counter: Counter[str] | None = None,
@@ -84,6 +86,9 @@ def prepare_call_rows(
             counter-based aggregation is not active.
         start_row_id: First ``row_id`` to assign; incremented for each
             emitted row.
+        max_calls_per_file: Optional cap on how many raw call records to
+            inspect for this file.  When set, row preparation stops after
+            this many calls so the cap bounds preparation work directly.
         known_callable_names: Legacy flat set of all callable names in
             the graph, used when *known_callable_names_by_family* is
             ``None``.
@@ -113,8 +118,14 @@ def prepare_call_rows(
     contextual_rows: list[dict[str, Any]] = []
     file_level_rows: list[dict[str, Any]] = []
     next_row_id = start_row_id
+    call_limit = None if max_calls_per_file is None else max(0, max_calls_per_file)
+    inspected_calls = 0
 
-    for call in file_data.get("function_calls", []):
+    raw_calls = file_data.get("function_calls", [])
+    for call in raw_calls:
+        if call_limit is not None and inspected_calls >= call_limit:
+            break
+        inspected_calls += 1
         called_name = call["name"]
         if called_name in _PYTHON_BUILTIN_NAMES:
             continue
@@ -199,6 +210,17 @@ def prepare_call_rows(
             )
         else:
             file_level_rows.append(call_params)
+
+    capped_calls = 0
+    if call_limit is not None and len(raw_calls) > inspected_calls:
+        capped_calls = len(raw_calls) - inspected_calls
+    observability = get_observability()
+    observability.record_call_prep_counts(
+        component=observability.component,
+        language=str(file_data.get("lang") or "unknown"),
+        inspected_count=inspected_calls,
+        capped_count=capped_calls,
+    )
 
     return contextual_rows, file_level_rows, next_row_id
 

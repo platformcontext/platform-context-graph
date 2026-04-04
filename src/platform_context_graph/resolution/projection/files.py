@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import time
 from typing import Callable
 from typing import Iterable
 
 from platform_context_graph.content.ingest import repository_metadata_from_row
 from platform_context_graph.facts.storage.models import FactRecordRow
 from platform_context_graph.graph.persistence.content_store import content_dual_write
+from platform_context_graph.graph.persistence.content_store import (
+    content_dual_write_batch,
+)
+from platform_context_graph.observability import get_observability
 
 from .common import run_write_query
 from .repositories import _normalized_fact_type
@@ -17,7 +23,13 @@ CollectDirectoryChainRowsFn = Callable[
     ..., tuple[list[dict[str, str]], list[dict[str, str]]]
 ]
 ContentDualWriteFn = Callable[..., None]
+ContentDualWriteBatchFn = Callable[..., None]
 FlushDirectoryChainRowsFn = Callable[..., None]
+
+_DEFAULT_FILE_BATCH_SIZE = max(
+    1,
+    int(os.getenv("PCG_RESOLUTION_FILE_BATCH_SIZE", "250")),
+)
 
 
 def collect_directory_chain_rows(
@@ -151,78 +163,125 @@ def iter_file_facts(fact_records: Iterable[FactRecordRow]) -> list[FactRecordRow
     return file_facts
 
 
+def _iter_file_fact_batches(
+    file_facts: list[FactRecordRow],
+    *,
+    batch_size: int,
+) -> Iterable[list[FactRecordRow]]:
+    """Yield file-fact batches in stable insertion order."""
+
+    for start in range(0, len(file_facts), batch_size):
+        yield file_facts[start : start + batch_size]
+
+
 def project_file_facts(
     tx: object,
     fact_records: Iterable[FactRecordRow],
     *,
     warning_logger_fn: object | None = None,
     content_dual_write_fn: ContentDualWriteFn = content_dual_write,
+    content_dual_write_batch_fn: ContentDualWriteBatchFn = content_dual_write_batch,
     collect_directory_chain_rows_fn: CollectDirectoryChainRowsFn = (
         collect_directory_chain_rows
     ),
     flush_directory_chain_rows_fn: FlushDirectoryChainRowsFn = flush_directory_chain_rows,
+    file_batch_size: int | None = None,
 ) -> int:
     """Project file facts into File nodes and repository containment edges."""
 
-    dir_rows: list[dict[str, str]] = []
-    containment_rows: list[dict[str, str]] = []
+    file_facts = iter_file_facts(fact_records)
+    if not file_facts:
+        return 0
+
+    batch_size = max(1, file_batch_size or _DEFAULT_FILE_BATCH_SIZE)
+    first_repo_path = Path(file_facts[0].checkout_path).resolve()
+    repository = repository_metadata_from_row(
+        row={
+            "id": file_facts[0].repository_id,
+            "name": first_repo_path.name,
+            "path": str(first_repo_path),
+            "local_path": str(first_repo_path),
+            "has_remote": False,
+        },
+        repo_path=first_repo_path,
+    )
+
     projected = 0
+    observability = get_observability()
+    for file_batch in _iter_file_fact_batches(file_facts, batch_size=batch_size):
+        batch_file_data: list[dict[str, object]] = []
+        dir_rows: list[dict[str, str]] = []
+        containment_rows: list[dict[str, str]] = []
+        started = time.perf_counter()
+        with observability.start_span(
+            "pcg.resolution.project_file_batch",
+            attributes={
+                "pcg.repository_id": repository.get("id"),
+                "pcg.file_count": len(file_batch),
+            },
+        ):
+            for fact_record in file_batch:
+                if not fact_record.relative_path:
+                    continue
+                repo_path = Path(fact_record.checkout_path).resolve()
+                file_path = repo_path / fact_record.relative_path
+                parsed_file_data = fact_record.payload.get("parsed_file_data")
+                if isinstance(parsed_file_data, dict):
+                    file_data = dict(parsed_file_data)
+                    file_data.setdefault("path", str(file_path))
+                    file_data.setdefault("repo_path", str(repo_path))
+                    file_data["is_dependency"] = bool(
+                        fact_record.payload.get("is_dependency", False)
+                    )
+                    batch_file_data.append(file_data)
+                run_write_query(
+                    tx,
+                    """
+                    MERGE (f:File {path: $file_path})
+                    SET f.name = $name,
+                        f.relative_path = $relative_path,
+                        f.lang = $language,
+                        f.is_dependency = $is_dependency
+                    """,
+                    file_path=str(file_path),
+                    name=file_path.name,
+                    relative_path=fact_record.relative_path,
+                    language=fact_record.payload.get("language"),
+                    is_dependency=bool(fact_record.payload.get("is_dependency", False)),
+                )
+                repo_dir_rows, repo_containment_rows = collect_directory_chain_rows_fn(
+                    file_path,
+                    repo_path,
+                    str(file_path),
+                    warning_logger_fn=warning_logger_fn,
+                )
+                dir_rows.extend(repo_dir_rows)
+                containment_rows.extend(repo_containment_rows)
+                projected += 1
 
-    for fact_record in iter_file_facts(fact_records):
-        if not fact_record.relative_path:
-            continue
-        repo_path = Path(fact_record.checkout_path).resolve()
-        file_path = repo_path / fact_record.relative_path
-        parsed_file_data = fact_record.payload.get("parsed_file_data")
-        if isinstance(parsed_file_data, dict):
-            file_data = dict(parsed_file_data)
-            file_data.setdefault("path", str(file_path))
-            file_data.setdefault("repo_path", str(repo_path))
-            file_data["is_dependency"] = bool(
-                fact_record.payload.get("is_dependency", False)
-            )
-            repository = repository_metadata_from_row(
-                row={
-                    "id": fact_record.repository_id,
-                    "name": repo_path.name,
-                    "path": str(repo_path),
-                    "local_path": str(repo_path),
-                    "has_remote": False,
-                },
-                repo_path=repo_path,
-            )
-            content_dual_write_fn(
-                file_data,
-                file_path.name,
-                repository,
-                warning_logger_fn,
-            )
-        run_write_query(
-            tx,
-            """
-            MERGE (f:File {path: $file_path})
-            SET f.name = $name,
-                f.relative_path = $relative_path,
-                f.lang = $language,
-                f.is_dependency = $is_dependency
-            """,
-            file_path=str(file_path),
-            name=file_path.name,
-            relative_path=fact_record.relative_path,
-            language=fact_record.payload.get("language"),
-            is_dependency=bool(fact_record.payload.get("is_dependency", False)),
+            if batch_file_data:
+                content_dual_write_batch_fn(
+                    batch_file_data,
+                    repository,
+                    warning_logger_fn,
+                )
+            flush_directory_chain_rows_fn(tx, dir_rows, containment_rows)
+        observability.record_resolution_file_projection_batch(
+            component=observability.component,
+            file_count=len(file_batch),
+            duration_seconds=time.perf_counter() - started,
         )
-        repo_dir_rows, repo_containment_rows = collect_directory_chain_rows_fn(
-            file_path,
-            repo_path,
-            str(file_path),
-            warning_logger_fn=warning_logger_fn,
+        observability.record_resolution_directory_flush_rows(
+            component=observability.component,
+            row_kind="directory",
+            row_count=len(dir_rows),
         )
-        dir_rows.extend(repo_dir_rows)
-        containment_rows.extend(repo_containment_rows)
-        projected += 1
+        observability.record_resolution_directory_flush_rows(
+            component=observability.component,
+            row_kind="containment",
+            row_count=len(containment_rows),
+        )
 
-    flush_directory_chain_rows_fn(tx, dir_rows, containment_rows)
     return projected
 
 

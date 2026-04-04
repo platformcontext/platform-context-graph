@@ -1,73 +1,92 @@
 # Telemetry Overview
 
-PlatformContextGraph uses three primary signal types:
+PlatformContextGraph uses three signal types:
 
 - **Metrics** for rate, latency, backlog, concurrency, and capacity trends
 - **Traces** for request and pipeline timing across service boundaries
 - **Logs** for high-context event breadcrumbs and incident forensics
 
-Use this section when you need to answer:
+Use this page to choose where to look first.
 
-- Is the system healthy right now?
-- Where is time going in the Git-to-graph pipeline?
-- Is backlog growing because of parse speed, queue pressure, Postgres, or Neo4j?
-- What should we scale first?
-- What exact trace or log line explains a production incident?
+## Start Here
 
-## Service Flow
+| If you are debugging | Start with | Then check |
+| --- | --- | --- |
+| API is slow or erroring | API metrics | API traces and logs |
+| backlog is growing | queue depth and queue age metrics | resolution-engine traces and queue logs |
+| one repository is slow | ingester metrics | ingester traces and resolution-engine stage timings |
+| graph writes are slow | resolution metrics | Neo4j traces and graph persistence logs |
+| content reads are missing or slow | API metrics and content metrics | content traces and logs |
+| replay or dead-letter behavior looks wrong | recovery metrics | recovery traces and admin/replay logs |
+
+## Runtime And Control-Plane Flow
 
 ```mermaid
 flowchart LR
-  A["API / MCP"] --> B["Canonical graph reads"]
-  C["Git Collector"] --> D["Parse snapshot"]
-  D --> E["Postgres fact store"]
-  E --> F["Postgres fact work queue"]
-  F --> G["Resolution Engine"]
-  G --> H["Graph persistence"]
-  H --> I["Neo4j"]
-  H --> J["Postgres content store"]
+  A["Ingester"] --> B["Postgres fact store"]
+  B --> C["Fact work queue"]
+  C --> D["Resolution Engine"]
+  D --> E["Neo4j graph"]
+  D --> F["Postgres content store"]
+  D --> G["Projection decisions"]
+  C --> H["Failure and replay state"]
+  I["API / MCP"] --> E
+  I --> F
+  J["Admin API / CLI"] --> G
+  J --> H
 ```
 
 ## How To Use The Signals
 
-- Start with **metrics** when you need to detect regressions, backlog growth, or saturation.
-- Jump to **traces** when you need to understand latency shape or cross-service timing.
-- Use **logs** when you need exact repo/run/work-item context, error text, or operator breadcrumbs.
+- Start with **metrics** when you need to detect regression, saturation, or
+  backlog growth.
+- Move to **traces** when you need to understand where time went across a
+  request or projection.
+- Use **logs** when you need exact repository, run, or work-item context.
 
-## By Service
+## By Runtime
 
-### API and MCP
+### API
 
 - Metrics answer request rate, latency, and error-rate questions.
-- Traces show slow queries and transport-level timing.
-- Logs carry request, correlation, and exception details.
+- Traces show request and query timing.
+- Logs carry correlation fields and failure details.
 
-### Git Collector
+### Ingester
 
-- Metrics answer parse throughput, queue wait, snapshot backlog, fact emission rate, and commit timing questions.
-- Traces show repository parse, fact emission, and inline projection timing.
-- Logs explain discovery choices, slow files, queue waits, and per-repo progress.
+- Metrics answer repo queue wait, parse throughput, fact emission timing, and
+  workspace pressure.
+- Traces show parse, fact emission, and inline projection timing.
+- Logs explain discovery choices, slow files, and per-repo progress.
 
-### Fact Store and Fact Work Queue
+### Facts Layer
 
-- Metrics answer SQL operation rate, latency, queue backlog depth, queue age, retry churn, dead-letter pressure, and connection-pool saturation questions.
-- Traces show individual `fact_store` and `fact_queue` operations.
-- Logs capture snapshot emission, inline projection lease/failure, dead-letter replay, and work-item lifecycle breadcrumbs.
+- Metrics answer fact-store latency, queue backlog depth, queue age, retry
+  churn, dead-letter pressure, and connection-pool saturation.
+- Traces show individual fact-store and fact-queue operations.
+- Logs capture snapshot emission, inline lease behavior, replay, and work-item
+  lifecycle breadcrumbs.
 
 ### Resolution Engine
 
-- Metrics answer claim latency, worker activity, work-item outcomes, stage durations, stage output volume, stage failures by error class, and retry/dead-letter age.
-- Traces show the lifetime of one projection attempt from claim through graph projection.
-- Logs capture work-item completion, retry, dead-letter, and per-stage failure context with work-item identifiers.
+- Metrics answer claim latency, worker activity, stage duration, stage output
+  volume, stage failures, and dead-letter pressure.
+- Traces show one projection attempt from claim to graph write.
+- Logs capture work-item completion, retry, dead-letter, and per-stage failure
+  context.
 
-### Graph and Content Persistence
+## Prometheus And ServiceMonitor
 
-- Metrics answer graph batch size, graph batch latency, Neo4j query latency, and content-provider behavior.
-- Traces show commit chunk timing, content dual-write timing, and individual Neo4j query spans.
-- Logs explain chunk fallback, per-file write failures, and content dual-write failures.
+- In Docker Compose, validate runtime metrics by curling the direct `/metrics`
+  endpoints.
+- In Kubernetes, Helm can expose dedicated metrics ports and render
+  `ServiceMonitor` resources for the API, ingester, and resolution-engine.
+- Bootstrap indexing is a local or operator-run one-shot activity, not a
+  steady-state `ServiceMonitor` target in the public chart.
 
-## Operator Starting Points
+## Where To Go Next
 
-- **Capacity planning:** start with the [Metrics](metrics.md) page.
-- **Latency debugging:** start with the [Traces](traces.md) page.
-- **Incident forensics:** start with the [Logs](logs.md) page.
+- [Metrics](metrics.md) for exact metric names and how to use them
+- [Traces](traces.md) for span names and latency debugging
+- [Logs](logs.md) for event breadcrumbs and incident forensics
+- [Baseline Performance](../baseline-performance.md) for large-run tuning

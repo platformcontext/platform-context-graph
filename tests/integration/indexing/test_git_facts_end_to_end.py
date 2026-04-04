@@ -149,11 +149,13 @@ def test_emitted_git_snapshot_projects_through_facts_first_commit_path() -> None
         *,
         builder,
         fact_store,
+        decision_store,
         info_logger_fn,
         debug_log_fn,
         warning_logger_fn,
     ) -> dict[str, object]:
         del builder
+        del decision_store
         del info_logger_fn
         del debug_log_fn
         del warning_logger_fn

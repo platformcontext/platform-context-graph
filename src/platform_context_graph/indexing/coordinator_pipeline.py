@@ -45,6 +45,10 @@ from .repo_classification import (
     classify_repo_runtime,
     load_repo_class_overrides,
 )
+from .parse_recovery import (
+    merge_parse_runtime_state,
+    parse_repository_snapshot_with_recovery,
+)
 
 _ENTITY_FIELDS = ("functions", "classes", "variables", "interfaces", "structs", "enums")
 
@@ -56,6 +60,13 @@ def _count_snapshot_entities(file_data: list[dict[str, Any]]) -> int:
         for field in _ENTITY_FIELDS:
             total += len(fd.get(field, []))
     return total
+
+
+def _set_span_attribute_if_supported(span: Any, key: str, value: Any) -> None:
+    """Set a telemetry span attribute when the span supports mutation."""
+
+    if hasattr(span, "set_attribute"):
+        span.set_attribute(key, value)
 
 
 def prepare_repository_snapshots(
@@ -173,6 +184,8 @@ async def process_repository_snapshots(
             parse_strategy=parse_strategy,
             parse_workers=parse_workers,
         )
+    current_parse_executor = parse_executor
+    current_parse_strategy = parse_strategy
 
     def _publish_runtime_state() -> None:
         """Publish the current pending-repo count and indexing progress snapshot."""
@@ -237,10 +250,13 @@ async def process_repository_snapshots(
     ) -> None:
         """Parse one repository snapshot and enqueue it for serialized commit."""
 
+        nonlocal current_parse_executor
+        nonlocal current_parse_strategy
         repo_key = str(repo_path.resolve())
         started: float | None = None
-        repo_span = None
         last_progress_publish = 0.0
+        effective_parse_executor = current_parse_executor
+        effective_parse_strategy = current_parse_strategy
         try:
             repo_state = run_state.repositories[repo_key]
             repo_tel = create_repo_telemetry(repo_path)
@@ -278,10 +294,10 @@ async def process_repository_snapshots(
                     "pcg.index.run_id": run_state.run_id,
                     "pcg.index.repo_path": repo_key,
                     "pcg.index.resume": resume_candidate,
-                    "pcg.index.parse_strategy": parse_strategy,
+                    "pcg.index.parse_strategy": effective_parse_strategy,
                     "pcg.index.parse_workers": parse_workers,
                 },
-            ) as repo_span:
+            ) as repository_span:
                 queue_wait_started = time.perf_counter()
                 with telemetry.start_span(
                     "pcg.index.repository.queue_wait",
@@ -289,12 +305,14 @@ async def process_repository_snapshots(
                     attributes={
                         "pcg.index.run_id": run_state.run_id,
                         "pcg.index.repo_path": repo_key,
-                        "pcg.index.parse_strategy": parse_strategy,
+                        "pcg.index.parse_strategy": effective_parse_strategy,
                         "pcg.index.parse_workers": parse_workers,
                     },
                 ):
                     await parse_semaphore.acquire()
                 queue_wait_duration = time.perf_counter() - queue_wait_started
+                effective_parse_executor = current_parse_executor
+                effective_parse_strategy = current_parse_strategy
                 repo_tel.parse_queue_wait_seconds = queue_wait_duration
                 try:
                     if hasattr(telemetry, "record_index_stage_duration"):
@@ -304,7 +322,7 @@ async def process_repository_snapshots(
                             source=source,
                             stage="repository_queue_wait",
                             duration_seconds=queue_wait_duration,
-                            parse_strategy=parse_strategy,
+                            parse_strategy=effective_parse_strategy,
                             parse_workers=parse_workers,
                             repo_class=repo_tel.repo_class,
                         )
@@ -317,7 +335,7 @@ async def process_repository_snapshots(
                             "run_id": run_state.run_id,
                             "repo_path": str(repo_path.resolve()),
                             "duration_seconds": round(queue_wait_duration, 6),
-                            "parse_strategy": parse_strategy,
+                            "parse_strategy": effective_parse_strategy,
                             "parse_workers": parse_workers,
                         },
                     )
@@ -328,10 +346,10 @@ async def process_repository_snapshots(
                             "pcg.index.run_id": run_state.run_id,
                             "pcg.index.repo_path": repo_key,
                             "pcg.index.file_count": len(repo_file_sets[repo_path]),
-                            "pcg.index.parse_strategy": parse_strategy,
+                            "pcg.index.parse_strategy": effective_parse_strategy,
                             "pcg.index.parse_workers": parse_workers,
                         },
-                    ):
+                    ) as parse_span:
                         started = time.perf_counter()
                         repo_state.started_at = utc_now_fn()
                         repo_state.finished_at = None
@@ -378,7 +396,7 @@ async def process_repository_snapshots(
                                 "run_id": run_state.run_id,
                                 "repo_path": str(repo_path.resolve()),
                                 "file_count": len(repo_file_sets[repo_path]),
-                                "parse_strategy": parse_strategy,
+                                "parse_strategy": effective_parse_strategy,
                                 "parse_workers": parse_workers,
                             },
                         )
@@ -386,20 +404,46 @@ async def process_repository_snapshots(
                             repo_tel, "parse_start", read_memory_usage_sample()
                         )
                         parse_started = time.perf_counter()
-                        snapshot = await parse_repository_snapshot_async_fn(
-                            builder,
-                            repo_path,
-                            repo_file_sets[repo_path],
+                        (
+                            snapshot,
+                            effective_parse_executor,
+                            effective_parse_strategy,
+                        ) = await parse_repository_snapshot_with_recovery(
+                            parse_repository_snapshot_async_fn=parse_repository_snapshot_async_fn,
+                            builder=builder,
+                            repo_path=repo_path,
+                            repo_files=repo_file_sets[repo_path],
                             is_dependency=is_dependency,
                             job_id=job_id,
                             asyncio_module=asyncio_module,
                             info_logger_fn=info_logger_fn,
+                            warning_logger_fn=warning_logger_fn,
                             progress_callback=_progress_callback,
-                            parse_executor=parse_executor,
+                            parse_executor=effective_parse_executor,
                             component=component,
                             mode=family,
                             source=source,
                             parse_workers=parse_workers,
+                            parse_strategy=effective_parse_strategy,
+                        )
+                        _set_span_attribute_if_supported(
+                            repository_span,
+                            "pcg.index.parse_strategy",
+                            effective_parse_strategy,
+                        )
+                        _set_span_attribute_if_supported(
+                            parse_span,
+                            "pcg.index.parse_strategy",
+                            effective_parse_strategy,
+                        )
+                        (
+                            current_parse_executor,
+                            current_parse_strategy,
+                        ) = merge_parse_runtime_state(
+                            current_parse_executor=current_parse_executor,
+                            current_parse_strategy=current_parse_strategy,
+                            effective_parse_executor=effective_parse_executor,
+                            effective_parse_strategy=effective_parse_strategy,
                         )
                         parse_duration = time.perf_counter() - parse_started
                         record_memory_sample(
@@ -437,7 +481,7 @@ async def process_repository_snapshots(
                                 source=source,
                                 stage="repository_parse",
                                 duration_seconds=parse_duration,
-                                parse_strategy=parse_strategy,
+                                parse_strategy=effective_parse_strategy,
                                 parse_workers=parse_workers,
                                 repo_class=repo_tel.repo_class,
                             )
@@ -451,7 +495,7 @@ async def process_repository_snapshots(
                                 "repo_path": str(repo_path.resolve()),
                                 "file_count": snapshot.file_count,
                                 "duration_seconds": round(parse_duration, 6),
-                                "parse_strategy": parse_strategy,
+                                "parse_strategy": effective_parse_strategy,
                                 "parse_workers": parse_workers,
                             },
                         )
@@ -508,7 +552,7 @@ async def process_repository_snapshots(
                         attributes={
                             "pcg.index.run_id": run_state.run_id,
                             "pcg.index.repo_path": repo_key,
-                            "pcg.index.parse_strategy": parse_strategy,
+                            "pcg.index.parse_strategy": effective_parse_strategy,
                             "pcg.index.parse_workers": parse_workers,
                         },
                     ):
@@ -538,7 +582,7 @@ async def process_repository_snapshots(
                             mode=family,
                             source=source,
                             depth=snapshot_queue.qsize(),
-                            parse_strategy=parse_strategy,
+                            parse_strategy=effective_parse_strategy,
                             parse_workers=parse_workers,
                         )
                     return
@@ -594,8 +638,6 @@ async def process_repository_snapshots(
                         else None
                     ),
                 )
-            if repo_span is not None:
-                repo_span.record_exception(exc)
             tb = traceback.format_exception(exc)
             warning_logger_fn(
                 f"Failed to index repository {repo_path.resolve()}: {exc}\n"
@@ -611,8 +653,6 @@ async def process_repository_snapshots(
         commit_concurrency = 1
     else:
         commit_concurrency = max(1, min(parsed, 32))
-    if facts_first_mode:
-        commit_concurrency = 1
     emit_log_call(
         info_logger_fn,
         f"Commit worker config: PCG_COMMIT_WORKERS={raw!r}, "
@@ -625,10 +665,12 @@ async def process_repository_snapshots(
         },
     )
 
-    # Create ProcessPoolExecutor when commit_concurrency > 1 for true parallelism
+    # Create ProcessPoolExecutor when commit_concurrency > 1 for true parallelism.
+    # In facts-first mode, the commit callback needs unserialisable objects
+    # (builder, fact_store, work_queue) so we use asyncio.to_thread instead.
     _commit_process_pool: ProcessPoolExecutor | None = None
     _connection_params: dict[str, str | None] | None = None
-    if commit_concurrency > 1:
+    if commit_concurrency > 1 and not facts_first_mode:
         mp_start_method = os.getenv("PCG_MULTIPROCESS_START_METHOD", "spawn")
         mp_context = multiprocessing.get_context(mp_start_method)
         _commit_process_pool = ProcessPoolExecutor(
@@ -827,7 +869,9 @@ async def process_repository_snapshots(
                             batch_size=batch_size,
                         )
                     )
-                    to_thread_fn = getattr(asyncio_module, "to_thread", asyncio.to_thread)
+                    to_thread_fn = getattr(
+                        asyncio_module, "to_thread", asyncio.to_thread
+                    )
                     if facts_first_mode:
                         commit_timing_result = await to_thread_fn(
                             commit_repository_snapshot_fn,

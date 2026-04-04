@@ -97,6 +97,7 @@ class _RetryQueue:
         work_item_id: str,
         error_message: str,
         terminal: bool,
+        **_kwargs,
     ) -> None:
         self.fail_calls.append((work_item_id, error_message, terminal))
 

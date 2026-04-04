@@ -1,50 +1,62 @@
 # Deployment Overview
 
-PlatformContextGraph can be run locally or as a networked service, but the public deployment contract is opinionated:
+PlatformContextGraph supports both a local full-stack workflow and a deployed
+split-service workflow. The supported production shape is a three-runtime
+deployment:
 
-- **external Neo4j**
-- **external Postgres for indexed content retrieval and search**
-- **stateless API runtime for HTTP and MCP**
-- **stateful repository ingester runtime for sync and indexing**
-- **standalone resolution-engine runtime for queued fact projection**
-- **API can serve before ingestion catches up**
+- **API** for HTTP and MCP
+- **Ingester** for repository sync, parsing, and fact emission
+- **Resolution Engine** for queued projection and recovery workflows
 
-## Choose a deployment path
+Both the ingester and resolution-engine use the same facts-first data flow and
+write into external Neo4j and external Postgres.
 
-### Minimal manifests
+## Choose A Deployment Path
 
-Use [Minimal Manifests](manifests.md) when you want the smallest possible Kubernetes example and you are comfortable managing details yourself.
+| Path | Best for | What you get |
+| --- | --- | --- |
+| [Docker Compose](docker-compose.md) | local full-stack testing | Neo4j, Postgres, OTEL collector, Jaeger, bootstrap-index, API, ingester, and resolution-engine |
+| [Helm](helm.md) | supported Kubernetes deployment | split API, ingester, and resolution-engine workloads with optional ServiceMonitor support |
+| [Argo CD](argocd.md) | GitOps-managed Kubernetes deployment | Helm-based deployment through GitOps overlays |
+| [Minimal Manifests](manifests.md) | smallest raw manifest example | a single-runtime API example, not the full split-service production shape |
 
-### Helm
+## Deployed Runtime Flow
 
-Use [Helm](helm.md) when you want the real deployment path for Kubernetes, EKS, or GitOps environments.
+```mermaid
+flowchart LR
+  A["Ingester"] --> B["Parse repository snapshot"]
+  B --> C["Postgres fact store"]
+  C --> D["Fact work queue"]
+  D --> E["Resolution Engine"]
+  E --> F["Neo4j graph"]
+  E --> G["Postgres content store"]
+  H["API / MCP"] --> F
+  H --> G
+```
 
-### Docker Compose
+## Platform Differences
 
-Use [Docker Compose](docker-compose.md) for local end-to-end testing with Neo4j, bootstrap indexing, API, repo-sync, and the standalone resolution-engine runtime.
+| Surface | Docker Compose | Helm / Argo CD | Minimal Manifests |
+| --- | --- | --- | --- |
+| Runtime shape | full local stack | supported production shape | single-runtime example |
+| API | yes | yes | yes |
+| Ingester | yes | yes | no |
+| Resolution Engine | yes | yes | no |
+| Bootstrap Index | yes, one-shot service | manual or operator-run activity | no |
+| Shared repo workspace | bind-mounted local fixture or host path | ingester-only PVC | statefulset-local only |
+| Direct `/metrics` ports | yes | optional | not packaged |
+| Kubernetes `ServiceMonitor` | no | optional | no |
 
-### Argo CD
+## Production Defaults
 
-Use [Argo CD](argocd.md) when you want GitOps-managed deployment with the public chart and example overlays.
+The intended production shape assumes:
 
-## Production shape
-
-The chart and deployable-service story assume:
-
-- an API `Deployment`
-- a Resolution Engine `Deployment`
-- a repository ingester `StatefulSet`
+- external Neo4j
+- external Postgres
 - attached workspace storage only on the ingester
-- external Neo4j credentials provided through environment or secret management
-- external Postgres credentials provided through environment or secret management
+- API and resolution-engine remaining stateless
+- OTLP and JSON-log observability enabled
+- optional direct scrape endpoints and `ServiceMonitor` resources per runtime
 
-Use [Service Runtimes](service-runtimes.md) when you need the operator view of
-what each runtime does, how it starts, and which workload should be tuned or
-scaled first.
-
-The repository ingester is responsible for ongoing rediscovery:
-
-- it re-evaluates the configured repository source on each sync cycle
-- when `repositoryRules` are configured, it applies exact and regex filters against normalized `org/repo` identifiers
-- it re-indexes the shared workspace when repositories were cloned or updated
-- it reports stale local checkouts that no longer match current discovery, but does not remove them automatically
+Use [Service Runtimes](service-runtimes.md) for the operator contract and
+[Helm](helm.md) for the exact deployment values.

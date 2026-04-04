@@ -1,20 +1,21 @@
 # Local Testing Runbook
 
-This is the default local verification runbook for engineers, Claude, and Codex.
+This is the default local verification runbook for engineers, Claude, and
+Codex.
 
 Use it to answer:
 
-- Which commands should I run for this kind of change?
-- What is the minimum acceptable verification before I call work ready?
-- How do I run the three-service stack locally?
-- How do I validate the facts-first pipeline and telemetry path?
+- which commands should I run for this kind of change
+- what is the minimum acceptable verification before I call work ready
+- how do I run the local full-stack workflow
+- how do I validate metrics, traces, and the facts-first pipeline
 
 ## Default Rule
 
-Run the smallest test set that proves the change, then run the deployment/docs
-checks required by the surfaces you touched.
+Run the smallest test set that proves the change, then run the deployment and
+docs checks required by the surfaces you touched.
 
-Do not claim a change is ready without citing the commands you actually ran.
+Do not call a change ready without citing the commands you actually ran.
 
 ## Common Environment
 
@@ -38,11 +39,12 @@ export PYTHONPATH=src
 | CLI/runtime wiring | `PYTHONPATH=src uv run pytest tests/integration/cli/test_cli_commands.py -q` |
 | Compose, Helm, or deployable runtime shape | `PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q` and `helm lint deploy/helm/platform-context-graph` |
 | Facts-first indexing, queue, or resolution flow | `PYTHONPATH=src:. uv run pytest tests/integration/indexing/test_git_facts_end_to_end.py tests/integration/indexing/test_git_facts_projection_parity.py -q` |
+| Phase 3 recovery controls | `PYTHONPATH=src:. uv run pytest tests/unit/facts/test_fact_work_queue_recovery.py tests/unit/api/test_admin_facts_recovery_router.py tests/integration/cli/test_remote_cli.py -q` |
 | Facts-first telemetry or queue scaling | `PYTHONPATH=src:. uv run pytest tests/unit/observability/test_fact_resolution_telemetry.py tests/unit/observability/test_fact_runtime_scaling_telemetry.py tests/unit/observability/test_resolution_queue_sampler.py tests/unit/observability/test_facts_first_logging.py -q` |
 | Admin replay flow | `PYTHONPATH=src uv run pytest tests/integration/api/test_admin_facts_replay.py tests/integration/cli/test_admin_facts_replay_cli.py -q` |
 | Python file layout/quality gates | `python3 scripts/check_python_file_lengths.py --max-lines 500` and `git diff --check` |
 
-## Local Three-Service Stack
+## Local Full Stack
 
 Start the full stack:
 
@@ -57,8 +59,8 @@ This brings up:
 - OTEL collector
 - Jaeger
 - `bootstrap-index`
-- `platform-context-graph` API
-- `repo-sync`
+- `platform-context-graph`
+- `ingester`
 - `resolution-engine`
 
 Useful checks:
@@ -66,35 +68,60 @@ Useful checks:
 ```bash
 docker compose ps
 docker compose logs bootstrap-index | tail -50
-docker compose logs repo-sync | tail -50
+docker compose logs ingester | tail -50
 docker compose logs resolution-engine | tail -50
 curl -s http://localhost:8080/health
 ```
 
-Telemetry endpoints:
+## Local Observability Checks
+
+### Traces
 
 - Jaeger UI: `http://localhost:16686`
-- Collector Prometheus metrics: `http://localhost:9464/metrics`
+- Collector Prometheus endpoint: `http://localhost:9464/metrics`
+
+### Direct Runtime Metrics
+
+Compose does not run a Kubernetes `ServiceMonitor`, but it does expose the same
+runtime `/metrics` endpoints that a `ServiceMonitor` would scrape:
+
+- API: `http://localhost:19464/metrics`
+- Ingester: `http://localhost:19465/metrics`
+- Resolution Engine: `http://localhost:19466/metrics`
+
+Quick checks:
+
+```bash
+curl -fsS http://localhost:19464/metrics | head
+curl -fsS http://localhost:19465/metrics | head
+curl -fsS http://localhost:19466/metrics | head
+```
+
+Live watch examples:
+
+```bash
+watch -n 2 'curl -fsS http://localhost:19464/metrics | rg "^(pcg_http|pcg_mcp)" | head -40'
+```
+
+```bash
+watch -n 2 'curl -fsS http://localhost:19466/metrics | rg "^(pcg_fact|pcg_resolution)" | head -60'
+```
 
 ## Recommended Test Order
 
-### 1. Smallest targeted test first
+### 1. Run the smallest targeted test first
 
-Run the most local unit or integration suite that covers the code you touched.
+Start with the most local unit or integration suite that covers the files you
+touched.
 
-### 2. Deployment contract if runtime shape changed
-
-If you touched Compose, Helm, entrypoints, or runtime-role wiring:
+### 2. Verify the deployment contract if runtime shape changed
 
 ```bash
 PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q
 helm lint deploy/helm/platform-context-graph
 ```
 
-### 3. Facts-first parity if indexing changed
-
-If you touched `facts/`, `resolution/`, `indexing/`, `collectors/`, `graph/`, or
-runtime orchestration:
+### 3. Verify facts-first parity if indexing changed
 
 ```bash
 PYTHONPATH=src:. uv run pytest \
@@ -102,10 +129,7 @@ PYTHONPATH=src:. uv run pytest \
   tests/integration/indexing/test_git_facts_projection_parity.py -q
 ```
 
-### 4. Telemetry validation if observability changed
-
-If you touched `observability/`, queue metrics, fact-store SQL telemetry, logs, or
-OTEL wiring:
+### 4. Verify telemetry if observability changed
 
 ```bash
 PYTHONPATH=src:. uv run pytest \
@@ -115,7 +139,16 @@ PYTHONPATH=src:. uv run pytest \
   tests/unit/observability/test_facts_first_logging.py -q
 ```
 
-### 5. Docs build if docs or instruction files changed
+### 5. Verify recovery and admin controls if Phase 3 controls changed
+
+```bash
+PYTHONPATH=src:. uv run pytest \
+  tests/unit/facts/test_fact_work_queue_recovery.py \
+  tests/unit/api/test_admin_facts_recovery_router.py \
+  tests/integration/cli/test_remote_cli.py -q
+```
+
+### 6. Build docs if docs or instruction files changed
 
 ```bash
 uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
@@ -123,9 +156,6 @@ uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
 ```
 
 ## Full Local Smoke For Release Candidates
-
-Use this when a branch is close to merge or when the change affects multiple
-runtime boundaries.
 
 ```bash
 PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q
@@ -138,13 +168,17 @@ PYTHONPATH=src:. uv run pytest \
   tests/unit/observability/test_fact_runtime_scaling_telemetry.py \
   tests/unit/observability/test_resolution_queue_sampler.py \
   tests/unit/observability/test_facts_first_logging.py -q
+PYTHONPATH=src:. uv run pytest \
+  tests/unit/facts/test_fact_work_queue_recovery.py \
+  tests/unit/api/test_admin_facts_recovery_router.py \
+  tests/integration/cli/test_remote_cli.py -q
 python3 scripts/check_python_file_lengths.py --max-lines 500
 git diff --check
 uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
   mkdocs build --strict --clean --config-file docs/mkdocs.yml
 ```
 
-## IaC Validation When Deployment Repo Changes Too
+## IaC Validation When The Deployment Repo Changes Too
 
 If the app change requires updates in `iac-eks-pcg`, also run there:
 
@@ -160,12 +194,12 @@ helm template platformcontextgraph chart/ \
 kubectl kustomize argocd/platformcontextgraph/overlays/ops-qa >/tmp/pcg-kustomize.yaml
 ```
 
-## Agent Completion Gate
+## Completion Gate
 
 Before Claude or Codex says a change is ready:
 
-1. Identify the changed surface area.
-2. Run the matching checks from this page.
-3. Report the exact commands run.
-4. Report anything not run.
-5. Do not substitute “looks correct” for verification output.
+1. identify the changed surface area
+2. run the matching checks from this page
+3. report the exact commands run
+4. report anything not run
+5. do not substitute "looks correct" for verification output

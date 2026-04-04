@@ -14,8 +14,10 @@ from .services import router as services_router
 from .traces import router as traces_router
 from .workloads import router as workloads_router
 from .admin import router as admin_router
+from .admin_facts import router as admin_facts_router
 
 __all__ = [
+    "admin_facts_router",
     "admin_router",
     "code_router",
     "content_router",

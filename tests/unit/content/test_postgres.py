@@ -575,8 +575,8 @@ def test_upsert_entities_chunks_large_batches(monkeypatch) -> None:
     assert len(last_chunk) == 1
 
 
-def test_upsert_file_batch_uses_executemany(monkeypatch) -> None:
-    """Batch file upserts should persist all rows via a single executemany call."""
+def test_upsert_file_batch_chunks_large_batches(monkeypatch) -> None:
+    """Batch file upserts should split large batches into smaller executemany calls."""
 
     provider = PostgresContentProvider("postgresql://example")
     cursor = MagicMock()
@@ -586,6 +586,7 @@ def test_upsert_file_batch_uses_executemany(monkeypatch) -> None:
         yield cursor
 
     monkeypatch.setattr(provider, "_cursor", _cursor)
+    monkeypatch.setenv("PCG_CONTENT_FILE_UPSERT_BATCH_SIZE", "2")
 
     entries = [
         ContentFileEntry(
@@ -599,11 +600,13 @@ def test_upsert_file_batch_uses_executemany(monkeypatch) -> None:
     ]
     provider.upsert_file_batch(entries)
 
-    assert cursor.executemany.call_count == 1
-    rows = cursor.executemany.call_args.args[1]
-    assert len(rows) == 3
-    assert rows[0]["relative_path"] == "src/file_0.py"
-    assert rows[2]["relative_path"] == "src/file_2.py"
+    assert cursor.executemany.call_count == 2
+    first_chunk = cursor.executemany.call_args_list[0].args[1]
+    last_chunk = cursor.executemany.call_args_list[-1].args[1]
+    assert len(first_chunk) == 2
+    assert len(last_chunk) == 1
+    assert first_chunk[0]["relative_path"] == "src/file_0.py"
+    assert last_chunk[0]["relative_path"] == "src/file_2.py"
 
 
 def test_upsert_file_batch_skips_empty_list(monkeypatch) -> None:

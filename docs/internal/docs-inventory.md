@@ -41,6 +41,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/reference/cli-kiss.md` | Short CLI quickstart and remote/local usage guide | active |
 | `docs/docs/reference/cli-reference.md` | CLI command reference | active |
 | `docs/docs/reference/cli-system.md` | CLI system reference | active |
+| `docs/docs/reference/baseline-performance.md` | Baseline performance findings and tuning checkpoints | active |
 | `docs/docs/reference/configuration.md` | Configuration reference | active |
 | `docs/docs/reference/http-api.md` | HTTP API reference | active |
 | `docs/docs/reference/ingestion-observability.md` | Ingestion observability reference | active |

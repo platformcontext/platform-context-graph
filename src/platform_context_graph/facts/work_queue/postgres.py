@@ -5,20 +5,29 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from contextlib import contextmanager
-from datetime import timedelta
 import time
+from contextlib import contextmanager
 from typing import Any
 
 from platform_context_graph.observability import current_component
 from platform_context_graph.observability import get_observability
 
+from .claims import claim_work_item
+from .claims import complete_work_item
+from .claims import enqueue_work_item
+from .claims import fail_work_item
+from .claims import lease_work_item
+from .inspection import list_queue_snapshot
+from .inspection import list_work_items
+from .models import FactBackfillRequestRow
+from .models import FactReplayEventRow
 from .models import FactWorkItemRow
 from .models import FactWorkQueueSnapshotRow
 from .replay import replay_failed_work_items
+from .recovery import dead_letter_work_items
+from .recovery import list_replay_events
+from .recovery import request_backfill
 from .schema import FACT_WORK_QUEUE_SCHEMA
-from .support import utc_now
-from .support import work_item_params
 
 try:
     import psycopg
@@ -72,12 +81,26 @@ class PostgresFactWorkQueue:
         return psycopg is not None and bool(self._dsn)
 
     def _ensure_schema(self, conn: Any) -> None:
-        """Run queue DDL once across the lifetime of the queue."""
+        """Run queue DDL once across the lifetime of the queue.
+
+        Uses a lightweight existence check before attempting DDL so that
+        concurrent writers are never blocked by ``CREATE INDEX IF NOT EXISTS``
+        acquiring a ``ShareLock`` on the table.
+        """
 
         if self._initialized:
             return
         with self._schema_lock:
             if not self._initialized:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT 1 FROM information_schema.tables "
+                        "WHERE table_schema = 'public' "
+                        "AND table_name = 'fact_work_items'"
+                    )
+                    if cursor.fetchone() is not None:
+                        self._initialized = True
+                        return
                 with conn.cursor() as cursor:
                     cursor.execute(FACT_WORK_QUEUE_SCHEMA)
                 self._initialized = True
@@ -157,50 +180,7 @@ class PostgresFactWorkQueue:
     def enqueue_work_item(self, entry: FactWorkItemRow) -> None:
         """Insert or update a pending work item."""
 
-        self._record_operation(
-            operation="enqueue_work_item",
-            row_count=1,
-            callback=lambda: self._execute(
-                """
-                INSERT INTO fact_work_items (
-                    work_item_id,
-                    work_type,
-                    repository_id,
-                    source_run_id,
-                    lease_owner,
-                    lease_expires_at,
-                    status,
-                    attempt_count,
-                    last_error,
-                    created_at,
-                    updated_at
-                ) VALUES (
-                    %(work_item_id)s,
-                    %(work_type)s,
-                    %(repository_id)s,
-                    %(source_run_id)s,
-                    %(lease_owner)s,
-                    %(lease_expires_at)s,
-                    %(status)s,
-                    %(attempt_count)s,
-                    %(last_error)s,
-                    %(created_at)s,
-                    %(updated_at)s
-                )
-                ON CONFLICT (work_item_id) DO UPDATE
-                SET work_type = EXCLUDED.work_type,
-                    repository_id = EXCLUDED.repository_id,
-                    source_run_id = EXCLUDED.source_run_id,
-                    lease_owner = EXCLUDED.lease_owner,
-                    lease_expires_at = EXCLUDED.lease_expires_at,
-                    status = EXCLUDED.status,
-                    attempt_count = EXCLUDED.attempt_count,
-                    last_error = EXCLUDED.last_error,
-                    updated_at = EXCLUDED.updated_at
-                """,
-                work_item_params(entry),
-            ),
-        )
+        enqueue_work_item(self, entry)
 
     def claim_work_item(
         self,
@@ -210,50 +190,11 @@ class PostgresFactWorkQueue:
     ) -> FactWorkItemRow | None:
         """Claim one pending work item and return the leased row."""
 
-        now = utc_now()
-        lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
-        row = self._record_operation(
-            operation="claim_work_item",
-            callback=lambda: self._fetchone(
-                """
-                WITH claimable AS (
-                    SELECT work_item_id
-                    FROM fact_work_items
-                    WHERE status = 'pending'
-                      AND (
-                        lease_expires_at IS NULL
-                        OR lease_expires_at <= %(now)s
-                      )
-                    ORDER BY updated_at ASC
-                    LIMIT 1
-                )
-                UPDATE fact_work_items
-                SET lease_owner = %(lease_owner)s,
-                    lease_expires_at = %(lease_expires_at)s,
-                    status = 'leased',
-                    attempt_count = fact_work_items.attempt_count + 1,
-                    updated_at = %(now)s
-                WHERE work_item_id IN (SELECT work_item_id FROM claimable)
-                RETURNING work_item_id,
-                          work_type,
-                          repository_id,
-                          source_run_id,
-                          lease_owner,
-                          lease_expires_at,
-                          status,
-                          attempt_count,
-                          last_error,
-                          created_at,
-                          updated_at
-                """,
-                {
-                    "lease_owner": lease_owner,
-                    "lease_expires_at": lease_expires_at,
-                    "now": now,
-                },
-            ),
+        return claim_work_item(
+            self,
+            lease_owner=lease_owner,
+            lease_ttl_seconds=lease_ttl_seconds,
         )
-        return FactWorkItemRow(**row) if row else None
 
     def lease_work_item(
         self,
@@ -264,45 +205,12 @@ class PostgresFactWorkQueue:
     ) -> FactWorkItemRow | None:
         """Lease one specific work item when it is still claimable."""
 
-        now = utc_now()
-        lease_expires_at = now + timedelta(seconds=lease_ttl_seconds)
-        row = self._record_operation(
-            operation="lease_work_item",
-            callback=lambda: self._fetchone(
-                """
-                UPDATE fact_work_items
-                SET lease_owner = %(lease_owner)s,
-                    lease_expires_at = %(lease_expires_at)s,
-                    status = 'leased',
-                    attempt_count = fact_work_items.attempt_count + 1,
-                    updated_at = %(now)s
-                WHERE work_item_id = %(work_item_id)s
-                  AND status = 'pending'
-                  AND (
-                    lease_expires_at IS NULL
-                    OR lease_expires_at <= %(now)s
-                  )
-                RETURNING work_item_id,
-                          work_type,
-                          repository_id,
-                          source_run_id,
-                          lease_owner,
-                          lease_expires_at,
-                          status,
-                          attempt_count,
-                          last_error,
-                          created_at,
-                          updated_at
-                """,
-                {
-                    "work_item_id": work_item_id,
-                    "lease_owner": lease_owner,
-                    "lease_expires_at": lease_expires_at,
-                    "now": now,
-                },
-            ),
+        return lease_work_item(
+            self,
+            work_item_id=work_item_id,
+            lease_owner=lease_owner,
+            lease_ttl_seconds=lease_ttl_seconds,
         )
-        return FactWorkItemRow(**row) if row else None
 
     def fail_work_item(
         self,
@@ -310,91 +218,81 @@ class PostgresFactWorkQueue:
         work_item_id: str,
         error_message: str,
         terminal: bool,
+        failure_stage: str | None = None,
+        error_class: str | None = None,
+        failure_class: str | None = None,
+        failure_code: str | None = None,
+        retry_disposition: str | None = None,
+        next_retry_at: Any | None = None,
+        operator_note: str | None = None,
     ) -> None:
         """Mark one work item as retryable or terminally failed."""
 
-        self._record_operation(
-            operation="fail_work_item",
-            row_count=1,
-            callback=lambda: self._execute(
-                """
-                UPDATE fact_work_items
-                SET status = %(status)s,
-                    lease_owner = NULL,
-                    lease_expires_at = NULL,
-                    attempt_count = fact_work_items.attempt_count + 1,
-                    last_error = %(last_error)s,
-                    updated_at = %(updated_at)s
-                WHERE work_item_id = %(work_item_id)s
-                """,
-                {
-                    "work_item_id": work_item_id,
-                    "status": "failed" if terminal else "pending",
-                    "last_error": error_message,
-                    "updated_at": utc_now(),
-                },
-            ),
+        fail_work_item(
+            self,
+            work_item_id=work_item_id,
+            error_message=error_message,
+            terminal=terminal,
+            failure_stage=failure_stage,
+            error_class=error_class,
+            failure_class=failure_class,
+            failure_code=failure_code,
+            retry_disposition=retry_disposition,
+            next_retry_at=next_retry_at,
+            operator_note=operator_note,
         )
 
     def complete_work_item(self, *, work_item_id: str) -> None:
         """Mark one work item completed and clear its lease."""
 
-        self._record_operation(
-            operation="complete_work_item",
-            row_count=1,
-            callback=lambda: self._execute(
-                """
-                UPDATE fact_work_items
-                SET status = 'completed',
-                    lease_owner = NULL,
-                    lease_expires_at = NULL,
-                    last_error = NULL,
-                    updated_at = %(updated_at)s
-                WHERE work_item_id = %(work_item_id)s
-                """,
-                {
-                    "work_item_id": work_item_id,
-                    "updated_at": utc_now(),
-                },
-            ),
-        )
+        complete_work_item(self, work_item_id=work_item_id)
 
     def replay_failed_work_items(self, **kwargs: Any) -> list[FactWorkItemRow]:
         """Replay terminally failed work items by returning them to pending."""
 
         return replay_failed_work_items(self, **kwargs)
 
+    def dead_letter_work_items(self, **kwargs: Any) -> list[FactWorkItemRow]:
+        """Move selected work items into durable dead-letter state."""
+
+        return dead_letter_work_items(self, **kwargs)
+
+    def request_backfill(self, **kwargs: Any) -> FactBackfillRequestRow:
+        """Persist one durable operator backfill request."""
+
+        return request_backfill(self, **kwargs)
+
+    def list_replay_events(self, **kwargs: Any) -> list[FactReplayEventRow]:
+        """List durable replay audit rows."""
+
+        return list_replay_events(self, **kwargs)
+
+    def list_work_items(
+        self,
+        *,
+        statuses: list[str] | None = None,
+        repository_id: str | None = None,
+        source_run_id: str | None = None,
+        work_type: str | None = None,
+        failure_class: str | None = None,
+        limit: int = 100,
+    ) -> list[FactWorkItemRow]:
+        """Return work items filtered by status and failure selectors."""
+
+        return list_work_items(
+            self,
+            statuses=statuses,
+            repository_id=repository_id,
+            source_run_id=source_run_id,
+            work_type=work_type,
+            failure_class=failure_class,
+            limit=limit,
+        )
+
     def list_queue_snapshot(self) -> list[FactWorkQueueSnapshotRow]:
         """Return aggregated queue depth and oldest age by work type and status."""
 
-        now = utc_now()
-        rows = self._record_operation(
-            operation="list_queue_snapshot",
-            callback=lambda: self._fetchall(
-                """
-                SELECT work_type,
-                       status,
-                       COUNT(*) AS depth,
-                       COALESCE(
-                         EXTRACT(EPOCH FROM (%(now)s - MIN(created_at))),
-                         0
-                       ) AS oldest_age_seconds
-                FROM fact_work_items
-                GROUP BY work_type, status
-                """,
-                {"now": now},
-            ),
-            row_count=None,
-        )
-        return [
-            FactWorkQueueSnapshotRow(
-                work_type=row["work_type"],
-                status=row["status"],
-                depth=int(row["depth"]),
-                oldest_age_seconds=float(row["oldest_age_seconds"] or 0.0),
-            )
-            for row in rows
-        ]
+        return list_queue_snapshot(self)
 
     def _component(self) -> str:
         """Return the logical component for emitted telemetry."""
@@ -423,6 +321,12 @@ class PostgresFactWorkQueue:
             cursor.execute(query, params)
             rows = cursor.fetchall()
         return list(rows)
+
+    def _executemany(self, query: str, rows: list[dict[str, Any]]) -> None:
+        """Execute one batched SQL write through the managed cursor."""
+
+        with self._cursor() as cursor:
+            cursor.executemany(query, rows)
 
     def _record_operation(
         self,

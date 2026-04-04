@@ -68,7 +68,7 @@ docker compose logs bootstrap-index | tail -20
 docker compose logs platform-context-graph | tail -20
 
 # Repo sync status
-docker compose logs repo-sync | tail -20
+docker compose logs ingester | tail -20
 
 # Resolution engine status
 docker compose logs resolution-engine | tail -20

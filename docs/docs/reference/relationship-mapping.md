@@ -181,9 +181,9 @@ Do not flatten every mapping into `DEPENDS_ON`. The more specific typed edge is 
 
 Write the edge in the direction of the behavior being explained.
 
-- `iac-eks-argocd -[:DISCOVERS_CONFIG_IN]-> iac-eks-observability`
-- `api-node-whisper -[:DEPLOYS_FROM]-> helm-charts`
-- `terraform-stack-external-search -[:PROVISIONS_DEPENDENCY_FOR]-> api-node-external-search`
+- `gitops-control-plane -[:DISCOVERS_CONFIG_IN]-> platform-observability`
+- `payments-api -[:DEPLOYS_FROM]-> helm-charts`
+- `terraform-stack-search -[:PROVISIONS_DEPENDENCY_FOR]-> search-api`
 
 If the source is the control plane, keep the control-plane source on the left. If the source is the deployed workload or service, keep that workload on the left.
 
@@ -517,17 +517,17 @@ For this slice, the important relationship tests are in:
 One useful pattern from the local corpus is:
 
 ```text
-iac-eks-argocd
-  DISCOVERS_CONFIG_IN -> iac-eks-observability
+gitops-control-plane
+  DISCOVERS_CONFIG_IN -> platform-observability
   DISCOVERS_CONFIG_IN -> helm-charts
 
-api-node-bw-home
+home-service
   DEPLOYS_FROM -> helm-charts
 
-api-node-external-search
+search-api
   DEPLOYS_FROM -> helm-charts
 
-api-node-whisper
+payments-api
   DEPLOYS_FROM -> helm-charts
 ```
 
