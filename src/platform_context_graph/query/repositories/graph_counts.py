@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .common import graph_relationship_types
+
 _SCOPE_PREDICATE = (
     "(($repo_id IS NOT NULL AND r.id = $repo_id) "
     "OR ($repo_path IS NOT NULL AND coalesce(r[$local_path_key], r.path) = $repo_path))"
@@ -27,23 +29,6 @@ def repository_scope_predicate() -> str:
     """Return the shared Cypher predicate for scoping one repository."""
 
     return _SCOPE_PREDICATE
-
-
-def _existing_relationship_types(session: Any) -> set[str]:
-    """Return the relationship types currently present in the database."""
-
-    rows = session.run(
-        """
-        CALL db.relationshipTypes()
-        YIELD relationshipType
-        RETURN relationshipType
-        """
-    ).data()
-    return {
-        str(row["relationshipType"])
-        for row in rows
-        if row.get("relationshipType") is not None
-    }
 
 
 def _count_subquery(query: str, alias: str) -> str:
@@ -149,10 +134,19 @@ def _build_graph_counts_query(relationship_types: set[str]) -> str:
     """
 
 
-def repository_graph_counts(session: Any, repo: dict[str, Any]) -> dict[str, int]:
-    """Return aligned root/recursive code counts for one repository."""
+def repository_graph_counts(
+    session: Any,
+    repo: dict[str, Any],
+    relationship_types: set[str] | None = None,
+) -> dict[str, int]:
+    """Return aligned root/recursive code counts for one repository.
 
-    relationship_types = _existing_relationship_types(session)
+    Callers that already fetched graph relationship types may pass them in to
+    avoid a second metadata round-trip.
+    """
+
+    if relationship_types is None:
+        relationship_types = graph_relationship_types(session)
     row = session.run(
         _build_graph_counts_query(relationship_types),
         parameters=repository_scope(repo),

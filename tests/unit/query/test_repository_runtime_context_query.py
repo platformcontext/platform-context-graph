@@ -221,8 +221,20 @@ def test_build_relationship_summary_returns_platforms_deployment_chain_and_limit
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data.resolve_repository",
+        lambda _session, _repo_id: _repo_row(),
+    )
+    monkeypatch.setattr(
         "platform_context_graph.query.repositories.relationship_summary.get_runtime_repository_coverage",
         lambda **_kwargs: _coverage_row(),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data._fetch_infrastructure",
+        lambda _session, _repo: {},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data._fetch_ecosystem",
+        lambda _session, _repo: None,
     )
     session = _make_session()
 
@@ -451,7 +463,7 @@ def test_build_repository_context_returns_platforms_deployment_chain_and_limitat
     )
     monkeypatch.setattr(
         "platform_context_graph.query.repositories.context_data.repository_graph_counts",
-        lambda _session, _repo: {
+        lambda _session, _repo, **_kwargs: {
             "root_file_count": 1,
             "root_directory_count": 2,
             "file_count": 8,
@@ -501,7 +513,7 @@ def test_build_repository_context_extends_limitations_for_dns_and_entrypoints(
     )
     monkeypatch.setattr(
         "platform_context_graph.query.repositories.context_data.repository_graph_counts",
-        lambda _session, _repo: {
+        lambda _session, _repo, **_kwargs: {
             "root_file_count": 1,
             "root_directory_count": 2,
             "file_count": 8,
@@ -522,7 +534,7 @@ def test_build_repository_context_extends_limitations_for_dns_and_entrypoints(
     )
     monkeypatch.setattr(
         "platform_context_graph.query.repositories.context_data.build_relationship_summary",
-        lambda _session, _repo_ref: {
+        lambda _session, _repo_ref, **_kwargs: {
             "coverage": {
                 **_coverage_row(),
                 "completeness_state": "complete",
@@ -558,6 +570,58 @@ def test_build_repository_context_extends_limitations_for_dns_and_entrypoints(
         "dns_unknown",
         "entrypoint_unknown",
     ]
+
+
+def test_build_repository_context_reuses_relationship_types_for_counts_and_summary(
+    monkeypatch,
+) -> None:
+    """Repository context should only fetch relationship types once per request."""
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data.resolve_repository",
+        lambda _session, _repo_id: _repo_row(),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data._fetch_infrastructure",
+        lambda _session, _repo: {},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.context_data._fetch_ecosystem",
+        lambda _session, _repo: None,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.relationship_summary.get_runtime_repository_coverage",
+        lambda **_kwargs: _coverage_row(),
+    )
+    session = _make_session()
+    session.query_results["CALL db.relationshipTypes()"] = MockResult(
+        records=[
+            {"relationshipType": "CONTAINS"},
+            {"relationshipType": "REPO_CONTAINS"},
+            {"relationshipType": "IMPORTS"},
+            {"relationshipType": "INSTANCE_OF"},
+        ]
+    )
+    session.query_results["RETURN root_file_count,"] = MockResult(
+        single_record={
+            "root_file_count": 2,
+            "root_directory_count": 3,
+            "file_count": 8,
+            "top_level_function_count": 1,
+            "class_method_count": 1,
+            "total_function_count": 2,
+            "class_count": 1,
+            "module_count": 1,
+        }
+    )
+
+    result = build_repository_context(session, "api-node-boats")
+
+    assert result["repository"]["file_count"] == 8
+    assert (
+        sum("CALL db.relationshipTypes()" in query for query in session.queries)
+        == 1
+    )
 
 
 def test_build_relationship_summary_skips_legacy_runtime_query_when_instance_of_missing(
@@ -631,7 +695,7 @@ def test_build_repository_stats_surfaces_platform_and_deployment_counts(
     )
     monkeypatch.setattr(
         "platform_context_graph.query.repositories.stats_data.repository_graph_counts",
-        lambda _session, _repo: {
+        lambda _session, _repo, **_kwargs: {
             "root_file_count": 1,
             "root_directory_count": 2,
             "file_count": 8,

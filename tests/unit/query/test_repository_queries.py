@@ -190,6 +190,45 @@ def test_repository_graph_counts_skips_missing_relationship_types() -> None:
     assert "0 AS top_level_function_count" in recorded_queries[1]
 
 
+def test_repository_graph_counts_uses_provided_relationship_types() -> None:
+    """Callers should be able to reuse a pre-fetched relationship type set."""
+
+    recorded_queries: list[str] = []
+
+    class RecordingSession:
+        def run(self, query, **kwargs):
+            del kwargs
+            recorded_queries.append(query)
+            return MockResult(
+                single_record=MockRecord(
+                    {
+                        "root_file_count": 1,
+                        "root_directory_count": 2,
+                        "file_count": 3,
+                        "top_level_function_count": 4,
+                        "class_method_count": 5,
+                        "total_function_count": 6,
+                        "class_count": 7,
+                        "module_count": 8,
+                    }
+                )
+            )
+
+    counts = repository_graph_counts(
+        RecordingSession(),
+        {
+            "id": "repository:r_cached",
+            "path": "/repos/cached",
+            "local_path": "/repos/cached",
+        },
+        relationship_types={"CONTAINS", "REPO_CONTAINS", "IMPORTS"},
+    )
+
+    assert counts["module_count"] == 8
+    assert len(recorded_queries) == 1
+    assert "CALL db.relationshipTypes()" not in recorded_queries[0]
+
+
 def test_resolve_repository_uses_dynamic_optional_repository_keys() -> None:
     """Repository lookup should avoid sparse-key warnings for optional metadata."""
 
