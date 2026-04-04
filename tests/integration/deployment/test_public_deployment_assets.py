@@ -160,6 +160,7 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         if container["name"] == "workspace-setup"
     )
 
+    assert worker_statefulset["metadata"]["name"] == "platform-context-graph"
     assert api_pod_spec.get("initContainers", []) == []
     assert api_container["command"] == [
         "pcg",
@@ -184,6 +185,9 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert (
         worker_statefulset["spec"]["serviceName"] == "platform-context-graph-ingester"
     )
+    assert worker_statefulset["spec"]["volumeClaimTemplates"][0]["metadata"][
+        "name"
+    ] == "data"
     assert api_deployment["spec"]["revisionHistoryLimit"] == 3
     assert resolution_engine_deployment["spec"]["revisionHistoryLimit"] == 3
     assert worker_statefulset["spec"]["revisionHistoryLimit"] == 3

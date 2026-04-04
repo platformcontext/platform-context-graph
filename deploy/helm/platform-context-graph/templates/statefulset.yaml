@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "pcg.ingesterFullname" . }}
+  name: {{ include "pcg.fullname" . }}
   labels:
     {{- include "pcg.labels" . | nindent 4 }}
     app.kubernetes.io/component: ingester
