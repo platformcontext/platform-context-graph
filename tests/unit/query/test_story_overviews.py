@@ -9,6 +9,8 @@ from platform_context_graph.query.story import (
 
 
 def test_repository_story_exposes_gitops_documentation_and_support_overviews() -> None:
+    """Repository stories should expose the new overview sections."""
+
     result = build_repository_story_response(
         {
             "repository": {
@@ -164,6 +166,8 @@ def test_repository_story_exposes_gitops_documentation_and_support_overviews() -
 
 
 def test_workload_story_exposes_gitops_documentation_and_support_overviews() -> None:
+    """Workload stories should expose the new overview sections."""
+
     result = build_workload_story_response(
         {
             "workload": {

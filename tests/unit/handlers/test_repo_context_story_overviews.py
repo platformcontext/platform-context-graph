@@ -124,6 +124,8 @@ def test_trace_deployment_chain_exposes_gitops_and_documentation_overviews(
     session = db.get_driver.return_value.session.return_value
 
     def repo_only_run(query, **kwargs):
+        """Return a repository match only for the trace seed lookup."""
+
         del kwargs
         if "RETURN r.id as id, r.name as name" in query:
             return MockResult(
