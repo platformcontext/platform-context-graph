@@ -6,6 +6,7 @@ from typing import Any
 
 from ..observability import trace_query
 from .postgres_query_support import (
+    infer_content_metadata,
     matches_metadata_filters,
     resolve_entity_row_metadata,
     resolve_row_metadata,
@@ -18,6 +19,7 @@ __all__ = [
     "get_file_content",
     "search_entity_content",
     "search_file_content",
+    "infer_content_metadata",
 ]
 
 _SEARCH_PAGE_SIZE = 500
