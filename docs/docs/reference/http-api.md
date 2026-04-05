@@ -143,7 +143,7 @@ For documentation generation, use this HTTP flow:
 
 For cross-repo documentation or support flows, phrase the caller intent the same
 way you would through MCP: tell PCG to scan all related repositories,
-deployment sources, and indexed docs for the service or workload before asking
+deployment sources, and indexed documentation for the service or workload before asking
 for the final narrative.
 
 ## Code API

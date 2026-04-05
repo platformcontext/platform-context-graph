@@ -9,7 +9,7 @@ For documentation-oriented answers, use a simple orchestration rule:
 - start with story or context when the user wants explanation, onboarding, support guidance, or deployment narrative
 - use content reads and content search after the story identifies the exact artifacts worth citing
 - keep all file-shaped answers portable through `repo_id + relative_path` or `entity_id`
-- when the answer spans multiple repos, tell PCG to scan all related repositories, deployment sources, and indexed docs first
+- when the answer spans multiple repos, tell PCG to scan all related repositories, deployment sources, and indexed documentation first
 
 Repository-bearing results may include `repo_access` metadata. If PCG is running remotely, treat repository identity as remote-first and use `repo_id`, `repo_slug`, and repo-relative paths before assuming any `local_path` exists on the user's machine.
 

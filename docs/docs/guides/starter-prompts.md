@@ -80,10 +80,10 @@ Good substitutions:
 
 ### Cross-repo documentation and GitOps
 
-- "Scan all related repositories, deployment/config sources, and indexed documentation involved in `platformcontextgraph` in `ops-qa`, then give me a complete service story."
-- "Using all linked repositories, deployment sources, and indexed docs, create an on-call runbook for `platformcontextgraph` in `ops-qa`."
+- "Scan all related repositories, deployment sources, and indexed documentation involved in `platformcontextgraph` in `ops-qa`, then give me a complete service story."
+- "Using all linked repositories, deployment sources, and indexed documentation, create an on-call runbook for `platformcontextgraph` in `ops-qa`."
 - "Across every repository that contributes to `platformcontextgraph`, trace it from ArgoCD ownership to values layers to rendered Kubernetes resources."
-- "Generate documentation for `platformcontextgraph` after scanning all involved repositories, indexed docs, and deployment artifacts."
+- "Generate documentation for `platformcontextgraph` after scanning all involved repositories, deployment sources, and indexed documentation."
 - "Build a platform-engineering explainer for `platformcontextgraph` using graph context plus stored content across all linked repos."
 - "Using all related repos and runtime dependencies, tell me the fastest places to investigate auth, database, repo-sync, and deployment failures for `platformcontextgraph`."
 
@@ -155,7 +155,7 @@ Best additions:
 
 Use:
 
-- "Scan all related repositories, deployment sources, and indexed docs involved in `<service>`."
+- "Scan all related repositories, deployment sources, and indexed documentation involved in `<service>`."
 - "Using all linked repositories and runtime context, explain `<service>`."
 - "Across every repository that contributes to `<service>`, trace the GitOps path in `<env>`."
 - "Create a `<runbook|explainer|story>` for `<service>` after scanning all related repos."

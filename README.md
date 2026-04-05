@@ -52,7 +52,7 @@ Core strengths:
 - facts-first indexing for durability, recovery, and operator visibility
 - direct code-to-cloud tracing, blast radius, and environment comparison
 
-Starter examples are collected in [Starter Prompts](docs/docs/guides/starter-prompts.md). The highest-value prompts explicitly ask PCG to scan all related repositories, deployment sources, and indexed docs before answering.
+Starter examples are collected in [Starter Prompts](docs/docs/guides/starter-prompts.md). The highest-value prompts explicitly ask PCG to scan all related repositories, deployment sources, and indexed documentation before answering.
 
 PCG exposes the same graph through:
 
