@@ -4,27 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-
-def _unique_strings(values: list[Any]) -> list[str]:
-    """Return non-empty string values while preserving first-seen order."""
-
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        if not isinstance(value, str):
-            continue
-        rendered = value.strip()
-        if not rendered or rendered in seen:
-            continue
-        seen.add(rendered)
-        normalized.append(rendered)
-    return normalized
-
-
-def _is_iac_adapter(adapter: str) -> bool:
-    """Return whether the adapter represents infrastructure-as-code provisioning."""
-
-    return adapter in {"cloudformation", "terraform"}
+from .story_deployment_mapping_support import controller_evidence
+from .story_deployment_mapping_support import controller_rows
+from .story_deployment_mapping_support import delivery_evidence
+from .story_deployment_mapping_support import delivery_rows
+from .story_deployment_mapping_support import infer_packaging_kind
+from .story_deployment_mapping_support import mapping_confidence
+from .story_deployment_mapping_support import resolve_mapping_mode
+from .story_deployment_mapping_support import unique_strings
 
 
 def build_controller_overview(
@@ -34,7 +21,7 @@ def build_controller_overview(
 ) -> dict[str, Any] | None:
     """Build a controller-agnostic overview from delivery evidence."""
 
-    families = _unique_strings(
+    families = unique_strings(
         [row.get("controller") for row in delivery_paths]
         + [row.get("controller_kind") for row in controller_driven_paths]
     )
@@ -59,10 +46,10 @@ def build_controller_overview(
         if not family:
             continue
         controller = controller_rows[family]
-        controller["path_kinds"] = _unique_strings(
+        controller["path_kinds"] = unique_strings(
             controller["path_kinds"] + [row.get("path_kind")]
         )
-        controller["delivery_modes"] = _unique_strings(
+        controller["delivery_modes"] = unique_strings(
             controller["delivery_modes"] + [row.get("delivery_mode")]
         )
 
@@ -71,16 +58,16 @@ def build_controller_overview(
         if not family:
             continue
         controller = controller_rows[family]
-        controller["automation_kinds"] = _unique_strings(
+        controller["automation_kinds"] = unique_strings(
             controller["automation_kinds"] + [row.get("automation_kind")]
         )
-        controller["entry_points"] = _unique_strings(
+        controller["entry_points"] = unique_strings(
             controller["entry_points"] + list(row.get("entry_points") or [])
         )
-        controller["target_descriptors"] = _unique_strings(
+        controller["target_descriptors"] = unique_strings(
             controller["target_descriptors"] + list(row.get("target_descriptors") or [])
         )
-        controller["supporting_repositories"] = _unique_strings(
+        controller["supporting_repositories"] = unique_strings(
             controller["supporting_repositories"]
             + list(row.get("supporting_repositories") or [])
         )
@@ -89,7 +76,7 @@ def build_controller_overview(
 
     return {
         "families": families,
-        "delivery_modes": _unique_strings(
+        "delivery_modes": unique_strings(
             [row.get("delivery_mode") for row in delivery_paths]
         ),
         "controllers": [controller_rows[family] for family in families],
@@ -107,71 +94,68 @@ def build_deployment_facts(
     """Build normalized deployment facts from evidence-backed adapter inputs."""
 
     facts: list[dict[str, Any]] = []
-    controller_rows = [
+    normalized_delivery_rows = delivery_rows(delivery_paths)
+    normalized_controller_rows = controller_rows(controller_driven_paths)
+    platform_rows = [
         row
-        for row in controller_driven_paths
-        if isinstance(row, dict) and str(row.get("controller_kind") or "").strip()
+        for row in platforms
+        if isinstance(row, dict) and str(row.get("kind") or "").strip()
     ]
-    delivery_rows = [
-        row
-        for row in delivery_paths
-        if isinstance(row, dict) and str(row.get("controller") or "").strip()
-    ]
-    if not delivery_rows and not controller_rows:
+    if not any(
+        [
+            normalized_delivery_rows,
+            normalized_controller_rows,
+            platform_rows,
+            entrypoints,
+        ]
+    ):
         return facts
 
-    adapter = ""
-    if controller_rows:
-        adapter = str(controller_rows[0].get("controller_kind") or "").strip()
-    if not adapter and delivery_rows:
-        adapter = str(delivery_rows[0].get("controller") or "").strip()
+    adapter, mapping_mode = resolve_mapping_mode(
+        delivery_rows=normalized_delivery_rows,
+        controller_rows=normalized_controller_rows,
+        platforms=platform_rows,
+        entrypoints=entrypoints,
+        observed_config_environments=observed_config_environments,
+    )
     if not adapter:
         return facts
 
-    delivery_evidence = None
-    if delivery_rows:
-        delivery_evidence = {
-            "source": "delivery_path",
-            "controller": delivery_rows[0].get("controller"),
-            "delivery_mode": delivery_rows[0].get("delivery_mode"),
-        }
-    controller_evidence = None
-    if controller_rows:
-        controller_evidence = {
-            "source": "controller_driven_path",
-            "controller_kind": controller_rows[0].get("controller_kind"),
-            "automation_kind": controller_rows[0].get("automation_kind"),
-        }
+    delivery_signal = delivery_evidence(
+        normalized_delivery_rows[0] if normalized_delivery_rows else None
+    )
+    controller_signal = controller_evidence(
+        normalized_controller_rows[0] if normalized_controller_rows else None
+    )
 
     managed_evidence = [
-        item for item in [delivery_evidence, controller_evidence] if item is not None
+        item for item in [delivery_signal, controller_signal] if item is not None
     ]
     delivery_mode = ""
-    if delivery_rows:
-        delivery_mode = str(delivery_rows[0].get("delivery_mode") or "").strip()
-    inferred_packaging_kind = ""
-    if delivery_mode.startswith("flux_"):
-        if "helmrelease" in delivery_mode:
-            inferred_packaging_kind = "helm"
-        elif "kustomization" in delivery_mode:
-            inferred_packaging_kind = "kustomize"
-    if _is_iac_adapter(adapter):
-        confidence = "high"
+    if normalized_delivery_rows:
+        delivery_mode = str(
+            normalized_delivery_rows[0].get("delivery_mode") or ""
+        ).strip()
+    inferred_packaging_kind = infer_packaging_kind(
+        adapter=adapter,
+        delivery_mode=delivery_mode,
+    )
+    confidence = mapping_confidence(
+        mapping_mode=mapping_mode,
+        controller_evidence=controller_signal,
+        inferred_packaging_kind=inferred_packaging_kind,
+    )
+    if mapping_mode == "iac":
         facts.append(
             {
                 "fact_type": "PROVISIONED_BY_IAC",
                 "adapter": adapter,
                 "value": adapter,
                 "confidence": confidence,
-                "evidence": [delivery_evidence] if delivery_evidence else [],
+                "evidence": [delivery_signal] if delivery_signal else [],
             }
         )
-    else:
-        confidence = (
-            "high"
-            if controller_evidence is not None or inferred_packaging_kind
-            else "medium"
-        )
+    elif mapping_mode == "controller":
         facts.append(
             {
                 "fact_type": "MANAGED_BY_CONTROLLER",
@@ -181,17 +165,25 @@ def build_deployment_facts(
                 "evidence": managed_evidence,
             }
         )
+    elif delivery_signal is not None:
+        facts.append(
+            {
+                "fact_type": "DELIVERY_PATH_PRESENT",
+                "adapter": adapter,
+                "value": delivery_mode
+                or str(normalized_delivery_rows[0].get("path_kind") or ""),
+                "confidence": confidence,
+                "evidence": [delivery_signal],
+            }
+        )
 
     automation_kind = ""
-    if adapter == "terraform":
-        if "helm" in delivery_mode:
-            automation_kind = "helm"
-        elif "kubernetes" in delivery_mode:
-            automation_kind = "kubernetes"
-    elif inferred_packaging_kind:
+    if inferred_packaging_kind:
         automation_kind = inferred_packaging_kind
-    elif controller_rows:
-        automation_kind = str(controller_rows[0].get("automation_kind") or "").strip()
+    elif normalized_controller_rows:
+        automation_kind = str(
+            normalized_controller_rows[0].get("automation_kind") or ""
+        ).strip()
     if automation_kind:
         facts.append(
             {
@@ -200,17 +192,17 @@ def build_deployment_facts(
                 "value": automation_kind,
                 "confidence": confidence,
                 "evidence": (
-                    [controller_evidence]
-                    if controller_evidence is not None
-                    else [delivery_evidence] if delivery_evidence is not None else []
+                    [controller_signal]
+                    if controller_signal is not None
+                    else [delivery_signal] if delivery_signal is not None else []
                 ),
             }
         )
 
-    deploy_sources = _unique_strings(
+    deploy_sources = unique_strings(
         [
             source
-            for row in delivery_rows
+            for row in normalized_delivery_rows
             for source in list(row.get("deployment_sources") or [])
         ]
     )
@@ -221,13 +213,13 @@ def build_deployment_facts(
                 "adapter": adapter,
                 "value": source,
                 "confidence": confidence,
-                "evidence": [delivery_evidence] if delivery_evidence else [],
+                "evidence": [delivery_signal] if delivery_signal else [],
             }
         )
-    config_sources = _unique_strings(
+    config_sources = unique_strings(
         [
             source
-            for row in delivery_rows
+            for row in normalized_delivery_rows
             for source in list(row.get("config_sources") or [])
         ]
     )
@@ -238,15 +230,10 @@ def build_deployment_facts(
                 "adapter": adapter,
                 "value": source,
                 "confidence": confidence,
-                "evidence": [delivery_evidence] if delivery_evidence else [],
+                "evidence": [delivery_signal] if delivery_signal else [],
             }
         )
 
-    platform_rows = [
-        row
-        for row in platforms
-        if isinstance(row, dict) and str(row.get("kind") or "").strip()
-    ]
     for row in platform_rows:
         facts.append(
             {
@@ -264,10 +251,10 @@ def build_deployment_facts(
             }
         )
 
-    environments = _unique_strings(
+    environments = unique_strings(
         [
             environment
-            for row in delivery_rows
+            for row in normalized_delivery_rows
             for environment in list(row.get("environments") or [])
         ]
         + observed_config_environments
@@ -279,7 +266,7 @@ def build_deployment_facts(
                 "adapter": adapter,
                 "value": environment,
                 "confidence": confidence,
-                "evidence": [delivery_evidence] if delivery_evidence else [],
+                "evidence": [delivery_signal] if delivery_signal else [],
             }
         )
 
@@ -308,6 +295,91 @@ def build_deployment_facts(
     return facts
 
 
+def build_deployment_fact_summary(
+    *,
+    delivery_paths: list[dict[str, Any]],
+    controller_driven_paths: list[dict[str, Any]],
+    platforms: list[dict[str, Any]],
+    entrypoints: list[dict[str, Any]],
+    observed_config_environments: list[str],
+) -> dict[str, Any] | None:
+    """Summarize deployment fact strength and truthful limitations."""
+
+    normalized_delivery_rows = delivery_rows(delivery_paths)
+    normalized_controller_rows = controller_rows(controller_driven_paths)
+    platform_rows = [
+        row
+        for row in platforms
+        if isinstance(row, dict) and str(row.get("kind") or "").strip()
+    ]
+    adapter, mapping_mode = resolve_mapping_mode(
+        delivery_rows=normalized_delivery_rows,
+        controller_rows=normalized_controller_rows,
+        platforms=platform_rows,
+        entrypoints=entrypoints,
+        observed_config_environments=observed_config_environments,
+    )
+    if not adapter:
+        return None
+
+    facts = build_deployment_facts(
+        delivery_paths=delivery_paths,
+        controller_driven_paths=controller_driven_paths,
+        platforms=platforms,
+        entrypoints=entrypoints,
+        observed_config_environments=observed_config_environments,
+    )
+    high_confidence_fact_types = [
+        str(row.get("fact_type") or "")
+        for row in facts
+        if str(row.get("confidence") or "").strip() == "high"
+    ]
+    medium_confidence_fact_types = [
+        str(row.get("fact_type") or "")
+        for row in facts
+        if str(row.get("confidence") or "").strip() == "medium"
+    ]
+    evidence_sources = unique_strings(
+        [
+            evidence.get("source")
+            for row in facts
+            for evidence in list(row.get("evidence") or [])
+            if isinstance(evidence, dict)
+        ]
+    )
+    limitations: list[str] = []
+    if mapping_mode == "evidence_only":
+        limitations.append("deployment_controller_unknown")
+    if not any(row.get("fact_type") == "DEPLOYS_FROM" for row in facts):
+        limitations.append("deployment_source_unknown")
+    if normalized_delivery_rows and not any(
+        row.get("fact_type") == "DISCOVERS_CONFIG_IN" for row in facts
+    ):
+        limitations.append("config_source_unknown")
+    if not platform_rows:
+        limitations.append("runtime_platform_unknown")
+    if not any(row.get("fact_type") == "OBSERVED_IN_ENVIRONMENT" for row in facts):
+        limitations.append("environment_unknown")
+    if not any(row.get("fact_type") == "EXPOSES_ENTRYPOINT" for row in facts):
+        limitations.append("entrypoint_unknown")
+
+    overall_confidence = "low"
+    if mapping_mode == "iac":
+        overall_confidence = "high"
+    elif mapping_mode in {"controller", "evidence_only"}:
+        overall_confidence = "medium"
+
+    return {
+        "adapter": adapter,
+        "mapping_mode": mapping_mode,
+        "overall_confidence": overall_confidence,
+        "evidence_sources": evidence_sources,
+        "high_confidence_fact_types": high_confidence_fact_types,
+        "medium_confidence_fact_types": medium_confidence_fact_types,
+        "limitations": limitations,
+    }
+
+
 def build_runtime_overview(
     *,
     selected_instance: dict[str, Any] | None,
@@ -325,14 +397,14 @@ def build_runtime_overview(
         selected_environment = str(instances[0].get("environment") or "").strip()
     if not selected_environment and len(platforms) == 1:
         selected_environment = str(platforms[0].get("environment") or "").strip()
-    platform_kinds = _unique_strings([row.get("kind") for row in platforms])
-    observed_environments = _unique_strings(
+    platform_kinds = unique_strings([row.get("kind") for row in platforms])
+    observed_environments = unique_strings(
         observed_config_environments
         + [row.get("environment") for row in platforms]
         + [row.get("environment") for row in instances]
         + [row.get("environment") for row in entrypoints]
     )
-    entrypoint_labels = _unique_strings(
+    entrypoint_labels = unique_strings(
         [
             row.get("hostname") or row.get("url") or row.get("path")
             for row in entrypoints

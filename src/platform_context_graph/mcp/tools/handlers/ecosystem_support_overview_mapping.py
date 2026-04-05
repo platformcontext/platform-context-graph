@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ....query.story_deployment_mapping import build_controller_overview
+from ....query.story_deployment_mapping import build_deployment_fact_summary
 from ....query.story_deployment_mapping import build_deployment_facts
 from ....query.story_deployment_mapping import build_runtime_overview
 
@@ -50,4 +51,13 @@ def build_mapping_overviews(
     )
     if deployment_facts:
         result["deployment_facts"] = deployment_facts
+    deployment_fact_summary = build_deployment_fact_summary(
+        delivery_paths=delivery_paths,
+        controller_driven_paths=controller_driven_paths,
+        platforms=runtime_platforms,
+        entrypoints=hostnames,
+        observed_config_environments=observed_config_environments,
+    )
+    if deployment_fact_summary:
+        result["deployment_fact_summary"] = deployment_fact_summary
     return result

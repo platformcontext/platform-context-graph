@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .story_deployment_mapping import build_controller_overview
+from .story_deployment_mapping import build_deployment_fact_summary
 from .story_deployment_mapping import build_deployment_facts
 from .story_deployment_mapping import build_runtime_overview
 from .story_documentation import (
@@ -219,6 +220,17 @@ def build_repository_story_response(
         ),
     )
     deployment_facts = build_deployment_facts(
+        delivery_paths=list(deployment_overview.get("delivery_paths") or []),
+        controller_driven_paths=list(
+            deployment_overview.get("controller_driven_paths") or []
+        ),
+        platforms=list(deployment_overview.get("runtime_platforms") or []),
+        entrypoints=hostnames,
+        observed_config_environments=list(
+            deployment_overview.get("observed_config_environments") or []
+        ),
+    )
+    deployment_fact_summary = build_deployment_fact_summary(
         delivery_paths=list(deployment_overview.get("delivery_paths") or []),
         controller_driven_paths=list(
             deployment_overview.get("controller_driven_paths") or []
@@ -497,6 +509,7 @@ def build_repository_story_response(
             "controller_overview": controller_overview,
             "runtime_overview": runtime_overview,
             "deployment_facts": deployment_facts,
+            "deployment_fact_summary": deployment_fact_summary,
             "code_overview": code_overview,
             "evidence": evidence,
             "limitations": limitations,
