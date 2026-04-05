@@ -42,6 +42,8 @@ def _candidate_paths(paths: list[str]) -> list[str]:
     """Return a ranked subset of documentation-shaped paths."""
 
     def sort_key(path: str) -> tuple[int, str]:
+        """Rank likely human-facing docs ahead of generic config artifacts."""
+
         path_lower = path.lower()
         if path_lower == "readme.md":
             rank = 0
