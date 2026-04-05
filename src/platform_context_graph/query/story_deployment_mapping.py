@@ -21,6 +21,12 @@ def _unique_strings(values: list[Any]) -> list[str]:
     return normalized
 
 
+def _is_iac_adapter(adapter: str) -> bool:
+    """Return whether the adapter represents infrastructure-as-code provisioning."""
+
+    return adapter in {"cloudformation", "terraform"}
+
+
 def build_controller_overview(
     *,
     delivery_paths: list[dict[str, Any]],
@@ -149,7 +155,7 @@ def build_deployment_facts(
             inferred_packaging_kind = "helm"
         elif "kustomization" in delivery_mode:
             inferred_packaging_kind = "kustomize"
-    if adapter == "terraform":
+    if _is_iac_adapter(adapter):
         confidence = "high"
         facts.append(
             {

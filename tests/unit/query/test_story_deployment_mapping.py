@@ -565,3 +565,121 @@ def test_build_deployment_facts_maps_flux_kustomization_into_controller_facts() 
             ],
         },
     ]
+
+
+def test_build_deployment_facts_maps_cloudformation_ecs_into_iac_facts() -> None:
+    """Verify CloudFormation ECS evidence emits IAC and runtime facts."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "controller": "cloudformation",
+                "delivery_mode": "cloudformation_ecs",
+                "deployment_sources": ["service-catalog"],
+                "config_sources": ["network-stack"],
+                "platform_kinds": ["ecs"],
+                "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
+                "environments": ["prod"],
+            }
+        ],
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                "kind": "ecs",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "node10",
+            }
+        ],
+        entrypoints=[
+            {
+                "hostname": "api-node-boats.prod.bgrp.io",
+                "environment": "prod",
+                "visibility": "public",
+            }
+        ],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts == [
+        {
+            "fact_type": "PROVISIONED_BY_IAC",
+            "adapter": "cloudformation",
+            "value": "cloudformation",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_ecs",
+                }
+            ],
+        },
+        {
+            "fact_type": "DEPLOYS_FROM",
+            "adapter": "cloudformation",
+            "value": "service-catalog",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_ecs",
+                }
+            ],
+        },
+        {
+            "fact_type": "DISCOVERS_CONFIG_IN",
+            "adapter": "cloudformation",
+            "value": "network-stack",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_ecs",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "cloudformation",
+            "value": "ecs",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "ecs",
+                    "environment": "prod",
+                }
+            ],
+        },
+        {
+            "fact_type": "OBSERVED_IN_ENVIRONMENT",
+            "adapter": "cloudformation",
+            "value": "prod",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_ecs",
+                }
+            ],
+        },
+        {
+            "fact_type": "EXPOSES_ENTRYPOINT",
+            "adapter": "cloudformation",
+            "value": "api-node-boats.prod.bgrp.io",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "entrypoint",
+                    "hostname": "api-node-boats.prod.bgrp.io",
+                    "environment": "prod",
+                }
+            ],
+        },
+    ]

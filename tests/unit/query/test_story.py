@@ -782,3 +782,128 @@ def test_workload_story_emits_flux_controller_facts_from_delivery_mode() -> None
             ],
         },
     ]
+
+
+def test_workload_story_emits_cloudformation_ecs_iac_facts() -> None:
+    """Verify CloudFormation ECS evidence emits IAC facts at story level."""
+
+    result = build_workload_story_response(
+        {
+            "workload": {
+                "id": "workload:api-node-boats",
+                "type": "workload",
+                "kind": "service",
+                "name": "api-node-boats",
+            },
+            "delivery_paths": [
+                {
+                    "path_kind": "direct",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_ecs",
+                    "deployment_sources": ["service-catalog"],
+                    "config_sources": ["network-stack"],
+                    "platform_kinds": ["ecs"],
+                    "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
+                    "environments": ["prod"],
+                }
+            ],
+            "platforms": [
+                {
+                    "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    "kind": "ecs",
+                    "provider": "aws",
+                    "environment": "prod",
+                    "name": "node10",
+                }
+            ],
+            "entrypoints": [
+                {
+                    "hostname": "api-node-boats.prod.bgrp.io",
+                    "environment": "prod",
+                    "visibility": "public",
+                }
+            ],
+            "observed_config_environments": ["prod"],
+        }
+    )
+
+    assert result["deployment_facts"] == [
+        {
+            "fact_type": "PROVISIONED_BY_IAC",
+            "adapter": "cloudformation",
+            "value": "cloudformation",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_ecs",
+                }
+            ],
+        },
+        {
+            "fact_type": "DEPLOYS_FROM",
+            "adapter": "cloudformation",
+            "value": "service-catalog",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_ecs",
+                }
+            ],
+        },
+        {
+            "fact_type": "DISCOVERS_CONFIG_IN",
+            "adapter": "cloudformation",
+            "value": "network-stack",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_ecs",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "cloudformation",
+            "value": "ecs",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "ecs",
+                    "environment": "prod",
+                }
+            ],
+        },
+        {
+            "fact_type": "OBSERVED_IN_ENVIRONMENT",
+            "adapter": "cloudformation",
+            "value": "prod",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_ecs",
+                }
+            ],
+        },
+        {
+            "fact_type": "EXPOSES_ENTRYPOINT",
+            "adapter": "cloudformation",
+            "value": "api-node-boats.prod.bgrp.io",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "entrypoint",
+                    "hostname": "api-node-boats.prod.bgrp.io",
+                    "environment": "prod",
+                }
+            ],
+        },
+    ]
