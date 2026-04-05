@@ -71,19 +71,21 @@ def test_project_relationship_facts_reuses_existing_graph_relationship_builders(
 
     def _create_all_function_calls(
         graph_builder: object,
-        all_file_data: list[dict[str, object]],
+        all_file_data: object,
         imports_map: dict[str, list[str]],
         **_kwargs: object,
     ) -> dict[str, float]:
-        captured["calls"] = (graph_builder, all_file_data, imports_map)
+        captured["calls_streamed"] = not isinstance(all_file_data, list)
+        captured["calls"] = (graph_builder, list(all_file_data), imports_map)
         return {"resolved": 1.0}
 
     def _create_all_inheritance_links(
         graph_builder: object,
-        all_file_data: list[dict[str, object]],
+        all_file_data: object,
         imports_map: dict[str, list[str]],
     ) -> None:
-        captured["inheritance"] = (graph_builder, all_file_data, imports_map)
+        captured["inheritance_streamed"] = not isinstance(all_file_data, list)
+        captured["inheritance"] = (graph_builder, list(all_file_data), imports_map)
 
     metrics = project_relationship_facts(
         builder=builder,
@@ -103,6 +105,8 @@ def test_project_relationship_facts_reuses_existing_graph_relationship_builders(
     expected_file_data[0]["is_dependency"] = False
     expected_imports_map = {"handler": ["/tmp/service/src/app.py"]}
 
+    assert captured["calls_streamed"] is True
+    assert captured["inheritance_streamed"] is True
     assert captured["calls"] == (builder, expected_file_data, expected_imports_map)
     assert captured["inheritance"] == (
         builder,
