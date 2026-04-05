@@ -182,3 +182,73 @@ def test_search_file_content_resolves_repo_names_to_canonical_ids(
 
     assert captured["repo_ids"] == ["repository:r_20871f7f"]
     assert result["repo_ids"] == ["repository:r_20871f7f"]
+
+
+def test_search_file_content_resolves_multiple_repo_filters_in_one_session(
+    monkeypatch,
+) -> None:
+    """File searches should avoid opening one database session per repo filter."""
+
+    database = _make_database(
+        [
+            {
+                "id": "repository:r_20871f7f",
+                "name": "helm-charts",
+                "path": "/data/repos/helm-charts",
+                "local_path": "/data/repos/helm-charts",
+                "remote_url": "https://github.com/platformcontext/helm-charts",
+                "repo_slug": "platformcontext/helm-charts",
+                "has_remote": True,
+            },
+            {
+                "id": "repository:r_91ab22ef",
+                "name": "iac-eks-pcg",
+                "path": "/data/repos/iac-eks-pcg",
+                "local_path": "/data/repos/iac-eks-pcg",
+                "remote_url": "https://github.com/platformcontext/iac-eks-pcg",
+                "repo_slug": "platformcontext/iac-eks-pcg",
+                "has_remote": True,
+            },
+        ]
+    )
+    captured: dict[str, object] = {}
+
+    class _ContentService:
+        def search_file_content(
+            self,
+            *,
+            pattern: str,
+            repo_ids: list[str] | None = None,
+            languages: list[str] | None = None,
+            artifact_types: list[str] | None = None,
+            template_dialects: list[str] | None = None,
+            iac_relevant: bool | None = None,
+        ) -> dict[str, object]:
+            del languages, artifact_types, template_dialects, iac_relevant
+            captured["pattern"] = pattern
+            captured["repo_ids"] = repo_ids
+            return {"pattern": pattern, "repo_ids": repo_ids or [], "matches": []}
+
+    monkeypatch.setattr(
+        content_queries,
+        "get_content_service",
+        lambda _database: _ContentService(),
+    )
+
+    result = content_queries.search_file_content(
+        database,
+        pattern="api-node-boats",
+        repo_ids=["helm-charts", "repository:r_direct", "iac-eks-pcg"],
+    )
+
+    assert database.get_driver.return_value.session.call_count == 1
+    assert captured["repo_ids"] == [
+        "repository:r_20871f7f",
+        "repository:r_direct",
+        "repository:r_91ab22ef",
+    ]
+    assert result["repo_ids"] == [
+        "repository:r_20871f7f",
+        "repository:r_direct",
+        "repository:r_91ab22ef",
+    ]

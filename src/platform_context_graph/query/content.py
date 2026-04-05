@@ -17,6 +17,17 @@ __all__ = [
 ]
 
 
+def _resolve_repo_identifier_with_session(session: Any, repo_id: str) -> str:
+    """Return a canonical repository ID using one existing database session."""
+
+    if repo_id.startswith("repository:"):
+        return repo_id
+    repo = resolve_repository(session, repo_id)
+    if repo is None:
+        return repo_id
+    return str(repo.get("id") or repo_id)
+
+
 def _resolve_repo_identifier(database: Any, repo_id: str) -> str:
     """Return a canonical repository ID when the caller passed a repo name."""
 
@@ -28,10 +39,7 @@ def _resolve_repo_identifier(database: Any, repo_id: str) -> str:
         return repo_id
 
     with db_manager.get_driver().session() as session:
-        repo = resolve_repository(session, repo_id)
-    if repo is None:
-        return repo_id
-    return str(repo.get("id") or repo_id)
+        return _resolve_repo_identifier_with_session(session, repo_id)
 
 
 def _resolve_repo_identifiers(
@@ -50,7 +58,26 @@ def _resolve_repo_identifiers(
 
     if repo_ids is None:
         return None
-    return [_resolve_repo_identifier(database, repo_id) for repo_id in repo_ids]
+    normalized_repo_ids = [
+        str(repo_id).strip() for repo_id in repo_ids if str(repo_id).strip()
+    ]
+    if not normalized_repo_ids:
+        return []
+
+    db_manager = get_db_manager(database)
+    if not callable(getattr(db_manager, "get_driver", None)):
+        return normalized_repo_ids
+
+    resolved_by_input: dict[str, str] = {}
+    with db_manager.get_driver().session() as session:
+        for repo_id in normalized_repo_ids:
+            if repo_id in resolved_by_input:
+                continue
+            resolved_by_input[repo_id] = _resolve_repo_identifier_with_session(
+                session,
+                repo_id,
+            )
+    return [resolved_by_input[repo_id] for repo_id in normalized_repo_ids]
 
 
 def get_file_content(

@@ -288,3 +288,32 @@ def test_workload_story_mentions_entrypoints_and_repository_dependencies() -> No
     assert result["story_sections"][0]["id"] == "runtime"
     assert result["story_sections"][1]["id"] == "internet"
     assert result["story_sections"][2]["id"] == "dependencies"
+
+
+def test_workload_story_uses_neutral_entrypoint_wording_for_internal_only_paths() -> (
+    None
+):
+    """Internal-only docs and endpoints should not be labeled as public."""
+
+    result = build_workload_story_response(
+        {
+            "workload": {
+                "id": "workload:api-node-boats",
+                "type": "workload",
+                "kind": "service",
+                "name": "api-node-boats",
+            },
+            "instances": [],
+            "entrypoints": [],
+            "api_surface": {
+                "docs_routes": ["/_specs"],
+                "endpoints": [{"path": "/_status"}],
+            },
+        }
+    )
+
+    assert "Public entrypoints" not in " ".join(result["story"])
+    assert "Known entrypoints: /_status, /_specs." in result["story"]
+    assert result["story_sections"][0]["summary"] == (
+        "Known entrypoints include /_status, /_specs."
+    )

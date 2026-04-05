@@ -235,6 +235,19 @@ def _entrypoint_labels(entrypoints: list[dict[str, Any]]) -> list[str]:
     return labels
 
 
+def _public_entrypoint_labels(entrypoints: list[dict[str, Any]]) -> list[str]:
+    """Return human-friendly labels for public workload entrypoints only."""
+
+    return _entrypoint_labels(
+        [
+            row
+            for row in entrypoints
+            if isinstance(row, dict)
+            and str(row.get("visibility") or "").strip().lower() == "public"
+        ]
+    )
+
+
 def build_workload_story_response(
     context: dict[str, Any],
 ) -> dict[str, Any]:
@@ -281,8 +294,13 @@ def build_workload_story_response(
             f"Owned by repositories {human_list([str(row.get('name') or '') for row in repositories if isinstance(row, dict)])}."
         )
     entrypoint_labels = _entrypoint_labels(entrypoints)
-    if entrypoint_labels:
-        story.append(f"Public entrypoints: {human_list(entrypoint_labels, limit=5)}.")
+    public_entrypoint_labels = _public_entrypoint_labels(entrypoints)
+    if public_entrypoint_labels:
+        story.append(
+            f"Public entrypoints: {human_list(public_entrypoint_labels, limit=5)}."
+        )
+    elif entrypoint_labels:
+        story.append(f"Known entrypoints: {human_list(entrypoint_labels, limit=5)}.")
     if cloud_resources:
         story.append(
             f"Depends on cloud resources {human_list([str(row.get('name') or '') for row in cloud_resources if isinstance(row, dict)])}."
@@ -350,12 +368,24 @@ def build_workload_story_response(
                 items=[selected_instance] if selected_instance else instances,
             )
         )
-    if entrypoint_labels:
+    if public_entrypoint_labels:
         story_sections.append(
             story_section(
                 "internet",
                 "Internet",
-                f"Public entrypoints include {human_list(entrypoint_labels, limit=5)}.",
+                (
+                    f"Public entrypoints include "
+                    f"{human_list(public_entrypoint_labels, limit=5)}."
+                ),
+                items=entrypoints,
+            )
+        )
+    elif entrypoint_labels:
+        story_sections.append(
+            story_section(
+                "internet",
+                "Internet",
+                f"Known entrypoints include {human_list(entrypoint_labels, limit=5)}.",
                 items=entrypoints,
             )
         )
