@@ -305,6 +305,8 @@ class StoryResponse(BaseModel):
     gitops_overview: dict[str, Any] | None = None
     documentation_overview: dict[str, Any] | None = None
     support_overview: dict[str, Any] | None = None
+    controller_overview: dict[str, Any] | None = None
+    runtime_overview: dict[str, Any] | None = None
     code_overview: dict[str, Any] | None = None
     evidence: list[EvidenceItem] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)

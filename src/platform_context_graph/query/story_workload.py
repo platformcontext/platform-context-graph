@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .story_deployment_mapping import build_controller_overview
+from .story_deployment_mapping import build_runtime_overview
 from .story_documentation import (
     build_documentation_overview,
     summarize_documentation_overview,
@@ -37,6 +39,12 @@ def build_workload_story_response(
     shared_resources = list(context.get("shared_resources") or [])
     dependencies = list(context.get("dependencies") or [])
     api_surface = dict(context.get("api_surface") or {})
+    platforms = list(context.get("platforms") or [])
+    delivery_paths = list(context.get("delivery_paths") or [])
+    controller_driven_paths = list(context.get("controller_driven_paths") or [])
+    observed_config_environments = list(
+        context.get("observed_config_environments") or []
+    )
     selected_environment = selected_environment_for_story(
         selected_instance=selected_instance,
         context=context,
@@ -51,6 +59,19 @@ def build_workload_story_response(
     )
     evidence = list(context.get("evidence") or [])
     requested_as = context.get("requested_as")
+    controller_overview = build_controller_overview(
+        delivery_paths=delivery_paths,
+        controller_driven_paths=controller_driven_paths,
+    )
+    runtime_overview = build_runtime_overview(
+        selected_instance=(
+            selected_instance if isinstance(selected_instance, dict) else None
+        ),
+        instances=instances,
+        entrypoints=entrypoints,
+        platforms=platforms,
+        observed_config_environments=observed_config_environments,
+    )
 
     story: list[str] = []
     if selected_instance:
@@ -274,6 +295,8 @@ def build_workload_story_response(
         "gitops_overview": gitops_overview,
         "documentation_overview": documentation_overview,
         "support_overview": support_overview,
+        "controller_overview": controller_overview,
+        "runtime_overview": runtime_overview,
         "evidence": evidence,
         "limitations": limitations,
         "coverage": coverage,
