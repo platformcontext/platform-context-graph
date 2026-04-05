@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .database import _portable_repository_ref
+from .database_support import portable_repository_ref
 from .support import build_fixture_indexes, canonical_ref, edge_evidence
 
 
@@ -79,7 +79,7 @@ def fixture_workload_context(
 
     response: dict[str, Any] = {
         "workload": canonical_ref(workload),
-        "repositories": [_portable_repository_ref(repo)] if repo else [],
+        "repositories": [portable_repository_ref(repo)] if repo else [],
         "cloud_resources": cloud_resources,
         "shared_resources": shared_resources,
         "dependencies": [],
