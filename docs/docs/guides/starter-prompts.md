@@ -33,7 +33,7 @@ flowchart TD
 - "What is the blast radius if `platformcontextgraph-postgresql` is degraded in `ops-qa`?"
 - "Show me every workload that depends on this queue."
 - "Trace this resource back to the code and repository that define it."
-- "Compare `prod` and `stage` for `checkout-service` and show what changed."
+- "Compare `prod` and `staging` for `checkout-service` and show what changed."
 
 ### Platform engineering
 
@@ -79,7 +79,7 @@ Use:
 
 Best additions:
 
-- environment name such as `ops-qa`, `stage`, or `prod`
+- environment name such as `ops-qa`, `staging`, or `prod`
 - workload or service name
 - resource name or canonical id
 
