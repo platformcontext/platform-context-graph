@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .story_deployment_mapping import build_controller_overview
+from .story_deployment_mapping import build_deployment_facts
 from .story_deployment_mapping import build_runtime_overview
 from .story_documentation import (
     build_documentation_overview,
@@ -70,6 +71,13 @@ def build_workload_story_response(
         instances=instances,
         entrypoints=entrypoints,
         platforms=platforms,
+        observed_config_environments=observed_config_environments,
+    )
+    deployment_facts = build_deployment_facts(
+        delivery_paths=delivery_paths,
+        controller_driven_paths=controller_driven_paths,
+        platforms=platforms,
+        entrypoints=entrypoints,
         observed_config_environments=observed_config_environments,
     )
 
@@ -297,6 +305,7 @@ def build_workload_story_response(
         "support_overview": support_overview,
         "controller_overview": controller_overview,
         "runtime_overview": runtime_overview,
+        "deployment_facts": deployment_facts,
         "evidence": evidence,
         "limitations": limitations,
         "coverage": coverage,

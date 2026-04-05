@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from .ecosystem_support_overview_mapping import build_mapping_overviews
 from .ecosystem_support_overview_story import build_controller_driven_story
 from .ecosystem_support_overview_story import build_deployment_story_fallback
 from .ecosystem_support_overview_story import build_topology_story
@@ -81,6 +82,14 @@ def build_deployment_overview(
             for row in controller_driven_paths
             if isinstance(row, dict)
         ]
+    overview.update(
+        build_mapping_overviews(
+            hostnames=hostnames,
+            runtime_platforms=overview["runtime_platforms"],
+            delivery_paths=overview["delivery_paths"],
+            controller_driven_paths=list(overview.get("controller_driven_paths") or []),
+        )
+    )
     if provisioning_source_chains:
         overview["provisioning_source_chains"] = list(provisioning_source_chains)
     if consumer_repositories:

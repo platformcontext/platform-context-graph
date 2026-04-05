@@ -307,6 +307,7 @@ class StoryResponse(BaseModel):
     support_overview: dict[str, Any] | None = None
     controller_overview: dict[str, Any] | None = None
     runtime_overview: dict[str, Any] | None = None
+    deployment_facts: list[dict[str, Any]] = Field(default_factory=list)
     code_overview: dict[str, Any] | None = None
     evidence: list[EvidenceItem] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)

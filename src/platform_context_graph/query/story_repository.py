@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from .story_deployment_mapping import build_controller_overview
+from .story_deployment_mapping import build_deployment_facts
+from .story_deployment_mapping import build_runtime_overview
 from .story_documentation import (
     build_documentation_overview,
     summarize_documentation_overview,
@@ -200,6 +203,32 @@ def build_repository_story_response(
     limitations = list(context.get("limitations") or [])
 
     deployment_overview = _build_repository_deployment_overview(context)
+    controller_overview = build_controller_overview(
+        delivery_paths=list(deployment_overview.get("delivery_paths") or []),
+        controller_driven_paths=list(
+            deployment_overview.get("controller_driven_paths") or []
+        ),
+    )
+    runtime_overview = build_runtime_overview(
+        selected_instance=None,
+        instances=[],
+        entrypoints=hostnames,
+        platforms=list(deployment_overview.get("runtime_platforms") or []),
+        observed_config_environments=list(
+            deployment_overview.get("observed_config_environments") or []
+        ),
+    )
+    deployment_facts = build_deployment_facts(
+        delivery_paths=list(deployment_overview.get("delivery_paths") or []),
+        controller_driven_paths=list(
+            deployment_overview.get("controller_driven_paths") or []
+        ),
+        platforms=list(deployment_overview.get("runtime_platforms") or []),
+        entrypoints=hostnames,
+        observed_config_environments=list(
+            deployment_overview.get("observed_config_environments") or []
+        ),
+    )
     deployment_story = list(deployment_overview.get("deployment_story") or [])
     direct_story = focused_deployment_story(deployment_story)
     if direct_story:
@@ -465,6 +494,9 @@ def build_repository_story_response(
             "gitops_overview": gitops_overview,
             "documentation_overview": documentation_overview,
             "support_overview": support_overview,
+            "controller_overview": controller_overview,
+            "runtime_overview": runtime_overview,
+            "deployment_facts": deployment_facts,
             "code_overview": code_overview,
             "evidence": evidence,
             "limitations": limitations,

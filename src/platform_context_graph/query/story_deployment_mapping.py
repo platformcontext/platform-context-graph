@@ -90,6 +90,165 @@ def build_controller_overview(
     }
 
 
+def build_deployment_facts(
+    *,
+    delivery_paths: list[dict[str, Any]],
+    controller_driven_paths: list[dict[str, Any]],
+    platforms: list[dict[str, Any]],
+    entrypoints: list[dict[str, Any]],
+    observed_config_environments: list[str],
+) -> list[dict[str, Any]]:
+    """Build normalized deployment facts from evidence-backed adapter inputs."""
+
+    facts: list[dict[str, Any]] = []
+    controller_rows = [
+        row
+        for row in controller_driven_paths
+        if isinstance(row, dict) and str(row.get("controller_kind") or "").strip()
+    ]
+    delivery_rows = [
+        row
+        for row in delivery_paths
+        if isinstance(row, dict) and str(row.get("controller") or "").strip()
+    ]
+    if not delivery_rows and not controller_rows:
+        return facts
+
+    adapter = ""
+    if controller_rows:
+        adapter = str(controller_rows[0].get("controller_kind") or "").strip()
+    if not adapter and delivery_rows:
+        adapter = str(delivery_rows[0].get("controller") or "").strip()
+    if not adapter:
+        return facts
+
+    delivery_evidence = None
+    if delivery_rows:
+        delivery_evidence = {
+            "source": "delivery_path",
+            "controller": delivery_rows[0].get("controller"),
+            "delivery_mode": delivery_rows[0].get("delivery_mode"),
+        }
+    controller_evidence = None
+    if controller_rows:
+        controller_evidence = {
+            "source": "controller_driven_path",
+            "controller_kind": controller_rows[0].get("controller_kind"),
+            "automation_kind": controller_rows[0].get("automation_kind"),
+        }
+
+    managed_evidence = [
+        item for item in [delivery_evidence, controller_evidence] if item is not None
+    ]
+    confidence = "high" if controller_evidence else "medium"
+    facts.append(
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": adapter,
+            "value": adapter,
+            "confidence": confidence,
+            "evidence": managed_evidence,
+        }
+    )
+
+    automation_kind = ""
+    if controller_rows:
+        automation_kind = str(controller_rows[0].get("automation_kind") or "").strip()
+    if automation_kind:
+        facts.append(
+            {
+                "fact_type": "USES_PACKAGING_LAYER",
+                "adapter": adapter,
+                "value": automation_kind,
+                "confidence": confidence,
+                "evidence": [controller_evidence],
+            }
+        )
+
+    deploy_sources = _unique_strings(
+        [
+            source
+            for row in delivery_rows
+            for source in list(row.get("deployment_sources") or [])
+        ]
+    )
+    for source in deploy_sources:
+        facts.append(
+            {
+                "fact_type": "DEPLOYS_FROM",
+                "adapter": adapter,
+                "value": source,
+                "confidence": confidence,
+                "evidence": [delivery_evidence] if delivery_evidence else [],
+            }
+        )
+
+    platform_rows = [
+        row
+        for row in platforms
+        if isinstance(row, dict) and str(row.get("kind") or "").strip()
+    ]
+    for row in platform_rows:
+        facts.append(
+            {
+                "fact_type": "RUNS_ON_PLATFORM",
+                "adapter": adapter,
+                "value": str(row.get("kind") or "").strip(),
+                "confidence": "high",
+                "evidence": [
+                    {
+                        "source": "platform",
+                        "kind": row.get("kind"),
+                        "environment": row.get("environment"),
+                    }
+                ],
+            }
+        )
+
+    environments = _unique_strings(
+        [
+            environment
+            for row in delivery_rows
+            for environment in list(row.get("environments") or [])
+        ]
+        + observed_config_environments
+    )
+    for environment in environments:
+        facts.append(
+            {
+                "fact_type": "OBSERVED_IN_ENVIRONMENT",
+                "adapter": adapter,
+                "value": environment,
+                "confidence": confidence,
+                "evidence": [delivery_evidence] if delivery_evidence else [],
+            }
+        )
+
+    for row in entrypoints:
+        if not isinstance(row, dict):
+            continue
+        hostname = str(row.get("hostname") or "").strip()
+        if not hostname:
+            continue
+        facts.append(
+            {
+                "fact_type": "EXPOSES_ENTRYPOINT",
+                "adapter": adapter,
+                "value": hostname,
+                "confidence": "medium",
+                "evidence": [
+                    {
+                        "source": "entrypoint",
+                        "hostname": row.get("hostname"),
+                        "environment": row.get("environment"),
+                    }
+                ],
+            }
+        )
+
+    return facts
+
+
 def build_runtime_overview(
     *,
     selected_instance: dict[str, Any] | None,

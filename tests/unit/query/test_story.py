@@ -432,3 +432,169 @@ def test_workload_story_exposes_generic_controller_and_runtime_overviews() -> No
         ],
         "entrypoints": ["api-node-boats.qa.bgrp.io"],
     }
+    assert result["deployment_facts"] == [
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": "argocd",
+            "value": "argocd",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "argocd",
+                    "delivery_mode": "eks_gitops",
+                },
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "argocd",
+                    "automation_kind": "helm",
+                },
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "argocd",
+            "value": "helm",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "argocd",
+                    "automation_kind": "helm",
+                }
+            ],
+        },
+        {
+            "fact_type": "DEPLOYS_FROM",
+            "adapter": "argocd",
+            "value": "helm-charts",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "argocd",
+                    "delivery_mode": "eks_gitops",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "argocd",
+            "value": "eks",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "eks",
+                    "environment": "bg-qa",
+                }
+            ],
+        },
+        {
+            "fact_type": "OBSERVED_IN_ENVIRONMENT",
+            "adapter": "argocd",
+            "value": "bg-qa",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "argocd",
+                    "delivery_mode": "eks_gitops",
+                }
+            ],
+        },
+        {
+            "fact_type": "EXPOSES_ENTRYPOINT",
+            "adapter": "argocd",
+            "value": "api-node-boats.qa.bgrp.io",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "entrypoint",
+                    "hostname": "api-node-boats.qa.bgrp.io",
+                    "environment": "bg-qa",
+                }
+            ],
+        },
+    ]
+
+
+def test_repository_story_exposes_generic_controller_and_runtime_overviews() -> None:
+    """Verify repository stories expose generic controller/runtime overviews."""
+
+    result = build_repository_story_response(
+        {
+            "repository": {
+                "id": "repository:r_f9600c28",
+                "name": "api-node-boats",
+                "repo_slug": "boatsgroup/api-node-boats",
+                "remote_url": "https://github.com/boatsgroup/api-node-boats",
+                "has_remote": True,
+            },
+            "code": {"functions": 10, "classes": 2, "class_methods": 4},
+            "hostnames": [
+                {
+                    "hostname": "api-node-boats.qa.bgrp.io",
+                    "environment": "bg-qa",
+                    "visibility": "public",
+                }
+            ],
+            "platforms": [
+                {
+                    "id": "platform:eks:aws:cluster/bg-qa:bg-qa:none",
+                    "kind": "eks",
+                    "provider": "aws",
+                    "environment": "bg-qa",
+                    "name": "bg-qa",
+                }
+            ],
+            "observed_config_environments": ["bg-qa"],
+            "delivery_paths": [
+                {
+                    "path_kind": "gitops",
+                    "controller": "argocd",
+                    "delivery_mode": "eks_gitops",
+                    "deployment_sources": ["helm-charts"],
+                    "platform_kinds": ["eks"],
+                    "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+                    "environments": ["bg-qa"],
+                    "summary": (
+                        "ArgoCD drives a GitOps deployment path through "
+                        "helm-charts onto EKS platforms."
+                    ),
+                }
+            ],
+            "controller_driven_paths": [
+                {
+                    "controller_kind": "argocd",
+                    "automation_kind": "helm",
+                    "entry_points": [
+                        "argocd/api-node-boats/overlays/bg-qa/config.yaml"
+                    ],
+                    "target_descriptors": ["bg-qa", "api-node"],
+                    "runtime_family": "kubernetes",
+                    "supporting_repositories": ["helm-charts"],
+                    "confidence": "high",
+                }
+            ],
+            "limitations": [],
+        }
+    )
+
+    assert result["controller_overview"]["families"] == ["argocd"]
+    assert result["controller_overview"]["delivery_modes"] == ["eks_gitops"]
+    assert result["runtime_overview"] == {
+        "selected_environment": "bg-qa",
+        "observed_environments": ["bg-qa"],
+        "platform_kinds": ["eks"],
+        "platforms": [
+            {
+                "id": "platform:eks:aws:cluster/bg-qa:bg-qa:none",
+                "kind": "eks",
+                "provider": "aws",
+                "environment": "bg-qa",
+                "name": "bg-qa",
+            }
+        ],
+        "entrypoints": ["api-node-boats.qa.bgrp.io"],
+    }
