@@ -39,13 +39,13 @@ def test_get_version_returns_dev_when_distribution_is_missing():
 
 
 def test_get_version_adds_v_prefix_for_installed_distribution():
-    with patch.object(main, "pkg_version", return_value="0.0.46"):
-        assert main.get_version() == "v0.0.46"
+    with patch.object(main, "pkg_version", return_value="0.0.47"):
+        assert main.get_version() == "v0.0.47"
 
 
 def test_ensure_v_prefix_only_strips_existing_prefix_for_version_like_strings():
-    assert ensure_v_prefix("V0.0.46") == "v0.0.46"
-    assert ensure_v_prefix("Version 0.0.46") == "vVersion 0.0.46"
+    assert ensure_v_prefix("V0.0.47") == "v0.0.47"
+    assert ensure_v_prefix("Version 0.0.47") == "vVersion 0.0.47"
 
 
 def test_resolve_cli_command_uses_platform_context_graph_module():
