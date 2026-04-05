@@ -4,7 +4,7 @@ Your AI assistant sees one file at a time. It can read imports, guess at depende
 
 ## Setup
 
-If you want ready-to-use natural-language examples before wiring your client, start with [Starter Prompts](starter-prompts.md).
+If you want ready-to-use natural-language examples before wiring your client, start with [Starter Prompts](starter-prompts.md). For the strongest end-to-end answers, use the cross-repo prompt framing there: ask PCG to scan all related repositories, deployment sources, and indexed documentation before it explains a service or workload.
 
 Run the setup wizard to configure your MCP client:
 

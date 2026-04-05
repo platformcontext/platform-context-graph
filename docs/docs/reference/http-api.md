@@ -141,6 +141,11 @@ For documentation generation, use this HTTP flow:
 2. read `story_sections`, `deployment_overview`, `gitops_overview`, `documentation_overview`, and `support_overview`
 3. only then call content routes for exact file or snippet evidence
 
+For cross-repo documentation or support flows, phrase the caller intent the same
+way you would through MCP: tell PCG to scan all related repositories,
+deployment sources, and indexed documentation for the service or workload before asking
+for the final narrative.
+
 ## Code API
 
 Use these routes when you only need code relationships and do not need the full code-to-cloud graph.
