@@ -43,6 +43,7 @@ nav:
     - Local Testing: reference/local-testing.md
     - Baseline Performance: reference/baseline-performance.md
   - Guides:
+    - Starter Prompts: guides/starter-prompts.md
     - Connect an MCP Client: guides/mcp-guide.md
     - Explore Relationship Graphs: guides/relationship-graphs.md
     - Visualize Query Results: guides/visualization.md

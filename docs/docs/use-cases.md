@@ -82,9 +82,11 @@ All of these tools are available through MCP. Your AI assistant can call them di
 - "What differs between prod and staging?" → `compare_environments`
 
 See the [MCP Guide](guides/mcp-guide.md) for setup.
+See [Starter Prompts](guides/starter-prompts.md) for role-based prompt sets you can use right away.
 
 ## Next steps
 
 - [Why PCG](why-pcg.md) — the problem this solves and how PCG is different
 - [Quickstart](getting-started/quickstart.md) — index a repo and run your first query
+- [Starter Prompts](guides/starter-prompts.md) — role-based prompt examples and follow-up patterns
 - [MCP Cookbook](reference/mcp-cookbook.md) — detailed MCP query examples
