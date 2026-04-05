@@ -120,6 +120,51 @@ _WORKLOAD_STORY_EXAMPLE = {
         "key_artifacts": [],
         "limitations": ["support_artifacts_missing"],
     },
+    "deployment_fact_summary": {
+        "adapter": "cloudformation",
+        "mapping_mode": "iac",
+        "overall_confidence": "high",
+        "overall_confidence_reason": "explicit_iac_adapter",
+        "evidence_sources": ["delivery_path", "platform"],
+        "high_confidence_fact_types": [
+            "PROVISIONED_BY_IAC",
+            "RUNS_ON_PLATFORM",
+        ],
+        "medium_confidence_fact_types": [],
+        "fact_thresholds": {
+            "PROVISIONED_BY_IAC": "explicit_iac_adapter",
+            "RUNS_ON_PLATFORM": "explicit_platform_match",
+        },
+        "limitations": [],
+    },
+    "deployment_facts": [
+        {
+            "fact_type": "PROVISIONED_BY_IAC",
+            "adapter": "cloudformation",
+            "value": "cloudformation",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_eks",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "cloudformation",
+            "value": "eks",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "eks",
+                    "environment": "prod",
+                }
+            ],
+        },
+    ],
     "evidence": [],
     "limitations": [],
     "coverage": None,
@@ -288,6 +333,56 @@ _REPOSITORY_STORY_EXAMPLE = {
         ],
         "limitations": [],
     },
+    "deployment_fact_summary": {
+        "adapter": "github_actions",
+        "mapping_mode": "controller",
+        "overall_confidence": "medium",
+        "overall_confidence_reason": "controller_delivery_signal",
+        "evidence_sources": ["delivery_path"],
+        "high_confidence_fact_types": [],
+        "medium_confidence_fact_types": [
+            "MANAGED_BY_CONTROLLER",
+            "DEPLOYS_FROM",
+        ],
+        "fact_thresholds": {
+            "MANAGED_BY_CONTROLLER": "explicit_controller_signal",
+            "DEPLOYS_FROM": "named_deployment_source",
+        },
+        "limitations": [
+            "config_source_unknown",
+            "runtime_platform_unknown",
+            "environment_unknown",
+            "entrypoint_unknown",
+        ],
+    },
+    "deployment_facts": [
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": "github_actions",
+            "value": "github_actions",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "github_actions",
+                    "delivery_mode": "eks_gitops",
+                }
+            ],
+        },
+        {
+            "fact_type": "DEPLOYS_FROM",
+            "adapter": "github_actions",
+            "value": "helm-charts",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "github_actions",
+                    "delivery_mode": "eks_gitops",
+                }
+            ],
+        },
+    ],
     "code_overview": {
         "file_count": 42,
         "functions": 12,

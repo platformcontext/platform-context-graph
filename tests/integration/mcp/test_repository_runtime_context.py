@@ -26,6 +26,15 @@ def test_get_repo_story_tool_surfaces_story_contract() -> None:
                 }
             ],
             "deployment_overview": {"platforms": [{"kind": "eks"}]},
+            "deployment_fact_summary": {
+                "adapter": "flux",
+                "mapping_mode": "controller",
+                "overall_confidence": "high",
+                "evidence_sources": ["delivery_path", "platform"],
+                "high_confidence_fact_types": ["MANAGED_BY_CONTROLLER"],
+                "medium_confidence_fact_types": [],
+                "limitations": [],
+            },
             "evidence": [],
             "limitations": ["dns_unknown"],
             "coverage": {"completeness_state": "partial"},
@@ -37,6 +46,7 @@ def test_get_repo_story_tool_surfaces_story_contract() -> None:
     mock_story.assert_called_once_with(server.db_manager, repo_id="api-node-boats")
     assert result["subject"]["name"] == "api-node-boats"
     assert result["story_sections"][0]["id"] == "internet"
+    assert result["deployment_fact_summary"]["mapping_mode"] == "controller"
 
 
 def test_workload_and_service_story_tools_route_through_context_queries() -> None:
@@ -46,13 +56,34 @@ def test_workload_and_service_story_tools_route_through_context_queries() -> Non
     with (
         patch(
             "platform_context_graph.mcp.query_tools.context_queries.get_workload_story",
-            return_value={"subject": {"id": "workload:payments-api"}, "story": []},
+            return_value={
+                "subject": {"id": "workload:payments-api"},
+                "story": [],
+                "deployment_fact_summary": {
+                    "adapter": "cloudformation",
+                    "mapping_mode": "iac",
+                    "overall_confidence": "high",
+                    "evidence_sources": ["delivery_path"],
+                    "high_confidence_fact_types": ["PROVISIONED_BY_IAC"],
+                    "medium_confidence_fact_types": [],
+                    "limitations": [],
+                },
+            },
         ) as mock_workload_story,
         patch(
             "platform_context_graph.mcp.query_tools.context_queries.get_service_story",
             return_value={
                 "subject": {"id": "workload:payments-api"},
                 "story": [],
+                "deployment_fact_summary": {
+                    "adapter": "evidence_only",
+                    "mapping_mode": "evidence_only",
+                    "overall_confidence": "medium",
+                    "evidence_sources": ["delivery_path"],
+                    "high_confidence_fact_types": [],
+                    "medium_confidence_fact_types": ["DELIVERY_PATH_PRESENT"],
+                    "limitations": ["deployment_controller_unknown"],
+                },
                 "requested_as": "service",
             },
         ) as mock_service_story,
@@ -77,6 +108,8 @@ def test_workload_and_service_story_tools_route_through_context_queries() -> Non
         environment="prod",
     )
     assert workload_result["subject"]["id"] == "workload:payments-api"
+    assert workload_result["deployment_fact_summary"]["mapping_mode"] == "iac"
+    assert service_result["deployment_fact_summary"]["mapping_mode"] == "evidence_only"
     assert service_result["requested_as"] == "service"
 
 
