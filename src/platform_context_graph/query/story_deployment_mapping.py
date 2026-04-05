@@ -143,6 +143,12 @@ def build_deployment_facts(
     delivery_mode = ""
     if delivery_rows:
         delivery_mode = str(delivery_rows[0].get("delivery_mode") or "").strip()
+    inferred_packaging_kind = ""
+    if delivery_mode.startswith("flux_"):
+        if "helmrelease" in delivery_mode:
+            inferred_packaging_kind = "helm"
+        elif "kustomization" in delivery_mode:
+            inferred_packaging_kind = "kustomize"
     if adapter == "terraform":
         confidence = "high"
         facts.append(
@@ -155,7 +161,11 @@ def build_deployment_facts(
             }
         )
     else:
-        confidence = "high" if controller_evidence else "medium"
+        confidence = (
+            "high"
+            if controller_evidence is not None or inferred_packaging_kind
+            else "medium"
+        )
         facts.append(
             {
                 "fact_type": "MANAGED_BY_CONTROLLER",
@@ -172,6 +182,8 @@ def build_deployment_facts(
             automation_kind = "helm"
         elif "kubernetes" in delivery_mode:
             automation_kind = "kubernetes"
+    elif inferred_packaging_kind:
+        automation_kind = inferred_packaging_kind
     elif controller_rows:
         automation_kind = str(controller_rows[0].get("automation_kind") or "").strip()
     if automation_kind:

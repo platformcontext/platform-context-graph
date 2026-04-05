@@ -690,3 +690,95 @@ def test_workload_story_emits_terraform_iac_facts_without_controller_facts() -> 
             ],
         },
     ]
+
+
+def test_workload_story_emits_flux_controller_facts_from_delivery_mode() -> None:
+    """Verify Flux facts can be derived without controller-driven helper rows."""
+
+    result = build_workload_story_response(
+        {
+            "workload": {
+                "id": "workload:catalog-api",
+                "type": "workload",
+                "kind": "service",
+                "name": "catalog-api",
+            },
+            "delivery_paths": [
+                {
+                    "path_kind": "gitops",
+                    "controller": "flux",
+                    "delivery_mode": "flux_helmrelease",
+                    "deployment_sources": ["platform-services"],
+                    "config_sources": ["clusters-prod"],
+                    "platform_kinds": ["kubernetes"],
+                    "platforms": ["platform:kubernetes:aws:cluster/prod:prod:none"],
+                    "environments": ["prod"],
+                }
+            ],
+            "platforms": [
+                {
+                    "id": "platform:kubernetes:aws:cluster/prod:prod:none",
+                    "kind": "kubernetes",
+                    "provider": "aws",
+                    "environment": "prod",
+                    "name": "prod",
+                }
+            ],
+            "observed_config_environments": ["prod"],
+        }
+    )
+
+    assert result["deployment_facts"][:4] == [
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": "flux",
+            "value": "flux",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "flux",
+                    "delivery_mode": "flux_helmrelease",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "flux",
+            "value": "helm",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "flux",
+                    "delivery_mode": "flux_helmrelease",
+                }
+            ],
+        },
+        {
+            "fact_type": "DEPLOYS_FROM",
+            "adapter": "flux",
+            "value": "platform-services",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "flux",
+                    "delivery_mode": "flux_helmrelease",
+                }
+            ],
+        },
+        {
+            "fact_type": "DISCOVERS_CONFIG_IN",
+            "adapter": "flux",
+            "value": "clusters-prod",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "flux",
+                    "delivery_mode": "flux_helmrelease",
+                }
+            ],
+        },
+    ]
