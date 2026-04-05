@@ -1441,6 +1441,7 @@ def test_update_existing_repositories_refreshes_https_origin_with_fresh_token(
         raise AssertionError(f"unexpected command: {command}")
 
     monkeypatch.setattr(git_module.subprocess, "run", _run)
+    monkeypatch.setattr(git_module, "github_app_token", lambda: "fresh-token")
 
     updated, failed = git_module.update_existing_repositories(config, "fresh-token")
 
