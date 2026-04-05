@@ -140,19 +140,39 @@ def build_deployment_facts(
     managed_evidence = [
         item for item in [delivery_evidence, controller_evidence] if item is not None
     ]
-    confidence = "high" if controller_evidence else "medium"
-    facts.append(
-        {
-            "fact_type": "MANAGED_BY_CONTROLLER",
-            "adapter": adapter,
-            "value": adapter,
-            "confidence": confidence,
-            "evidence": managed_evidence,
-        }
-    )
+    delivery_mode = ""
+    if delivery_rows:
+        delivery_mode = str(delivery_rows[0].get("delivery_mode") or "").strip()
+    if adapter == "terraform":
+        confidence = "high"
+        facts.append(
+            {
+                "fact_type": "PROVISIONED_BY_IAC",
+                "adapter": adapter,
+                "value": adapter,
+                "confidence": confidence,
+                "evidence": [delivery_evidence] if delivery_evidence else [],
+            }
+        )
+    else:
+        confidence = "high" if controller_evidence else "medium"
+        facts.append(
+            {
+                "fact_type": "MANAGED_BY_CONTROLLER",
+                "adapter": adapter,
+                "value": adapter,
+                "confidence": confidence,
+                "evidence": managed_evidence,
+            }
+        )
 
     automation_kind = ""
-    if controller_rows:
+    if adapter == "terraform":
+        if "helm" in delivery_mode:
+            automation_kind = "helm"
+        elif "kubernetes" in delivery_mode:
+            automation_kind = "kubernetes"
+    elif controller_rows:
         automation_kind = str(controller_rows[0].get("automation_kind") or "").strip()
     if automation_kind:
         facts.append(
@@ -161,7 +181,11 @@ def build_deployment_facts(
                 "adapter": adapter,
                 "value": automation_kind,
                 "confidence": confidence,
-                "evidence": [controller_evidence],
+                "evidence": (
+                    [controller_evidence]
+                    if controller_evidence is not None
+                    else [delivery_evidence] if delivery_evidence is not None else []
+                ),
             }
         )
 
@@ -176,6 +200,23 @@ def build_deployment_facts(
         facts.append(
             {
                 "fact_type": "DEPLOYS_FROM",
+                "adapter": adapter,
+                "value": source,
+                "confidence": confidence,
+                "evidence": [delivery_evidence] if delivery_evidence else [],
+            }
+        )
+    config_sources = _unique_strings(
+        [
+            source
+            for row in delivery_rows
+            for source in list(row.get("config_sources") or [])
+        ]
+    )
+    for source in config_sources:
+        facts.append(
+            {
+                "fact_type": "DISCOVERS_CONFIG_IN",
                 "adapter": adapter,
                 "value": source,
                 "confidence": confidence,

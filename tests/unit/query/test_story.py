@@ -598,3 +598,95 @@ def test_repository_story_exposes_generic_controller_and_runtime_overviews() -> 
         ],
         "entrypoints": ["api-node-boats.qa.bgrp.io"],
     }
+
+
+def test_workload_story_emits_terraform_iac_facts_without_controller_facts() -> None:
+    """Verify Terraform provider evidence emits IAC facts, not controller facts."""
+
+    result = build_workload_story_response(
+        {
+            "workload": {
+                "id": "workload:payments-api",
+                "type": "workload",
+                "kind": "service",
+                "name": "payments-api",
+            },
+            "delivery_paths": [
+                {
+                    "path_kind": "direct",
+                    "controller": "terraform",
+                    "delivery_mode": "terraform_helm_provider",
+                    "deployment_sources": ["helm-charts"],
+                    "config_sources": ["infra-live"],
+                    "platform_kinds": ["eks"],
+                    "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+                    "environments": ["bg-qa"],
+                }
+            ],
+            "platforms": [
+                {
+                    "id": "platform:eks:aws:cluster/bg-qa:bg-qa:none",
+                    "kind": "eks",
+                    "provider": "aws",
+                    "environment": "bg-qa",
+                    "name": "bg-qa",
+                }
+            ],
+            "observed_config_environments": ["bg-qa"],
+        }
+    )
+
+    assert result["deployment_facts"][:4] == [
+        {
+            "fact_type": "PROVISIONED_BY_IAC",
+            "adapter": "terraform",
+            "value": "terraform",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "terraform",
+                    "delivery_mode": "terraform_helm_provider",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "terraform",
+            "value": "helm",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "terraform",
+                    "delivery_mode": "terraform_helm_provider",
+                }
+            ],
+        },
+        {
+            "fact_type": "DEPLOYS_FROM",
+            "adapter": "terraform",
+            "value": "helm-charts",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "terraform",
+                    "delivery_mode": "terraform_helm_provider",
+                }
+            ],
+        },
+        {
+            "fact_type": "DISCOVERS_CONFIG_IN",
+            "adapter": "terraform",
+            "value": "infra-live",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "terraform",
+                    "delivery_mode": "terraform_helm_provider",
+                }
+            ],
+        },
+    ]
