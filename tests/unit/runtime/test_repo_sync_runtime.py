@@ -1479,8 +1479,17 @@ def test_update_existing_repositories_refreshes_https_origin_with_fresh_token(
         calls.index(get_url_call) < calls.index(set_url_call) < calls.index(fetch_call)
     )
     fetch_env = envs_by_command[tuple(fetch_call)]
-    assert fetch_env["GIT_CONFIG_KEY_0"] == "http.https://github.com/.extraheader"
-    assert fetch_env["GIT_CONFIG_VALUE_0"].startswith("AUTHORIZATION: basic ")
+    config_count = int(fetch_env.get("GIT_CONFIG_COUNT", "0"))
+    extraheader = None
+    for index in range(config_count):
+        if (
+            fetch_env.get(f"GIT_CONFIG_KEY_{index}")
+            == "http.https://github.com/.extraheader"
+        ):
+            extraheader = fetch_env[f"GIT_CONFIG_VALUE_{index}"]
+            break
+    assert extraheader is not None
+    assert extraheader.startswith("AUTHORIZATION: basic ")
 
 
 def test_update_existing_repositories_skips_origin_refresh_without_token(
