@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+PACKAGING_AUTOMATION_KINDS = frozenset({"helm", "kubernetes", "kustomize"})
+
 
 def unique_strings(values: list[Any]) -> list[str]:
     """Return non-empty string values while preserving first-seen order."""
@@ -108,12 +110,37 @@ def infer_packaging_kind(*, adapter: str, delivery_mode: str) -> str:
             return "helm"
         if "kubernetes" in delivery_mode:
             return "kubernetes"
+    if adapter == "evidence_only":
+        if "helm" in delivery_mode:
+            return "helm"
+        if "kustom" in delivery_mode:
+            return "kustomize"
+        if "kubernetes" in delivery_mode or "manifest" in delivery_mode:
+            return "kubernetes"
     if delivery_mode.startswith("flux_"):
         if "helmrelease" in delivery_mode:
             return "helm"
         if "kustomization" in delivery_mode:
             return "kustomize"
     return ""
+
+
+def normalize_controller_packaging_kind(automation_kind: str) -> str:
+    """Return a packaging kind only for controller automation that packages artifacts."""
+
+    normalized = automation_kind.strip().lower()
+    if normalized in PACKAGING_AUTOMATION_KINDS:
+        return normalized
+    return ""
+
+
+def normalize_automation_layer(automation_kind: str) -> str:
+    """Return a controller automation layer that is not a packaging primitive."""
+
+    normalized = automation_kind.strip().lower()
+    if not normalized or normalized in PACKAGING_AUTOMATION_KINDS:
+        return ""
+    return normalized
 
 
 def mapping_confidence(

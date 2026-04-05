@@ -49,6 +49,7 @@ def test_build_deployment_overview_surfaces_deployment_fact_summary() -> None:
         "high_confidence_fact_types": ["RUNS_ON_PLATFORM"],
         "medium_confidence_fact_types": [
             "DELIVERY_PATH_PRESENT",
+            "USES_PACKAGING_LAYER",
             "DEPLOYS_FROM",
             "DISCOVERS_CONFIG_IN",
             "OBSERVED_IN_ENVIRONMENT",

@@ -10,6 +10,8 @@ from .story_deployment_mapping_support import delivery_evidence
 from .story_deployment_mapping_support import delivery_rows
 from .story_deployment_mapping_support import infer_packaging_kind
 from .story_deployment_mapping_support import mapping_confidence
+from .story_deployment_mapping_support import normalize_automation_layer
+from .story_deployment_mapping_support import normalize_controller_packaging_kind
 from .story_deployment_mapping_support import resolve_mapping_mode
 from .story_deployment_mapping_support import unique_strings
 
@@ -181,9 +183,9 @@ def build_deployment_facts(
     if inferred_packaging_kind:
         automation_kind = inferred_packaging_kind
     elif normalized_controller_rows:
-        automation_kind = str(
-            normalized_controller_rows[0].get("automation_kind") or ""
-        ).strip()
+        automation_kind = normalize_controller_packaging_kind(
+            str(normalized_controller_rows[0].get("automation_kind") or "")
+        )
     if automation_kind:
         facts.append(
             {
@@ -195,6 +197,23 @@ def build_deployment_facts(
                     [controller_signal]
                     if controller_signal is not None
                     else [delivery_signal] if delivery_signal is not None else []
+                ),
+            }
+        )
+    deployment_automation_kind = ""
+    if normalized_controller_rows:
+        deployment_automation_kind = normalize_automation_layer(
+            str(normalized_controller_rows[0].get("automation_kind") or "")
+        )
+    if deployment_automation_kind:
+        facts.append(
+            {
+                "fact_type": "USES_AUTOMATION_LAYER",
+                "adapter": adapter,
+                "value": deployment_automation_kind,
+                "confidence": confidence,
+                "evidence": (
+                    [controller_signal] if controller_signal is not None else []
                 ),
             }
         )
