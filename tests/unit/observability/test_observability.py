@@ -86,8 +86,8 @@ def test_package_version_returns_raw_semver_for_otel_resource() -> None:
     otel = importlib.import_module("platform_context_graph.observability.otel")
 
     with pytest.MonkeyPatch.context() as patch_ctx:
-        patch_ctx.setattr(otel, "pkg_version", lambda _name: "0.0.47")
-        assert otel.package_version() == "0.0.47"
+        patch_ctx.setattr(otel, "pkg_version", lambda _name: "1.2.3")
+        assert otel.package_version() == "1.2.3"
 
 
 def test_package_version_falls_back_to_zero_when_distribution_missing() -> None:
