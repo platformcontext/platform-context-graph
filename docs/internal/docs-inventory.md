@@ -105,6 +105,8 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | Path | Purpose | Status |
 | --- | --- | --- |
 | `docs/superpowers/specs/2026-03-19-query-model-api-design.md` | Query model and API design reference | active |
+| `docs/superpowers/specs/2026-04-05-gitops-support-story-design.md` | Design for GitOps, documentation, and support story orchestration | active |
+| `docs/superpowers/plans/2026-04-05-gitops-support-story-implementation.md` | Implementation plan for additive story orchestration and docs generation | active |
 
 ## Archive boundary
 

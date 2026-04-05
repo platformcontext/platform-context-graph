@@ -32,6 +32,7 @@ Use the CLI for local indexing workflows. Use the Helm runtime for deployment-ma
 - `local_path` is server-local metadata, not a portable client filesystem path.
 - file-bearing query results should be interpreted using `repo_id + relative_path`, not an absolute server path.
 - `repo_access` indicates whether the caller may need to ask the user for a local checkout path or clone decision.
+- documentation-oriented clients should resolve canonical graph identity first, then use `repo_id + relative_path` or `entity_id` for exact evidence reads.
 
 ## Context API
 
@@ -93,6 +94,9 @@ Story responses are shaped around:
 - `story`
 - `story_sections`
 - `deployment_overview` or `code_overview`
+- `gitops_overview`
+- `documentation_overview`
+- `support_overview`
 - `evidence`
 - `limitations`
 - `coverage`
@@ -130,6 +134,12 @@ Examples:
 Treat the story routes as the top-level contract for repo/service/workload
 narratives. Use the context routes, trace routes, and content routes named in
 `drilldowns` for follow-up evidence.
+
+For documentation generation, use this HTTP flow:
+
+1. call a story route first
+2. read `story_sections`, `deployment_overview`, `gitops_overview`, `documentation_overview`, and `support_overview`
+3. only then call content routes for exact file or snippet evidence
 
 ## Code API
 
@@ -188,6 +198,7 @@ Rules:
 - file and entity read responses include `source_backend` so callers can see whether the result came from `postgres`, `workspace`, `graph-cache`, or `unavailable`
 - content search routes require the PostgreSQL content store and return an error payload when it is disabled
 - content retrieval should not trigger `repo_access` prompting when the server already has the checkout
+- documentation and runbook workflows should expect exact evidence to come from PostgreSQL-backed reads or search when available
 
 Example file read:
 

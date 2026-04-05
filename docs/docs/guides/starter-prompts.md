@@ -51,6 +51,14 @@ flowchart TD
 - "Find all code involved in clone, fetch, default-branch resolution, and workspace locking."
 - "Explain the dependency path between the ingester runtime and GitHub App credentials."
 
+### Documentation and support
+
+- "Explain this service to a new engineer, then cite the repos, manifests, and files that matter most."
+- "Generate an architecture and deployment explainer for `platformcontextgraph` in `ops-qa`."
+- "Create a support runbook for `api-node-boats` in `prod`, including the fastest places to investigate request, auth, config, and deploy issues."
+- "Show me the source and docs evidence behind this explanation."
+- "Trace this service from ArgoCD values layers to rendered Kubernetes resources, then tell me which files I should read first."
+
 ## Prompt Patterns
 
 ### To understand code
@@ -76,6 +84,7 @@ Use:
 - "What infrastructure does `<workload>` depend on?"
 - "Trace `<resource>` back to code."
 - "Show me the repos and manifests that define `<service>` in `<env>`."
+- "Trace `<service>` from ArgoCD values to rendered Kubernetes resources in `<env>`."
 
 Best additions:
 
@@ -92,6 +101,21 @@ Use:
 - "What change surface is affected if I update `<resource>`?"
 - "Explain why `<repo A>` and `<repo B>` are connected."
 
+### To generate documentation
+
+Use:
+
+- "Explain `<service>` to a new engineer."
+- "Generate an architecture or deployment explainer for `<service>`."
+- "Create a support runbook for `<service>` in `<env>`."
+- "Show me the source and docs evidence behind this explanation."
+
+Best additions:
+
+- audience such as support, onboarding, service owner, or platform engineering
+- environment
+- whether you want exact files, manifests, docs, or runtime resources cited
+
 Best additions:
 
 - exact target you plan to change
@@ -104,6 +128,7 @@ Best additions:
 - Add the environment when the answer could differ between `prod`, `stage`, or `ops-qa`.
 - Use exact names when you have them. Exact repo, workload, and resource names usually produce better results than broad descriptions.
 - Ask for evidence when you want proof. Prompts like "show the repos, manifests, and resources involved" steer the answer toward traceable output.
+- For documentation prompts, let PCG tell the story first and ask for exact files second. That keeps the answer concise and portable.
 - Follow up in layers. Start with "trace the deployment chain," then ask "what repos define those resources?" and then "what breaks if I change this?"
 
 ## Good Follow-Ups

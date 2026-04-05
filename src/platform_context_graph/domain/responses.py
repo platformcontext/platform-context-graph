@@ -302,6 +302,9 @@ class StoryResponse(BaseModel):
     story: list[str] = Field(default_factory=list)
     story_sections: list[StorySection] = Field(default_factory=list)
     deployment_overview: dict[str, Any] | None = None
+    gitops_overview: dict[str, Any] | None = None
+    documentation_overview: dict[str, Any] | None = None
+    support_overview: dict[str, Any] | None = None
     code_overview: dict[str, Any] | None = None
     evidence: list[EvidenceItem] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)

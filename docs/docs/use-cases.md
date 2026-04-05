@@ -56,6 +56,12 @@ To understand a specific connection:
 
 `explain_dependency_path` shows why two entities are connected, with evidence for each hop. No tribal knowledge required.
 
+Story-first documentation now works the same way. Start with `get_service_story`,
+`get_workload_story`, or `get_repo_story`, read the high-level `story`, then use
+`gitops_overview`, `documentation_overview`, and `support_overview` to shape an
+onboarding doc, deployment explainer, or support guide. Only after that should a
+client call content routes for exact README, runbook, values, or manifest evidence.
+
 ## Comparing environments
 
 Staging is broken but prod works. What is different?

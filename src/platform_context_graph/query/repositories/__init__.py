@@ -21,6 +21,10 @@ from .content_enrichment import enrich_repository_context
 from .context_data import build_repository_context
 from .listing import list_repositories_rows
 from .stats_data import build_repository_stats
+from ..story_documentation import (
+    build_graph_context_evidence,
+    collect_documentation_evidence,
+)
 from ..story import build_repository_story_response
 
 __all__ = [
@@ -76,6 +80,30 @@ def get_repository_story(database: Any, *, repo_id: str) -> dict[str, Any]:
         context = get_repository_context(database, repo_id=repo_id)
         if "error" in context:
             return context
+        repository = dict(context.get("repository") or {})
+        repo_refs = [
+            repository,
+            *list(context.get("deploys_from") or []),
+            *list(context.get("discovers_config_in") or []),
+            *list(context.get("provisioned_by") or []),
+        ]
+        documentation_evidence = collect_documentation_evidence(
+            database,
+            repo_refs=repo_refs,
+            subject_names=[str(repository.get("name") or repo_id)],
+        )
+        documentation_evidence["graph_context"] = build_graph_context_evidence(
+            entrypoints=list(context.get("hostnames") or []),
+            delivery_paths=list(context.get("delivery_paths") or []),
+            deploys_from=list(context.get("deploys_from") or []),
+            dependencies=[
+                {"name": row.get("repository") or row.get("name")}
+                for row in list(context.get("consumer_repositories") or [])
+                if isinstance(row, dict)
+            ],
+            api_surface=dict(context.get("api_surface") or {}),
+        )
+        context["documentation_evidence"] = documentation_evidence
         return build_repository_story_response(context)
 
 
