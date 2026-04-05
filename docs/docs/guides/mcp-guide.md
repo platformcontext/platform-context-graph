@@ -85,6 +85,20 @@ For documentation-oriented answers, the orchestration order is:
 3. targeted Postgres file reads or content search
 4. exact file or line citations only when the story answer needs them
 
+The deployment-oriented story surfaces now expose three related layers:
+
+- `controller_overview` for controller-family evidence such as ArgoCD, Flux, Jenkins, or other automation controllers
+- `runtime_overview` for observed runtime/platform evidence such as EKS, Kubernetes, ECS, or Lambda
+- `deployment_facts` plus `deployment_fact_summary` for normalized evidence-backed mapping
+
+`deployment_fact_summary` is the quickest way to understand how PCG interpreted the evidence:
+
+- `mapping_mode=controller` means PCG found explicit controller evidence
+- `mapping_mode=iac` means PCG found infrastructure-as-code evidence such as Terraform or CloudFormation
+- `mapping_mode=evidence_only` means PCG found delivery/runtime evidence but no trustworthy controller or IAC adapter and intentionally did not guess
+
+That rule is important: PCG maps from indexed evidence, not deployment-tool assumptions. If a company uses ArgoCD, Flux, Terraform Helm provider, Terraform Kubernetes provider, CloudFormation stack sets, CloudFormation serverless patterns, or plain manifests with no controller at all, the story contract should reflect only what the parser actually found.
+
 The current story order is:
 
 1. public entrypoints
@@ -104,6 +118,21 @@ There is now a controller-driven automation tier between those two extremes. For
 4. `delivery_paths`
 5. `controller_driven_paths`
 6. detailed evidence fields
+
+When you need a stable contract instead of prose, prefer this order:
+
+1. `deployment_fact_summary`
+2. `deployment_facts`
+3. `controller_overview`
+4. `runtime_overview`
+5. lower-level deployment evidence fields
+
+That lets clients answer:
+
+- what type of deployment evidence was found
+- how confident the mapping is
+- which evidence sources were used
+- what is still missing or unknown
 
 For programming prompts, keep using the code-query tools directly:
 

@@ -21,9 +21,19 @@ from platform_context_graph.query.story_deployment_mapping import (
             "eks",
         ),
         (
+            "cloudformation_stackset",
+            "platform:eks:aws:cluster/prod-2:prod:us-east-1",
+            "eks",
+        ),
+        (
             "cloudformation_kubernetes",
             "platform:kubernetes:aws:cluster/shared:prod:us-east-1",
             "kubernetes",
+        ),
+        (
+            "cloudformation_serverless",
+            "platform:lambda:aws:region/us-east-1:prod:none",
+            "lambda",
         ),
     ],
 )
@@ -54,7 +64,15 @@ def test_build_deployment_facts_maps_cloudformation_kubernetes_variants_into_iac
                 "kind": platform_kind,
                 "provider": "aws",
                 "environment": "prod",
-                "name": "prod-1" if platform_kind == "eks" else "shared",
+                "name": (
+                    "prod-1"
+                    if delivery_mode == "cloudformation_eks"
+                    else "prod-2"
+                    if delivery_mode == "cloudformation_stackset"
+                    else "shared"
+                    if platform_kind == "kubernetes"
+                    else "us-east-1"
+                ),
             }
         ],
         entrypoints=[

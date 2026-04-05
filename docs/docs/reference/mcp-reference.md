@@ -60,6 +60,33 @@ Use these tools when the user is asking for a narrative answer such as
 | **`get_workload_context`** | Durable drill-down for workload details after the story answer. | "Show me the workload context behind that story." |
 | **`get_service_context`** | Service alias drill-down for service-shaped prompts. | "Show me the service context behind that story." |
 
+Story responses may now include deployment-mapping fields alongside the narrative:
+
+- `controller_overview`
+- `runtime_overview`
+- `deployment_facts`
+- `deployment_fact_summary`
+
+`deployment_facts` are normalized, evidence-backed facts such as:
+
+- `MANAGED_BY_CONTROLLER`
+- `PROVISIONED_BY_IAC`
+- `USES_PACKAGING_LAYER`
+- `DEPLOYS_FROM`
+- `DISCOVERS_CONFIG_IN`
+- `RUNS_ON_PLATFORM`
+- `OBSERVED_IN_ENVIRONMENT`
+- `EXPOSES_ENTRYPOINT`
+- `DELIVERY_PATH_PRESENT`
+
+`deployment_fact_summary` is the compact interpretation layer:
+
+- `mapping_mode=controller` means explicit controller evidence was found
+- `mapping_mode=iac` means explicit infrastructure-as-code evidence was found
+- `mapping_mode=evidence_only` means only delivery/runtime evidence was found, and PCG intentionally avoided guessing a controller family
+
+This keeps the contract portable across ArgoCD, Flux, Terraform, CloudFormation, plain Kubernetes manifests, ECS, Lambda, and environments that do not use a controller at all.
+
 ## Content Retrieval & Search
 
 Tools for portable source retrieval and indexed content search.
