@@ -288,7 +288,6 @@ def clone_missing_repositories_detailed_impl(
     cloned_paths: list[Path] = []
     skipped = 0
     failed = 0
-    env = git_env_fn(config, token)
     telemetry = get_observability()
 
     with telemetry.start_span(
@@ -302,6 +301,7 @@ def clone_missing_repositories_detailed_impl(
                 skipped += 1
                 continue
 
+            env = git_env_fn(config, token)
             remote_url = repo_remote_url_fn(config, repo_id, token)
             repo_path.parent.mkdir(parents=True, exist_ok=True)
             log(config.component, f"Cloning {repo_id}")
@@ -500,7 +500,6 @@ def update_existing_repositories_detailed_impl(
 
     updated_paths: list[Path] = []
     failed = 0
-    env = git_env_fn(config, token)
     retry_cache = load_default_branch_retry_cache(config)
     branchless_repos: list[str] = []
     now = time.time()
@@ -528,6 +527,7 @@ def update_existing_repositories_detailed_impl(
                     "pcg.repo.path": str(repo_dir),
                 },
             ):
+                env = git_env_fn(config, token)
                 refresh_repository_origin_url_fn(
                     repo_dir,
                     token,

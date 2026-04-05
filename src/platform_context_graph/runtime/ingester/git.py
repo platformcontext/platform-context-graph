@@ -115,6 +115,27 @@ def git_env(config: RepoSyncConfig, token: str | None = None) -> dict[str, str]:
     return env
 
 
+def _git_operation_env(config: RepoSyncConfig, token: str | None) -> dict[str, str]:
+    """Build per-operation Git subprocess auth state.
+
+    GitHub App tokens expire during long repo-sync cycles, so each clone or fetch
+    operation must resolve auth from the current cache state instead of reusing a
+    token captured at the start of the cycle.
+
+    Args:
+        config: Repo sync configuration.
+        token: Previously resolved token for non-refreshing auth modes.
+
+    Returns:
+        Git subprocess environment for the current operation.
+    """
+
+    operation_token = token
+    if config.git_auth_method == "githubApp":
+        operation_token = None
+    return git_env(config, operation_token)
+
+
 def list_repo_identifiers(config: RepoSyncConfig, token: str | None) -> list[str]:
     """Discover repository identifiers for the configured source mode.
 
@@ -358,7 +379,7 @@ def clone_missing_repositories_detailed(
         list_repo_identifiers_fn=list_repo_identifiers,
         repo_checkout_name_fn=repo_checkout_name,
         repo_remote_url_fn=repo_remote_url,
-        git_env_fn=git_env,
+        git_env_fn=_git_operation_env,
         subprocess_run_fn=subprocess.run,
     )
 
@@ -417,7 +438,7 @@ def update_existing_repositories_detailed(
         config,
         token,
         force_default_branch_refresh=force_default_branch_refresh,
-        git_env_fn=git_env,
+        git_env_fn=_git_operation_env,
         refresh_repository_origin_url_fn=_refresh_repository_origin_url,
         subprocess_run_fn=subprocess.run,
     )
