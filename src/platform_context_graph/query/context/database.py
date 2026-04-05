@@ -8,8 +8,11 @@ from ..repositories import _repository_projection
 from .database_support import (
     dedupe_dict_rows,
     dedupe_entity_refs,
+    find_instance_for_environment,
     instances_from_platform_rows,
+    instances_from_environment_names,
     instances_from_resource_rows,
+    normalize_environment_name,
     portable_repository_ref,
     repository_dependencies_from_context,
     repository_entrypoints_from_context,
@@ -93,21 +96,34 @@ def _merge_repository_context_into_workload_response(
         workload_kind=workload_kind,
         platform_rows=list(repo_context.get("platforms") or []),
     )
+    config_instances = instances_from_environment_names(
+        workload_id=workload_id,
+        workload_name=workload_name,
+        workload_kind=workload_kind,
+        environment_names=[
+            *[
+                str(value).strip()
+                for value in repo_context.get("environments") or []
+                if str(value).strip()
+            ],
+            *[
+                str(value).strip()
+                for value in repo_context.get("observed_config_environments") or []
+                if str(value).strip()
+            ],
+        ],
+    )
     if effective_environment is not None and response.get("instance") is None:
-        response["instance"] = next(
-            (
-                instance
-                for instance in derived_instances
-                if instance.get("environment") == effective_environment
-            ),
-            None,
+        response["instance"] = find_instance_for_environment(
+            derived_instances + config_instances,
+            effective_environment,
         )
         if response.get("instance") is not None:
             response["instances"] = []
     if response.get("instance") is None:
         existing_instances = list(response.get("instances") or [])
         response["instances"] = dedupe_entity_refs(
-            existing_instances + derived_instances
+            existing_instances + derived_instances + config_instances
         )
     return response
 
@@ -235,13 +251,9 @@ def db_workload_context(
         instances = list(graph_instances)
         selected_instance = None
         if effective_environment is not None:
-            selected_instance = next(
-                (
-                    instance
-                    for instance in instances
-                    if instance.get("environment") == effective_environment
-                ),
-                None,
+            selected_instance = find_instance_for_environment(
+                instances,
+                effective_environment,
             )
 
         response = {
@@ -285,19 +297,24 @@ def db_workload_context(
                 resource_rows=[record_to_dict(row) for row in resource_rows],
             )
             if effective_environment is not None:
-                response["instance"] = next(
-                    (
-                        instance
-                        for instance in resource_instances
-                        if instance.get("environment") == effective_environment
-                    ),
-                    None,
+                response["instance"] = find_instance_for_environment(
+                    resource_instances,
+                    effective_environment,
                 )
                 if response.get("instance") is not None:
                     response["instances"] = []
             if response.get("instance") is None:
                 response["instances"] = resource_instances
-        if effective_environment is not None and response.get("instance") is None:
+        if (
+            effective_environment is not None
+            and response.get("instance") is None
+            and normalize_environment_name(effective_environment)
+            not in {
+                normalize_environment_name(value)
+                for value in list(response.get("observed_config_environments") or [])
+                + list(response.get("environments") or [])
+            }
+        ):
             return {
                 "error": (
                     f"Workload '{workload_dict['id']}' has no instance for "
@@ -337,15 +354,14 @@ def db_workload_context(
     ]
     selected_instance = None
     if effective_environment is not None:
-        selected_instance = canonical_ref(
-            {
-                "id": f"workload-instance:{workload_name}:{effective_environment}",
-                "type": "workload_instance",
-                "kind": workload_kind,
-                "name": workload_name,
-                "environment": effective_environment,
-                "workload_id": f"workload:{workload_name}",
-            }
+        selected_instance = find_instance_for_environment(
+            instances_from_environment_names(
+                workload_id=f"workload:{workload_name}",
+                workload_name=workload_name,
+                workload_kind=workload_kind,
+                environment_names=[effective_environment],
+            ),
+            effective_environment,
         )
 
     response: dict[str, Any] = {
@@ -357,6 +373,16 @@ def db_workload_context(
         "entrypoints": [],
         "evidence": [],
     }
+    if repo_dict is not None:
+        response = _merge_repository_context_into_workload_response(
+            database,
+            repo_id=str(repo_dict["id"]),
+            workload_id=str(workload_ref["id"]),
+            workload_name=workload_name,
+            workload_kind=workload_kind,
+            response=response,
+            effective_environment=effective_environment,
+        )
     if selected_instance is not None:
         response["instance"] = selected_instance
     else:

@@ -42,6 +42,19 @@ def dedupe_entity_refs(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return deduped
 
 
+def normalize_environment_name(value: str | None) -> str:
+    """Return a normalized environment token for comparisons.
+
+    Args:
+        value: Raw environment name.
+
+    Returns:
+        Lower-cased, trimmed environment token.
+    """
+
+    return str(value or "").strip().lower()
+
+
 def dedupe_dict_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return dict rows deduped by stable stringified content."""
 
@@ -76,6 +89,33 @@ def make_workload_instance_ref(
             "environment": environment,
             "workload_id": workload_id,
         }
+    )
+
+
+def find_instance_for_environment(
+    instances: list[dict[str, Any]], environment: str | None
+) -> dict[str, Any] | None:
+    """Return the first instance whose environment matches the requested value.
+
+    Args:
+        instances: Candidate workload-instance refs.
+        environment: Requested environment name.
+
+    Returns:
+        Matching workload-instance ref when found.
+    """
+
+    normalized_environment = normalize_environment_name(environment)
+    if not normalized_environment:
+        return None
+    return next(
+        (
+            instance
+            for instance in instances
+            if normalize_environment_name(str(instance.get("environment") or ""))
+            == normalized_environment
+        ),
+        None,
     )
 
 
@@ -128,6 +168,38 @@ def instances_from_platform_rows(
                 environment=environment,
             )
         )
+    return dedupe_entity_refs(instances)
+
+
+def instances_from_environment_names(
+    *,
+    workload_id: str,
+    workload_name: str,
+    workload_kind: str,
+    environment_names: list[str],
+) -> list[dict[str, Any]]:
+    """Derive workload instances from known environment-name hints.
+
+    Args:
+        workload_id: Canonical workload identifier.
+        workload_name: Human-readable workload name.
+        workload_kind: Workload kind such as ``service``.
+        environment_names: Runtime or config-scoped environment hints.
+
+    Returns:
+        Canonical workload-instance refs for the provided environments.
+    """
+
+    instances = [
+        make_workload_instance_ref(
+            workload_id=workload_id,
+            workload_name=workload_name,
+            workload_kind=workload_kind,
+            environment=str(environment).strip(),
+        )
+        for environment in environment_names
+        if str(environment).strip()
+    ]
     return dedupe_entity_refs(instances)
 
 

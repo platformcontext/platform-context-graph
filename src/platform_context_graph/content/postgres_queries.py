@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from ..observability import trace_query
-from ..parsers.languages.templated_detection import infer_content_metadata
+from .postgres_query_support import (
+    infer_content_metadata,
+    matches_metadata_filters,
+    resolve_entity_row_metadata,
+    resolve_row_metadata,
+)
 from .postgres_support import append_array_filter, snippet_for_match
 
 __all__ = [
@@ -15,6 +19,7 @@ __all__ = [
     "get_file_content",
     "search_entity_content",
     "search_file_content",
+    "infer_content_metadata",
 ]
 
 _SEARCH_PAGE_SIZE = 500
@@ -76,93 +81,6 @@ def get_file_contents_batch(
     }
 
 
-def _resolve_row_metadata(
-    *, relative_path: str, content: str, row: dict[str, Any]
-) -> dict[str, Any]:
-    """Resolve metadata values, inferring them when legacy rows are still null."""
-
-    if not any(
-        row.get(key) is None
-        for key in ("artifact_type", "template_dialect", "iac_relevant")
-    ):
-        return {
-            "artifact_type": row["artifact_type"],
-            "template_dialect": row["template_dialect"],
-            "iac_relevant": row["iac_relevant"],
-        }
-    inferred = infer_content_metadata(
-        relative_path=Path(relative_path), content=content
-    )
-    return {
-        "artifact_type": (
-            row["artifact_type"]
-            if row.get("artifact_type") is not None
-            else inferred.artifact_type
-        ),
-        "template_dialect": (
-            row["template_dialect"]
-            if row.get("template_dialect") is not None
-            else inferred.template_dialect
-        ),
-        "iac_relevant": (
-            row["iac_relevant"]
-            if row.get("iac_relevant") is not None
-            else inferred.iac_relevant
-        ),
-    }
-
-
-def _resolve_entity_row_metadata(row: dict[str, Any]) -> dict[str, Any]:
-    """Resolve entity metadata, inheriting from the containing file when available."""
-
-    file_row = {
-        "artifact_type": row.get("file_artifact_type"),
-        "template_dialect": row.get("file_template_dialect"),
-        "iac_relevant": row.get("file_iac_relevant"),
-    }
-    file_content = row.get("file_content") or row["source_cache"]
-    file_metadata = _resolve_row_metadata(
-        relative_path=row["relative_path"],
-        content=file_content,
-        row=file_row,
-    )
-    return {
-        "artifact_type": (
-            row["artifact_type"]
-            if row.get("artifact_type") is not None
-            else file_metadata["artifact_type"]
-        ),
-        "template_dialect": (
-            row["template_dialect"]
-            if row.get("template_dialect") is not None
-            else file_metadata["template_dialect"]
-        ),
-        "iac_relevant": (
-            row["iac_relevant"]
-            if row.get("iac_relevant") is not None
-            else file_metadata["iac_relevant"]
-        ),
-    }
-
-
-def _matches_metadata_filters(
-    *,
-    metadata: dict[str, Any],
-    artifact_types: list[str] | None,
-    template_dialects: list[str] | None,
-    iac_relevant: bool | None,
-) -> bool:
-    """Return whether resolved metadata satisfies the requested filters."""
-
-    if artifact_types and metadata["artifact_type"] not in artifact_types:
-        return False
-    if template_dialects and metadata["template_dialect"] not in template_dialects:
-        return False
-    if iac_relevant is not None and metadata["iac_relevant"] is not iac_relevant:
-        return False
-    return True
-
-
 def get_file_content(
     provider: Any, *, repo_id: str, relative_path: str
 ) -> dict[str, Any] | None:
@@ -199,7 +117,7 @@ def get_file_content(
             row = cursor.fetchone()
     if row is None:
         return None
-    metadata = _resolve_row_metadata(
+    metadata = resolve_row_metadata(
         relative_path=row["relative_path"],
         content=row["content"],
         row=row,
@@ -259,7 +177,7 @@ def get_entity_content(provider: Any, *, entity_id: str) -> dict[str, Any] | Non
             row = cursor.fetchone()
     if row is None:
         return None
-    metadata = _resolve_entity_row_metadata(row)
+    metadata = resolve_entity_row_metadata(row)
     return {
         "available": True,
         "entity_id": row["entity_id"],
@@ -345,12 +263,12 @@ def search_file_content(
                     break
                 scanned_rows += len(rows)
                 for row in rows:
-                    metadata = _resolve_row_metadata(
+                    metadata = resolve_row_metadata(
                         relative_path=row["relative_path"],
                         content=row["content"],
                         row=row,
                     )
-                    if not _matches_metadata_filters(
+                    if not matches_metadata_filters(
                         metadata=metadata,
                         artifact_types=artifact_types,
                         template_dialects=template_dialects,
@@ -461,8 +379,8 @@ def search_entity_content(
                     break
                 scanned_rows += len(rows)
                 for row in rows:
-                    metadata = _resolve_entity_row_metadata(row)
-                    if not _matches_metadata_filters(
+                    metadata = resolve_entity_row_metadata(row)
+                    if not matches_metadata_filters(
                         metadata=metadata,
                         artifact_types=artifact_types,
                         template_dialects=template_dialects,

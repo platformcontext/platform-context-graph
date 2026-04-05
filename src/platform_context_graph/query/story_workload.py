@@ -11,21 +11,14 @@ from .story_documentation import (
 from .story_gitops import build_gitops_overview, summarize_gitops_overview
 from .story_shared import human_list, portable_story_value, story_section
 from .story_support import build_support_overview, summarize_support_overview
-
-
-def _entrypoint_labels(entrypoints: list[dict[str, Any]]) -> list[str]:
-    """Return human-friendly labels for workload entrypoints."""
-
-    labels: list[str] = []
-    for row in entrypoints:
-        if not isinstance(row, dict):
-            continue
-        label = (
-            row.get("hostname") or row.get("path") or row.get("url") or row.get("name")
-        )
-        if isinstance(label, str) and label:
-            labels.append(label)
-    return labels
+from .story_workload_support import (
+    api_surface_entrypoints,
+    build_workload_deployment_overview,
+    entrypoint_labels as build_entrypoint_labels,
+    public_entrypoint_labels as build_public_entrypoint_labels,
+    rank_entrypoints,
+    selected_environment_for_story,
+)
 
 
 def build_workload_story_response(
@@ -43,7 +36,19 @@ def build_workload_story_response(
     cloud_resources = list(context.get("cloud_resources") or [])
     shared_resources = list(context.get("shared_resources") or [])
     dependencies = list(context.get("dependencies") or [])
-    entrypoints = list(context.get("entrypoints") or [])
+    api_surface = dict(context.get("api_surface") or {})
+    selected_environment = selected_environment_for_story(
+        selected_instance=selected_instance,
+        context=context,
+        entrypoints=list(context.get("entrypoints") or []),
+    )
+    entrypoints = rank_entrypoints(
+        [
+            *list(context.get("entrypoints") or []),
+            *api_surface_entrypoints(api_surface),
+        ],
+        selected_environment=selected_environment,
+    )
     evidence = list(context.get("evidence") or [])
     requested_as = context.get("requested_as")
 
@@ -61,9 +66,14 @@ def build_workload_story_response(
         story.append(
             f"Owned by repositories {human_list([str(row.get('name') or '') for row in repositories if isinstance(row, dict)])}."
         )
-    entrypoint_labels = _entrypoint_labels(entrypoints)
-    if entrypoint_labels:
-        story.append(f"Public entrypoints: {human_list(entrypoint_labels, limit=5)}.")
+    entrypoint_labels = build_entrypoint_labels(entrypoints)
+    public_entrypoint_labels = build_public_entrypoint_labels(entrypoints)
+    if public_entrypoint_labels:
+        story.append(
+            f"Public entrypoints: {human_list(public_entrypoint_labels, limit=5)}."
+        )
+    elif entrypoint_labels:
+        story.append(f"Known entrypoints: {human_list(entrypoint_labels, limit=5)}.")
     if cloud_resources:
         story.append(
             f"Depends on cloud resources {human_list([str(row.get('name') or '') for row in cloud_resources if isinstance(row, dict)])}."
@@ -78,6 +88,43 @@ def build_workload_story_response(
         )
     if not story:
         story.append(f"{subject['name']} is available for context lookup.")
+
+    drilldowns = {
+        "workload_context": {"workload_id": subject["id"]},
+    }
+    if subject.get("kind") == "service" or requested_as == "service":
+        drilldowns["service_context"] = {"workload_id": subject["id"]}
+
+    gitops_overview = build_gitops_overview(
+        deploys_from=list(context.get("deploys_from") or []),
+        discovers_config_in=list(context.get("discovers_config_in") or []),
+        provisioned_by=list(context.get("provisioned_by") or []),
+        delivery_paths=list(context.get("delivery_paths") or []),
+        controller_driven_paths=list(context.get("controller_driven_paths") or []),
+        deployment_artifacts=dict(context.get("deployment_artifacts") or {}),
+        environments=list(context.get("environments") or []),
+        observed_config_environments=list(
+            context.get("observed_config_environments") or []
+        ),
+        selected_environment=selected_environment or None,
+    )
+    if gitops_overview is not None:
+        story.append(summarize_gitops_overview(gitops_overview))
+    deployment_overview = build_workload_deployment_overview(
+        context=context,
+        selected_instance=(
+            selected_instance if isinstance(selected_instance, dict) else None
+        ),
+        instances=instances,
+        repositories=repositories,
+        entrypoints=entrypoints,
+        api_surface=api_surface,
+        cloud_resources=cloud_resources,
+        shared_resources=shared_resources,
+        dependencies=dependencies,
+        evidence=evidence,
+        requested_as=requested_as,
+    )
 
     story_sections: list[dict[str, Any]] = []
     if selected_instance or instances:
@@ -94,12 +141,24 @@ def build_workload_story_response(
                 items=[selected_instance] if selected_instance else instances,
             )
         )
-    if entrypoint_labels:
+    if public_entrypoint_labels:
         story_sections.append(
             story_section(
                 "internet",
                 "Internet",
-                f"Public entrypoints include {human_list(entrypoint_labels, limit=5)}.",
+                (
+                    f"Public entrypoints include "
+                    f"{human_list(public_entrypoint_labels, limit=5)}."
+                ),
+                items=entrypoints,
+            )
+        )
+    elif entrypoint_labels:
+        story_sections.append(
+            story_section(
+                "internet",
+                "Internet",
+                f"Known entrypoints include {human_list(entrypoint_labels, limit=5)}.",
                 items=entrypoints,
             )
         )
@@ -139,40 +198,19 @@ def build_workload_story_response(
                 items=dependencies,
             )
         )
-
-    deployment_overview = {
-        "instances": [selected_instance] if selected_instance else instances,
-        "repositories": repositories,
-        "entrypoints": entrypoints,
-        "cloud_resources": cloud_resources,
-        "shared_resources": shared_resources,
-        "dependencies": dependencies,
-        "evidence": evidence,
-        **({"requested_as": requested_as} if requested_as else {}),
-    }
-
-    drilldowns = {
-        "workload_context": {"workload_id": subject["id"]},
-    }
-    if subject.get("kind") == "service" or requested_as == "service":
-        drilldowns["service_context"] = {"workload_id": subject["id"]}
-
-    selected_environment = None
-    if isinstance(selected_instance, dict):
-        selected_environment = str(selected_instance.get("environment") or "").strip()
-    gitops_overview = build_gitops_overview(
-        deploys_from=list(context.get("deploys_from") or []),
-        discovers_config_in=list(context.get("discovers_config_in") or []),
-        provisioned_by=list(context.get("provisioned_by") or []),
-        delivery_paths=list(context.get("delivery_paths") or []),
-        controller_driven_paths=list(context.get("controller_driven_paths") or []),
-        deployment_artifacts=dict(context.get("deployment_artifacts") or {}),
-        environments=list(context.get("environments") or []),
-        observed_config_environments=list(
-            context.get("observed_config_environments") or []
-        ),
-        selected_environment=selected_environment or None,
+    deployment_summary = (
+        summarize_gitops_overview(gitops_overview) if gitops_overview else ""
     )
+    if deployment_summary:
+        story_sections.append(
+            story_section(
+                "deployment",
+                "Deployment",
+                deployment_summary,
+                items=list(deployment_overview.get("delivery_paths") or [])
+                or list(gitops_overview.get("value_layers") or []),
+            )
+        )
     documentation_overview = build_documentation_overview(
         subject_name=str(subject["name"]),
         subject_type=str(subject.get("type") or "workload"),

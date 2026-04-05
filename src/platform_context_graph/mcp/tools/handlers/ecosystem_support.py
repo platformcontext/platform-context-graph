@@ -408,7 +408,8 @@ def trace_deployment_chain(
         entrypoints=list(result.get("hostnames") or []),
         cloud_resources=[],
         shared_resources=[],
-        dependencies=list(result.get("consumer_repositories") or []),
+        dependencies=[],
+        consumer_repositories=list(result.get("consumer_repositories") or []),
         gitops_overview=result.get("gitops_overview"),
         documentation_overview=result.get("documentation_overview"),
     )

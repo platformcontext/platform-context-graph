@@ -8,7 +8,10 @@ from platform_context_graph.query.repositories import (
     get_repository_context,
     get_repository_stats,
 )
-from platform_context_graph.query.repositories.common import resolve_repository
+from platform_context_graph.query.repositories.common import (
+    canonical_repository_ref,
+    resolve_repository,
+)
 from platform_context_graph.query.repositories.context_data import (
     _fetch_infrastructure,
     build_repository_context,
@@ -79,6 +82,26 @@ class FinderLike:
         self.db_manager = db_manager
 
 
+def test_canonical_repository_ref_preserves_stored_graph_id() -> None:
+    """Public repository refs should preserve stored graph IDs when they exist."""
+
+    repo_ref = canonical_repository_ref(
+        {
+            "id": "repository:r_graph1234",
+            "name": "api-node-boats",
+            "path": "/repos/api-node-boats",
+            "local_path": "/repos/api-node-boats",
+            "remote_url": "https://github.com/platformcontext/api-node-boats",
+            "repo_slug": "platformcontext/api-node-boats",
+            "has_remote": True,
+        }
+    )
+
+    assert repo_ref["id"] == "repository:r_graph1234"
+    assert repo_ref["repo_slug"] == "platformcontext/api-node-boats"
+    assert repo_ref["remote_url"] == "https://github.com/platformcontext/api-node-boats"
+
+
 def test_repository_graph_counts_excludes_class_methods_from_top_level_count() -> None:
     """Top-level function counts must exclude functions also contained by classes."""
 
@@ -128,14 +151,9 @@ def test_repository_graph_counts_excludes_class_methods_from_top_level_count() -
     assert "WITH r" not in count_query
     assert "NOT EXISTS {" in count_query
     assert "(:Class)-[:CONTAINS]->(counted)" in count_query
-    assert (
-        "coalesce(r[$local_path_key], r.path) = $repo_path" in count_query
-    )
+    assert "coalesce(r[$local_path_key], r.path) = $repo_path" in count_query
     assert "[:REPO_CONTAINS]->(counted:File)" in count_query
-    assert (
-        "[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(counted:Function)"
-        in count_query
-    )
+    assert "[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(counted:Function)" in count_query
     assert "[:IMPORTS]->(module:Module)" not in count_query
     assert "type(rel) = $imports_rel_type" in count_query
 

@@ -17,6 +17,17 @@ __all__ = [
 ]
 
 
+def _resolve_repo_identifier_with_session(session: Any, repo_id: str) -> str:
+    """Return a canonical repository ID using one existing database session."""
+
+    if repo_id.startswith("repository:"):
+        return repo_id
+    repo = resolve_repository(session, repo_id)
+    if repo is None:
+        return repo_id
+    return str(repo.get("id") or repo_id)
+
+
 def _resolve_repo_identifier(database: Any, repo_id: str) -> str:
     """Return a canonical repository ID when the caller passed a repo name."""
 
@@ -28,10 +39,45 @@ def _resolve_repo_identifier(database: Any, repo_id: str) -> str:
         return repo_id
 
     with db_manager.get_driver().session() as session:
-        repo = resolve_repository(session, repo_id)
-    if repo is None:
-        return repo_id
-    return str(repo.get("id") or repo_id)
+        return _resolve_repo_identifier_with_session(session, repo_id)
+
+
+def _resolve_repo_identifiers(
+    database: Any, repo_ids: list[str] | None
+) -> list[str] | None:
+    """Return canonical repository IDs for optional repo-filter lists.
+
+    Args:
+        database: Query-layer database dependency.
+        repo_ids: Optional repository identifiers supplied by the caller.
+
+    Returns:
+        Canonicalized repository identifiers, or ``None`` when no filters were
+        provided.
+    """
+
+    if repo_ids is None:
+        return None
+    normalized_repo_ids = [
+        str(repo_id).strip() for repo_id in repo_ids if str(repo_id).strip()
+    ]
+    if not normalized_repo_ids:
+        return []
+
+    db_manager = get_db_manager(database)
+    if not callable(getattr(db_manager, "get_driver", None)):
+        return normalized_repo_ids
+
+    resolved_by_input: dict[str, str] = {}
+    with db_manager.get_driver().session() as session:
+        for repo_id in normalized_repo_ids:
+            if repo_id in resolved_by_input:
+                continue
+            resolved_by_input[repo_id] = _resolve_repo_identifier_with_session(
+                session,
+                repo_id,
+            )
+    return [resolved_by_input[repo_id] for repo_id in normalized_repo_ids]
 
 
 def get_file_content(
@@ -125,7 +171,7 @@ def search_file_content(
     with trace_query("content_file_search"):
         return get_content_service(database).search_file_content(
             pattern=pattern,
-            repo_ids=repo_ids,
+            repo_ids=_resolve_repo_identifiers(database, repo_ids),
             languages=languages,
             artifact_types=artifact_types,
             template_dialects=template_dialects,
@@ -161,7 +207,7 @@ def search_entity_content(
         return get_content_service(database).search_entity_content(
             pattern=pattern,
             entity_types=entity_types,
-            repo_ids=repo_ids,
+            repo_ids=_resolve_repo_identifiers(database, repo_ids),
             languages=languages,
             artifact_types=artifact_types,
             template_dialects=template_dialects,
