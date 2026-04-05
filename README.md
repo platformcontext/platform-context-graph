@@ -52,6 +52,8 @@ Core strengths:
 - facts-first indexing for durability, recovery, and operator visibility
 - direct code-to-cloud tracing, blast radius, and environment comparison
 
+Starter examples are collected in [Starter Prompts](docs/docs/guides/starter-prompts.md).
+
 PCG exposes the same graph through:
 
 - a local CLI for indexing and analysis
@@ -194,6 +196,9 @@ Examples:
 - "What breaks if I change this Terraform module?"
 - "How does prod differ from staging for this workload?"
 
+Role-based prompt sets and follow-up patterns live in
+[Starter Prompts](docs/docs/guides/starter-prompts.md).
+
 ## Quick Navigation
 
 - CLI: local indexing, search, and graph-backed analysis
@@ -209,6 +214,8 @@ Start with the path that matches what you are doing:
   [Quickstart](docs/docs/getting-started/quickstart.md)
 - AI tooling:
   [MCP Guide](docs/docs/guides/mcp-guide.md)
+- Prompt cookbook:
+  [Starter Prompts](docs/docs/guides/starter-prompts.md)
 - Deployment:
   [Deployment Overview](docs/docs/deployment/overview.md)
 - Operations:

@@ -2,6 +2,8 @@
 
 Practical examples of MCP tool usage. Each entry shows the natural-language question, the tool to use, and the JSON arguments.
 
+If you want shorter, role-based prompts before you drop into tool names and JSON payloads, start with [Starter Prompts](../guides/starter-prompts.md).
+
 ## Contents
 
 - [Finding code](#finding-code)

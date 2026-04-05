@@ -8,6 +8,7 @@ questions, trace infrastructure back to source, inspect shared dependencies, and
 run AI tooling against real system context instead of partial local state.
 
 [Quickstart](getting-started/quickstart.md){ .md-button .md-button--primary }
+[Starter Prompts](guides/starter-prompts.md){ .md-button }
 [Deployment Overview](deployment/overview.md){ .md-button }
 [MCP Guide](guides/mcp-guide.md){ .md-button }
 [HTTP API](reference/http-api.md){ .md-button }
@@ -29,6 +30,9 @@ Examples:
 - "Which workloads share this database?"
 - "Trace this resource back to the code that defines it."
 
+For role-based examples and better follow-up patterns, start with
+[Starter Prompts](guides/starter-prompts.md).
+
 ## Get Started
 
 ## Choose Your Path
@@ -47,6 +51,7 @@ immediately.
 Use MCP when you want an assistant to ask graph-backed questions over your code
 and infrastructure.
 
+- [Starter Prompts](guides/starter-prompts.md)
 - [MCP Guide](guides/mcp-guide.md)
 - [MCP Reference](reference/mcp-reference.md)
 - [MCP Cookbook](reference/mcp-cookbook.md)
@@ -85,6 +90,21 @@ flowchart LR
   F --> H["Postgres content store"]
   I["CLI / MCP / HTTP API"] --> G
   I --> H
+```
+
+## Prompt Flow
+
+```mermaid
+flowchart TD
+  A["Pick A Goal"] --> B["Understand Code"]
+  A --> C["Trace A Deployment"]
+  A --> D["Assess Change Risk"]
+  B --> E["Name the symbol or repo"]
+  C --> F["Name the service or environment"]
+  D --> G["Name the thing you plan to change"]
+  E --> H["Ask for callers, implementations, or context"]
+  F --> I["Ask for chains, resources, or owners"]
+  G --> J["Ask for blast radius, change surface, or dependency path"]
 ```
 
 ## What PCG Does Well

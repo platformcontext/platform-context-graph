@@ -30,6 +30,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/guides/neo4j-setup.md` | Neo4j setup | active |
 | `docs/docs/guides/relationship-graphs.md` | Public relationship graph examples and capability showcase | active |
 | `docs/docs/guides/shared-infra-trace.md` | Shared infra tracing walkthrough | active |
+| `docs/docs/guides/starter-prompts.md` | Role-based prompt cookbook for engineers using MCP, API, and graph-aware assistants | active |
 | `docs/docs/guides/terraform-providers/index.md` | Terraform provider guide index | active |
 | `docs/docs/guides/terraform-providers/adding-providers.md` | Adding Terraform providers guide | active |
 | `docs/docs/guides/terraform-providers/service-categories.md` | Terraform provider service categories reference | active |

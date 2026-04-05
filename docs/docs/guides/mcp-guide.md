@@ -4,6 +4,8 @@ Your AI assistant sees one file at a time. It can read imports, guess at depende
 
 ## Setup
 
+If you want ready-to-use natural-language examples before wiring your client, start with [Starter Prompts](starter-prompts.md).
+
 Run the setup wizard to configure your MCP client:
 
 ```bash
@@ -137,6 +139,7 @@ These rules keep prompt tests from leaking server paths or normalizing unsafe qu
 
 ## Related docs
 
+- [Starter Prompts](starter-prompts.md) — role-based prompt examples you can use immediately
 - [MCP Reference](../reference/mcp-reference.md) — full tool list with parameters
 - [MCP Cookbook](../reference/mcp-cookbook.md) — detailed query examples
 - [HTTP API](../reference/http-api.md) — automation and service-to-service access
