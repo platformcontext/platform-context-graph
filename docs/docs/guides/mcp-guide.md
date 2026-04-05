@@ -53,6 +53,8 @@ assumptions from a partial code snapshot.
 | "What does this repo contain?" | `get_repo_context` |
 | "Tell me the Internet-to-cloud-to-code story for this repo" | `get_repo_story` |
 | "Tell me the deployment story for this workload or service" | `get_workload_story`, `get_service_story` |
+| "Explain this service, then cite the relevant files and docs" | `get_service_story` followed by `get_file_content`, `get_file_lines`, `search_file_content` |
+| "Create support or onboarding documentation for this repo or service" | `get_repo_story`, `get_service_story`, `get_workload_story` |
 | "Show me the source of this file" | `get_file_content` |
 | "Search across indexed code" | `search_file_content` |
 | "Find complex functions" | `find_most_complex_functions` |
@@ -70,10 +72,18 @@ Use it this way:
 
 1. start with `story`
 2. use `story_sections` for grouped supporting context
-3. use `deployment_overview` or `code_overview` for structured evidence
-4. use `drilldowns` to move into `get_repo_context`, `get_workload_context`, `get_service_context`, `trace_deployment_chain`, content reads, or lower-level relationship tools
+3. use `deployment_overview`, `gitops_overview`, `documentation_overview`, or `support_overview` for structured evidence
+4. if the answer needs exact file or docs evidence, follow with Postgres-backed content reads or search
+5. use `drilldowns` to move into `get_repo_context`, `get_workload_context`, `get_service_context`, `trace_deployment_chain`, content reads, or lower-level relationship tools
 
 This keeps answers concise without hiding the underlying evidence.
+
+For documentation-oriented answers, the orchestration order is:
+
+1. graph-first story and context
+2. structured GitOps, documentation, and support overviews
+3. targeted Postgres file reads or content search
+4. exact file or line citations only when the story answer needs them
 
 The current story order is:
 
@@ -118,11 +128,15 @@ Read responses include `source_backend` so you know where the answer came from. 
 
 `search_file_content` and `search_entity_content` require the PostgreSQL content store — they do not fall back to workspace scanning.
 
+For documentation and runbook generation, expect the story layer to prefer Postgres-backed content evidence whenever it needs exact docs, README, runbook, overlay, or config references. If content is missing, story responses should expose limitations instead of implying the docs do not exist.
+
 ## Prompt-suite guardrails
 
 Prompt-suite coverage should stay portable and auth-safe:
 
 - use repo-relative identifiers and paths, not server-local filesystem paths
+- prefer story and context tools before raw content search when the user asks for explanation or documentation
+- use Postgres-backed content reads and search as evidence fetchers after the story identifies the right artifacts
 - prefer structured MCP or HTTP tools before any expert fallback
 - do not treat raw Cypher as a generic fallback for prompt or story tests
 - only ask for a local checkout path when a workflow truly needs the user's machine

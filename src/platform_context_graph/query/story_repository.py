@@ -4,35 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
+from .story_documentation import (
+    build_documentation_overview,
+    summarize_documentation_overview,
+)
+from .story_gitops import build_gitops_overview, summarize_gitops_overview
+from .story_repository_support import (
+    dependency_label,
+    focused_deployment_story,
+    subject_from_repository,
+)
 from .story_shared import human_list, portable_story_value, story_section
-
-
-def _dependency_label(row: Any) -> str:
-    """Return a human-friendly dependency label from mixed response shapes."""
-
-    if isinstance(row, str):
-        return row.strip()
-    if not isinstance(row, dict):
-        return ""
-    for key in ("name", "repository", "repo_name", "label", "id"):
-        value = str(row.get(key) or "").strip()
-        if value:
-            return value
-    return ""
-
-
-def _subject_from_repository(context: dict[str, Any]) -> dict[str, Any]:
-    """Build a portable repository subject from repository context."""
-
-    repository = context.get("repository") or {}
-    return {
-        "id": repository.get("id"),
-        "type": "repository",
-        "name": repository.get("name") or repository.get("repo_slug") or "repository",
-        "repo_slug": repository.get("repo_slug"),
-        "remote_url": repository.get("remote_url"),
-        "has_remote": repository.get("has_remote"),
-    }
+from .story_support import build_support_overview, summarize_support_overview
 
 
 def _build_repository_deployment_overview(
@@ -202,31 +185,12 @@ def _build_repository_deployment_overview(
     }
 
 
-def _focused_deployment_story(lines: list[str]) -> list[str]:
-    """Return the direct deployment story lines without dependency sprawl."""
-
-    focused: list[str] = []
-    for value in lines:
-        line = str(value).strip()
-        if not line:
-            continue
-        lower = line.lower()
-        if lower.startswith("shared config"):
-            continue
-        if lower.startswith("consumer repositories"):
-            continue
-        if "consumer-only repository" in lower:
-            continue
-        focused.append(line)
-    return focused
-
-
 def build_repository_story_response(
     context: dict[str, Any],
 ) -> dict[str, Any]:
     """Build the structured story contract for one repository."""
 
-    subject = _subject_from_repository(context)
+    subject = subject_from_repository(context)
     code = context.get("code") or {}
     hostnames = list(context.get("hostnames") or [])
     api_surface = dict(context.get("api_surface") or {})
@@ -238,7 +202,7 @@ def build_repository_story_response(
 
     deployment_overview = _build_repository_deployment_overview(context)
     deployment_story = list(deployment_overview.get("deployment_story") or [])
-    direct_story = _focused_deployment_story(deployment_story)
+    direct_story = focused_deployment_story(deployment_story)
     if direct_story:
         deployment_overview["direct_story"] = direct_story
         deployment_overview["trace_controls"] = {
@@ -323,6 +287,62 @@ def build_repository_story_response(
         "classes": int(code.get("classes") or 0),
         "class_methods": int(code.get("class_methods") or 0),
     }
+    drilldowns = {
+        "repo_context": {"repo_id": subject["id"]},
+        "repo_summary": {"repo_name": subject["name"]},
+        "deployment_chain": {"service_name": subject["name"]},
+    }
+
+    gitops_overview = build_gitops_overview(
+        deploys_from=list(context.get("deploys_from") or []),
+        discovers_config_in=list(context.get("discovers_config_in") or []),
+        provisioned_by=list(context.get("provisioned_by") or []),
+        delivery_paths=list(context.get("delivery_paths") or []),
+        controller_driven_paths=list(context.get("controller_driven_paths") or []),
+        deployment_artifacts=dict(context.get("deployment_artifacts") or {}),
+        environments=list(context.get("environments") or []),
+        observed_config_environments=list(
+            context.get("observed_config_environments") or []
+        ),
+    )
+    documentation_overview = build_documentation_overview(
+        subject_name=str(subject["name"]),
+        subject_type="repository",
+        repositories=[subject],
+        entrypoints=hostnames,
+        dependencies=[
+            *deploys_from,
+            *consumer_repositories,
+            *[
+                {"name": dependency_label(row)}
+                for row in dependencies
+                if dependency_label(row)
+            ],
+        ],
+        code_overview=code_overview,
+        gitops_overview=gitops_overview,
+        documentation_evidence=dict(context.get("documentation_evidence") or {}),
+        drilldowns=drilldowns,
+    )
+    support_overview = build_support_overview(
+        subject_name=str(subject["name"]),
+        instances=[],
+        repositories=[subject],
+        entrypoints=hostnames,
+        cloud_resources=[],
+        shared_resources=[],
+        dependencies=[
+            *deploys_from,
+            *consumer_repositories,
+            *[
+                {"name": dependency_label(row)}
+                for row in dependencies
+                if dependency_label(row)
+            ],
+        ],
+        gitops_overview=gitops_overview,
+        documentation_overview=documentation_overview,
+    )
     story_sections.append(
         story_section(
             "code",
@@ -364,7 +384,7 @@ def build_repository_story_response(
         if dependencies:
             dependency_names = [
                 label
-                for label in (_dependency_label(row) for row in dependencies)
+                for label in (dependency_label(row) for row in dependencies)
                 if label
             ]
             if dependency_names:
@@ -386,6 +406,34 @@ def build_repository_story_response(
                     items=dependency_items,
                 )
             )
+
+    if gitops_overview is not None:
+        story_sections.append(
+            story_section(
+                "gitops",
+                "GitOps",
+                summarize_gitops_overview(gitops_overview),
+                items=list(gitops_overview.get("value_layers") or []),
+            )
+        )
+    if documentation_overview is not None:
+        story_sections.append(
+            story_section(
+                "documentation",
+                "Documentation",
+                summarize_documentation_overview(documentation_overview),
+                items=list(documentation_overview.get("key_artifacts") or []),
+            )
+        )
+    if support_overview is not None:
+        story_sections.append(
+            story_section(
+                "support",
+                "Support",
+                summarize_support_overview(support_overview),
+                items=list(support_overview.get("investigation_paths") or []),
+            )
+        )
 
     evidence: list[dict[str, Any]] = []
     for hostname in public_hostnames[:3]:
@@ -415,14 +463,13 @@ def build_repository_story_response(
             "story": story,
             "story_sections": story_sections,
             "deployment_overview": deployment_overview or None,
+            "gitops_overview": gitops_overview,
+            "documentation_overview": documentation_overview,
+            "support_overview": support_overview,
             "code_overview": code_overview,
             "evidence": evidence,
             "limitations": limitations,
             "coverage": context.get("coverage"),
-            "drilldowns": {
-                "repo_context": {"repo_id": subject["id"]},
-                "repo_summary": {"repo_name": subject["name"]},
-                "deployment_chain": {"service_name": subject["name"]},
-            },
+            "drilldowns": drilldowns,
         }
     )

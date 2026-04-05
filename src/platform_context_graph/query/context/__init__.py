@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from ...observability import trace_query
+from ..story_documentation import (
+    build_graph_context_evidence,
+    collect_documentation_evidence,
+)
 from ..story import build_workload_story_response
 from .content_entity import content_entity_context
 from .database import db_workload_context
@@ -113,6 +117,7 @@ def get_workload_story(
         )
         if "error" in result:
             return result
+        _attach_documentation_evidence(database, result)
         return build_workload_story_response(result)
 
 
@@ -132,7 +137,31 @@ def get_service_story(
         )
         if "error" in result:
             return result
+        _attach_documentation_evidence(database, result)
         return build_workload_story_response(result)
+
+
+def _attach_documentation_evidence(database: Any, context: dict[str, Any]) -> None:
+    """Attach targeted Postgres-backed documentation evidence in place."""
+
+    workload = dict(context.get("workload") or {})
+    subject_name = str(workload.get("name") or "")
+    documentation_evidence = collect_documentation_evidence(
+        database,
+        repo_refs=list(context.get("repositories") or [])
+        + list(context.get("deploys_from") or [])
+        + list(context.get("discovers_config_in") or [])
+        + list(context.get("provisioned_by") or []),
+        subject_names=[subject_name] if subject_name else [],
+    )
+    documentation_evidence["graph_context"] = build_graph_context_evidence(
+        entrypoints=list(context.get("entrypoints") or []),
+        delivery_paths=list(context.get("delivery_paths") or []),
+        deploys_from=list(context.get("deploys_from") or []),
+        dependencies=list(context.get("dependencies") or []),
+        api_surface=dict(context.get("api_surface") or {}),
+    )
+    context["documentation_evidence"] = documentation_evidence
 
 
 def _entity_context(

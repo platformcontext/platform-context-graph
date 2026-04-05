@@ -67,6 +67,55 @@ _WORKLOAD_STORY_EXAMPLE = {
         "shared_resources": [],
         "dependencies": [],
     },
+    "gitops_overview": {
+        "owner": {"source_repositories": [], "delivery_controllers": []},
+        "environment": {
+            "selected": "prod",
+            "declared": ["prod"],
+            "observed_config": [],
+        },
+        "chart": {"charts": [], "images": [], "service_ports": []},
+        "value_layers": [],
+        "rendered_resources": [],
+        "supporting_resources": [],
+        "limitations": [],
+    },
+    "documentation_overview": {
+        "audiences": [
+            "engineering",
+            "service-owner",
+            "platform-engineering",
+            "support",
+        ],
+        "service_summary": "payments-api is a deployable service story backed by payments-api.",
+        "code_summary": "Code detail should be drilled into through repository and content reads.",
+        "deployment_summary": "GitOps and deployment drilldowns provide the supporting evidence.",
+        "key_artifacts": [],
+        "recommended_drilldowns": [
+            {
+                "tool": "workload_context",
+                "args": {"workload_id": "workload:payments-api"},
+            }
+        ],
+        "documentation_evidence": {
+            "graph_context": [],
+            "file_content": [],
+            "entity_content": [],
+            "content_search": [],
+        },
+        "limitations": [
+            "postgres_file_evidence_missing",
+            "content_search_evidence_missing",
+        ],
+    },
+    "support_overview": {
+        "runtime_components": [_WORKLOAD_CONTEXT_EXAMPLE["instance"]],
+        "entrypoints": [],
+        "dependency_hotspots": [],
+        "investigation_paths": [],
+        "key_artifacts": [],
+        "limitations": ["support_artifacts_missing"],
+    },
     "evidence": [],
     "limitations": [],
     "coverage": None,
@@ -131,6 +180,109 @@ _REPOSITORY_STORY_EXAMPLE = {
             "API surface exposes versions v1 and docs /_specs.",
             "Deployment flows through github_actions eks_gitops from helm-charts onto eks.",
         ],
+    },
+    "gitops_overview": {
+        "owner": {
+            "source_repositories": [{"name": "helm-charts"}],
+            "delivery_controllers": ["github_actions"],
+            "workflow_families": [],
+        },
+        "environment": {
+            "selected": None,
+            "declared": ["prod"],
+            "observed_config": ["prod"],
+        },
+        "chart": {"charts": [], "images": [], "service_ports": []},
+        "value_layers": [
+            {
+                "relative_path": "argocd/payments-api/base/values.yaml",
+                "source_repo": "helm-charts",
+                "layer_kind": "base_values",
+                "precedence": 0,
+            }
+        ],
+        "rendered_resources": [],
+        "supporting_resources": [],
+        "limitations": [],
+    },
+    "documentation_overview": {
+        "audiences": [
+            "engineering",
+            "service-owner",
+            "platform-engineering",
+            "support",
+        ],
+        "service_summary": "payments-api is a repository story backed by payments-api.",
+        "code_summary": "Code context includes 12 functions, 3 classes, and 42 discovered files.",
+        "deployment_summary": "Entry points include payments-api.prod.example.com. GitOps delivery uses github_actions.",
+        "key_artifacts": [
+            {
+                "repo_id": "repository:r_ab12cd34",
+                "relative_path": "README.md",
+                "source_backend": "postgres",
+                "reason": "Service overview and debugging notes.",
+            }
+        ],
+        "recommended_drilldowns": [
+            {"tool": "repo_context", "args": {"repo_id": "repository:r_ab12cd34"}},
+            {"tool": "repo_summary", "args": {"repo_name": "payments-api"}},
+            {"tool": "deployment_chain", "args": {"service_name": "payments-api"}},
+        ],
+        "documentation_evidence": {
+            "graph_context": [
+                {"kind": "entrypoint", "detail": "payments-api.prod.example.com"}
+            ],
+            "file_content": [
+                {
+                    "repo_id": "repository:r_ab12cd34",
+                    "relative_path": "README.md",
+                    "source_backend": "postgres",
+                    "title": "Payments API",
+                    "summary": "Service overview and debugging notes.",
+                }
+            ],
+            "entity_content": [],
+            "content_search": [],
+        },
+        "limitations": ["content_search_evidence_missing"],
+    },
+    "support_overview": {
+        "runtime_components": [
+            {
+                "id": "repository:r_ab12cd34",
+                "type": "repository",
+                "name": "payments-api",
+            }
+        ],
+        "entrypoints": [
+            {
+                "hostname": "payments-api.prod.example.com",
+            }
+        ],
+        "dependency_hotspots": [],
+        "investigation_paths": [
+            {
+                "topic": "request_failures",
+                "summary": "Start with payments-api.prod.example.com and then confirm runtime and routing evidence.",
+                "artifacts": [
+                    {
+                        "repo_id": "repository:r_ab12cd34",
+                        "relative_path": "README.md",
+                        "source_backend": "postgres",
+                        "reason": "Service overview and debugging notes.",
+                    }
+                ],
+            }
+        ],
+        "key_artifacts": [
+            {
+                "repo_id": "repository:r_ab12cd34",
+                "relative_path": "README.md",
+                "source_backend": "postgres",
+                "reason": "Service overview and debugging notes.",
+            }
+        ],
+        "limitations": [],
     },
     "code_overview": {
         "file_count": 42,

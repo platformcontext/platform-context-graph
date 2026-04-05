@@ -48,6 +48,22 @@ def _dedupe_entity_refs(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return deduped
 
 
+def _dedupe_dict_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return dict rows deduped by stable stringified content."""
+
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[tuple[str, str], ...]] = set()
+    for item in items:
+        fingerprint = tuple(
+            sorted((str(key), str(value)) for key, value in item.items())
+        )
+        if not fingerprint or fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        deduped.append(item)
+    return deduped
+
+
 def _make_workload_instance_ref(
     *,
     workload_id: str,
@@ -185,6 +201,36 @@ def _merge_repository_context_into_workload_response(
         for entrypoint in _repository_entrypoints_from_context(repo_context)
         if entrypoint not in existing_entrypoints
     ]
+    for key in (
+        "hostnames",
+        "delivery_paths",
+        "controller_driven_paths",
+        "deploys_from",
+        "discovers_config_in",
+        "provisioned_by",
+        "provisions_dependencies_for",
+        "deployment_chain",
+        "platforms",
+    ):
+        existing_rows = list(response.get(key) or [])
+        incoming_rows = list(repo_context.get(key) or [])
+        if not existing_rows and incoming_rows:
+            response[key] = incoming_rows
+        elif existing_rows and incoming_rows:
+            response[key] = _dedupe_dict_rows(existing_rows + incoming_rows)
+    for key in ("api_surface", "deployment_artifacts", "delivery_workflows", "summary"):
+        if response.get(key) is None and repo_context.get(key) is not None:
+            response[key] = repo_context.get(key)
+    for key in ("observed_config_environments", "environments"):
+        existing_values = list(response.get(key) or [])
+        incoming_values = [
+            str(value).strip()
+            for value in repo_context.get(key) or []
+            if str(value).strip()
+        ]
+        response[key] = list(dict.fromkeys(existing_values + incoming_values))
+    if response.get("hostnames") is None and repo_context.get("hostnames") is not None:
+        response["hostnames"] = list(repo_context.get("hostnames") or [])
 
     if repo_context.get("coverage") is not None:
         response["coverage"] = repo_context["coverage"]

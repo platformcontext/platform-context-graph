@@ -4,6 +4,12 @@ This page lists all available **MCP Tools** that your AI assistant (Cursor, Clau
 
 When you ask a question in natural language, the AI selects one of these tools behind the scenes.
 
+For documentation-oriented answers, use a simple orchestration rule:
+
+- start with story or context when the user wants explanation, onboarding, support guidance, or deployment narrative
+- use content reads and content search after the story identifies the exact artifacts worth citing
+- keep all file-shaped answers portable through `repo_id + relative_path` or `entity_id`
+
 Repository-bearing results may include `repo_access` metadata. If PCG is running remotely, treat repository identity as remote-first and use `repo_id`, `repo_slug`, and repo-relative paths before assuming any `local_path` exists on the user's machine.
 
 Content-oriented tools use the same rule:
@@ -47,8 +53,8 @@ Use these tools when the user is asking for a narrative answer such as
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
 | **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for payments-api." |
-| **`get_workload_story`** | Return a structured workload story using canonical workload identity, optionally scoped to one environment. | "Show me how payments-api is deployed in prod." |
-| **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. | "What can you tell me about payments-api in QA?" |
+| **`get_workload_story`** | Return a structured workload story using canonical workload identity, optionally scoped to one environment. Story payloads may include `gitops_overview`, `documentation_overview`, and `support_overview` when evidence exists. | "Show me how payments-api is deployed in prod." |
+| **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. This is the preferred first hop for support, onboarding, and service-explainer prompts. | "What can you tell me about payments-api in QA?" |
 | **`get_repo_context`** | Durable drill-down for repository details after the story answer. | "Show me the full repo context behind that story." |
 | **`get_workload_context`** | Durable drill-down for workload details after the story answer. | "Show me the workload context behind that story." |
 | **`get_service_context`** | Service alias drill-down for service-shaped prompts. | "Show me the service context behind that story." |
@@ -56,6 +62,8 @@ Use these tools when the user is asking for a narrative answer such as
 ## Content Retrieval & Search
 
 Tools for portable source retrieval and indexed content search.
+
+Use these after story or context determines which files, snippets, or docs matter most.
 
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
