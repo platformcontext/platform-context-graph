@@ -110,8 +110,9 @@ def canonical_repository_ref(row: dict[str, Any]) -> dict[str, Any]:
     """
 
     metadata = repository_metadata_from_row(row)
+    stored_id = row.get("id") or metadata["id"]
     return {
-        "id": metadata["id"],
+        "id": stored_id,
         "type": "repository",
         "name": metadata["name"],
         "repo_slug": metadata["repo_slug"],

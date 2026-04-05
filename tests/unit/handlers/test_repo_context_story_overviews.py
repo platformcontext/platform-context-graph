@@ -96,7 +96,14 @@ def test_trace_deployment_chain_exposes_gitops_and_documentation_overviews(
             },
             "hostnames": [{"hostname": "api-node-boats.qa.bgrp.io"}],
             "api_surface": {"docs_routes": ["/_specs"]},
-            "consumer_repositories": [],
+            "consumer_repositories": [
+                {
+                    "repository": "api-node-boattrader",
+                    "repo_id": "repository:r_consumer",
+                    "evidence_kinds": ["repository_reference"],
+                    "sample_paths": ["api-node-boattrader.ts"],
+                }
+            ],
             "summary": {},
             "coverage": None,
             "limitations": [],
@@ -148,4 +155,8 @@ def test_trace_deployment_chain_exposes_gitops_and_documentation_overviews(
     )
     assert result["support_overview"]["investigation_paths"][0]["topic"] == (
         "request_failures"
+    )
+    assert result["support_overview"]["dependency_hotspots"] == []
+    assert result["support_overview"]["consumer_repositories"][0]["repository"] == (
+        "api-node-boattrader"
     )

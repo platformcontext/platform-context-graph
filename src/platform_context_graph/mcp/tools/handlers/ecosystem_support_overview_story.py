@@ -69,6 +69,8 @@ def build_deployment_story_fallback(
 
     if not deployment_controllers:
         return []
+    if _has_low_signal_service_variants(service_variants):
+        return []
     controller_summary = _human_join(
         [str(value).strip() for value in deployment_controllers]
     )
@@ -91,6 +93,45 @@ def build_deployment_story_fallback(
     if platform_summary:
         line += f" on {platform_summary}"
     return [line + "."]
+
+
+def _has_low_signal_service_variants(service_variants: list[dict[str, Any]]) -> bool:
+    """Return whether variant evidence is too diffuse for a trustworthy story.
+
+    Args:
+        service_variants: Candidate Terraform-derived service variants.
+
+    Returns:
+        True when the fallback would mostly narrate unrelated module noise.
+    """
+
+    variant_rows = [row for row in service_variants if isinstance(row, dict)]
+    if len(variant_rows) < 5:
+        return False
+
+    repositories = {
+        str(row.get("repository") or "").strip()
+        for row in variant_rows
+        if str(row.get("repository") or "").strip()
+    }
+    deployment_names = {
+        str(row.get("deployment_name") or "").strip()
+        for row in variant_rows
+        if str(row.get("deployment_name") or "").strip()
+    }
+    repo_names = {
+        str(row.get("repo_name") or "").strip()
+        for row in variant_rows
+        if str(row.get("repo_name") or "").strip()
+    }
+    cluster_names = {
+        str(row.get("cluster_name") or "").strip()
+        for row in variant_rows
+        if str(row.get("cluster_name") or "").strip()
+    }
+
+    has_service_anchor = bool(deployment_names or repo_names or cluster_names)
+    return len(repositories) >= 5 and not has_service_anchor
 
 
 def build_controller_driven_story(

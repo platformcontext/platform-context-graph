@@ -34,6 +34,25 @@ def _resolve_repo_identifier(database: Any, repo_id: str) -> str:
     return str(repo.get("id") or repo_id)
 
 
+def _resolve_repo_identifiers(
+    database: Any, repo_ids: list[str] | None
+) -> list[str] | None:
+    """Return canonical repository IDs for optional repo-filter lists.
+
+    Args:
+        database: Query-layer database dependency.
+        repo_ids: Optional repository identifiers supplied by the caller.
+
+    Returns:
+        Canonicalized repository identifiers, or ``None`` when no filters were
+        provided.
+    """
+
+    if repo_ids is None:
+        return None
+    return [_resolve_repo_identifier(database, repo_id) for repo_id in repo_ids]
+
+
 def get_file_content(
     database: Any, *, repo_id: str, relative_path: str
 ) -> dict[str, Any]:
@@ -125,7 +144,7 @@ def search_file_content(
     with trace_query("content_file_search"):
         return get_content_service(database).search_file_content(
             pattern=pattern,
-            repo_ids=repo_ids,
+            repo_ids=_resolve_repo_identifiers(database, repo_ids),
             languages=languages,
             artifact_types=artifact_types,
             template_dialects=template_dialects,
@@ -161,7 +180,7 @@ def search_entity_content(
         return get_content_service(database).search_entity_content(
             pattern=pattern,
             entity_types=entity_types,
-            repo_ids=repo_ids,
+            repo_ids=_resolve_repo_identifiers(database, repo_ids),
             languages=languages,
             artifact_types=artifact_types,
             template_dialects=template_dialects,

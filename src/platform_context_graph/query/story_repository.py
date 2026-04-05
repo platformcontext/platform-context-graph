@@ -332,13 +332,13 @@ def build_repository_story_response(
         shared_resources=[],
         dependencies=[
             *deploys_from,
-            *consumer_repositories,
             *[
                 {"name": dependency_label(row)}
                 for row in dependencies
                 if dependency_label(row)
             ],
         ],
+        consumer_repositories=consumer_repositories,
         gitops_overview=gitops_overview,
         documentation_overview=documentation_overview,
     )

@@ -421,6 +421,40 @@ def test_search_file_content_filters_on_metadata(monkeypatch) -> None:
     assert result["matches"][0]["artifact_type"] == "dockerfile"
 
 
+def test_search_file_content_file_filter_matches_plain_source_rows(monkeypatch) -> None:
+    """`artifact_types=["file"]` should match ordinary source files with null metadata."""
+
+    provider = PostgresContentProvider("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = [
+        {
+            "repo_id": "repository:r_test",
+            "relative_path": "src/api_node_boats.py",
+            "language": "python",
+            "artifact_type": None,
+            "template_dialect": None,
+            "iac_relevant": None,
+            "content": "from api_node_forex import warm_cache\n",
+        }
+    ]
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(provider, "_cursor", _cursor)
+
+    result = provider.search_file_content(
+        pattern="api_node_forex",
+        artifact_types=["file"],
+    )
+
+    assert [match["relative_path"] for match in result["matches"]] == [
+        "src/api_node_boats.py"
+    ]
+    assert result["matches"][0]["artifact_type"] is None
+
+
 def test_search_entity_content_falls_back_to_inherited_metadata(monkeypatch) -> None:
     """Entity search should infer metadata for legacy rows before backfill completes."""
 

@@ -154,13 +154,35 @@ def _matches_metadata_filters(
 ) -> bool:
     """Return whether resolved metadata satisfies the requested filters."""
 
-    if artifact_types and metadata["artifact_type"] not in artifact_types:
+    if artifact_types and not _matches_artifact_type_filter(
+        requested_types=artifact_types,
+        resolved_type=metadata["artifact_type"],
+    ):
         return False
     if template_dialects and metadata["template_dialect"] not in template_dialects:
         return False
     if iac_relevant is not None and metadata["iac_relevant"] is not iac_relevant:
         return False
     return True
+
+
+def _matches_artifact_type_filter(
+    *, requested_types: list[str], resolved_type: str | None
+) -> bool:
+    """Return whether one resolved artifact type matches the requested filter.
+
+    Args:
+        requested_types: Artifact-type filters supplied by the caller.
+        resolved_type: Resolved persisted artifact type for one match candidate.
+
+    Returns:
+        ``True`` when the candidate should be included by the artifact-type
+        filter.
+    """
+
+    if resolved_type in requested_types:
+        return True
+    return resolved_type is None and "file" in requested_types
 
 
 def get_file_content(

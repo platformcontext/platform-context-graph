@@ -428,3 +428,209 @@ def test_get_workload_context_clears_instances_when_resource_instance_is_selecte
 
     assert scoped["instance"]["id"] == "workload-instance:api-node-boats:bg-qa"
     assert scoped["instances"] == []
+
+
+def test_get_workload_story_enriches_gitops_from_repo_name_fallback(
+    monkeypatch,
+) -> None:
+    """Fallback repo-name matches should still enrich service stories with GitOps."""
+
+    db = make_mock_db(
+        {
+            "MATCH (w:Workload)": MockResult(single_record=None),
+            "RETURN r.id as id, r.name as name, r.path as path": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "repository:r_f9600c28",
+                        "name": "api-node-boats",
+                        "path": "/data/repos/api-node-boats",
+                        "local_path": "/data/repos/api-node-boats",
+                        "remote_url": "https://github.com/boatsgroup/api-node-boats",
+                        "repo_slug": "boatsgroup/api-node-boats",
+                        "has_remote": True,
+                    }
+                )
+            ),
+            "MATCH (k:K8sResource)\n            WHERE k.name CONTAINS $name": MockResult(
+                records=[
+                    {
+                        "name": "api-node-boats",
+                        "kind": "Deployment",
+                        "namespace": "bg-qa",
+                    }
+                ]
+            ),
+        }
+    )
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.get_repository_context",
+        lambda *_args, **_kwargs: {
+            "platforms": [
+                {
+                    "id": "platform:eks:aws:cluster/bg-qa:bg-qa:none",
+                    "name": "bg-qa",
+                    "kind": "eks",
+                    "provider": "aws",
+                    "environment": "bg-qa",
+                }
+            ],
+            "hostnames": [
+                {
+                    "hostname": "api-node-boats.qa.bgrp.io",
+                    "environment": "bg-qa",
+                    "source_repo": "helm-charts",
+                    "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                    "visibility": "public",
+                },
+                {
+                    "hostname": "api-node-boats.platformcontextgraph.svc.cluster.local",
+                    "environment": "bg-qa",
+                    "source_repo": "helm-charts",
+                    "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                    "visibility": "internal",
+                },
+            ],
+            "api_surface": {
+                "docs_routes": ["/_specs"],
+                "api_versions": ["v3"],
+                "endpoints": [
+                    {
+                        "path": "/_status",
+                        "relative_path": "catalog-specs.yaml",
+                    },
+                    {
+                        "path": "/boats/search",
+                        "relative_path": "catalog-specs.yaml",
+                    },
+                ],
+            },
+            "deploys_from": [
+                {
+                    "id": "repository:r_66cd2d76",
+                    "type": "repository",
+                    "name": "helm-charts",
+                    "repo_slug": "boatsgroup/helm-charts",
+                    "remote_url": "https://github.com/boatsgroup/helm-charts",
+                    "has_remote": True,
+                    "relationship_type": "DEPLOYS_FROM",
+                }
+            ],
+            "discovers_config_in": [],
+            "provisioned_by": [],
+            "delivery_paths": [
+                {
+                    "path_kind": "gitops",
+                    "controller": "argocd",
+                    "delivery_mode": "gitops",
+                    "deployment_sources": ["helm-charts"],
+                    "platform_kinds": ["eks"],
+                }
+            ],
+            "deployment_artifacts": {
+                "config_paths": [
+                    {
+                        "path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                        "source_repo": "helm-charts",
+                    }
+                ],
+                "service_ports": [
+                    {
+                        "port": 3081,
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/base/values.yaml",
+                    }
+                ],
+                "gateways": [
+                    {
+                        "name": "envoy-internal",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                    }
+                ],
+            },
+            "observed_config_environments": ["bg-qa"],
+            "environments": ["bg-qa"],
+            "limitations": [],
+        },
+    )
+
+    story = get_workload_story(db, workload_id="workload:api-node-boats")
+
+    assert story["gitops_overview"] is not None
+    assert story["gitops_overview"]["owner"]["delivery_controllers"] == ["argocd"]
+    assert story["gitops_overview"]["value_layers"][0]["relative_path"] == (
+        "argocd/api-node-boats/overlays/bg-qa/values.yaml"
+    )
+    assert story["gitops_overview"]["environment"]["selected"] == "bg-qa"
+    assert story["deployment_overview"]["internet_entrypoints"][0]["hostname"] == (
+        "api-node-boats.qa.bgrp.io"
+    )
+    assert story["support_overview"]["entrypoints"][0]["hostname"] == (
+        "api-node-boats.qa.bgrp.io"
+    )
+    assert story["support_overview"]["entrypoints"][1]["path"] == "/_status"
+
+
+def test_get_service_context_selects_config_only_environment_when_runtime_is_missing(
+    monkeypatch,
+) -> None:
+    """GitOps config environments should backfill service selection when needed."""
+
+    db = make_mock_db(
+        {
+            "MATCH (w:Workload)": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "workload:api-node-boats",
+                        "name": "api-node-boats",
+                        "kind": "service",
+                        "repo_id": "repository:r_f9600c28",
+                        "repo_name": "api-node-boats",
+                        "repo_path": "/data/repos/api-node-boats",
+                        "repo_local_path": "/data/repos/api-node-boats",
+                        "repo_slug": "boatsgroup/api-node-boats",
+                        "repo_remote_url": "https://github.com/boatsgroup/api-node-boats",
+                        "repo_has_remote": True,
+                    }
+                )
+            ),
+            "MATCH (i:WorkloadInstance)": MockResult(records=[]),
+            "MATCH (w:Workload)-[rel]->(dep:Workload)": MockResult(records=[]),
+            "MATCH (k:K8sResource)\n            WHERE k.name CONTAINS $name": MockResult(
+                records=[]
+            ),
+        }
+    )
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.get_repository_context",
+        lambda *_args, **_kwargs: {
+            "platforms": [],
+            "hostnames": [
+                {
+                    "hostname": "api-node-boats.qa.bgrp.io",
+                    "environment": "bg-qa",
+                    "source_repo": "helm-charts",
+                    "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                    "visibility": "public",
+                }
+            ],
+            "deploys_from": [],
+            "discovers_config_in": [],
+            "provisioned_by": [],
+            "observed_config_environments": ["bg-qa"],
+            "environments": [],
+            "limitations": [],
+        },
+    )
+
+    result = get_service_context(
+        db,
+        workload_id="workload:api-node-boats",
+        environment="bg-qa",
+    )
+
+    assert result["instance"]["id"] == "workload-instance:api-node-boats:bg-qa"
+    assert result["instance"]["environment"] == "bg-qa"
+    assert result["instances"] == []

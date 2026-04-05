@@ -28,12 +28,14 @@ def build_support_overview(
     cloud_resources: list[dict[str, Any]],
     shared_resources: list[dict[str, Any]],
     dependencies: list[dict[str, Any]],
+    consumer_repositories: list[dict[str, Any]] | None = None,
     gitops_overview: dict[str, Any] | None,
     documentation_overview: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
     """Build a support/runbook overview from story and content evidence."""
 
     key_artifacts = list((documentation_overview or {}).get("key_artifacts") or [])
+    consumer_repositories = list(consumer_repositories or [])
     if not any(
         [
             instances,
@@ -42,6 +44,7 @@ def build_support_overview(
             cloud_resources,
             shared_resources,
             dependencies,
+            consumer_repositories,
             gitops_overview,
             key_artifacts,
         ]
@@ -108,11 +111,30 @@ def build_support_overview(
                 "artifacts": key_artifacts[:4],
             }
         )
+    if consumer_repositories:
+        consumer_names = [
+            str(row.get("repository") or row.get("name") or "").strip()
+            for row in consumer_repositories
+            if isinstance(row, dict)
+            and str(row.get("repository") or row.get("name") or "").strip()
+        ]
+        if consumer_names:
+            investigation_paths.append(
+                {
+                    "topic": "consumer_impact",
+                    "summary": (
+                        "Check downstream consumer impact across "
+                        f"{human_list(consumer_names, limit=4)}."
+                    ),
+                    "artifacts": key_artifacts[:3],
+                }
+            )
 
     return {
         "runtime_components": runtime_components,
         "entrypoints": entrypoints,
         "dependency_hotspots": dependency_hotspots,
+        "consumer_repositories": consumer_repositories,
         "investigation_paths": investigation_paths,
         "key_artifacts": key_artifacts,
         "limitations": ([] if key_artifacts else ["support_artifacts_missing"]),

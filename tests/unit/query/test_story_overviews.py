@@ -198,8 +198,22 @@ def test_workload_story_exposes_gitops_documentation_and_support_overviews() -> 
                 {
                     "hostname": "api-node-boats.qa.bgrp.io",
                     "environment": "bg-qa",
-                }
+                    "visibility": "public",
+                },
+                {
+                    "hostname": "api-node-boats.platformcontextgraph.svc.cluster.local",
+                    "environment": "bg-qa",
+                    "visibility": "internal",
+                },
             ],
+            "api_surface": {
+                "docs_routes": ["/_specs"],
+                "api_versions": ["v3"],
+                "endpoints": [
+                    {"path": "/_status", "relative_path": "catalog-specs.yaml"},
+                    {"path": "/boats/search", "relative_path": "catalog-specs.yaml"},
+                ],
+            },
             "deploys_from": [
                 {
                     "id": "repository:r_helm_charts",
@@ -230,6 +244,20 @@ def test_workload_story_exposes_gitops_documentation_and_support_overviews() -> 
                         "source_repo": "helm-charts",
                     }
                 ],
+                "service_ports": [
+                    {
+                        "port": 3081,
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/base/values.yaml",
+                    }
+                ],
+                "gateways": [
+                    {
+                        "name": "envoy-internal",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                    }
+                ],
             },
             "documentation_evidence": {
                 "graph_context": [
@@ -253,8 +281,21 @@ def test_workload_story_exposes_gitops_documentation_and_support_overviews() -> 
     )
 
     story_section_ids = [section["id"] for section in result["story_sections"]]
-    assert story_section_ids[-3:] == ["gitops", "documentation", "support"]
+    assert story_section_ids[-4:] == [
+        "deployment",
+        "gitops",
+        "documentation",
+        "support",
+    ]
     assert result["gitops_overview"]["environment"]["selected"] == "bg-qa"
+    assert result["deployment_overview"]["internet_entrypoints"][0]["hostname"] == (
+        "api-node-boats.qa.bgrp.io"
+    )
+    assert result["deployment_overview"]["api_surface"]["docs_routes"] == ["/_specs"]
+    assert result["support_overview"]["entrypoints"][0]["hostname"] == (
+        "api-node-boats.qa.bgrp.io"
+    )
+    assert result["support_overview"]["entrypoints"][1]["path"] == "/_status"
     assert result["documentation_overview"]["service_summary"].startswith(
         "api-node-boats"
     )

@@ -156,6 +156,40 @@ def test_build_deployment_overview_falls_back_to_controller_story() -> None:
     ]
 
 
+def test_build_deployment_overview_skips_low_signal_terraform_fallback_story() -> None:
+    """Large unrelated Terraform module sets should not become the main story."""
+
+    overview = build_deployment_overview(
+        hostnames=[],
+        api_surface={},
+        platforms=[],
+        delivery_paths=[],
+        terraform_modules=[
+            {
+                "name": f"module_{index}",
+                "repository": repository,
+                "source": "boatsgroup.pe.jfrog.io/TF__BG/example/aws",
+                "version": "~> 1.0",
+            }
+            for index, repository in enumerate(
+                [
+                    "dap-data-framework",
+                    "dap-dataplatform-infrastructure",
+                    "dap-general-purpose",
+                    "dap-sharedservices-infrastructure",
+                    "github-settings",
+                    "helm-charts",
+                    "api-node-template",
+                ],
+                start=1,
+            )
+        ],
+    )
+
+    assert "deployment_story" not in overview
+    assert "topology_story" not in overview
+
+
 def test_build_deployment_overview_falls_back_to_controller_driven_paths() -> None:
     """Controller-driven automation paths should shape a story before generic fallback."""
 
