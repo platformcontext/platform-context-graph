@@ -62,6 +62,12 @@ Story-first documentation now works the same way. Start with `get_service_story`
 onboarding doc, deployment explainer, or support guide. Only after that should a
 client call content routes for exact README, runbook, values, or manifest evidence.
 
+When the answer spans code, GitOps, and runtime systems, the best prompt is not
+just "explain this service." It is "scan all related repositories, deployment
+sources, and indexed documentation for this service, then explain it." That
+explicitly tells PCG to use its cross-repo graph and content-store strengths
+instead of behaving like a repo-local assistant.
+
 ## Comparing environments
 
 Staging is broken but prod works. What is different?

@@ -4,6 +4,10 @@ Use these prompts when you want fast, high-signal answers from PlatformContextGr
 
 Start with the shortest prompt that matches your goal. If you need a narrower answer, add the environment, workload, repository, or resource name.
 
+The highest-value PCG prompts usually do one extra thing: they tell PCG to
+scan all related repositories, deployment sources, and indexed documentation
+before answering. That is where PCG shines compared with repo-local assistants.
+
 ```mermaid
 flowchart TD
   A["Start With A Goal"] --> B["Code Question"]
@@ -18,6 +22,21 @@ flowchart TD
 ```
 
 ## Start Here
+
+### Cross-repo framing
+
+Use this framing when you want PCG to work as a code-to-cloud system, not just
+as a single-repo search tool:
+
+- "Scan all related repositories, deployment sources, and indexed documentation involved in `<service>` in `<environment>`, then explain it."
+- "Using all linked repos and runtime context, build the story for `<service>`."
+- "Across every repository that contributes to `<service>`, trace the GitOps and runtime path."
+
+Good substitutions:
+
+- service or workload name
+- environment such as `ops-qa`, `staging`, or `prod`
+- doc shape such as story, runbook, explainer, onboarding guide, or investigation guide
 
 ### Software engineering
 
@@ -58,6 +77,15 @@ flowchart TD
 - "Create a support runbook for `api-node-boats` in `prod`, including the fastest places to investigate request, auth, config, and deploy issues."
 - "Show me the source and docs evidence behind this explanation."
 - "Trace this service from ArgoCD values layers to rendered Kubernetes resources, then tell me which files I should read first."
+
+### Cross-repo documentation and GitOps
+
+- "Scan all related repositories, deployment/config sources, and indexed documentation involved in `platformcontextgraph` in `ops-qa`, then give me a complete service story."
+- "Using all linked repositories, deployment sources, and indexed docs, create an on-call runbook for `platformcontextgraph` in `ops-qa`."
+- "Across every repository that contributes to `platformcontextgraph`, trace it from ArgoCD ownership to values layers to rendered Kubernetes resources."
+- "Generate documentation for `platformcontextgraph` after scanning all involved repositories, indexed docs, and deployment artifacts."
+- "Build a platform-engineering explainer for `platformcontextgraph` using graph context plus stored content across all linked repos."
+- "Using all related repos and runtime dependencies, tell me the fastest places to investigate auth, database, repo-sync, and deployment failures for `platformcontextgraph`."
 
 ## Prompt Patterns
 
@@ -101,6 +129,12 @@ Use:
 - "What change surface is affected if I update `<resource>`?"
 - "Explain why `<repo A>` and `<repo B>` are connected."
 
+Best additions:
+
+- exact target you plan to change
+- target environment
+- whether you want direct or transitive impact
+
 ### To generate documentation
 
 Use:
@@ -115,12 +149,23 @@ Best additions:
 - audience such as support, onboarding, service owner, or platform engineering
 - environment
 - whether you want exact files, manifests, docs, or runtime resources cited
+- whether PCG should scan all related repos and deployment sources first
+
+### To use PCG's cross-repo strength
+
+Use:
+
+- "Scan all related repositories, deployment sources, and indexed docs involved in `<service>`."
+- "Using all linked repositories and runtime context, explain `<service>`."
+- "Across every repository that contributes to `<service>`, trace the GitOps path in `<env>`."
+- "Create a `<runbook|explainer|story>` for `<service>` after scanning all related repos."
 
 Best additions:
 
-- exact target you plan to change
-- target environment
-- whether you want direct or transitive impact
+- exact service or workload name
+- environment
+- audience
+- output shape such as story, support guide, onboarding doc, or deployment explainer
 
 ## Better Answers Fast
 
@@ -128,6 +173,7 @@ Best additions:
 - Add the environment when the answer could differ between `prod`, `stage`, or `ops-qa`.
 - Use exact names when you have them. Exact repo, workload, and resource names usually produce better results than broad descriptions.
 - Ask for evidence when you want proof. Prompts like "show the repos, manifests, and resources involved" steer the answer toward traceable output.
+- When the answer spans code, deployment, and runtime, explicitly ask PCG to scan all related repositories first.
 - For documentation prompts, let PCG tell the story first and ask for exact files second. That keeps the answer concise and portable.
 - Follow up in layers. Start with "trace the deployment chain," then ask "what repos define those resources?" and then "what breaks if I change this?"
 
