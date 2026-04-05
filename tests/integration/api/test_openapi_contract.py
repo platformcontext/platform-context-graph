@@ -317,12 +317,17 @@ def test_openapi_story_examples_include_deployment_mapping_contract() -> None:
         "adapter": "cloudformation",
         "mapping_mode": "iac",
         "overall_confidence": "high",
+        "overall_confidence_reason": "explicit_iac_adapter",
         "evidence_sources": ["delivery_path", "platform"],
         "high_confidence_fact_types": [
             "PROVISIONED_BY_IAC",
             "RUNS_ON_PLATFORM",
         ],
         "medium_confidence_fact_types": [],
+        "fact_thresholds": {
+            "PROVISIONED_BY_IAC": "explicit_iac_adapter",
+            "RUNS_ON_PLATFORM": "explicit_platform_match",
+        },
         "limitations": [],
     }
     assert service_story["deployment_facts"][0]["fact_type"] == "PROVISIONED_BY_IAC"

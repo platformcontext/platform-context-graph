@@ -45,6 +45,7 @@ def test_build_deployment_overview_surfaces_deployment_fact_summary() -> None:
         "adapter": "evidence_only",
         "mapping_mode": "evidence_only",
         "overall_confidence": "medium",
+        "overall_confidence_reason": "delivery_runtime_evidence_without_named_adapter",
         "evidence_sources": ["delivery_path", "platform", "entrypoint"],
         "high_confidence_fact_types": ["RUNS_ON_PLATFORM"],
         "medium_confidence_fact_types": [
@@ -55,5 +56,14 @@ def test_build_deployment_overview_surfaces_deployment_fact_summary() -> None:
             "OBSERVED_IN_ENVIRONMENT",
             "EXPOSES_ENTRYPOINT",
         ],
+        "fact_thresholds": {
+            "DELIVERY_PATH_PRESENT": "delivery_path_present",
+            "USES_PACKAGING_LAYER": "explicit_packaging_signal",
+            "DEPLOYS_FROM": "named_deployment_source",
+            "DISCOVERS_CONFIG_IN": "named_config_source",
+            "RUNS_ON_PLATFORM": "explicit_platform_match",
+            "OBSERVED_IN_ENVIRONMENT": "explicit_environment_evidence",
+            "EXPOSES_ENTRYPOINT": "named_entrypoint",
+        },
         "limitations": ["deployment_controller_unknown"],
     }

@@ -84,6 +84,22 @@ Story responses may now include deployment-mapping fields alongside the narrativ
 - `mapping_mode=controller` means explicit controller evidence was found
 - `mapping_mode=iac` means explicit infrastructure-as-code evidence was found
 - `mapping_mode=evidence_only` means only delivery/runtime evidence was found, and PCG intentionally avoided guessing a controller family
+- `overall_confidence_reason` explains the reason code behind the top-level confidence
+- `fact_thresholds` maps each emitted fact type to a stable threshold code
+- `limitations` uses stable deployment-mapping limitation codes
+
+Current threshold-code examples:
+
+- `explicit_iac_adapter`
+- `explicit_controller_signal`
+- `explicit_packaging_signal`
+- `explicit_automation_signal`
+- `named_deployment_source`
+- `named_config_source`
+- `explicit_platform_match`
+- `explicit_environment_evidence`
+- `named_entrypoint`
+- `delivery_path_present`
 
 This keeps the contract portable across ArgoCD, Flux, Terraform, CloudFormation, plain Kubernetes manifests, ECS, Lambda, and environments that do not use a controller at all.
 

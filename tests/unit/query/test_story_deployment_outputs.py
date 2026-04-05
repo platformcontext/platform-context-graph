@@ -54,6 +54,7 @@ def test_workload_story_surfaces_deployment_fact_summary_for_evidence_only_mode(
         "adapter": "evidence_only",
         "mapping_mode": "evidence_only",
         "overall_confidence": "medium",
+        "overall_confidence_reason": "delivery_runtime_evidence_without_named_adapter",
         "evidence_sources": ["delivery_path", "platform", "entrypoint"],
         "high_confidence_fact_types": ["RUNS_ON_PLATFORM"],
         "medium_confidence_fact_types": [
@@ -64,6 +65,15 @@ def test_workload_story_surfaces_deployment_fact_summary_for_evidence_only_mode(
             "OBSERVED_IN_ENVIRONMENT",
             "EXPOSES_ENTRYPOINT",
         ],
+        "fact_thresholds": {
+            "DELIVERY_PATH_PRESENT": "delivery_path_present",
+            "USES_PACKAGING_LAYER": "explicit_packaging_signal",
+            "DEPLOYS_FROM": "named_deployment_source",
+            "DISCOVERS_CONFIG_IN": "named_config_source",
+            "RUNS_ON_PLATFORM": "explicit_platform_match",
+            "OBSERVED_IN_ENVIRONMENT": "explicit_environment_evidence",
+            "EXPOSES_ENTRYPOINT": "named_entrypoint",
+        },
         "limitations": ["deployment_controller_unknown"],
     }
 
@@ -118,6 +128,7 @@ def test_repository_story_surfaces_deployment_fact_summary_for_cloudformation() 
         "adapter": "cloudformation",
         "mapping_mode": "iac",
         "overall_confidence": "high",
+        "overall_confidence_reason": "explicit_iac_adapter",
         "evidence_sources": ["delivery_path", "platform", "entrypoint"],
         "high_confidence_fact_types": [
             "PROVISIONED_BY_IAC",
@@ -127,5 +138,13 @@ def test_repository_story_surfaces_deployment_fact_summary_for_cloudformation() 
             "OBSERVED_IN_ENVIRONMENT",
         ],
         "medium_confidence_fact_types": ["EXPOSES_ENTRYPOINT"],
+        "fact_thresholds": {
+            "PROVISIONED_BY_IAC": "explicit_iac_adapter",
+            "DEPLOYS_FROM": "named_deployment_source",
+            "DISCOVERS_CONFIG_IN": "named_config_source",
+            "RUNS_ON_PLATFORM": "explicit_platform_match",
+            "OBSERVED_IN_ENVIRONMENT": "explicit_environment_evidence",
+            "EXPOSES_ENTRYPOINT": "named_entrypoint",
+        },
         "limitations": [],
     }

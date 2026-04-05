@@ -5,6 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 PACKAGING_AUTOMATION_KINDS = frozenset({"helm", "kubernetes", "kustomize"})
+FACT_THRESHOLD_CODES = {
+    "PROVISIONED_BY_IAC": "explicit_iac_adapter",
+    "MANAGED_BY_CONTROLLER": "explicit_controller_signal",
+    "USES_PACKAGING_LAYER": "explicit_packaging_signal",
+    "USES_AUTOMATION_LAYER": "explicit_automation_signal",
+    "DEPLOYS_FROM": "named_deployment_source",
+    "DISCOVERS_CONFIG_IN": "named_config_source",
+    "RUNS_ON_PLATFORM": "explicit_platform_match",
+    "OBSERVED_IN_ENVIRONMENT": "explicit_environment_evidence",
+    "EXPOSES_ENTRYPOINT": "named_entrypoint",
+    "DELIVERY_PATH_PRESENT": "delivery_path_present",
+}
 
 
 def unique_strings(values: list[Any]) -> list[str]:
@@ -162,3 +174,58 @@ def mapping_confidence(
     if mapping_mode == "evidence_only":
         return "medium"
     return "low"
+
+
+def overall_confidence_reason(
+    *,
+    mapping_mode: str,
+    controller_evidence: dict[str, Any] | None,
+    inferred_packaging_kind: str,
+) -> str:
+    """Return the top-level reason code for the selected confidence."""
+
+    if mapping_mode == "iac":
+        return "explicit_iac_adapter"
+    if mapping_mode == "controller":
+        if controller_evidence is not None:
+            return "explicit_controller_signal"
+        if inferred_packaging_kind:
+            return "explicit_packaging_signal"
+        return "controller_delivery_signal"
+    if mapping_mode == "evidence_only":
+        return "delivery_runtime_evidence_without_named_adapter"
+    return "confidence_unknown"
+
+
+def build_mapping_limitations(
+    *,
+    mapping_mode: str,
+    has_deploy_source: bool,
+    has_config_source: bool,
+    has_platform: bool,
+    has_environment: bool,
+    has_entrypoint: bool,
+    saw_delivery_rows: bool,
+) -> list[str]:
+    """Return standardized deployment-mapping limitation codes."""
+
+    limitations: list[str] = []
+    if mapping_mode == "evidence_only":
+        limitations.append("deployment_controller_unknown")
+    if not has_deploy_source:
+        limitations.append("deployment_source_unknown")
+    if saw_delivery_rows and not has_config_source:
+        limitations.append("config_source_unknown")
+    if not has_platform:
+        limitations.append("runtime_platform_unknown")
+    if not has_environment:
+        limitations.append("environment_unknown")
+    if not has_entrypoint:
+        limitations.append("entrypoint_unknown")
+    return limitations
+
+
+def fact_threshold_code(fact_type: str) -> str:
+    """Return the threshold code for one normalized deployment fact type."""
+
+    return FACT_THRESHOLD_CODES.get(fact_type, "threshold_unknown")

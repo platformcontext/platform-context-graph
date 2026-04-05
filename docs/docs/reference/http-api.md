@@ -115,8 +115,10 @@ Use those when you need a stable, evidence-first contract instead of prose.
 
 - `mapping_mode`
 - `overall_confidence`
+- `overall_confidence_reason`
 - `evidence_sources`
 - fact types grouped by confidence
+- `fact_thresholds`
 - deployment-specific limitations such as `deployment_controller_unknown`
 
 Mapping modes are intentionally controller-agnostic:

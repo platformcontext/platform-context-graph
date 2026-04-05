@@ -8,10 +8,13 @@ from .story_deployment_mapping_support import controller_evidence
 from .story_deployment_mapping_support import controller_rows
 from .story_deployment_mapping_support import delivery_evidence
 from .story_deployment_mapping_support import delivery_rows
+from .story_deployment_mapping_support import build_mapping_limitations
+from .story_deployment_mapping_support import fact_threshold_code
 from .story_deployment_mapping_support import infer_packaging_kind
 from .story_deployment_mapping_support import mapping_confidence
 from .story_deployment_mapping_support import normalize_automation_layer
 from .story_deployment_mapping_support import normalize_controller_packaging_kind
+from .story_deployment_mapping_support import overall_confidence_reason
 from .story_deployment_mapping_support import resolve_mapping_mode
 from .story_deployment_mapping_support import unique_strings
 
@@ -366,21 +369,33 @@ def build_deployment_fact_summary(
             if isinstance(evidence, dict)
         ]
     )
-    limitations: list[str] = []
-    if mapping_mode == "evidence_only":
-        limitations.append("deployment_controller_unknown")
-    if not any(row.get("fact_type") == "DEPLOYS_FROM" for row in facts):
-        limitations.append("deployment_source_unknown")
-    if normalized_delivery_rows and not any(
-        row.get("fact_type") == "DISCOVERS_CONFIG_IN" for row in facts
-    ):
-        limitations.append("config_source_unknown")
-    if not platform_rows:
-        limitations.append("runtime_platform_unknown")
-    if not any(row.get("fact_type") == "OBSERVED_IN_ENVIRONMENT" for row in facts):
-        limitations.append("environment_unknown")
-    if not any(row.get("fact_type") == "EXPOSES_ENTRYPOINT" for row in facts):
-        limitations.append("entrypoint_unknown")
+    delivery_mode = ""
+    if normalized_delivery_rows:
+        delivery_mode = str(
+            normalized_delivery_rows[0].get("delivery_mode") or ""
+        ).strip()
+    inferred_packaging_kind = infer_packaging_kind(
+        adapter=adapter,
+        delivery_mode=delivery_mode,
+    )
+    controller_signal = controller_evidence(
+        normalized_controller_rows[0] if normalized_controller_rows else None
+    )
+    limitations = build_mapping_limitations(
+        mapping_mode=mapping_mode,
+        has_deploy_source=any(row.get("fact_type") == "DEPLOYS_FROM" for row in facts),
+        has_config_source=any(
+            row.get("fact_type") == "DISCOVERS_CONFIG_IN" for row in facts
+        ),
+        has_platform=bool(platform_rows),
+        has_environment=any(
+            row.get("fact_type") == "OBSERVED_IN_ENVIRONMENT" for row in facts
+        ),
+        has_entrypoint=any(
+            row.get("fact_type") == "EXPOSES_ENTRYPOINT" for row in facts
+        ),
+        saw_delivery_rows=bool(normalized_delivery_rows),
+    )
 
     overall_confidence = "low"
     if mapping_mode == "iac":
@@ -392,9 +407,20 @@ def build_deployment_fact_summary(
         "adapter": adapter,
         "mapping_mode": mapping_mode,
         "overall_confidence": overall_confidence,
+        "overall_confidence_reason": overall_confidence_reason(
+            mapping_mode=mapping_mode,
+            controller_evidence=controller_signal,
+            inferred_packaging_kind=inferred_packaging_kind,
+        ),
         "evidence_sources": evidence_sources,
         "high_confidence_fact_types": high_confidence_fact_types,
         "medium_confidence_fact_types": medium_confidence_fact_types,
+        "fact_thresholds": {
+            str(row.get("fact_type") or ""): fact_threshold_code(
+                str(row.get("fact_type") or "")
+            )
+            for row in facts
+        },
         "limitations": limitations,
     }
 
