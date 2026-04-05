@@ -18,6 +18,10 @@ _DOC_AUDIENCES = [
 _DOCUMENTATION_PATH_RE = re.compile(
     r"(?i)(^README(?:\.[^.]+)?$|(^|/)(runbook|oncall|support|troubleshooting)\.md$|^docs/.+\.md$|(^|/)(Chart\.ya?ml|values(?:[-\w]*)?\.ya?ml|kustomization\.ya?ml|Dockerfile)$)"
 )
+_DOCUMENTATION_PATH_PATTERN = (
+    r"(?i)(^README(?:\.[^.]+)?$|(^|/)(runbook|oncall|support|troubleshooting)\.md$"
+    r"|^docs/.+\.md$|(^|/)(Chart\.ya?ml|values(?:[-\w]*)?\.ya?ml|kustomization\.ya?ml|Dockerfile)$)"
+)
 
 
 def _dedupe_repo_refs(repo_refs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -95,7 +99,13 @@ def collect_documentation_evidence(
 
     for repo_ref in deduped_repo_refs:
         repo_id = str(repo_ref.get("id") or "")
-        candidate_paths = _candidate_paths(discover_repo_files(database, repo_id))
+        candidate_paths = _candidate_paths(
+            discover_repo_files(
+                database,
+                repo_id,
+                pattern=_DOCUMENTATION_PATH_PATTERN,
+            )
+        )
         for relative_path in candidate_paths:
             read_result = content_queries.get_file_content(
                 database,

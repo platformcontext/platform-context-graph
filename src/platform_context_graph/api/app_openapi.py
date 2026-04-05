@@ -68,7 +68,11 @@ _WORKLOAD_STORY_EXAMPLE = {
         "dependencies": [],
     },
     "gitops_overview": {
-        "owner": {"source_repositories": [], "delivery_controllers": []},
+        "owner": {
+            "source_repositories": [],
+            "delivery_controllers": [],
+            "workflow_families": [],
+        },
         "environment": {
             "selected": "prod",
             "declared": ["prod"],

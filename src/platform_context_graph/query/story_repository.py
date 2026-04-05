@@ -194,7 +194,6 @@ def build_repository_story_response(
     code = context.get("code") or {}
     hostnames = list(context.get("hostnames") or [])
     api_surface = dict(context.get("api_surface") or {})
-    deployment_artifacts = dict(context.get("deployment_artifacts") or {})
     consumer_repositories = list(context.get("consumer_repositories") or [])
     deploys_from = list(context.get("deploys_from") or [])
     dependencies = list((context.get("ecosystem") or {}).get("dependencies") or [])
