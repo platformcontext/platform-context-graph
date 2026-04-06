@@ -126,6 +126,7 @@ Mapping modes are intentionally controller-agnostic:
 - `controller` for explicit controller evidence such as ArgoCD or Flux
 - `iac` for explicit infrastructure-as-code evidence such as Terraform or CloudFormation
 - `evidence_only` when delivery/runtime evidence exists but no trusted controller/IaC adapter was found
+- `none` when no deployment evidence cleared the evidence thresholds and PCG can only report missing inputs
 
 That lets the same story contract work across GitOps, IaC-driven, and controller-free estates without fabricating deployment tooling.
 

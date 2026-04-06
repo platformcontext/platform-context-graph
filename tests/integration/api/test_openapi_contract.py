@@ -314,23 +314,23 @@ def test_openapi_story_examples_include_deployment_mapping_contract() -> None:
     ]["200"]["content"]["application/json"]["examples"]["service_story"]["value"]
 
     assert service_story["deployment_fact_summary"] == {
-        "adapter": "cloudformation",
-        "mapping_mode": "iac",
-        "overall_confidence": "high",
-        "overall_confidence_reason": "explicit_iac_adapter",
-        "evidence_sources": ["delivery_path", "platform"],
-        "high_confidence_fact_types": [
-            "PROVISIONED_BY_IAC",
-            "RUNS_ON_PLATFORM",
-        ],
+        "adapter": "unknown",
+        "mapping_mode": "none",
+        "overall_confidence": "low",
+        "overall_confidence_reason": "no_deployment_evidence",
+        "evidence_sources": [],
+        "high_confidence_fact_types": [],
         "medium_confidence_fact_types": [],
-        "fact_thresholds": {
-            "PROVISIONED_BY_IAC": "explicit_iac_adapter",
-            "RUNS_ON_PLATFORM": "explicit_platform_match",
-        },
-        "limitations": [],
+        "fact_thresholds": {},
+        "limitations": [
+            "deployment_evidence_missing",
+            "deployment_source_unknown",
+            "runtime_platform_unknown",
+            "environment_unknown",
+            "entrypoint_unknown",
+        ],
     }
-    assert service_story["deployment_facts"][0]["fact_type"] == "PROVISIONED_BY_IAC"
+    assert service_story["deployment_facts"] == []
 
 
 def test_openapi_exposes_query_routes_without_deployment_control_endpoints() -> None:

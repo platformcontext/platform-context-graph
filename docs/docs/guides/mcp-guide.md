@@ -96,12 +96,13 @@ The deployment-oriented story surfaces now expose three related layers:
 - `mapping_mode=controller` means PCG found explicit controller evidence
 - `mapping_mode=iac` means PCG found infrastructure-as-code evidence such as Terraform or CloudFormation
 - `mapping_mode=evidence_only` means PCG found delivery/runtime evidence but no trustworthy controller or IAC adapter and intentionally did not guess
+- `mapping_mode=none` means PCG did not find enough deployment evidence to map a controller, IAC adapter, or evidence-only path yet
 
 It also exposes truthfulness helpers:
 
 - `overall_confidence_reason` explains why the mapping got its top-level confidence
 - `fact_thresholds` maps each emitted fact type to the evidence threshold it passed
-- `limitations` uses standardized deployment-mapping codes like `deployment_controller_unknown`, `deployment_source_unknown`, `config_source_unknown`, `runtime_platform_unknown`, `environment_unknown`, and `entrypoint_unknown`
+- `limitations` uses standardized deployment-mapping codes like `deployment_evidence_missing`, `deployment_controller_unknown`, `deployment_source_unknown`, `config_source_unknown`, `runtime_platform_unknown`, `environment_unknown`, and `entrypoint_unknown`
 
 That rule is important: PCG maps from indexed evidence, not deployment-tool assumptions. If a company uses ArgoCD, Flux, Terraform Helm provider, Terraform Kubernetes provider, CloudFormation stack sets, CloudFormation serverless patterns, or plain manifests with no controller at all, the story contract should reflect only what the parser actually found.
 

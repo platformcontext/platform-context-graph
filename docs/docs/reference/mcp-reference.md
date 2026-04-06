@@ -84,6 +84,7 @@ Story responses may now include deployment-mapping fields alongside the narrativ
 - `mapping_mode=controller` means explicit controller evidence was found
 - `mapping_mode=iac` means explicit infrastructure-as-code evidence was found
 - `mapping_mode=evidence_only` means only delivery/runtime evidence was found, and PCG intentionally avoided guessing a controller family
+- `mapping_mode=none` means the indexed context is too sparse to map deployment evidence truthfully yet
 - `overall_confidence_reason` explains the reason code behind the top-level confidence
 - `fact_thresholds` maps each emitted fact type to a stable threshold code
 - `limitations` uses stable deployment-mapping limitation codes

@@ -55,6 +55,8 @@ This is especially useful in mixed estates:
 
 If PCG only has delivery/runtime evidence, it will return `mapping_mode=evidence_only` instead of inventing a controller family.
 
+If PCG does not yet have enough indexed deployment evidence to map the path truthfully, it now returns `mapping_mode=none` with limitations like `deployment_evidence_missing` instead of silently dropping the contract.
+
 ## Onboarding a new engineer
 
 Day one. A new engineer needs to understand how the payment service fits into the platform.
