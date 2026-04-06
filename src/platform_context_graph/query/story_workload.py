@@ -268,6 +268,7 @@ def build_workload_story_response(
         cloud_resources=cloud_resources,
         shared_resources=shared_resources,
         dependencies=dependencies,
+        consumer_repositories=list(context.get("consumer_repositories") or []),
         gitops_overview=gitops_overview,
         documentation_overview=documentation_overview,
     )

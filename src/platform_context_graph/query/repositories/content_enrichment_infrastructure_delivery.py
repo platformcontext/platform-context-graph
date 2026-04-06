@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from ...resolution.platform_families import format_platform_kind_label
-from .content_enrichment_support import ordered_unique_strings
+from .content_enrichment_support import (
+    ordered_unique_environments,
+    ordered_unique_strings,
+)
 
 _CLOUDFORMATION_ECS_TYPES = frozenset(
     {"AWS::ECS::Cluster", "AWS::ECS::Service", "AWS::ECS::TaskDefinition"}
@@ -151,8 +154,8 @@ def _build_one_cloudformation_path(
     resolved_platform_kinds = ordered_unique_strings(
         row.get("kind") for row in matched_platforms if row.get("kind")
     )
-    environments = ordered_unique_strings(
-        row.get("environment") for row in matched_platforms if row.get("environment")
+    environments = ordered_unique_environments(
+        [row.get("environment") for row in matched_platforms if row.get("environment")]
     )
     return [
         {

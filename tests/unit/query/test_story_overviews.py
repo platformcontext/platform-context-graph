@@ -524,3 +524,60 @@ def test_support_overview_uses_topic_specific_artifact_classes() -> None:
         "argocd/api-node-boats/base/values.yaml",
         "argocd/api-node-boats/base/xirsarole.yaml",
     ]
+
+
+def test_workload_story_classifies_alerts_and_oncall_docs_for_support_topics() -> None:
+    """Support topics should promote alerts and on-call docs over generic docs."""
+
+    result = build_workload_story_response(
+        {
+            "workload": {
+                "id": "workload:api-node-boats",
+                "type": "workload",
+                "kind": "service",
+                "name": "api-node-boats",
+            },
+            "entrypoints": [{"hostname": "api-node-boats.qa.bgrp.io"}],
+            "dependencies": [{"name": "shared-memcached"}],
+            "consumer_repositories": [{"repository": "api-node-boattrader"}],
+            "documentation_evidence": {
+                "graph_context": [],
+                "file_content": [
+                    {
+                        "repo_id": "repository:r_api_node_boats",
+                        "relative_path": "README.md",
+                        "source_backend": "postgres",
+                        "title": "API Node Boats",
+                        "summary": "Repository overview and local debugging notes.",
+                    },
+                    {
+                        "repo_id": "repository:r_api_node_boats",
+                        "relative_path": "ops/oncall.md",
+                        "source_backend": "postgres",
+                        "title": "On-call",
+                        "summary": "Escalation playbook",
+                    },
+                    {
+                        "repo_id": "repository:r_api_node_boats",
+                        "relative_path": "observability/alerts/api-node-boats.yaml",
+                        "source_backend": "postgres",
+                        "title": "Alerts",
+                        "summary": "Pager rules",
+                    },
+                ],
+                "entity_content": [],
+                "content_search": [],
+            },
+            "limitations": [],
+        }
+    )
+
+    paths_by_topic = {
+        row["topic"]: [artifact["relative_path"] for artifact in row["artifacts"]]
+        for row in result["support_overview"]["investigation_paths"]
+    }
+
+    assert paths_by_topic["dependency_failures"][0] == (
+        "observability/alerts/api-node-boats.yaml"
+    )
+    assert paths_by_topic["consumer_impact"][0] == "ops/oncall.md"

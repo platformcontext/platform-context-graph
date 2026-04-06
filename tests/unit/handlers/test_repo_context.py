@@ -1239,6 +1239,60 @@ class TestRepoSummary:
         assert "confirmed runtime environments: bg-qa" in result["note"].lower()
         assert "configuration also references: prod" in result["note"].lower()
 
+    def test_repo_summary_does_not_double_count_environment_aliases(self, monkeypatch):
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            lambda *_args, **_kwargs: {
+                "repository": {
+                    "id": "repository:r_boats123",
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 196,
+                    "discovered_file_count": 196,
+                    "files_by_extension": {"json": 12, "js": 77},
+                },
+                "code": {"functions": 12, "classes": 1},
+                "infrastructure": {},
+                "ecosystem": {"dependencies": [], "dependents": []},
+                "coverage": {
+                    "completeness_state": "complete",
+                    "discovered_file_count": 196,
+                    "graph_recursive_file_count": 196,
+                    "content_file_count": 196,
+                    "content_entity_count": 240,
+                    "graph_gap_count": 0,
+                    "content_gap_count": 0,
+                    "server_content_available": True,
+                },
+                "platforms": [
+                    {
+                        "id": "platform:eks:aws:cluster/bg-qa",
+                        "name": "bg-qa",
+                        "kind": "eks",
+                        "provider": "aws",
+                        "environment": "bg-qa",
+                        "relationship_type": "RUNS_ON",
+                    }
+                ],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "environments": ["qa"],
+                "observed_config_environments": ["bg-qa"],
+                "api_surface": {},
+                "hostnames": [],
+                "limitations": [],
+                "relationships": [],
+            },
+        )
+
+        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+
+        assert "note" not in result or (
+            "configuration also references" not in result["note"].lower()
+        )
+
     def test_repo_summary_notes_pending_finalization_truthfully(self, monkeypatch):
         monkeypatch.setattr(
             "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",

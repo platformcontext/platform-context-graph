@@ -1102,6 +1102,157 @@ def test_enrich_repository_context_surfaces_local_chart_and_manifest_evidence(
     ]
 
 
+def test_enrich_repository_context_infers_specific_envs_from_values_and_namespace(
+    monkeypatch,
+) -> None:
+    """Local chart values and namespace-like labels should enrich env evidence."""
+
+    file_store = {
+        (
+            "repository:r_service_edge_api",
+            "charts/service-edge-api/Chart.yaml",
+        ): "\n".join(
+            [
+                "apiVersion: v2",
+                "name: service-edge-api",
+                "version: 0.1.0",
+                "annotations:",
+                "  appRepo: service-edge-api",
+            ]
+        ),
+        (
+            "repository:r_service_edge_api",
+            "charts/service-edge-api/values-prod-us.yaml",
+        ): "\n".join(
+            [
+                "image:",
+                "  repository: ghcr.io/example/service-edge-api",
+                "  tag: prod-us",
+                "service:",
+                "  port: 8080",
+            ]
+        ),
+        (
+            "repository:r_service_edge_api",
+            "infra/k8s/deployment.yaml",
+        ): "\n".join(
+            [
+                "apiVersion: apps/v1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: service-edge-api",
+                "  namespace: api-edge-qa",
+                "spec:",
+                "  template:",
+                "    spec:",
+                "      containers:",
+                "        - name: service-edge-api",
+                "          image: ghcr.io/example/service-edge-api:prod-us",
+            ]
+        ),
+    }
+    _apply_indexed_file_mocks(monkeypatch, file_store)
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.extract_consumer_repositories",
+        lambda *_args, **_kwargs: [],
+    )
+
+    result = enrich_repository_context(
+        _DummyDB(),
+        {
+            "repository": {
+                "id": "repository:r_service_edge_api",
+                "name": "service-edge-api",
+                "path": "/does/not/matter",
+                "local_path": "/does/not/matter",
+            },
+            "platforms": [
+                {
+                    "id": "platform:kubernetes:aws:cluster/shared:prod:none",
+                    "kind": "kubernetes",
+                    "provider": "aws",
+                    "environment": "prod",
+                    "name": "shared",
+                }
+            ],
+        },
+    )
+
+    assert result["deployment_artifacts"]["images"] == [
+        {
+            "repository": "ghcr.io/example/service-edge-api",
+            "tag": "prod-us",
+            "source_repo": "service-edge-api",
+            "relative_path": "charts/service-edge-api/values-prod-us.yaml",
+            "environment": "prod-us",
+        },
+        {
+            "repository": "ghcr.io/example/service-edge-api",
+            "tag": "prod-us",
+            "source_repo": "service-edge-api",
+            "relative_path": "infra/k8s/deployment.yaml",
+            "environment": "qa",
+        },
+    ]
+    assert result["deployment_artifacts"]["service_ports"] == [
+        {
+            "port": "8080",
+            "source_repo": "service-edge-api",
+            "relative_path": "charts/service-edge-api/values-prod-us.yaml",
+            "environment": "prod-us",
+        }
+    ]
+    assert result["deployment_artifacts"]["k8s_resources"] == [
+        {
+            "resource_path": "infra/k8s/deployment.yaml",
+            "kind": "Deployment",
+            "name": "service-edge-api",
+            "source_repo": "service-edge-api",
+            "relative_path": "infra/k8s/deployment.yaml",
+            "environment": "qa",
+        }
+    ]
+    assert result["delivery_paths"] == [
+        {
+            "path_kind": "direct",
+            "controller": "",
+            "delivery_mode": "plain_helm_release",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["kubernetes"],
+            "platforms": ["platform:kubernetes:aws:cluster/shared:prod:none"],
+            "deployment_sources": ["charts/service-edge-api"],
+            "config_sources": ["charts/service-edge-api/values-prod-us.yaml"],
+            "provisioning_repositories": [],
+            "environments": ["prod-us"],
+            "summary": (
+                "Indexed deployment artifacts indicate a direct Helm deployment "
+                "path through charts/service-edge-api onto Kubernetes platforms."
+            ),
+        },
+        {
+            "path_kind": "direct",
+            "controller": "",
+            "delivery_mode": "plain_kubernetes_manifests",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["kubernetes"],
+            "platforms": ["platform:kubernetes:aws:cluster/shared:prod:none"],
+            "deployment_sources": ["infra/k8s"],
+            "config_sources": [],
+            "provisioning_repositories": [],
+            "environments": ["prod", "qa"],
+            "summary": (
+                "Indexed deployment artifacts indicate a direct Kubernetes "
+                "manifest deployment path through infra/k8s onto Kubernetes "
+                "platforms."
+            ),
+        },
+    ]
+
+
 def test_enrich_repository_context_adds_cloudformation_ecs_delivery_path(
     monkeypatch,
 ) -> None:

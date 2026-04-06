@@ -9,6 +9,7 @@ from .content_enrichment_infrastructure_delivery import (
     build_infrastructure_delivery_paths,
 )
 from .content_enrichment_local_delivery import build_local_delivery_paths
+from .content_enrichment_support import ordered_unique_environments
 
 _GITOPS_DELIVERY_MODES = frozenset({"eks_gitops", "eks_gitops_rollback"})
 _DIRECT_DELIVERY_MODES = frozenset(
@@ -195,8 +196,8 @@ def _build_delivery_path(
     platform_ids = _ordered_unique(
         str(row.get("id") or "").strip() for row in platforms
     )
-    environments = _ordered_unique(
-        str(row.get("environment") or "").strip() for row in platforms
+    environments = ordered_unique_environments(
+        [str(row.get("environment") or "").strip() for row in platforms]
     )
     summary = _delivery_path_summary(
         summary_prefix=summary_prefix,
@@ -236,8 +237,8 @@ def _build_jenkins_delivery_path(
     platform_ids = _ordered_unique(
         str(row.get("id") or "").strip() for row in platforms
     )
-    environments = _ordered_unique(
-        str(row.get("environment") or "").strip() for row in platforms
+    environments = ordered_unique_environments(
+        [str(row.get("environment") or "").strip() for row in platforms]
     )
     controller_supporting_repositories = _ordered_unique(
         repository

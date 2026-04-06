@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from .environment_normalization import canonical_environment_key
+from .environment_normalization import environments_match
+from .environment_normalization import ordered_unique_environment_names
+from .environment_normalization import preferred_environment_label
+
 
 def normalize_environment(value: Any) -> str:
     """Return a normalized environment token for story comparisons."""
 
-    return str(value or "").strip().lower()
+    return canonical_environment_key(value)
 
 
 def entrypoint_identity(row: dict[str, Any]) -> tuple[str, str, str]:
@@ -62,8 +67,8 @@ def entrypoint_sort_key(
     normalized_selected_environment = normalize_environment(selected_environment)
     normalized_row_environment = normalize_environment(row.get("environment"))
     environment_rank = 1
-    if normalized_selected_environment and (
-        normalized_row_environment == normalized_selected_environment
+    if normalized_selected_environment and environments_match(
+        normalized_row_environment, normalized_selected_environment
     ):
         environment_rank = 0
     elif normalized_row_environment:
@@ -129,14 +134,14 @@ def selected_environment_for_story(
 
     candidate_values = [
         *[
-            str(row.get("environment") or "").strip()
-            for row in entrypoints
-            if isinstance(row, dict) and str(row.get("environment") or "").strip()
-        ],
-        *[
             str(value).strip()
             for value in context.get("observed_config_environments") or []
             if str(value).strip()
+        ],
+        *[
+            str(row.get("environment") or "").strip()
+            for row in entrypoints
+            if isinstance(row, dict) and str(row.get("environment") or "").strip()
         ],
         *[
             str(value).strip()
@@ -144,13 +149,19 @@ def selected_environment_for_story(
             if str(value).strip()
         ],
     ]
-    normalized_candidates: dict[str, str] = {}
+    normalized_candidates = ordered_unique_environment_names(candidate_values)
+    if len(normalized_candidates) == 1:
+        return normalized_candidates[0]
+    candidate_groups: dict[str, list[str]] = {}
     for value in candidate_values:
         normalized_value = normalize_environment(value)
-        if normalized_value and normalized_value not in normalized_candidates:
-            normalized_candidates[normalized_value] = value
-    if len(normalized_candidates) == 1:
-        return next(iter(normalized_candidates.values()))
+        if not normalized_value:
+            continue
+        candidate_groups.setdefault(normalized_value, []).append(value)
+    if len(candidate_groups) == 1:
+        return (
+            preferred_environment_label(next(iter(candidate_groups.values()))) or None
+        )
     return None
 
 

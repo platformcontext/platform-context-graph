@@ -17,7 +17,20 @@ def _artifact_rank(row: dict[str, Any]) -> int:
         return 1
     if any(token in relative_path for token in ["xirsarole", "secret", "secrets"]):
         return 2
-    if any(token in relative_path for token in ["dashboard", "grafana", "monitor"]):
+    if any(
+        token in relative_path
+        for token in [
+            "dashboard",
+            "grafana",
+            "monitor",
+            "alerts",
+            "prometheus",
+            "datadog",
+            "slo",
+            "metrics",
+            "logging",
+        ]
+    ):
         return 3
     if any(token in relative_path for token in ["openapi", "swagger"]):
         return 4
@@ -34,7 +47,14 @@ def _artifact_rank(row: dict[str, Any]) -> int:
         return 7
     if any(
         token in relative_path
-        for token in ["runbook", "oncall", "support", "troubleshooting"]
+        for token in [
+            "runbook",
+            "oncall",
+            "playbook",
+            "support",
+            "troubleshooting",
+            "incident",
+        ]
     ):
         return 8
     if relative_path == "readme.md" or relative_path.startswith("docs/"):
@@ -48,7 +68,20 @@ def _artifact_class(row: dict[str, Any]) -> str:
     relative_path = str(row.get("relative_path") or "").strip().lower()
     reason = str(row.get("reason") or "").strip().lower()
 
-    if any(token in relative_path for token in ["dashboard", "grafana", "monitor"]):
+    if any(
+        token in relative_path
+        for token in [
+            "dashboard",
+            "grafana",
+            "monitor",
+            "alerts",
+            "prometheus",
+            "datadog",
+            "slo",
+            "metrics",
+            "logging",
+        ]
+    ):
         return "observability_asset"
     if any(
         token in relative_path
@@ -69,6 +102,18 @@ def _artifact_class(row: dict[str, Any]) -> str:
         for token in ["values", "xirsarole", "secret", "config.yaml", "kustomization"]
     ):
         return "deployment_config"
+    if any(
+        token in relative_path
+        for token in [
+            "runbook",
+            "oncall",
+            "playbook",
+            "support",
+            "troubleshooting",
+            "incident",
+        ]
+    ):
+        return "operator_doc"
     if relative_path == "readme.md" or relative_path.startswith("docs/"):
         return "operator_doc"
     return "generic"

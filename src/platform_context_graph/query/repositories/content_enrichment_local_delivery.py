@@ -10,6 +10,7 @@ from ...parsers.languages.kubernetes_manifest import extract_container_images
 from ...resolution.platform_families import format_platform_kind_label
 from .content_enrichment_support import (
     infer_environment_from_path,
+    ordered_unique_environments,
     ordered_unique_strings,
 )
 from .indexed_file_discovery import discover_repo_files, read_yaml_file
@@ -106,6 +107,7 @@ def extract_local_deployment_artifacts(
             metadata = {}
         environment = (
             infer_environment_from_path(relative_path)
+            or infer_environment_from_path(str(metadata.get("namespace") or "").strip())
             or str(metadata.get("namespace") or "").strip()
             or None
         )
@@ -200,17 +202,19 @@ def build_local_delivery_paths(
             str(row.get("relative_path") or "").strip() for row in chart_config_rows
         )
         environments = ordered_unique_strings(
-            platform_environments
-            + [
-                row.get("environment")
-                for row in deployment_artifacts.get("charts", [])
-                if row.get("environment")
-            ]
-            + [
-                row.get("environment")
-                for row in chart_config_rows
-                if row.get("environment")
-            ]
+            ordered_unique_environments(
+                platform_environments
+                + [
+                    row.get("environment")
+                    for row in deployment_artifacts.get("charts", [])
+                    if row.get("environment")
+                ]
+                + [
+                    row.get("environment")
+                    for row in chart_config_rows
+                    if row.get("environment")
+                ]
+            )
         )
         paths.append(
             {
@@ -241,12 +245,14 @@ def build_local_delivery_paths(
     )
     if manifest_roots:
         environments = ordered_unique_strings(
-            platform_environments
-            + [
-                row.get("environment")
-                for row in deployment_artifacts.get("k8s_resources", [])
-                if row.get("environment")
-            ]
+            ordered_unique_environments(
+                platform_environments
+                + [
+                    row.get("environment")
+                    for row in deployment_artifacts.get("k8s_resources", [])
+                    if row.get("environment")
+                ]
+            )
         )
         paths.append(
             {
