@@ -327,6 +327,42 @@ def test_fetch_infrastructure_uses_dynamic_optional_property_keys() -> None:
     assert shared_kwargs["generators_key"] == "generators"
 
 
+def test_fetch_infrastructure_includes_cloudformation_resources() -> None:
+    """Repository infrastructure should include indexed CloudFormation resources."""
+
+    class RecordingSession:
+        def run(self, query, **kwargs):
+            del kwargs
+            if "CloudFormationResource" in query:
+                return MockResult(
+                    records=[
+                        {
+                            "name": "ApiService",
+                            "resource_type": "AWS::ECS::Service",
+                            "file": "infra/api-service.yaml",
+                        }
+                    ]
+                )
+            return MockResult(records=[])
+
+    infrastructure = _fetch_infrastructure(
+        RecordingSession(),
+        {
+            "id": "repository:r_cf1234",
+            "path": "/repos/platform-stack",
+            "local_path": "/repos/platform-stack",
+        },
+    )
+
+    assert infrastructure["cloudformation_resources"] == [
+        {
+            "name": "ApiService",
+            "resource_type": "AWS::ECS::Service",
+            "file": "infra/api-service.yaml",
+        }
+    ]
+
+
 def test_build_repository_context_uses_repo_contains_for_file_queries(
     monkeypatch,
 ) -> None:

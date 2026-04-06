@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from ...resolution.platform_families import format_platform_kind_label
+from .content_enrichment_infrastructure_delivery import (
+    build_infrastructure_delivery_paths,
+)
 from .content_enrichment_local_delivery import build_local_delivery_paths
 
 _GITOPS_DELIVERY_MODES = frozenset({"eks_gitops", "eks_gitops_rollback"})
@@ -19,6 +22,7 @@ def summarize_delivery_paths(
     delivery_workflows: dict[str, Any],
     controller_driven_paths: list[dict[str, Any]] | None = None,
     platforms: list[dict[str, Any]],
+    infrastructure: dict[str, Any] | None = None,
     deploys_from: list[dict[str, Any]],
     discovers_config_in: list[dict[str, Any]],
     provisioned_by: list[dict[str, Any]],
@@ -144,6 +148,12 @@ def summarize_delivery_paths(
                 provisioning_repositories=_repository_names(provisioned_by),
             )
         )
+    paths.extend(
+        build_infrastructure_delivery_paths(
+            infrastructure=infrastructure or {},
+            platforms=platforms,
+        )
+    )
     paths.extend(
         build_local_delivery_paths(
             deployment_artifacts=deployment_artifacts or {},

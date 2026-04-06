@@ -57,11 +57,20 @@ def enrich_workflow_paths(
         )
         if controller_driven_paths:
             context["controller_driven_paths"] = controller_driven_paths
-    if delivery_workflows or local_deployment_artifacts:
+    if (
+        delivery_workflows
+        or local_deployment_artifacts
+        or isinstance(context.get("infrastructure"), dict)
+    ):
         delivery_paths = summarize_delivery_paths(
             delivery_workflows=delivery_workflows,
             controller_driven_paths=list(context.get("controller_driven_paths") or []),
             platforms=list(context.get("platforms") or []),
+            infrastructure=(
+                context.get("infrastructure")
+                if isinstance(context.get("infrastructure"), dict)
+                else {}
+            ),
             deploys_from=list(context.get("deploys_from") or []),
             discovers_config_in=list(context.get("discovers_config_in") or []),
             provisioned_by=list(context.get("provisioned_by") or []),

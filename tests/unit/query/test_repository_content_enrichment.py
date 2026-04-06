@@ -1102,6 +1102,81 @@ def test_enrich_repository_context_surfaces_local_chart_and_manifest_evidence(
     ]
 
 
+def test_enrich_repository_context_adds_cloudformation_ecs_delivery_path(
+    monkeypatch,
+) -> None:
+    """CloudFormation ECS resources should enrich delivery paths."""
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
+        lambda _database, *, repo_id, relative_path: {
+            "available": False,
+            "content": None,
+        },
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.content_queries.search_file_content",
+        lambda _database, **_kwargs: {"matches": []},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.resolve_repository",
+        lambda _session, candidate: None,
+    )
+
+    result = enrich_repository_context(
+        _DummyDB(),
+        {
+            "repository": {
+                "id": "repository:r_platform_stack",
+                "name": "platform-stack",
+                "path": "/does/not/matter",
+                "local_path": "/does/not/matter",
+            },
+            "platforms": [
+                {
+                    "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    "kind": "ecs",
+                    "provider": "aws",
+                    "environment": "prod",
+                    "name": "node10",
+                }
+            ],
+            "infrastructure": {
+                "cloudformation_resources": [
+                    {
+                        "name": "ApiService",
+                        "resource_type": "AWS::ECS::Service",
+                        "file": "infra/api-service.yaml",
+                    }
+                ]
+            },
+            "limitations": [],
+        },
+    )
+
+    assert result["delivery_paths"] == [
+        {
+            "path_kind": "direct",
+            "controller": "cloudformation",
+            "delivery_mode": "cloudformation_ecs",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["ecs"],
+            "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
+            "deployment_sources": ["infra/api-service.yaml"],
+            "config_sources": [],
+            "provisioning_repositories": [],
+            "environments": ["prod"],
+            "summary": (
+                "Indexed CloudFormation resources indicate a direct "
+                "CloudFormation ECS deployment path through infra/api-service.yaml "
+                "onto ECS platforms."
+            ),
+        }
+    ]
+
+
 def test_enrich_repository_context_extracts_jenkins_pipeline_hints(
     monkeypatch,
     tmp_path: Path,
