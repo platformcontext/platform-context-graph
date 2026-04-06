@@ -75,6 +75,7 @@ def _apply_indexed_file_mocks(monkeypatch, file_store):
     discover, exists, read_content, read_yaml = fns
     _DA = "platform_context_graph.query.repositories.content_enrichment_deployment_artifacts"
     _DAS = "platform_context_graph.query.repositories.content_enrichment_deployment_artifacts_support"
+    _LDP = "platform_context_graph.query.repositories.content_enrichment_local_delivery"
     _WF = "platform_context_graph.query.repositories.content_enrichment_workflows"
     monkeypatch.setattr(f"{_DA}.discover_repo_files", discover)
     monkeypatch.setattr(f"{_DA}.file_exists", exists)
@@ -83,6 +84,8 @@ def _apply_indexed_file_mocks(monkeypatch, file_store):
     monkeypatch.setattr(f"{_DAS}.file_exists", exists)
     monkeypatch.setattr(f"{_DAS}.read_file_content", read_content)
     monkeypatch.setattr(f"{_DAS}.read_yaml_file", read_yaml)
+    monkeypatch.setattr(f"{_LDP}.discover_repo_files", discover)
+    monkeypatch.setattr(f"{_LDP}.read_yaml_file", read_yaml)
     monkeypatch.setattr(f"{_WF}.discover_repo_files", discover)
     monkeypatch.setattr(f"{_WF}.read_file_content", read_content)
     monkeypatch.setattr(f"{_WF}.read_yaml_file", read_yaml)
@@ -935,6 +938,168 @@ def test_enrich_repository_context_extracts_api_surface_and_hostnames(
             },
         ],
     }
+
+
+def test_enrich_repository_context_surfaces_local_chart_and_manifest_evidence(
+    monkeypatch,
+) -> None:
+    """Local indexed deployment files should enrich artifacts and delivery paths."""
+
+    file_store = {
+        (
+            "repository:r_service_edge_api",
+            "charts/service-edge-api/Chart.yaml",
+        ): "\n".join(
+            [
+                "apiVersion: v2",
+                "name: service-edge-api",
+                "version: 0.1.0",
+                "annotations:",
+                "  appRepo: service-edge-api",
+            ]
+        ),
+        (
+            "repository:r_service_edge_api",
+            "charts/service-edge-api/values.yaml",
+        ): "\n".join(
+            [
+                "image:",
+                "  repository: ghcr.io/example/service-edge-api",
+                "  tag: modern",
+                "service:",
+                "  port: 8080",
+            ]
+        ),
+        (
+            "repository:r_service_edge_api",
+            "k8s/deployment.yaml",
+        ): "\n".join(
+            [
+                "apiVersion: apps/v1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: service-edge-api",
+                "  namespace: modern",
+                "spec:",
+                "  template:",
+                "    spec:",
+                "      containers:",
+                "        - name: service-edge-api",
+                "          image: ghcr.io/example/service-edge-api:modern",
+            ]
+        ),
+    }
+    _apply_indexed_file_mocks(monkeypatch, file_store)
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.extract_consumer_repositories",
+        lambda *_args, **_kwargs: [],
+    )
+
+    result = enrich_repository_context(
+        _DummyDB(),
+        {
+            "repository": {
+                "id": "repository:r_service_edge_api",
+                "name": "service-edge-api",
+                "path": "/does/not/matter",
+                "local_path": "/does/not/matter",
+            },
+            "platforms": [
+                {
+                    "id": "platform:kubernetes:aws:cluster/modern:prod:none",
+                    "kind": "kubernetes",
+                    "provider": "aws",
+                    "environment": "prod",
+                    "name": "modern",
+                }
+            ],
+        },
+    )
+
+    assert result["deployment_artifacts"]["charts"] == [
+        {
+            "repo_url": "",
+            "chart": "service-edge-api",
+            "version": "0.1.0",
+            "release_name": "",
+            "namespace": "",
+            "source_repo": "service-edge-api",
+            "relative_path": "charts/service-edge-api/Chart.yaml",
+            "environment": None,
+        }
+    ]
+    assert result["deployment_artifacts"]["images"] == [
+        {
+            "repository": "ghcr.io/example/service-edge-api",
+            "tag": "modern",
+            "source_repo": "service-edge-api",
+            "relative_path": "charts/service-edge-api/values.yaml",
+            "environment": None,
+        },
+        {
+            "repository": "ghcr.io/example/service-edge-api",
+            "tag": "modern",
+            "source_repo": "service-edge-api",
+            "relative_path": "k8s/deployment.yaml",
+            "environment": "modern",
+        },
+    ]
+    assert result["deployment_artifacts"]["service_ports"] == [
+        {
+            "port": "8080",
+            "source_repo": "service-edge-api",
+            "relative_path": "charts/service-edge-api/values.yaml",
+            "environment": None,
+        }
+    ]
+    assert result["deployment_artifacts"]["k8s_resources"] == [
+        {
+            "resource_path": "k8s/deployment.yaml",
+            "kind": "Deployment",
+            "name": "service-edge-api",
+            "source_repo": "service-edge-api",
+            "relative_path": "k8s/deployment.yaml",
+            "environment": "modern",
+        }
+    ]
+    assert result["delivery_paths"] == [
+        {
+            "path_kind": "direct",
+            "controller": "",
+            "delivery_mode": "plain_helm_release",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["kubernetes"],
+            "platforms": ["platform:kubernetes:aws:cluster/modern:prod:none"],
+            "deployment_sources": ["charts/service-edge-api"],
+            "config_sources": ["charts/service-edge-api/values.yaml"],
+            "provisioning_repositories": [],
+            "environments": ["prod"],
+            "summary": (
+                "Indexed deployment artifacts indicate a direct Helm deployment "
+                "path through charts/service-edge-api onto Kubernetes platforms."
+            ),
+        },
+        {
+            "path_kind": "direct",
+            "controller": "",
+            "delivery_mode": "plain_kubernetes_manifests",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["kubernetes"],
+            "platforms": ["platform:kubernetes:aws:cluster/modern:prod:none"],
+            "deployment_sources": ["k8s"],
+            "config_sources": [],
+            "provisioning_repositories": [],
+            "environments": ["prod", "modern"],
+            "summary": (
+                "Indexed deployment artifacts indicate a direct Kubernetes "
+                "manifest deployment path through k8s onto Kubernetes platforms."
+            ),
+        },
+    ]
 
 
 def test_enrich_repository_context_extracts_jenkins_pipeline_hints(

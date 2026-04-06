@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...resolution.platform_families import format_platform_kind_label
+from .content_enrichment_local_delivery import build_local_delivery_paths
 
 _GITOPS_DELIVERY_MODES = frozenset({"eks_gitops", "eks_gitops_rollback"})
 _DIRECT_DELIVERY_MODES = frozenset(
@@ -21,6 +22,7 @@ def summarize_delivery_paths(
     deploys_from: list[dict[str, Any]],
     discovers_config_in: list[dict[str, Any]],
     provisioned_by: list[dict[str, Any]],
+    deployment_artifacts: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     """Summarize workflow hints into higher-level delivery paths."""
 
@@ -142,6 +144,12 @@ def summarize_delivery_paths(
                 provisioning_repositories=_repository_names(provisioned_by),
             )
         )
+    paths.extend(
+        build_local_delivery_paths(
+            deployment_artifacts=deployment_artifacts or {},
+            platforms=platforms,
+        )
+    )
     return [path for path in paths if path]
 
 

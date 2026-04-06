@@ -97,3 +97,83 @@ def test_summarize_delivery_paths_falls_back_to_context_when_commands_are_missin
             ),
         },
     ]
+
+
+def test_summarize_delivery_paths_adds_local_plain_helm_and_manifest_paths() -> None:
+    """Local deployment artifacts should surface evidence-only delivery paths."""
+
+    result = summarize_delivery_paths(
+        delivery_workflows={},
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:kubernetes:aws:cluster/modern:prod:none",
+                "kind": "kubernetes",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "modern",
+            }
+        ],
+        deploys_from=[],
+        discovers_config_in=[],
+        provisioned_by=[],
+        deployment_artifacts={
+            "charts": [
+                {
+                    "relative_path": "charts/service-edge-api/Chart.yaml",
+                    "environment": "prod",
+                }
+            ],
+            "images": [
+                {
+                    "relative_path": "charts/service-edge-api/values.yaml",
+                    "environment": "prod",
+                }
+            ],
+            "k8s_resources": [
+                {
+                    "resource_path": "k8s/deployment.yaml",
+                    "environment": "modern",
+                }
+            ],
+        },
+    )
+
+    assert result == [
+        {
+            "path_kind": "direct",
+            "controller": "",
+            "delivery_mode": "plain_helm_release",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["kubernetes"],
+            "platforms": ["platform:kubernetes:aws:cluster/modern:prod:none"],
+            "deployment_sources": ["charts/service-edge-api"],
+            "config_sources": ["charts/service-edge-api/values.yaml"],
+            "provisioning_repositories": [],
+            "environments": ["prod"],
+            "summary": (
+                "Indexed deployment artifacts indicate a direct Helm deployment "
+                "path through charts/service-edge-api onto Kubernetes platforms."
+            ),
+        },
+        {
+            "path_kind": "direct",
+            "controller": "",
+            "delivery_mode": "plain_kubernetes_manifests",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["kubernetes"],
+            "platforms": ["platform:kubernetes:aws:cluster/modern:prod:none"],
+            "deployment_sources": ["k8s"],
+            "config_sources": [],
+            "provisioning_repositories": [],
+            "environments": ["prod", "modern"],
+            "summary": (
+                "Indexed deployment artifacts indicate a direct Kubernetes "
+                "manifest deployment path through k8s onto Kubernetes platforms."
+            ),
+        },
+    ]

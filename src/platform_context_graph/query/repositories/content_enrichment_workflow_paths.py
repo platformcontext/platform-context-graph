@@ -18,6 +18,7 @@ def enrich_workflow_paths(
     context: dict[str, Any],
     resolve_repository: Callable[[str], dict[str, Any] | None],
     database: Any = None,
+    local_deployment_artifacts: dict[str, list[dict[str, Any]]] | None = None,
 ) -> None:
     """Mutate context with workflow, controller-driven, and delivery paths."""
 
@@ -41,7 +42,7 @@ def enrich_workflow_paths(
         )
         if controller_driven_paths:
             context["controller_driven_paths"] = controller_driven_paths
-    if delivery_workflows:
+    if delivery_workflows or local_deployment_artifacts:
         delivery_paths = summarize_delivery_paths(
             delivery_workflows=delivery_workflows,
             controller_driven_paths=list(context.get("controller_driven_paths") or []),
@@ -49,6 +50,7 @@ def enrich_workflow_paths(
             deploys_from=list(context.get("deploys_from") or []),
             discovers_config_in=list(context.get("discovers_config_in") or []),
             provisioned_by=list(context.get("provisioned_by") or []),
+            deployment_artifacts=local_deployment_artifacts or {},
         )
         if delivery_paths:
             context["delivery_paths"] = delivery_paths

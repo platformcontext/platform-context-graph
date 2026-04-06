@@ -15,6 +15,8 @@ from .common import get_db_manager, resolve_repository
 from .content_enrichment_deployment_artifacts import (
     extract_related_deployment_artifacts,
 )
+from .content_enrichment_local_delivery import extract_local_deployment_artifacts
+from .content_enrichment_local_delivery import merge_deployment_artifacts
 from .content_enrichment_consumers import extract_consumer_repositories
 from .content_enrichment_openapi import dedupe_endpoint_rows, extract_openapi_endpoints
 from .content_enrichment_support import (
@@ -74,12 +76,10 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
     db_manager = get_db_manager(database)
 
     def _resolve_repo(candidate: str) -> dict[str, Any] | None:
-        """Resolve one related repository candidate through the graph database."""
-
         with db_manager.get_driver().session() as session:
             return _resolve_related_repo(session, candidate)
 
-    deployment_artifacts = extract_related_deployment_artifacts(
+    related_deployment_artifacts = extract_related_deployment_artifacts(
         database=database,
         repo_name=str(repository.get("name") or ""),
         deploys_from=list(context.get("deploys_from") or []),
@@ -89,6 +89,12 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
         values_path_patterns=values_path_patterns,
         infer_environment_from_path=infer_environment_from_path,
         split_csv=split_csv,
+    )
+    local_deployment_artifacts = extract_local_deployment_artifacts(
+        database, repo_id=repo_id, repo_name=str(repository.get("name") or "")
+    )
+    deployment_artifacts = merge_deployment_artifacts(
+        related_deployment_artifacts, local_deployment_artifacts
     )
     if any(deployment_artifacts.values()):
         context["deployment_artifacts"] = deployment_artifacts
@@ -110,6 +116,7 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
         context=context,
         resolve_repository=_resolve_repo,
         database=database,
+        local_deployment_artifacts=local_deployment_artifacts,
     )
     return context
 
