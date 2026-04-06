@@ -42,6 +42,38 @@ def _artifact_rank(row: dict[str, Any]) -> int:
     return 10
 
 
+def _artifact_class(row: dict[str, Any]) -> str:
+    """Return a support-oriented class for one artifact row."""
+
+    relative_path = str(row.get("relative_path") or "").strip().lower()
+    reason = str(row.get("reason") or "").strip().lower()
+
+    if any(token in relative_path for token in ["dashboard", "grafana", "monitor"]):
+        return "observability_asset"
+    if any(
+        token in relative_path
+        for token in ["openapi", "swagger", "catalog-specs", "specs/"]
+    ):
+        return "api_spec"
+    if any(
+        token in relative_path for token in ["health", "probe", "_status", "_version"]
+    ):
+        return "runtime_source"
+    if any(
+        token in relative_path
+        for token in ["bootstrap", "main.", "server.", "app.", "entrypoint"]
+    ) or any(token in reason for token in ["bootstrap", "main", "entrypoint"]):
+        return "runtime_source"
+    if any(
+        token in relative_path
+        for token in ["values", "xirsarole", "secret", "config.yaml", "kustomization"]
+    ):
+        return "deployment_config"
+    if relative_path == "readme.md" or relative_path.startswith("docs/"):
+        return "operator_doc"
+    return "generic"
+
+
 def _artifact_sort_key(row: dict[str, Any]) -> tuple[int, str, str]:
     """Return a stable sort key for one artifact row."""
 
@@ -89,6 +121,7 @@ def _append_api_surface_artifacts(
                 "relative_path": relative_path,
                 "source_backend": "graph-context",
                 "reason": row.get("discovered_from") or "api_spec",
+                "artifact_class": "",
             }
         )
 
@@ -104,6 +137,7 @@ def _append_api_surface_artifacts(
                 "relative_path": relative_path,
                 "source_backend": "graph-context",
                 "reason": row.get("path") or "api_endpoint",
+                "artifact_class": "",
             }
         )
 
@@ -130,6 +164,7 @@ def _append_gitops_artifacts(
                 "relative_path": relative_path,
                 "source_backend": "graph-context",
                 "reason": row.get("layer_kind"),
+                "artifact_class": "",
             }
         )
 
@@ -146,6 +181,7 @@ def _append_gitops_artifacts(
                     "relative_path": relative_path,
                     "source_backend": "graph-context",
                     "reason": row.get("kind") or row.get("source_family"),
+                    "artifact_class": "",
                 }
             )
 
@@ -165,6 +201,7 @@ def build_ranked_story_artifacts(
             "relative_path": row.get("relative_path"),
             "source_backend": row.get("source_backend"),
             "reason": row.get("summary") or row.get("snippet") or row.get("title"),
+            "artifact_class": "",
         }
         for row in [
             *documentation_evidence.get("file_content", []),
@@ -175,4 +212,24 @@ def build_ranked_story_artifacts(
     _append_gitops_artifacts(artifacts, gitops_overview=gitops_overview)
     _append_api_surface_artifacts(artifacts, api_surface=api_surface or {})
     ranked = sorted(_dedupe_artifacts(artifacts), key=_artifact_sort_key)
+    for row in ranked:
+        row["artifact_class"] = _artifact_class(row)
     return ranked[:limit]
+
+
+def select_support_artifacts(
+    *,
+    artifacts: list[dict[str, Any]],
+    preferred_classes: list[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Return topic-specific artifacts with fallback to the ranked global list."""
+
+    selected = [
+        row
+        for row in artifacts
+        if str(row.get("artifact_class") or "").strip() in preferred_classes
+    ]
+    if selected:
+        return selected[:limit]
+    return artifacts[:limit]

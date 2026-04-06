@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .story_artifact_ranking import select_support_artifacts
 from .story_shared import human_list
 
 
@@ -75,7 +76,15 @@ def build_support_overview(
                 "summary": (
                     f"Start with {human_list(entrypoint_labels, limit=5)} and then confirm runtime and routing evidence."
                 ),
-                "artifacts": key_artifacts[:3],
+                "artifacts": select_support_artifacts(
+                    artifacts=key_artifacts,
+                    preferred_classes=[
+                        "observability_asset",
+                        "api_spec",
+                        "runtime_source",
+                    ],
+                    limit=3,
+                ),
             }
         )
     if gitops_overview and (gitops_overview.get("value_layers") or key_artifacts):
@@ -98,7 +107,11 @@ def build_support_overview(
                         else "."
                     )
                 ),
-                "artifacts": key_artifacts[:5],
+                "artifacts": select_support_artifacts(
+                    artifacts=key_artifacts,
+                    preferred_classes=["deployment_config", "operator_doc"],
+                    limit=5,
+                ),
             }
         )
     if dependency_hotspots:
@@ -108,7 +121,15 @@ def build_support_overview(
                 "summary": (
                     f"Check shared dependencies such as {human_list([row['name'] for row in dependency_hotspots], limit=4)}."
                 ),
-                "artifacts": key_artifacts[:4],
+                "artifacts": select_support_artifacts(
+                    artifacts=key_artifacts,
+                    preferred_classes=[
+                        "observability_asset",
+                        "runtime_source",
+                        "deployment_config",
+                    ],
+                    limit=4,
+                ),
             }
         )
     if consumer_repositories:
@@ -126,7 +147,11 @@ def build_support_overview(
                         "Check downstream consumer impact across "
                         f"{human_list(consumer_names, limit=4)}."
                     ),
-                    "artifacts": key_artifacts[:3],
+                    "artifacts": select_support_artifacts(
+                        artifacts=key_artifacts,
+                        preferred_classes=["operator_doc", "deployment_config"],
+                        limit=3,
+                    ),
                 }
             )
 
