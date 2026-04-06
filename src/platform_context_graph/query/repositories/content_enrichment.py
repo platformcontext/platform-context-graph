@@ -76,6 +76,8 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
     db_manager = get_db_manager(database)
 
     def _resolve_repo(candidate: str) -> dict[str, Any] | None:
+        """Resolve one related repository candidate within a short-lived session."""
+
         with db_manager.get_driver().session() as session:
             return _resolve_related_repo(session, candidate)
 
