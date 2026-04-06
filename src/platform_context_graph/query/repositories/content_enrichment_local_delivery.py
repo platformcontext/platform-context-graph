@@ -395,11 +395,13 @@ def _split_image_reference(image: str) -> tuple[str, str]:
     normalized = image.strip()
     if not normalized:
         return "", ""
-    last_colon = normalized.rfind(":")
-    last_slash = normalized.rfind("/")
+    name_part, has_digest, digest_part = normalized.partition("@")
+    digest_suffix = f"@{digest_part}" if has_digest else ""
+    last_colon = name_part.rfind(":")
+    last_slash = name_part.rfind("/")
     if last_colon <= last_slash:
         return normalized, ""
-    return normalized[:last_colon], normalized[last_colon + 1 :]
+    return name_part[:last_colon] + digest_suffix, name_part[last_colon + 1 :]
 
 
 def _is_values_file(relative_path: str, chart_paths: list[str]) -> bool:

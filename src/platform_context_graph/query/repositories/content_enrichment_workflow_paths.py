@@ -27,6 +27,9 @@ def enrich_workflow_paths(
         resolve_repository=resolve_repository,
         database=database,
     )
+    has_local_deployment_artifacts = _has_deployment_artifacts(
+        local_deployment_artifacts
+    )
     repo_root = _repo_root(repository)
     ansible_hints = (
         extract_ansible_automation_evidence(repo_root) if repo_root is not None else {}
@@ -59,7 +62,7 @@ def enrich_workflow_paths(
             context["controller_driven_paths"] = controller_driven_paths
     if (
         delivery_workflows
-        or local_deployment_artifacts
+        or has_local_deployment_artifacts
         or isinstance(context.get("infrastructure"), dict)
     ):
         delivery_paths = summarize_delivery_paths(
@@ -74,10 +77,22 @@ def enrich_workflow_paths(
             deploys_from=list(context.get("deploys_from") or []),
             discovers_config_in=list(context.get("discovers_config_in") or []),
             provisioned_by=list(context.get("provisioned_by") or []),
-            deployment_artifacts=local_deployment_artifacts or {},
+            deployment_artifacts=(
+                local_deployment_artifacts if has_local_deployment_artifacts else {}
+            ),
         )
         if delivery_paths:
             context["delivery_paths"] = delivery_paths
+
+
+def _has_deployment_artifacts(
+    deployment_artifacts: dict[str, list[dict[str, Any]]] | None,
+) -> bool:
+    """Return whether a deployment-artifact mapping contains any rows."""
+
+    if not deployment_artifacts:
+        return False
+    return any(bool(rows) for rows in deployment_artifacts.values())
 
 
 def _repo_root(repository: dict[str, Any]) -> Path | None:

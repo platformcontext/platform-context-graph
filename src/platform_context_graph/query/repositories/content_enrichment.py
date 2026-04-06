@@ -19,6 +19,7 @@ from .content_enrichment_local_delivery import extract_local_deployment_artifact
 from .content_enrichment_local_delivery import merge_deployment_artifacts
 from .content_enrichment_consumers import extract_consumer_repositories
 from .content_enrichment_openapi import dedupe_endpoint_rows, extract_openapi_endpoints
+from .content_enrichment_resolver import build_related_repo_resolver
 from .content_enrichment_support import (
     infer_environment_from_path,
     split_csv,
@@ -74,12 +75,7 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
             context["observed_config_environments"] = observed_environments
         _remove_limitation(context, "dns_unknown")
     db_manager = get_db_manager(database)
-
-    def _resolve_repo(candidate: str) -> dict[str, Any] | None:
-        """Resolve one related repository candidate within a short-lived session."""
-
-        with db_manager.get_driver().session() as session:
-            return _resolve_related_repo(session, candidate)
+    _resolve_repo = build_related_repo_resolver(db_manager)
 
     related_deployment_artifacts = extract_related_deployment_artifacts(
         database=database,
