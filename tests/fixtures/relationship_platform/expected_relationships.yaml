@@ -103,6 +103,19 @@ api_expectations:
     - kubernetes
   expected_service_dependencies:
     - service-worker-jobs
+  expected_delivery_modes:
+    - plain_helm_release
+    - plain_kubernetes_manifests
+  expected_local_deployment_sources:
+    - charts/service-edge-api
+    - k8s
+  expected_local_config_sources:
+    - charts/service-edge-api/values.yaml
+  expected_local_artifacts:
+    chart_paths:
+      - charts/service-edge-api/Chart.yaml
+    k8s_resource_paths:
+      - k8s/deployment.yaml
   expected_delivery_workflows:
     github_actions:
       workflow_names:
