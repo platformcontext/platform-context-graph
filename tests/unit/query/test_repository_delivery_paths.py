@@ -229,3 +229,141 @@ def test_summarize_delivery_paths_keeps_nested_manifest_roots() -> None:
             ),
         }
     ]
+
+
+def test_summarize_delivery_paths_adds_terraform_provider_paths() -> None:
+    """Terraform provider resources should surface direct delivery paths."""
+
+    result = summarize_delivery_paths(
+        delivery_workflows={},
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:eks:aws:cluster/bg-qa:bg-qa:none",
+                "kind": "eks",
+                "provider": "aws",
+                "environment": "bg-qa",
+                "name": "bg-qa",
+            }
+        ],
+        infrastructure={
+            "terraform_resources": [
+                {
+                    "resource_type": "helm_release",
+                    "repository": "terraform-stack-eks",
+                    "file": "shared/helm.tf",
+                },
+                {
+                    "resource_type": "kubernetes_deployment",
+                    "repository": "terraform-stack-eks",
+                    "file": "shared/k8s.tf",
+                },
+            ]
+        },
+        deploys_from=[],
+        discovers_config_in=[],
+        provisioned_by=[],
+        deployment_artifacts={},
+    )
+
+    assert result == [
+        {
+            "path_kind": "direct",
+            "controller": "terraform",
+            "delivery_mode": "terraform_helm_provider",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["eks"],
+            "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+            "deployment_sources": ["terraform-stack-eks"],
+            "config_sources": ["shared/helm.tf"],
+            "provisioning_repositories": [],
+            "environments": ["bg-qa"],
+            "summary": (
+                "Indexed Terraform resources indicate a direct Helm deployment "
+                "path through terraform-stack-eks onto EKS platforms."
+            ),
+        },
+        {
+            "path_kind": "direct",
+            "controller": "terraform",
+            "delivery_mode": "terraform_kubernetes_provider",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["eks"],
+            "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+            "deployment_sources": ["terraform-stack-eks"],
+            "config_sources": ["shared/k8s.tf"],
+            "provisioning_repositories": [],
+            "environments": ["bg-qa"],
+            "summary": (
+                "Indexed Terraform resources indicate a direct Kubernetes "
+                "provider deployment path through terraform-stack-eks onto EKS "
+                "platforms."
+            ),
+        },
+    ]
+
+
+def test_summarize_delivery_paths_adds_terraform_ecs_delivery_path() -> None:
+    """Terraform ECS modules should surface direct container delivery paths."""
+
+    result = summarize_delivery_paths(
+        delivery_workflows={},
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                "kind": "ecs",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "node10",
+            }
+        ],
+        infrastructure={
+            "terraform_modules": [
+                {
+                    "name": "api_node_boats",
+                    "repository": "terraform-stack-node10",
+                    "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                    "deployment_name": "api-node-boats",
+                    "cluster_name": "node10",
+                }
+            ],
+            "terraform_resources": [
+                {
+                    "resource_type": "aws_ecs_service",
+                    "repository": "terraform-stack-node10",
+                    "file": "shared/service.tf",
+                }
+            ],
+        },
+        deploys_from=[],
+        discovers_config_in=[],
+        provisioned_by=[],
+        deployment_artifacts={},
+    )
+
+    assert result == [
+        {
+            "path_kind": "direct",
+            "controller": "terraform",
+            "delivery_mode": "ecs_service_deployment",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["ecs"],
+            "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
+            "deployment_sources": ["terraform-stack-node10"],
+            "config_sources": ["shared/service.tf"],
+            "provisioning_repositories": [],
+            "environments": ["prod"],
+            "summary": (
+                "Indexed Terraform resources indicate a direct ECS service "
+                "deployment path through terraform-stack-node10 onto ECS "
+                "platforms."
+            ),
+        }
+    ]
