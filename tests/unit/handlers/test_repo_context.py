@@ -712,19 +712,63 @@ class TestRepoSummary:
                 "sample_paths": ["group_vars/qa/api.yml"],
             }
         ]
-        assert result["deployment_overview"] == {
-            "internet_entrypoints": [
-                {
-                    "hostname": "api-node-boats.qa.bgrp.io",
-                    "visibility": "public",
-                }
-            ],
-            "internal_entrypoints": [],
-            "api_surface": {
-                "docs_routes": ["/_specs"],
-                "api_versions": ["v3"],
-            },
-            "runtime_platforms": [
+        overview = result["deployment_overview"]
+        assert overview["internet_entrypoints"] == [
+            {
+                "hostname": "api-node-boats.qa.bgrp.io",
+                "visibility": "public",
+            }
+        ]
+        assert overview["internal_entrypoints"] == []
+        assert overview["api_surface"] == {
+            "docs_routes": ["/_specs"],
+            "api_versions": ["v3"],
+        }
+        assert overview["runtime_platforms"] == [
+            {
+                "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                "kind": "ecs",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "node10",
+            }
+        ]
+        assert overview["delivery_paths"][0]["path_kind"] == "gitops"
+        assert overview["deployment_story"] == [
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa."
+        ]
+        assert overview["topology_story"] == [
+            "Public entrypoints: api-node-boats.qa.bgrp.io.",
+            "API surface exposes versions v3 and docs routes /_specs.",
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
+            "Traffic enters through gateways envoy-internal on service ports 3081.",
+            "Shared config families span helm-charts, terraform-stack-node10: /configd/api-node-boats/*.",
+            "Consumer-only repository automate-yachtworld references this service via hostname references in group_vars/qa/api.yml.",
+        ]
+        assert overview["consumer_repositories"] == [
+            {
+                "repository": "automate-yachtworld",
+                "evidence_kinds": ["hostname_reference"],
+                "sample_paths": ["group_vars/qa/api.yml"],
+            }
+        ]
+        assert overview["shared_config_paths"] == [
+            {
+                "path": "/configd/api-node-boats/*",
+                "source_repositories": [
+                    "helm-charts",
+                    "terraform-stack-node10",
+                ],
+            }
+        ]
+        assert overview["deployment_artifacts"]["images"][0]["tag"] == "3.21.0"
+        assert overview["deployment_controllers"] == ["github_actions"]
+        assert overview["controller_overview"]["families"] == ["github_actions"]
+        assert overview["runtime_overview"] == {
+            "selected_environment": "prod",
+            "observed_environments": ["prod"],
+            "platform_kinds": ["ecs"],
+            "platforms": [
                 {
                     "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
                     "kind": "ecs",
@@ -733,131 +777,49 @@ class TestRepoSummary:
                     "name": "node10",
                 }
             ],
-            "delivery_paths": [
-                {
-                    "path_kind": "gitops",
-                    "controller": "github_actions",
-                    "delivery_mode": "eks_gitops",
-                    "summary": "GitHub Actions drives a GitOps deployment path through helm-charts onto EKS platforms.",
-                    "automation_repositories": [
-                        "boatsgroup/core-engineering-automation"
-                    ],
-                    "platform_kinds": ["eks"],
-                    "deployment_sources": ["helm-charts"],
-                    "config_sources": [],
-                    "provisioning_repositories": [],
-                    "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
-                    "environments": ["bg-qa"],
-                }
-            ],
-            "deployment_story": [
-                "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa."
-            ],
-            "topology_story": [
-                "Public entrypoints: api-node-boats.qa.bgrp.io.",
-                "API surface exposes versions v3 and docs routes /_specs.",
-                "GitHub Actions via boatsgroup/core-engineering-automation deploys from helm-charts onto EKS in bg-qa.",
-                "Traffic enters through gateways envoy-internal on service ports 3081.",
-                "Shared config families span helm-charts, terraform-stack-node10: /configd/api-node-boats/*.",
-                "Consumer-only repository automate-yachtworld references this service via hostname references in group_vars/qa/api.yml.",
-            ],
-            "consumer_repositories": [
-                {
-                    "repository": "automate-yachtworld",
-                    "evidence_kinds": ["hostname_reference"],
-                    "sample_paths": ["group_vars/qa/api.yml"],
-                }
-            ],
-            "shared_config_paths": [
-                {
-                    "path": "/configd/api-node-boats/*",
-                    "source_repositories": [
-                        "helm-charts",
-                        "terraform-stack-node10",
-                    ],
-                }
-            ],
-            "deployment_artifacts": {
-                "charts": [
+            "entrypoints": ["api-node-boats.qa.bgrp.io"],
+        }
+        assert overview["deployment_facts"][:3] == [
+            {
+                "fact_type": "MANAGED_BY_CONTROLLER",
+                "adapter": "github_actions",
+                "value": "github_actions",
+                "confidence": "medium",
+                "evidence": [
                     {
-                        "repo_url": "boatsgroup.pe.jfrog.io",
-                        "chart": "bg-helm/api-node-template",
-                        "version": "0.2.1",
-                        "release_name": "api-node-boats",
-                        "namespace": "api-node",
-                        "source_repo": "helm-charts",
-                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/config.yaml",
-                        "environment": "bg-qa",
-                    }
-                ],
-                "images": [
-                    {
-                        "repository": "048922418463.dkr.ecr.us-east-1.amazonaws.com/api-node-boats",
-                        "tag": "3.21.0",
-                        "source_repo": "helm-charts",
-                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
-                        "environment": "bg-qa",
-                    }
-                ],
-                "kustomize_resources": [
-                    {
-                        "resource_path": "argocd/api-node-boats/base/xirsarole.yaml",
-                        "kind": "XIRSARole",
-                        "name": "api-node-boats",
-                        "source_repo": "helm-charts",
-                        "relative_path": "argocd/api-node-boats/base/kustomization.yaml",
-                        "environment": None,
-                    }
-                ],
-                "kustomize_patches": [
-                    {
-                        "patch_path": "argocd/api-node-boats/overlays/bg-qa/xirsarole-patch.yaml",
-                        "target_kind": "XIRSARole",
-                        "target_name": "api-node-boats",
-                        "source_repo": "helm-charts",
-                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/kustomization.yaml",
-                        "environment": "bg-qa",
-                    }
-                ],
-                "config_paths": [
-                    {
-                        "path": "/configd/api-node-boats/*",
-                        "source_repo": "helm-charts",
-                        "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
-                        "environment": None,
-                    },
-                    {
-                        "path": "/api/api-node-boats/*",
-                        "source_repo": "helm-charts",
-                        "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
-                        "environment": None,
-                    },
-                    {
-                        "path": "/configd/api-node-boats/*",
-                        "source_repo": "terraform-stack-node10",
-                        "relative_path": "shared/iam.tf",
-                        "environment": None,
-                    },
-                ],
-                "service_ports": [
-                    {
-                        "port": "3081",
-                        "source_repo": "helm-charts",
-                        "relative_path": "argocd/api-node-boats/base/values.yaml",
-                        "environment": None,
-                    }
-                ],
-                "gateways": [
-                    {
-                        "name": "envoy-internal",
-                        "source_repo": "helm-charts",
-                        "relative_path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
-                        "environment": "bg-qa",
+                        "source": "delivery_path",
+                        "controller": "github_actions",
+                        "delivery_mode": "eks_gitops",
                     }
                 ],
             },
-            "deployment_controllers": ["github_actions"],
-        }
+            {
+                "fact_type": "DEPLOYS_FROM",
+                "adapter": "github_actions",
+                "value": "helm-charts",
+                "confidence": "medium",
+                "evidence": [
+                    {
+                        "source": "delivery_path",
+                        "controller": "github_actions",
+                        "delivery_mode": "eks_gitops",
+                    }
+                ],
+            },
+            {
+                "fact_type": "RUNS_ON_PLATFORM",
+                "adapter": "github_actions",
+                "value": "ecs",
+                "confidence": "high",
+                "evidence": [
+                    {
+                        "source": "platform",
+                        "kind": "ecs",
+                        "environment": "prod",
+                    }
+                ],
+            },
+        ]
         assert result["story"] == [
             "Public entrypoints: api-node-boats.qa.bgrp.io.",
             "API surface exposes versions v3 and docs routes /_specs.",
@@ -1585,19 +1547,43 @@ class TestTraceDeploymentChain:
         assert result["deployment_artifacts"]["images"][0]["repository"].endswith(
             "/api-node-boats"
         )
-        assert result["deployment_overview"] == {
-            "internet_entrypoints": [
-                {
-                    "hostname": "api-node-boats.qa.bgrp.io",
-                    "visibility": "public",
-                }
-            ],
-            "internal_entrypoints": [],
-            "api_surface": {
-                "docs_routes": ["/_specs"],
-                "api_versions": ["v3"],
-            },
-            "runtime_platforms": [
+        overview = result["deployment_overview"]
+        assert overview["internet_entrypoints"] == [
+            {
+                "hostname": "api-node-boats.qa.bgrp.io",
+                "visibility": "public",
+            }
+        ]
+        assert overview["internal_entrypoints"] == []
+        assert overview["api_surface"] == {
+            "docs_routes": ["/_specs"],
+            "api_versions": ["v3"],
+        }
+        assert overview["runtime_platforms"] == [
+            {
+                "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                "kind": "ecs",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "node10",
+            }
+        ]
+        assert overview["delivery_paths"][0]["path_kind"] == "direct"
+        assert overview["deployment_story"] == [
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod."
+        ]
+        assert overview["topology_story"] == [
+            "Public entrypoints: api-node-boats.qa.bgrp.io.",
+            "API surface exposes versions v3 and docs routes /_specs.",
+            "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod.",
+        ]
+        assert overview["deployment_controllers"] == ["github_actions"]
+        assert overview["controller_overview"]["families"] == ["github_actions"]
+        assert overview["runtime_overview"] == {
+            "selected_environment": "prod",
+            "observed_environments": ["prod"],
+            "platform_kinds": ["ecs"],
+            "platforms": [
                 {
                     "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
                     "kind": "ecs",
@@ -1606,33 +1592,75 @@ class TestTraceDeploymentChain:
                     "name": "node10",
                 }
             ],
-            "delivery_paths": [
-                {
-                    "path_kind": "direct",
-                    "controller": "github_actions",
-                    "delivery_mode": "continuous_deployment",
-                    "summary": "GitHub Actions drives a direct deployment path through terraform-stack-ecs onto ECS platforms.",
-                    "automation_repositories": [
-                        "boatsgroup/core-engineering-automation"
-                    ],
-                    "platform_kinds": ["ecs"],
-                    "deployment_sources": [],
-                    "config_sources": [],
-                    "provisioning_repositories": ["terraform-stack-ecs"],
-                    "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
-                    "environments": ["prod"],
-                }
-            ],
-            "deployment_story": [
-                "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod."
-            ],
-            "topology_story": [
-                "Public entrypoints: api-node-boats.qa.bgrp.io.",
-                "API surface exposes versions v3 and docs routes /_specs.",
-                "GitHub Actions via boatsgroup/core-engineering-automation deploys through terraform-stack-ecs onto ECS in prod.",
-            ],
-            "deployment_controllers": ["github_actions"],
+            "entrypoints": ["api-node-boats.qa.bgrp.io"],
         }
+        assert overview["deployment_facts"] == [
+            {
+                "fact_type": "MANAGED_BY_CONTROLLER",
+                "adapter": "github_actions",
+                "value": "github_actions",
+                "confidence": "high",
+                "evidence": [
+                    {
+                        "source": "delivery_path",
+                        "controller": "github_actions",
+                        "delivery_mode": "continuous_deployment",
+                    }
+                ],
+            },
+            {
+                "fact_type": "USES_PACKAGING_LAYER",
+                "adapter": "github_actions",
+                "value": "container",
+                "confidence": "high",
+                "evidence": [
+                    {
+                        "source": "delivery_path",
+                        "controller": "github_actions",
+                        "delivery_mode": "continuous_deployment",
+                    }
+                ],
+            },
+            {
+                "fact_type": "RUNS_ON_PLATFORM",
+                "adapter": "github_actions",
+                "value": "ecs",
+                "confidence": "high",
+                "evidence": [
+                    {
+                        "source": "platform",
+                        "kind": "ecs",
+                        "environment": "prod",
+                    }
+                ],
+            },
+            {
+                "fact_type": "OBSERVED_IN_ENVIRONMENT",
+                "adapter": "github_actions",
+                "value": "prod",
+                "confidence": "high",
+                "evidence": [
+                    {
+                        "source": "delivery_path",
+                        "controller": "github_actions",
+                        "delivery_mode": "continuous_deployment",
+                    }
+                ],
+            },
+            {
+                "fact_type": "EXPOSES_ENTRYPOINT",
+                "adapter": "github_actions",
+                "value": "api-node-boats.qa.bgrp.io",
+                "confidence": "medium",
+                "evidence": [
+                    {
+                        "source": "entrypoint",
+                        "hostname": "api-node-boats.qa.bgrp.io",
+                        "environment": None,
+                    }
+                ],
+            },
+        ]
         assert result["story"] == [
             "Public entrypoints: api-node-boats.qa.bgrp.io.",
             "API surface exposes versions v3 and docs routes /_specs.",

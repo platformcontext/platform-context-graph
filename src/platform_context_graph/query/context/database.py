@@ -89,6 +89,15 @@ def _merge_repository_context_into_workload_response(
         response["coverage"] = repo_context["coverage"]
     if repo_context.get("limitations"):
         response["limitations"] = list(repo_context["limitations"])
+    for key in (
+        "platforms",
+        "delivery_paths",
+        "controller_driven_paths",
+        "observed_config_environments",
+    ):
+        value = repo_context.get(key)
+        if value:
+            response[key] = value
 
     derived_instances = instances_from_platform_rows(
         workload_id=workload_id,

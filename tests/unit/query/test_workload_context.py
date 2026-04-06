@@ -344,6 +344,39 @@ def test_get_workload_context_enriches_repo_backed_runtime_and_dependency_data(
                     "visibility": "public",
                 }
             ],
+            "observed_config_environments": ["bg-qa"],
+            "delivery_paths": [
+                {
+                    "path_kind": "gitops",
+                    "controller": "argocd",
+                    "delivery_mode": "eks_gitops",
+                    "deployment_sources": ["helm-charts"],
+                    "platform_kinds": ["eks"],
+                    "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+                    "environments": ["bg-qa"],
+                    "summary": (
+                        "ArgoCD drives a GitOps deployment path through "
+                        "helm-charts onto EKS platforms."
+                    ),
+                }
+            ],
+            "controller_driven_paths": [
+                {
+                    "controller_kind": "argocd",
+                    "automation_kind": "helm",
+                    "entry_points": [
+                        "argocd/api-node-boats/overlays/bg-qa/config.yaml"
+                    ],
+                    "target_descriptors": ["bg-qa", "api-node"],
+                    "runtime_family": "kubernetes",
+                    "supporting_repositories": ["helm-charts"],
+                    "confidence": "high",
+                    "explanation": (
+                        "argocd controller config.yaml drives a helm deployment "
+                        "into bg-qa."
+                    ),
+                }
+            ],
             "deploys_from": [
                 {
                     "id": "repository:r_66cd2d76",
@@ -385,6 +418,10 @@ def test_get_workload_context_enriches_repo_backed_runtime_and_dependency_data(
     assert scoped["instances"] == []
     assert "Public entrypoints: api-node-boats.qa.bgrp.io." in story["story"]
     assert "Depends on helm-charts." in story["story"]
+    assert story["controller_overview"]["families"] == ["argocd"]
+    assert story["controller_overview"]["delivery_modes"] == ["eks_gitops"]
+    assert story["runtime_overview"]["selected_environment"] == "bg-qa"
+    assert story["runtime_overview"]["platform_kinds"] == ["eks"]
 
 
 def test_get_workload_context_clears_instances_when_resource_instance_is_selected():

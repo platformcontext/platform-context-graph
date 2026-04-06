@@ -60,6 +60,33 @@ STORY_RESPONSE = {
         }
     ],
     "deployment_overview": {"instances": [WORKLOAD_CONTEXT["instance"]]},
+    "deployment_fact_summary": {
+        "adapter": "cloudformation",
+        "mapping_mode": "iac",
+        "overall_confidence": "high",
+        "evidence_sources": ["delivery_path", "platform"],
+        "high_confidence_fact_types": [
+            "PROVISIONED_BY_IAC",
+            "RUNS_ON_PLATFORM",
+        ],
+        "medium_confidence_fact_types": [],
+        "limitations": [],
+    },
+    "deployment_facts": [
+        {
+            "fact_type": "PROVISIONED_BY_IAC",
+            "adapter": "cloudformation",
+            "value": "cloudformation",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_eks",
+                }
+            ],
+        }
+    ],
     "evidence": [],
     "limitations": [],
     "coverage": None,
@@ -246,6 +273,22 @@ def test_openapi_examples_cover_service_alias_and_code_only_workflows() -> None:
         repo_story_examples["repository_story"]["value"]["subject"]["id"]
         == "repository:r_ab12cd34"
     )
+    assert (
+        repo_story_examples["repository_story"]["value"]["deployment_fact_summary"][
+            "mapping_mode"
+        ]
+        == "controller"
+    )
+    assert (
+        schema["paths"]["/api/v0/workloads/{workload_id}/story"]["get"]["responses"][
+            "200"
+        ]["content"]["application/json"]["examples"]["workload_story"]["value"][
+            "deployment_fact_summary"
+        ][
+            "mapping_mode"
+        ]
+        == "iac"
+    )
 
 
 def test_openapi_examples_match_live_service_alias_response_shape() -> None:
@@ -260,6 +303,34 @@ def test_openapi_examples_match_live_service_alias_response_shape() -> None:
         "responses"
     ]["200"]["content"]["application/json"]["examples"]["service_alias"]["value"]
     assert response.json() == documented
+
+
+def test_openapi_story_examples_include_deployment_mapping_contract() -> None:
+    with _make_client(query_services=_make_query_services()) as client:
+        schema = client.get("/api/v0/openapi.json").json()
+
+    service_story = schema["paths"]["/api/v0/services/{workload_id}/story"]["get"][
+        "responses"
+    ]["200"]["content"]["application/json"]["examples"]["service_story"]["value"]
+
+    assert service_story["deployment_fact_summary"] == {
+        "adapter": "unknown",
+        "mapping_mode": "none",
+        "overall_confidence": "low",
+        "overall_confidence_reason": "no_deployment_evidence",
+        "evidence_sources": [],
+        "high_confidence_fact_types": [],
+        "medium_confidence_fact_types": [],
+        "fact_thresholds": {},
+        "limitations": [
+            "deployment_evidence_missing",
+            "deployment_source_unknown",
+            "runtime_platform_unknown",
+            "environment_unknown",
+            "entrypoint_unknown",
+        ],
+    }
+    assert service_story["deployment_facts"] == []
 
 
 def test_openapi_exposes_query_routes_without_deployment_control_endpoints() -> None:

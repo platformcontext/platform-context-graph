@@ -254,3 +254,120 @@ def test_build_deployment_overview_prefers_richer_controller_driven_story_over_g
     assert overview["deployment_story"] == [
         "Jenkins invokes Ansible entry points deploy.yml and local.yml targeting server-dmmwebsites and localhost for wordpress website fleets."
     ]
+
+
+def test_build_deployment_overview_exposes_generic_controller_and_runtime_overviews() -> (
+    None
+):
+    """Verify deployment overviews carry generic controller/runtime summaries."""
+
+    overview = build_deployment_overview(
+        hostnames=[
+            {
+                "hostname": "api-node-boats.qa.bgrp.io",
+                "visibility": "public",
+                "environment": "bg-qa",
+            }
+        ],
+        api_surface={},
+        platforms=[
+            {
+                "id": "platform:eks:aws:cluster/bg-qa:bg-qa:none",
+                "kind": "eks",
+                "provider": "aws",
+                "environment": "bg-qa",
+                "name": "bg-qa",
+            }
+        ],
+        delivery_paths=[
+            {
+                "path_kind": "gitops",
+                "controller": "argocd",
+                "delivery_mode": "eks_gitops",
+                "deployment_sources": ["helm-charts"],
+                "platform_kinds": ["eks"],
+                "platforms": ["platform:eks:aws:cluster/bg-qa:bg-qa:none"],
+                "environments": ["bg-qa"],
+                "summary": (
+                    "ArgoCD drives a GitOps deployment path through helm-charts "
+                    "onto EKS platforms."
+                ),
+            }
+        ],
+        controller_driven_paths=[
+            {
+                "controller_kind": "argocd",
+                "automation_kind": "helm",
+                "entry_points": ["argocd/api-node-boats/overlays/bg-qa/config.yaml"],
+                "target_descriptors": ["bg-qa", "api-node"],
+                "runtime_family": "kubernetes",
+                "supporting_repositories": ["helm-charts"],
+                "confidence": "high",
+            }
+        ],
+    )
+
+    assert overview["controller_overview"] == {
+        "families": ["argocd"],
+        "delivery_modes": ["eks_gitops"],
+        "controllers": [
+            {
+                "family": "argocd",
+                "path_kinds": ["gitops"],
+                "delivery_modes": ["eks_gitops"],
+                "automation_kinds": ["helm"],
+                "entry_points": ["argocd/api-node-boats/overlays/bg-qa/config.yaml"],
+                "target_descriptors": ["bg-qa", "api-node"],
+                "supporting_repositories": ["helm-charts"],
+                "confidence": "high",
+            }
+        ],
+    }
+    assert overview["runtime_overview"] == {
+        "selected_environment": "bg-qa",
+        "observed_environments": ["bg-qa"],
+        "platform_kinds": ["eks"],
+        "platforms": [
+            {
+                "id": "platform:eks:aws:cluster/bg-qa:bg-qa:none",
+                "kind": "eks",
+                "provider": "aws",
+                "environment": "bg-qa",
+                "name": "bg-qa",
+            }
+        ],
+        "entrypoints": ["api-node-boats.qa.bgrp.io"],
+    }
+    assert overview["deployment_facts"][:2] == [
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": "argocd",
+            "value": "argocd",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "argocd",
+                    "delivery_mode": "eks_gitops",
+                },
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "argocd",
+                    "automation_kind": "helm",
+                },
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "argocd",
+            "value": "helm",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "argocd",
+                    "automation_kind": "helm",
+                }
+            ],
+        },
+    ]

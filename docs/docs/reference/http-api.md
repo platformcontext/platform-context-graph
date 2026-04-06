@@ -97,10 +97,38 @@ Story responses are shaped around:
 - `gitops_overview`
 - `documentation_overview`
 - `support_overview`
+- `controller_overview`
+- `runtime_overview`
 - `evidence`
 - `limitations`
 - `coverage`
 - `drilldowns`
+
+Deployment-oriented story responses may also include:
+
+- `deployment_facts`
+- `deployment_fact_summary`
+
+Use those when you need a stable, evidence-first contract instead of prose.
+
+`deployment_fact_summary` reports:
+
+- `mapping_mode`
+- `overall_confidence`
+- `overall_confidence_reason`
+- `evidence_sources`
+- fact types grouped by confidence
+- `fact_thresholds`
+- deployment-specific limitations such as `deployment_controller_unknown`
+
+Mapping modes are intentionally controller-agnostic:
+
+- `controller` for explicit controller evidence such as ArgoCD or Flux
+- `iac` for explicit infrastructure-as-code evidence such as Terraform or CloudFormation
+- `evidence_only` when delivery/runtime evidence exists but no trusted controller/IaC adapter was found
+- `none` when no deployment evidence cleared the evidence thresholds and PCG can only report missing inputs
+
+That lets the same story contract work across GitOps, IaC-driven, and controller-free estates without fabricating deployment tooling.
 
 HTTP story routes stay canonical-ID based. If the caller starts with a fuzzy
 name or alias, resolve first and then call the story route.

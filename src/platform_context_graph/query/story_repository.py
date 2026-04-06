@@ -4,185 +4,23 @@ from __future__ import annotations
 
 from typing import Any
 
+from .story_deployment_mapping import build_controller_overview
+from .story_deployment_mapping import build_deployment_fact_summary
+from .story_deployment_mapping import build_deployment_facts
+from .story_deployment_mapping import build_runtime_overview
 from .story_documentation import (
     build_documentation_overview,
     summarize_documentation_overview,
 )
 from .story_gitops import build_gitops_overview, summarize_gitops_overview
 from .story_repository_support import (
+    build_repository_deployment_overview,
     dependency_label,
     focused_deployment_story,
     subject_from_repository,
 )
 from .story_shared import human_list, portable_story_value, story_section
 from .story_support import build_support_overview, summarize_support_overview
-
-
-def _build_repository_deployment_overview(
-    context: dict[str, Any],
-) -> dict[str, Any]:
-    """Build a compact deployment overview without depending on MCP modules."""
-
-    hostnames = list(context.get("hostnames") or [])
-    api_surface = dict(context.get("api_surface") or {})
-    platforms = list(context.get("platforms") or [])
-    delivery_paths = list(context.get("delivery_paths") or [])
-    controller_driven_paths = list(context.get("controller_driven_paths") or [])
-    deployment_artifacts = dict(context.get("deployment_artifacts") or {})
-    consumer_repositories = list(context.get("consumer_repositories") or [])
-    observed_config_environments = list(
-        context.get("observed_config_environments") or []
-    )
-    delivery_workflows = dict(context.get("delivery_workflows") or {})
-    deploys_from = list(context.get("deploys_from") or [])
-    discovers_config_in = list(context.get("discovers_config_in") or [])
-    provisioned_by = list(context.get("provisioned_by") or [])
-    provisions_dependencies_for = list(context.get("provisions_dependencies_for") or [])
-    iac_relationships = list(context.get("iac_relationships") or [])
-    deployment_chain = list(context.get("deployment_chain") or [])
-    environments = list(context.get("environments") or [])
-    relationships = list(context.get("relationships") or [])
-    ecosystem = dict(context.get("ecosystem") or {})
-    coverage = context.get("coverage")
-    summary = context.get("summary")
-    public_hostnames = [
-        str(row.get("hostname") or "").strip()
-        for row in hostnames
-        if isinstance(row, dict) and str(row.get("hostname") or "").strip()
-    ]
-    internal_hostnames = [
-        str(row.get("hostname") or "").strip()
-        for row in hostnames
-        if isinstance(row, dict)
-        and str(row.get("visibility") or "").strip().lower() == "internal"
-        and str(row.get("hostname") or "").strip()
-    ]
-
-    deployment_story: list[str] = []
-    if public_hostnames:
-        deployment_story.append(
-            f"Public entrypoints: {human_list(public_hostnames, limit=5)}."
-        )
-    if api_surface.get("api_versions") or api_surface.get("docs_routes"):
-        api_parts: list[str] = []
-        versions = [str(v) for v in api_surface.get("api_versions") or [] if str(v)]
-        docs_routes = [str(v) for v in api_surface.get("docs_routes") or [] if str(v)]
-        if versions:
-            api_parts.append(f"versions {human_list(versions)}")
-        if docs_routes:
-            api_parts.append(f"docs {human_list(docs_routes)}")
-        deployment_story.append(f"API surface exposes {' and '.join(api_parts)}.")
-    if delivery_paths:
-        first = delivery_paths[0]
-        delivery_mode = str(first.get("delivery_mode") or "").strip()
-        controller = str(first.get("controller") or "").strip()
-        deployment_sources = [
-            str(value).strip()
-            for value in first.get("deployment_sources") or []
-            if str(value).strip()
-        ]
-        platform_kinds = [
-            str(value).strip()
-            for value in first.get("platform_kinds") or []
-            if str(value).strip()
-        ]
-        parts: list[str] = []
-        if controller:
-            parts.append(controller)
-        if delivery_mode:
-            parts.append(delivery_mode)
-        if deployment_sources:
-            parts.append(f"from {human_list(deployment_sources)}")
-        if platform_kinds:
-            parts.append(f"onto {human_list(platform_kinds)}")
-        if parts:
-            deployment_story.append("Deployment flows through " + " ".join(parts) + ".")
-    if controller_driven_paths and not delivery_paths:
-        first = controller_driven_paths[0]
-        controller_kind = str(first.get("controller_kind") or "").strip()
-        automation_kind = str(first.get("automation_kind") or "").strip()
-        entry_points = [
-            str(value).strip()
-            for value in first.get("entry_points") or []
-            if str(value).strip()
-        ]
-        parts = [part for part in [controller_kind, automation_kind] if part]
-        if entry_points:
-            parts.append(f"via {human_list(entry_points)}")
-        if parts:
-            deployment_story.append(
-                "Controller-driven delivery uses " + " ".join(parts) + "."
-            )
-
-    topology_story = list(deployment_story)
-    if deployment_artifacts.get("config_paths"):
-        topology_story.append(
-            "Shared config paths include "
-            + human_list(
-                [
-                    str(v)
-                    for v in deployment_artifacts.get("config_paths") or []
-                    if str(v)
-                ]
-            )
-            + "."
-        )
-    if consumer_repositories:
-        topology_story.append(
-            "Consumer repositories include "
-            + human_list(
-                [
-                    str(row.get("repository") or row.get("name") or "")
-                    for row in consumer_repositories
-                    if isinstance(row, dict)
-                    and str(row.get("repository") or row.get("name") or "").strip()
-                ]
-            )
-            + "."
-        )
-
-    return {
-        "hostnames": hostnames,
-        "internet_entrypoints": public_hostnames,
-        "internal_entrypoints": internal_hostnames,
-        "api_surface": {
-            "docs_routes": list(api_surface.get("docs_routes") or []),
-            "api_versions": list(api_surface.get("api_versions") or []),
-            "spec_files": list(api_surface.get("spec_files") or []),
-            "endpoint_count": api_surface.get("endpoint_count"),
-            "endpoints": list(api_surface.get("endpoints") or []),
-        },
-        "observed_config_environments": observed_config_environments,
-        "runtime_platforms": [
-            {
-                "id": row.get("id"),
-                "kind": row.get("kind"),
-                "provider": row.get("provider"),
-                "environment": row.get("environment"),
-                "name": row.get("name"),
-            }
-            for row in platforms
-            if isinstance(row, dict)
-        ],
-        "delivery_workflows": delivery_workflows,
-        "delivery_paths": delivery_paths,
-        "controller_driven_paths": controller_driven_paths,
-        "deployment_artifacts": deployment_artifacts or None,
-        "consumer_repositories": consumer_repositories,
-        "deploys_from": deploys_from,
-        "discovers_config_in": discovers_config_in,
-        "provisioned_by": provisioned_by,
-        "provisions_dependencies_for": provisions_dependencies_for,
-        "iac_relationships": iac_relationships,
-        "deployment_chain": deployment_chain,
-        "environments": environments,
-        "relationships": relationships,
-        "ecosystem": ecosystem or None,
-        "coverage": coverage,
-        "summary": summary,
-        "deployment_story": deployment_story,
-        "topology_story": topology_story,
-    }
 
 
 def build_repository_story_response(
@@ -199,7 +37,44 @@ def build_repository_story_response(
     dependencies = list((context.get("ecosystem") or {}).get("dependencies") or [])
     limitations = list(context.get("limitations") or [])
 
-    deployment_overview = _build_repository_deployment_overview(context)
+    deployment_overview = build_repository_deployment_overview(context)
+    controller_overview = build_controller_overview(
+        delivery_paths=list(deployment_overview.get("delivery_paths") or []),
+        controller_driven_paths=list(
+            deployment_overview.get("controller_driven_paths") or []
+        ),
+    )
+    runtime_overview = build_runtime_overview(
+        selected_instance=None,
+        instances=[],
+        entrypoints=hostnames,
+        platforms=list(deployment_overview.get("runtime_platforms") or []),
+        observed_config_environments=list(
+            deployment_overview.get("observed_config_environments") or []
+        ),
+    )
+    deployment_facts = build_deployment_facts(
+        delivery_paths=list(deployment_overview.get("delivery_paths") or []),
+        controller_driven_paths=list(
+            deployment_overview.get("controller_driven_paths") or []
+        ),
+        platforms=list(deployment_overview.get("runtime_platforms") or []),
+        entrypoints=hostnames,
+        observed_config_environments=list(
+            deployment_overview.get("observed_config_environments") or []
+        ),
+    )
+    deployment_fact_summary = build_deployment_fact_summary(
+        delivery_paths=list(deployment_overview.get("delivery_paths") or []),
+        controller_driven_paths=list(
+            deployment_overview.get("controller_driven_paths") or []
+        ),
+        platforms=list(deployment_overview.get("runtime_platforms") or []),
+        entrypoints=hostnames,
+        observed_config_environments=list(
+            deployment_overview.get("observed_config_environments") or []
+        ),
+    )
     deployment_story = list(deployment_overview.get("deployment_story") or [])
     direct_story = focused_deployment_story(deployment_story)
     if direct_story:
@@ -465,6 +340,10 @@ def build_repository_story_response(
             "gitops_overview": gitops_overview,
             "documentation_overview": documentation_overview,
             "support_overview": support_overview,
+            "controller_overview": controller_overview,
+            "runtime_overview": runtime_overview,
+            "deployment_facts": deployment_facts,
+            "deployment_fact_summary": deployment_fact_summary,
             "code_overview": code_overview,
             "evidence": evidence,
             "limitations": limitations,

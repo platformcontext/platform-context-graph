@@ -40,6 +40,23 @@ For MCP and API callers, start with the top-level `story` field from `trace_depl
 
 That applies to controller-driven automation estates too. If a platform uses Jenkins plus Ansible, start with `story`, then inspect `deployment_overview`, `delivery_paths`, and `controller_driven_paths` before dropping to raw workflow, playbook, or inventory evidence.
 
+For evidence-first automation, use the normalized deployment mapping layer too:
+
+- start with `deployment_fact_summary` to see what type of evidence PCG actually found
+- inspect `deployment_facts` for normalized facts
+- then drill into controller/runtime/raw rows only if needed
+
+This is especially useful in mixed estates:
+
+- ArgoCD or Flux on Kubernetes
+- Terraform Helm provider or Terraform Kubernetes provider
+- CloudFormation stack sets or serverless deployments
+- ECS, EKS, Lambda, or plain manifests with no controller at all
+
+If PCG only has delivery/runtime evidence, it will return `mapping_mode=evidence_only` instead of inventing a controller family.
+
+If PCG does not yet have enough indexed deployment evidence to map the path truthfully, it now returns `mapping_mode=none` with limitations like `deployment_evidence_missing` instead of silently dropping the contract.
+
 ## Onboarding a new engineer
 
 Day one. A new engineer needs to understand how the payment service fits into the platform.

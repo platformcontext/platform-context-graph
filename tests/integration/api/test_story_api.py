@@ -38,6 +38,15 @@ def test_repository_story_route_uses_repository_story_query() -> None:
                 }
             ],
             "deployment_overview": {"platforms": [{"kind": "eks"}]},
+            "deployment_fact_summary": {
+                "adapter": "flux",
+                "mapping_mode": "controller",
+                "overall_confidence": "high",
+                "evidence_sources": ["delivery_path", "platform"],
+                "high_confidence_fact_types": ["MANAGED_BY_CONTROLLER"],
+                "medium_confidence_fact_types": [],
+                "limitations": [],
+            },
             "evidence": [],
             "limitations": ["entrypoint_unknown"],
             "coverage": {"completeness_state": "partial"},
@@ -55,6 +64,7 @@ def test_repository_story_route_uses_repository_story_query() -> None:
     assert response.status_code == 200
     assert response.json()["subject"]["id"] == "repository:r_ab12cd34"
     assert response.json()["story_sections"][0]["id"] == "deployment"
+    assert response.json()["deployment_fact_summary"]["mapping_mode"] == "controller"
     assert calls == [
         {"database": services.database, "repo_id": "repository:r_ab12cd34"}
     ]
@@ -81,6 +91,15 @@ def test_workload_story_route_supports_environment_scope() -> None:
                 }
             ],
             "deployment_overview": {"platforms": [{"kind": "eks"}]},
+            "deployment_fact_summary": {
+                "adapter": "cloudformation",
+                "mapping_mode": "iac",
+                "overall_confidence": "high",
+                "evidence_sources": ["delivery_path", "platform"],
+                "high_confidence_fact_types": ["PROVISIONED_BY_IAC"],
+                "medium_confidence_fact_types": [],
+                "limitations": [],
+            },
             "evidence": [],
             "limitations": [],
             "coverage": None,
@@ -104,6 +123,7 @@ def test_workload_story_route_supports_environment_scope() -> None:
         response.json()["story"][0]
         == "Prod traffic lands on payments-api running in EKS."
     )
+    assert response.json()["deployment_fact_summary"]["mapping_mode"] == "iac"
     assert calls == [
         {
             "database": services.database,

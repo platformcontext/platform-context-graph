@@ -1,0 +1,918 @@
+"""Focused rule tests for deployment fact mapping."""
+
+from __future__ import annotations
+
+import pytest
+
+from platform_context_graph.query.story_deployment_mapping import (
+    build_deployment_fact_summary,
+)
+from platform_context_graph.query.story_deployment_mapping import (
+    build_deployment_facts,
+)
+
+
+@pytest.mark.parametrize(
+    ("delivery_mode", "platform_id", "platform_kind"),
+    [
+        (
+            "cloudformation_eks",
+            "platform:eks:aws:cluster/prod-1:prod:us-east-1",
+            "eks",
+        ),
+        (
+            "cloudformation_stackset",
+            "platform:eks:aws:cluster/prod-2:prod:us-east-1",
+            "eks",
+        ),
+        (
+            "cloudformation_kubernetes",
+            "platform:kubernetes:aws:cluster/shared:prod:us-east-1",
+            "kubernetes",
+        ),
+    ],
+)
+def test_build_deployment_facts_maps_cloudformation_kubernetes_variants_into_iac_facts(
+    delivery_mode: str,
+    platform_id: str,
+    platform_kind: str,
+) -> None:
+    """Verify CloudFormation Kubernetes-family inputs emit IAC facts."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "controller": "cloudformation",
+                "delivery_mode": delivery_mode,
+                "deployment_sources": ["service-catalog"],
+                "config_sources": ["cluster-networking"],
+                "platform_kinds": [platform_kind],
+                "platforms": [platform_id],
+                "environments": ["prod"],
+            }
+        ],
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": platform_id,
+                "kind": platform_kind,
+                "provider": "aws",
+                "environment": "prod",
+                "name": (
+                    "prod-1"
+                    if delivery_mode == "cloudformation_eks"
+                    else (
+                        "prod-2"
+                        if delivery_mode == "cloudformation_stackset"
+                        else "shared" if platform_kind == "kubernetes" else "us-east-1"
+                    )
+                ),
+            }
+        ],
+        entrypoints=[
+            {
+                "hostname": "payments.prod.example.com",
+                "environment": "prod",
+                "visibility": "public",
+            }
+        ],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts == [
+        {
+            "fact_type": "PROVISIONED_BY_IAC",
+            "adapter": "cloudformation",
+            "value": "cloudformation",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": delivery_mode,
+                }
+            ],
+        },
+        {
+            "fact_type": "DEPLOYS_FROM",
+            "adapter": "cloudformation",
+            "value": "service-catalog",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": delivery_mode,
+                }
+            ],
+        },
+        {
+            "fact_type": "DISCOVERS_CONFIG_IN",
+            "adapter": "cloudformation",
+            "value": "cluster-networking",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": delivery_mode,
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "cloudformation",
+            "value": platform_kind,
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": platform_kind,
+                    "environment": "prod",
+                }
+            ],
+        },
+        {
+            "fact_type": "OBSERVED_IN_ENVIRONMENT",
+            "adapter": "cloudformation",
+            "value": "prod",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": delivery_mode,
+                }
+            ],
+        },
+        {
+            "fact_type": "EXPOSES_ENTRYPOINT",
+            "adapter": "cloudformation",
+            "value": "payments.prod.example.com",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "entrypoint",
+                    "hostname": "payments.prod.example.com",
+                    "environment": "prod",
+                }
+            ],
+        },
+    ]
+
+
+def test_build_deployment_facts_uses_evidence_only_mode_without_controller() -> None:
+    """Verify plain manifest evidence still emits normalized facts."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "delivery_mode": "plain_kubernetes_manifests",
+                "deployment_sources": ["service-manifests"],
+                "config_sources": ["env-overlays"],
+                "platform_kinds": ["kubernetes"],
+                "platforms": ["platform:kubernetes:aws:cluster/shared:stage:none"],
+                "environments": ["stage"],
+            }
+        ],
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:kubernetes:aws:cluster/shared:stage:none",
+                "kind": "kubernetes",
+                "provider": "aws",
+                "environment": "stage",
+                "name": "shared",
+            }
+        ],
+        entrypoints=[
+            {
+                "hostname": "payments.stage.example.com",
+                "environment": "stage",
+                "visibility": "internal",
+            }
+        ],
+        observed_config_environments=["stage"],
+    )
+
+    assert facts == [
+        {
+            "fact_type": "DELIVERY_PATH_PRESENT",
+            "adapter": "evidence_only",
+            "value": "plain_kubernetes_manifests",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "delivery_mode": "plain_kubernetes_manifests",
+                    "path_kind": "direct",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "evidence_only",
+            "value": "kubernetes",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "delivery_mode": "plain_kubernetes_manifests",
+                    "path_kind": "direct",
+                }
+            ],
+        },
+        {
+            "fact_type": "DEPLOYS_FROM",
+            "adapter": "evidence_only",
+            "value": "service-manifests",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "delivery_mode": "plain_kubernetes_manifests",
+                    "path_kind": "direct",
+                }
+            ],
+        },
+        {
+            "fact_type": "DISCOVERS_CONFIG_IN",
+            "adapter": "evidence_only",
+            "value": "env-overlays",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "delivery_mode": "plain_kubernetes_manifests",
+                    "path_kind": "direct",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "evidence_only",
+            "value": "kubernetes",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "kubernetes",
+                    "environment": "stage",
+                }
+            ],
+        },
+        {
+            "fact_type": "OBSERVED_IN_ENVIRONMENT",
+            "adapter": "evidence_only",
+            "value": "stage",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "delivery_mode": "plain_kubernetes_manifests",
+                    "path_kind": "direct",
+                }
+            ],
+        },
+        {
+            "fact_type": "EXPOSES_ENTRYPOINT",
+            "adapter": "evidence_only",
+            "value": "payments.stage.example.com",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "entrypoint",
+                    "hostname": "payments.stage.example.com",
+                    "environment": "stage",
+                }
+            ],
+        },
+    ]
+
+
+def test_build_deployment_facts_maps_cloudformation_serverless_into_serverless_packaging() -> (
+    None
+):
+    """Verify CloudFormation serverless evidence emits a serverless packaging fact."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "controller": "cloudformation",
+                "delivery_mode": "cloudformation_serverless",
+                "deployment_sources": ["service-catalog"],
+                "config_sources": ["lambda-env"],
+                "platform_kinds": ["lambda"],
+                "platforms": ["platform:lambda:aws:region/us-east-1:prod:none"],
+                "environments": ["prod"],
+            }
+        ],
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:lambda:aws:region/us-east-1:prod:none",
+                "kind": "lambda",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "us-east-1",
+            }
+        ],
+        entrypoints=[],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts[:4] == [
+        {
+            "fact_type": "PROVISIONED_BY_IAC",
+            "adapter": "cloudformation",
+            "value": "cloudformation",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_serverless",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "cloudformation",
+            "value": "serverless",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_serverless",
+                }
+            ],
+        },
+        {
+            "fact_type": "DEPLOYS_FROM",
+            "adapter": "cloudformation",
+            "value": "service-catalog",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_serverless",
+                }
+            ],
+        },
+        {
+            "fact_type": "DISCOVERS_CONFIG_IN",
+            "adapter": "cloudformation",
+            "value": "lambda-env",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_serverless",
+                }
+            ],
+        },
+    ]
+
+
+def test_build_deployment_fact_summary_reports_strength_and_limitations() -> None:
+    """Verify evidence strength and missing controller limitations are surfaced."""
+
+    summary = build_deployment_fact_summary(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "delivery_mode": "plain_kubernetes_manifests",
+                "deployment_sources": ["service-manifests"],
+                "config_sources": ["env-overlays"],
+                "platform_kinds": ["kubernetes"],
+                "platforms": ["platform:kubernetes:aws:cluster/shared:stage:none"],
+                "environments": ["stage"],
+            }
+        ],
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:kubernetes:aws:cluster/shared:stage:none",
+                "kind": "kubernetes",
+                "provider": "aws",
+                "environment": "stage",
+                "name": "shared",
+            }
+        ],
+        entrypoints=[
+            {
+                "hostname": "payments.stage.example.com",
+                "environment": "stage",
+                "visibility": "internal",
+            }
+        ],
+        observed_config_environments=["stage"],
+    )
+
+    assert summary == {
+        "adapter": "evidence_only",
+        "mapping_mode": "evidence_only",
+        "overall_confidence": "medium",
+        "overall_confidence_reason": "delivery_runtime_evidence_without_named_adapter",
+        "evidence_sources": ["delivery_path", "platform", "entrypoint"],
+        "high_confidence_fact_types": ["RUNS_ON_PLATFORM"],
+        "medium_confidence_fact_types": [
+            "DELIVERY_PATH_PRESENT",
+            "USES_PACKAGING_LAYER",
+            "DEPLOYS_FROM",
+            "DISCOVERS_CONFIG_IN",
+            "OBSERVED_IN_ENVIRONMENT",
+            "EXPOSES_ENTRYPOINT",
+        ],
+        "fact_thresholds": {
+            "DELIVERY_PATH_PRESENT": "delivery_path_present",
+            "USES_PACKAGING_LAYER": "explicit_packaging_signal",
+            "DEPLOYS_FROM": "named_deployment_source",
+            "DISCOVERS_CONFIG_IN": "named_config_source",
+            "RUNS_ON_PLATFORM": "explicit_platform_match",
+            "OBSERVED_IN_ENVIRONMENT": "explicit_environment_evidence",
+            "EXPOSES_ENTRYPOINT": "named_entrypoint",
+        },
+        "limitations": ["deployment_controller_unknown"],
+    }
+
+
+def test_build_deployment_fact_summary_reports_missing_evidence_truthfully() -> None:
+    """Verify empty deployment inputs produce an explicit missing-evidence summary."""
+
+    summary = build_deployment_fact_summary(
+        delivery_paths=[],
+        controller_driven_paths=[],
+        platforms=[],
+        entrypoints=[],
+        observed_config_environments=[],
+    )
+
+    assert summary == {
+        "adapter": "unknown",
+        "mapping_mode": "none",
+        "overall_confidence": "low",
+        "overall_confidence_reason": "no_deployment_evidence",
+        "evidence_sources": [],
+        "high_confidence_fact_types": [],
+        "medium_confidence_fact_types": [],
+        "fact_thresholds": {},
+        "limitations": [
+            "deployment_evidence_missing",
+            "deployment_source_unknown",
+            "runtime_platform_unknown",
+            "environment_unknown",
+            "entrypoint_unknown",
+        ],
+    }
+
+
+def test_build_deployment_facts_maps_plain_helm_release_into_evidence_only_facts() -> (
+    None
+):
+    """Verify raw Helm delivery evidence emits packaging facts without a controller."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "delivery_mode": "plain_helm_release",
+                "deployment_sources": ["service-chart"],
+                "config_sources": ["values-prod"],
+                "platform_kinds": ["kubernetes"],
+                "platforms": ["platform:kubernetes:aws:cluster/shared:prod:none"],
+                "environments": ["prod"],
+            }
+        ],
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:kubernetes:aws:cluster/shared:prod:none",
+                "kind": "kubernetes",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "shared",
+            }
+        ],
+        entrypoints=[],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts[:4] == [
+        {
+            "fact_type": "DELIVERY_PATH_PRESENT",
+            "adapter": "evidence_only",
+            "value": "plain_helm_release",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "delivery_mode": "plain_helm_release",
+                    "path_kind": "direct",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "evidence_only",
+            "value": "helm",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "delivery_mode": "plain_helm_release",
+                    "path_kind": "direct",
+                }
+            ],
+        },
+        {
+            "fact_type": "DEPLOYS_FROM",
+            "adapter": "evidence_only",
+            "value": "service-chart",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "delivery_mode": "plain_helm_release",
+                    "path_kind": "direct",
+                }
+            ],
+        },
+        {
+            "fact_type": "DISCOVERS_CONFIG_IN",
+            "adapter": "evidence_only",
+            "value": "values-prod",
+            "confidence": "medium",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "delivery_mode": "plain_helm_release",
+                    "path_kind": "direct",
+                }
+            ],
+        },
+    ]
+
+
+def test_build_deployment_facts_maps_jenkins_ansible_into_controller_and_automation_facts() -> (
+    None
+):
+    """Verify Jenkins plus Ansible emits controller and automation facts."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "controller": "jenkins",
+                "delivery_mode": "jenkins_pipeline",
+                "platform_kinds": ["vm"],
+                "platforms": ["platform:vmware:none:mws:prod:none"],
+                "environments": ["prod"],
+            }
+        ],
+        controller_driven_paths=[
+            {
+                "controller_kind": "jenkins",
+                "automation_kind": "ansible",
+                "entry_points": ["deploy.yml"],
+                "target_descriptors": ["mws", "prod"],
+                "runtime_family": "wordpress_website_fleet",
+                "supporting_repositories": ["terraform-stack-mws"],
+                "confidence": "high",
+            }
+        ],
+        platforms=[
+            {
+                "id": "platform:vmware:none:mws:prod:none",
+                "kind": "vm",
+                "provider": "vmware",
+                "environment": "prod",
+                "name": "mws",
+            }
+        ],
+        entrypoints=[],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts[:4] == [
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": "jenkins",
+            "value": "jenkins",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "jenkins",
+                    "delivery_mode": "jenkins_pipeline",
+                },
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "jenkins",
+                    "automation_kind": "ansible",
+                },
+            ],
+        },
+        {
+            "fact_type": "USES_AUTOMATION_LAYER",
+            "adapter": "jenkins",
+            "value": "ansible",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "jenkins",
+                    "automation_kind": "ansible",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_RUNTIME_FAMILY",
+            "adapter": "jenkins",
+            "value": "wordpress_website_fleet",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "jenkins",
+                    "runtime_family": "wordpress_website_fleet",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "jenkins",
+            "value": "vm",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "vm",
+                    "environment": "prod",
+                }
+            ],
+        },
+    ]
+
+
+def test_build_deployment_facts_maps_direct_ecs_delivery_into_container_facts() -> None:
+    """Verify direct ECS delivery emits a container packaging fact."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "controller": "github_actions",
+                "delivery_mode": "continuous_deployment",
+                "platform_kinds": ["ecs"],
+                "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
+                "environments": ["prod"],
+            }
+        ],
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                "kind": "ecs",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "node10",
+            }
+        ],
+        entrypoints=[],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts[:3] == [
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": "github_actions",
+            "value": "github_actions",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "github_actions",
+                    "delivery_mode": "continuous_deployment",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "github_actions",
+            "value": "container",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "github_actions",
+                    "delivery_mode": "continuous_deployment",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "github_actions",
+            "value": "ecs",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "ecs",
+                    "environment": "prod",
+                }
+            ],
+        },
+    ]
+
+
+def test_build_deployment_facts_maps_codedeploy_ecs_controller_into_container_facts() -> (
+    None
+):
+    """Verify CodeDeploy on ECS emits controller and container packaging facts."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[],
+        controller_driven_paths=[
+            {
+                "controller_kind": "codedeploy",
+                "automation_kind": "",
+                "entry_points": ["shared/codedeploy.tf"],
+                "target_descriptors": ["api-node-boats", "prod"],
+                "runtime_family": "ecs_service",
+                "supporting_repositories": ["terraform-stack-node10"],
+                "confidence": "high",
+            }
+        ],
+        platforms=[
+            {
+                "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                "kind": "ecs",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "node10",
+            }
+        ],
+        entrypoints=[],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts[:4] == [
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": "codedeploy",
+            "value": "codedeploy",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "codedeploy",
+                    "automation_kind": "",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "codedeploy",
+            "value": "container",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "codedeploy",
+                    "automation_kind": "",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_RUNTIME_FAMILY",
+            "adapter": "codedeploy",
+            "value": "ecs_service",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "codedeploy",
+                    "runtime_family": "ecs_service",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "codedeploy",
+            "value": "ecs",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "ecs",
+                    "environment": "prod",
+                }
+            ],
+        },
+    ]
+
+
+def test_build_deployment_facts_emits_runtime_family_for_vm_ansible_paths() -> None:
+    """Verify VM automation paths preserve runtime-family evidence as a fact."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "controller": "jenkins",
+                "delivery_mode": "jenkins_pipeline",
+                "platform_kinds": ["vm"],
+                "platforms": ["platform:vmware:none:mws:prod:none"],
+                "environments": ["prod"],
+            }
+        ],
+        controller_driven_paths=[
+            {
+                "controller_kind": "jenkins",
+                "automation_kind": "ansible",
+                "entry_points": ["deploy.yml"],
+                "target_descriptors": ["mws", "prod"],
+                "runtime_family": "wordpress_website_fleet",
+                "supporting_repositories": ["terraform-stack-mws"],
+                "confidence": "high",
+            }
+        ],
+        platforms=[
+            {
+                "id": "platform:vmware:none:mws:prod:none",
+                "kind": "vm",
+                "provider": "vmware",
+                "environment": "prod",
+                "name": "mws",
+            }
+        ],
+        entrypoints=[],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts[:4] == [
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": "jenkins",
+            "value": "jenkins",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "jenkins",
+                    "delivery_mode": "jenkins_pipeline",
+                },
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "jenkins",
+                    "automation_kind": "ansible",
+                },
+            ],
+        },
+        {
+            "fact_type": "USES_AUTOMATION_LAYER",
+            "adapter": "jenkins",
+            "value": "ansible",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "jenkins",
+                    "automation_kind": "ansible",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_RUNTIME_FAMILY",
+            "adapter": "jenkins",
+            "value": "wordpress_website_fleet",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "jenkins",
+                    "runtime_family": "wordpress_website_fleet",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "jenkins",
+            "value": "vm",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "vm",
+                    "environment": "prod",
+                }
+            ],
+        },
+    ]
