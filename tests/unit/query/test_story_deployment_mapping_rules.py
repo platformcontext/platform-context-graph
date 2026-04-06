@@ -570,7 +570,7 @@ def test_build_deployment_facts_maps_jenkins_ansible_into_controller_and_automat
         observed_config_environments=["prod"],
     )
 
-    assert facts[:3] == [
+    assert facts[:4] == [
         {
             "fact_type": "MANAGED_BY_CONTROLLER",
             "adapter": "jenkins",
@@ -599,6 +599,19 @@ def test_build_deployment_facts_maps_jenkins_ansible_into_controller_and_automat
                     "source": "controller_driven_path",
                     "controller_kind": "jenkins",
                     "automation_kind": "ansible",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_RUNTIME_FAMILY",
+            "adapter": "jenkins",
+            "value": "wordpress_website_fleet",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "jenkins",
+                    "runtime_family": "wordpress_website_fleet",
                 }
             ],
         },
@@ -722,7 +735,7 @@ def test_build_deployment_facts_maps_codedeploy_ecs_controller_into_container_fa
         observed_config_environments=["prod"],
     )
 
-    assert facts[:3] == [
+    assert facts[:4] == [
         {
             "fact_type": "MANAGED_BY_CONTROLLER",
             "adapter": "codedeploy",
@@ -750,6 +763,19 @@ def test_build_deployment_facts_maps_codedeploy_ecs_controller_into_container_fa
             ],
         },
         {
+            "fact_type": "USES_RUNTIME_FAMILY",
+            "adapter": "codedeploy",
+            "value": "ecs_service",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "codedeploy",
+                    "runtime_family": "ecs_service",
+                }
+            ],
+        },
+        {
             "fact_type": "RUNS_ON_PLATFORM",
             "adapter": "codedeploy",
             "value": "ecs",
@@ -758,6 +784,105 @@ def test_build_deployment_facts_maps_codedeploy_ecs_controller_into_container_fa
                 {
                     "source": "platform",
                     "kind": "ecs",
+                    "environment": "prod",
+                }
+            ],
+        },
+    ]
+
+
+def test_build_deployment_facts_emits_runtime_family_for_vm_ansible_paths() -> None:
+    """Verify VM automation paths preserve runtime-family evidence as a fact."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "controller": "jenkins",
+                "delivery_mode": "jenkins_pipeline",
+                "platform_kinds": ["vm"],
+                "platforms": ["platform:vmware:none:mws:prod:none"],
+                "environments": ["prod"],
+            }
+        ],
+        controller_driven_paths=[
+            {
+                "controller_kind": "jenkins",
+                "automation_kind": "ansible",
+                "entry_points": ["deploy.yml"],
+                "target_descriptors": ["mws", "prod"],
+                "runtime_family": "wordpress_website_fleet",
+                "supporting_repositories": ["terraform-stack-mws"],
+                "confidence": "high",
+            }
+        ],
+        platforms=[
+            {
+                "id": "platform:vmware:none:mws:prod:none",
+                "kind": "vm",
+                "provider": "vmware",
+                "environment": "prod",
+                "name": "mws",
+            }
+        ],
+        entrypoints=[],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts[:4] == [
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": "jenkins",
+            "value": "jenkins",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "jenkins",
+                    "delivery_mode": "jenkins_pipeline",
+                },
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "jenkins",
+                    "automation_kind": "ansible",
+                },
+            ],
+        },
+        {
+            "fact_type": "USES_AUTOMATION_LAYER",
+            "adapter": "jenkins",
+            "value": "ansible",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "jenkins",
+                    "automation_kind": "ansible",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_RUNTIME_FAMILY",
+            "adapter": "jenkins",
+            "value": "wordpress_website_fleet",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "jenkins",
+                    "runtime_family": "wordpress_website_fleet",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "jenkins",
+            "value": "vm",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "vm",
                     "environment": "prod",
                 }
             ],

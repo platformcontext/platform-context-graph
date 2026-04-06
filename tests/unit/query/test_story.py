@@ -465,6 +465,19 @@ def test_workload_story_exposes_generic_controller_and_runtime_overviews() -> No
             ],
         },
         {
+            "fact_type": "USES_RUNTIME_FAMILY",
+            "adapter": "argocd",
+            "value": "kubernetes",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "argocd",
+                    "runtime_family": "kubernetes",
+                }
+            ],
+        },
+        {
             "fact_type": "DEPLOYS_FROM",
             "adapter": "argocd",
             "value": "helm-charts",

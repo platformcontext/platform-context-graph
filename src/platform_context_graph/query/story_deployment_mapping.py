@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .story_deployment_mapping_support import build_controller_overview
+from .story_deployment_mapping_support import build_runtime_overview
 from .story_deployment_mapping_support import controller_evidence
 from .story_deployment_mapping_support import controller_rows
 from .story_deployment_mapping_support import delivery_evidence
@@ -17,75 +19,6 @@ from .story_deployment_mapping_support import normalize_controller_packaging_kin
 from .story_deployment_mapping_support import overall_confidence_reason
 from .story_deployment_mapping_support import resolve_mapping_mode
 from .story_deployment_mapping_support import unique_strings
-
-
-def build_controller_overview(
-    *,
-    delivery_paths: list[dict[str, Any]],
-    controller_driven_paths: list[dict[str, Any]],
-) -> dict[str, Any] | None:
-    """Build a controller-agnostic overview from delivery evidence."""
-
-    families = unique_strings(
-        [row.get("controller") for row in delivery_paths]
-        + [row.get("controller_kind") for row in controller_driven_paths]
-    )
-    if not families:
-        return None
-
-    controller_rows: dict[str, dict[str, Any]] = {}
-    for family in families:
-        controller_rows[family] = {
-            "family": family,
-            "path_kinds": [],
-            "delivery_modes": [],
-            "automation_kinds": [],
-            "entry_points": [],
-            "target_descriptors": [],
-            "supporting_repositories": [],
-            "confidence": None,
-        }
-
-    for row in delivery_paths:
-        family = str(row.get("controller") or "").strip()
-        if not family:
-            continue
-        controller = controller_rows[family]
-        controller["path_kinds"] = unique_strings(
-            controller["path_kinds"] + [row.get("path_kind")]
-        )
-        controller["delivery_modes"] = unique_strings(
-            controller["delivery_modes"] + [row.get("delivery_mode")]
-        )
-
-    for row in controller_driven_paths:
-        family = str(row.get("controller_kind") or "").strip()
-        if not family:
-            continue
-        controller = controller_rows[family]
-        controller["automation_kinds"] = unique_strings(
-            controller["automation_kinds"] + [row.get("automation_kind")]
-        )
-        controller["entry_points"] = unique_strings(
-            controller["entry_points"] + list(row.get("entry_points") or [])
-        )
-        controller["target_descriptors"] = unique_strings(
-            controller["target_descriptors"] + list(row.get("target_descriptors") or [])
-        )
-        controller["supporting_repositories"] = unique_strings(
-            controller["supporting_repositories"]
-            + list(row.get("supporting_repositories") or [])
-        )
-        if controller["confidence"] is None and row.get("confidence"):
-            controller["confidence"] = row.get("confidence")
-
-    return {
-        "families": families,
-        "delivery_modes": unique_strings(
-            [row.get("delivery_mode") for row in delivery_paths]
-        ),
-        "controllers": [controller_rows[family] for family in families],
-    }
 
 
 def build_deployment_facts(
@@ -227,6 +160,29 @@ def build_deployment_facts(
                 "evidence": (
                     [controller_signal] if controller_signal is not None else []
                 ),
+            }
+        )
+    runtime_family = ""
+    if normalized_controller_rows:
+        runtime_family = str(
+            normalized_controller_rows[0].get("runtime_family") or ""
+        ).strip()
+    if runtime_family:
+        facts.append(
+            {
+                "fact_type": "USES_RUNTIME_FAMILY",
+                "adapter": adapter,
+                "value": runtime_family,
+                "confidence": confidence,
+                "evidence": [
+                    {
+                        "source": "controller_driven_path",
+                        "controller_kind": normalized_controller_rows[0].get(
+                            "controller_kind"
+                        ),
+                        "runtime_family": runtime_family,
+                    }
+                ],
             }
         )
 
@@ -440,58 +396,4 @@ def build_deployment_fact_summary(
             for row in facts
         },
         "limitations": limitations,
-    }
-
-
-def build_runtime_overview(
-    *,
-    selected_instance: dict[str, Any] | None,
-    instances: list[dict[str, Any]],
-    entrypoints: list[dict[str, Any]],
-    platforms: list[dict[str, Any]],
-    observed_config_environments: list[str],
-) -> dict[str, Any] | None:
-    """Build a runtime-agnostic overview from instance and platform evidence."""
-
-    selected_environment = None
-    if isinstance(selected_instance, dict):
-        selected_environment = str(selected_instance.get("environment") or "").strip()
-    if not selected_environment and len(instances) == 1:
-        selected_environment = str(instances[0].get("environment") or "").strip()
-    if not selected_environment and len(platforms) == 1:
-        selected_environment = str(platforms[0].get("environment") or "").strip()
-    platform_kinds = unique_strings([row.get("kind") for row in platforms])
-    observed_environments = unique_strings(
-        observed_config_environments
-        + [row.get("environment") for row in platforms]
-        + [row.get("environment") for row in instances]
-        + [row.get("environment") for row in entrypoints]
-    )
-    entrypoint_labels = unique_strings(
-        [
-            row.get("hostname") or row.get("url") or row.get("path")
-            for row in entrypoints
-        ]
-    )
-    if not any(
-        [selected_environment, observed_environments, platform_kinds, entrypoint_labels]
-    ):
-        return None
-
-    return {
-        "selected_environment": selected_environment or None,
-        "observed_environments": observed_environments,
-        "platform_kinds": platform_kinds,
-        "platforms": [
-            {
-                "id": row.get("id"),
-                "kind": row.get("kind"),
-                "provider": row.get("provider"),
-                "environment": row.get("environment"),
-                "name": row.get("name"),
-            }
-            for row in platforms
-            if isinstance(row, dict)
-        ],
-        "entrypoints": entrypoint_labels,
     }
