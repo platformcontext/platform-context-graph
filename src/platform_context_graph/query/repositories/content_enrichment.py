@@ -75,7 +75,7 @@ def enrich_repository_context(database: Any, context: dict[str, Any]) -> dict[st
             context["observed_config_environments"] = observed_environments
         _remove_limitation(context, "dns_unknown")
     db_manager = get_db_manager(database)
-    _resolve_repo = build_related_repo_resolver(db_manager)
+    _resolve_repo = build_related_repo_resolver(db_manager, _resolve_related_repo)
 
     related_deployment_artifacts = extract_related_deployment_artifacts(
         database=database,
