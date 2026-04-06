@@ -177,3 +177,55 @@ def test_summarize_delivery_paths_adds_local_plain_helm_and_manifest_paths() -> 
             ),
         },
     ]
+
+
+def test_summarize_delivery_paths_keeps_nested_manifest_roots() -> None:
+    """Nested Kubernetes manifest directories should remain stable delivery roots."""
+
+    result = summarize_delivery_paths(
+        delivery_workflows={},
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:kubernetes:aws:cluster/modern:prod:none",
+                "kind": "kubernetes",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "modern",
+            }
+        ],
+        infrastructure={},
+        deploys_from=[],
+        discovers_config_in=[],
+        provisioned_by=[],
+        deployment_artifacts={
+            "k8s_resources": [
+                {
+                    "resource_path": "infra/k8s/deployment.yaml",
+                    "environment": "prod",
+                }
+            ]
+        },
+    )
+
+    assert result == [
+        {
+            "path_kind": "direct",
+            "controller": "",
+            "delivery_mode": "plain_kubernetes_manifests",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["kubernetes"],
+            "platforms": ["platform:kubernetes:aws:cluster/modern:prod:none"],
+            "deployment_sources": ["infra/k8s"],
+            "config_sources": [],
+            "provisioning_repositories": [],
+            "environments": ["prod"],
+            "summary": (
+                "Indexed deployment artifacts indicate a direct Kubernetes "
+                "manifest deployment path through infra/k8s onto Kubernetes "
+                "platforms."
+            ),
+        }
+    ]

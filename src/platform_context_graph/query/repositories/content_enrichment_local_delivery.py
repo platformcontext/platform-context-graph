@@ -311,8 +311,7 @@ def _is_direct_kubernetes_resource(parsed: dict[str, Any], relative_path: str) -
     api_version = str(parsed.get("apiVersion") or "").strip()
     if not kind or not api_version or kind in _EXCLUDED_KUBERNETES_KINDS:
         return False
-    first_part = PurePosixPath(relative_path).parts[:1]
-    return bool(first_part and first_part[0] in _DIRECT_KUBERNETES_ROOTS)
+    return _manifest_root(relative_path) != relative_path
 
 
 def _extract_image_rows(
@@ -421,7 +420,10 @@ def _manifest_root(resource_path: str) -> str:
     parts = PurePosixPath(resource_path).parts
     if not parts:
         return resource_path
-    return parts[0]
+    for index, part in enumerate(parts):
+        if part in _DIRECT_KUBERNETES_ROOTS:
+            return str(PurePosixPath(*parts[: index + 1]))
+    return resource_path
 
 
 def _local_delivery_summary(

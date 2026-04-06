@@ -1177,6 +1177,91 @@ def test_enrich_repository_context_adds_cloudformation_ecs_delivery_path(
     ]
 
 
+def test_enrich_repository_context_detects_nested_manifest_roots(
+    monkeypatch,
+) -> None:
+    """Nested infra Kubernetes manifests should enrich local deployment evidence."""
+
+    file_store = {
+        (
+            "repository:r_service_edge_api",
+            "infra/k8s/deployment.yaml",
+        ): "\n".join(
+            [
+                "apiVersion: apps/v1",
+                "kind: Deployment",
+                "metadata:",
+                "  name: service-edge-api",
+                "  namespace: prod",
+                "spec:",
+                "  template:",
+                "    spec:",
+                "      containers:",
+                "        - name: service-edge-api",
+                "          image: ghcr.io/example/service-edge-api:nested",
+            ]
+        ),
+    }
+    _apply_indexed_file_mocks(monkeypatch, file_store)
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.extract_consumer_repositories",
+        lambda *_args, **_kwargs: [],
+    )
+
+    result = enrich_repository_context(
+        _DummyDB(),
+        {
+            "repository": {
+                "id": "repository:r_service_edge_api",
+                "name": "service-edge-api",
+                "path": "/does/not/matter",
+                "local_path": "/does/not/matter",
+            },
+            "platforms": [
+                {
+                    "id": "platform:kubernetes:aws:cluster/modern:prod:none",
+                    "kind": "kubernetes",
+                    "provider": "aws",
+                    "environment": "prod",
+                    "name": "modern",
+                }
+            ],
+        },
+    )
+
+    assert result["deployment_artifacts"]["k8s_resources"] == [
+        {
+            "resource_path": "infra/k8s/deployment.yaml",
+            "kind": "Deployment",
+            "name": "service-edge-api",
+            "source_repo": "service-edge-api",
+            "relative_path": "infra/k8s/deployment.yaml",
+            "environment": "prod",
+        }
+    ]
+    assert result["delivery_paths"] == [
+        {
+            "path_kind": "direct",
+            "controller": "",
+            "delivery_mode": "plain_kubernetes_manifests",
+            "commands": [],
+            "supporting_workflows": [],
+            "automation_repositories": [],
+            "platform_kinds": ["kubernetes"],
+            "platforms": ["platform:kubernetes:aws:cluster/modern:prod:none"],
+            "deployment_sources": ["infra/k8s"],
+            "config_sources": [],
+            "provisioning_repositories": [],
+            "environments": ["prod"],
+            "summary": (
+                "Indexed deployment artifacts indicate a direct Kubernetes "
+                "manifest deployment path through infra/k8s onto Kubernetes "
+                "platforms."
+            ),
+        }
+    ]
+
+
 def test_enrich_repository_context_extracts_jenkins_pipeline_hints(
     monkeypatch,
     tmp_path: Path,
