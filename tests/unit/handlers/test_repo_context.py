@@ -1599,7 +1599,20 @@ class TestTraceDeploymentChain:
                 "fact_type": "MANAGED_BY_CONTROLLER",
                 "adapter": "github_actions",
                 "value": "github_actions",
-                "confidence": "medium",
+                "confidence": "high",
+                "evidence": [
+                    {
+                        "source": "delivery_path",
+                        "controller": "github_actions",
+                        "delivery_mode": "continuous_deployment",
+                    }
+                ],
+            },
+            {
+                "fact_type": "USES_PACKAGING_LAYER",
+                "adapter": "github_actions",
+                "value": "container",
+                "confidence": "high",
                 "evidence": [
                     {
                         "source": "delivery_path",
@@ -1625,7 +1638,7 @@ class TestTraceDeploymentChain:
                 "fact_type": "OBSERVED_IN_ENVIRONMENT",
                 "adapter": "github_actions",
                 "value": "prod",
-                "confidence": "medium",
+                "confidence": "high",
                 "evidence": [
                     {
                         "source": "delivery_path",

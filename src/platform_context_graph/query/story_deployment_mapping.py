@@ -141,9 +141,18 @@ def build_deployment_facts(
         delivery_mode = str(
             normalized_delivery_rows[0].get("delivery_mode") or ""
         ).strip()
+    platform_kinds = unique_strings(
+        [str(row.get("kind") or "").strip() for row in platform_rows]
+        + [
+            str(kind).strip()
+            for row in normalized_delivery_rows
+            for kind in list(row.get("platform_kinds") or [])
+        ]
+    )
     inferred_packaging_kind = infer_packaging_kind(
         adapter=adapter,
         delivery_mode=delivery_mode,
+        platform_kinds=platform_kinds,
     )
     confidence = mapping_confidence(
         mapping_mode=mapping_mode,
@@ -374,9 +383,18 @@ def build_deployment_fact_summary(
         delivery_mode = str(
             normalized_delivery_rows[0].get("delivery_mode") or ""
         ).strip()
+    platform_kinds = unique_strings(
+        [str(row.get("kind") or "").strip() for row in platform_rows]
+        + [
+            str(kind).strip()
+            for row in normalized_delivery_rows
+            for kind in list(row.get("platform_kinds") or [])
+        ]
+    )
     inferred_packaging_kind = infer_packaging_kind(
         adapter=adapter,
         delivery_mode=delivery_mode,
+        platform_kinds=platform_kinds,
     )
     controller_signal = controller_evidence(
         normalized_controller_rows[0] if normalized_controller_rows else None

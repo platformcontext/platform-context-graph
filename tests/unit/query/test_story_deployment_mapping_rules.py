@@ -533,3 +533,150 @@ def test_build_deployment_facts_maps_jenkins_ansible_into_controller_and_automat
             ],
         },
     ]
+
+
+def test_build_deployment_facts_maps_direct_ecs_delivery_into_container_facts() -> (
+    None
+):
+    """Verify direct ECS delivery emits a container packaging fact."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "controller": "github_actions",
+                "delivery_mode": "continuous_deployment",
+                "platform_kinds": ["ecs"],
+                "platforms": ["platform:ecs:aws:cluster/node10:prod:us-east-1"],
+                "environments": ["prod"],
+            }
+        ],
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                "kind": "ecs",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "node10",
+            }
+        ],
+        entrypoints=[],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts[:3] == [
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": "github_actions",
+            "value": "github_actions",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "github_actions",
+                    "delivery_mode": "continuous_deployment",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "github_actions",
+            "value": "container",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "github_actions",
+                    "delivery_mode": "continuous_deployment",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "github_actions",
+            "value": "ecs",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "ecs",
+                    "environment": "prod",
+                }
+            ],
+        },
+    ]
+
+
+def test_build_deployment_facts_maps_codedeploy_ecs_controller_into_container_facts() -> (
+    None
+):
+    """Verify CodeDeploy on ECS emits controller and container packaging facts."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[],
+        controller_driven_paths=[
+            {
+                "controller_kind": "codedeploy",
+                "automation_kind": "",
+                "entry_points": ["shared/codedeploy.tf"],
+                "target_descriptors": ["api-node-boats", "prod"],
+                "runtime_family": "ecs_service",
+                "supporting_repositories": ["terraform-stack-node10"],
+                "confidence": "high",
+            }
+        ],
+        platforms=[
+            {
+                "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                "kind": "ecs",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "node10",
+            }
+        ],
+        entrypoints=[],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts[:3] == [
+        {
+            "fact_type": "MANAGED_BY_CONTROLLER",
+            "adapter": "codedeploy",
+            "value": "codedeploy",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "codedeploy",
+                    "automation_kind": "",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "codedeploy",
+            "value": "container",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "controller_driven_path",
+                    "controller_kind": "codedeploy",
+                    "automation_kind": "",
+                }
+            ],
+        },
+        {
+            "fact_type": "RUNS_ON_PLATFORM",
+            "adapter": "codedeploy",
+            "value": "ecs",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "platform",
+                    "kind": "ecs",
+                    "environment": "prod",
+                }
+            ],
+        },
+    ]

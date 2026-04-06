@@ -114,9 +114,17 @@ def resolve_mapping_mode(
     return "", ""
 
 
-def infer_packaging_kind(*, adapter: str, delivery_mode: str) -> str:
-    """Infer the packaging layer from adapter-specific delivery modes."""
+def infer_packaging_kind(
+    *,
+    adapter: str,
+    delivery_mode: str,
+    platform_kinds: list[str],
+) -> str:
+    """Infer the packaging layer from adapter-specific delivery and runtime evidence."""
 
+    normalized_platform_kinds = {
+        kind.strip().lower() for kind in platform_kinds if kind.strip()
+    }
     if adapter == "terraform":
         if "helm" in delivery_mode:
             return "helm"
@@ -134,6 +142,11 @@ def infer_packaging_kind(*, adapter: str, delivery_mode: str) -> str:
             return "helm"
         if "kustomization" in delivery_mode:
             return "kustomize"
+    if "ecs" in normalized_platform_kinds:
+        if adapter == "codedeploy":
+            return "container"
+        if delivery_mode in {"continuous_deployment", "ecs_service_deployment"}:
+            return "container"
     return ""
 
 
