@@ -393,6 +393,7 @@ def trace_deployment_chain(
         repositories=[canonical_repository, *source_repositories],
         entrypoints=list(result.get("hostnames") or []),
         dependencies=list(result.get("consumer_repositories") or []),
+        api_surface=dict(result.get("api_surface") or {}),
         code_overview=None,
         gitops_overview=result.get("gitops_overview"),
         documentation_evidence=documentation_evidence,

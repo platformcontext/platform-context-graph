@@ -254,6 +254,7 @@ def build_workload_story_response(
         repositories=repositories,
         entrypoints=entrypoints,
         dependencies=dependencies,
+        api_surface=api_surface,
         code_overview=None,
         gitops_overview=gitops_overview,
         documentation_evidence=dict(context.get("documentation_evidence") or {}),

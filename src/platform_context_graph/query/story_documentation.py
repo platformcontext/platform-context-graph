@@ -7,6 +7,7 @@ from typing import Any
 
 from . import content as content_queries
 from .repositories.indexed_file_discovery import discover_repo_files
+from .story_artifact_ranking import build_ranked_story_artifacts
 from .story_shared import human_list
 
 _DOC_AUDIENCES = [
@@ -204,6 +205,7 @@ def build_documentation_overview(
     repositories: list[dict[str, Any]],
     entrypoints: list[dict[str, Any]],
     dependencies: list[dict[str, Any]],
+    api_surface: dict[str, Any] | None,
     code_overview: dict[str, Any] | None,
     gitops_overview: dict[str, Any] | None,
     documentation_evidence: dict[str, list[dict[str, Any]]],
@@ -263,31 +265,11 @@ def build_documentation_overview(
         else "Deployment detail is available through GitOps and context drilldowns."
     )
 
-    key_artifacts = [
-        {
-            "repo_id": row.get("repo_id"),
-            "relative_path": row.get("relative_path"),
-            "source_backend": row.get("source_backend"),
-            "reason": row.get("summary") or row.get("snippet") or row.get("title"),
-        }
-        for row in [
-            *documentation_evidence.get("file_content", []),
-            *documentation_evidence.get("content_search", []),
-        ]
-        if isinstance(row, dict) and row.get("relative_path")
-    ]
-    if gitops_overview:
-        for row in gitops_overview.get("value_layers") or []:
-            if not isinstance(row, dict):
-                continue
-            key_artifacts.append(
-                {
-                    "repo_id": None,
-                    "relative_path": row.get("relative_path"),
-                    "source_backend": "graph-context",
-                    "reason": row.get("layer_kind"),
-                }
-            )
+    key_artifacts = build_ranked_story_artifacts(
+        documentation_evidence=documentation_evidence,
+        gitops_overview=gitops_overview,
+        api_surface=api_surface,
+    )
 
     recommended_drilldowns = [
         {
@@ -308,7 +290,7 @@ def build_documentation_overview(
         "service_summary": service_summary,
         "code_summary": code_summary,
         "deployment_summary": deployment_summary,
-        "key_artifacts": key_artifacts[:8],
+        "key_artifacts": key_artifacts,
         "recommended_drilldowns": recommended_drilldowns,
         "documentation_evidence": documentation_evidence,
         "limitations": limitations,
