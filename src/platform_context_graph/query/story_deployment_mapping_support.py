@@ -247,6 +247,28 @@ def fact_threshold_code(fact_type: str) -> str:
     return FACT_THRESHOLD_CODES.get(fact_type, "threshold_unknown")
 
 
+def build_empty_deployment_fact_summary() -> dict[str, Any]:
+    """Return a truthful summary for contexts with no deployment evidence."""
+
+    return {
+        "adapter": "unknown",
+        "mapping_mode": "none",
+        "overall_confidence": "low",
+        "overall_confidence_reason": "no_deployment_evidence",
+        "evidence_sources": [],
+        "high_confidence_fact_types": [],
+        "medium_confidence_fact_types": [],
+        "fact_thresholds": {},
+        "limitations": [
+            "deployment_evidence_missing",
+            "deployment_source_unknown",
+            "runtime_platform_unknown",
+            "environment_unknown",
+            "entrypoint_unknown",
+        ],
+    }
+
+
 def build_controller_overview(
     *,
     delivery_paths: list[dict[str, Any]],

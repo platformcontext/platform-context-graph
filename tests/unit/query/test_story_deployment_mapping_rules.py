@@ -443,6 +443,36 @@ def test_build_deployment_fact_summary_reports_strength_and_limitations() -> Non
     }
 
 
+def test_build_deployment_fact_summary_reports_missing_evidence_truthfully() -> None:
+    """Verify empty deployment inputs produce an explicit missing-evidence summary."""
+
+    summary = build_deployment_fact_summary(
+        delivery_paths=[],
+        controller_driven_paths=[],
+        platforms=[],
+        entrypoints=[],
+        observed_config_environments=[],
+    )
+
+    assert summary == {
+        "adapter": "unknown",
+        "mapping_mode": "none",
+        "overall_confidence": "low",
+        "overall_confidence_reason": "no_deployment_evidence",
+        "evidence_sources": [],
+        "high_confidence_fact_types": [],
+        "medium_confidence_fact_types": [],
+        "fact_thresholds": {},
+        "limitations": [
+            "deployment_evidence_missing",
+            "deployment_source_unknown",
+            "runtime_platform_unknown",
+            "environment_unknown",
+            "entrypoint_unknown",
+        ],
+    }
+
+
 def test_build_deployment_facts_maps_plain_helm_release_into_evidence_only_facts() -> (
     None
 ):
@@ -631,9 +661,7 @@ def test_build_deployment_facts_maps_jenkins_ansible_into_controller_and_automat
     ]
 
 
-def test_build_deployment_facts_maps_direct_ecs_delivery_into_container_facts() -> (
-    None
-):
+def test_build_deployment_facts_maps_direct_ecs_delivery_into_container_facts() -> None:
     """Verify direct ECS delivery emits a container packaging fact."""
 
     facts = build_deployment_facts(

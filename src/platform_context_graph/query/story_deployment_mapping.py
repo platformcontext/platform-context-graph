@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .story_deployment_mapping_support import build_controller_overview
+from .story_deployment_mapping_support import build_empty_deployment_fact_summary
 from .story_deployment_mapping_support import build_runtime_overview
 from .story_deployment_mapping_support import controller_evidence
 from .story_deployment_mapping_support import controller_rows
@@ -307,7 +308,7 @@ def build_deployment_fact_summary(
         observed_config_environments=observed_config_environments,
     )
     if not adapter:
-        return None
+        return build_empty_deployment_fact_summary()
 
     facts = build_deployment_facts(
         delivery_paths=delivery_paths,
