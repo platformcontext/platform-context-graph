@@ -130,6 +130,8 @@ def infer_packaging_kind(
             return "helm"
         if "kubernetes" in delivery_mode:
             return "kubernetes"
+    if adapter == "cloudformation" and "serverless" in delivery_mode:
+        return "serverless"
     if adapter == "evidence_only":
         if "helm" in delivery_mode:
             return "helm"

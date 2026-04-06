@@ -30,11 +30,6 @@ from platform_context_graph.query.story_deployment_mapping import (
             "platform:kubernetes:aws:cluster/shared:prod:us-east-1",
             "kubernetes",
         ),
-        (
-            "cloudformation_serverless",
-            "platform:lambda:aws:region/us-east-1:prod:none",
-            "lambda",
-        ),
     ],
 )
 def test_build_deployment_facts_maps_cloudformation_kubernetes_variants_into_iac_facts(
@@ -291,6 +286,94 @@ def test_build_deployment_facts_uses_evidence_only_mode_without_controller() -> 
                     "source": "entrypoint",
                     "hostname": "payments.stage.example.com",
                     "environment": "stage",
+                }
+            ],
+        },
+    ]
+
+
+def test_build_deployment_facts_maps_cloudformation_serverless_into_serverless_packaging() -> (
+    None
+):
+    """Verify CloudFormation serverless evidence emits a serverless packaging fact."""
+
+    facts = build_deployment_facts(
+        delivery_paths=[
+            {
+                "path_kind": "direct",
+                "controller": "cloudformation",
+                "delivery_mode": "cloudformation_serverless",
+                "deployment_sources": ["service-catalog"],
+                "config_sources": ["lambda-env"],
+                "platform_kinds": ["lambda"],
+                "platforms": ["platform:lambda:aws:region/us-east-1:prod:none"],
+                "environments": ["prod"],
+            }
+        ],
+        controller_driven_paths=[],
+        platforms=[
+            {
+                "id": "platform:lambda:aws:region/us-east-1:prod:none",
+                "kind": "lambda",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "us-east-1",
+            }
+        ],
+        entrypoints=[],
+        observed_config_environments=["prod"],
+    )
+
+    assert facts[:4] == [
+        {
+            "fact_type": "PROVISIONED_BY_IAC",
+            "adapter": "cloudformation",
+            "value": "cloudformation",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_serverless",
+                }
+            ],
+        },
+        {
+            "fact_type": "USES_PACKAGING_LAYER",
+            "adapter": "cloudformation",
+            "value": "serverless",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_serverless",
+                }
+            ],
+        },
+        {
+            "fact_type": "DEPLOYS_FROM",
+            "adapter": "cloudformation",
+            "value": "service-catalog",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_serverless",
+                }
+            ],
+        },
+        {
+            "fact_type": "DISCOVERS_CONFIG_IN",
+            "adapter": "cloudformation",
+            "value": "lambda-env",
+            "confidence": "high",
+            "evidence": [
+                {
+                    "source": "delivery_path",
+                    "controller": "cloudformation",
+                    "delivery_mode": "cloudformation_serverless",
                 }
             ],
         },
