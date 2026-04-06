@@ -328,12 +328,25 @@ def _assert_deployment_artifact_expectations(
         for row in list(deployment_artifacts.get("charts") or [])
         if isinstance(row, dict)
     }
+    cloudformation_resources = {
+        str(row.get("file") or "")
+        for row in list(
+            dict(repository_context.get("infrastructure") or {}).get(
+                "cloudformation_resources"
+            )
+            or []
+        )
+        if isinstance(row, dict)
+    }
     k8s_resources = {
         str(row.get("resource_path") or "")
         for row in list(deployment_artifacts.get("k8s_resources") or [])
         if isinstance(row, dict)
     }
     assert set(expectations.get("chart_paths") or []).issubset(charts)
+    assert set(expectations.get("cloudformation_resource_paths") or []).issubset(
+        cloudformation_resources
+    )
     assert set(expectations.get("k8s_resource_paths") or []).issubset(k8s_resources)
 
 
