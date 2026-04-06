@@ -254,6 +254,7 @@ def build_workload_story_response(
         repositories=repositories,
         entrypoints=entrypoints,
         dependencies=dependencies,
+        api_surface=api_surface,
         code_overview=None,
         gitops_overview=gitops_overview,
         documentation_evidence=dict(context.get("documentation_evidence") or {}),
@@ -267,6 +268,7 @@ def build_workload_story_response(
         cloud_resources=cloud_resources,
         shared_resources=shared_resources,
         dependencies=dependencies,
+        consumer_repositories=list(context.get("consumer_repositories") or []),
         gitops_overview=gitops_overview,
         documentation_overview=documentation_overview,
     )

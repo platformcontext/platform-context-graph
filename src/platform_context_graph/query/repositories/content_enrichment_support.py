@@ -8,6 +8,9 @@ from typing import Any
 
 import yaml
 
+from ..environment_normalization import infer_environment_label
+from ..environment_normalization import ordered_unique_environment_names
+
 
 def values_path_patterns(source_path: str) -> list[str]:
     """Return related values-file glob patterns for one source path hint."""
@@ -42,12 +45,17 @@ def infer_environment_from_path(relative_path: str) -> str | None:
     """Infer environment name from a repo-relative path."""
 
     for part in Path(relative_path).parts:
-        normalized = part.strip()
-        if normalized in {"dev", "development", "prod", "production", "qa", "staging"}:
-            return normalized
-        if normalized.startswith("bg-"):
-            return normalized
+        for candidate in (Path(part).stem.strip(), part.strip()):
+            inferred = infer_environment_label(candidate)
+            if inferred:
+                return inferred
     return None
+
+
+def ordered_unique_environments(values: Iterable[Any]) -> list[str]:
+    """Return ordered unique environment names using canonical-family dedupe."""
+
+    return ordered_unique_environment_names(list(values))
 
 
 def split_csv(value: Any) -> list[str]:

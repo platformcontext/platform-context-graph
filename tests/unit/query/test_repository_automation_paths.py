@@ -315,3 +315,61 @@ def test_build_controller_driven_paths_supports_nested_jenkins_groovy_entrypoint
             ),
         }
     ]
+
+
+def test_build_controller_driven_paths_derives_codedeploy_ecs_from_infrastructure() -> (
+    None
+):
+    """Infrastructure-only CodeDeploy signals should emit a controller path."""
+
+    paths = build_controller_driven_paths(
+        workflow_hints={},
+        ansible_hints={},
+        platforms=[
+            {
+                "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                "kind": "ecs",
+                "provider": "aws",
+                "environment": "prod",
+                "name": "node10",
+            }
+        ],
+        provisioned_by=[{"name": "terraform-stack-node10"}],
+        infrastructure={
+            "terraform_resources": [
+                {
+                    "name": "aws_codedeploy_deployment_group.api_node_boats",
+                    "resource_type": "aws_codedeploy_deployment_group",
+                    "file": "shared/codedeploy.tf",
+                }
+            ],
+            "terraform_modules": [
+                {
+                    "name": "api_node_boats",
+                    "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                    "deployment_name": "api-node-boats",
+                    "cluster_name": "node10",
+                    "deploy_entry_point": "api-node-boats.js",
+                }
+            ],
+        },
+    )
+
+    assert paths == [
+        {
+            "controller_kind": "codedeploy",
+            "controller_repository": None,
+            "automation_kind": "",
+            "automation_repository": None,
+            "entry_points": ["shared/codedeploy.tf"],
+            "target_descriptors": ["api-node-boats", "node10", "prod"],
+            "runtime_family": "ecs_service",
+            "supporting_repositories": ["terraform-stack-node10"],
+            "confidence": "high",
+            "explanation": (
+                "codedeploy controller shared/codedeploy.tf targets "
+                "api-node-boats, node10, prod for ecs_service with support "
+                "from terraform-stack-node10."
+            ),
+        }
+    ]

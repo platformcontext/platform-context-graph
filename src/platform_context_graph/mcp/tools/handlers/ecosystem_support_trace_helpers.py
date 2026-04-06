@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ....query.environment_normalization import canonical_environment_key
+from ....query.environment_normalization import ordered_unique_environment_names
+
 
 def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return rows with duplicates removed while preserving order."""
@@ -76,17 +79,7 @@ def _service_name_tokens(service_name: str) -> list[str]:
 def _normalized_environment_names(values: list[str] | None) -> list[str]:
     """Return ordered unique environment names."""
 
-    if not values:
-        return []
-    ordered: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        normalized = str(value).strip()
-        if not normalized or normalized in seen:
-            continue
-        seen.add(normalized)
-        ordered.append(normalized)
-    return ordered
+    return ordered_unique_environment_names(list(values or []))
 
 
 def _environment_truthfulness_note(
@@ -107,8 +100,14 @@ def _environment_truthfulness_note(
             "but runtime evidence has not confirmed deployed environments."
         )
 
-    runtime_set = set(runtime)
-    extra_config = [name for name in observed if name not in runtime_set]
+    runtime_set = {
+        canonical_environment_key(name) or name for name in runtime if str(name).strip()
+    }
+    extra_config = [
+        name
+        for name in observed
+        if (canonical_environment_key(name) or name) not in runtime_set
+    ]
     if not extra_config:
         return ""
 

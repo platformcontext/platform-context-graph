@@ -283,6 +283,73 @@ def _assert_delivery_workflows(
         _assert_jenkins_expectations(delivery_workflows, jenkins_expectations)
 
 
+def _assert_delivery_path_expectations(
+    repository_context: dict[str, object], expectations: dict[str, object]
+) -> None:
+    """Assert evidence-backed delivery path details in one repository context."""
+
+    delivery_paths = list(repository_context.get("delivery_paths") or [])
+    delivery_modes = {
+        str(row.get("delivery_mode") or "")
+        for row in delivery_paths
+        if isinstance(row, dict)
+    }
+    deployment_sources = {
+        str(source)
+        for row in delivery_paths
+        if isinstance(row, dict)
+        for source in list(row.get("deployment_sources") or [])
+    }
+    config_sources = {
+        str(source)
+        for row in delivery_paths
+        if isinstance(row, dict)
+        for source in list(row.get("config_sources") or [])
+    }
+    assert set(expectations.get("expected_delivery_modes") or []).issubset(
+        delivery_modes
+    )
+    assert set(expectations.get("expected_local_deployment_sources") or []).issubset(
+        deployment_sources
+    )
+    assert set(expectations.get("expected_local_config_sources") or []).issubset(
+        config_sources
+    )
+
+
+def _assert_deployment_artifact_expectations(
+    repository_context: dict[str, object], expectations: dict[str, object]
+) -> None:
+    """Assert selected deployment artifact paths in one repository context."""
+
+    deployment_artifacts = dict(repository_context.get("deployment_artifacts") or {})
+    charts = {
+        str(row.get("relative_path") or "")
+        for row in list(deployment_artifacts.get("charts") or [])
+        if isinstance(row, dict)
+    }
+    cloudformation_resources = {
+        str(row.get("file") or "")
+        for row in list(
+            dict(repository_context.get("infrastructure") or {}).get(
+                "cloudformation_resources"
+            )
+            or []
+        )
+        if isinstance(row, dict)
+    }
+    k8s_resources = {
+        str(row.get("resource_path") or "")
+        for row in list(deployment_artifacts.get("k8s_resources") or [])
+        if isinstance(row, dict)
+    }
+    assert set(expectations.get("chart_paths") or []).issubset(charts)
+    assert set(expectations.get("cloudformation_resource_paths") or []).issubset(
+        cloudformation_resources
+    )
+    assert set(expectations.get("k8s_resource_paths") or []).issubset(k8s_resources)
+
+
 def test_relationship_platform_compose_flow(
     seeded_relationship_platform_graph: None,
     expectations: dict[str, object],
@@ -384,6 +451,11 @@ def test_relationship_platform_compose_flow(
     )
     assert set(api_expectations.get("expected_runtime_platform_kinds") or []).issubset(
         runtime_platform_kinds
+    )
+    _assert_delivery_path_expectations(repository_context, api_expectations)
+    _assert_deployment_artifact_expectations(
+        repository_context,
+        dict(api_expectations.get("expected_local_artifacts") or {}),
     )
     _assert_delivery_workflows(
         repository_context,

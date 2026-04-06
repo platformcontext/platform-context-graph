@@ -193,6 +193,7 @@ def build_repository_story_response(
                 if dependency_label(row)
             ],
         ],
+        api_surface=api_surface,
         code_overview=code_overview,
         gitops_overview=gitops_overview,
         documentation_evidence=dict(context.get("documentation_evidence") or {}),

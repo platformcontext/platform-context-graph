@@ -18,6 +18,7 @@ def enrich_workflow_paths(
     context: dict[str, Any],
     resolve_repository: Callable[[str], dict[str, Any] | None],
     database: Any = None,
+    local_deployment_artifacts: dict[str, list[dict[str, Any]]] | None = None,
 ) -> None:
     """Mutate context with workflow, controller-driven, and delivery paths."""
 
@@ -25,6 +26,9 @@ def enrich_workflow_paths(
         repository=repository,
         resolve_repository=resolve_repository,
         database=database,
+    )
+    has_local_deployment_artifacts = _has_deployment_artifacts(
+        local_deployment_artifacts
     )
     repo_root = _repo_root(repository)
     ansible_hints = (
@@ -38,20 +42,57 @@ def enrich_workflow_paths(
             ansible_hints=ansible_hints,
             platforms=list(context.get("platforms") or []),
             provisioned_by=list(context.get("provisioned_by") or []),
+            infrastructure=(
+                context.get("infrastructure")
+                if isinstance(context.get("infrastructure"), dict)
+                else {}
+            ),
         )
         if controller_driven_paths:
             context["controller_driven_paths"] = controller_driven_paths
-    if delivery_workflows:
+    elif isinstance(context.get("infrastructure"), dict):
+        controller_driven_paths = build_controller_driven_paths(
+            workflow_hints=delivery_workflows,
+            ansible_hints={},
+            platforms=list(context.get("platforms") or []),
+            provisioned_by=list(context.get("provisioned_by") or []),
+            infrastructure=context["infrastructure"],
+        )
+        if controller_driven_paths:
+            context["controller_driven_paths"] = controller_driven_paths
+    if (
+        delivery_workflows
+        or has_local_deployment_artifacts
+        or isinstance(context.get("infrastructure"), dict)
+    ):
         delivery_paths = summarize_delivery_paths(
             delivery_workflows=delivery_workflows,
             controller_driven_paths=list(context.get("controller_driven_paths") or []),
             platforms=list(context.get("platforms") or []),
+            infrastructure=(
+                context.get("infrastructure")
+                if isinstance(context.get("infrastructure"), dict)
+                else {}
+            ),
             deploys_from=list(context.get("deploys_from") or []),
             discovers_config_in=list(context.get("discovers_config_in") or []),
             provisioned_by=list(context.get("provisioned_by") or []),
+            deployment_artifacts=(
+                local_deployment_artifacts if has_local_deployment_artifacts else {}
+            ),
         )
         if delivery_paths:
             context["delivery_paths"] = delivery_paths
+
+
+def _has_deployment_artifacts(
+    deployment_artifacts: dict[str, list[dict[str, Any]]] | None,
+) -> bool:
+    """Return whether a deployment-artifact mapping contains any rows."""
+
+    if not deployment_artifacts:
+        return False
+    return any(bool(rows) for rows in deployment_artifacts.values())
 
 
 def _repo_root(repository: dict[str, Any]) -> Path | None:

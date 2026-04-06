@@ -12,6 +12,7 @@ from ....query.story_documentation import (
 from ....query.story_gitops import build_gitops_overview
 from ....query.story_shared import portable_story_value
 from ....query.story_support import build_support_overview
+from ....query.story_workload_support import selected_environment_for_story
 from ....utils.debug_log import emit_log_call, warning_logger
 from .ecosystem_support_overview import (
     build_deployment_overview,
@@ -364,7 +365,7 @@ def trace_deployment_chain(
             *source_repositories,
             *list(context.get("deploys_from") or []),
             *list(context.get("discovers_config_in") or []),
-            *list(context.get("provisioned_by") or []),
+            *([] if direct_only else list(context.get("provisioned_by") or [])),
         ],
         subject_names=[canonical_name],
     )
@@ -375,10 +376,17 @@ def trace_deployment_chain(
         dependencies=list(result.get("consumer_repositories") or []),
         api_surface=dict(result.get("api_surface") or {}),
     )
+    selected_environment = selected_environment_for_story(
+        selected_instance=None,
+        context=result,
+        entrypoints=list(result.get("hostnames") or []),
+    )
     result["gitops_overview"] = build_gitops_overview(
         deploys_from=list(result.get("deploys_from") or []),
         discovers_config_in=list(result.get("discovers_config_in") or []),
-        provisioned_by=list(result.get("provisioned_by") or []),
+        provisioned_by=(
+            [] if direct_only else list(result.get("provisioned_by") or [])
+        ),
         delivery_paths=list(result.get("delivery_paths") or []),
         controller_driven_paths=list(result.get("controller_driven_paths") or []),
         deployment_artifacts=dict(result.get("deployment_artifacts") or {}),
@@ -386,6 +394,7 @@ def trace_deployment_chain(
         observed_config_environments=list(
             result.get("observed_config_environments") or []
         ),
+        selected_environment=selected_environment,
     )
     result["documentation_overview"] = build_documentation_overview(
         subject_name=canonical_name,
@@ -393,6 +402,7 @@ def trace_deployment_chain(
         repositories=[canonical_repository, *source_repositories],
         entrypoints=list(result.get("hostnames") or []),
         dependencies=list(result.get("consumer_repositories") or []),
+        api_surface=dict(result.get("api_surface") or {}),
         code_overview=None,
         gitops_overview=result.get("gitops_overview"),
         documentation_evidence=documentation_evidence,

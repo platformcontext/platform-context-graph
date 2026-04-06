@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from ...resolution.platform_families import format_platform_kind_label
+from .content_enrichment_infrastructure_delivery import (
+    build_infrastructure_delivery_paths,
+)
+from .content_enrichment_local_delivery import build_local_delivery_paths
+from .content_enrichment_support import ordered_unique_environments
 
 _GITOPS_DELIVERY_MODES = frozenset({"eks_gitops", "eks_gitops_rollback"})
 _DIRECT_DELIVERY_MODES = frozenset(
@@ -18,9 +23,11 @@ def summarize_delivery_paths(
     delivery_workflows: dict[str, Any],
     controller_driven_paths: list[dict[str, Any]] | None = None,
     platforms: list[dict[str, Any]],
+    infrastructure: dict[str, Any] | None = None,
     deploys_from: list[dict[str, Any]],
     discovers_config_in: list[dict[str, Any]],
     provisioned_by: list[dict[str, Any]],
+    deployment_artifacts: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     """Summarize workflow hints into higher-level delivery paths."""
 
@@ -142,6 +149,18 @@ def summarize_delivery_paths(
                 provisioning_repositories=_repository_names(provisioned_by),
             )
         )
+    paths.extend(
+        build_infrastructure_delivery_paths(
+            infrastructure=infrastructure or {},
+            platforms=platforms,
+        )
+    )
+    paths.extend(
+        build_local_delivery_paths(
+            deployment_artifacts=deployment_artifacts or {},
+            platforms=platforms,
+        )
+    )
     return [path for path in paths if path]
 
 
@@ -177,8 +196,8 @@ def _build_delivery_path(
     platform_ids = _ordered_unique(
         str(row.get("id") or "").strip() for row in platforms
     )
-    environments = _ordered_unique(
-        str(row.get("environment") or "").strip() for row in platforms
+    environments = ordered_unique_environments(
+        [str(row.get("environment") or "").strip() for row in platforms]
     )
     summary = _delivery_path_summary(
         summary_prefix=summary_prefix,
@@ -218,8 +237,8 @@ def _build_jenkins_delivery_path(
     platform_ids = _ordered_unique(
         str(row.get("id") or "").strip() for row in platforms
     )
-    environments = _ordered_unique(
-        str(row.get("environment") or "").strip() for row in platforms
+    environments = ordered_unique_environments(
+        [str(row.get("environment") or "").strip() for row in platforms]
     )
     controller_supporting_repositories = _ordered_unique(
         repository

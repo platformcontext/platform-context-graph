@@ -13,17 +13,13 @@ def build_controller_driven_paths(
     ansible_hints: dict[str, Any],
     platforms: list[dict[str, Any]],
     provisioned_by: list[dict[str, Any]] | list[str],
+    infrastructure: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Assemble normalized controller-driven automation paths."""
-
-    del platforms  # This slice keeps controller-driven paths runtime-centric, not platform-centric.
 
     jenkins_rows = [
         row for row in workflow_hints.get("jenkins", []) if isinstance(row, dict)
     ]
-    if not jenkins_rows:
-        return []
-
     playbooks = [
         row for row in ansible_hints.get("playbooks", []) if isinstance(row, dict)
     ]
@@ -73,6 +69,13 @@ def build_controller_driven_paths(
                 ),
             }
         )
+    paths.extend(
+        _build_codedeploy_paths(
+            infrastructure=infrastructure or {},
+            platforms=platforms,
+            supporting_repositories=supporting_repositories,
+        )
+    )
     seen: set[tuple[str, ...]] = set()
     deduped: list[dict[str, Any]] = []
     for path in paths:
@@ -181,6 +184,101 @@ def _format_controller_path_explanation(
     )
     if target_descriptors:
         explanation += f" targeting {', '.join(target_descriptors)}"
+    if runtime_family:
+        explanation += f" for {runtime_family}"
+    if supporting_repositories:
+        explanation += f" with support from {', '.join(supporting_repositories)}"
+    return explanation + "."
+
+
+def _build_codedeploy_paths(
+    *,
+    infrastructure: dict[str, Any],
+    platforms: list[dict[str, Any]],
+    supporting_repositories: list[str],
+) -> list[dict[str, Any]]:
+    """Build controller-driven paths from CodeDeploy plus ECS infrastructure."""
+
+    terraform_resources = [
+        row
+        for row in infrastructure.get("terraform_resources", [])
+        if isinstance(row, dict)
+    ]
+    terraform_modules = [
+        row
+        for row in infrastructure.get("terraform_modules", [])
+        if isinstance(row, dict)
+    ]
+    codedeploy_rows = [
+        row
+        for row in terraform_resources
+        if str(row.get("resource_type") or "").strip().startswith("aws_codedeploy_")
+    ]
+    if not codedeploy_rows:
+        return []
+
+    ecs_modules = [
+        row
+        for row in terraform_modules
+        if "ecs-application/aws" in str(row.get("source") or "").strip()
+        or "ecs/service" in str(row.get("source") or "").strip()
+    ]
+    runtime_family = "ecs_service" if ecs_modules else ""
+    target_descriptors = ordered_unique_strings(
+        [
+            *(row.get("deployment_name") for row in ecs_modules),
+            *(row.get("cluster_name") for row in ecs_modules),
+            *(
+                row.get("environment")
+                for row in platforms
+                if isinstance(row, dict) and str(row.get("kind") or "").strip() == "ecs"
+            ),
+        ]
+    )
+    entry_points = ordered_unique_strings(row.get("file") for row in codedeploy_rows)
+    if not entry_points:
+        return []
+    confidence = (
+        "high"
+        if runtime_family and target_descriptors and supporting_repositories
+        else "medium"
+    )
+    return [
+        {
+            "controller_kind": "codedeploy",
+            "controller_repository": None,
+            "automation_kind": "",
+            "automation_repository": None,
+            "entry_points": entry_points,
+            "target_descriptors": target_descriptors,
+            "runtime_family": runtime_family,
+            "supporting_repositories": supporting_repositories,
+            "confidence": confidence,
+            "explanation": _format_infrastructure_controller_explanation(
+                controller_kind="codedeploy",
+                entry_points=entry_points,
+                target_descriptors=target_descriptors,
+                runtime_family=runtime_family,
+                supporting_repositories=supporting_repositories,
+            ),
+        }
+    ]
+
+
+def _format_infrastructure_controller_explanation(
+    *,
+    controller_kind: str,
+    entry_points: list[str],
+    target_descriptors: list[str],
+    runtime_family: str,
+    supporting_repositories: list[str],
+) -> str:
+    """Render one stable explanation string for infra-derived controller paths."""
+
+    explanation = (
+        f"{controller_kind} controller {', '.join(entry_points)} targets "
+        f"{', '.join(target_descriptors)}"
+    )
     if runtime_family:
         explanation += f" for {runtime_family}"
     if supporting_repositories:

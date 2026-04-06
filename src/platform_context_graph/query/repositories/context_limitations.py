@@ -64,6 +64,7 @@ def looks_like_deployable_repository(
     relevant_keys = {
         "argocd_applications",
         "argocd_applicationsets",
+        "cloudformation_resources",
         "helm_charts",
         "helm_values",
         "k8s_resources",

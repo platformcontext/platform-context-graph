@@ -132,3 +132,139 @@ Implementation target:
   hotspots.
 - Config-only environments continue to resolve cleanly for support stories.
 - Focused story and context regressions stay green.
+
+## Post-PR-76 Backlog
+
+The evidence-based deployment contract is now in place. The next work should
+focus on improving the evidence that feeds that contract instead of adding more
+story-only shaping.
+
+### Priority 1. Artifact Ranking And Support Selection
+
+Goal:
+
+- make support-oriented stories consistently promote the first files an
+  operator should open
+
+Remaining work:
+
+- add a deterministic artifact-ranking helper
+- score GitOps overlays, values, probes, bootstrap files, IRSA/secret/config
+  manifests, dashboards, and API specs explicitly
+- reuse the same ranked artifact set in:
+  - `get_service_story(...)`
+  - `get_repo_story(...)`
+  - `trace_deployment_chain(...)`
+  - support overview shaping
+
+Acceptance criteria:
+
+- top artifacts are stable across story surfaces for the same service
+- overlay values, probes, bootstrap files, and dashboards appear before lower
+  signal docs
+
+### Priority 2. Deployment Trace Convergence And Pruning
+
+Goal:
+
+- keep service stories and deployment traces aligned on the same primary
+  deployment evidence
+
+Remaining work:
+
+- reuse the same deployment-owner and artifact-selection logic across story and
+  trace handlers
+- prune broad provisioning fan-out from default support answers
+- keep deep infra context available only in drill-down paths or explicit deep
+  traces
+
+Acceptance criteria:
+
+- `get_service_story(...)` and `trace_deployment_chain(...)` agree on the
+  primary owner and top deployment artifacts
+- unrelated Terraform or provisioning estates do not dominate default support
+  answers
+
+### Priority 3. Environment Normalization
+
+Goal:
+
+- make environment selection behave consistently across runtime, config, and
+  deployment evidence
+
+Remaining work:
+
+- normalize environment comparison across workload instances, hostnames,
+  overlays, namespaces, and config-derived hints
+- add regression coverage for:
+  - `qa`
+  - `bg-qa`
+  - `ops-qa`
+  - `prod-us`
+  - namespace-only hints
+
+Acceptance criteria:
+
+- environment-aware service stories select the same environment from runtime
+  and config-backed evidence
+- config-only estates keep working without pretending a runtime instance exists
+
+### Priority 4. Parser And Context Enrichment
+
+Goal:
+
+- improve the raw deployment evidence available to the mapper
+
+Remaining work:
+
+- broaden controller-free Helm and manifest detection
+- strengthen CloudFormation-to-runtime linking
+- strengthen ECS service and task linking
+- continue expanding the synthetic fixture corpus for mixed deployment estates
+- validate against real indexed services across:
+  - ArgoCD
+  - Flux
+  - Terraform
+  - CloudFormation/ECS or Lambda
+  - controller-free local Helm/manifests
+
+Acceptance criteria:
+
+- parser/context layers produce richer `delivery_paths` and
+  `controller_driven_paths` before story shaping runs
+- live validation shows fewer `mapping_mode=none` cases caused by missing raw
+  evidence
+
+### Priority 5. Support-Oriented Content Classification
+
+Goal:
+
+- better distinguish what kind of file or doc an operator is looking at
+
+Remaining work:
+
+- classify content into:
+  - operator docs
+  - deployment/config files
+  - runtime source files
+  - observability assets
+- use that classification to improve support summaries and first-15-minute
+  investigation guidance
+
+Acceptance criteria:
+
+- support guidance favors operator and deployment artifacts ahead of generic
+  repository docs
+- observability assets are promoted when incident investigation is the likely
+  user intent
+
+## Recommended Order After PR #76
+
+1. Finish deterministic artifact ranking and reuse it across all story
+   surfaces.
+2. Align deployment traces with service-story shaping and prune default
+   fan-out.
+3. Broaden environment normalization coverage.
+4. Continue parser/context enrichment and mixed-estate validation.
+5. Tighten support-oriented content classification once the richer evidence
+   layer has settled.

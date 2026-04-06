@@ -161,7 +161,7 @@ def test_repository_story_exposes_gitops_documentation_and_support_overviews() -
         "request_failures"
     )
     assert result["support_overview"]["key_artifacts"][0]["relative_path"] == (
-        "README.md"
+        "argocd/api-node-boats/overlays/bg-qa/values.yaml"
     )
 
 
@@ -295,10 +295,289 @@ def test_workload_story_exposes_gitops_documentation_and_support_overviews() -> 
     assert result["support_overview"]["entrypoints"][0]["hostname"] == (
         "api-node-boats.qa.bgrp.io"
     )
-    assert result["support_overview"]["entrypoints"][1]["path"] == "/_status"
+
+
+def test_repository_story_ranks_support_artifacts_ahead_of_generic_docs() -> None:
+    """Support artifacts should outrank generic README-style documentation."""
+
+    result = build_repository_story_response(
+        {
+            "repository": {
+                "id": "repository:r_api_node_boats",
+                "name": "api-node-boats",
+                "repo_slug": "boatsgroup/api-node-boats",
+                "remote_url": "https://github.com/boatsgroup/api-node-boats",
+                "has_remote": True,
+            },
+            "code": {"functions": 10, "classes": 2, "class_methods": 4},
+            "api_surface": {
+                "spec_files": [
+                    {
+                        "relative_path": "specs/openapi.yaml",
+                        "discovered_from": "api-node-boats.ts",
+                    }
+                ],
+                "endpoints": [
+                    {
+                        "path": "/_status",
+                        "relative_path": "catalog-specs.yaml",
+                    }
+                ],
+            },
+            "deploys_from": [
+                {
+                    "id": "repository:r_helm",
+                    "name": "helm-charts",
+                    "repo_slug": "boatsgroup/helm-charts",
+                }
+            ],
+            "delivery_paths": [
+                {
+                    "path_kind": "gitops",
+                    "controller": "github_actions",
+                    "delivery_mode": "eks_gitops",
+                    "deployment_sources": ["helm-charts"],
+                    "platform_kinds": ["eks"],
+                }
+            ],
+            "deployment_artifacts": {
+                "config_paths": [
+                    {
+                        "path": "argocd/api-node-boats/base/values.yaml",
+                        "source_repo": "helm-charts",
+                    },
+                    {
+                        "path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                        "source_repo": "helm-charts",
+                    },
+                ],
+                "kustomize_resources": [
+                    {
+                        "kind": "XIRSARole",
+                        "name": "api-node-boats",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                    },
+                    {
+                        "kind": "ConfigMap",
+                        "name": "dashboard-overview",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/base/dashboards/dashboard-overview-configmap.yaml",
+                    },
+                ],
+            },
+            "documentation_evidence": {
+                "graph_context": [],
+                "file_content": [
+                    {
+                        "repo_id": "repository:r_api_node_boats",
+                        "relative_path": "README.md",
+                        "source_backend": "postgres",
+                        "title": "API Node Boats",
+                        "summary": "Repository overview and local debugging notes.",
+                    },
+                    {
+                        "repo_id": "repository:r_api_node_boats",
+                        "relative_path": "docs/runbook.md",
+                        "source_backend": "postgres",
+                        "title": "Runbook",
+                        "summary": "Incident workflow",
+                    },
+                ],
+                "entity_content": [],
+                "content_search": [],
+            },
+            "limitations": [],
+        }
+    )
+
+    artifact_paths = [
+        artifact["relative_path"]
+        for artifact in result["support_overview"]["key_artifacts"]
+    ]
+    assert artifact_paths[:5] == [
+        "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+        "argocd/api-node-boats/base/values.yaml",
+        "argocd/api-node-boats/base/xirsarole.yaml",
+        "argocd/api-node-boats/base/dashboards/dashboard-overview-configmap.yaml",
+        "specs/openapi.yaml",
+    ]
+    assert "README.md" in artifact_paths
     assert result["documentation_overview"]["service_summary"].startswith(
         "api-node-boats"
     )
-    assert result["support_overview"]["entrypoints"][0]["hostname"] == (
-        "api-node-boats.qa.bgrp.io"
+
+
+def test_support_overview_uses_topic_specific_artifact_classes() -> None:
+    """Support investigation topics should use class-specific artifact subsets."""
+
+    result = build_repository_story_response(
+        {
+            "repository": {
+                "id": "repository:r_api_node_boats",
+                "name": "api-node-boats",
+                "repo_slug": "boatsgroup/api-node-boats",
+                "remote_url": "https://github.com/boatsgroup/api-node-boats",
+                "has_remote": True,
+            },
+            "code": {"functions": 10, "classes": 2, "class_methods": 4},
+            "hostnames": [
+                {
+                    "hostname": "api-node-boats.qa.bgrp.io",
+                    "environment": "bg-qa",
+                    "visibility": "public",
+                }
+            ],
+            "api_surface": {
+                "spec_files": [
+                    {
+                        "relative_path": "specs/openapi.yaml",
+                        "discovered_from": "api-node-boats.ts",
+                    }
+                ],
+                "endpoints": [
+                    {
+                        "path": "/_status",
+                        "relative_path": "catalog-specs.yaml",
+                    }
+                ],
+            },
+            "deploys_from": [
+                {
+                    "id": "repository:r_helm",
+                    "name": "helm-charts",
+                    "repo_slug": "boatsgroup/helm-charts",
+                }
+            ],
+            "delivery_paths": [
+                {
+                    "path_kind": "gitops",
+                    "controller": "github_actions",
+                    "delivery_mode": "eks_gitops",
+                    "deployment_sources": ["helm-charts"],
+                    "platform_kinds": ["eks"],
+                }
+            ],
+            "deployment_artifacts": {
+                "config_paths": [
+                    {
+                        "path": "argocd/api-node-boats/base/values.yaml",
+                        "source_repo": "helm-charts",
+                    },
+                    {
+                        "path": "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+                        "source_repo": "helm-charts",
+                    },
+                ],
+                "kustomize_resources": [
+                    {
+                        "kind": "XIRSARole",
+                        "name": "api-node-boats",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/base/xirsarole.yaml",
+                    },
+                    {
+                        "kind": "ConfigMap",
+                        "name": "dashboard-overview",
+                        "source_repo": "helm-charts",
+                        "relative_path": "argocd/api-node-boats/base/dashboards/dashboard-overview-configmap.yaml",
+                    },
+                ],
+            },
+            "documentation_evidence": {
+                "graph_context": [],
+                "file_content": [
+                    {
+                        "repo_id": "repository:r_api_node_boats",
+                        "relative_path": "README.md",
+                        "source_backend": "postgres",
+                        "title": "API Node Boats",
+                        "summary": "Repository overview and local debugging notes.",
+                    },
+                    {
+                        "repo_id": "repository:r_api_node_boats",
+                        "relative_path": "docs/runbook.md",
+                        "source_backend": "postgres",
+                        "title": "Runbook",
+                        "summary": "Incident workflow",
+                    },
+                ],
+                "entity_content": [],
+                "content_search": [],
+            },
+            "limitations": [],
+        }
     )
+
+    paths_by_topic = {
+        row["topic"]: [artifact["relative_path"] for artifact in row["artifacts"]]
+        for row in result["support_overview"]["investigation_paths"]
+    }
+
+    assert paths_by_topic["request_failures"][:3] == [
+        "argocd/api-node-boats/base/dashboards/dashboard-overview-configmap.yaml",
+        "specs/openapi.yaml",
+        "catalog-specs.yaml",
+    ]
+    assert paths_by_topic["deploy_and_config"][:3] == [
+        "argocd/api-node-boats/overlays/bg-qa/values.yaml",
+        "argocd/api-node-boats/base/values.yaml",
+        "argocd/api-node-boats/base/xirsarole.yaml",
+    ]
+
+
+def test_workload_story_classifies_alerts_and_oncall_docs_for_support_topics() -> None:
+    """Support topics should promote alerts and on-call docs over generic docs."""
+
+    result = build_workload_story_response(
+        {
+            "workload": {
+                "id": "workload:api-node-boats",
+                "type": "workload",
+                "kind": "service",
+                "name": "api-node-boats",
+            },
+            "entrypoints": [{"hostname": "api-node-boats.qa.bgrp.io"}],
+            "dependencies": [{"name": "shared-memcached"}],
+            "consumer_repositories": [{"repository": "api-node-boattrader"}],
+            "documentation_evidence": {
+                "graph_context": [],
+                "file_content": [
+                    {
+                        "repo_id": "repository:r_api_node_boats",
+                        "relative_path": "README.md",
+                        "source_backend": "postgres",
+                        "title": "API Node Boats",
+                        "summary": "Repository overview and local debugging notes.",
+                    },
+                    {
+                        "repo_id": "repository:r_api_node_boats",
+                        "relative_path": "ops/oncall.md",
+                        "source_backend": "postgres",
+                        "title": "On-call",
+                        "summary": "Escalation playbook",
+                    },
+                    {
+                        "repo_id": "repository:r_api_node_boats",
+                        "relative_path": "observability/alerts/api-node-boats.yaml",
+                        "source_backend": "postgres",
+                        "title": "Alerts",
+                        "summary": "Pager rules",
+                    },
+                ],
+                "entity_content": [],
+                "content_search": [],
+            },
+            "limitations": [],
+        }
+    )
+
+    paths_by_topic = {
+        row["topic"]: [artifact["relative_path"] for artifact in row["artifacts"]]
+        for row in result["support_overview"]["investigation_paths"]
+    }
+
+    assert paths_by_topic["dependency_failures"][0] == (
+        "observability/alerts/api-node-boats.yaml"
+    )
+    assert paths_by_topic["consumer_impact"][0] == "ops/oncall.md"
