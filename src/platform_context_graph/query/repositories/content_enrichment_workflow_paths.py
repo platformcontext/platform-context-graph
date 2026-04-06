@@ -39,6 +39,21 @@ def enrich_workflow_paths(
             ansible_hints=ansible_hints,
             platforms=list(context.get("platforms") or []),
             provisioned_by=list(context.get("provisioned_by") or []),
+            infrastructure=(
+                context.get("infrastructure")
+                if isinstance(context.get("infrastructure"), dict)
+                else {}
+            ),
+        )
+        if controller_driven_paths:
+            context["controller_driven_paths"] = controller_driven_paths
+    elif isinstance(context.get("infrastructure"), dict):
+        controller_driven_paths = build_controller_driven_paths(
+            workflow_hints=delivery_workflows,
+            ansible_hints={},
+            platforms=list(context.get("platforms") or []),
+            provisioned_by=list(context.get("provisioned_by") or []),
+            infrastructure=context["infrastructure"],
         )
         if controller_driven_paths:
             context["controller_driven_paths"] = controller_driven_paths

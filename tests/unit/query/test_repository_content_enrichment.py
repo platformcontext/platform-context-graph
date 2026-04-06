@@ -1397,3 +1397,84 @@ def test_enrich_repository_context_adds_controller_driven_paths(
             ),
         }
     ]
+
+
+def test_enrich_repository_context_adds_codedeploy_controller_path_from_infrastructure(
+    monkeypatch,
+) -> None:
+    """Infrastructure-only ECS signals should surface a CodeDeploy controller path."""
+
+    _apply_indexed_file_mocks(monkeypatch, {})
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.content_queries.get_file_content",
+        lambda _database, *, repo_id, relative_path: {
+            "available": False,
+            "content": None,
+        },
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.content_queries.search_file_content",
+        lambda _database, **_kwargs: {"matches": []},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.repositories.content_enrichment.resolve_repository",
+        lambda _session, candidate: None,
+    )
+
+    result = enrich_repository_context(
+        _DummyDB(),
+        {
+            "repository": {
+                "id": "repository:r_api_node_boats",
+                "name": "api-node-boats",
+                "path": "/does/not/matter",
+                "local_path": "/does/not/matter",
+            },
+            "platforms": [
+                {
+                    "id": "platform:ecs:aws:cluster/node10:prod:us-east-1",
+                    "kind": "ecs",
+                    "environment": "prod",
+                    "name": "node10",
+                }
+            ],
+            "provisioned_by": [{"name": "terraform-stack-node10"}],
+            "infrastructure": {
+                "terraform_resources": [
+                    {
+                        "name": "aws_codedeploy_deployment_group.api_node_boats",
+                        "resource_type": "aws_codedeploy_deployment_group",
+                        "file": "shared/codedeploy.tf",
+                    }
+                ],
+                "terraform_modules": [
+                    {
+                        "name": "api_node_boats",
+                        "source": "boatsgroup.pe.jfrog.io/TF__BG/ecs-application/aws",
+                        "deployment_name": "api-node-boats",
+                        "cluster_name": "node10",
+                        "deploy_entry_point": "api-node-boats.js",
+                    }
+                ],
+            },
+        },
+    )
+
+    assert result["controller_driven_paths"] == [
+        {
+            "controller_kind": "codedeploy",
+            "controller_repository": None,
+            "automation_kind": "",
+            "automation_repository": None,
+            "entry_points": ["shared/codedeploy.tf"],
+            "target_descriptors": ["api-node-boats", "node10", "prod"],
+            "runtime_family": "ecs_service",
+            "supporting_repositories": ["terraform-stack-node10"],
+            "confidence": "high",
+            "explanation": (
+                "codedeploy controller shared/codedeploy.tf targets "
+                "api-node-boats, node10, prod for ecs_service with support "
+                "from terraform-stack-node10."
+            ),
+        }
+    ]
