@@ -18,6 +18,9 @@ from .app_openapi_examples import SERVICE_CONTEXT_EXAMPLE as _SERVICE_CONTEXT_EX
 from .app_openapi_examples import SERVICE_STORY_EXAMPLE as _SERVICE_STORY_EXAMPLE
 from .app_openapi_examples import WORKLOAD_CONTEXT_EXAMPLE as _WORKLOAD_CONTEXT_EXAMPLE
 from .app_openapi_examples import WORKLOAD_STORY_EXAMPLE as _WORKLOAD_STORY_EXAMPLE
+from .app_openapi_examples_investigation import (
+    INVESTIGATION_RESPONSE_EXAMPLE as _INVESTIGATION_RESPONSE_EXAMPLE,
+)
 
 
 def build_openapi_schema(app: FastAPI) -> dict[str, Any]:
@@ -74,6 +77,15 @@ def _ensure_examples(schema: dict[str, Any]) -> dict[str, Any]:
         "repository_story": {
             "summary": "Structured repository story",
             "value": _REPOSITORY_STORY_EXAMPLE,
+        }
+    }
+    response_content(
+        "/api/v0/investigations/services/{service_name}",
+        "get",
+    )["examples"] = {
+        "service_investigation": {
+            "summary": "Structured service investigation",
+            "value": _INVESTIGATION_RESPONSE_EXAMPLE,
         }
     }
     response_content("/api/v0/entities/resolve", "post")["examples"] = {

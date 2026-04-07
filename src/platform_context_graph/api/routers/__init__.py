@@ -8,6 +8,7 @@ from .entities import router as entities_router
 from .environments import router as environments_router
 from .impact import router as impact_router
 from .infra import router as infra_router
+from .investigations import router as investigations_router
 from .paths import router as paths_router
 from .repositories import router as repositories_router
 from .services import router as services_router
@@ -25,6 +26,7 @@ __all__ = [
     "environments_router",
     "impact_router",
     "infra_router",
+    "investigations_router",
     "paths_router",
     "repositories_router",
     "services_router",

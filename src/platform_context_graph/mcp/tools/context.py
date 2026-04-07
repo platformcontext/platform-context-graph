@@ -133,6 +133,32 @@ CONTEXT_TOOLS = {
             "required": ["workload_id"],
         },
     },
+    "investigate_service": {
+        "name": "investigate_service",
+        "description": "Run an orchestrated service investigation that widens across related deployment, infrastructure, workflow, and dependency evidence families.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "service_name": {
+                    "type": "string",
+                    "description": "Plain service or repository name.",
+                },
+                "environment": {
+                    "type": "string",
+                    "description": "Optional environment hint such as bg-qa or prod.",
+                },
+                "intent": {
+                    "type": "string",
+                    "description": "Optional investigation intent such as deployment, network, dependencies, support, or overview.",
+                },
+                "question": {
+                    "type": "string",
+                    "description": "Optional free-form user question used for intent inference.",
+                },
+            },
+            "required": ["service_name"],
+        },
+    },
 }
 
 __all__ = ["CONTEXT_TOOLS"]
