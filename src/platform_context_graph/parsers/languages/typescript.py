@@ -11,6 +11,7 @@ from .typescript_support import (
     calculate_complexity,
     extract_parameters,
     get_parent_context,
+    is_valid_function_node,
     is_typescript_file,
     pre_scan_typescript,
 )
@@ -161,7 +162,7 @@ class TypescriptTreeSitterParser:
     def _resolve_function_capture(self, node: Any, capture_name: str) -> Any | None:
         """Resolve a TypeScript query capture to its owning function node."""
         if capture_name == "function_node":
-            return node
+            return node if is_valid_function_node(node) else None
         current = node.parent
         while current:
             if current.type in (
@@ -170,7 +171,7 @@ class TypescriptTreeSitterParser:
                 "arrow_function",
                 "method_definition",
             ):
-                return current
+                return current if is_valid_function_node(current) else None
             if capture_name == "name" and current.type in (
                 "variable_declarator",
                 "assignment_expression",

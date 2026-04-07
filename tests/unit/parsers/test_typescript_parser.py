@@ -4,7 +4,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_context_graph.parsers.languages.typescript import TypescriptTreeSitterParser
+from platform_context_graph.parsers.languages.typescript import (
+    TypescriptTreeSitterParser,
+)
 from platform_context_graph.utils.tree_sitter_manager import get_tree_sitter_manager
 
 
@@ -234,6 +236,21 @@ def test_parse_access_modifiers(ts_parser, temp_test_dir):
 
     classes = result.get("classes", [])
     assert any(c["name"] == "Service" for c in classes)
+
+
+def test_parse_object_literal_methods(ts_parser, temp_test_dir):
+    code = """const registry = {
+    greet(name: string) {
+        return name;
+    },
+};
+"""
+    f = temp_test_dir / "object-methods.ts"
+    f.write_text(code)
+    result = ts_parser.parse(f)
+
+    funcs = result["functions"]
+    assert any(fn["name"] == "greet" for fn in funcs)
 
 
 def test_parse_decorators_do_not_emit_metadata(ts_parser, temp_test_dir):

@@ -46,6 +46,7 @@ def test_build_parser_registry_uses_dedicated_tsx_parser() -> None:
     registry = parser_registry.build_parser_registry(lambda _key: "false")
 
     assert ".tsx" in registry
+    assert registry[".tsx"].language_name == "tsx"
     assert (
         registry[".tsx"].language_specific_parser.__class__.__name__
         == "TypescriptJSXTreeSitterParser"

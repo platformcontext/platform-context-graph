@@ -212,25 +212,117 @@ def extract_parameters(params_node: Any, get_node_text: Any) -> list[str]:
         elif child.type == "required_parameter":
             pattern = child.child_by_field_name("pattern")
             if pattern:
-                params.append(get_node_text(pattern))
+                params.extend(_extract_pattern_parameters(pattern, get_node_text))
             else:
                 for sub in child.children:
                     if sub.type in ("identifier", "object_pattern", "array_pattern"):
-                        params.append(get_node_text(sub))
+                        params.extend(_extract_pattern_parameters(sub, get_node_text))
                         break
         elif child.type == "optional_parameter":
             pattern = child.child_by_field_name("pattern")
             if pattern:
-                params.append(get_node_text(pattern))
+                params.extend(_extract_pattern_parameters(pattern, get_node_text))
         elif child.type == "assignment_pattern":
             left_child = child.child_by_field_name("left")
-            if left_child and left_child.type == "identifier":
-                params.append(get_node_text(left_child))
+            if left_child:
+                params.extend(_extract_pattern_parameters(left_child, get_node_text))
         elif child.type == "rest_pattern":
             argument = child.child_by_field_name("argument")
-            if argument and argument.type == "identifier":
-                params.append(f"...{get_node_text(argument)}")
-    return params
+            if argument:
+                params.extend(
+                    _extract_pattern_parameters(
+                        argument, get_node_text, include_rest_prefix=True
+                    )
+                )
+    return list(dict.fromkeys(params))
+
+
+def _extract_pattern_parameters(
+    node: Any, get_node_text: Any, *, include_rest_prefix: bool = False
+) -> list[str]:
+    """Extract bound parameter names from one TypeScript pattern node."""
+
+    if node.type in {"identifier", "shorthand_property_identifier_pattern"}:
+        name = get_node_text(node)
+        return [f"...{name}" if include_rest_prefix else name]
+    if node.type in {"object_pattern", "array_pattern"}:
+        params: list[str] = []
+        for child in node.children:
+            params.extend(_extract_pattern_parameters(child, get_node_text))
+        return params
+    if node.type in {"required_parameter", "optional_parameter"}:
+        pattern = node.child_by_field_name("pattern")
+        if pattern is not None:
+            return _extract_pattern_parameters(
+                pattern, get_node_text, include_rest_prefix=include_rest_prefix
+            )
+    if node.type == "assignment_pattern":
+        left_child = node.child_by_field_name("left")
+        if left_child is not None:
+            return _extract_pattern_parameters(
+                left_child, get_node_text, include_rest_prefix=include_rest_prefix
+            )
+    if node.type == "object_assignment_pattern":
+        left_child = node.child_by_field_name("left")
+        if left_child is not None:
+            return _extract_pattern_parameters(
+                left_child, get_node_text, include_rest_prefix=include_rest_prefix
+            )
+    if node.type == "pair_pattern":
+        value_child = node.child_by_field_name("value")
+        if value_child is not None:
+            return _extract_pattern_parameters(
+                value_child, get_node_text, include_rest_prefix=include_rest_prefix
+            )
+        key_child = node.child_by_field_name("key")
+        if key_child is not None:
+            return _extract_pattern_parameters(
+                key_child, get_node_text, include_rest_prefix=include_rest_prefix
+            )
+    if node.type == "rest_pattern":
+        argument = node.child_by_field_name("argument")
+        if argument is not None:
+            return _extract_pattern_parameters(
+                argument, get_node_text, include_rest_prefix=True
+            )
+    return []
+
+
+def is_valid_function_node(node: Any) -> bool:
+    """Return whether a captured TypeScript function node is trustworthy.
+
+    When `.tsx` files are parsed with the plain TypeScript grammar, tree-sitter
+    can recover invalid JSX states as synthetic ``method_definition`` nodes.
+    Those recovered nodes may carry a control-flow keyword like ``if`` as the
+    "name" and a huge body fragment as the parameter list. We keep normal
+    declarations, but reject recovered method definitions that sit on an error
+    node boundary.
+
+    Args:
+        node: Captured function-like tree-sitter node.
+
+    Returns:
+        ``True`` when the node should be emitted as a function entity.
+    """
+    if node.type != "method_definition":
+        return True
+    parent = getattr(node, "parent", None)
+    if parent is None:
+        return False
+    if parent.type == "class_body":
+        return True
+    if parent.type == "ERROR":
+        return False
+    if parent.type != "object":
+        return True
+    grandparent = getattr(parent, "parent", None)
+    return grandparent is not None and grandparent.type in {
+        "arguments",
+        "assignment_expression",
+        "pair",
+        "return_statement",
+        "variable_declarator",
+    }
 
 
 def pre_scan_typescript(files: list[Path], parser_wrapper: Any) -> dict[str, list[str]]:
