@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from platform_context_graph.query.investigation_service import investigate_service
 from platform_context_graph.query.investigation_coverage import (
     build_investigation_coverage_summary,
 )
@@ -71,3 +72,171 @@ def test_build_coverage_summary_marks_sparse_when_only_runtime_exists() -> None:
     assert summary.deployment_mode == "sparse"
     assert summary.deployment_planes == []
     assert summary.missing_evidence_families == ["network_routing"]
+
+
+def test_investigate_service_surfaces_dual_deployment_planes(
+    monkeypatch,
+) -> None:
+    """Preserve separate GitOps and Terraform planes in one investigation."""
+
+    def fake_resolve_entity(_database, **_kwargs):
+        return {
+            "matches": [
+                {
+                    "ref": {
+                        "id": "workload:api-node-boats",
+                        "type": "workload",
+                        "kind": "service",
+                        "name": "api-node-boats",
+                    },
+                    "score": 0.99,
+                },
+                {
+                    "ref": {
+                        "id": "repository:r_app12345",
+                        "type": "repository",
+                        "name": "api-node-boats",
+                    },
+                    "score": 0.97,
+                },
+            ]
+        }
+
+    def fake_get_service_story(_database, **_kwargs):
+        return {
+            "subject": {
+                "id": "workload:api-node-boats",
+                "type": "workload",
+                "kind": "service",
+                "name": "api-node-boats",
+            },
+            "deployment_overview": {
+                "internet_entrypoints": ["api-node-boats.qa.bgrp.io"],
+            },
+            "limitations": ["runtime_instance_missing"],
+        }
+
+    def fake_trace_deployment_chain(_database, service_name, **_kwargs):
+        assert service_name == "api-node-boats"
+        return {
+            "argocd_applicationsets": [
+                {"source_repos": ["https://github.com/boatsgroup/helm-charts"]}
+            ]
+        }
+
+    def fake_get_repository_story(_database, **kwargs):
+        repo_id = kwargs["repo_id"]
+        if repo_id == "repository:r_app12345":
+            return {
+                "subject": {
+                    "id": repo_id,
+                    "type": "repository",
+                    "name": "api-node-boats",
+                },
+                "story": ["Runtime service repo."],
+            }
+        return {
+            "subject": {
+                "id": "repository:r_tf12345",
+                "type": "repository",
+                "name": "terraform-stack-node10",
+            },
+            "story": ["Terraform deployment stack."],
+        }
+
+    def fake_get_repository_context(_database, **kwargs):
+        repo_id = kwargs["repo_id"]
+        if repo_id == "repository:r_app12345":
+            return {
+                "repository": {
+                    "id": repo_id,
+                    "name": "api-node-boats",
+                }
+            }
+        return {
+            "repository": {
+                "id": "repository:r_tf12345",
+                "name": "terraform-stack-node10",
+            }
+        }
+
+    def fake_search_file_content(_database, **kwargs):
+        repo_ids = kwargs.get("repo_ids") or []
+        if repo_ids == ["repository:r_app12345"]:
+            return {
+                "matches": [
+                    {
+                        "repo_id": "repository:r_app12345",
+                        "relative_path": ".github/workflows/release.yaml",
+                        "snippet": "boatsgroup/helm-charts",
+                        "source_backend": "postgres",
+                    }
+                ]
+            }
+        return {"matches": []}
+
+    def fake_add_related_repo_details(_database, *, widened_repositories):
+        return [
+            {
+                "repo_id": "repository:r_tf12345",
+                "repo_name": "terraform-stack-node10",
+                "reason": "oidc_role_subject",
+                "evidence_families": ["iac_infrastructure", "identity_and_iam"],
+            },
+            *widened_repositories,
+        ]
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.entity_resolution_queries.resolve_entity",
+        fake_resolve_entity,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.context_queries.get_service_story",
+        fake_get_service_story,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.trace_deployment_chain",
+        fake_trace_deployment_chain,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.repository_queries.get_repository_story",
+        fake_get_repository_story,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.repository_queries.get_repository_context",
+        fake_get_repository_context,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.content_queries.search_file_content",
+        fake_search_file_content,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service._add_related_repo_details",
+        fake_add_related_repo_details,
+    )
+
+    result = investigate_service(
+        database=object(),
+        service_name="api-node-boats",
+        intent="deployment",
+    )
+
+    assert result["coverage_summary"]["deployment_mode"] == "multi_plane"
+    assert result["evidence_families_found"] == [
+        "service_runtime",
+        "deployment_controller",
+        "gitops_config",
+        "iac_infrastructure",
+        "identity_and_iam",
+        "ci_cd_pipeline",
+    ]
+    assert (
+        result["repositories_with_evidence"][0]["repo_name"] == "terraform-stack-node10"
+    )
+    assert result["recommended_next_calls"] == [
+        {
+            "tool": "get_repo_story",
+            "reason": "related_deployment_repository",
+            "args": {"repo_id": "repository:r_tf12345"},
+        }
+    ]
