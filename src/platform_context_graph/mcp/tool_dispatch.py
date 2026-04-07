@@ -54,6 +54,7 @@ def build_sync_tool_map(server: Any) -> dict[str, SyncToolHandler]:
         "get_workload_story": server.get_workload_story_tool,
         "get_service_context": server.get_service_context_tool,
         "get_service_story": server.get_service_story_tool,
+        "investigate_service": server.investigate_service_tool,
         "trace_resource_to_code": server.trace_resource_to_code_tool,
         "explain_dependency_path": server.explain_dependency_path_tool,
         "find_change_surface": server.find_change_surface_tool,

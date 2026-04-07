@@ -25,10 +25,15 @@ Use metrics to detect a problem first, then traces to explain it.
 - `pcg.query.*` spans around shared query operations
 - `pcg.mcp.*` request and tool spans in the MCP runtime
 
+Investigation-specific query spans continue to use the shared query family:
+
+- `pcg.query.investigate_service`
+
 Why it matters:
 
 - shows slow requests end-to-end
 - exposes whether latency came from transport, graph query, or content retrieval
+- makes service-investigation widening visible without requiring prompt-expert logs
 
 ### Git Collector
 
@@ -109,6 +114,14 @@ These attributes are especially useful for narrowing traces:
 - `pcg.transport`
 - `pcg.request_id`
 - `pcg.correlation_id`
+- `pcg.investigation.service_name`
+- `pcg.investigation.intent`
+- `pcg.investigation.environment`
+- `pcg.investigation.deployment_mode`
+- `pcg.investigation.repositories_considered_count`
+- `pcg.investigation.repositories_with_evidence_count`
+- `pcg.investigation.evidence_families_found_count`
+- `pcg.investigation.missing_evidence_families_count`
 - `pcg.index.run_id`
 - `pcg.index.repo_path`
 - `pcg.repository_id`
@@ -144,6 +157,15 @@ These attributes are especially useful for narrowing traces:
 1. Start with `pcg_resolution_file_projection_batch_duration_seconds`, `pcg_content_file_batch_upsert_duration_seconds`, and `pcg_call_prep_calls_capped_total`.
 2. Open traces for `pcg.resolution.project_file_batch`, `pcg.content.postgres.upsert_file_batch`, `pcg.calls.known_name_scan`, and `pcg.inheritance.flush_batch`.
 3. Decide whether the hot path is still file/content IO or has moved into relationship preparation and flushes.
+
+### A service investigation feels too shallow
+
+1. Open the `pcg.query.investigate_service` trace for the affected request.
+2. Check `pcg.investigation.deployment_mode`,
+   `pcg.investigation.repositories_considered_count`, and
+   `pcg.investigation.missing_evidence_families_count`.
+3. Use the trace attributes to decide whether the issue is sparse evidence,
+   repo-widening failure, or downstream query latency.
 
 ## Best Practices
 

@@ -168,6 +168,29 @@ def _make_query_services() -> object:
                 "stats": {},
             },
         ),
+        investigation=SimpleNamespace(
+            investigate_service=lambda *_args, **_kwargs: {
+                "summary": ["dual deployment detected"],
+                "repositories_considered": [],
+                "repositories_with_evidence": [],
+                "evidence_families_found": [],
+                "coverage_summary": {
+                    "searched_repository_count": 0,
+                    "repositories_with_evidence_count": 0,
+                    "searched_evidence_families": [],
+                    "found_evidence_families": [],
+                    "missing_evidence_families": [],
+                    "deployment_mode": "none",
+                    "deployment_planes": [],
+                    "graph_completeness": "unknown",
+                    "content_completeness": "unknown",
+                },
+                "investigation_findings": [],
+                "limitations": [],
+                "recommended_next_steps": [],
+                "recommended_next_calls": [],
+            }
+        ),
     )
 
 
@@ -344,7 +367,21 @@ def test_openapi_exposes_query_routes_without_deployment_control_endpoints() -> 
     assert "/api/v0/repositories/{repo_id}/stats" in paths
     assert "/api/v0/workloads/{workload_id}/story" in paths
     assert "/api/v0/services/{workload_id}/story" in paths
+    assert "/api/v0/investigations/services/{service_name}" in paths
     assert "/api/v0/index" not in paths
     assert "/api/v0/watch" not in paths
     assert "/api/v0/jobs" not in paths
     assert "/api/v0/jobs/{job_id}" not in paths
+
+
+def test_openapi_uses_typed_response_model_for_investigation_route() -> None:
+    with _make_client(query_services=_make_query_services()) as client:
+        schema = client.get("/api/v0/openapi.json").json()
+
+    investigation_schema = schema["paths"][
+        "/api/v0/investigations/services/{service_name}"
+    ]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+
+    assert investigation_schema["$ref"] == (
+        "#/components/schemas/InvestigationResponse"
+    )

@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from ..query import compare as compare_queries
 from ..query import context as context_queries
 from ..query import entity_resolution as entity_resolution_queries
+from ..query import investigation as investigation_queries
 from ..query import impact as impact_queries
 from ..query import infra as infra_queries
 from ..query import repositories as repository_queries
@@ -239,6 +240,20 @@ class QueryToolMixin:
             )
         except context_queries.ServiceAliasError as exc:
             return {"error": str(exc)}
+
+    def investigate_service_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
+        """Return an orchestrated service investigation."""
+
+        service_name = require_str_argument(args, "service_name")
+        if service_name is None:
+            return {"error": "The 'service_name' argument is required."}
+        return investigation_queries.investigate_service(
+            self.db_manager,
+            service_name=service_name,
+            environment=args.get("environment"),
+            intent=args.get("intent"),
+            question=args.get("question"),
+        )
 
     def trace_resource_to_code_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
         """Trace a cloud resource back to related code."""

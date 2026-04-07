@@ -8,6 +8,7 @@ from .entities import (
     normalize_workload_kind,
 )
 from .requests import ResolveEntityRequest
+from .investigation_responses import InvestigationResponse
 from .responses import (
     AliasMetadata,
     EvidenceItem,
@@ -24,6 +25,7 @@ __all__ = [
     "EntityType",
     "EvidenceItem",
     "InferenceMetadata",
+    "InvestigationResponse",
     "ProblemDetails",
     "RepoAccess",
     "ResolveEntityMatch",

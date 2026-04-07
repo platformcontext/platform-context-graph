@@ -38,6 +38,7 @@ def test_query_module_exports_are_present():
         content,
         context,
         entity_resolution,
+        investigation,
         impact,
         infra,
         repositories,
@@ -50,6 +51,7 @@ def test_query_module_exports_are_present():
         "content",
         "context",
         "entity_resolution",
+        "investigation",
         "impact",
         "infra",
         "repositories",
@@ -60,6 +62,7 @@ def test_query_module_exports_are_present():
     assert query_pkg.content is content
     assert query_pkg.context is context
     assert query_pkg.entity_resolution is entity_resolution
+    assert query_pkg.investigation is investigation
     assert query_pkg.impact is impact
     assert query_pkg.infra is infra
     assert query_pkg.repositories is repositories
@@ -69,6 +72,7 @@ def test_query_module_exports_are_present():
     assert hasattr(context, "get_entity_context")
     assert hasattr(context, "get_workload_context")
     assert hasattr(context, "get_service_context")
+    assert hasattr(investigation, "investigate_service")
     assert hasattr(code, "search_code")
     assert hasattr(code, "get_code_relationships")
     assert hasattr(code, "find_dead_code")

@@ -41,6 +41,7 @@ from .routers import (
     environments_router,
     impact_router,
     infra_router,
+    investigations_router,
     paths_router,
     repositories_router,
     services_router,
@@ -306,6 +307,7 @@ def create_app(
     app.include_router(code_router, prefix=API_V0_PREFIX)
     app.include_router(content_router, prefix=API_V0_PREFIX)
     app.include_router(infra_router, prefix=API_V0_PREFIX)
+    app.include_router(investigations_router, prefix=API_V0_PREFIX)
     app.include_router(repositories_router, prefix=API_V0_PREFIX)
     app.include_router(admin_router, prefix=API_V0_PREFIX)
     app.include_router(admin_facts_router, prefix=API_V0_PREFIX)

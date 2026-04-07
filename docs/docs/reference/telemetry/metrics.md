@@ -72,6 +72,36 @@ Each metric entry includes:
 - Description: MCP tool failures grouped by tool name and error outcome.
 - How to leverage: Use it to identify unstable tools before they show up as broad MCP request regressions.
 
+### `pcg_investigations_total`
+
+- Type: Counter
+- Description: Total completed service investigations by intent, deployment mode, and outcome.
+- How to leverage: Use this to understand how often operators are asking deployment, network, or dependency questions and whether those investigations are succeeding or erroring.
+
+### `pcg_investigation_duration_seconds`
+
+- Type: Histogram
+- Description: End-to-end latency of the investigation query wrapper.
+- How to leverage: Watch p95 and p99 when repo widening or downstream query fan-out grows. Compare it to `pcg_http_request_duration_seconds` and `pcg_mcp_tool_duration_seconds` to separate transport overhead from investigation work.
+
+### `pcg_investigation_coverage_total`
+
+- Type: Counter
+- Description: Investigation result-quality classifications by intent, deployment mode, and whether evidence was missing.
+- How to leverage: This is the top-line signal for sparse versus single-plane versus multi-plane investigation quality. Alert or dashboard on sustained sparse outcomes for important services.
+
+### `pcg_investigation_repositories_considered`
+
+- Type: Histogram
+- Description: Number of repositories considered during one investigation.
+- How to leverage: Use this to tune repo-widening breadth. Rising breadth with flat quality often means the widening heuristic is getting noisy.
+
+### `pcg_investigation_repositories_with_evidence`
+
+- Type: Histogram
+- Description: Number of widened repositories that contributed evidence to one investigation.
+- How to leverage: Compare this to `pcg_investigation_repositories_considered` to see whether widening is productive or mostly dead ends.
+
 ## Git Collector And Indexing
 
 ### `pcg_index_runs_total`

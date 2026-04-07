@@ -14,6 +14,7 @@ from platform_context_graph.query import (
     content as content_queries,
     context as context_queries,
     entity_resolution as entity_resolution_queries,
+    investigation as investigation_queries,
     impact as impact_queries,
     infra as infra_queries,
     repositories as repository_queries,
@@ -38,6 +39,7 @@ class QueryServices:
         content: Content retrieval and search query module.
         context: Entity and workload context query module.
         entity_resolution: Entity resolution query module.
+        investigation: Investigation query module.
         impact: Trace and blast-radius query module.
         infra: Infrastructure query module.
         repositories: Repository query module.
@@ -50,6 +52,7 @@ class QueryServices:
     content: Any = content_queries
     context: Any = context_queries
     entity_resolution: Any = entity_resolution_queries
+    investigation: Any = investigation_queries
     impact: Any = impact_queries
     infra: Any = infra_queries
     repositories: Any = repository_queries
