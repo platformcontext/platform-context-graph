@@ -32,6 +32,7 @@ from .prometheus import prometheus_metrics_enabled
 from .prometheus import prometheus_metrics_host
 from .prometheus import prometheus_metrics_port
 from .prometheus import start_prometheus_server
+from .investigation_metrics import clear_investigation_instruments_cache
 from .runtime import ObservabilityRuntime
 from .structured_logging import configure_logging
 
@@ -46,11 +47,7 @@ def _parse_exporters(name: str, *, default: str) -> set[str]:
     """Return normalized exporter names from an OTEL environment variable."""
 
     raw_value = os.getenv(name, default)
-    return {
-        item.strip().lower()
-        for item in raw_value.split(",")
-        if item.strip()
-    }
+    return {item.strip().lower() for item in raw_value.split(",") if item.strip()}
 
 
 def _create_prometheus_reader() -> MetricReader | None:
@@ -116,10 +113,7 @@ def initialize_observability(
                 metric_readers.append(
                     PeriodicExportingMetricReader(OTLPMetricExporter())
                 )
-            if (
-                prometheus_requested
-                or "prometheus" in metric_exporters
-            ):
+            if prometheus_requested or "prometheus" in metric_exporters:
                 prometheus_reader = _create_prometheus_reader()
                 if prometheus_reader is not None:
                     metric_readers.append(prometheus_reader)
@@ -167,9 +161,7 @@ def initialize_observability(
         tracer_provider = TracerProvider(resource=resource)
         if tracing_enabled:
             span_processor_cls = (
-                SimpleSpanProcessor
-                if use_simple_span_processor
-                else BatchSpanProcessor
+                SimpleSpanProcessor if use_simple_span_processor else BatchSpanProcessor
             )
             tracer_provider.add_span_processor(
                 span_processor_cls(selected_span_exporter)
@@ -239,6 +231,7 @@ def reset_observability_for_tests() -> None:
         _STATE = None
         _TEST_SPAN_EXPORTER = None
         _TEST_METRIC_READER = None
+        clear_investigation_instruments_cache()
 
 
 @contextlib.contextmanager

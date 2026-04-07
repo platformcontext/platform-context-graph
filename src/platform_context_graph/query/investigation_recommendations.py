@@ -8,7 +8,9 @@ from platform_context_graph.domain.investigation_responses import (
 
 
 def build_recommended_next_calls(
-    *, repositories_with_evidence: list[dict[str, object]]
+    *,
+    repositories_with_evidence: list[dict[str, object]],
+    primary_repo_name: str | None,
 ) -> list[InvestigationNextCall]:
     """Build recommended next calls from related repositories with evidence."""
 
@@ -19,7 +21,7 @@ def build_recommended_next_calls(
             continue
         if not isinstance(repo_name, str) or not repo_name:
             continue
-        if repo_name == "api-node-boats":
+        if primary_repo_name and repo_name == primary_repo_name:
             continue
         return [
             InvestigationNextCall(

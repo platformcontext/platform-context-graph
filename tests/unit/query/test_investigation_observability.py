@@ -193,3 +193,90 @@ def test_investigate_service_emits_span_attributes_and_quality_metrics(
         and attrs.get("pcg.investigation.deployment_mode") == "multi_plane"
         for metric_name, attrs, _value in points
     )
+
+
+def test_investigation_observability_reset_clears_instrument_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resetting observability should also clear cached investigation instruments."""
+
+    observability = importlib.import_module("platform_context_graph.observability")
+    investigation_metrics = importlib.import_module(
+        "platform_context_graph.observability.investigation_metrics"
+    )
+    observability.reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+    span_exporter = InMemorySpanExporter()
+    metric_reader = InMemoryMetricReader()
+    runtime = observability.initialize_observability(
+        component="api",
+        span_exporter=span_exporter,
+        metric_reader=metric_reader,
+    )
+
+    investigation_metrics.record_investigation_metrics(
+        runtime,
+        intent="deployment",
+        deployment_mode="single_plane",
+        repositories_considered_count=1,
+        repositories_with_evidence_count=1,
+        missing_evidence_families_count=0,
+        duration_seconds=0.1,
+        outcome="success",
+    )
+
+    assert investigation_metrics._INVESTIGATION_INSTRUMENTS
+    observability.reset_observability_for_tests()
+    assert not investigation_metrics._INVESTIGATION_INSTRUMENTS
+
+
+def test_investigation_wrapper_infers_intent_from_question(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Infer the effective investigation intent when callers omit it."""
+
+    investigation_query = importlib.import_module(
+        "platform_context_graph.query.investigation"
+    )
+    observed_calls: list[dict[str, object]] = []
+
+    def fake_investigation_query(
+        _database: object, **kwargs: object
+    ) -> dict[str, object]:
+        observed_calls.append(kwargs)
+        return {
+            "summary": [],
+            "repositories_considered": [],
+            "repositories_with_evidence": [],
+            "evidence_families_found": [],
+            "coverage_summary": {
+                "missing_evidence_families": [],
+                "deployment_mode": "unknown",
+            },
+            "investigation_findings": [],
+            "limitations": [],
+            "recommended_next_steps": [],
+            "recommended_next_calls": [],
+        }
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation.investigate_service_query",
+        fake_investigation_query,
+    )
+
+    investigation_query.investigate_service(
+        object(),
+        service_name="api-node-boats",
+        question="Explain the network flow for api-node-boats.",
+    )
+
+    assert observed_calls == [
+        {
+            "service_name": "api-node-boats",
+            "environment": None,
+            "intent": "network",
+            "question": "Explain the network flow for api-node-boats.",
+        }
+    ]

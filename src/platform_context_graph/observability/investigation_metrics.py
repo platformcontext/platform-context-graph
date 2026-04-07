@@ -7,6 +7,12 @@ from typing import Any
 _INVESTIGATION_INSTRUMENTS: dict[int, dict[str, Any]] = {}
 
 
+def clear_investigation_instruments_cache() -> None:
+    """Clear cached investigation OTEL instruments."""
+
+    _INVESTIGATION_INSTRUMENTS.clear()
+
+
 def _get_investigation_instruments(runtime: Any) -> dict[str, Any]:
     """Create or reuse OTEL instruments for investigation telemetry."""
 

@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from platform_context_graph.query.investigation_recommendations import (
+    build_recommended_next_calls,
+)
+from platform_context_graph.query.investigation_service import (
+    _add_related_repo_details,
+)
 from platform_context_graph.query.investigation_service import investigate_service
 from platform_context_graph.query.investigation_coverage import (
     build_investigation_coverage_summary,
@@ -234,6 +240,92 @@ def test_investigate_service_surfaces_dual_deployment_planes(
         result["repositories_with_evidence"][0]["repo_name"] == "terraform-stack-node10"
     )
     assert result["recommended_next_calls"] == [
+        {
+            "tool": "get_repo_story",
+            "reason": "related_deployment_repository",
+            "args": {"repo_id": "repository:r_tf12345"},
+        }
+    ]
+
+
+def test_add_related_repo_details_resolves_canonical_repository_ids(
+    monkeypatch,
+) -> None:
+    """Resolve widened repository names to canonical repository identifiers."""
+
+    def fake_resolve_entity(_database, **kwargs):
+        if kwargs["query"] == "terraform-stack-node10":
+            return {
+                "matches": [
+                    {
+                        "ref": {
+                            "id": "repository:r_tf12345",
+                            "type": "repository",
+                            "name": "terraform-stack-node10",
+                        }
+                    }
+                ]
+            }
+        return {"matches": []}
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.entity_resolution_queries.resolve_entity",
+        fake_resolve_entity,
+    )
+
+    detailed = _add_related_repo_details(
+        object(),
+        widened_repositories=[
+            {
+                "repo_name": "terraform-stack-node10",
+                "reason": "oidc_role_subject",
+                "evidence_families": ["iac_infrastructure"],
+            },
+            {
+                "repo_name": "unknown-repo",
+                "reason": "workflow_reference",
+                "evidence_families": ["ci_cd_pipeline"],
+            },
+        ],
+    )
+
+    assert detailed == [
+        {
+            "repo_id": "repository:r_tf12345",
+            "repo_name": "terraform-stack-node10",
+            "reason": "oidc_role_subject",
+            "evidence_families": ["iac_infrastructure"],
+        },
+        {
+            "repo_name": "unknown-repo",
+            "reason": "workflow_reference",
+            "evidence_families": ["ci_cd_pipeline"],
+        },
+    ]
+
+
+def test_build_recommended_next_calls_skips_primary_repository() -> None:
+    """Do not recommend the primary repository as the next deployment repo."""
+
+    result = build_recommended_next_calls(
+        repositories_with_evidence=[
+            {
+                "repo_id": "repository:r_app12345",
+                "repo_name": "payments-api",
+                "reason": "primary_service_repository",
+                "evidence_families": ["service_runtime"],
+            },
+            {
+                "repo_id": "repository:r_tf12345",
+                "repo_name": "terraform-stack-payments",
+                "reason": "oidc_role_subject",
+                "evidence_families": ["iac_infrastructure"],
+            },
+        ],
+        primary_repo_name="payments-api",
+    )
+
+    assert [call.model_dump(mode="json") for call in result] == [
         {
             "tool": "get_repo_story",
             "reason": "related_deployment_repository",

@@ -106,16 +106,32 @@ def _add_related_repo_details(
         repo_name = repository.get("repo_name")
         if not isinstance(repo_name, str) or not repo_name:
             continue
-        repo_story = repository_queries.get_repository_story(
-            database, repo_id=repo_name
-        )
-        subject = repo_story.get("subject") or {}
-        repo_id = subject.get("id")
         detailed_repository = dict(repository)
+        repo_id = _resolve_related_repository_id(database, repo_name=repo_name)
         if isinstance(repo_id, str) and repo_id:
             detailed_repository["repo_id"] = repo_id
         detailed_repositories.append(detailed_repository)
     return detailed_repositories
+
+
+def _resolve_related_repository_id(database: Any, *, repo_name: str) -> str | None:
+    """Resolve one widened repository name to a canonical repository identifier."""
+
+    resolve_response = entity_resolution_queries.resolve_entity(
+        database,
+        query=repo_name,
+        types=["repository"],
+        exact=False,
+        limit=5,
+    )
+    for match in resolve_response.get("matches", []):
+        ref = match.get("ref") or {}
+        if ref.get("type") != "repository":
+            continue
+        repo_id = ref.get("id")
+        if isinstance(repo_id, str) and repo_id:
+            return repo_id
+    return None
 
 
 def _evidence_families_found(
@@ -157,9 +173,7 @@ def investigate_service(
 ) -> dict[str, Any]:
     """Investigate one service using coordinated PCG evidence retrieval."""
 
-    requested_intent = normalize_investigation_intent(
-        intent
-    ) or infer_investigation_intent(question)
+    requested_intent = normalize_investigation_intent(intent)
     if requested_intent == "overview" and question:
         requested_intent = infer_investigation_intent(question)
 
@@ -238,7 +252,8 @@ def investigate_service(
         content_completeness="partial",
     )
     recommended_next_calls = build_recommended_next_calls(
-        repositories_with_evidence=related_repositories
+        repositories_with_evidence=related_repositories,
+        primary_repo_name=primary_repo_name,
     )
     response = InvestigationResponse(
         summary=[

@@ -30,9 +30,7 @@ def investigate_service(
 ) -> dict[str, Any]:
     """Return an orchestrated investigation for one service."""
 
-    resolved_intent = normalize_investigation_intent(intent) or (
-        infer_investigation_intent(question)
-    )
+    resolved_intent = normalize_investigation_intent(intent)
     if resolved_intent == "overview" and question:
         resolved_intent = infer_investigation_intent(question)
 
