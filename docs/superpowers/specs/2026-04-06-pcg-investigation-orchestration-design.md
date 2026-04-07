@@ -211,6 +211,7 @@ For service investigation, V1 should search across these families.
 #### Service/runtime family
 
 - app repo
+- app repo `.github/` workflows
 - runtime config files
 - Dockerfile or runtime packaging
 - entrypoints
@@ -254,6 +255,15 @@ For service investigation, V1 should search across these families.
 - monitoring assets
 - API specs
 - health and readiness definitions
+
+#### CI/CD pipeline family
+
+- app repo `.github/workflows/*`
+- build and publish workflows
+- image-tag promotion workflows
+- deploy-repo update workflows
+- workflow-dispatched environment gates
+- CI/CD IAM or OIDC role bindings tied to those workflows
 
 ### Step 4. Detect multi-plane deployment
 
@@ -318,6 +328,8 @@ Signals that justify widening:
 
 - repo references embedded in ApplicationSets or deployment specs
 - overlay paths or values sources
+- app repo `.github/` workflows that reference deploy repos, image registries,
+  environments, OIDC roles, or workflow-dispatched release targets
 - Terraform role subjects or GitHub OIDC bindings
 - shared image names or image repositories
 - shared config paths like SSM parameter prefixes
@@ -393,6 +405,8 @@ Good evaluation prompts:
 - "Explain the deployment flow for `api-node-boats` using PCG only."
 - "What depends on `api-node-boats` and what does it depend on?"
 - "Explain the network flow for `api-node-boats` using PCG only."
+- "Explain the CI/CD flow for `api-node-boats` from build to deployment using
+  PCG only."
 
 Bad evaluation methodology:
 
@@ -409,6 +423,7 @@ For a service like `api-node-boats`, a normal investigation prompt should
 surface:
 
 - the app repo
+- app repo workflow/build evidence from `.github/`
 - GitOps repo
 - controller repo
 - relevant Terraform or infrastructure repo
