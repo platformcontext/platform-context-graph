@@ -6,6 +6,8 @@ from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .investigation_responses import InvestigationResponse
+
 from .entities import EntityRef, EntityType
 
 
