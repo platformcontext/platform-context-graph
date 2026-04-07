@@ -9,9 +9,6 @@ from platform_context_graph.domain.investigation_responses import (
     InvestigationFinding,
     InvestigationResponse,
 )
-from platform_context_graph.mcp.tools.handlers.ecosystem_support import (
-    trace_deployment_chain,
-)
 
 from . import content as content_queries
 from . import context as context_queries
@@ -30,6 +27,27 @@ from .investigation_recommendations import (
 from .investigation_repo_widening import widen_related_repositories
 
 _EXTERNAL_REPO_RE = re.compile(r"\b[\w.-]+/([\w.-]+)\b")
+
+
+def trace_deployment_chain(
+    database: Any,
+    service_name: str,
+    *,
+    direct_only: bool = True,
+    include_related_module_usage: bool = False,
+) -> dict[str, Any]:
+    """Trace the deployment chain through the existing ecosystem support helper."""
+
+    from platform_context_graph.mcp.tools.handlers.ecosystem_support import (
+        trace_deployment_chain as trace_deployment_chain_handler,
+    )
+
+    return trace_deployment_chain_handler(
+        database,
+        service_name,
+        direct_only=direct_only,
+        include_related_module_usage=include_related_module_usage,
+    )
 
 
 def _primary_refs_from_resolution(

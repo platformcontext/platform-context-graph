@@ -74,3 +74,72 @@ def test_investigation_route_uses_investigation_query_service() -> None:
             "question": "Explain the deployment flow.",
         }
     ]
+
+
+def test_investigation_response_exposes_operator_coverage_fields() -> None:
+    services = SimpleNamespace(
+        database=object(),
+        investigation=SimpleNamespace(
+            investigate_service=lambda *_args, **_kwargs: {
+                "summary": ["dual deployment detected"],
+                "repositories_considered": [
+                    {
+                        "repo_id": "repository:r_app",
+                        "repo_name": "api-node-boats",
+                        "reason": "primary_service_repository",
+                        "evidence_families": ["service_runtime"],
+                    }
+                ],
+                "repositories_with_evidence": [
+                    {
+                        "repo_id": "repository:r_tf",
+                        "repo_name": "terraform-stack-node10",
+                        "reason": "oidc_role_subject",
+                        "evidence_families": ["iac_infrastructure"],
+                    }
+                ],
+                "evidence_families_found": ["service_runtime", "iac_infrastructure"],
+                "coverage_summary": {
+                    "searched_repository_count": 2,
+                    "repositories_with_evidence_count": 1,
+                    "searched_evidence_families": [
+                        "service_runtime",
+                        "iac_infrastructure",
+                    ],
+                    "found_evidence_families": [
+                        "service_runtime",
+                        "iac_infrastructure",
+                    ],
+                    "missing_evidence_families": [],
+                    "deployment_mode": "single_plane",
+                    "deployment_planes": [
+                        {
+                            "name": "iac_infrastructure_plane",
+                            "evidence_families": ["iac_infrastructure"],
+                        }
+                    ],
+                    "graph_completeness": "partial",
+                    "content_completeness": "partial",
+                },
+                "investigation_findings": [],
+                "limitations": [],
+                "recommended_next_steps": [],
+                "recommended_next_calls": [
+                    {
+                        "tool": "get_repo_story",
+                        "reason": "related_deployment_repository",
+                        "args": {"repo_id": "repository:r_tf"},
+                    }
+                ],
+            }
+        ),
+    )
+
+    with _make_client(query_services=services) as client:
+        response = client.get("/api/v0/investigations/services/api-node-boats")
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert "repositories_considered" in payload
+    assert "evidence_families_found" in payload
+    assert "recommended_next_calls" in payload

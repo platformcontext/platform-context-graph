@@ -15,6 +15,7 @@ from .story_documentation import (
 from .story_gitops import build_gitops_overview, summarize_gitops_overview
 from .story_repository_support import (
     build_repository_deployment_overview,
+    build_repository_investigation_hints,
     dependency_label,
     focused_deployment_story,
     subject_from_repository,
@@ -166,6 +167,15 @@ def build_repository_story_response(
         "repo_summary": {"repo_name": subject["name"]},
         "deployment_chain": {"service_name": subject["name"]},
     }
+    investigation_hints = build_repository_investigation_hints(
+        subject_name=str(subject["name"]),
+        deploys_from=deploys_from,
+        provisioned_by=list(context.get("provisioned_by") or []),
+        delivery_paths=list(context.get("delivery_paths") or []),
+        controller_driven_paths=list(context.get("controller_driven_paths") or []),
+    )
+    if investigation_hints is not None:
+        drilldowns["investigation_hints"] = investigation_hints
 
     gitops_overview = build_gitops_overview(
         deploys_from=list(context.get("deploys_from") or []),

@@ -17,6 +17,7 @@ from .story_shared import human_list, portable_story_value, story_section
 from .story_support import build_support_overview, summarize_support_overview
 from .story_workload_support import (
     api_surface_entrypoints,
+    build_workload_investigation_hints,
     build_workload_deployment_overview,
     entrypoint_labels as build_entrypoint_labels,
     public_entrypoint_labels as build_public_entrypoint_labels,
@@ -131,6 +132,16 @@ def build_workload_story_response(
     }
     if subject.get("kind") == "service" or requested_as == "service":
         drilldowns["service_context"] = {"workload_id": subject["id"]}
+    investigation_hints = build_workload_investigation_hints(
+        subject=subject,
+        selected_environment=selected_environment,
+        deploys_from=list(context.get("deploys_from") or []),
+        provisioned_by=list(context.get("provisioned_by") or []),
+        delivery_paths=delivery_paths,
+        controller_driven_paths=controller_driven_paths,
+    )
+    if investigation_hints is not None:
+        drilldowns["investigation_hints"] = investigation_hints
 
     gitops_overview = build_gitops_overview(
         deploys_from=list(context.get("deploys_from") or []),

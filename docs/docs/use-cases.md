@@ -85,6 +85,21 @@ sources, and indexed documentation for this service, then explain it." That
 explicitly tells PCG to use its cross-repo graph and content-store strengths
 instead of behaving like a repo-local assistant.
 
+For that exact workflow, prefer `investigate_service` first. It is designed for
+the cases where a user should not need to know:
+
+- which Terraform stack to search
+- whether the app repo `.github/` workflows matter
+- whether the service has one deployment plane or multiple
+- which repo to drill into next
+
+The investigation result reports both findings and coverage, so you can tell
+whether PCG:
+
+- found the right deployment-adjacent repos
+- found evidence but still has a partial story
+- needs another drill-down call
+
 ## Comparing environments
 
 Staging is broken but prod works. What is different?

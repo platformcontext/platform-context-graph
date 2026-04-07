@@ -8,6 +8,7 @@ from .environment_normalization import canonical_environment_key
 from .environment_normalization import environments_match
 from .environment_normalization import ordered_unique_environment_names
 from .environment_normalization import preferred_environment_label
+from .story_investigation_hints import build_investigation_hints
 
 
 def normalize_environment(value: Any) -> str:
@@ -248,4 +249,25 @@ def public_entrypoint_labels(entrypoints: list[dict[str, Any]]) -> list[str]:
             if isinstance(row, dict)
             and str(row.get("visibility") or "").strip().lower() == "public"
         ]
+    )
+
+
+def build_workload_investigation_hints(
+    *,
+    subject: dict[str, Any],
+    selected_environment: str | None,
+    deploys_from: list[dict[str, Any]],
+    provisioned_by: list[dict[str, Any]],
+    delivery_paths: list[dict[str, Any]],
+    controller_driven_paths: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Build lightweight investigation hints for workload or service stories."""
+
+    return build_investigation_hints(
+        subject_name=str(subject.get("name") or "").strip(),
+        deploys_from=deploys_from,
+        provisioned_by=provisioned_by,
+        delivery_paths=delivery_paths,
+        controller_driven_paths=controller_driven_paths,
+        environment=selected_environment,
     )

@@ -8,6 +8,9 @@ from unittest.mock import MagicMock
 from platform_context_graph.mcp.tools.handlers.ecosystem import (
     trace_deployment_chain,
 )
+from platform_context_graph.query.story_repository_support import (
+    build_repository_investigation_hints,
+)
 from platform_context_graph.query.story import build_workload_story_response
 
 
@@ -564,3 +567,28 @@ def test_trace_deployment_chain_prunes_provisioning_repos_from_focused_support(
 
     assert owner_names == ["helm-charts"]
     assert "docs/terraform-runbook.md" not in artifact_paths
+
+
+def test_build_repository_investigation_hints_surfaces_deployment_repos() -> None:
+    """Repository stories should point users toward the investigation flow."""
+
+    hints = build_repository_investigation_hints(
+        subject_name="api-node-boats",
+        deploys_from=[{"name": "helm-charts"}],
+        provisioned_by=[{"name": "terraform-stack-node10"}],
+        delivery_paths=[{"controller": "argocd"}],
+        controller_driven_paths=[],
+    )
+
+    assert hints == {
+        "related_repositories": ["helm-charts", "terraform-stack-node10"],
+        "evidence_families": [
+            "deployment_controller",
+            "gitops_config",
+            "iac_infrastructure",
+        ],
+        "recommended_next_call": {
+            "tool": "investigate_service",
+            "args": {"service_name": "api-node-boats"},
+        },
+    }

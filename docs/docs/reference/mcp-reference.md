@@ -56,6 +56,7 @@ Use these tools when the user is asking for a narrative answer such as
 | **`get_repo_story`** | Return a structured repository story with `subject`, `story`, `story_sections`, evidence-oriented overviews, limitations, coverage, and drill-down handles. Accepts a canonical repository ID or a plain repository name/slug. | "Tell me the end-to-end story for payments-api." |
 | **`get_workload_story`** | Return a structured workload story using canonical workload identity, optionally scoped to one environment. Story payloads may include `gitops_overview`, `documentation_overview`, and `support_overview` when evidence exists. | "Show me how payments-api is deployed in prod." |
 | **`get_service_story`** | Service alias wrapper around workload story for service-shaped prompts. This is the preferred first hop for support, onboarding, and service-explainer prompts. | "What can you tell me about payments-api in QA?" |
+| **`investigate_service`** | Orchestrated service investigation that widens across related repos, evidence families, and deployment planes, then reports coverage and recommended next calls. | "Explain the deployment flow for api-node-boats using PCG only." |
 | **`get_repo_context`** | Durable drill-down for repository details after the story answer. | "Show me the full repo context behind that story." |
 | **`get_workload_context`** | Durable drill-down for workload details after the story answer. | "Show me the workload context behind that story." |
 | **`get_service_context`** | Service alias drill-down for service-shaped prompts. | "Show me the service context behind that story." |
@@ -103,6 +104,24 @@ Current threshold-code examples:
 - `delivery_path_present`
 
 This keeps the contract portable across ArgoCD, Flux, Terraform, CloudFormation, plain Kubernetes manifests, ECS, Lambda, and environments that do not use a controller at all.
+
+`investigate_service` is the new investigation-first companion to the story
+tools.
+
+Use it when:
+
+- the user asks a normal operator question and should not need prompt engineering
+- you want PCG to widen into deployment-adjacent repos automatically
+- you need explicit coverage reporting and recommended next calls
+
+The main output fields are:
+
+- `repositories_considered`
+- `repositories_with_evidence`
+- `evidence_families_found`
+- `coverage_summary`
+- `investigation_findings`
+- `recommended_next_calls`
 
 ## Content Retrieval & Search
 

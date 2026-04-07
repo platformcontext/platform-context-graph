@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .story_investigation_hints import build_investigation_hints
 from .story_shared import human_list
 
 
@@ -217,3 +218,22 @@ def build_repository_deployment_overview(context: dict[str, Any]) -> dict[str, A
         "deployment_story": deployment_story,
         "topology_story": topology_story,
     }
+
+
+def build_repository_investigation_hints(
+    *,
+    subject_name: str,
+    deploys_from: list[dict[str, Any]],
+    provisioned_by: list[dict[str, Any]],
+    delivery_paths: list[dict[str, Any]],
+    controller_driven_paths: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Build lightweight investigation hints for repository stories."""
+
+    return build_investigation_hints(
+        subject_name=subject_name,
+        deploys_from=deploys_from,
+        provisioned_by=provisioned_by,
+        delivery_paths=delivery_paths,
+        controller_driven_paths=controller_driven_paths,
+    )

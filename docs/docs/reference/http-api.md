@@ -174,6 +174,40 @@ way you would through MCP: tell PCG to scan all related repositories,
 deployment sources, and indexed documentation for the service or workload before asking
 for the final narrative.
 
+## Investigation API
+
+Use this route when the caller wants PCG to plan the repo widening and evidence
+search for them instead of manually chaining story, trace, and content calls.
+
+### Investigate a service
+
+`GET /api/v0/investigations/services/{service_name}`
+
+Optional query params:
+
+- `environment`
+- `intent`
+- `question`
+
+The response is investigation-first rather than story-first. Key fields:
+
+- `repositories_considered`
+- `repositories_with_evidence`
+- `evidence_families_found`
+- `coverage_summary`
+- `investigation_findings`
+- `recommended_next_calls`
+
+Use it for prompts like:
+
+- "Explain the deployment flow for api-node-boats using PCG only."
+- "Explain the network flow for api-node-boats using PCG only."
+- "What depends on api-node-boats and what does it depend on?"
+
+This route is designed for non-expert users who should not have to know which
+deployment, GitOps, Terraform, workflow, or support repositories to inspect
+next.
+
 ## Code API
 
 Use these routes when you only need code relationships and do not need the full code-to-cloud graph.
