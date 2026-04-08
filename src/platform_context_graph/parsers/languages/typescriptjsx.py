@@ -8,7 +8,8 @@ from platform_context_graph.utils.source_text import read_source_text
 def pre_scan_typescript(files: list[Path], parser_wrapper) -> dict:
     """
     Scans TypeScript JSX (.tsx) files to create a map of class/function names to their file paths.
-    Reuses the logic from TypeScript parser, but can be extended for JSX-specific extraction.
+    Reuses the logic from the TypeScript parser with the TSX grammar selected by the
+    parser wrapper, and can be extended for JSX-specific extraction.
     """
     imports_map = {}
     # Use the same queries as TypeScript
@@ -83,7 +84,7 @@ class TypescriptJSXTreeSitterParser(TypescriptTreeSitterParser):
     """
 
     def __init__(self, generic_parser_wrapper):
-        """Initialize the JSX parser facade on top of the TypeScript parser."""
+        """Initialize the JSX parser facade on top of the shared TypeScript logic."""
         super().__init__(generic_parser_wrapper)
         self.language_name = "typescript"
         self.jsx_enabled = True

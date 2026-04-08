@@ -101,7 +101,7 @@ _TREE_SITTER_PARSER_EXTENSIONS: tuple[tuple[str, str], ...] = (
     (".ts", "typescript"),
     (".cts", "typescript"),
     (".mts", "typescript"),
-    (".tsx", "typescript"),
+    (".tsx", "tsx"),
     (".cpp", "cpp"),
     (".cc", "cpp"),
     (".cxx", "cpp"),

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import gzip
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,17 +17,27 @@ from platform_context_graph.utils.tree_sitter_manager import get_tree_sitter_man
 
 @pytest.fixture(scope="module")
 def tsx_parser() -> TypescriptJSXTreeSitterParser:
-    """Build a TSX parser backed by the TypeScript grammar."""
+    """Build a TSX parser backed by the TSX grammar."""
 
     manager = get_tree_sitter_manager()
-    if not manager.is_language_available("typescript"):
-        pytest.skip("TypeScript tree-sitter grammar not available")
+    if not manager.is_language_available("tsx"):
+        pytest.skip("TSX tree-sitter grammar not available")
 
     wrapper = MagicMock()
-    wrapper.language_name = "typescript"
-    wrapper.language = manager.get_language_safe("typescript")
-    wrapper.parser = manager.create_parser("typescript")
+    wrapper.language_name = "tsx"
+    wrapper.language = manager.get_language_safe("tsx")
+    wrapper.parser = manager.create_parser("tsx")
     return TypescriptJSXTreeSitterParser(wrapper)
+
+
+def _load_fixture_text(fixture_name: str) -> str:
+    """Decode a compressed TSX fixture into UTF-8 source text."""
+
+    fixture_path = (
+        Path(__file__).resolve().parents[2] / "fixtures" / "parsers" / fixture_name
+    )
+    encoded_fixture = fixture_path.read_text(encoding="utf-8")
+    return gzip.decompress(base64.b64decode(encoded_fixture)).decode("utf-8")
 
 
 def test_parse_tsx_components_and_interfaces(
@@ -124,3 +137,65 @@ export function Example() {
     assert any(item["name"] == "useMemo" for item in result["function_calls"])
     assert any(item["name"] == "total" for item in result["variables"])
     assert any(item["name"] == "User" for item in result["type_aliases"])
+
+
+def test_parse_tsx_ignores_error_recovery_method_captures(
+    tsx_parser: TypescriptJSXTreeSitterParser, temp_test_dir
+) -> None:
+    """Ignore bogus method captures recovered from invalid TSX parser states."""
+
+    path = temp_test_dir / "search-boats-regression.tsx"
+    path.write_text(
+        _load_fixture_text("typescriptjsx_search_boats_regression.tsx.gz.b64"),
+        encoding="utf-8",
+    )
+
+    result = tsx_parser.parse(path)
+
+    function_names = {item["name"] for item in result["functions"]}
+    max_arg_length = max(
+        (len(arg) for item in result["functions"] for arg in item.get("args", [])),
+        default=0,
+    )
+
+    assert "if" not in function_names
+    assert max_arg_length < 200
+
+
+def test_parse_tsx_destructured_typed_props_as_bound_names(
+    tsx_parser: TypescriptJSXTreeSitterParser, temp_test_dir
+) -> None:
+    """Normalize destructured typed props into stable bound parameter names."""
+
+    source = """\
+type GridProps<T> = {
+  data: T[];
+  loading?: boolean;
+  sorting?: string[];
+  selectedRows?: Set<string>;
+  onSortingChange?: (sorting: string[]) => void;
+};
+
+const DataGrid = <T extends Record<string, unknown>>({
+  data,
+  loading = false,
+  sorting: controlledSorting,
+  selectedRows = new Set(),
+  onSortingChange,
+}: GridProps<T>) => {
+  return <div>{data.length}{String(loading)}{String(controlledSorting)}{selectedRows.size}{String(onSortingChange)}</div>;
+};
+"""
+    path = temp_test_dir / "DataGridProps.tsx"
+    path.write_text(source, encoding="utf-8")
+
+    result = tsx_parser.parse(path)
+
+    data_grid = next(item for item in result["functions"] if item["name"] == "DataGrid")
+    assert data_grid["args"] == [
+        "data",
+        "loading",
+        "controlledSorting",
+        "selectedRows",
+        "onSortingChange",
+    ]
