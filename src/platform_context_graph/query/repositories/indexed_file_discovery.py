@@ -7,6 +7,7 @@ against Neo4j File nodes and Postgres content store.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import yaml
@@ -45,7 +46,6 @@ def discover_repo_files(
         "MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)\n"
         "WHERE ($prefix IS NULL OR f.relative_path STARTS WITH $prefix)\n"
         "  AND ($suffix IS NULL OR f.relative_path ENDS WITH $suffix)\n"
-        "  AND ($pattern IS NULL OR f.relative_path =~ $pattern)\n"
         "RETURN f.relative_path AS relative_path\n"
         "ORDER BY f.relative_path"
     )
@@ -56,9 +56,12 @@ def discover_repo_files(
             repo_id=repo_id,
             prefix=prefix,
             suffix=suffix,
-            pattern=pattern,
         ).data()
-    return [str(row["relative_path"]) for row in rows if row.get("relative_path")]
+    paths = [str(row["relative_path"]) for row in rows if row.get("relative_path")]
+    if pattern is None:
+        return paths
+    regex = re.compile(pattern)
+    return [relative_path for relative_path in paths if regex.search(relative_path)]
 
 
 def file_exists(database: Any, repo_id: str, relative_path: str) -> bool:

@@ -99,7 +99,7 @@ class TestDiscoverRepoFiles:
         assert result == ["group_vars/all.yml", "group_vars/prod.yml"]
         assert session.last_params["prefix"] == "group_vars/"
         assert session.last_params["suffix"] is None
-        assert session.last_params["pattern"] is None
+        assert "pattern" not in session.last_params
 
     def test_returns_matching_files_with_suffix(self) -> None:
         """Files filtered by suffix are returned."""
@@ -129,7 +129,8 @@ class TestDiscoverRepoFiles:
         result = discover_repo_files(db, REPO_ID, pattern="roles/.*/tasks/main\\.y.*ml")
 
         assert result == ["roles/nginx/tasks/main.yml"]
-        assert session.last_params["pattern"] == "roles/.*/tasks/main\\.y.*ml"
+        assert "=~" not in (session.last_query or "")
+        assert "pattern" not in session.last_params
 
     def test_returns_empty_list_when_no_matches(self) -> None:
         """An empty list is returned when no files match."""

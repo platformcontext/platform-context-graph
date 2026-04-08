@@ -147,15 +147,16 @@ def test_repository_graph_counts_excludes_class_methods_from_top_level_count() -
     assert counts["class_method_count"] == 22363
     assert counts["total_function_count"] == 40271
     count_query = recorded_queries[-1]
-    assert "CALL (r) {" in count_query
-    assert "WITH r" not in count_query
-    assert "NOT EXISTS {" in count_query
-    assert "(:Class)-[:CONTAINS]->(counted)" in count_query
+    assert "CALL (r) {" not in count_query
+    assert "WITH r" in count_query
+    assert "NOT EXISTS {" not in count_query
+    assert "OPTIONAL MATCH (class_owner:Class)-[:CONTAINS]->(counted)" in count_query
+    assert "CASE WHEN class_owner IS NULL THEN counted END" in count_query
     assert "coalesce(r[$local_path_key], r.path) = $repo_path" in count_query
     assert "[:REPO_CONTAINS]->(counted:File)" in count_query
     assert "[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(counted:Function)" in count_query
-    assert "[:IMPORTS]->(module:Module)" not in count_query
-    assert "type(rel) = $imports_rel_type" in count_query
+    assert "[:REPO_CONTAINS]->(:File)-[:IMPORTS]->(counted:Module)" in count_query
+    assert "type(rel) = $imports_rel_type" not in count_query
 
 
 def test_repository_graph_counts_skips_missing_relationship_types() -> None:

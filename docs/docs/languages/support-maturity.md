@@ -36,4 +36,4 @@ yet been explicitly assessed in the parser maturity program.
 | Terraform | `HCLTerraformParser` | - | - | - | - | - | - | - |
 | Terragrunt | `HCLTerraformParser` | - | - | - | - | - | - | - |
 | TypeScript | `TypescriptTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | partial | partial |
-| TypeScript JSX | `TypescriptJSXTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | supported | partial |
+| TypeScript JSX | `TypescriptJSXTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | supported | supported |

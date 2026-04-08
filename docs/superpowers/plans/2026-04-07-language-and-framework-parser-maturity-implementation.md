@@ -114,16 +114,20 @@ And real repo validation scripts that:
 - report bogus function names
 - report oversized normalized parameters
 
+## Completed On This Branch
+
+1. End-to-end indexing validation now passes on `/Users/allen/repos/services/portal-nextjs-platform`.
+   - local run: `01e7ca696a30df95`
+   - result: `1 completed / 0 failed / 0 pending`
+   - repo context, repo summary, and repo story all surface React/Next.js framework evidence
+2. React/Next.js semantic packs are implemented through parser facts, file persistence, and query/story surfacing.
+3. Public support-maturity docs are published and generated from specs.
+
 ## Open Follow-Ups
 
-1. Add end-to-end indexing validation for a large TSX-heavy repo.
-2. Add framework semantic packs for React and Next.js.
-   - see
-     `docs/superpowers/specs/2026-04-07-react-nextjs-semantic-pack-design.md`
-   - see
-     `docs/superpowers/plans/2026-04-07-react-nextjs-semantic-pack-implementation.md`
-3. Design a declarative framework/provider pack format.
-4. Publish a support matrix in public docs.
+1. Design a declarative framework/provider pack format.
+2. Expand the same maturity program to additional language/framework pairs beyond the React/Next.js lane.
+3. Add end-to-end validation evidence for JavaScript and TypeScript repos independently, not just TSX-heavy repos.
 
 ## PR Packaging
 
