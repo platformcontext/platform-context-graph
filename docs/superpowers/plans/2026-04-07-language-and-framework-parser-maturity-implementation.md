@@ -118,6 +118,10 @@ And real repo validation scripts that:
 
 1. Add end-to-end indexing validation for a large TSX-heavy repo.
 2. Add framework semantic packs for React and Next.js.
+   - see
+     `docs/superpowers/specs/2026-04-07-react-nextjs-semantic-pack-design.md`
+   - see
+     `docs/superpowers/plans/2026-04-07-react-nextjs-semantic-pack-implementation.md`
 3. Design a declarative framework/provider pack format.
 4. Publish a support matrix in public docs.
 
