@@ -74,6 +74,10 @@ Parse-only features must not remain `supported`.
 
 6. **Run the spec/doc consistency check and the relevant tests.**
 
+7. **When support-maturity claims change, run a graph-backed end-to-end validation.**
+   Use the local indexing path plus the reusable validator so support-maturity updates
+   are backed by a real repository run, not only fixture or parser-unit coverage.
+
 ## Writing a Good Capability Spec
 
 One YAML file per parser. Keep it explicit. A reviewer should be able to answer:
@@ -116,6 +120,16 @@ Check for drift:
 PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py --check
 ```
 
+Graph-backed end-to-end validation example:
+
+```bash
+PYTHONPATH=src uv run python scripts/validate_language_support_e2e.py \
+  --repo-path /Users/allen/repos/services/portal-react-platform \
+  --language javascript \
+  --check \
+  --require-framework-evidence
+```
+
 The `--check` mode fails when:
 
 - A spec references a missing test or fixture
@@ -129,6 +143,12 @@ The `--check` mode fails when:
 
 - One unit test validates extraction and required fields
 - One integration test validates persisted or queryable end-to-end behavior
+
+**For support-maturity promotions:**
+
+- Use at least one real local repository run to justify `real_repo_validation: supported`
+- Use at least one clean local indexing run plus graph-backed query validation to justify
+  `end_to_end_indexing: supported`
 
 **For `partial` capabilities:**
 

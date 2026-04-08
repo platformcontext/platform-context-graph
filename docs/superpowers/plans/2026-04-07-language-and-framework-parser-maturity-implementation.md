@@ -106,6 +106,16 @@ Use the repo’s real discovery path plus parser smoke checks:
 PYTHONPATH=src uv run python -m pytest tests/unit/parsers/test_typescriptjsx_parser.py tests/unit/parsers/test_typescript_parser.py tests/unit/tools/test_graph_builder_parsers.py -q
 ```
 
+And use the graph-backed validation script for end-to-end support checks:
+
+```bash
+PYTHONPATH=src uv run python scripts/validate_language_support_e2e.py \
+  --repo-path /Users/allen/repos/services/portal-react-platform \
+  --language javascript \
+  --check \
+  --require-framework-evidence
+```
+
 And real repo validation scripts that:
 
 - honor discovery rules
@@ -120,14 +130,22 @@ And real repo validation scripts that:
    - local run: `01e7ca696a30df95`
    - result: `1 completed / 0 failed / 0 pending`
    - repo context, repo summary, and repo story all surface React/Next.js framework evidence
-2. React/Next.js semantic packs are implemented through parser facts, file persistence, and query/story surfacing.
-3. Public support-maturity docs are published and generated from specs.
+2. End-to-end indexing validation now passes on `/Users/allen/repos/services/portal-react-platform`.
+   - local run: `773c75cb105c8879`
+   - result: `1 completed / 0 failed / 0 pending`
+   - repo context, repo summary, and repo story all surface React framework evidence for the JavaScript lane
+3. End-to-end indexing validation now passes on `/Users/allen/repos/services/api-node-platform`.
+   - local run: `ef02081cb9874275`
+   - result: `1 completed / 0 failed / 0 pending`
+   - repo context, repo summary, and repo story all return successfully for the plain TypeScript lane on a zero-TSX repo
+4. A reusable graph-backed validation script now exists at `scripts/validate_language_support_e2e.py`.
+5. React/Next.js semantic packs are implemented through parser facts, file persistence, and query/story surfacing.
+6. Public support-maturity docs are published and generated from specs.
 
 ## Open Follow-Ups
 
 1. Design a declarative framework/provider pack format.
 2. Expand the same maturity program to additional language/framework pairs beyond the React/Next.js lane.
-3. Add end-to-end validation evidence for JavaScript and TypeScript repos independently, not just TSX-heavy repos.
 
 ## PR Packaging
 

@@ -32,11 +32,13 @@ Canonical source: `src/platform_context_graph/parsers/capabilities/specs/typescr
 - Framework pack status: `supported`
 - Framework packs: `react-base`, `nextjs-app-router-base`
 - Query surfacing: `supported`
-- Real-repo validation: `partial`
-- End-to-end indexing: `partial`
+- Real-repo validation: `supported`
+- End-to-end indexing: `supported`
 - Local repo validation evidence:
-  - `shared semantic facts are validated through TSX-heavy local repos; dedicated pure-TypeScript app validation is still pending`
+  - `api-node-platform (109 indexed TS files, clean end-to-end validation on a zero-TSX repo)`
 - Notes:
+  - api-node-platform completed a clean local end-to-end indexing run (run ef02081cb9874275)
+  - repo context, repo summary, and repo story all returned successfully on a pure TypeScript repo without requiring framework evidence
   - generic type aliases and decorators remain partial or unsupported as documented below
 
 

@@ -15,12 +15,13 @@ support_maturity:
     - react-base
     - nextjs-app-router-base
   query_surfacing: supported
-  real_repo_validation: partial
+  real_repo_validation: supported
   real_repo_examples:
-    - shared JS parser framework facts are exercised through TSX-heavy local app repos on this branch
-  end_to_end_indexing: partial
+    - portal-react-platform (1145 indexed JS files, clean end-to-end validation with framework evidence)
+  end_to_end_indexing: supported
   notes:
-    - dedicated pure-JavaScript frontend repo validation is still pending
+    - portal-react-platform completed a clean local end-to-end indexing run (run 773c75cb105c8879)
+    - repo context, repo summary, and repo story all surfaced React framework evidence on the default FalkorDB backend
 capabilities:
 - id: function-declarations
   name: Function declarations

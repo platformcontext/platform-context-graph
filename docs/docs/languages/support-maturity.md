@@ -21,7 +21,7 @@ yet been explicitly assessed in the parser maturity program.
 | Haskell | `HaskellTreeSitterParser` | - | - | - | - | - | - | - |
 | Helm | `InfraYAMLParser` | - | - | - | - | - | - | - |
 | Java | `JavaTreeSitterParser` | - | - | - | - | - | - | - |
-| JavaScript | `JavascriptTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | partial | partial |
+| JavaScript | `JavascriptTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | supported | supported |
 | JSON Config | `JSONConfigTreeSitterParser` | - | - | - | - | - | - | - |
 | Kotlin | `KotlinTreeSitterParser` | - | - | - | - | - | - | - |
 | Kubernetes | `InfraYAMLParser` | - | - | - | - | - | - | - |
@@ -35,5 +35,5 @@ yet been explicitly assessed in the parser maturity program.
 | Swift | `SwiftTreeSitterParser` | - | - | - | - | - | - | - |
 | Terraform | `HCLTerraformParser` | - | - | - | - | - | - | - |
 | Terragrunt | `HCLTerraformParser` | - | - | - | - | - | - | - |
-| TypeScript | `TypescriptTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | partial | partial |
+| TypeScript | `TypescriptTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | supported | supported |
 | TypeScript JSX | `TypescriptJSXTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | supported | supported |

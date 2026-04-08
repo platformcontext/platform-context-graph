@@ -15,11 +15,13 @@ support_maturity:
     - react-base
     - nextjs-app-router-base
   query_surfacing: supported
-  real_repo_validation: partial
+  real_repo_validation: supported
   real_repo_examples:
-    - shared semantic facts are validated through TSX-heavy local repos; dedicated pure-TypeScript app validation is still pending
-  end_to_end_indexing: partial
+    - api-node-platform (109 indexed TS files, clean end-to-end validation on a zero-TSX repo)
+  end_to_end_indexing: supported
   notes:
+    - api-node-platform completed a clean local end-to-end indexing run (run ef02081cb9874275)
+    - repo context, repo summary, and repo story all returned successfully on a pure TypeScript repo without requiring framework evidence
     - generic type aliases and decorators remain partial or unsupported as documented below
 capabilities:
 - id: functions

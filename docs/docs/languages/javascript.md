@@ -33,12 +33,13 @@ Canonical source: `src/platform_context_graph/parsers/capabilities/specs/javascr
 - Framework pack status: `supported`
 - Framework packs: `react-base`, `nextjs-app-router-base`
 - Query surfacing: `supported`
-- Real-repo validation: `partial`
-- End-to-end indexing: `partial`
+- Real-repo validation: `supported`
+- End-to-end indexing: `supported`
 - Local repo validation evidence:
-  - `shared JS parser framework facts are exercised through TSX-heavy local app repos on this branch`
+  - `portal-react-platform (1145 indexed JS files, clean end-to-end validation with framework evidence)`
 - Notes:
-  - dedicated pure-JavaScript frontend repo validation is still pending
+  - portal-react-platform completed a clean local end-to-end indexing run (run 773c75cb105c8879)
+  - repo context, repo summary, and repo story all surfaced React framework evidence on the default FalkorDB backend
 
 
 ## Known Limitations
