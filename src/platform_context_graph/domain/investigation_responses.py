@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .framework_responses import FrameworkSummary
+
 InvestigationIntent = Literal[
     "deployment",
     "network",
@@ -79,6 +81,7 @@ class InvestigationResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     summary: list[str] = Field(default_factory=list)
+    framework_summary: FrameworkSummary | None = None
     repositories_considered: list[InvestigationRepositoryEvidence] = Field(
         default_factory=list
     )

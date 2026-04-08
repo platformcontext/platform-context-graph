@@ -23,6 +23,22 @@ def test_investigation_route_uses_investigation_query_service() -> None:
         calls.append({"database": database, **kwargs})
         return {
             "summary": ["dual deployment detected"],
+            "framework_summary": {
+                "frameworks": ["nextjs"],
+                "react": None,
+                "nextjs": {
+                    "module_count": 1,
+                    "page_count": 1,
+                    "layout_count": 0,
+                    "route_count": 0,
+                    "metadata_module_count": 0,
+                    "route_handler_module_count": 0,
+                    "client_runtime_count": 1,
+                    "server_runtime_count": 0,
+                    "route_verbs": [],
+                    "sample_modules": [],
+                },
+            },
             "repositories_considered": [],
             "repositories_with_evidence": [],
             "evidence_families_found": ["gitops_config", "iac_infrastructure"],
@@ -82,6 +98,22 @@ def test_investigation_response_exposes_operator_coverage_fields() -> None:
         investigation=SimpleNamespace(
             investigate_service=lambda *_args, **_kwargs: {
                 "summary": ["dual deployment detected"],
+                "framework_summary": {
+                    "frameworks": ["nextjs"],
+                    "react": None,
+                    "nextjs": {
+                        "module_count": 1,
+                        "page_count": 1,
+                        "layout_count": 0,
+                        "route_count": 0,
+                        "metadata_module_count": 0,
+                        "route_handler_module_count": 0,
+                        "client_runtime_count": 1,
+                        "server_runtime_count": 0,
+                        "route_verbs": [],
+                        "sample_modules": [],
+                    },
+                },
                 "repositories_considered": [
                     {
                         "repo_id": "repository:r_app",
@@ -142,4 +174,5 @@ def test_investigation_response_exposes_operator_coverage_fields() -> None:
     assert response.status_code == 200
     assert "repositories_considered" in payload
     assert "evidence_families_found" in payload
+    assert payload["framework_summary"]["nextjs"]["page_count"] == 1
     assert "recommended_next_calls" in payload

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...utils.debug_log import emit_log_call, warning_logger
+from ..story_frameworks import summarize_framework_overview
 from .common import (
     canonical_repository_ref,
     graph_relationship_types,
@@ -199,7 +200,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         deployment_chain=relationship_summary["deployment_chain"],
         platforms=relationship_summary["platforms"],
     )
-    return {
+    context_payload = {
         "repository": repository_payload,
         "code": {
             "functions": counts["total_function_count"],
@@ -227,6 +228,10 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         "ecosystem": ecosystem,
         "framework_summary": framework_summary,
     }
+    framework_story = summarize_framework_overview(framework_summary)
+    if framework_story:
+        context_payload["framework_story"] = framework_story
+    return context_payload
 
 
 def _fetch_infrastructure(session: Any, repo: dict[str, Any]) -> dict[str, Any]:

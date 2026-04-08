@@ -16,6 +16,11 @@ from . import entity_resolution as entity_resolution_queries
 from . import repositories as repository_queries
 from .investigation_coverage import build_investigation_coverage_summary
 from .investigation_evidence_families import INVESTIGATION_EVIDENCE_FAMILIES
+from .investigation_frameworks import (
+    build_framework_investigation_finding,
+    framework_summary_from_context,
+    summarize_investigation_frameworks,
+)
 from .investigation_intent import (
     infer_investigation_intent,
     normalize_investigation_intent,
@@ -206,7 +211,7 @@ def investigate_service(
         if isinstance(primary_repo_id, str) and primary_repo_id
         else {}
     )
-    del primary_repo_context  # Reserved for later richer widening.
+    framework_summary = framework_summary_from_context(primary_repo_context)
     deployment_trace = trace_deployment_chain(
         database,
         service_name,
@@ -255,11 +260,29 @@ def investigate_service(
         repositories_with_evidence=related_repositories,
         primary_repo_name=primary_repo_name,
     )
+    summary_lines = [
+        f"Investigation intent: {requested_intent}.",
+        f"Primary service: {service_name}.",
+    ]
+    framework_story = summarize_investigation_frameworks(framework_summary)
+    if framework_story:
+        summary_lines.append(framework_story)
+    investigation_findings = [
+        InvestigationFinding(
+            title="Service investigation initialized",
+            summary=(
+                "PCG combined service, deployment, workflow, and related "
+                "repository evidence for this service."
+            ),
+            evidence_families=found_evidence_families,
+        )
+    ]
+    framework_finding = build_framework_investigation_finding(framework_summary)
+    if framework_finding is not None:
+        investigation_findings.append(framework_finding)
     response = InvestigationResponse(
-        summary=[
-            f"Investigation intent: {requested_intent}.",
-            f"Primary service: {service_name}.",
-        ],
+        summary=summary_lines,
+        framework_summary=framework_summary,
         repositories_considered=[
             {
                 "repo_id": (
@@ -274,23 +297,17 @@ def investigate_service(
         repositories_with_evidence=related_repositories,
         evidence_families_found=found_evidence_families,
         coverage_summary=coverage_summary,
-        investigation_findings=[
-            InvestigationFinding(
-                title="Service investigation initialized",
-                summary=(
-                    "PCG combined service, deployment, workflow, and related "
-                    "repository evidence for this service."
-                ),
-                evidence_families=found_evidence_families,
-            )
-        ],
+        investigation_findings=investigation_findings,
         limitations=list(service_story.get("limitations") or []),
         recommended_next_steps=build_recommended_next_steps(
             recommended_next_calls=recommended_next_calls
         ),
         recommended_next_calls=recommended_next_calls,
     )
-    return response.model_dump(mode="json")
+    result = response.model_dump(mode="json")
+    if framework_summary is None:
+        result.pop("framework_summary", None)
+    return result
 
 
 __all__ = ["investigate_service"]
