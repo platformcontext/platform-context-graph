@@ -78,7 +78,7 @@ def test_project_file_facts_persists_framework_semantics_on_file_nodes() -> None
                         "nextjs": {
                             "module_kind": "page",
                             "route_verbs": [],
-                            "metadata_exports": ["generateMetadata"],
+                            "metadata_exports": "dynamic",
                             "route_segments": ["orders"],
                             "runtime_boundary": "client",
                             "request_response_apis": ["NextResponse"],
@@ -114,7 +114,7 @@ def test_project_file_facts_persists_framework_semantics_on_file_nodes() -> None
         and params["react_hooks_used"] == ["useState"]
         and params["next_module_kind"] == "page"
         and params["next_route_verbs"] == []
-        and params["next_metadata_exports"] == ["generateMetadata"]
+        and params["next_metadata_exports"] == "dynamic"
         and params["next_route_segments"] == ["orders"]
         and params["next_runtime_boundary"] == "client"
         and params["next_request_response_apis"] == ["NextResponse"]

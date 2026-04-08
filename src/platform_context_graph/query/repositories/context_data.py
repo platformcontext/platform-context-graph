@@ -14,6 +14,7 @@ from .context_infrastructure_support import (
     infrastructure_label_queries,
     infrastructure_query_kwargs,
 )
+from .framework_summary import build_repository_framework_summary
 from .context_limitations import build_context_limitations
 from .graph_counts import (
     repository_graph_counts,
@@ -122,6 +123,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         **scope,
     ).data()
     ecosystem = _fetch_ecosystem(session, repo)
+    framework_summary = build_repository_framework_summary(session, repo)
     relationship_summary = build_relationship_summary(
         session,
         repo_ref,
@@ -223,6 +225,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         "infrastructure": infrastructure,
         "relationships": relationships,
         "ecosystem": ecosystem,
+        "framework_summary": framework_summary,
     }
 
 

@@ -12,6 +12,8 @@ from .story_documentation import (
     build_documentation_overview,
     summarize_documentation_overview,
 )
+from .story_frameworks import build_framework_story_items
+from .story_frameworks import summarize_framework_overview
 from .story_gitops import build_gitops_overview, summarize_gitops_overview
 from .story_repository_support import (
     build_repository_deployment_overview,
@@ -110,6 +112,10 @@ def build_repository_story_response(
             f"{subject['name']} contains "
             f"{code.get('functions', 0)} functions and {code.get('classes', 0)} classes."
         ]
+    framework_summary = context.get("framework_summary")
+    framework_story = summarize_framework_overview(framework_summary)
+    if framework_story and framework_story not in story:
+        story.append(framework_story)
 
     story_sections: list[dict[str, Any]] = []
     public_hostnames = [
@@ -239,6 +245,15 @@ def build_repository_story_response(
             ),
         )
     )
+    if framework_story:
+        story_sections.append(
+            story_section(
+                "frameworks",
+                "Frameworks",
+                framework_story,
+                items=build_framework_story_items(framework_summary),
+            )
+        )
 
     if deploys_from or consumer_repositories or dependencies:
         dependency_summary_parts: list[str] = []

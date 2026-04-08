@@ -68,7 +68,7 @@ def _framework_semantic_properties(
         "react_hooks_used": _normalized_string_list(react_mapping.get("hooks_used")),
         "next_module_kind": _normalized_string(nextjs_mapping.get("module_kind")),
         "next_route_verbs": _normalized_string_list(nextjs_mapping.get("route_verbs")),
-        "next_metadata_exports": _normalized_string_list(
+        "next_metadata_exports": _normalized_string(
             nextjs_mapping.get("metadata_exports")
         ),
         "next_route_segments": _normalized_string_list(
