@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, TypedDict
+from typing import Any, Final, Literal, TypedDict
 
 FrameworkPackStrategy = Literal["react_module", "nextjs_app_router"]
+SUPPORTED_FRAMEWORK_PACK_STRATEGIES: Final[set[FrameworkPackStrategy]] = {
+    "react_module",
+    "nextjs_app_router",
+}
 
 
 class FrameworkPackSpec(TypedDict, total=False):

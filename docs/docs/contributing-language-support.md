@@ -14,6 +14,10 @@ Framework semantic packs also have canonical YAML sources:
 src/platform_context_graph/parsers/framework_packs/specs/<framework>.yaml
 ```
 
+Those pack specs are runtime inputs, not only documentation artifacts. They must
+remain package-safe, validated, and bounded because installed wheels load them
+directly at parser runtime.
+
 The generated outputs:
 
 ```
@@ -37,6 +41,23 @@ Every parser has one capability spec that records:
 Framework semantic packs complement that parser contract. They define the
 bounded semantic rules layered on top of parser output, such as React runtime
 boundaries or Next.js app-router module roles.
+
+Each framework-pack YAML currently declares:
+
+- `framework`
+- `title`
+- `strategy`
+- `compute_order`
+- `surface_order`
+- `config`
+
+Supported strategies today:
+
+- `react_module`
+- `nextjs_app_router`
+
+Duplicate `framework` keys are invalid because the parser runtime uses the
+framework name as the surfaced semantic bucket key.
 
 Each capability entry includes:
 
@@ -86,6 +107,10 @@ Parse-only features must not remain `supported`.
 
    If the behavior comes from a framework semantic layer, update the
    corresponding framework-pack YAML too.
+
+   If the change adds a new pack or modifies a pack contract, make sure the
+   spec is included in package data so wheels and sdists can load it at
+   runtime.
 
 5. **Regenerate the docs.**
 
@@ -154,6 +179,20 @@ The `--check` mode fails when:
 - A `supported` capability declares no surfaced graph/query target
 - Generated docs drift from the YAML specs
 
+Framework-pack validation example:
+
+```bash
+PYTHONPATH=src uv run python -m pytest tests/unit/parsers/test_framework_packs.py -q
+```
+
+That suite now verifies:
+
+- built-in framework-pack YAML validates cleanly
+- repo-root override loading works
+- unknown strategies are rejected
+- required fields and field types are enforced
+- duplicate framework keys are rejected
+
 ## Testing Rules
 
 **For `supported` capabilities:**
@@ -188,5 +227,6 @@ Before approving parser-support changes:
 - [ ] Generated docs were regenerated, not hand-edited
 - [ ] Unit and integration references point to real tests
 - [ ] `partial` and `unsupported` entries have concrete rationales
+- [ ] framework-pack YAML changes are validated and still ship in package builds
 
 If the YAML, tests, and generated docs disagree, fix the disagreement before merging.

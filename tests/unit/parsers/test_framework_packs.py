@@ -6,7 +6,10 @@ from pathlib import Path
 
 import yaml
 
-from platform_context_graph.parsers.framework_packs import load_framework_pack_specs
+from platform_context_graph.parsers.framework_packs import (
+    load_framework_pack_specs,
+    validate_framework_pack_specs,
+)
 from platform_context_graph.parsers.framework_semantics import (
     build_framework_semantics,
 )
@@ -21,6 +24,12 @@ def test_load_framework_pack_specs_exposes_react_and_nextjs() -> None:
 
     assert "react" in names
     assert "nextjs" in names
+
+
+def test_validate_framework_pack_specs_has_no_errors() -> None:
+    """Validate the built-in framework pack set."""
+
+    assert validate_framework_pack_specs() == []
 
 
 def test_load_framework_pack_specs_supports_repo_root_override(tmp_path: Path) -> None:
@@ -61,6 +70,126 @@ def test_load_framework_pack_specs_supports_repo_root_override(tmp_path: Path) -
     assert specs[0]["spec_path"] == (
         "src/platform_context_graph/parsers/framework_packs/specs/demo.yaml"
     )
+
+
+def test_validate_framework_pack_specs_rejects_unknown_strategy(
+    tmp_path: Path,
+) -> None:
+    """Reject framework-pack specs that declare unsupported strategies."""
+
+    spec_root = (
+        tmp_path
+        / "src"
+        / "platform_context_graph"
+        / "parsers"
+        / "framework_packs"
+        / "specs"
+    )
+    spec_root.mkdir(parents=True)
+    spec_root.joinpath("broken.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "framework": "demo",
+                "title": "Broken Framework Pack",
+                "strategy": "unknown_strategy",
+                "compute_order": 10,
+                "surface_order": 20,
+                "config": {},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    errors = validate_framework_pack_specs(tmp_path)
+
+    assert (
+        "src/platform_context_graph/parsers/framework_packs/specs/broken.yaml: "
+        "unknown strategy 'unknown_strategy'"
+    ) in errors
+
+
+def test_validate_framework_pack_specs_rejects_missing_required_fields(
+    tmp_path: Path,
+) -> None:
+    """Reject framework-pack specs missing required top-level fields."""
+
+    spec_root = (
+        tmp_path
+        / "src"
+        / "platform_context_graph"
+        / "parsers"
+        / "framework_packs"
+        / "specs"
+    )
+    spec_root.mkdir(parents=True)
+    spec_root.joinpath("broken.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "framework": "demo",
+                "strategy": "react_module",
+                "compute_order": "ten",
+                "surface_order": 20,
+                "config": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    errors = validate_framework_pack_specs(tmp_path)
+
+    assert (
+        "src/platform_context_graph/parsers/framework_packs/specs/broken.yaml: "
+        "missing required field 'title'"
+    ) in errors
+    assert (
+        "src/platform_context_graph/parsers/framework_packs/specs/broken.yaml: "
+        "field 'compute_order' must be an integer"
+    ) in errors
+    assert (
+        "src/platform_context_graph/parsers/framework_packs/specs/broken.yaml: "
+        "field 'config' must be a mapping"
+    ) in errors
+
+
+def test_validate_framework_pack_specs_rejects_duplicate_framework_keys(
+    tmp_path: Path,
+) -> None:
+    """Reject duplicate framework keys that would collide at runtime."""
+
+    spec_root = (
+        tmp_path
+        / "src"
+        / "platform_context_graph"
+        / "parsers"
+        / "framework_packs"
+        / "specs"
+    )
+    spec_root.mkdir(parents=True)
+    for filename in ("one.yaml", "two.yaml"):
+        spec_root.joinpath(filename).write_text(
+            yaml.safe_dump(
+                {
+                    "framework": "demo",
+                    "title": f"{filename} Framework Pack",
+                    "strategy": "react_module",
+                    "compute_order": 10,
+                    "surface_order": 20,
+                    "config": {},
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+
+    errors = validate_framework_pack_specs(tmp_path)
+
+    assert (
+        "src/platform_context_graph/parsers/framework_packs/specs/two.yaml: "
+        "duplicate framework 'demo' also declared in "
+        "src/platform_context_graph/parsers/framework_packs/specs/one.yaml"
+    ) in errors
 
 
 def test_build_framework_semantics_accepts_custom_react_pack_specs() -> None:
