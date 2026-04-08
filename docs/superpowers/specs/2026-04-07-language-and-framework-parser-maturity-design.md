@@ -1,5 +1,3 @@
-"""Design for first-class language and framework parser maturity."""
-
 # Parser Maturity Design
 
 ## Problem

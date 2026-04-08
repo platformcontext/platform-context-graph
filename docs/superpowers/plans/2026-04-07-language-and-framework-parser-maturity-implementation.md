@@ -1,5 +1,3 @@
-"""Implementation plan for parser and framework maturity."""
-
 # Parser Maturity Implementation Plan
 
 ## Outcome
