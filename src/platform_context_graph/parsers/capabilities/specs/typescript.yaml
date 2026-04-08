@@ -7,6 +7,20 @@ doc_path: docs/docs/languages/typescript.md
 fixture_repo: tests/fixtures/ecosystems/typescript_comprehensive/
 unit_test_file: tests/unit/parsers/test_typescript_parser.py
 integration_test_suite: tests/integration/test_language_graph.py::TestTypeScriptGraph
+support_maturity:
+  grammar_routing: supported
+  normalization: supported
+  framework_packs: supported
+  framework_pack_names:
+    - react-base
+    - nextjs-app-router-base
+  query_surfacing: supported
+  real_repo_validation: partial
+  real_repo_examples:
+    - shared semantic facts are validated through TSX-heavy local repos; dedicated pure-TypeScript app validation is still pending
+  end_to_end_indexing: partial
+  notes:
+    - generic type aliases and decorators remain partial or unsupported as documented below
 capabilities:
 - id: functions
   name: Functions

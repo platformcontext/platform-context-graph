@@ -7,6 +7,23 @@ doc_path: docs/docs/languages/typescriptjsx.md
 fixture_repo: tests/fixtures/ecosystems/tsx_comprehensive/
 unit_test_file: tests/unit/parsers/test_typescriptjsx_parser.py
 integration_test_suite: tests/integration/test_language_graph.py::TestTypeScriptJSXGraph
+support_maturity:
+  grammar_routing: supported
+  normalization: supported
+  framework_packs: supported
+  framework_pack_names:
+    - react-base
+    - nextjs-app-router-base
+  query_surfacing: supported
+  real_repo_validation: supported
+  real_repo_examples:
+    - portal-nextjs-platform (612 indexed TSX files, 0 parser issues)
+    - portal-java-ycm (358 indexed TSX files, 0 parser issues)
+    - webapp-node-fsbo (177 indexed TSX files, 0 parser issues)
+    - boats-chatgpt-app (local regression fixture plus clean TSX smoke check)
+  end_to_end_indexing: partial
+  notes:
+    - a substantial end-to-end indexing run on one large TSX-heavy repo is still pending
 capabilities:
 - id: functions
   name: Functions

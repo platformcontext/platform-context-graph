@@ -5,6 +5,7 @@ from .catalog import (
     load_language_capability_specs,
     render_feature_matrix,
     render_language_doc,
+    render_support_maturity_matrix,
     validate_language_capability_specs,
     write_generated_language_docs,
 )
@@ -14,6 +15,7 @@ __all__ = (
     "load_language_capability_specs",
     "render_feature_matrix",
     "render_language_doc",
+    "render_support_maturity_matrix",
     "validate_language_capability_specs",
     "write_generated_language_docs",
 )

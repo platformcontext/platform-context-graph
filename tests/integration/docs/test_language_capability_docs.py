@@ -32,3 +32,15 @@ def test_generated_feature_matrix_is_in_sync_with_specs() -> None:
         matrix_path.read_text(encoding="utf-8")
         == expected_docs["docs/docs/languages/feature-matrix.md"]
     )
+
+
+def test_generated_support_maturity_matrix_is_in_sync_with_specs() -> None:
+    """The tracked support-maturity matrix must match generated spec output."""
+
+    expected_docs = expected_generated_language_docs(REPO_ROOT)
+    matrix_path = DOCS_ROOT / "support-maturity.md"
+
+    assert (
+        matrix_path.read_text(encoding="utf-8")
+        == expected_docs["docs/docs/languages/support-maturity.md"]
+    )

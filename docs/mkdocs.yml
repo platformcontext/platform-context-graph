@@ -77,6 +77,7 @@ nav:
     - Source Layout: reference/source-layout.md
     - Language Support: contributing-language-support.md
     - Language Feature Matrix: languages/feature-matrix.md
+    - Language Support Maturity: languages/support-maturity.md
     - PHP Parser: languages/php.md
   - Project:
     - Terraform Providers:

@@ -13,6 +13,7 @@ The generated outputs:
 ```
 docs/docs/languages/*.md
 docs/docs/languages/feature-matrix.md
+docs/docs/languages/support-maturity.md
 ```
 
 Do not hand-edit those generated docs. Update the YAML spec, then regenerate.
@@ -24,6 +25,7 @@ Every parser has one capability spec that records:
 - Parser and language identity
 - Fixture repo used for test coverage
 - The capability checklist
+- Optional support maturity metadata
 - Known limitations
 
 Each capability entry includes:
@@ -36,6 +38,15 @@ Each capability entry includes:
 - One unit-test reference
 - One integration-test reference
 - A rationale (required for `partial` or `unsupported`)
+
+Optional top-level support maturity metadata can also record:
+
+- grammar routing status
+- normalization status
+- framework-pack status and pack names
+- query surfacing status
+- real-repo validation status and examples
+- end-to-end indexing status
 
 ### Status semantics
 

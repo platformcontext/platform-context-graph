@@ -27,6 +27,20 @@ Canonical source: `src/platform_context_graph/parsers/capabilities/specs/javascr
 | JSDoc comments | `jsdoc-comments` | partial | `functions` | `name, line_number, docstring` | `property:Function.docstring` | `tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface` | `tests/integration/test_language_graph.py::TestJavaScriptGraph::test_jsdoc_metadata_persisted` | The parser still leaves JavaScript `docstring` fields empty, but indexed graph nodes now surface docstrings via content enrichment during ingest. |
 | Method kind (get/set/async) | `method-kind-get-set-async` | partial | `functions` | `name, line_number, type` | `property:Function.type` | `tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface` | `tests/integration/test_language_graph.py::TestJavaScriptGraph::test_getter_metadata_persisted` | Getter methods are emitted with `type='getter'`, but setter and async metadata are not captured consistently enough to claim full support. |
 
+## Support Maturity
+- Grammar routing: `supported`
+- Normalization: `supported`
+- Framework pack status: `supported`
+- Framework packs: `react-base`, `nextjs-app-router-base`
+- Query surfacing: `supported`
+- Real-repo validation: `partial`
+- End-to-end indexing: `partial`
+- Local repo validation evidence:
+  - `shared JS parser framework facts are exercised through TSX-heavy local app repos on this branch`
+- Notes:
+  - dedicated pure-JavaScript frontend repo validation is still pending
+
+
 ## Known Limitations
 - Computed property names in classes are not resolved to static names
 - Dynamic `require()` calls with non-literal paths are not tracked

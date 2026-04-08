@@ -7,6 +7,20 @@ doc_path: docs/docs/languages/javascript.md
 fixture_repo: tests/fixtures/ecosystems/javascript_comprehensive/
 unit_test_file: tests/unit/parsers/test_javascript_parser.py
 integration_test_suite: tests/integration/test_language_graph.py::TestJavaScriptGraph
+support_maturity:
+  grammar_routing: supported
+  normalization: supported
+  framework_packs: supported
+  framework_pack_names:
+    - react-base
+    - nextjs-app-router-base
+  query_surfacing: supported
+  real_repo_validation: partial
+  real_repo_examples:
+    - shared JS parser framework facts are exercised through TSX-heavy local app repos on this branch
+  end_to_end_indexing: partial
+  notes:
+    - dedicated pure-JavaScript frontend repo validation is still pending
 capabilities:
 - id: function-declarations
   name: Function declarations

@@ -26,6 +26,20 @@ Canonical source: `src/platform_context_graph/parsers/capabilities/specs/typescr
 | Decorators | `decorators` | unsupported | `classes` | `name, line_number` | `none:not_persisted` | `tests/unit/parsers/test_typescript_parser.py::test_parse_decorators_do_not_emit_metadata` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_decorator_metadata_not_persisted` | Decorator syntax is accepted by the parser, but decorator metadata is not emitted into the normalized parse result or persisted to graph properties. |
 | Generics | `generics` | partial | `type_parameters` | `name, line_number, type_parameters` | `none:not_persisted` | `tests/unit/parsers/test_typescript_parser.py::test_parse_generics` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_function_nodes_created` | Generic syntax is tolerated in parsed declarations, but type parameter metadata is not promoted into the normalized graph model. |
 
+## Support Maturity
+- Grammar routing: `supported`
+- Normalization: `supported`
+- Framework pack status: `supported`
+- Framework packs: `react-base`, `nextjs-app-router-base`
+- Query surfacing: `supported`
+- Real-repo validation: `partial`
+- End-to-end indexing: `partial`
+- Local repo validation evidence:
+  - `shared semantic facts are validated through TSX-heavy local repos; dedicated pure-TypeScript app validation is still pending`
+- Notes:
+  - generic type aliases and decorators remain partial or unsupported as documented below
+
+
 ## Known Limitations
 - Type aliases are parsed (`type_aliases` key) but not persisted to the graph — no persistence mapping exists
 - Mapped types and conditional types not fully captured
