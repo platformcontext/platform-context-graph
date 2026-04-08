@@ -8,6 +8,12 @@ The canonical source of truth for each language or IaC parser:
 src/platform_context_graph/parsers/capabilities/specs/<language>.yaml
 ```
 
+Framework semantic packs also have canonical YAML sources:
+
+```
+src/platform_context_graph/parsers/framework_packs/specs/<framework>.yaml
+```
+
 The generated outputs:
 
 ```
@@ -27,6 +33,10 @@ Every parser has one capability spec that records:
 - The capability checklist
 - Optional support maturity metadata
 - Known limitations
+
+Framework semantic packs complement that parser contract. They define the
+bounded semantic rules layered on top of parser output, such as React runtime
+boundaries or Next.js app-router module roles.
 
 Each capability entry includes:
 
@@ -64,11 +74,18 @@ Parse-only features must not remain `supported`.
 2. **Implement or adjust the parser.**
    Keep the parser output and the persisted/queryable graph surface aligned with the claimed capability.
 
+   When the change is framework-semantic rather than syntax-extraction, prefer
+   updating the declarative framework pack before adding more hard-coded parser
+   constants.
+
 3. **Add or update integration coverage.**
    The integration test must prove the capability exists end-to-end in the indexed graph or API surface.
 
 4. **Update the capability spec.**
    Add, remove, or reclassify entries in the YAML spec.
+
+   If the behavior comes from a framework semantic layer, update the
+   corresponding framework-pack YAML too.
 
 5. **Regenerate the docs.**
 

@@ -1,0 +1,24 @@
+framework: react
+title: React Base Pack
+strategy: react_module
+compute_order: 10
+surface_order: 20
+config:
+  boundary_directives:
+    - client
+    - server
+  hook_name_pattern: '^use[A-Z][A-Za-z0-9]*$'
+  component_name_pattern: '^[A-Z][A-Za-z0-9]*$'
+  react_candidate_path_suffixes:
+    - .jsx
+    - .tsx
+  react_candidate_path_segments:
+    - components
+  react_candidate_import_sources:
+    - react
+  component_export_patterns:
+    - '^\s*export\s+default\s+(?:async\s+)?function\s+([A-Z][A-Za-z0-9]*)\b'
+    - '^\s*export\s+(?:async\s+)?function\s+([A-Z][A-Za-z0-9]*)\b'
+    - '^\s*export\s+const\s+([A-Z][A-Za-z0-9]*)\b'
+    - '^\s*export\s+class\s+([A-Z][A-Za-z0-9]*)\b'
+    - '^\s*export\s+default\s+([A-Z][A-Za-z0-9]*)\b'

@@ -16,6 +16,7 @@ Deliverables on this branch:
 3. destructured typed prop normalization
 4. real-repo validation against local TSX-heavy repos
 5. PRD/roadmap for broader language and framework support
+6. declarative React/Next.js framework-pack specs and loader
 
 ## Next Slices
 
@@ -72,7 +73,8 @@ Targets:
 Model:
 
 - declarative framework/provider specs for imports, constructors, calls, and
-  semantic evidence
+  semantic evidence built on the same pack-loading pattern now used for the
+  React/Next.js lane
 
 Acceptance:
 
@@ -141,11 +143,12 @@ And real repo validation scripts that:
 4. A reusable graph-backed validation script now exists at `scripts/validate_language_support_e2e.py`.
 5. React/Next.js semantic packs are implemented through parser facts, file persistence, and query/story surfacing.
 6. Public support-maturity docs are published and generated from specs.
+7. React/Next.js semantic detection is now driven by declarative framework-pack YAML specs under `src/platform_context_graph/parsers/framework_packs/specs/`.
 
 ## Open Follow-Ups
 
-1. Design a declarative framework/provider pack format.
-2. Expand the same maturity program to additional language/framework pairs beyond the React/Next.js lane.
+1. Reuse the declarative framework-pack format for additional framework/provider lanes beyond React/Next.js.
+2. Expand the same maturity program to additional language/framework pairs beyond the current JS/TS/TSX lane.
 
 ## PR Packaging
 

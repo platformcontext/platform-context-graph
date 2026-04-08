@@ -1,0 +1,30 @@
+framework: nextjs
+title: Next.js App Router Base Pack
+strategy: nextjs_app_router
+compute_order: 20
+surface_order: 10
+config:
+  module_root_segments:
+    - app
+  module_kinds:
+    - page
+    - layout
+    - route
+  route_verbs:
+    - GET
+    - POST
+    - PUT
+    - PATCH
+    - DELETE
+    - HEAD
+    - OPTIONS
+  static_metadata_patterns:
+    - '^\s*export\s+const\s+metadata\b'
+  dynamic_metadata_patterns:
+    - '^\s*export\s+(?:async\s+)?function\s+generateMetadata\b'
+  request_response_import_sources:
+    - next
+    - next/server
+  request_response_api_names:
+    - NextRequest
+    - NextResponse
