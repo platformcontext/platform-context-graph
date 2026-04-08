@@ -20,6 +20,7 @@ def empty_result(path: Path, language_name: str, is_dependency: bool) -> dict[st
         "variables": [],
         "imports": [],
         "function_calls": [],
+        "framework_semantics": {"frameworks": []},
         "is_dependency": is_dependency,
         "lang": language_name,
     }

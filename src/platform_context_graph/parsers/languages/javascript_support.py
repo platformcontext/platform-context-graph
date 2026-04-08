@@ -8,6 +8,7 @@ from typing import Any
 from platform_context_graph.utils.debug_log import warning_logger
 from platform_context_graph.utils.source_text import read_source_text
 from platform_context_graph.utils.tree_sitter_manager import execute_query
+from ..framework_semantics import build_framework_semantics
 from .javascript_support_queries import JS_QUERIES, pre_scan_javascript
 from .javascript_support_helpers import (
     classify_method_kind as _classify_method_kind,
@@ -362,28 +363,41 @@ def parse_javascript_file(
         source_code = read_source_text(path)
         tree = parser_wrapper.parser.parse(bytes(source_code, "utf8"))
         root_node = tree.root_node
+        functions = _find_functions(
+            parser_wrapper.language,
+            root_node,
+            parser_wrapper.language_name,
+            index_source,
+        )
+        classes = _find_classes(
+            parser_wrapper.language,
+            root_node,
+            parser_wrapper.language_name,
+            index_source,
+        )
+        variables = _find_variables(
+            parser_wrapper.language, root_node, parser_wrapper.language_name
+        )
+        imports = _find_imports(
+            parser_wrapper.language, root_node, parser_wrapper.language_name
+        )
+        function_calls = _find_calls(
+            parser_wrapper.language, root_node, parser_wrapper.language_name
+        )
         return {
             "path": str(path),
-            "functions": _find_functions(
-                parser_wrapper.language,
-                root_node,
-                parser_wrapper.language_name,
-                index_source,
-            ),
-            "classes": _find_classes(
-                parser_wrapper.language,
-                root_node,
-                parser_wrapper.language_name,
-                index_source,
-            ),
-            "variables": _find_variables(
-                parser_wrapper.language, root_node, parser_wrapper.language_name
-            ),
-            "imports": _find_imports(
-                parser_wrapper.language, root_node, parser_wrapper.language_name
-            ),
-            "function_calls": _find_calls(
-                parser_wrapper.language, root_node, parser_wrapper.language_name
+            "functions": functions,
+            "classes": classes,
+            "variables": variables,
+            "imports": imports,
+            "function_calls": function_calls,
+            "framework_semantics": build_framework_semantics(
+                path,
+                source_code,
+                imports=imports,
+                functions=functions,
+                function_calls=function_calls,
+                classes=classes,
             ),
             "is_dependency": is_dependency,
             "lang": parser_wrapper.language_name,

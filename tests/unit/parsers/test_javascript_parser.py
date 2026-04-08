@@ -139,3 +139,33 @@ def test_parse_javascript_minified_value_keeps_full_initializer(
     assert variable["value"] is not None
     assert payload in variable["value"]
     assert len(variable["value"]) > 200
+
+
+def test_parse_javascript_client_component_semantics(
+    javascript_parser: JavascriptTreeSitterParser, temp_test_dir
+) -> None:
+    """Expose React semantic facts for JSX client component modules."""
+
+    source = """\
+'use client';
+
+import React, { useState } from 'react';
+import { useToolbarOverflow } from './hooks/useToolbarOverflow';
+
+export function ToolbarButton() {
+  const [open, setOpen] = useState(false);
+  useToolbarOverflow();
+  return <button onClick={() => setOpen(!open)}>{String(open)}</button>;
+}
+"""
+    source_file = temp_test_dir / "ToolbarButton.jsx"
+    source_file.write_text(source, encoding="utf-8")
+
+    result = javascript_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["react"]
+    assert semantics["react"]["boundary"] == "client"
+    assert semantics["react"]["component_exports"] == ["ToolbarButton"]
+    assert semantics["react"]["hooks_used"] == ["useState", "useToolbarOverflow"]

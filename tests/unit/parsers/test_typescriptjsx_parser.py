@@ -199,3 +199,75 @@ const DataGrid = <T extends Record<string, unknown>>({
         "selectedRows",
         "onSortingChange",
     ]
+
+
+def test_parse_tsx_next_page_semantics(
+    tsx_parser: TypescriptJSXTreeSitterParser, temp_test_dir
+) -> None:
+    """Expose Next.js page semantics and metadata exports for app-router pages."""
+
+    page_dir = temp_test_dir / "src" / "app" / "[locale]" / "boats"
+    page_dir.mkdir(parents=True)
+    page_file = page_dir / "page.tsx"
+    page_file.write_text(
+        """\
+import type { Metadata } from 'next';
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: 'Boats' };
+}
+
+export default async function BoatsPage() {
+  return <div>Boats</div>;
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = tsx_parser.parse(page_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["nextjs", "react"]
+    assert semantics["react"]["boundary"] == "shared"
+    assert semantics["react"]["component_exports"] == ["BoatsPage"]
+    assert semantics["react"]["hooks_used"] == []
+    assert semantics["nextjs"]["module_kind"] == "page"
+    assert semantics["nextjs"]["metadata_exports"] == "dynamic"
+    assert semantics["nextjs"]["route_segments"] == ["[locale]", "boats"]
+    assert semantics["nextjs"]["runtime_boundary"] == "server"
+
+
+def test_parse_tsx_next_layout_semantics(
+    tsx_parser: TypescriptJSXTreeSitterParser, temp_test_dir
+) -> None:
+    """Expose Next.js layout semantics for app-router layout modules."""
+
+    layout_dir = temp_test_dir / "src" / "app" / "dashboard"
+    layout_dir.mkdir(parents=True)
+    layout_file = layout_dir / "layout.tsx"
+    layout_file.write_text(
+        """\
+import type { ReactNode } from 'react';
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return <section>{children}</section>;
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = tsx_parser.parse(layout_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["nextjs", "react"]
+    assert semantics["react"]["boundary"] == "shared"
+    assert semantics["react"]["component_exports"] == ["DashboardLayout"]
+    assert semantics["nextjs"]["module_kind"] == "layout"
+    assert semantics["nextjs"]["metadata_exports"] == "none"
+    assert semantics["nextjs"]["route_segments"] == ["dashboard"]

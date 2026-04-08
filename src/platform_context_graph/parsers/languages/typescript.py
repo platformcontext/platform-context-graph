@@ -8,6 +8,7 @@ from platform_context_graph.utils.tree_sitter_manager import execute_query
 
 from .typescript_support import (
     TS_QUERIES,
+    build_parse_result,
     calculate_complexity,
     extract_parameters,
     get_parent_context,
@@ -43,20 +44,6 @@ class TypescriptTreeSitterParser:
         """
         return node.text.decode("utf-8")
 
-    def _get_parent_context(
-        self,
-        node: Any,
-        types: tuple[str, ...] = (
-            "function_declaration",
-            "class_declaration",
-            "method_definition",
-            "function_expression",
-            "arrow_function",
-        ),
-    ) -> tuple[str | None, str | None, int | None]:
-        """Return the nearest enclosing TypeScript declaration for a node."""
-        return get_parent_context(node, self._get_node_text, types)
-
     def parse(
         self,
         path: Path,
@@ -77,20 +64,29 @@ class TypescriptTreeSitterParser:
         source_code = read_source_text(path)
         tree = self.parser.parse(bytes(source_code, "utf8"))
         root_node = tree.root_node
+        functions = self._find_functions(root_node)
+        classes = self._find_classes(root_node)
+        interfaces = self._find_interfaces(root_node)
+        type_aliases = self._find_type_aliases(root_node)
+        enums = self._find_enums(root_node)
+        variables = self._find_variables(root_node)
+        imports = self._find_imports(root_node)
+        function_calls = self._find_calls(root_node)
 
-        return {
-            "path": str(path),
-            "functions": self._find_functions(root_node),
-            "classes": self._find_classes(root_node),
-            "interfaces": self._find_interfaces(root_node),
-            "type_aliases": self._find_type_aliases(root_node),
-            "enums": self._find_enums(root_node),
-            "variables": self._find_variables(root_node),
-            "imports": self._find_imports(root_node),
-            "function_calls": self._find_calls(root_node),
-            "is_dependency": is_dependency,
-            "lang": self.language_name,
-        }
+        return build_parse_result(
+            path,
+            source_code=source_code,
+            functions=functions,
+            classes=classes,
+            interfaces=interfaces,
+            type_aliases=type_aliases,
+            enums=enums,
+            variables=variables,
+            imports=imports,
+            function_calls=function_calls,
+            is_dependency=is_dependency,
+            language_name=self.language_name,
+        )
 
     def _find_functions(self, root_node: Any) -> list[dict[str, Any]]:
         """Parse TypeScript function-like declarations."""
@@ -136,7 +132,9 @@ class TypescriptTreeSitterParser:
             elif data["single_param"] is not None:
                 args = [self._get_node_text(data["single_param"])]
 
-            context, context_type, _ = self._get_parent_context(func_node)
+            context, context_type, _ = get_parent_context(
+                func_node, self._get_node_text
+            )
             function_data = {
                 "name": name,
                 "line_number": func_node.start_point[0] + 1,
@@ -431,9 +429,10 @@ class TypescriptTreeSitterParser:
                     "line_number": node.start_point[0] + 1,
                     "args": args,
                     "inferred_obj_type": None,
-                    "context": self._get_parent_context(node),
-                    "class_context": self._get_parent_context(
+                    "context": get_parent_context(node, self._get_node_text),
+                    "class_context": get_parent_context(
                         node,
+                        self._get_node_text,
                         ("class_declaration", "abstract_class_declaration"),
                     ),
                     "lang": self.language_name,
@@ -477,7 +476,7 @@ class TypescriptTreeSitterParser:
                     )
                 else:
                     value = self._get_node_text(value_node)
-            context, context_type, _ = self._get_parent_context(node)
+            context, context_type, _ = get_parent_context(node, self._get_node_text)
             variables.append(
                 {
                     "name": self._get_node_text(node),

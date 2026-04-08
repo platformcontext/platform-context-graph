@@ -253,6 +253,39 @@ def test_parse_object_literal_methods(ts_parser, temp_test_dir):
     assert any(fn["name"] == "greet" for fn in funcs)
 
 
+def test_parse_typescript_next_route_semantics(ts_parser, temp_test_dir):
+    """Expose Next.js route semantics for app-router route handlers."""
+
+    route_dir = temp_test_dir / "src" / "app" / "api" / "health"
+    route_dir.mkdir(parents=True)
+    route_file = route_dir / "route.ts"
+    route_file.write_text(
+        """\
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function GET(_request: NextRequest) {
+  return NextResponse.json({ ok: true });
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = ts_parser.parse(route_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["nextjs"]
+    assert semantics["nextjs"]["module_kind"] == "route"
+    assert semantics["nextjs"]["route_verbs"] == ["GET"]
+    assert semantics["nextjs"]["metadata_exports"] == "none"
+    assert semantics["nextjs"]["route_segments"] == ["api", "health"]
+    assert semantics["nextjs"]["runtime_boundary"] == "server"
+    assert semantics["nextjs"]["request_response_apis"] == [
+        "NextRequest",
+        "NextResponse",
+    ]
+
+
 def test_parse_decorators_do_not_emit_metadata(ts_parser, temp_test_dir):
     code = """@sealed
 class Demo {}
