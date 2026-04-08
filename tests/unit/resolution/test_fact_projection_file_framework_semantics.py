@@ -83,6 +83,16 @@ def test_project_file_facts_persists_framework_semantics_on_file_nodes() -> None
                             "runtime_boundary": "client",
                             "request_response_apis": ["NextResponse"],
                         },
+                        "express": {
+                            "route_methods": ["GET"],
+                            "route_paths": ["/orders"],
+                            "server_symbols": ["router"],
+                        },
+                        "hapi": {
+                            "route_methods": ["POST"],
+                            "route_paths": ["/orders/{id}"],
+                            "server_symbols": [],
+                        },
                     },
                 },
             },
@@ -118,5 +128,11 @@ def test_project_file_facts_persists_framework_semantics_on_file_nodes() -> None
         and params["next_route_segments"] == ["orders"]
         and params["next_runtime_boundary"] == "client"
         and params["next_request_response_apis"] == ["NextResponse"]
+        and params["express_route_methods"] == ["GET"]
+        and params["express_route_paths"] == ["/orders"]
+        and params["express_server_symbols"] == ["router"]
+        and params["hapi_route_methods"] == ["POST"]
+        and params["hapi_route_paths"] == ["/orders/{id}"]
+        and params["hapi_server_symbols"] == []
         for query, params in session.calls
     )

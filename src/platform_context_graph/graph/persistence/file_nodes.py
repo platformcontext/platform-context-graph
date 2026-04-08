@@ -20,7 +20,13 @@ SET f.name = $name,
     f.next_metadata_exports = $next_metadata_exports,
     f.next_route_segments = $next_route_segments,
     f.next_runtime_boundary = $next_runtime_boundary,
-    f.next_request_response_apis = $next_request_response_apis
+    f.next_request_response_apis = $next_request_response_apis,
+    f.express_route_methods = $express_route_methods,
+    f.express_route_paths = $express_route_paths,
+    f.express_server_symbols = $express_server_symbols,
+    f.hapi_route_methods = $hapi_route_methods,
+    f.hapi_route_paths = $hapi_route_paths,
+    f.hapi_server_symbols = $hapi_server_symbols
 """
 
 
@@ -59,6 +65,10 @@ def _framework_semantic_properties(
     react_mapping = react if isinstance(react, Mapping) else {}
     nextjs = semantics.get("nextjs")
     nextjs_mapping = nextjs if isinstance(nextjs, Mapping) else {}
+    express = semantics.get("express")
+    express_mapping = express if isinstance(express, Mapping) else {}
+    hapi = semantics.get("hapi")
+    hapi_mapping = hapi if isinstance(hapi, Mapping) else {}
     return {
         "frameworks": _normalized_string_list(semantics.get("frameworks")),
         "react_boundary": _normalized_string(react_mapping.get("boundary")),
@@ -80,6 +90,22 @@ def _framework_semantic_properties(
         "next_request_response_apis": _normalized_string_list(
             nextjs_mapping.get("request_response_apis")
         ),
+        "express_route_methods": _normalized_string_list(
+            express_mapping.get("route_methods")
+        ),
+        "express_route_paths": _normalized_string_list(
+            express_mapping.get("route_paths")
+        ),
+        "express_server_symbols": _normalized_string_list(
+            express_mapping.get("server_symbols")
+        ),
+        "hapi_route_methods": _normalized_string_list(
+            hapi_mapping.get("route_methods")
+        ),
+        "hapi_route_paths": _normalized_string_list(hapi_mapping.get("route_paths")),
+        "hapi_server_symbols": _normalized_string_list(
+            hapi_mapping.get("server_symbols")
+        ),
     }
 
 
@@ -97,6 +123,12 @@ def _empty_framework_semantic_properties() -> dict[str, Any]:
         "next_route_segments": None,
         "next_runtime_boundary": None,
         "next_request_response_apis": None,
+        "express_route_methods": None,
+        "express_route_paths": None,
+        "express_server_symbols": None,
+        "hapi_route_methods": None,
+        "hapi_route_paths": None,
+        "hapi_server_symbols": None,
     }
 
 

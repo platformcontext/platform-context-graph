@@ -14,7 +14,20 @@ def test_investigation_response_allows_typed_coverage_and_next_calls() -> None:
         {
             "summary": ["dual deployment detected"],
             "framework_summary": {
-                "frameworks": ["nextjs", "react"],
+                "frameworks": ["express", "nextjs", "react"],
+                "express": {
+                    "module_count": 1,
+                    "route_path_count": 2,
+                    "route_methods": ["GET", "POST"],
+                    "sample_modules": [
+                        {
+                            "relative_path": "server/routes.js",
+                            "route_methods": ["GET", "POST"],
+                            "route_paths": ["/health", "/orders"],
+                            "server_symbols": ["app"],
+                        }
+                    ],
+                },
                 "react": {
                     "module_count": 2,
                     "client_boundary_count": 1,
@@ -125,6 +138,8 @@ def test_investigation_response_allows_typed_coverage_and_next_calls() -> None:
 
     assert payload.coverage_summary.deployment_mode == "multi_plane"
     assert payload.framework_summary is not None
+    assert payload.framework_summary.express is not None
+    assert payload.framework_summary.express.route_path_count == 2
     assert payload.framework_summary.nextjs is not None
     assert payload.framework_summary.nextjs.page_count == 1
     assert payload.recommended_next_calls[0].tool == "get_repo_story"

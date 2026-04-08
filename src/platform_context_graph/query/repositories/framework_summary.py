@@ -9,6 +9,7 @@ from .graph_counts import repository_scope_predicate
 
 _SAMPLE_LIMIT = 5
 _HTTP_VERB_ORDER = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
+_NODE_HTTP_FRAMEWORKS = ("express", "hapi")
 
 
 def build_repository_framework_summary(
@@ -25,6 +26,8 @@ def build_repository_framework_summary(
             size(coalesce(f.frameworks, [])) > 0
             OR f.react_boundary IS NOT NULL
             OR f.next_module_kind IS NOT NULL
+            OR size(coalesce(f.express_route_methods, [])) > 0
+            OR size(coalesce(f.hapi_route_methods, [])) > 0
           )
         RETURN f.relative_path as relative_path,
                f.frameworks as frameworks,
@@ -36,7 +39,13 @@ def build_repository_framework_summary(
                f.next_metadata_exports as next_metadata_exports,
                f.next_route_segments as next_route_segments,
                f.next_runtime_boundary as next_runtime_boundary,
-               f.next_request_response_apis as next_request_response_apis
+               f.next_request_response_apis as next_request_response_apis,
+               f.express_route_methods as express_route_methods,
+               f.express_route_paths as express_route_paths,
+               f.express_server_symbols as express_server_symbols,
+               f.hapi_route_methods as hapi_route_methods,
+               f.hapi_route_paths as hapi_route_paths,
+               f.hapi_server_symbols as hapi_server_symbols
         ORDER BY f.relative_path
         """,
         **repository_scope(repo),
@@ -52,6 +61,9 @@ def summarize_repository_framework_rows(
     framework_names: set[str] = set()
     react = _empty_react_summary()
     nextjs = _empty_nextjs_summary()
+    node_http = {
+        framework: _empty_node_http_summary() for framework in _NODE_HTTP_FRAMEWORKS
+    }
 
     for row in rows:
         normalized = _normalize_framework_row(row)
@@ -61,6 +73,12 @@ def summarize_repository_framework_rows(
         if _has_nextjs_evidence(normalized):
             framework_names.add("nextjs")
             _accumulate_nextjs_summary(nextjs, normalized)
+        for framework in _NODE_HTTP_FRAMEWORKS:
+            if _has_node_http_evidence(normalized, framework):
+                framework_names.add(framework)
+                _accumulate_node_http_summary(
+                    node_http[framework], normalized, framework
+                )
 
     if not framework_names:
         return None
@@ -69,6 +87,10 @@ def summarize_repository_framework_rows(
         "frameworks": sorted(framework_names),
         "react": react if react["module_count"] else None,
         "nextjs": nextjs if nextjs["module_count"] else None,
+        "express": (
+            node_http["express"] if node_http["express"]["module_count"] else None
+        ),
+        "hapi": node_http["hapi"] if node_http["hapi"]["module_count"] else None,
     }
 
 
@@ -169,6 +191,17 @@ def _empty_nextjs_summary() -> dict[str, Any]:
     }
 
 
+def _empty_node_http_summary() -> dict[str, Any]:
+    """Return the default Express/Hapi summary payload."""
+
+    return {
+        "module_count": 0,
+        "route_path_count": 0,
+        "route_methods": [],
+        "sample_modules": [],
+    }
+
+
 def _has_react_evidence(row: dict[str, Any]) -> bool:
     """Return whether one file row contains React evidence."""
 
@@ -188,6 +221,17 @@ def _has_nextjs_evidence(row: dict[str, Any]) -> bool:
         or row["next_module_kind"]
         or row["next_route_verbs"]
         or (row["next_metadata_exports"] and row["next_metadata_exports"] != "none")
+    )
+
+
+def _has_node_http_evidence(row: dict[str, Any], framework: str) -> bool:
+    """Return whether one file row contains Express/Hapi route evidence."""
+
+    return bool(
+        framework in row["frameworks"]
+        or row[f"{framework}_route_methods"]
+        or row[f"{framework}_route_paths"]
+        or row[f"{framework}_server_symbols"]
     )
 
 
@@ -220,6 +264,16 @@ def _normalize_framework_row(row: dict[str, Any]) -> dict[str, Any]:
         "next_request_response_apis": _normalize_string_list(
             row.get("next_request_response_apis")
         ),
+        "express_route_methods": _normalize_http_verbs(
+            row.get("express_route_methods")
+        ),
+        "express_route_paths": _normalize_string_list(row.get("express_route_paths")),
+        "express_server_symbols": _normalize_string_list(
+            row.get("express_server_symbols")
+        ),
+        "hapi_route_methods": _normalize_http_verbs(row.get("hapi_route_methods")),
+        "hapi_route_paths": _normalize_string_list(row.get("hapi_route_paths")),
+        "hapi_server_symbols": _normalize_string_list(row.get("hapi_server_symbols")),
     }
 
 
@@ -262,6 +316,48 @@ def _normalize_metadata_exports(value: object) -> str | None:
             normalized = first.strip()
             return normalized or None
     return None
+
+
+def _normalize_http_verbs(value: object) -> list[str]:
+    """Return one normalized HTTP verb list in stable display order."""
+
+    verbs = _normalize_string_list(value)
+    verbs.sort(
+        key=lambda item: (
+            _HTTP_VERB_ORDER.index(item)
+            if item in _HTTP_VERB_ORDER
+            else len(_HTTP_VERB_ORDER)
+        )
+    )
+    return verbs
+
+
+def _accumulate_node_http_summary(
+    summary: dict[str, Any],
+    row: dict[str, Any],
+    framework: str,
+) -> None:
+    """Update one Express/Hapi summary from one normalized file row."""
+
+    route_methods = row[f"{framework}_route_methods"]
+    route_paths = row[f"{framework}_route_paths"]
+    server_symbols = row[f"{framework}_server_symbols"]
+
+    summary["module_count"] += 1
+    summary["route_path_count"] += len(route_paths)
+    for verb in route_methods:
+        if verb not in summary["route_methods"]:
+            summary["route_methods"].append(verb)
+
+    if len(summary["sample_modules"]) < _SAMPLE_LIMIT and row["relative_path"]:
+        summary["sample_modules"].append(
+            {
+                "relative_path": row["relative_path"],
+                "route_methods": route_methods,
+                "route_paths": route_paths,
+                "server_symbols": server_symbols,
+            }
+        )
 
 
 __all__ = [

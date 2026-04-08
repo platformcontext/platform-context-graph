@@ -286,6 +286,61 @@ export async function GET(_request: NextRequest) {
     ]
 
 
+def test_parse_typescript_express_app_semantics(ts_parser, temp_test_dir) -> None:
+    """Expose Express app semantics for TypeScript server modules."""
+
+    source = """\
+import express from 'express';
+
+const app = express();
+
+app.get('/health', (_req, _res) => {
+  return null;
+});
+
+app.post('/uptime-check', handleUptimeCheck);
+"""
+    source_file = temp_test_dir / "src" / "index.ts"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text(source, encoding="utf-8")
+
+    result = ts_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["express"]
+    assert semantics["express"]["route_methods"] == ["GET", "POST"]
+    assert semantics["express"]["route_paths"] == ["/health", "/uptime-check"]
+    assert semantics["express"]["server_symbols"] == ["app"]
+
+
+def test_parse_typescript_path_metadata_does_not_count_as_hapi_routes(
+    ts_parser, temp_test_dir
+) -> None:
+    """Generic config objects with path keys should stay unclassified."""
+
+    source = """\
+type StepMeta = {
+  label: string;
+  path: string;
+};
+
+export const steps: StepMeta[] = [
+  {
+    label: 'Trade',
+    path: 'trade',
+  },
+];
+"""
+    source_file = temp_test_dir / "src" / "meta.ts"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text(source, encoding="utf-8")
+
+    result = ts_parser.parse(source_file)
+
+    assert "hapi" not in result["framework_semantics"]["frameworks"]
+
+
 def test_parse_decorators_do_not_emit_metadata(ts_parser, temp_test_dir):
     code = """@sealed
 class Demo {}

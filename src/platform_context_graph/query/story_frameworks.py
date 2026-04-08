@@ -14,6 +14,21 @@ def summarize_framework_overview(framework_summary: dict[str, Any] | None) -> st
         return ""
 
     parts: list[str] = []
+    for framework, label in (("express", "Express"), ("hapi", "Hapi")):
+        node_http = framework_summary.get(framework)
+        if isinstance(node_http, dict) and node_http.get("module_count"):
+            node_parts = [_count_phrase(int(node_http["module_count"]), "route module")]
+            route_path_count = int(node_http.get("route_path_count") or 0)
+            if route_path_count:
+                node_parts.append(_count_phrase(route_path_count, "path"))
+            summary = f"{label} has " + " spanning ".join(node_parts)
+            route_methods = [
+                str(value) for value in node_http.get("route_methods") or [] if value
+            ]
+            if route_methods:
+                summary += f" with verbs {human_list(route_methods)}"
+            parts.append(summary)
+
     nextjs = framework_summary.get("nextjs")
     if isinstance(nextjs, dict) and nextjs.get("module_count"):
         next_parts: list[str] = []
@@ -70,6 +85,13 @@ def build_framework_story_items(
         return []
 
     items: list[dict[str, Any]] = []
+    for framework in ("express", "hapi"):
+        node_http = framework_summary.get(framework)
+        if isinstance(node_http, dict):
+            for row in node_http.get("sample_modules") or []:
+                if not isinstance(row, dict):
+                    continue
+                items.append({"framework": framework, **row})
     nextjs = framework_summary.get("nextjs")
     if isinstance(nextjs, dict):
         for row in nextjs.get("sample_modules") or []:

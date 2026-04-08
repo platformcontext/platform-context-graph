@@ -131,6 +131,7 @@ class TypescriptJSXTreeSitterParser(TypescriptTreeSitterParser):
                 imports=imports,
                 functions=functions,
                 function_calls=function_calls,
+                variables=variables,
                 classes=classes,
                 components=components,
             ),

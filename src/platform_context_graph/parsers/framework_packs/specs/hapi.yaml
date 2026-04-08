@@ -1,0 +1,13 @@
+framework: hapi
+title: Hapi Base Pack
+strategy: node_http_routes
+compute_order: 40
+surface_order: 40
+config:
+  framework_import_sources:
+    - '@hapi/hapi'
+  require_methods_and_paths: true
+  route_object_method_patterns:
+    - "method\\s*:\\s*(\\[[^\\]]+\\]|'[^']+'|\\\"[^\\\"]+\\\")"
+  route_object_path_patterns:
+    - "path\\s*:\\s*(['\\\"`][^'\\\"`]+['\\\"`])"

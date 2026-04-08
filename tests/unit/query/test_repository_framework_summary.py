@@ -37,7 +37,7 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
         [
             {
                 "relative_path": "app/orders/page.tsx",
-                "frameworks": ["nextjs", "react"],
+                "frameworks": ["express", "nextjs", "react"],
                 "react_boundary": "client",
                 "react_component_exports": ["default"],
                 "react_hooks_used": ["useState"],
@@ -47,6 +47,12 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
                 "next_route_segments": ["orders"],
                 "next_runtime_boundary": "client",
                 "next_request_response_apis": [],
+                "express_route_methods": ["GET"],
+                "express_route_paths": ["/orders"],
+                "express_server_symbols": ["router"],
+                "hapi_route_methods": [],
+                "hapi_route_paths": [],
+                "hapi_server_symbols": [],
             },
             {
                 "relative_path": "app/orders/layout.tsx",
@@ -60,10 +66,16 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
                 "next_route_segments": ["orders"],
                 "next_runtime_boundary": "server",
                 "next_request_response_apis": [],
+                "express_route_methods": [],
+                "express_route_paths": [],
+                "express_server_symbols": [],
+                "hapi_route_methods": [],
+                "hapi_route_paths": [],
+                "hapi_server_symbols": [],
             },
             {
-                "relative_path": "app/api/orders/route.ts",
-                "frameworks": ["nextjs"],
+                "relative_path": "routes/orders.js",
+                "frameworks": ["hapi", "nextjs"],
                 "react_boundary": None,
                 "react_component_exports": [],
                 "react_hooks_used": [],
@@ -73,12 +85,18 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
                 "next_route_segments": ["api", "orders"],
                 "next_runtime_boundary": "server",
                 "next_request_response_apis": ["NextResponse"],
+                "express_route_methods": [],
+                "express_route_paths": [],
+                "express_server_symbols": [],
+                "hapi_route_methods": ["POST", "GET"],
+                "hapi_route_paths": ["/orders", "/orders/{id}"],
+                "hapi_server_symbols": [],
             },
         ]
     )
 
     assert summary == {
-        "frameworks": ["nextjs", "react"],
+        "frameworks": ["express", "hapi", "nextjs", "react"],
         "react": {
             "module_count": 2,
             "client_boundary_count": 1,
@@ -99,6 +117,32 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
                     "component_exports": ["default"],
                     "hooks_used": [],
                 },
+            ],
+        },
+        "express": {
+            "module_count": 1,
+            "route_path_count": 1,
+            "route_methods": ["GET"],
+            "sample_modules": [
+                {
+                    "relative_path": "app/orders/page.tsx",
+                    "route_methods": ["GET"],
+                    "route_paths": ["/orders"],
+                    "server_symbols": ["router"],
+                }
+            ],
+        },
+        "hapi": {
+            "module_count": 1,
+            "route_path_count": 2,
+            "route_methods": ["GET", "POST"],
+            "sample_modules": [
+                {
+                    "relative_path": "routes/orders.js",
+                    "route_methods": ["GET", "POST"],
+                    "route_paths": ["/orders", "/orders/{id}"],
+                    "server_symbols": [],
+                }
             ],
         },
         "nextjs": {
@@ -129,7 +173,7 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
                     "runtime_boundary": "server",
                 },
                 {
-                    "relative_path": "app/api/orders/route.ts",
+                    "relative_path": "routes/orders.js",
                     "module_kind": "route",
                     "route_verbs": ["GET", "POST"],
                     "metadata_exports": "none",
@@ -148,7 +192,7 @@ def test_build_repository_framework_summary_queries_file_properties() -> None:
         [
             {
                 "relative_path": "app/page.tsx",
-                "frameworks": ["nextjs", "react"],
+                "frameworks": ["express", "nextjs", "react"],
                 "react_boundary": "client",
                 "react_component_exports": ["default"],
                 "react_hooks_used": [],
@@ -158,6 +202,12 @@ def test_build_repository_framework_summary_queries_file_properties() -> None:
                 "next_route_segments": [],
                 "next_runtime_boundary": "client",
                 "next_request_response_apis": [],
+                "express_route_methods": ["GET"],
+                "express_route_paths": ["/health"],
+                "express_server_symbols": ["app"],
+                "hapi_route_methods": [],
+                "hapi_route_paths": [],
+                "hapi_server_symbols": [],
             }
         ]
     )
@@ -171,4 +221,6 @@ def test_build_repository_framework_summary_queries_file_properties() -> None:
     query, params = session.calls[0]
     assert "f.react_boundary as react_boundary" in query
     assert "f.next_module_kind as next_module_kind" in query
+    assert "f.express_route_methods as express_route_methods" in query
+    assert "f.hapi_route_methods as hapi_route_methods" in query
     assert params["repo_id"] == "repository:r_demo"

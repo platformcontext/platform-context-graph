@@ -22,6 +22,9 @@ class FrameworkSampleModule(BaseModel):
     hooks_used: list[str] = Field(default_factory=list)
     module_kind: NextModuleKind | None = None
     route_verbs: list[str] = Field(default_factory=list)
+    route_methods: list[str] = Field(default_factory=list)
+    route_paths: list[str] = Field(default_factory=list)
+    server_symbols: list[str] = Field(default_factory=list)
     metadata_exports: NextMetadataExports | None = None
     route_segments: list[str] = Field(default_factory=list)
     runtime_boundary: ReactBoundary | None = None
@@ -58,6 +61,17 @@ class NextJsFrameworkSummary(BaseModel):
     sample_modules: list[FrameworkSampleModule] = Field(default_factory=list)
 
 
+class NodeHttpFrameworkSummary(BaseModel):
+    """Bounded Express/Hapi route summary for one repository."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    module_count: int = 0
+    route_path_count: int = 0
+    route_methods: list[str] = Field(default_factory=list)
+    sample_modules: list[FrameworkSampleModule] = Field(default_factory=list)
+
+
 class FrameworkSummary(BaseModel):
     """Top-level framework summary for one repository-like subject."""
 
@@ -66,3 +80,5 @@ class FrameworkSummary(BaseModel):
     frameworks: list[str] = Field(default_factory=list)
     react: ReactFrameworkSummary | None = None
     nextjs: NextJsFrameworkSummary | None = None
+    express: NodeHttpFrameworkSummary | None = None
+    hapi: NodeHttpFrameworkSummary | None = None

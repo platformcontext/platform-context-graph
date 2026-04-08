@@ -22,14 +22,16 @@ Already complete on this branch:
 - repo/story/investigation framework surfacing
 - end-to-end validation for JavaScript, TypeScript, and TSX
 - declarative React/Next.js framework-pack specs and loader
+- framework-pack validation and contributor tooling
+- Node HTTP framework packs for Express and Hapi
+- Node HTTP file-node persistence and repo/story/investigation surfacing
+- real repo smoke validation for Express and Hapi semantics
 
 Still left for this branch:
 
-1. harden the framework-pack contract with validation and contributor tooling
-2. add a thin Node HTTP framework lane for Hapi and Express
-3. add a thin Python web framework lane for FastAPI and Flask
-4. create the first provider-pack foundation for JS/TS SDK evidence
-5. publish repeatable framework-pack docs and validation expectations
+1. add a thin Python web framework lane for FastAPI and Flask
+2. create the first provider-pack foundation for JS/TS SDK evidence
+3. publish repeatable framework-pack docs and validation expectations
 
 Out of scope for this branch unless the above finishes early:
 
@@ -57,6 +59,8 @@ Concrete local repos for this branch:
 
 ## Chunk 1: Framework Pack Contract Hardening
 
+Status: completed on this branch.
+
 ### Task 1: Add framework-pack validation and repo-root/package-path coverage
 
 **Files:**
@@ -68,7 +72,7 @@ Concrete local repos for this branch:
 - Test: `tests/unit/tools/test_parser_support_maturity.py`
 - Docs: `docs/docs/contributing-language-support.md`
 
-- [ ] **Step 1: Write failing validation tests**
+- [x] **Step 1: Write failing validation tests**
 
 ```python
 def test_load_framework_pack_specs_rejects_unknown_strategy(tmp_path: Path) -> None:
@@ -76,12 +80,12 @@ def test_load_framework_pack_specs_rejects_unknown_strategy(tmp_path: Path) -> N
     assert "unknown strategy" in errors[0]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `PYTHONPATH=src uv run python -m pytest tests/unit/parsers/test_framework_packs.py -q`
 Expected: FAIL because framework-pack validation does not exist yet.
 
-- [ ] **Step 3: Implement validation helpers**
+- [x] **Step 3: Implement validation helpers**
 
 ```python
 def validate_framework_pack_specs(root: Path | None = None) -> list[str]:
@@ -89,16 +93,16 @@ def validate_framework_pack_specs(root: Path | None = None) -> list[str]:
     return _validate_specs(specs)
 ```
 
-- [ ] **Step 4: Re-run focused tests**
+- [x] **Step 4: Re-run focused tests**
 
 Run: `PYTHONPATH=src uv run python -m pytest tests/unit/parsers/test_framework_packs.py tests/unit/tools/test_parser_support_maturity.py -q`
 Expected: PASS
 
-- [ ] **Step 5: Update contributor docs**
+- [x] **Step 5: Update contributor docs**
 
 Document required fields, supported strategies, package-data expectations, and validation commands for framework-pack YAML.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/platform_context_graph/parsers/framework_packs docs/docs/contributing-language-support.md tests/unit/parsers/test_framework_packs.py tests/unit/tools/test_parser_support_maturity.py
@@ -106,6 +110,8 @@ git commit -m "feat(parsers): validate framework pack specs"
 ```
 
 ## Chunk 2: Node HTTP Framework Lane
+
+Status: completed on this branch with parser facts, file-node persistence, query/story/investigation surfacing, and real repo smoke validation.
 
 ### Task 2: Introduce Hapi and Express pack strategies
 
@@ -120,7 +126,7 @@ git commit -m "feat(parsers): validate framework pack specs"
 - Test: `tests/unit/parsers/test_typescript_parser.py`
 - Test: `tests/unit/parsers/test_framework_packs.py`
 
-- [ ] **Step 1: Write failing parser tests for Hapi and Express route modules**
+- [x] **Step 1: Write failing parser tests for Hapi and Express route modules**
 
 ```python
 def test_parse_javascript_hapi_route_semantics(...) -> None:
@@ -128,12 +134,12 @@ def test_parse_javascript_hapi_route_semantics(...) -> None:
     assert semantics["hapi"]["route_methods"] == ["GET"]
 ```
 
-- [ ] **Step 2: Run the failing parser tests**
+- [x] **Step 2: Run the failing parser tests**
 
 Run: `PYTHONPATH=src uv run python -m pytest tests/unit/parsers/test_javascript_parser.py tests/unit/parsers/test_typescript_parser.py -q`
 Expected: FAIL because Hapi/Express semantics are not yet emitted.
 
-- [ ] **Step 3: Implement a bounded Node HTTP strategy**
+- [x] **Step 3: Implement a bounded Node HTTP strategy**
 
 Emit only bounded file-level facts:
 
@@ -145,7 +151,7 @@ Emit only bounded file-level facts:
 }
 ```
 
-- [ ] **Step 4: Re-run parser tests**
+- [x] **Step 4: Re-run parser tests**
 
 Run: `PYTHONPATH=src uv run python -m pytest tests/unit/parsers/test_javascript_parser.py tests/unit/parsers/test_typescript_parser.py tests/unit/parsers/test_framework_packs.py -q`
 Expected: PASS
@@ -164,28 +170,30 @@ Expected: PASS
 - Test: `tests/unit/query/test_repository_framework_summary.py`
 - Test: `tests/unit/query/test_story_frameworks.py`
 
-- [ ] **Step 1: Write failing persistence/query tests**
+- [x] **Step 1: Write failing persistence/query tests**
 
 ```python
 assert params["node_http_framework"] == "hapi"
 assert summary["hapi"]["route_module_count"] == 3
 ```
 
-- [ ] **Step 2: Run the failing tests**
+- [x] **Step 2: Run the failing tests**
 
 Run: `PYTHONPATH=src uv run python -m pytest tests/unit/core/test_graph_builder_file_framework_semantics.py tests/unit/query/test_repository_framework_summary.py -q`
 Expected: FAIL because new node-http fields are not persisted or summarized.
 
-- [ ] **Step 3: Add file-node properties and summary logic**
+- [x] **Step 3: Add file-node properties and summary logic**
 
 Persist bounded fields only:
 
-- `node_http_framework`
-- `node_http_route_methods`
-- `node_http_route_paths`
-- `node_http_server_symbols`
+- `express_route_methods`
+- `express_route_paths`
+- `express_server_symbols`
+- `hapi_route_methods`
+- `hapi_route_paths`
+- `hapi_server_symbols`
 
-- [ ] **Step 4: Re-run persistence/query tests**
+- [x] **Step 4: Re-run persistence/query tests**
 
 Run: `PYTHONPATH=src uv run python -m pytest tests/unit/core/test_graph_builder_file_framework_semantics.py tests/unit/resolution/test_fact_projection_file_framework_semantics.py tests/unit/query/test_repository_framework_summary.py tests/unit/query/test_story_frameworks.py -q`
 Expected: PASS
@@ -197,8 +205,10 @@ Expected: PASS
 - Test: `tests/unit/scripts/test_validate_language_support_e2e.py`
 - Docs: `docs/superpowers/plans/2026-04-07-language-and-framework-parser-maturity-implementation.md`
 
-- [ ] **Step 1: Extend validator expectations for node-http evidence**
-- [ ] **Step 2: Validate real repos**
+- [x] **Step 1: Extend validator expectations for node-http evidence**
+No script change was required because the existing framework-evidence validation is generic across framework summaries and story sections.
+
+- [x] **Step 2: Validate real repos**
 
 Run:
 

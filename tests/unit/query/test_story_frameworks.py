@@ -18,7 +18,19 @@ def test_summarize_framework_overview_builds_short_story_line() -> None:
 
     summary = summarize_framework_overview(
         {
-            "frameworks": ["nextjs", "react"],
+            "frameworks": ["express", "hapi", "nextjs", "react"],
+            "express": {
+                "module_count": 2,
+                "route_path_count": 3,
+                "route_methods": ["GET", "POST"],
+                "sample_modules": [],
+            },
+            "hapi": {
+                "module_count": 1,
+                "route_path_count": 2,
+                "route_methods": ["GET", "DELETE"],
+                "sample_modules": [],
+            },
             "nextjs": {
                 "module_count": 3,
                 "page_count": 1,
@@ -45,7 +57,7 @@ def test_summarize_framework_overview_builds_short_story_line() -> None:
 
     assert (
         summary
-        == "Framework evidence shows Next.js has 1 page module, 1 layout module, 1 route module, 1 metadata provider with verbs GET, POST and React has 1 client module, 1 shared module, 2 component modules, 1 hook-heavy module."
+        == "Framework evidence shows Express has 2 route modules spanning 3 paths with verbs GET, POST and Hapi has 1 route module spanning 2 paths with verbs GET, DELETE and Next.js has 1 page module, 1 layout module, 1 route module, 1 metadata provider with verbs GET, POST and React has 1 client module, 1 shared module, 2 component modules, 1 hook-heavy module."
     )
 
 
@@ -54,7 +66,11 @@ def test_build_framework_story_items_merges_sample_modules() -> None:
 
     items = build_framework_story_items(
         {
-            "frameworks": ["nextjs", "react"],
+            "frameworks": ["express", "nextjs", "react"],
+            "express": {
+                "module_count": 1,
+                "sample_modules": [{"relative_path": "server/routes.js"}],
+            },
             "nextjs": {
                 "module_count": 1,
                 "sample_modules": [{"relative_path": "app/page.tsx"}],
@@ -67,6 +83,7 @@ def test_build_framework_story_items_merges_sample_modules() -> None:
     )
 
     assert items == [
+        {"framework": "express", "relative_path": "server/routes.js"},
         {"framework": "nextjs", "relative_path": "app/page.tsx"},
         {"framework": "react", "relative_path": "components/Button.tsx"},
     ]
@@ -85,7 +102,13 @@ def test_build_repository_story_response_adds_framework_section() -> None:
             },
             "code": {"functions": 4, "classes": 1},
             "framework_summary": {
-                "frameworks": ["nextjs", "react"],
+                "frameworks": ["express", "nextjs", "react"],
+                "express": {
+                    "module_count": 1,
+                    "route_path_count": 1,
+                    "route_methods": ["GET"],
+                    "sample_modules": [{"relative_path": "server/routes.js"}],
+                },
                 "nextjs": {
                     "module_count": 1,
                     "page_count": 1,
@@ -116,6 +139,7 @@ def test_build_repository_story_response_adds_framework_section() -> None:
     )
     assert "Framework evidence shows" in framework_section["summary"]
     assert framework_section["items"] == [
+        {"framework": "express", "relative_path": "server/routes.js"},
         {"framework": "nextjs", "relative_path": "app/page.tsx"},
         {"framework": "react", "relative_path": "app/page.tsx"},
     ]

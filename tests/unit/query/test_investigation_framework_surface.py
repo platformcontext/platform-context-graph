@@ -12,7 +12,20 @@ def framework_summary() -> dict[str, object]:
     """Return one bounded framework summary payload for the primary repo."""
 
     return {
-        "frameworks": ["nextjs", "react"],
+        "frameworks": ["express", "nextjs", "react"],
+        "express": {
+            "module_count": 1,
+            "route_path_count": 2,
+            "route_methods": ["GET", "POST"],
+            "sample_modules": [
+                {
+                    "relative_path": "server/routes.js",
+                    "route_methods": ["GET", "POST"],
+                    "route_paths": ["/health", "/orders"],
+                    "server_symbols": ["router"],
+                }
+            ],
+        },
         "react": {
             "module_count": 4,
             "client_boundary_count": 3,
@@ -139,6 +152,7 @@ def test_investigate_service_surfaces_primary_repo_framework_summary(
         intent="overview",
     )
 
+    assert result["framework_summary"]["express"]["route_path_count"] == 2
     assert result["framework_summary"]["nextjs"]["page_count"] == 2
     assert any(
         line.startswith("Framework evidence shows ") for line in result["summary"]

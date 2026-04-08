@@ -1,0 +1,17 @@
+framework: express
+title: Express Base Pack
+strategy: node_http_routes
+compute_order: 30
+surface_order: 30
+config:
+  framework_import_sources:
+    - express
+  server_variable_values:
+    - express
+    - express.Router
+  route_call_names:
+    - get
+    - post
+    - put
+    - patch
+    - delete

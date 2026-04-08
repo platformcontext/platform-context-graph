@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from typing import Any, Final, Literal, TypedDict
 
-FrameworkPackStrategy = Literal["react_module", "nextjs_app_router"]
+FrameworkPackStrategy = Literal[
+    "react_module",
+    "nextjs_app_router",
+    "node_http_routes",
+]
 SUPPORTED_FRAMEWORK_PACK_STRATEGIES: Final[set[FrameworkPackStrategy]] = {
     "react_module",
     "nextjs_app_router",
+    "node_http_routes",
 }
 
 

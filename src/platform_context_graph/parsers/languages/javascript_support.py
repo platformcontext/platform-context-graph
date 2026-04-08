@@ -397,6 +397,7 @@ def parse_javascript_file(
                 imports=imports,
                 functions=functions,
                 function_calls=function_calls,
+                variables=variables,
                 classes=classes,
             ),
             "is_dependency": is_dependency,
