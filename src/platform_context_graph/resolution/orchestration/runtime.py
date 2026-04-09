@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import threading
 import time
 from collections.abc import Callable
@@ -165,6 +165,11 @@ def run_resolution_iteration(
                 failure_stage="project_work_item",
             )
             terminal = work_item.attempt_count >= max_attempts
+            next_retry_at = None
+            if not terminal and failure.retry_after_seconds is not None:
+                next_retry_at = _utc_now() + timedelta(
+                    seconds=failure.retry_after_seconds
+                )
             queue.fail_work_item(
                 work_item_id=work_item.work_item_id,
                 error_message=str(exc),
@@ -174,6 +179,7 @@ def run_resolution_iteration(
                 failure_class=failure.failure_class,
                 failure_code=failure.failure_code,
                 retry_disposition=failure.retry_disposition,
+                next_retry_at=next_retry_at,
             )
             log_resolution_work_item(
                 "dead_lettered" if terminal else "failed",
