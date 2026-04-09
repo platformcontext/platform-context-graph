@@ -103,6 +103,48 @@ def _filter_authoritative_intents(
     return active_rows, stale_ids
 
 
+def _select_partition_batch(
+    *,
+    shared_projection_intent_store: Any,
+    fact_work_queue: Any | None,
+    projection_domain: str,
+    partition_id: int,
+    partition_count: int,
+    batch_limit: int,
+    accepted_generations_override: dict[tuple[str, str], str] | None = None,
+) -> tuple[list[Any], list[str], list[str]]:
+    """Return one accepted partition batch plus stale and superseded intent ids."""
+
+    limit = max(batch_limit, 1)
+    scan_limit = limit * max(partition_count, 1) * 2
+    while True:
+        pending_rows = shared_projection_intent_store.list_pending_domain_intents(
+            projection_domain=projection_domain,
+            limit=scan_limit,
+        )
+        partition_rows = rows_for_partition(
+            pending_rows,
+            partition_id=partition_id,
+            partition_count=partition_count,
+        )
+        if not partition_rows:
+            return [], [], []
+        accepted_generations = _accepted_generations_by_repo_run(
+            fact_work_queue,
+            projection_domain=projection_domain,
+            repository_ids=sorted({row.repository_id for row in partition_rows}),
+            accepted_generations_override=accepted_generations_override,
+        )
+        active_rows, stale_ids = _filter_authoritative_intents(
+            partition_rows,
+            accepted_generations=accepted_generations,
+        )
+        latest_rows, superseded_ids = _latest_intents_by_repo_and_partition(active_rows)
+        if len(latest_rows) >= limit or len(pending_rows) < scan_limit:
+            return latest_rows[:limit], stale_ids, superseded_ids
+        scan_limit *= 2
+
+
 def _retract_platform_edges(
     session: Any,
     *,
@@ -186,29 +228,17 @@ def process_platform_partition_once(
         return {"lease_acquired": False, "processed_intents": 0}
 
     try:
-        pending_rows = shared_projection_intent_store.list_pending_domain_intents(
+        latest_rows, stale_ids, superseded_ids = _select_partition_batch(
+            shared_projection_intent_store=shared_projection_intent_store,
+            fact_work_queue=fact_work_queue,
             projection_domain=PLATFORM_INFRA_PROJECTION_DOMAIN,
-            limit=max(batch_limit, 1) * max(partition_count, 1) * 2,
-        )
-        partition_rows = rows_for_partition(
-            pending_rows,
             partition_id=partition_id,
             partition_count=partition_count,
-        )[: max(batch_limit, 1)]
-        if not partition_rows:
-            return {"lease_acquired": True, "processed_intents": 0}
-
-        accepted_generations = _accepted_generations_by_repo_run(
-            fact_work_queue,
-            projection_domain=PLATFORM_INFRA_PROJECTION_DOMAIN,
-            repository_ids=sorted({row.repository_id for row in partition_rows}),
+            batch_limit=batch_limit,
             accepted_generations_override=accepted_generations_override,
         )
-        active_rows, stale_ids = _filter_authoritative_intents(
-            partition_rows,
-            accepted_generations=accepted_generations,
-        )
-        latest_rows, superseded_ids = _latest_intents_by_repo_and_partition(active_rows)
+        if not latest_rows and not stale_ids and not superseded_ids:
+            return {"lease_acquired": True, "processed_intents": 0}
         retract_rows = [
             {
                 "repo_id": str(intent.payload.get("repo_id") or intent.repository_id),
@@ -309,29 +339,17 @@ def process_dependency_partition_once(
         return {"lease_acquired": False, "processed_intents": 0}
 
     try:
-        pending_rows = shared_projection_intent_store.list_pending_domain_intents(
+        latest_rows, stale_ids, superseded_ids = _select_partition_batch(
+            shared_projection_intent_store=shared_projection_intent_store,
+            fact_work_queue=fact_work_queue,
             projection_domain=projection_domain,
-            limit=max(batch_limit, 1) * max(partition_count, 1) * 2,
-        )
-        partition_rows = rows_for_partition(
-            pending_rows,
             partition_id=partition_id,
             partition_count=partition_count,
-        )[: max(batch_limit, 1)]
-        if not partition_rows:
-            return {"lease_acquired": True, "processed_intents": 0}
-
-        accepted_generations = _accepted_generations_by_repo_run(
-            fact_work_queue,
-            projection_domain=projection_domain,
-            repository_ids=sorted({row.repository_id for row in partition_rows}),
+            batch_limit=batch_limit,
             accepted_generations_override=accepted_generations_override,
         )
-        active_rows, stale_ids = _filter_authoritative_intents(
-            partition_rows,
-            accepted_generations=accepted_generations,
-        )
-        latest_rows, superseded_ids = _latest_intents_by_repo_and_partition(active_rows)
+        if not latest_rows and not stale_ids and not superseded_ids:
+            return {"lease_acquired": True, "processed_intents": 0}
         if projection_domain == REPO_DEPENDENCY_PROJECTION_DOMAIN:
             retract_rows = [
                 {

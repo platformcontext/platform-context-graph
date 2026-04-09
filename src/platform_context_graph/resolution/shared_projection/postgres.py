@@ -53,7 +53,10 @@ SET projection_domain = EXCLUDED.projection_domain,
     generation_id = EXCLUDED.generation_id,
     payload = EXCLUDED.payload,
     created_at = EXCLUDED.created_at,
-    completed_at = NULL
+    completed_at = COALESCE(
+        shared_projection_intents.completed_at,
+        EXCLUDED.completed_at
+    )
 """
 
 _REQUIRED_SHARED_PROJECTION_TABLES = (

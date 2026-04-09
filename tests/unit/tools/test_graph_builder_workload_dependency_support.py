@@ -129,12 +129,14 @@ def test_load_runtime_dependency_targets_batches_content_store_reads(
     assert workload_dependency_rows == [
         {
             "dependency_name": "api-node-forex",
+            "repo_id": "repository:r_search",
             "target_repo_id": "repository:r_forex",
             "target_workload_id": "workload:api-node-forex",
             "workload_id": "workload:api-node-search",
         },
         {
             "dependency_name": "api-node-search",
+            "repo_id": "repository:r_catalog",
             "target_repo_id": "repository:r_search",
             "target_workload_id": "workload:api-node-search",
             "workload_id": "workload:api-node-catalog",

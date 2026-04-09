@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from platform_context_graph.collectors.git.types import RepositoryParseSnapshot
+from platform_context_graph.facts.work_queue.stages import ProjectionStageError
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
 from platform_context_graph.indexing.coordinator_facts import (
     emit_repository_snapshot_facts,
@@ -147,7 +148,7 @@ def test_project_work_item_logs_stage_failure_context(
     fact_store = MagicMock()
     fact_store.list_facts.return_value = []
 
-    with pytest.raises(ValueError, match="bad relationships"):
+    with pytest.raises(ProjectionStageError, match="bad relationships") as exc_info:
         project_work_item(
             FactWorkItemRow(
                 work_item_id="work-9",
@@ -162,6 +163,8 @@ def test_project_work_item_logs_stage_failure_context(
                 ValueError("bad relationships")
             ),
         )
+    assert exc_info.value.stage == "project_relationships"
+    assert isinstance(exc_info.value.cause, ValueError)
 
     records = _parse_records(buffer)
     failures = [
@@ -200,7 +203,9 @@ def test_project_work_item_logs_projection_decision_context(
         fact_projector=lambda **_kwargs: {"files": 0},
         relationship_projector=lambda **_kwargs: {"files": 1},
         workload_projector=lambda **_kwargs: {"workloads_projected": 1},
-        platform_projector=lambda **_kwargs: {"infrastructure_platform_edges_projected": 1},
+        platform_projector=lambda **_kwargs: {
+            "infrastructure_platform_edges_projected": 1
+        },
     )
 
     records = _parse_records(buffer)

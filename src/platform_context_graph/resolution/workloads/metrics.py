@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 
@@ -53,16 +54,8 @@ def merge_shared_projection_payload(
     if not isinstance(payload, dict):
         return totals
     merged = dict(totals.get("shared_projection") or {})
-    existing_domains = {
-        str(domain).strip()
-        for domain in merged.get("authoritative_domains", [])
-        if str(domain).strip()
-    }
-    current_domains = {
-        str(domain).strip()
-        for domain in payload.get("authoritative_domains", [])
-        if str(domain).strip()
-    }
+    existing_domains = _normalized_strings(merged.get("authoritative_domains", []))
+    current_domains = _normalized_strings(payload.get("authoritative_domains", []))
     all_domains = sorted(existing_domains | current_domains)
     if all_domains:
         merged["authoritative_domains"] = all_domains
@@ -71,14 +64,12 @@ def merge_shared_projection_payload(
     )
     if intent_count:
         merged["intent_count"] = intent_count
-    accepted_generation_ids = {
-        str(value).strip()
-        for value in (
+    accepted_generation_ids = _normalized_strings(
+        (
             merged.get("accepted_generation_id"),
             payload.get("accepted_generation_id"),
         )
-        if str(value).strip()
-    }
+    )
     if len(accepted_generation_ids) == 1:
         merged["accepted_generation_id"] = next(iter(accepted_generation_ids))
     elif accepted_generation_ids:
@@ -94,6 +85,19 @@ def run_cleanup_query(
     """Execute one cleanup query and return deleted node/edge counters."""
 
     return extract_cleanup_metrics(session.run(query, **parameters))
+
+
+def _normalized_strings(values: Iterable[object]) -> set[str]:
+    """Return a set of non-empty strings without coercing sentinel values."""
+
+    normalized: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        stripped = value.strip()
+        if stripped:
+            normalized.add(stripped)
+    return normalized
 
 
 __all__ = [

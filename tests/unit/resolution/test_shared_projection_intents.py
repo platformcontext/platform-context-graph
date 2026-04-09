@@ -171,6 +171,37 @@ def test_upsert_and_list_shared_projection_intents_round_trip(monkeypatch) -> No
     assert intents[0].generation_id == "snapshot-abc"
 
 
+def test_upsert_intents_preserves_completed_at_on_conflict(monkeypatch) -> None:
+    """Re-emitting the same intent should not reopen a completed row."""
+
+    store = PostgresSharedProjectionIntentStore("postgresql://example")
+    cursor = MagicMock()
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    store.upsert_intents(
+        [
+            build_shared_projection_intent(
+                projection_domain="repo_dependency",
+                partition_key="repo:r_payments->repository:r_users",
+                repository_id="repository:r_payments",
+                source_run_id="run-123",
+                generation_id="snapshot-abc",
+                payload={"target_repo_id": "repository:r_users"},
+                created_at=_utc_now(),
+            )
+        ]
+    )
+
+    query, _params = cursor.executemany.call_args.args
+    assert "shared_projection_intents.completed_at" in query
+    assert "completed_at = NULL" not in query
+
+
 def test_ensure_schema_upgrades_existing_shared_projection_tables() -> None:
     """Schema bootstrap should upgrade an existing shared intent store."""
 

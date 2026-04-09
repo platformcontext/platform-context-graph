@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 PROJECT_WORK_ITEM_STAGE = "project_work_item"
 LOAD_FACTS_STAGE = "load_facts"
 PROJECT_FACTS_STAGE = "project_facts"
@@ -13,17 +11,17 @@ PROJECT_WORKLOADS_STAGE = "project_workloads"
 PROJECT_PLATFORMS_STAGE = "project_platforms"
 
 
-@dataclass(frozen=True, slots=True)
 class ProjectionStageError(Exception):
     """Wrap one exception with the projection stage that raised it."""
 
-    stage: str
-    cause: BaseException
+    __slots__ = ("stage", "cause")
 
-    def __post_init__(self) -> None:
-        """Initialize the exception message from the wrapped cause."""
+    def __init__(self, stage: str, cause: BaseException) -> None:
+        """Initialize one stage wrapper around an underlying exception."""
 
-        Exception.__init__(self, str(self.cause))
+        super().__init__(str(cause))
+        self.stage = stage
+        self.cause = cause
 
 
 __all__ = [

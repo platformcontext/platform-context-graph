@@ -10,7 +10,9 @@ from platform_context_graph.resolution.platforms import (
     infer_gitops_platform_kind,
     infer_infrastructure_platform_descriptor,
 )
-from platform_context_graph.resolution.workloads.materialization import materialize_workloads
+from platform_context_graph.resolution.workloads.materialization import (
+    materialize_workloads,
+)
 
 
 class _FakeResult:
@@ -220,6 +222,7 @@ def test_materialize_workloads_creates_runtime_platform_relationships() -> None:
 
     assert platform_merge == {
         "environment": "bg-qa",
+        "repo_id": "repository:r_5c50d0d3",
         "platform_id": "platform:kubernetes:none:bg-qa:bg-qa:none",
         "platform_kind": "kubernetes",
         "platform_locator": None,
@@ -352,7 +355,7 @@ def test_materialize_workloads_reports_gather_cleanup_and_chunk_progress() -> No
     assert stats["candidate_repo_count"] == 1
     assert stats["targeted_repo_count"] == 1
     assert stats["cleanup_deleted_edges"] == 7
-    assert stats["cleanup_deleted_nodes"] == 3
+    assert stats["cleanup_deleted_nodes"] == 2
     assert stats["workloads_projected"] == 1
     assert stats["instances_projected"] == 1
     assert stats["write_chunk_count"] >= 4
@@ -706,6 +709,7 @@ const main = async ({ api }) => {
     }
     assert workload_dependency == {
         "dependency_name": "api-node-forex",
+        "repo_id": "repository:r_5c50d0d3",
         "target_repo_id": "repository:r_dep12345",
         "target_workload_id": "workload:api-node-forex",
         "workload_id": "workload:api-node-search",

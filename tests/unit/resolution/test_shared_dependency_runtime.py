@@ -320,3 +320,76 @@ def test_process_dependency_partition_once_ignores_stale_generations() -> None:
         projection_domain="repo_dependency",
     )
     assert metrics["processed_intents"] == 3
+
+
+def test_process_dependency_partition_once_scans_past_unaccepted_rows() -> None:
+    """Accepted dependency intents should not starve behind unaccepted ones."""
+
+    from platform_context_graph.resolution.shared_projection.partitioning import (
+        partition_for_key,
+    )
+    from platform_context_graph.resolution.shared_projection.runtime import (
+        process_dependency_partition_once,
+    )
+
+    blocked = build_shared_projection_intent(
+        projection_domain="repo_dependency",
+        partition_key="repo:repository:r_blocked->repository:r_legacy",
+        repository_id="repository:r_blocked",
+        source_run_id="run-blocked",
+        generation_id="gen-blocked",
+        payload={
+            "action": "upsert",
+            "dependency_name": "legacy",
+            "repo_id": "repository:r_blocked",
+            "target_repo_id": "repository:r_legacy",
+        },
+        created_at=_utc_now(0),
+    )
+    accepted = build_shared_projection_intent(
+        projection_domain="repo_dependency",
+        partition_key="repo:repository:r_payments->repository:r_users",
+        repository_id="repository:r_payments",
+        source_run_id="run-123",
+        generation_id="gen-accepted",
+        payload={
+            "action": "upsert",
+            "dependency_name": "users",
+            "repo_id": "repository:r_payments",
+            "target_repo_id": "repository:r_users",
+        },
+        created_at=_utc_now(1),
+    )
+    store = _FakeIntentStore([blocked, accepted])
+    queue = MagicMock()
+    queue.list_shared_projection_acceptances.return_value = {
+        ("repository:r_payments", "run-123"): "gen-accepted"
+    }
+    session = MagicMock()
+    partition_id = partition_for_key(
+        "repo:repository:r_payments->repository:r_users", partition_count=1
+    )
+
+    metrics = process_dependency_partition_once(
+        session,
+        shared_projection_intent_store=store,
+        fact_work_queue=queue,
+        projection_domain="repo_dependency",
+        partition_id=partition_id,
+        partition_count=1,
+        lease_owner="worker-1",
+        lease_ttl_seconds=60,
+        batch_limit=1,
+    )
+
+    assert metrics["processed_intents"] == 1
+    assert session.run.call_args_list[1].kwargs["rows"] == [
+        {
+            "action": "upsert",
+            "dependency_name": "users",
+            "repo_id": "repository:r_payments",
+            "target_repo_id": "repository:r_users",
+        }
+    ]
+    assert blocked.intent_id not in store.completed_ids
+    assert accepted.intent_id in store.completed_ids

@@ -304,3 +304,80 @@ def test_process_platform_partition_once_applies_latest_generation_only() -> Non
         projection_domain="platform_infra",
     )
     assert metrics["processed_intents"] == 2
+
+
+def test_process_platform_partition_once_scans_past_unaccepted_rows() -> None:
+    """Accepted intents should not starve behind older unaccepted rows."""
+
+    from platform_context_graph.resolution.shared_projection.partitioning import (
+        partition_for_key,
+    )
+    from platform_context_graph.resolution.shared_projection.runtime import (
+        process_platform_partition_once,
+    )
+
+    blocked = build_shared_projection_intent(
+        projection_domain="platform_infra",
+        partition_key="platform:kubernetes:qa-blocked",
+        repository_id="repository:r_blocked",
+        source_run_id="run-blocked",
+        generation_id="gen-blocked",
+        payload={
+            "action": "upsert",
+            "platform_id": "platform:kubernetes:qa-blocked",
+            "platform_kind": "kubernetes",
+            "platform_name": "qa-blocked",
+            "platform_provider": None,
+            "platform_environment": "qa",
+            "platform_region": None,
+            "platform_locator": None,
+            "repo_id": "repository:r_blocked",
+        },
+        created_at=_utc_now(0),
+    )
+    accepted = build_shared_projection_intent(
+        projection_domain="platform_infra",
+        partition_key="platform:kubernetes:qa-accepted",
+        repository_id="repository:r_payments",
+        source_run_id="run-123",
+        generation_id="gen-accepted",
+        payload={
+            "action": "upsert",
+            "platform_id": "platform:kubernetes:qa-accepted",
+            "platform_kind": "kubernetes",
+            "platform_name": "qa-accepted",
+            "platform_provider": None,
+            "platform_environment": "qa",
+            "platform_region": None,
+            "platform_locator": None,
+            "repo_id": "repository:r_payments",
+        },
+        created_at=_utc_now(1),
+    )
+    store = _FakeIntentStore([blocked, accepted])
+    queue = MagicMock()
+    queue.list_shared_projection_acceptances.return_value = {
+        ("repository:r_payments", "run-123"): "gen-accepted"
+    }
+    session = MagicMock()
+    partition_id = partition_for_key(
+        "platform:kubernetes:qa-accepted", partition_count=1
+    )
+
+    metrics = process_platform_partition_once(
+        session,
+        shared_projection_intent_store=store,
+        fact_work_queue=queue,
+        partition_id=partition_id,
+        partition_count=1,
+        lease_owner="worker-1",
+        lease_ttl_seconds=60,
+        batch_limit=1,
+    )
+
+    assert metrics["processed_intents"] == 1
+    assert session.run.call_args_list[1].kwargs["rows"][0]["platform_name"] == (
+        "qa-accepted"
+    )
+    assert blocked.intent_id not in store.completed_ids
+    assert accepted.intent_id in store.completed_ids
