@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS runtime_ingester_status (
     pending_repositories INTEGER NOT NULL DEFAULT 0,
     completed_repositories INTEGER NOT NULL DEFAULT 0,
     failed_repositories INTEGER NOT NULL DEFAULT 0,
+    shared_projection_pending_repositories INTEGER NOT NULL DEFAULT 0,
     updated_at TIMESTAMPTZ NOT NULL
 );
 ALTER TABLE runtime_ingester_status
@@ -42,6 +43,8 @@ ALTER TABLE runtime_ingester_status
     ADD COLUMN IF NOT EXISTS active_last_progress_at TIMESTAMPTZ;
 ALTER TABLE runtime_ingester_status
     ADD COLUMN IF NOT EXISTS active_commit_started_at TIMESTAMPTZ;
+ALTER TABLE runtime_ingester_status
+    ADD COLUMN IF NOT EXISTS shared_projection_pending_repositories INTEGER NOT NULL DEFAULT 0;
 """
 
 CONTROL_SCHEMA = """

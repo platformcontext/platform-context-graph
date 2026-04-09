@@ -18,6 +18,7 @@ _COUNT_FIELDS = frozenset(
         "pending_repositories",
         "completed_repositories",
         "failed_repositories",
+        "shared_projection_pending_repositories",
     }
 )
 _COVERAGE_COUNT_FIELDS = frozenset(

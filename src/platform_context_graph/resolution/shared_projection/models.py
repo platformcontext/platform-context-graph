@@ -21,6 +21,7 @@ class SharedProjectionIntentRow:
     generation_id: str
     payload: dict[str, Any]
     created_at: datetime
+    completed_at: datetime | None = None
 
 
 def _normalize_json_value(value: Any) -> Any:
@@ -80,6 +81,7 @@ def build_shared_projection_intent(
         generation_id=generation_id,
         payload=payload,
         created_at=created_at,
+        completed_at=None,
     )
 
 

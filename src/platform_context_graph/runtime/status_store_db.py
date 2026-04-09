@@ -93,6 +93,7 @@ class PostgresRuntimeStatusStore:
         pending_repositories: int | None = 0,
         completed_repositories: int | None = 0,
         failed_repositories: int | None = 0,
+        shared_projection_pending_repositories: int | None = 0,
     ) -> None:
         """Insert or update one ingester status row."""
 
@@ -102,6 +103,9 @@ class PostgresRuntimeStatusStore:
         pending_repositories = _normalize_count(pending_repositories)
         completed_repositories = _normalize_count(completed_repositories)
         failed_repositories = _normalize_count(failed_repositories)
+        shared_projection_pending_repositories = _normalize_count(
+            shared_projection_pending_repositories
+        )
 
         with self._cursor() as cursor:
             cursor.execute(
@@ -128,6 +132,7 @@ class PostgresRuntimeStatusStore:
                     pending_repositories,
                     completed_repositories,
                     failed_repositories,
+                    shared_projection_pending_repositories,
                     updated_at
                 ) VALUES (
                     %(ingester)s,
@@ -151,6 +156,7 @@ class PostgresRuntimeStatusStore:
                     %(pending_repositories)s,
                     %(completed_repositories)s,
                     %(failed_repositories)s,
+                    %(shared_projection_pending_repositories)s,
                     %(updated_at)s
                 )
                 ON CONFLICT (ingester) DO UPDATE
@@ -174,6 +180,7 @@ class PostgresRuntimeStatusStore:
                     pending_repositories = EXCLUDED.pending_repositories,
                     completed_repositories = EXCLUDED.completed_repositories,
                     failed_repositories = EXCLUDED.failed_repositories,
+                    shared_projection_pending_repositories = EXCLUDED.shared_projection_pending_repositories,
                     updated_at = EXCLUDED.updated_at
                 """,
                 {
@@ -198,6 +205,7 @@ class PostgresRuntimeStatusStore:
                     "pending_repositories": pending_repositories,
                     "completed_repositories": completed_repositories,
                     "failed_repositories": failed_repositories,
+                    "shared_projection_pending_repositories": shared_projection_pending_repositories,
                     "updated_at": utc_now(),
                 },
             )
@@ -229,6 +237,7 @@ class PostgresRuntimeStatusStore:
                        pending_repositories,
                        completed_repositories,
                        failed_repositories,
+                       shared_projection_pending_repositories,
                        updated_at
                 FROM runtime_ingester_status
                 WHERE ingester = %(ingester)s
@@ -298,6 +307,7 @@ class PostgresRuntimeStatusStore:
                     "pending_repositories": 0,
                     "completed_repositories": 0,
                     "failed_repositories": 0,
+                    "shared_projection_pending_repositories": 0,
                     "updated_at": None,
                     **control_row,
                 }

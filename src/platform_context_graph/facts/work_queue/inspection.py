@@ -44,6 +44,12 @@ def list_work_items(
                    last_attempt_finished_at,
                    next_retry_at,
                    operator_note,
+                   parent_work_item_id,
+                   projection_domain,
+                   accepted_generation_id,
+                   authoritative_shared_domains,
+                   completed_shared_domains,
+                   shared_projection_pending,
                    created_at,
                    updated_at
             FROM fact_work_items
@@ -100,3 +106,26 @@ def list_queue_snapshot(queue: Any) -> list[FactWorkQueueSnapshotRow]:
         )
         for row in rows
     ]
+
+
+def count_shared_projection_pending(
+    queue: Any, *, source_run_id: str | None = None
+) -> int:
+    """Return the number of work items blocked on authoritative shared follow-up."""
+
+    row = queue._record_operation(
+        operation="count_shared_projection_pending",
+        callback=lambda: queue._fetchone(
+            """
+            SELECT COUNT(*) AS pending_count
+            FROM fact_work_items
+            WHERE shared_projection_pending = TRUE
+              AND (%(source_run_id)s IS NULL OR source_run_id = %(source_run_id)s)
+            """,
+            {"source_run_id": source_run_id},
+        ),
+        row_count=None,
+    )
+    if row is None:
+        return 0
+    return int(row.get("pending_count") or 0)

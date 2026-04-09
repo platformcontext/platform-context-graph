@@ -38,6 +38,12 @@ def enqueue_work_item(queue: Any, entry: FactWorkItemRow) -> None:
                 last_attempt_finished_at,
                 next_retry_at,
                 operator_note,
+                parent_work_item_id,
+                projection_domain,
+                accepted_generation_id,
+                authoritative_shared_domains,
+                completed_shared_domains,
+                shared_projection_pending,
                 created_at,
                 updated_at
             ) VALUES (
@@ -60,6 +66,12 @@ def enqueue_work_item(queue: Any, entry: FactWorkItemRow) -> None:
                 %(last_attempt_finished_at)s,
                 %(next_retry_at)s,
                 %(operator_note)s,
+                %(parent_work_item_id)s,
+                %(projection_domain)s,
+                %(accepted_generation_id)s,
+                %(authoritative_shared_domains)s,
+                %(completed_shared_domains)s,
+                %(shared_projection_pending)s,
                 %(created_at)s,
                 %(updated_at)s
             )
@@ -82,6 +94,12 @@ def enqueue_work_item(queue: Any, entry: FactWorkItemRow) -> None:
                 last_attempt_finished_at = EXCLUDED.last_attempt_finished_at,
                 next_retry_at = EXCLUDED.next_retry_at,
                 operator_note = EXCLUDED.operator_note,
+                parent_work_item_id = EXCLUDED.parent_work_item_id,
+                projection_domain = EXCLUDED.projection_domain,
+                accepted_generation_id = EXCLUDED.accepted_generation_id,
+                authoritative_shared_domains = EXCLUDED.authoritative_shared_domains,
+                completed_shared_domains = EXCLUDED.completed_shared_domains,
+                shared_projection_pending = EXCLUDED.shared_projection_pending,
                 updated_at = EXCLUDED.updated_at
             """,
             work_item_params(entry),
@@ -313,6 +331,12 @@ def complete_work_item(queue: Any, *, work_item_id: str) -> None:
                 last_attempt_started_at = NULL,
                 next_retry_at = NULL,
                 operator_note = NULL,
+                parent_work_item_id = NULL,
+                projection_domain = NULL,
+                accepted_generation_id = NULL,
+                authoritative_shared_domains = ARRAY[]::TEXT[],
+                completed_shared_domains = ARRAY[]::TEXT[],
+                shared_projection_pending = FALSE,
                 updated_at = %(updated_at)s
             WHERE work_item_id = %(work_item_id)s
             """,

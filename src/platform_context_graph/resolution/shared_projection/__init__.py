@@ -5,7 +5,11 @@ from .emission import emit_platform_infra_intents
 from .emission import emit_platform_runtime_intents
 from .models import SharedProjectionIntentRow
 from .models import build_shared_projection_intent
+from .partitioning import partition_for_key
+from .partitioning import rows_for_partition
 from .postgres import PostgresSharedProjectionIntentStore
+from .runtime import process_platform_partition_once
+from .runtime import platform_shared_projection_worker_enabled
 
 __all__ = [
     "PostgresSharedProjectionIntentStore",
@@ -14,4 +18,8 @@ __all__ = [
     "emit_dependency_intents",
     "emit_platform_infra_intents",
     "emit_platform_runtime_intents",
+    "partition_for_key",
+    "platform_shared_projection_worker_enabled",
+    "process_platform_partition_once",
+    "rows_for_partition",
 ]

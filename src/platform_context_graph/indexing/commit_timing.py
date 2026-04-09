@@ -30,6 +30,9 @@ class CommitTimingResult:
     max_graph_batch_rows: int = 0
     max_content_batch_rows: int = 0
     entity_totals: dict[str, int] = field(default_factory=dict)
+    shared_projection_pending: bool = False
+    authoritative_shared_domains: tuple[str, ...] = field(default_factory=tuple)
+    accepted_generation_id: str | None = None
 
     def accumulate_graph_batch(
         self,

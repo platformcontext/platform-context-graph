@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ..facts.state import get_fact_work_queue
 from ..observability import get_observability, trace_query
 from ..runtime.status_store import (
     get_runtime_status_store,
@@ -18,6 +19,8 @@ from .status_projection import (
     checkpoint_status_payload,
     runtime_run_summary_from_status,
 )
+from .status_shared_projection import apply_shared_projection_pending_status
+from .status_shared_projection import count_pending_shared_projection_repositories
 
 __all__ = [
     "KNOWN_INGESTERS",
@@ -76,6 +79,7 @@ def _default_status(ingester: str) -> dict[str, Any]:
         "pending_repositories": 0,
         "completed_repositories": 0,
         "failed_repositories": 0,
+        "shared_projection_pending_repositories": 0,
         "scan_request_state": "idle",
         "scan_request_token": None,
         "scan_requested_at": None,
@@ -353,6 +357,7 @@ def get_ingester_status(
     with trace_query("runtime_ingester_status"):
         store = get_runtime_status_store()
         checkpoint_fallback = _checkpoint_status_fallback(ingester)
+        queue = get_fact_work_queue()
         if store is not None and store.enabled:
             result = _select_runtime_status_payload(store, ingester=ingester)
             if result is not None:
@@ -362,11 +367,28 @@ def get_ingester_status(
                         result, checkpoint_fallback
                     )
                 ):
-                    return checkpoint_fallback
-                return result
+                    result = checkpoint_fallback
+                pending_count = count_pending_shared_projection_repositories(
+                    queue,
+                    source_run_id=str(result.get("active_run_id") or "").strip()
+                    or None,
+                )
+                return apply_shared_projection_pending_status(
+                    result, pending_count=pending_count
+                )
         if checkpoint_fallback is not None:
-            return checkpoint_fallback
-        return _default_status(ingester)
+            pending_count = count_pending_shared_projection_repositories(
+                queue,
+                source_run_id=(
+                    str(checkpoint_fallback.get("active_run_id") or "").strip() or None
+                ),
+            )
+            return apply_shared_projection_pending_status(
+                checkpoint_fallback, pending_count=pending_count
+            )
+        return apply_shared_projection_pending_status(
+            _default_status(ingester), pending_count=0
+        )
 
 
 def request_ingester_scan_control(

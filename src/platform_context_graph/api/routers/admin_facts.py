@@ -113,6 +113,12 @@ def _serialize_work_item(row: Any) -> dict[str, Any]:
         "last_attempt_finished_at": row.last_attempt_finished_at,
         "next_retry_at": row.next_retry_at,
         "operator_note": row.operator_note,
+        "parent_work_item_id": row.parent_work_item_id,
+        "projection_domain": row.projection_domain,
+        "accepted_generation_id": row.accepted_generation_id,
+        "authoritative_shared_domains": row.authoritative_shared_domains,
+        "completed_shared_domains": row.completed_shared_domains,
+        "shared_projection_pending": row.shared_projection_pending,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }

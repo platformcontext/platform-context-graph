@@ -22,6 +22,15 @@ from platform_context_graph.facts.work_queue.stages import (
 )
 from platform_context_graph.observability import get_observability
 from platform_context_graph.observability.facts_first_logs import log_inline_projection
+from platform_context_graph.indexing.coordinator_shared_completion import (
+    apply_completion_state,
+)
+from platform_context_graph.indexing.coordinator_shared_completion import (
+    completion_state_from_metrics,
+)
+from platform_context_graph.indexing.coordinator_shared_completion import (
+    decorate_timing_result,
+)
 from platform_context_graph.resolution.orchestration.failure_classification import (
     classify_resolution_failure,
 )
@@ -192,9 +201,16 @@ def project_repository_snapshot_facts(
         refresh_fact_queue_metrics(queue, component="ingester")
         raise
 
-    queue.complete_work_item(work_item_id=work_item.work_item_id)
+    completion_state = completion_state_from_metrics(
+        metrics, default_generation_id=work_item.source_run_id
+    )
+    apply_completion_state(
+        queue=queue,
+        work_item_id=work_item.work_item_id,
+        completion_state=completion_state,
+    )
     log_inline_projection(
-        "completed",
+        ("awaiting_shared_projection" if completion_state.pending else "completed"),
         repository_id=work_item.repository_id,
         source_run_id=work_item.source_run_id,
         work_item_id=work_item.work_item_id,
@@ -203,7 +219,9 @@ def project_repository_snapshot_facts(
     observability.record_fact_work_item(
         component="ingester",
         work_type=work_item.work_type,
-        outcome="completed",
+        outcome=(
+            "awaiting_shared_projection" if completion_state.pending else "completed"
+        ),
     )
     observability.record_resolution_stage_duration(
         component="ingester",
@@ -217,7 +235,7 @@ def project_repository_snapshot_facts(
         duration_seconds=max(time.perf_counter() - started, 0.0),
         row_count=max(fact_metric_row_count(metrics), 1),
     )
-    return timing
+    return decorate_timing_result(timing, completion_state=completion_state)
 
 
 def commit_repository_snapshot_from_facts(
@@ -362,9 +380,17 @@ def create_facts_first_commit_callback(
                 source_system="git",
                 source_snapshot_id=emission_result.source_snapshot_id,
                 repository_id=emission_result.repository_id,
-                status="completed",
+                status=(
+                    "awaiting_shared_projection"
+                    if getattr(timing, "shared_projection_pending", False)
+                    else "completed"
+                ),
                 started_at=observed_at_fn(),
-                completed_at=observed_at_fn(),
+                completed_at=(
+                    None
+                    if getattr(timing, "shared_projection_pending", False)
+                    else observed_at_fn()
+                ),
             )
         )
         return timing
