@@ -37,6 +37,12 @@ from platform_context_graph.resolution.projection.workloads import (
     project_platform_facts,
     project_workload_facts,
 )
+from platform_context_graph.resolution.shared_projection import (
+    run_inline_shared_followup,
+)
+from platform_context_graph.resolution.workloads.metrics import (
+    merge_shared_projection_payload,
+)
 
 
 def _metric_output_count(metrics: Any) -> int:
@@ -125,7 +131,9 @@ def project_work_item(
     *,
     builder: Any | None = None,
     fact_store: Any | None = None,
+    fact_work_queue: Any | None = None,
     decision_store: Any | None = None,
+    shared_projection_intent_store: Any | None = None,
     fact_projector: Any = project_git_fact_records,
     relationship_projector: Any = project_git_relationship_fact_records,
     workload_projector: Any = project_workload_facts,
@@ -356,12 +364,45 @@ def project_work_item(
                 }
             ),
         )
-    return {
+
+    shared_followup_metrics: dict[str, object] = {}
+    merge_shared_projection_payload(shared_followup_metrics, workload_metrics)
+    merge_shared_projection_payload(shared_followup_metrics, platform_metrics)
+    shared_payload = shared_followup_metrics.get("shared_projection")
+    if isinstance(shared_payload, dict):
+        if fact_work_queue is None:
+            from platform_context_graph.facts.state import get_fact_work_queue
+
+            fact_work_queue = get_fact_work_queue()
+        if shared_projection_intent_store is None:
+            from platform_context_graph.facts.state import (
+                get_shared_projection_intent_store,
+            )
+
+            shared_projection_intent_store = get_shared_projection_intent_store()
+        shared_followup_metrics = run_inline_shared_followup(
+            builder=builder,
+            repository_id=work_item.repository_id,
+            source_run_id=work_item.source_run_id,
+            accepted_generation_id=str(
+                shared_payload.get("accepted_generation_id") or work_item.source_run_id
+            ),
+            authoritative_domains=list(
+                shared_payload.get("authoritative_domains") or []
+            ),
+            fact_work_queue=fact_work_queue,
+            shared_projection_intent_store=shared_projection_intent_store,
+        )
+
+    result = {
         "facts": fact_metrics,
         "relationships": relationship_metrics,
         "workloads": workload_metrics,
         "platforms": platform_metrics,
     }
+    if shared_followup_metrics:
+        result["shared_projection"] = shared_followup_metrics
+    return result
 
 
 def _load_entity_batches(

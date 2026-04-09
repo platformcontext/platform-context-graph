@@ -95,6 +95,77 @@ class _InMemoryFactWorkQueue:
             last_error=None,
         )
 
+    def mark_shared_projection_pending(
+        self,
+        *,
+        work_item_id: str,
+        accepted_generation_id: str,
+        authoritative_shared_domains: list[str] | tuple[str, ...],
+    ) -> None:
+        row = self.rows[work_item_id]
+        self.rows[work_item_id] = replace(
+            row,
+            status="awaiting_shared_projection",
+            lease_owner=None,
+            accepted_generation_id=accepted_generation_id,
+            authoritative_shared_domains=list(authoritative_shared_domains),
+            completed_shared_domains=[],
+            shared_projection_pending=True,
+        )
+
+    def complete_shared_projection_domain_by_generation(
+        self,
+        *,
+        repository_id: str,
+        source_run_id: str,
+        accepted_generation_id: str,
+        projection_domain: str,
+    ) -> None:
+        for work_item_id, row in list(self.rows.items()):
+            if (
+                row.repository_id != repository_id
+                or row.source_run_id != source_run_id
+                or row.accepted_generation_id != accepted_generation_id
+            ):
+                continue
+            completed = sorted(
+                {
+                    *(row.completed_shared_domains or []),
+                    projection_domain,
+                }
+            )
+            pending_domains = sorted(
+                set(row.authoritative_shared_domains or []) - set(completed)
+            )
+            self.rows[work_item_id] = replace(
+                row,
+                status=(
+                    "completed" if not pending_domains else "awaiting_shared_projection"
+                ),
+                completed_shared_domains=completed,
+                shared_projection_pending=bool(pending_domains),
+                lease_owner=None,
+            )
+
+    def list_shared_projection_acceptances(
+        self,
+        *,
+        projection_domain: str,
+        repository_ids: list[str] | None = None,
+    ) -> dict[tuple[str, str], str]:
+        del repository_ids
+        accepted: dict[tuple[str, str], str] = {}
+        for row in self.rows.values():
+            if (
+                row.shared_projection_pending
+                and row.accepted_generation_id
+                and projection_domain in row.authoritative_shared_domains
+            ):
+                accepted[(row.repository_id, row.source_run_id)] = (
+                    row.accepted_generation_id
+                )
+        return accepted
+
     def fail_work_item(
         self,
         *,
@@ -192,3 +263,61 @@ def test_emitted_git_snapshot_projects_through_facts_first_commit_path() -> None
         "RepositoryObserved",
     ]
     assert work_queue.rows[emission_result.work_item_id].status == "completed"
+
+
+def test_emitted_git_snapshot_waits_for_shared_followup_when_projection_is_pending() -> (
+    None
+):
+    """Facts-first commit should not report complete while shared follow-up remains."""
+
+    fact_store = _InMemoryFactStore()
+    work_queue = _InMemoryFactWorkQueue()
+    emitter = create_snapshot_fact_emitter(
+        source_run_id="run-123",
+        fact_store=fact_store,
+        work_queue=work_queue,
+        observed_at_fn=_utc_now,
+    )
+    snapshot = RepositoryParseSnapshot(
+        repo_path="/tmp/service",
+        file_count=1,
+        imports_map={},
+        file_data=[
+            {
+                "path": "/tmp/service/src/app.py",
+                "repo_path": "/tmp/service",
+                "lang": "python",
+                "functions": [{"name": "handler", "line_number": 10}],
+            }
+        ],
+    )
+    emission_result = emitter(
+        run_id="run-123",
+        repo_path=Path(snapshot.repo_path),
+        snapshot=snapshot,
+        is_dependency=False,
+    )
+
+    timing = commit_repository_snapshot_from_facts(
+        builder=SimpleNamespace(
+            reset_repository_subtree_in_graph=MagicMock(return_value=True),
+            _content_provider=SimpleNamespace(enabled=False),
+        ),
+        snapshot=snapshot,
+        fact_emission_result=emission_result,
+        fact_store=fact_store,
+        work_queue=work_queue,
+        graph_store=SimpleNamespace(delete_repository=MagicMock()),
+        project_work_item_fn=lambda *_args, **_kwargs: {
+            "shared_projection": {
+                "authoritative_domains": ["repo_dependency"],
+                "accepted_generation_id": "snapshot-abc",
+            }
+        },
+    )
+
+    row = work_queue.rows[emission_result.work_item_id]
+    assert timing.shared_projection_pending is True
+    assert row.status == "awaiting_shared_projection"
+    assert row.accepted_generation_id == "snapshot-abc"
+    assert row.authoritative_shared_domains == ["repo_dependency"]

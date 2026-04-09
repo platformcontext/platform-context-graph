@@ -14,6 +14,10 @@ from .partitioning import rows_for_partition
 PLATFORM_INFRA_PROJECTION_DOMAIN = "platform_infra"
 REPO_DEPENDENCY_PROJECTION_DOMAIN = "repo_dependency"
 WORKLOAD_DEPENDENCY_PROJECTION_DOMAIN = "workload_dependency"
+DEPENDENCY_PROJECTION_DOMAINS = {
+    REPO_DEPENDENCY_PROJECTION_DOMAIN,
+    WORKLOAD_DEPENDENCY_PROJECTION_DOMAIN,
+}
 
 
 def platform_shared_projection_worker_enabled() -> bool:
@@ -51,25 +55,30 @@ def _accepted_generations_by_repo_run(
     *,
     projection_domain: str,
     repository_ids: list[str],
+    accepted_generations_override: dict[tuple[str, str], str] | None = None,
 ) -> dict[tuple[str, str], str]:
     """Return accepted shared generations keyed by repository and source run."""
 
+    accepted_generations = dict(accepted_generations_override or {})
     if fact_work_queue is None:
-        return {}
+        return accepted_generations
     list_fn = getattr(fact_work_queue, "list_shared_projection_acceptances", None)
     if not callable(list_fn):
-        return {}
+        return accepted_generations
     accepted = list_fn(
         projection_domain=projection_domain,
         repository_ids=repository_ids or None,
     )
     if not isinstance(accepted, dict):
-        return {}
-    return {
-        (str(key[0]), str(key[1])): str(value)
-        for key, value in accepted.items()
-        if isinstance(key, tuple) and len(key) == 2 and str(value).strip()
-    }
+        return accepted_generations
+    accepted_generations.update(
+        {
+            (str(key[0]), str(key[1])): str(value)
+            for key, value in accepted.items()
+            if isinstance(key, tuple) and len(key) == 2 and str(value).strip()
+        }
+    )
+    return accepted_generations
 
 
 def _filter_authoritative_intents(
@@ -162,6 +171,7 @@ def process_platform_partition_once(
     lease_ttl_seconds: int,
     batch_limit: int = 100,
     evidence_source: str = "finalization/workloads",
+    accepted_generations_override: dict[tuple[str, str], str] | None = None,
 ) -> dict[str, int | bool]:
     """Process one authoritative platform partition exactly once."""
 
@@ -192,6 +202,7 @@ def process_platform_partition_once(
             fact_work_queue,
             projection_domain=PLATFORM_INFRA_PROJECTION_DOMAIN,
             repository_ids=sorted({row.repository_id for row in partition_rows}),
+            accepted_generations_override=accepted_generations_override,
         )
         active_rows, stale_ids = _filter_authoritative_intents(
             partition_rows,
@@ -279,13 +290,11 @@ def process_dependency_partition_once(
     lease_ttl_seconds: int,
     batch_limit: int = 100,
     evidence_source: str = "finalization/workloads",
+    accepted_generations_override: dict[tuple[str, str], str] | None = None,
 ) -> dict[str, int | bool]:
     """Process one authoritative dependency partition exactly once."""
 
-    if projection_domain not in {
-        REPO_DEPENDENCY_PROJECTION_DOMAIN,
-        WORKLOAD_DEPENDENCY_PROJECTION_DOMAIN,
-    }:
+    if projection_domain not in DEPENDENCY_PROJECTION_DOMAINS:
         raise ValueError(
             f"unsupported dependency projection domain: {projection_domain}"
         )
@@ -316,6 +325,7 @@ def process_dependency_partition_once(
             fact_work_queue,
             projection_domain=projection_domain,
             repository_ids=sorted({row.repository_id for row in partition_rows}),
+            accepted_generations_override=accepted_generations_override,
         )
         active_rows, stale_ids = _filter_authoritative_intents(
             partition_rows,

@@ -91,6 +91,44 @@ def test_run_resolution_iteration_marks_failures() -> None:
     assert kwargs["error_class"] == "RuntimeError"
 
 
+def test_run_resolution_iteration_marks_shared_projection_pending() -> None:
+    """Resolution runtime should preserve pending shared follow-up honestly."""
+
+    queue = MagicMock()
+    queue.claim_work_item.return_value = FactWorkItemRow(
+        work_item_id="work-pending",
+        work_type="project-git-facts",
+        repository_id="github.com/acme/service",
+        source_run_id="run-123",
+        lease_owner="resolution-worker-1",
+        lease_expires_at=_utc_now(),
+        status="leased",
+        attempt_count=1,
+        created_at=_utc_now(),
+        updated_at=_utc_now(),
+    )
+
+    processed = run_resolution_iteration(
+        queue=queue,
+        projector=lambda _row: {
+            "shared_projection": {
+                "authoritative_domains": ["platform_infra"],
+                "accepted_generation_id": "gen-123",
+            }
+        },
+        lease_owner="resolution-worker-1",
+        lease_ttl_seconds=60,
+    )
+
+    assert processed is True
+    queue.mark_shared_projection_pending.assert_called_once_with(
+        work_item_id="work-pending",
+        accepted_generation_id="gen-123",
+        authoritative_shared_domains=["platform_infra"],
+    )
+    queue.complete_work_item.assert_not_called()
+
+
 def test_project_work_item_loads_facts_and_runs_projection_stages() -> None:
     """Projecting one work item should load facts and run both projection stages."""
 

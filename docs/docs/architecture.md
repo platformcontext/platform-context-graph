@@ -12,6 +12,12 @@ Phase 1 clarified package ownership, Phase 2 switched Git indexing to a
 facts-first write path, and Phase 3 added durable recovery and explainability on
 top of that runtime.
 
+The current write-domain architecture keeps repo-local graph refresh parallel
+while routing shared platform and dependency mutation through durable,
+partitioned follow-up domains keyed by stable lock identifiers. That preserves
+commit-worker throughput without letting concurrent writers fight over the same
+dense shared nodes.
+
 ## Local Request Path
 
 ```mermaid
@@ -69,15 +75,22 @@ flowchart LR
 1. The ingester discovers repositories and parses a repository snapshot.
 2. Repository, file, and entity facts are written to Postgres.
 3. A fact work item is enqueued for that snapshot.
-4. The resolution-engine claims the work item and loads the stored facts.
-5. The resolution-engine projects repository, file, entity, relationship,
-   workload, and platform state into Neo4j.
-6. The same projection pass dual-writes file and entity content into Postgres.
-7. Query surfaces continue reading the canonical graph and content store.
+4. The resolution-engine, or the ingester’s inline facts-first commit path,
+   claims the work item and loads the stored facts.
+5. Repo-local projection refreshes repository, file, entity, relationship,
+   workload, and repo-owned platform state in Neo4j.
+6. Authoritative shared platform and dependency writes are emitted as durable
+   follow-up domains and drained through partitioned workers keyed by stable
+   lock domains.
+7. The same projection flow dual-writes file and entity content into Postgres.
+8. Query surfaces continue reading the canonical graph and content store.
 
 For the current Git cutover, the indexing coordinator can still drive the same
 resolution path in-process so one indexing run completes deterministically even
 without a separate runtime hop.
+
+Status surfaces can report `awaiting_shared_projection` while authoritative
+shared follow-up remains pending for an accepted repository generation.
 
 ## Recovery And Explainability
 

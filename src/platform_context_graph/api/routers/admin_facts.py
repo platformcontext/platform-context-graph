@@ -95,32 +95,38 @@ def _serialize_work_item(row: Any) -> dict[str, Any]:
     """Return one admin-friendly work-item payload."""
 
     return {
-        "work_item_id": row.work_item_id,
-        "work_type": row.work_type,
-        "repository_id": row.repository_id,
-        "source_run_id": row.source_run_id,
-        "lease_owner": row.lease_owner,
-        "status": row.status,
-        "attempt_count": row.attempt_count,
-        "last_error": row.last_error,
-        "failure_stage": row.failure_stage,
-        "error_class": row.error_class,
-        "failure_class": row.failure_class,
-        "failure_code": row.failure_code,
-        "retry_disposition": row.retry_disposition,
-        "dead_lettered_at": row.dead_lettered_at,
-        "last_attempt_started_at": row.last_attempt_started_at,
-        "last_attempt_finished_at": row.last_attempt_finished_at,
-        "next_retry_at": row.next_retry_at,
-        "operator_note": row.operator_note,
-        "parent_work_item_id": row.parent_work_item_id,
-        "projection_domain": row.projection_domain,
-        "accepted_generation_id": row.accepted_generation_id,
-        "authoritative_shared_domains": row.authoritative_shared_domains,
-        "completed_shared_domains": row.completed_shared_domains,
-        "shared_projection_pending": row.shared_projection_pending,
-        "created_at": row.created_at,
-        "updated_at": row.updated_at,
+        "work_item_id": getattr(row, "work_item_id", None),
+        "work_type": getattr(row, "work_type", None),
+        "repository_id": getattr(row, "repository_id", None),
+        "source_run_id": getattr(row, "source_run_id", None),
+        "lease_owner": getattr(row, "lease_owner", None),
+        "status": getattr(row, "status", None),
+        "attempt_count": getattr(row, "attempt_count", None),
+        "last_error": getattr(row, "last_error", None),
+        "failure_stage": getattr(row, "failure_stage", None),
+        "error_class": getattr(row, "error_class", None),
+        "failure_class": getattr(row, "failure_class", None),
+        "failure_code": getattr(row, "failure_code", None),
+        "retry_disposition": getattr(row, "retry_disposition", None),
+        "dead_lettered_at": getattr(row, "dead_lettered_at", None),
+        "last_attempt_started_at": getattr(row, "last_attempt_started_at", None),
+        "last_attempt_finished_at": getattr(row, "last_attempt_finished_at", None),
+        "next_retry_at": getattr(row, "next_retry_at", None),
+        "operator_note": getattr(row, "operator_note", None),
+        "parent_work_item_id": getattr(row, "parent_work_item_id", None),
+        "projection_domain": getattr(row, "projection_domain", None),
+        "accepted_generation_id": getattr(row, "accepted_generation_id", None),
+        "authoritative_shared_domains": list(
+            getattr(row, "authoritative_shared_domains", []) or []
+        ),
+        "completed_shared_domains": list(
+            getattr(row, "completed_shared_domains", []) or []
+        ),
+        "shared_projection_pending": bool(
+            getattr(row, "shared_projection_pending", False)
+        ),
+        "created_at": getattr(row, "created_at", None),
+        "updated_at": getattr(row, "updated_at", None),
     }
 
 
