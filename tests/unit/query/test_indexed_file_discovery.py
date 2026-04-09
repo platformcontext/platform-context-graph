@@ -131,6 +131,37 @@ class TestDiscoverRepoFiles:
         assert result == ["roles/nginx/tasks/main.yml"]
         assert "=~" not in (session.last_query or "")
         assert "pattern" not in session.last_params
+        assert session.last_params["prefix"] == "roles/"
+
+    def test_returns_empty_list_for_invalid_pattern(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Invalid regex patterns should not raise unhandled query errors."""
+
+        session = _StubSession([{"relative_path": "roles/nginx/tasks/main.yml"}])
+        db = _StubDB(session)
+
+        with caplog.at_level("WARNING"):
+            result = discover_repo_files(db, REPO_ID, pattern="roles/[")
+
+        assert result == []
+        assert "Invalid repository file pattern" in caplog.text
+
+    def test_combines_explicit_prefix_with_pattern_prefix(self) -> None:
+        """Explicit prefix filters should be narrowed by a literal regex prefix."""
+
+        session = _StubSession([{"relative_path": "roles/nginx/tasks/main.yml"}])
+        db = _StubDB(session)
+
+        result = discover_repo_files(
+            db,
+            REPO_ID,
+            prefix="roles/",
+            pattern=r"roles/[^/]+/tasks/main\.ya?ml",
+        )
+
+        assert result == ["roles/nginx/tasks/main.yml"]
+        assert session.last_params["prefix"] == "roles/"
 
     def test_returns_empty_list_when_no_matches(self) -> None:
         """An empty list is returned when no files match."""
