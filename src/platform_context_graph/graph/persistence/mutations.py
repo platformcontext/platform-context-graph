@@ -185,10 +185,31 @@ def reset_repository_subtree_in_graph(
             WHERE r.id IN $lookup_values
                OR r.path IN $lookup_values
                OR r[$local_path_key] IN $lookup_values
-            OPTIONAL MATCH (r)-[:CONTAINS|REPO_CONTAINS*1..]->(owned)
-            WITH collect(DISTINCT owned) AS owned_nodes
-            UNWIND owned_nodes AS owned
+            OPTIONAL MATCH (r)-[:CONTAINS|REPO_CONTAINS*1..]->(owned_tree)
+            WITH r, collect(DISTINCT owned_tree) AS owned_nodes
+            OPTIONAL MATCH (r)-[:DEFINES]->(defined_workload:Workload)
+            WITH r, owned_nodes + collect(DISTINCT defined_workload) AS owned_nodes
+            OPTIONAL MATCH (owned_workload:Workload {repo_id: r.id})
+            WITH r, owned_nodes + collect(DISTINCT owned_workload) AS owned_nodes
+            OPTIONAL MATCH (owned_instance:WorkloadInstance {repo_id: r.id})
+            WITH r, owned_nodes + collect(DISTINCT owned_instance) AS maybe_owned_nodes
+            UNWIND [owned IN maybe_owned_nodes WHERE owned IS NOT NULL] AS owned
             DETACH DELETE owned
+            """,
+            lookup_values=lookup_values,
+            local_path_key="local_path",
+        )
+        session.run(
+            """
+            MATCH (r:Repository)
+            WHERE r.id IN $lookup_values
+               OR r.path IN $lookup_values
+               OR r[$local_path_key] IN $lookup_values
+            OPTIONAL MATCH (r)-[rel]-()
+            WITH [relationship IN collect(DISTINCT rel) WHERE relationship IS NOT NULL]
+                AS relationships
+            UNWIND relationships AS rel
+            DELETE rel
             """,
             lookup_values=lookup_values,
             local_path_key="local_path",

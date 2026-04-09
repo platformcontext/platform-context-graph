@@ -36,6 +36,41 @@ def _accepted_override(
     return {(repository_id, source_run_id): generation_id}
 
 
+def _pending_partition_ids(
+    *,
+    shared_projection_intent_store: Any,
+    repository_id: str,
+    source_run_id: str,
+    projection_domain: str,
+    partition_count: int,
+) -> list[int] | None:
+    """Return pending partition ids for one repository/run/domain page."""
+
+    list_intents = getattr(shared_projection_intent_store, "list_intents", None)
+    if not callable(list_intents):
+        return None
+    pending_rows = [
+        row
+        for row in list_intents(
+            repository_id=repository_id,
+            source_run_id=source_run_id,
+            projection_domain=projection_domain,
+            limit=10_000,
+        )
+        if getattr(row, "completed_at", None) is None
+    ]
+    return sorted(
+        {
+            partition_for_key(
+                str(getattr(row, "partition_key", "")),
+                partition_count=partition_count,
+            )
+            for row in pending_rows
+            if str(getattr(row, "partition_key", "")).strip()
+        }
+    )
+
+
 def run_inline_shared_followup(
     *,
     builder: Any,
@@ -70,7 +105,6 @@ def run_inline_shared_followup(
     )
     partition_count = _shared_projection_partition_count()
     remaining_domains: list[str] = []
-    list_intents = getattr(shared_projection_intent_store, "list_intents", None)
     count_pending = getattr(
         shared_projection_intent_store,
         "count_pending_repository_generation_intents",
@@ -79,61 +113,62 @@ def run_inline_shared_followup(
 
     with builder.driver.session() as session:
         for domain in domains:
-            if not callable(list_intents) or not callable(count_pending):
+            if not callable(count_pending):
                 remaining_domains.append(domain)
                 continue
-            pending_rows = [
-                row
-                for row in list_intents(
+            previous_remaining: int | None = None
+            while True:
+                partition_ids = _pending_partition_ids(
+                    shared_projection_intent_store=shared_projection_intent_store,
                     repository_id=repository_id,
                     source_run_id=source_run_id,
                     projection_domain=domain,
-                    limit=10_000,
+                    partition_count=partition_count,
                 )
-                if getattr(row, "completed_at", None) is None
-            ]
-            partition_ids = sorted(
-                {
-                    partition_for_key(
-                        str(getattr(row, "partition_key", "")),
-                        partition_count=partition_count,
-                    )
-                    for row in pending_rows
-                    if str(getattr(row, "partition_key", "")).strip()
-                }
-            )
-            for partition_id in partition_ids:
-                if domain == PLATFORM_INFRA_PROJECTION_DOMAIN:
-                    process_platform_partition_once(
-                        session,
-                        shared_projection_intent_store=shared_projection_intent_store,
-                        fact_work_queue=fact_work_queue,
-                        partition_id=partition_id,
-                        partition_count=partition_count,
-                        lease_owner=lease_owner,
-                        lease_ttl_seconds=lease_ttl_seconds,
-                        accepted_generations_override=accepted_generations_override,
-                    )
-                elif domain in DEPENDENCY_PROJECTION_DOMAINS:
-                    process_dependency_partition_once(
-                        session,
-                        shared_projection_intent_store=shared_projection_intent_store,
-                        fact_work_queue=fact_work_queue,
+                if partition_ids is None:
+                    remaining_domains.append(domain)
+                    break
+                if not partition_ids:
+                    break
+                for partition_id in partition_ids:
+                    if domain == PLATFORM_INFRA_PROJECTION_DOMAIN:
+                        process_platform_partition_once(
+                            session,
+                            shared_projection_intent_store=shared_projection_intent_store,
+                            fact_work_queue=fact_work_queue,
+                            partition_id=partition_id,
+                            partition_count=partition_count,
+                            lease_owner=lease_owner,
+                            lease_ttl_seconds=lease_ttl_seconds,
+                            accepted_generations_override=accepted_generations_override,
+                        )
+                    elif domain in DEPENDENCY_PROJECTION_DOMAINS:
+                        process_dependency_partition_once(
+                            session,
+                            shared_projection_intent_store=shared_projection_intent_store,
+                            fact_work_queue=fact_work_queue,
+                            projection_domain=domain,
+                            partition_id=partition_id,
+                            partition_count=partition_count,
+                            lease_owner=lease_owner,
+                            lease_ttl_seconds=lease_ttl_seconds,
+                            accepted_generations_override=accepted_generations_override,
+                        )
+                remaining = int(
+                    count_pending(
+                        repository_id=repository_id,
+                        source_run_id=source_run_id,
+                        generation_id=accepted_generation_id,
                         projection_domain=domain,
-                        partition_id=partition_id,
-                        partition_count=partition_count,
-                        lease_owner=lease_owner,
-                        lease_ttl_seconds=lease_ttl_seconds,
-                        accepted_generations_override=accepted_generations_override,
                     )
-            remaining = count_pending(
-                repository_id=repository_id,
-                source_run_id=source_run_id,
-                generation_id=accepted_generation_id,
-                projection_domain=domain,
-            )
-            if int(remaining or 0) > 0:
-                remaining_domains.append(domain)
+                    or 0
+                )
+                if remaining <= 0:
+                    break
+                if previous_remaining is not None and remaining >= previous_remaining:
+                    remaining_domains.append(domain)
+                    break
+                previous_remaining = remaining
 
     if not remaining_domains:
         return {}

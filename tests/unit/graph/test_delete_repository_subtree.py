@@ -74,11 +74,19 @@ def test_reset_repository_subtree_preserves_repository_node(
         "Reset repository subtree while preserving repository node: "
         f"{repo_path.resolve()}"
     ]
-    reset_query = session.calls[1][0]
-    assert "MATCH (r)-[:CONTAINS|REPO_CONTAINS*1..]->(owned)" in reset_query
-    assert "DETACH DELETE owned" in reset_query
-    assert "DETACH DELETE r" not in reset_query
-    assert "DELETE r" not in reset_query
+    owned_reset_query = session.calls[1][0]
+    relationship_reset_query = session.calls[2][0]
+    assert "MATCH (r)-[:CONTAINS|REPO_CONTAINS*1..]->(owned_tree)" in owned_reset_query
+    assert "MATCH (r)-[:DEFINES]->(defined_workload:Workload)" in owned_reset_query
+    assert "MATCH (owned_workload:Workload {repo_id: r.id})" in owned_reset_query
+    assert (
+        "MATCH (owned_instance:WorkloadInstance {repo_id: r.id})" in owned_reset_query
+    )
+    assert "DETACH DELETE owned" in owned_reset_query
+    assert "OPTIONAL MATCH (r)-[rel]-()" in relationship_reset_query
+    assert "DELETE rel" in relationship_reset_query
+    assert "DETACH DELETE r" not in owned_reset_query
+    assert "DELETE r" not in owned_reset_query
 
 
 def test_reset_repository_subtree_uses_dynamic_local_path_lookup() -> None:
@@ -96,7 +104,10 @@ def test_reset_repository_subtree_uses_dynamic_local_path_lookup() -> None:
 
     lookup_query = session.calls[0][0]
     reset_query = session.calls[1][0]
+    relationship_reset_query = session.calls[2][0]
     assert "r[$local_path_key] IN $lookup_values" in lookup_query
     assert "r.local_path IN $lookup_values" not in lookup_query
     assert "r[$local_path_key] IN $lookup_values" in reset_query
     assert "r.local_path IN $lookup_values" not in reset_query
+    assert "r[$local_path_key] IN $lookup_values" in relationship_reset_query
+    assert "r.local_path IN $lookup_values" not in relationship_reset_query

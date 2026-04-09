@@ -17,6 +17,26 @@ def _utc_now() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
+def _persist_intents(
+    *,
+    shared_projection_intent_store: Any | None,
+    rows: list[SharedProjectionIntentRow],
+    mark_completed: bool = False,
+) -> None:
+    """Persist shared intents and optionally mark shadow rows completed."""
+
+    if shared_projection_intent_store is None or not rows:
+        return
+    shared_projection_intent_store.upsert_intents(rows)
+    if not mark_completed:
+        return
+    complete_fn = getattr(
+        shared_projection_intent_store, "mark_intents_completed", None
+    )
+    if callable(complete_fn):
+        complete_fn(intent_ids=[row.intent_id for row in rows])
+
+
 def _intent_rows_for_platform_domain(
     *,
     created_at: datetime,
@@ -66,8 +86,10 @@ def emit_platform_infra_intents(
         projection_context_by_repo_id=projection_context_by_repo_id,
         projection_domain="platform_infra",
     )
-    if rows:
-        shared_projection_intent_store.upsert_intents(rows)
+    _persist_intents(
+        shared_projection_intent_store=shared_projection_intent_store,
+        rows=rows,
+    )
 
 
 def emit_platform_runtime_intents(
@@ -85,10 +107,13 @@ def emit_platform_runtime_intents(
         created_at=created_at or _utc_now(),
         descriptor_rows=runtime_platform_rows,
         projection_context_by_repo_id=projection_context_by_repo_id,
-        projection_domain="platform_runtime",
+        projection_domain="shadow_platform_runtime",
     )
-    if rows:
-        shared_projection_intent_store.upsert_intents(rows)
+    _persist_intents(
+        shared_projection_intent_store=shared_projection_intent_store,
+        rows=rows,
+        mark_completed=True,
+    )
 
 
 def emit_dependency_intents(
@@ -113,7 +138,7 @@ def emit_dependency_intents(
             continue
         rows.append(
             build_shared_projection_intent(
-                projection_domain="repo_dependency",
+                projection_domain="shadow_repo_dependency",
                 partition_key=f"repo:{repository_id}->{target_repo_id}",
                 repository_id=repository_id,
                 source_run_id=context["source_run_id"],
@@ -136,7 +161,7 @@ def emit_dependency_intents(
             continue
         rows.append(
             build_shared_projection_intent(
-                projection_domain="workload_dependency",
+                projection_domain="shadow_workload_dependency",
                 partition_key=f"workload:{workload_id}->{target_workload_id}",
                 repository_id=repository_id,
                 source_run_id=context["source_run_id"],
@@ -145,8 +170,11 @@ def emit_dependency_intents(
                 created_at=created,
             )
         )
-    if rows:
-        shared_projection_intent_store.upsert_intents(rows)
+    _persist_intents(
+        shared_projection_intent_store=shared_projection_intent_store,
+        rows=rows,
+        mark_completed=True,
+    )
 
 
 __all__ = [

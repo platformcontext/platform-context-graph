@@ -12,6 +12,9 @@ from platform_context_graph.resolution.shared_projection.emission import (
 from platform_context_graph.resolution.shared_projection.emission import (
     emit_platform_infra_intents,
 )
+from platform_context_graph.resolution.shared_projection.emission import (
+    emit_platform_runtime_intents,
+)
 from platform_context_graph.resolution.shared_projection.models import (
     build_shared_projection_intent,
 )
@@ -285,8 +288,41 @@ def test_emit_dependency_intents_persists_repo_and_workload_domains() -> None:
 
     [rows] = store.upsert_intents.call_args.args
     assert [row.projection_domain for row in rows] == [
-        "repo_dependency",
-        "workload_dependency",
+        "shadow_repo_dependency",
+        "shadow_workload_dependency",
     ]
     assert rows[0].partition_key == "repo:repository:r_payments->repository:r_users"
     assert rows[1].partition_key == "workload:workload:payments->workload:users"
+    store.mark_intents_completed.assert_called_once_with(
+        intent_ids=[row.intent_id for row in rows]
+    )
+
+
+def test_emit_platform_runtime_intents_complete_shadow_rows_immediately() -> None:
+    """Runtime-platform shadow intents should not stay pending forever."""
+
+    store = MagicMock()
+
+    emit_platform_runtime_intents(
+        shared_projection_intent_store=store,
+        runtime_platform_rows=[
+            {
+                "instance_id": "workload_instance:payments:qa",
+                "platform_id": "platform:kubernetes:qa",
+                "platform_name": "qa",
+                "platform_kind": "kubernetes",
+                "repo_id": "repository:r_payments",
+            }
+        ],
+        projection_context_by_repo_id={
+            "repository:r_payments": {
+                "generation_id": "snapshot-abc",
+                "source_run_id": "run-123",
+            }
+        },
+        created_at=_utc_now(),
+    )
+
+    [rows] = store.upsert_intents.call_args.args
+    assert rows[0].projection_domain == "shadow_platform_runtime"
+    store.mark_intents_completed.assert_called_once_with(intent_ids=[rows[0].intent_id])
