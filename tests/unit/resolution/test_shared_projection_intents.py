@@ -20,6 +20,65 @@ from platform_context_graph.resolution.shared_projection.postgres import (
 )
 
 
+class _RecordingCursor:
+    """Record schema bootstrap queries and return canned metadata responses."""
+
+    def __init__(self) -> None:
+        """Initialize the cursor recorder."""
+
+        self.executed: list[tuple[str, object | None]] = []
+        self._last_query = ""
+
+    def execute(self, query: str, params: object | None = None) -> None:
+        """Record one query execution."""
+
+        self.executed.append((query, params))
+        self._last_query = query
+
+    def fetchone(self) -> tuple[int] | None:
+        """Return canned responses for metadata checks."""
+
+        if "table_name = 'shared_projection_intents'" in self._last_query:
+            return (1,)
+        return None
+
+    def fetchall(self) -> list[dict[str, str]]:
+        """Return a pre-upgrade shared projection schema shape."""
+
+        if "FROM information_schema.tables" in self._last_query:
+            return [
+                {"table_name": "shared_projection_intents"},
+                {"table_name": "shared_projection_partition_leases"},
+            ]
+        if "FROM information_schema.columns" in self._last_query:
+            return [
+                {"column_name": "intent_id"},
+                {"column_name": "projection_domain"},
+                {"column_name": "partition_key"},
+                {"column_name": "repository_id"},
+                {"column_name": "source_run_id"},
+                {"column_name": "generation_id"},
+                {"column_name": "payload"},
+                {"column_name": "created_at"},
+            ]
+        return []
+
+
+class _RecordingConnection:
+    """Return the same recording cursor for each schema bootstrap cursor call."""
+
+    def __init__(self, cursor: _RecordingCursor) -> None:
+        """Store the backing recording cursor."""
+
+        self._cursor = cursor
+
+    @contextmanager
+    def cursor(self) -> _RecordingCursor:
+        """Yield the recording cursor."""
+
+        yield self._cursor
+
+
 def _utc_now() -> datetime:
     """Return a stable UTC timestamp for intent tests."""
 
@@ -110,6 +169,23 @@ def test_upsert_and_list_shared_projection_intents_round_trip(monkeypatch) -> No
     assert params[0]["generation_id"] == "snapshot-abc"
     assert intents[0].projection_domain == "repo_dependency"
     assert intents[0].generation_id == "snapshot-abc"
+
+
+def test_ensure_schema_upgrades_existing_shared_projection_tables() -> None:
+    """Schema bootstrap should upgrade an existing shared intent store."""
+
+    store = PostgresSharedProjectionIntentStore("postgresql://example")
+    cursor = _RecordingCursor()
+    conn = _RecordingConnection(cursor)
+
+    store._ensure_schema(conn)
+
+    queries = "\n".join(query for query, _params in cursor.executed)
+
+    assert "shared_projection_intents" in queries
+    assert "ADD COLUMN IF NOT EXISTS completed_at" in queries
+    assert "CREATE TABLE IF NOT EXISTS shared_projection_partition_leases" in queries
+    assert store._initialized is True
 
 
 def test_emit_platform_infra_intents_persists_partitioned_shadow_rows() -> None:

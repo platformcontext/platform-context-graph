@@ -11,6 +11,7 @@ from typing import Any
 
 from platform_context_graph.observability import current_component
 from platform_context_graph.observability import get_observability
+from platform_context_graph.postgres_schema import schema_is_ready
 
 from .claims import claim_work_item
 from .claims import complete_work_item
@@ -44,6 +45,28 @@ except ImportError:  # pragma: no cover - exercised without optional dependency.
     _ConnectionPool = None
 
 _logger = logging.getLogger(__name__)
+
+_REQUIRED_FACT_WORK_QUEUE_TABLES = (
+    "fact_work_items",
+    "fact_replay_events",
+    "fact_backfill_requests",
+)
+_REQUIRED_FACT_WORK_QUEUE_COLUMNS = {
+    "fact_work_items": (
+        "parent_work_item_id",
+        "projection_domain",
+        "accepted_generation_id",
+        "authoritative_shared_domains",
+        "completed_shared_domains",
+        "shared_projection_pending",
+    ),
+}
+_REQUIRED_FACT_WORK_QUEUE_INDEXES = (
+    "fact_work_items_status_idx",
+    "fact_work_items_shared_projection_idx",
+    "fact_replay_events_work_item_idx",
+    "fact_backfill_requests_repo_idx",
+)
 
 
 class PostgresFactWorkQueue:
@@ -97,17 +120,14 @@ class PostgresFactWorkQueue:
             return
         with self._schema_lock:
             if not self._initialized:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT 1 FROM information_schema.tables "
-                        "WHERE table_schema = 'public' "
-                        "AND table_name = 'fact_work_items'"
-                    )
-                    if cursor.fetchone() is not None:
-                        self._initialized = True
-                        return
-                with conn.cursor() as cursor:
-                    cursor.execute(FACT_WORK_QUEUE_SCHEMA)
+                if not schema_is_ready(
+                    conn,
+                    required_tables=_REQUIRED_FACT_WORK_QUEUE_TABLES,
+                    required_columns_by_table=_REQUIRED_FACT_WORK_QUEUE_COLUMNS,
+                    required_indexes=_REQUIRED_FACT_WORK_QUEUE_INDEXES,
+                ):
+                    with conn.cursor() as cursor:
+                        cursor.execute(FACT_WORK_QUEUE_SCHEMA)
                 self._initialized = True
 
     def _refresh_pool_metrics(self, *, component: str) -> None:

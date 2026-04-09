@@ -9,6 +9,8 @@ from datetime import timedelta
 from datetime import timezone
 from typing import Any
 
+from platform_context_graph.postgres_schema import schema_is_ready
+
 from .models import SharedProjectionIntentRow
 from .schema import SHARED_PROJECTION_INTENT_SCHEMA
 
@@ -53,6 +55,18 @@ SET projection_domain = EXCLUDED.projection_domain,
     created_at = EXCLUDED.created_at,
     completed_at = NULL
 """
+
+_REQUIRED_SHARED_PROJECTION_TABLES = (
+    "shared_projection_intents",
+    "shared_projection_partition_leases",
+)
+_REQUIRED_SHARED_PROJECTION_COLUMNS = {
+    "shared_projection_intents": ("completed_at",),
+}
+_REQUIRED_SHARED_PROJECTION_INDEXES = (
+    "shared_projection_intents_repo_run_idx",
+    "shared_projection_intents_pending_idx",
+)
 
 
 def _intent_params(entry: SharedProjectionIntentRow) -> dict[str, Any]:
@@ -129,17 +143,14 @@ class PostgresSharedProjectionIntentStore:
         with self._schema_lock:
             if self._initialized:
                 return
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT 1 FROM information_schema.tables "
-                    "WHERE table_schema = 'public' "
-                    "AND table_name = 'shared_projection_intents'"
-                )
-                if cursor.fetchone() is not None:
-                    self._initialized = True
-                    return
-            with conn.cursor() as cursor:
-                cursor.execute(SHARED_PROJECTION_INTENT_SCHEMA)
+            if not schema_is_ready(
+                conn,
+                required_tables=_REQUIRED_SHARED_PROJECTION_TABLES,
+                required_columns_by_table=_REQUIRED_SHARED_PROJECTION_COLUMNS,
+                required_indexes=_REQUIRED_SHARED_PROJECTION_INDEXES,
+            ):
+                with conn.cursor() as cursor:
+                    cursor.execute(SHARED_PROJECTION_INTENT_SCHEMA)
             self._initialized = True
 
     def upsert_intents(self, entries: list[SharedProjectionIntentRow]) -> None:
