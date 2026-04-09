@@ -17,6 +17,13 @@ _NOISY_JSON_FILENAMES = frozenset(
 _HELM_DIRECTIVE_LINE = re.compile(r"^\s*\{\{[-#]?(?:.|\n)*?[-#]?\}\}\s*$")
 
 
+def is_typescript_config_filename(filename: str) -> bool:
+    """Return whether a filename belongs to the tsconfig JSON family."""
+
+    lowered = filename.lower()
+    return lowered.startswith("tsconfig") and lowered.endswith(".json")
+
+
 def build_empty_result(
     path: str, language_name: str, is_dependency: bool
 ) -> dict[str, Any]:
@@ -47,13 +54,15 @@ def should_skip_json_entities(filename: str) -> bool:
     return lowered in _NOISY_JSON_FILENAMES or lowered.endswith(".min.json")
 
 
-def normalize_json_source(source_text: str) -> str:
+def normalize_json_source(source_text: str, *, filename: str | None = None) -> str:
     """Normalize JSON text for known real-world config preambles.
 
     The targeted JSON parser stays strict for document content, but some repos
     legitimately store JSON documents behind a small Helm-templated preamble.
     We strip only leading full-line Helm directives and otherwise leave the
-    document untouched. Empty or whitespace-only files normalize to ``""``.
+    document untouched except for ``tsconfig*.json`` files, where we also strip
+    JSONC comments and trailing commas. Empty or whitespace-only files
+    normalize to ``""``.
     """
 
     stripped = source_text.lstrip("\ufeff")
@@ -64,7 +73,10 @@ def normalize_json_source(source_text: str) -> str:
     start_index = 0
     while start_index < len(lines) and _HELM_DIRECTIVE_LINE.match(lines[start_index]):
         start_index += 1
-    return "\n".join(lines[start_index:]).lstrip()
+    normalized = "\n".join(lines[start_index:]).lstrip()
+    if filename and is_typescript_config_filename(filename):
+        return _strip_trailing_commas(_strip_jsonc_comments(normalized))
+    return normalized
 
 
 def apply_json_document(
@@ -101,7 +113,7 @@ def apply_json_document(
         )
         return
 
-    if lowered == "tsconfig.json":
+    if is_typescript_config_filename(lowered):
         result["variables"].extend(_tsconfig_variables(document, language_name))
 
 
@@ -253,9 +265,115 @@ def _tsconfig_variables(
     return rows
 
 
+def _strip_jsonc_comments(source_text: str) -> str:
+    """Strip JSONC comments while preserving string literals."""
+
+    result: list[str] = []
+    index = 0
+    in_string = False
+    in_line_comment = False
+    in_block_comment = False
+    escape_next = False
+
+    while index < len(source_text):
+        char = source_text[index]
+        next_char = source_text[index + 1] if index + 1 < len(source_text) else ""
+
+        if in_line_comment:
+            if char == "\n":
+                in_line_comment = False
+                result.append(char)
+            index += 1
+            continue
+
+        if in_block_comment:
+            if char == "*" and next_char == "/":
+                in_block_comment = False
+                index += 2
+                continue
+            if char == "\n":
+                result.append(char)
+            index += 1
+            continue
+
+        if in_string:
+            result.append(char)
+            if escape_next:
+                escape_next = False
+            elif char == "\\":
+                escape_next = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+
+        if char == '"' and not in_string:
+            in_string = True
+            result.append(char)
+            index += 1
+            continue
+
+        if char == "/" and next_char == "/":
+            in_line_comment = True
+            index += 2
+            continue
+
+        if char == "/" and next_char == "*":
+            in_block_comment = True
+            index += 2
+            continue
+
+        result.append(char)
+        index += 1
+
+    return "".join(result)
+
+
+def _strip_trailing_commas(source_text: str) -> str:
+    """Remove commas that appear immediately before JSON closing tokens."""
+
+    result: list[str] = []
+    in_string = False
+    escape_next = False
+    index = 0
+
+    while index < len(source_text):
+        char = source_text[index]
+        if in_string:
+            result.append(char)
+            if escape_next:
+                escape_next = False
+            elif char == "\\":
+                escape_next = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+
+        if char == '"':
+            in_string = True
+            result.append(char)
+            index += 1
+            continue
+
+        if char == ",":
+            lookahead = index + 1
+            while lookahead < len(source_text) and source_text[lookahead].isspace():
+                lookahead += 1
+            if lookahead < len(source_text) and source_text[lookahead] in "]}":
+                index += 1
+                continue
+
+        result.append(char)
+        index += 1
+
+    return "".join(result)
+
+
 __all__ = [
     "apply_json_document",
     "build_empty_result",
+    "is_typescript_config_filename",
     "normalize_json_source",
     "should_skip_json_entities",
 ]

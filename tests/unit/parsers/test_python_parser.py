@@ -1,6 +1,8 @@
 """Tests for the handwritten Python parser facade."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
+import warnings
 
 import pytest
 
@@ -8,6 +10,7 @@ from platform_context_graph.parsers.languages.python import (
     PythonTreeSitterParser,
     pre_scan_python,
 )
+from platform_context_graph.parsers.languages.python_support import get_docstring
 from platform_context_graph.utils.tree_sitter_manager import get_tree_sitter_manager
 
 
@@ -262,6 +265,27 @@ def proxy():
         assert semantics["flask"]["route_methods"] == ["GET", "POST"]
         assert semantics["flask"]["route_paths"] == ["/health", "/proxy"]
         assert semantics["flask"]["server_symbols"] == ["app"]
+
+    def test_get_docstring_with_invalid_escape_does_not_emit_syntax_warning(
+        self,
+    ) -> None:
+        """Invalid-escape docstrings should not spam parser warnings."""
+
+        docstring_node = SimpleNamespace(type="string")
+        expression_node = SimpleNamespace(
+            type="expression_statement",
+            children=[docstring_node],
+        )
+        body_node = SimpleNamespace(child_count=1, children=[expression_node])
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", SyntaxWarning)
+            docstring = get_docstring(body_node, lambda _node: '"""Regex: \\s+"""')
+
+        assert docstring == r"Regex: \s+"
+        assert [
+            warning for warning in caught if issubclass(warning.category, SyntaxWarning)
+        ] == []
 
     def test_parse_flask_factory_route_semantics(self, parser, temp_test_dir):
         """Treat imported Flask app factories as bounded route owners."""

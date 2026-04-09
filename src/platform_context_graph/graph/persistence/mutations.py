@@ -186,14 +186,21 @@ def reset_repository_subtree_in_graph(
                OR r.path IN $lookup_values
                OR r[$local_path_key] IN $lookup_values
             OPTIONAL MATCH (r)-[:CONTAINS|REPO_CONTAINS*1..]->(owned_tree)
-            WITH r, collect(DISTINCT owned_tree) AS owned_nodes
+            WITH r, collect(DISTINCT owned_tree) AS owned_tree_nodes
             OPTIONAL MATCH (r)-[:DEFINES]->(defined_workload:Workload)
-            WITH r, owned_nodes + collect(DISTINCT defined_workload) AS owned_nodes
+            WITH r, owned_tree_nodes, collect(DISTINCT defined_workload)
+                AS defined_workload_nodes
             OPTIONAL MATCH (owned_workload:Workload {repo_id: r.id})
-            WITH r, owned_nodes + collect(DISTINCT owned_workload) AS owned_nodes
+            WITH r, owned_tree_nodes, defined_workload_nodes,
+                collect(DISTINCT owned_workload) AS repo_workload_nodes
             OPTIONAL MATCH (owned_instance:WorkloadInstance {repo_id: r.id})
-            WITH r, owned_nodes + collect(DISTINCT owned_instance) AS maybe_owned_nodes
-            UNWIND [owned IN maybe_owned_nodes WHERE owned IS NOT NULL] AS owned
+            WITH owned_tree_nodes, defined_workload_nodes, repo_workload_nodes,
+                collect(DISTINCT owned_instance) AS repo_instance_nodes
+            WITH owned_tree_nodes + defined_workload_nodes + repo_workload_nodes
+                + repo_instance_nodes AS owned_nodes
+            UNWIND owned_nodes AS owned
+            WITH DISTINCT owned
+            WHERE owned IS NOT NULL
             DETACH DELETE owned
             """,
             lookup_values=lookup_values,

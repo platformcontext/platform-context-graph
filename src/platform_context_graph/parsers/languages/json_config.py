@@ -45,7 +45,7 @@ class JSONConfigTreeSitterParser:
         file_path = Path(path)
         source_text = file_path.read_text(encoding="utf-8")
         result = build_empty_result(str(file_path), self.language_name, is_dependency)
-        normalized_source = normalize_json_source(source_text)
+        normalized_source = normalize_json_source(source_text, filename=file_path.name)
         if not normalized_source:
             if index_source:
                 result["source"] = source_text

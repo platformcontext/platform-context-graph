@@ -184,7 +184,9 @@ def get_docstring(body_node: Any, get_node_text: Callable[[Any], str]) -> str | 
             and first_child.children[0].type == "string"
         ):
             try:
-                return ast.literal_eval(get_node_text(first_child.children[0]))
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", SyntaxWarning)
+                    return ast.literal_eval(get_node_text(first_child.children[0]))
             except (ValueError, SyntaxError):
                 return get_node_text(first_child.children[0])
     return None
