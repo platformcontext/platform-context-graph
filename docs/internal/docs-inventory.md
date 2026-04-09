@@ -62,6 +62,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/use-cases.md` | Use cases | active |
 | `docs/docs/why-pcg.md` | Why PlatformContextGraph exists | active |
 | `docs/docs/languages/feature-matrix.md` | Parser feature matrix | active |
+| `docs/docs/languages/support-maturity.md` | Parser support maturity matrix | active |
 | `docs/docs/languages/python.md` | Python parser spec | active |
 | `docs/docs/languages/go.md` | Go parser spec | active |
 | `docs/docs/languages/typescript.md` | TypeScript parser spec | active |
