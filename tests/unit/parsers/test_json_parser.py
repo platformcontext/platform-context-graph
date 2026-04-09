@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from platform_context_graph.parsers.languages.json_config import (
     JSONConfigTreeSitterParser,
 )
@@ -102,6 +104,58 @@ class TestJSONConfigParser:
         assert values["reference:../shared"]["config_kind"] == "reference"
         assert values["reference:../infra"]["value"] == "../infra"
         assert values["path:@app/*"]["value"] == "src/*,generated/*"
+
+    @pytest.mark.parametrize("filename", ["tsconfig.json", "tsconfig.base.json"])
+    def test_parse_tsconfig_jsonc_comments_and_trailing_commas(
+        self, temp_test_dir: Path, filename: str
+    ) -> None:
+        """tsconfig*.json should tolerate JSONC comments and trailing commas."""
+
+        file_path = temp_test_dir / filename
+        file_path.write_text(
+            "\n".join(
+                [
+                    "{",
+                    "  // shared config",
+                    '  "extends": "./tsconfig.shared.json",',
+                    '  "compilerOptions": {',
+                    '    "paths": {',
+                    '      "@app/*": ["src/*", "generated/*",],',
+                    "    },",
+                    "  },",
+                    '  "references": [{"path": "../shared"},],',
+                    "}",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        parser = JSONConfigTreeSitterParser("json")
+        result = parser.parse(file_path)
+
+        values = {item["name"]: item for item in result["variables"]}
+
+        assert values["extends"]["value"] == "./tsconfig.shared.json"
+        assert values["reference:../shared"]["config_kind"] == "reference"
+        assert values["path:@app/*"]["value"] == "src/*,generated/*"
+
+    def test_non_tsconfig_json_with_comments_stays_strict(
+        self, temp_test_dir: Path
+    ) -> None:
+        """Generic JSON files should still reject JSONC-only syntax."""
+
+        file_path = temp_test_dir / "data.json"
+        file_path.write_text(
+            "\n".join(
+                ["{", "  // not allowed here", '  "service": "payments-api"', "}"]
+            ),
+            encoding="utf-8",
+        )
+
+        parser = JSONConfigTreeSitterParser("json")
+
+        with pytest.raises(json.JSONDecodeError):
+            parser.parse(file_path)
 
     def test_skip_non_config_json(self, temp_test_dir: Path) -> None:
         """Generic JSON files should stay metadata-only instead of emitting nodes."""

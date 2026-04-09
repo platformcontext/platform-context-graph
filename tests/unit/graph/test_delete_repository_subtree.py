@@ -82,6 +82,8 @@ def test_reset_repository_subtree_preserves_repository_node(
     assert (
         "MATCH (owned_instance:WorkloadInstance {repo_id: r.id})" in owned_reset_query
     )
+    assert "owned_nodes + collect" not in owned_reset_query
+    assert "maybe_owned_nodes" not in owned_reset_query
     assert "DETACH DELETE owned" in owned_reset_query
     assert "OPTIONAL MATCH (r)-[rel]-()" in relationship_reset_query
     assert "DELETE rel" in relationship_reset_query
