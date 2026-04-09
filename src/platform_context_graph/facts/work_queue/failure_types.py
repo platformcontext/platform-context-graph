@@ -34,3 +34,4 @@ class FailureClassification:
     failure_class: FailureClass
     failure_code: str
     retry_disposition: FailureDisposition
+    retry_after_seconds: int | None = None
