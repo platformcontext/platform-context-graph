@@ -18,6 +18,7 @@ from .claims import enqueue_work_item
 from .claims import fail_work_item
 from .claims import lease_work_item
 from .inspection import count_shared_projection_pending
+from .inspection import list_shared_projection_acceptances
 from .inspection import list_queue_snapshot
 from .inspection import list_work_items
 from .models import FactBackfillRequestRow
@@ -349,6 +350,20 @@ class PostgresFactWorkQueue:
         """Return the number of work items awaiting authoritative shared writes."""
 
         return count_shared_projection_pending(self, source_run_id=source_run_id)
+
+    def list_shared_projection_acceptances(
+        self,
+        *,
+        projection_domain: str,
+        repository_ids: list[str] | None = None,
+    ) -> dict[tuple[str, str], str]:
+        """Return accepted generations for one shared projection domain."""
+
+        return list_shared_projection_acceptances(
+            self,
+            projection_domain=projection_domain,
+            repository_ids=repository_ids,
+        )
 
     def list_queue_snapshot(self) -> list[FactWorkQueueSnapshotRow]:
         """Return aggregated queue depth and oldest age by work type and status."""

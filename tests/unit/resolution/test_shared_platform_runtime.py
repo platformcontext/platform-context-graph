@@ -271,6 +271,9 @@ def test_process_platform_partition_once_applies_latest_generation_only() -> Non
     )
     store = _FakeIntentStore([old_intent, new_intent])
     queue = MagicMock()
+    queue.list_shared_projection_acceptances.return_value = {
+        ("repository:r_payments", "run-123"): "gen-new"
+    }
     session = MagicMock()
     partition_id = partition_for_key("platform:kubernetes:qa", partition_count=8)
 

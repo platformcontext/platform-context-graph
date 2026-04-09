@@ -129,3 +129,46 @@ def count_shared_projection_pending(
     if row is None:
         return 0
     return int(row.get("pending_count") or 0)
+
+
+def list_shared_projection_acceptances(
+    queue: Any,
+    *,
+    projection_domain: str,
+    repository_ids: list[str] | None = None,
+) -> dict[tuple[str, str], str]:
+    """Return accepted generations for pending authoritative shared projection."""
+
+    rows = queue._record_operation(
+        operation="list_shared_projection_acceptances",
+        callback=lambda: queue._fetchall(
+            """
+            SELECT DISTINCT ON (repository_id, source_run_id)
+                   repository_id,
+                   source_run_id,
+                   accepted_generation_id
+            FROM fact_work_items
+            WHERE shared_projection_pending = TRUE
+              AND accepted_generation_id IS NOT NULL
+              AND %(projection_domain)s = ANY(authoritative_shared_domains)
+              AND (
+                %(repository_ids)s IS NULL
+                OR repository_id = ANY(%(repository_ids)s)
+              )
+            ORDER BY repository_id, source_run_id, updated_at DESC, work_item_id DESC
+            """,
+            {
+                "projection_domain": projection_domain,
+                "repository_ids": repository_ids or None,
+            },
+        ),
+        row_count=None,
+    )
+    accepted: dict[tuple[str, str], str] = {}
+    for row in rows:
+        repository_id = str(row.get("repository_id") or "").strip()
+        source_run_id = str(row.get("source_run_id") or "").strip()
+        generation_id = str(row.get("accepted_generation_id") or "").strip()
+        if repository_id and source_run_id and generation_id:
+            accepted[(repository_id, source_run_id)] = generation_id
+    return accepted

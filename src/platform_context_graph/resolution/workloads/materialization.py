@@ -7,6 +7,7 @@ import re
 from typing import Any, Iterable
 
 from ..platforms import materialize_infrastructure_platforms_for_repo_paths
+from ..shared_projection import dependency_shared_projection_worker_enabled
 from ..shared_projection import emit_platform_runtime_intents
 from .batches import retract_instance_rows
 from .batches import retract_repo_dependency_rows
@@ -17,6 +18,8 @@ from .batches import write_instance_rows
 from .batches import write_runtime_platform_rows
 from .batches import write_workload_rows
 from .dependency_support import materialize_runtime_dependencies
+from .metrics import merge_projection_metrics
+from .metrics import merge_shared_projection_payload
 from .projection import build_projection_rows
 from ...utils.debug_log import emit_log_call
 
@@ -64,17 +67,6 @@ def _normalize_repo_paths(
     if not committed_repo_paths:
         return None
     return [str(path.resolve()) for path in committed_repo_paths]
-
-
-def _merge_metric_totals(
-    totals: dict[str, int],
-    current: dict[str, int],
-) -> dict[str, int]:
-    """Merge one integer metrics payload into the running totals."""
-
-    for key, value in current.items():
-        totals[key] = totals.get(key, 0) + int(value)
-    return totals
 
 
 def _emit_workload_progress(
@@ -296,6 +288,11 @@ def materialize_workloads(
         metrics["deployment_sources"] = stats["deployment_sources"]
         metrics["deployment_sources_projected"] = stats["deployment_sources"]
         metrics["runtime_platform_edges_projected"] = len(runtime_platform_rows)
+        dependency_worker_cutover = (
+            dependency_shared_projection_worker_enabled()
+            and shared_projection_intent_store is not None
+            and projection_context_by_repo_id
+        )
         _progress(
             status="running",
             operation="gather_completed",
@@ -310,40 +307,54 @@ def materialize_workloads(
             targeted_repo_count=metrics["targeted_repo_count"],
             workloads_projected=metrics["workloads_projected"],
         )
-        _merge_metric_totals(
-            metrics,
-            retract_repo_dependency_rows(
-                session,
-                target_repo_ids,
-                evidence_source=_EVIDENCE_SOURCE,
-            ),
-        )
-        _progress(
-            status="running",
-            operation="cleanup_completed",
-            cleanup_pass="repo_dependencies",
-            cleanup_deleted_edges=metrics["cleanup_deleted_edges"],
-            cleanup_deleted_nodes=metrics["cleanup_deleted_nodes"],
-            targeted_repo_count=metrics["targeted_repo_count"],
-        )
-        _merge_metric_totals(
-            metrics,
-            retract_workload_dependency_rows(
-                session,
-                target_repo_ids,
-                active_workload_ids=active_workload_ids,
-                evidence_source=_EVIDENCE_SOURCE,
-            ),
-        )
-        _progress(
-            status="running",
-            operation="cleanup_completed",
-            cleanup_pass="workload_dependencies",
-            cleanup_deleted_edges=metrics["cleanup_deleted_edges"],
-            cleanup_deleted_nodes=metrics["cleanup_deleted_nodes"],
-            targeted_repo_count=metrics["targeted_repo_count"],
-        )
-        _merge_metric_totals(
+        if dependency_worker_cutover:
+            _progress(
+                status="running",
+                operation="cleanup_skipped",
+                cleanup_pass="repo_dependencies",
+                targeted_repo_count=metrics["targeted_repo_count"],
+            )
+            _progress(
+                status="running",
+                operation="cleanup_skipped",
+                cleanup_pass="workload_dependencies",
+                targeted_repo_count=metrics["targeted_repo_count"],
+            )
+        else:
+            merge_projection_metrics(
+                metrics,
+                retract_repo_dependency_rows(
+                    session,
+                    target_repo_ids,
+                    evidence_source=_EVIDENCE_SOURCE,
+                ),
+            )
+            _progress(
+                status="running",
+                operation="cleanup_completed",
+                cleanup_pass="repo_dependencies",
+                cleanup_deleted_edges=metrics["cleanup_deleted_edges"],
+                cleanup_deleted_nodes=metrics["cleanup_deleted_nodes"],
+                targeted_repo_count=metrics["targeted_repo_count"],
+            )
+            merge_projection_metrics(
+                metrics,
+                retract_workload_dependency_rows(
+                    session,
+                    target_repo_ids,
+                    active_workload_ids=active_workload_ids,
+                    evidence_source=_EVIDENCE_SOURCE,
+                ),
+            )
+            _progress(
+                status="running",
+                operation="cleanup_completed",
+                cleanup_pass="workload_dependencies",
+                cleanup_deleted_edges=metrics["cleanup_deleted_edges"],
+                cleanup_deleted_nodes=metrics["cleanup_deleted_nodes"],
+                targeted_repo_count=metrics["targeted_repo_count"],
+            )
+        merge_projection_metrics(
             metrics,
             retract_stale_workload_rows(
                 session,
@@ -360,7 +371,7 @@ def materialize_workloads(
             cleanup_deleted_nodes=metrics["cleanup_deleted_nodes"],
             targeted_repo_count=metrics["targeted_repo_count"],
         )
-        _merge_metric_totals(
+        merge_projection_metrics(
             metrics,
             retract_instance_rows(
                 session,
@@ -376,7 +387,7 @@ def materialize_workloads(
             cleanup_deleted_nodes=metrics["cleanup_deleted_nodes"],
             targeted_repo_count=metrics["targeted_repo_count"],
         )
-        _merge_metric_totals(
+        merge_projection_metrics(
             metrics,
             write_workload_rows(
                 session,
@@ -385,7 +396,7 @@ def materialize_workloads(
                 progress_callback=_progress,
             ),
         )
-        _merge_metric_totals(
+        merge_projection_metrics(
             metrics,
             write_instance_rows(
                 session,
@@ -394,7 +405,7 @@ def materialize_workloads(
                 progress_callback=_progress,
             ),
         )
-        _merge_metric_totals(
+        merge_projection_metrics(
             metrics,
             write_deployment_source_rows(
                 session,
@@ -403,7 +414,7 @@ def materialize_workloads(
                 progress_callback=_progress,
             ),
         )
-        _merge_metric_totals(
+        merge_projection_metrics(
             metrics,
             write_runtime_platform_rows(
                 session,
@@ -417,27 +428,25 @@ def materialize_workloads(
             runtime_platform_rows=runtime_platform_rows,
             projection_context_by_repo_id=projection_context_by_repo_id,
         )
-        _merge_metric_totals(
-            metrics,
-            materialize_runtime_dependencies(
-                session,
-                repo_descriptors=repo_descriptors,
-                evidence_source=_EVIDENCE_SOURCE,
-                progress_callback=_progress,
-                projection_context_by_repo_id=projection_context_by_repo_id,
-                shared_projection_intent_store=shared_projection_intent_store,
-            ),
+        dependency_metrics = materialize_runtime_dependencies(
+            session,
+            repo_descriptors=repo_descriptors,
+            evidence_source=_EVIDENCE_SOURCE,
+            progress_callback=_progress,
+            projection_context_by_repo_id=projection_context_by_repo_id,
+            shared_projection_intent_store=shared_projection_intent_store,
         )
-        _merge_metric_totals(
-            metrics,
-            materialize_infrastructure_platforms_for_repo_paths(
-                session,
-                repo_paths=committed_repo_paths,
-                progress_callback=_progress,
-                projection_context_by_repo_id=projection_context_by_repo_id,
-                shared_projection_intent_store=shared_projection_intent_store,
-            ),
+        merge_projection_metrics(metrics, dependency_metrics)
+        merge_shared_projection_payload(metrics, dependency_metrics)
+        platform_metrics = materialize_infrastructure_platforms_for_repo_paths(
+            session,
+            repo_paths=committed_repo_paths,
+            progress_callback=_progress,
+            projection_context_by_repo_id=projection_context_by_repo_id,
+            shared_projection_intent_store=shared_projection_intent_store,
         )
+        merge_projection_metrics(metrics, platform_metrics)
+        merge_shared_projection_payload(metrics, platform_metrics)
 
     if metrics["workloads_projected"] > 0:
         info_logger_fn(
