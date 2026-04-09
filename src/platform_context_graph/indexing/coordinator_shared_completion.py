@@ -44,12 +44,14 @@ def completion_state_from_metrics(
     )
     if not domains:
         return SharedProjectionCompletionState()
-    accepted_generation_id = str(
-        payload.get("accepted_generation_id") or default_generation_id
-    ).strip()
+    accepted_generation_id = str(payload.get("accepted_generation_id") or "").strip()
+    if not accepted_generation_id:
+        accepted_generation_id = default_generation_id.strip()
+    if not accepted_generation_id:
+        return SharedProjectionCompletionState()
     return SharedProjectionCompletionState(
         authoritative_domains=domains,
-        accepted_generation_id=accepted_generation_id or default_generation_id,
+        accepted_generation_id=accepted_generation_id,
     )
 
 

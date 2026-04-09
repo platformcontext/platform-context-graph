@@ -370,29 +370,31 @@ def project_work_item(
     merge_shared_projection_payload(shared_followup_metrics, platform_metrics)
     shared_payload = shared_followup_metrics.get("shared_projection")
     if isinstance(shared_payload, dict):
-        if fact_work_queue is None:
-            from platform_context_graph.facts.state import get_fact_work_queue
+        accepted_generation_id = str(
+            shared_payload.get("accepted_generation_id") or ""
+        ).strip()
+        if accepted_generation_id:
+            if fact_work_queue is None:
+                from platform_context_graph.facts.state import get_fact_work_queue
 
-            fact_work_queue = get_fact_work_queue()
-        if shared_projection_intent_store is None:
-            from platform_context_graph.facts.state import (
-                get_shared_projection_intent_store,
+                fact_work_queue = get_fact_work_queue()
+            if shared_projection_intent_store is None:
+                from platform_context_graph.facts.state import (
+                    get_shared_projection_intent_store,
+                )
+
+                shared_projection_intent_store = get_shared_projection_intent_store()
+            shared_followup_metrics = run_inline_shared_followup(
+                builder=builder,
+                repository_id=work_item.repository_id,
+                source_run_id=work_item.source_run_id,
+                accepted_generation_id=accepted_generation_id,
+                authoritative_domains=list(
+                    shared_payload.get("authoritative_domains") or []
+                ),
+                fact_work_queue=fact_work_queue,
+                shared_projection_intent_store=shared_projection_intent_store,
             )
-
-            shared_projection_intent_store = get_shared_projection_intent_store()
-        shared_followup_metrics = run_inline_shared_followup(
-            builder=builder,
-            repository_id=work_item.repository_id,
-            source_run_id=work_item.source_run_id,
-            accepted_generation_id=str(
-                shared_payload.get("accepted_generation_id") or work_item.source_run_id
-            ),
-            authoritative_domains=list(
-                shared_payload.get("authoritative_domains") or []
-            ),
-            fact_work_queue=fact_work_queue,
-            shared_projection_intent_store=shared_projection_intent_store,
-        )
 
     result = {
         "facts": fact_metrics,

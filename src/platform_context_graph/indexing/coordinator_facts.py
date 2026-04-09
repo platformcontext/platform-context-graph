@@ -202,7 +202,8 @@ def project_repository_snapshot_facts(
         raise
 
     completion_state = completion_state_from_metrics(
-        metrics, default_generation_id=work_item.source_run_id
+        metrics,
+        default_generation_id=fact_emission_result.source_snapshot_id,
     )
     apply_completion_state(
         queue=queue,

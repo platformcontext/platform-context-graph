@@ -219,7 +219,7 @@ def run_resolution_iteration(
         else:
             completion_state = completion_state_from_metrics(
                 metrics if isinstance(metrics, dict) else None,
-                default_generation_id=work_item.source_run_id,
+                default_generation_id="",
             )
             apply_completion_state(
                 queue=queue,

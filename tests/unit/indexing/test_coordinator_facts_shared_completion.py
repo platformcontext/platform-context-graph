@@ -99,6 +99,77 @@ def test_commit_repository_snapshot_from_facts_fences_on_authoritative_shared_wo
     work_queue.complete_work_item.assert_not_called()
 
 
+def test_commit_repository_snapshot_from_facts_falls_back_to_snapshot_generation(
+    tmp_path: Path,
+) -> None:
+    """Inline projection should use the emitted snapshot id as safe fallback."""
+
+    repo_path = tmp_path / "payments"
+    snapshot = RepositorySnapshot(
+        repo_path=str(repo_path),
+        file_count=1,
+        imports_map={},
+        file_data=[],
+    )
+    builder = SimpleNamespace(
+        reset_repository_subtree_in_graph=MagicMock(return_value=True),
+        _content_provider=SimpleNamespace(
+            enabled=True,
+            delete_repository_content=MagicMock(),
+        ),
+    )
+    graph_store = SimpleNamespace(delete_repository=MagicMock())
+    work_item = FactWorkItemRow(
+        work_item_id="work-1",
+        work_type="project-git-facts",
+        repository_id="repository:r_123",
+        source_run_id="run-123",
+        status="leased",
+        lease_owner="indexing",
+        lease_expires_at=_utc_now(),
+        attempt_count=1,
+        created_at=_utc_now(),
+        updated_at=_utc_now(),
+    )
+    work_queue = MagicMock()
+    work_queue.lease_work_item.return_value = work_item
+    fact_store = MagicMock()
+    projector = MagicMock(
+        return_value={
+            "facts": {"repositories": 1},
+            "shared_projection": {
+                "authoritative_domains": ["platform_infra"],
+            },
+        }
+    )
+
+    result = commit_repository_snapshot_from_facts(
+        builder=builder,
+        snapshot=snapshot,
+        fact_emission_result=GitSnapshotFactEmissionResult(
+            repository_id="repository:r_123",
+            source_run_id="run-123",
+            source_snapshot_id="snapshot-abc",
+            work_item_id="work-1",
+            fact_count=3,
+        ),
+        fact_store=fact_store,
+        work_queue=work_queue,
+        graph_store=graph_store,
+        project_work_item_fn=projector,
+        warning_logger_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert result.shared_projection_pending is True
+    assert result.accepted_generation_id == "snapshot-abc"
+    work_queue.mark_shared_projection_pending.assert_called_once_with(
+        work_item_id="work-1",
+        accepted_generation_id="snapshot-abc",
+        authoritative_shared_domains=["platform_infra"],
+    )
+    work_queue.complete_work_item.assert_not_called()
+
+
 def test_create_facts_first_commit_callback_marks_fact_run_pending_shared_follow_up() -> (
     None
 ):
