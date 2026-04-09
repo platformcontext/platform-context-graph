@@ -43,6 +43,7 @@ def test_commit_repository_snapshot_from_facts_resets_repo_and_projects_work_ite
         file_data=[],
     )
     builder = SimpleNamespace(
+        reset_repository_subtree_in_graph=MagicMock(return_value=True),
         _content_provider=SimpleNamespace(
             enabled=True,
             delete_repository_content=MagicMock(),
@@ -89,7 +90,10 @@ def test_commit_repository_snapshot_from_facts_resets_repo_and_projects_work_ite
     )
 
     assert result.graph_batch_count == 1
-    graph_store.delete_repository.assert_called_once_with("repository:r_123")
+    builder.reset_repository_subtree_in_graph.assert_called_once_with(
+        "repository:r_123"
+    )
+    graph_store.delete_repository.assert_not_called()
     builder._content_provider.delete_repository_content.assert_called_once_with(
         "repository:r_123"
     )
@@ -180,6 +184,7 @@ def test_commit_repository_snapshot_from_facts_uses_inline_owned_work_item(
         file_data=[],
     )
     builder = SimpleNamespace(
+        reset_repository_subtree_in_graph=MagicMock(return_value=True),
         _content_provider=SimpleNamespace(
             enabled=True,
             delete_repository_content=MagicMock(),
@@ -220,6 +225,10 @@ def test_commit_repository_snapshot_from_facts_uses_inline_owned_work_item(
     )
 
     assert result.graph_batch_count == 1
+    builder.reset_repository_subtree_in_graph.assert_called_once_with(
+        "repository:r_123"
+    )
+    graph_store.delete_repository.assert_not_called()
     work_queue.lease_work_item.assert_not_called()
     projector.assert_called_once()
     work_queue.complete_work_item.assert_called_once_with(work_item_id="work-1")

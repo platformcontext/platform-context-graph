@@ -6,8 +6,9 @@ from pathlib import Path
 import re
 from typing import Any, Iterable
 
+from .maintenance import cleanup_orphan_platform_state
+from .shared_projection import emit_platform_infra_intents
 from .workloads.batches import (
-    delete_orphan_platform_rows,
     retract_infrastructure_platform_rows,
     write_infrastructure_platform_rows,
 )
@@ -109,6 +110,10 @@ def materialize_infrastructure_platforms(session: Any) -> None:
     """Attach infrastructure repositories to inferred platform nodes."""
 
     materialize_infrastructure_platforms_for_repo_paths(session, repo_paths=None)
+    cleanup_orphan_platform_state(
+        session,
+        evidence_source="finalization/workloads",
+    )
 
 
 def materialize_infrastructure_platforms_for_repo_paths(
@@ -116,6 +121,8 @@ def materialize_infrastructure_platforms_for_repo_paths(
     *,
     repo_paths: list[Path] | None,
     progress_callback: Any | None = None,
+    projection_context_by_repo_id: dict[str, dict[str, str]] | None = None,
+    shared_projection_intent_store: Any | None = None,
 ) -> dict[str, int]:
     """Attach infrastructure repositories to inferred platform nodes in batches."""
 
@@ -196,18 +203,17 @@ def materialize_infrastructure_platforms_for_repo_paths(
             }
         )
 
+    emit_platform_infra_intents(
+        shared_projection_intent_store=shared_projection_intent_store,
+        descriptor_rows=descriptor_rows,
+        projection_context_by_repo_id=projection_context_by_repo_id,
+    )
     write_metrics = write_infrastructure_platform_rows(
         session,
         descriptor_rows,
         evidence_source="finalization/workloads",
         progress_callback=progress_callback,
     )
-    orphan_metrics = delete_orphan_platform_rows(
-        session,
-        evidence_source="finalization/workloads",
-    )
-    cleanup_metrics["cleanup_deleted_edges"] += orphan_metrics["cleanup_deleted_edges"]
-    cleanup_metrics["cleanup_deleted_nodes"] += orphan_metrics["cleanup_deleted_nodes"]
     return {
         "cleanup_deleted_edges": cleanup_metrics["cleanup_deleted_edges"],
         "cleanup_deleted_nodes": cleanup_metrics["cleanup_deleted_nodes"],

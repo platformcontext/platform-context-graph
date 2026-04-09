@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..shared_projection import emit_dependency_intents
 from .batches import write_repo_dependency_rows
 from .batches import write_workload_dependency_rows
 from ...parsers.languages.runtime_dependencies import (
@@ -171,6 +172,7 @@ def _load_runtime_dependency_targets(
             workload_dependency_rows.append(
                 {
                     "dependency_name": dependency_name,
+                    "repo_id": repo_id,
                     "target_repo_id": target_repo_id,
                     "target_workload_id": f"workload:{dependency_name}",
                     "workload_id": descriptor["workload_id"],
@@ -186,12 +188,20 @@ def materialize_runtime_dependencies(
     repo_descriptors: list[dict[str, str]],
     evidence_source: str,
     progress_callback: Any | None = None,
+    projection_context_by_repo_id: dict[str, dict[str, str]] | None = None,
+    shared_projection_intent_store: Any | None = None,
 ) -> dict[str, int]:
     """Create repo and workload dependency edges from runtime service lists."""
 
     repo_dependency_rows, workload_dependency_rows = _load_runtime_dependency_targets(
         session,
         repo_descriptors=repo_descriptors,
+    )
+    emit_dependency_intents(
+        shared_projection_intent_store=shared_projection_intent_store,
+        repo_dependency_rows=repo_dependency_rows,
+        workload_dependency_rows=workload_dependency_rows,
+        projection_context_by_repo_id=projection_context_by_repo_id,
     )
     repo_write_metrics = write_repo_dependency_rows(
         session,

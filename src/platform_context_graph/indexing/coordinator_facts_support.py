@@ -98,7 +98,11 @@ def clear_repository_projection_state(
 ) -> None:
     """Delete graph/content state before facts-first reprojection."""
 
-    graph_store.delete_repository(repository_id)
+    reset_repository = getattr(builder, "reset_repository_subtree_in_graph", None)
+    if callable(reset_repository):
+        reset_repository(repository_id)
+    else:
+        graph_store.delete_repository(repository_id)
     content_provider = getattr(builder, "_content_provider", None)
     if content_provider is not None and getattr(content_provider, "enabled", False):
         content_provider.delete_repository_content(repository_id)

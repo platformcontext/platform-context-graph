@@ -399,6 +399,7 @@ def test_project_work_item_clears_repository_state_before_projection() -> None:
     fact_store = MagicMock()
     fact_store.list_facts.return_value = []
     builder = MagicMock()
+    builder.reset_repository_subtree_in_graph = MagicMock(return_value=True)
     builder._content_provider = MagicMock(enabled=True)
 
     project_work_item(
@@ -418,9 +419,10 @@ def test_project_work_item_clears_repository_state_before_projection() -> None:
         },
     )
 
-    builder.delete_repository_from_graph.assert_called_once_with(
+    builder.reset_repository_subtree_in_graph.assert_called_once_with(
         "github.com/acme/service"
     )
+    builder.delete_repository_from_graph.assert_not_called()
     builder._content_provider.delete_repository_content.assert_called_once_with(
         "github.com/acme/service"
     )

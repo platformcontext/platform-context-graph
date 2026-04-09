@@ -166,9 +166,13 @@ def test_emitted_git_snapshot_projects_through_facts_first_commit_path() -> None
         captured["fact_types"] = sorted(record.fact_type for record in fact_records)
         return {"facts": {"records": len(fact_records)}}
 
+    builder = SimpleNamespace(
+        reset_repository_subtree_in_graph=MagicMock(return_value=True),
+        _content_provider=SimpleNamespace(enabled=False),
+    )
     graph_store = SimpleNamespace(delete_repository=MagicMock())
     timing = commit_repository_snapshot_from_facts(
-        builder=SimpleNamespace(_content_provider=SimpleNamespace(enabled=False)),
+        builder=builder,
         snapshot=snapshot,
         fact_emission_result=emission_result,
         fact_store=fact_store,
@@ -178,7 +182,10 @@ def test_emitted_git_snapshot_projects_through_facts_first_commit_path() -> None
     )
 
     assert timing.graph_batch_count == 1
-    graph_store.delete_repository.assert_called_once_with(emission_result.repository_id)
+    builder.reset_repository_subtree_in_graph.assert_called_once_with(
+        emission_result.repository_id
+    )
+    graph_store.delete_repository.assert_not_called()
     assert captured["fact_types"] == [
         "FileObserved",
         "ParsedEntityObserved",

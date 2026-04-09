@@ -141,6 +141,7 @@ def build_projection_rows(
                     "platform_name": environment,
                     "platform_provider": None,
                     "platform_region": None,
+                    "repo_id": repo_id,
                 }
             )
 

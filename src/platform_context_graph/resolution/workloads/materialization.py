@@ -7,6 +7,7 @@ import re
 from typing import Any, Iterable
 
 from ..platforms import materialize_infrastructure_platforms_for_repo_paths
+from ..shared_projection import emit_platform_runtime_intents
 from .batches import retract_instance_rows
 from .batches import retract_repo_dependency_rows
 from .batches import retract_stale_workload_rows
@@ -222,6 +223,8 @@ def materialize_workloads(
     info_logger_fn: Any,
     committed_repo_paths: list[Path] | None = None,
     progress_callback: Any | None = None,
+    projection_context_by_repo_id: dict[str, dict[str, str]] | None = None,
+    shared_projection_intent_store: Any | None = None,
 ) -> dict[str, int]:
     """Materialize canonical workload nodes from indexed repo and Argo metadata."""
 
@@ -409,6 +412,11 @@ def materialize_workloads(
                 progress_callback=_progress,
             ),
         )
+        emit_platform_runtime_intents(
+            shared_projection_intent_store=shared_projection_intent_store,
+            runtime_platform_rows=runtime_platform_rows,
+            projection_context_by_repo_id=projection_context_by_repo_id,
+        )
         _merge_metric_totals(
             metrics,
             materialize_runtime_dependencies(
@@ -416,6 +424,8 @@ def materialize_workloads(
                 repo_descriptors=repo_descriptors,
                 evidence_source=_EVIDENCE_SOURCE,
                 progress_callback=_progress,
+                projection_context_by_repo_id=projection_context_by_repo_id,
+                shared_projection_intent_store=shared_projection_intent_store,
             ),
         )
         _merge_metric_totals(
@@ -424,6 +434,8 @@ def materialize_workloads(
                 session,
                 repo_paths=committed_repo_paths,
                 progress_callback=_progress,
+                projection_context_by_repo_id=projection_context_by_repo_id,
+                shared_projection_intent_store=shared_projection_intent_store,
             ),
         )
 

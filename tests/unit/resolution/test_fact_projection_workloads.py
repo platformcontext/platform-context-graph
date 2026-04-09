@@ -45,10 +45,14 @@ def test_project_workload_facts_targets_projected_repositories() -> None:
         info_logger_fn: object,
         committed_repo_paths: list[Path] | None,
         progress_callback: object | None = None,
+        projection_context_by_repo_id: dict[str, dict[str, str]] | None = None,
+        shared_projection_intent_store: object | None = None,
     ) -> dict[str, int]:
         captured["builder"] = builder
         captured["repo_paths"] = committed_repo_paths
         captured["progress_callback"] = progress_callback
+        captured["projection_context_by_repo_id"] = projection_context_by_repo_id
+        captured["shared_projection_intent_store"] = shared_projection_intent_store
         assert callable(info_logger_fn)
         return {"workloads_projected": 2}
 
@@ -59,8 +63,16 @@ def test_project_workload_facts_targets_projected_repositories() -> None:
         fact_records=fact_records,
         materialize_workloads_fn=_materialize_workloads,
         info_logger_fn=lambda *_args, **_kwargs: None,
+        shared_projection_intent_store="shared-store",
     )
 
     assert metrics == {"workloads_projected": 2}
     assert captured["builder"] is builder
     assert captured["repo_paths"] == [Path("/tmp/service").resolve()]
+    assert captured["projection_context_by_repo_id"] == {
+        "github.com/acme/service": {
+            "generation_id": "snapshot-abc",
+            "source_run_id": "run-123",
+        }
+    }
+    assert captured["shared_projection_intent_store"] == "shared-store"
