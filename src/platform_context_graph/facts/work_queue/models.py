@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field
 from datetime import datetime
 
 
@@ -29,6 +30,12 @@ class FactWorkItemRow:
     last_attempt_finished_at: datetime | None = None
     next_retry_at: datetime | None = None
     operator_note: str | None = None
+    parent_work_item_id: str | None = None
+    projection_domain: str | None = None
+    accepted_generation_id: str | None = None
+    authoritative_shared_domains: list[str] = field(default_factory=list)
+    completed_shared_domains: list[str] = field(default_factory=list)
+    shared_projection_pending: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

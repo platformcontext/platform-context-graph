@@ -10,6 +10,13 @@ from typing import Any
 
 from platform_context_graph.facts.storage.models import FactRecordRow
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
+from platform_context_graph.facts.work_queue.stages import LOAD_FACTS_STAGE
+from platform_context_graph.facts.work_queue.stages import PROJECT_ENTITY_BATCHES_STAGE
+from platform_context_graph.facts.work_queue.stages import PROJECT_FACTS_STAGE
+from platform_context_graph.facts.work_queue.stages import PROJECT_PLATFORMS_STAGE
+from platform_context_graph.facts.work_queue.stages import PROJECT_RELATIONSHIPS_STAGE
+from platform_context_graph.facts.work_queue.stages import PROJECT_WORKLOADS_STAGE
+from platform_context_graph.facts.work_queue.stages import ProjectionStageError
 from platform_context_graph.observability import get_observability
 from platform_context_graph.observability.facts_first_logs import (
     log_projection_decision,
@@ -29,6 +36,12 @@ from platform_context_graph.resolution.projection.relationships import (
 from platform_context_graph.resolution.projection.workloads import (
     project_platform_facts,
     project_workload_facts,
+)
+from platform_context_graph.resolution.shared_projection import (
+    run_inline_shared_followup,
+)
+from platform_context_graph.resolution.workloads.metrics import (
+    merge_shared_projection_payload,
 )
 
 
@@ -101,9 +114,13 @@ def _record_projection_decision(
 def _clear_repository_projection_state(*, builder: Any, repository_id: str) -> None:
     """Delete existing graph and content state before reprojection."""
 
-    delete_repository = getattr(builder, "delete_repository_from_graph", None)
-    if callable(delete_repository):
-        delete_repository(repository_id)
+    reset_repository = getattr(builder, "reset_repository_subtree_in_graph", None)
+    if callable(reset_repository):
+        reset_repository(repository_id)
+    else:
+        delete_repository = getattr(builder, "delete_repository_from_graph", None)
+        if callable(delete_repository):
+            delete_repository(repository_id)
     content_provider = getattr(builder, "_content_provider", None)
     if content_provider is not None and getattr(content_provider, "enabled", False):
         content_provider.delete_repository_content(repository_id)
@@ -114,7 +131,9 @@ def project_work_item(
     *,
     builder: Any | None = None,
     fact_store: Any | None = None,
+    fact_work_queue: Any | None = None,
     decision_store: Any | None = None,
+    shared_projection_intent_store: Any | None = None,
     fact_projector: Any = project_git_fact_records,
     relationship_projector: Any = project_git_relationship_fact_records,
     workload_projector: Any = project_workload_facts,
@@ -204,14 +223,14 @@ def project_work_item(
             observability.record_resolution_stage_failure(
                 component="resolution-engine",
                 work_type=work_item.work_type,
-                stage="load_facts",
+                stage=LOAD_FACTS_STAGE,
                 error_class=type(exc).__name__,
             )
-            raise
+            raise ProjectionStageError(LOAD_FACTS_STAGE, exc) from exc
         observability.record_resolution_stage_duration(
             component="resolution-engine",
             work_type=work_item.work_type,
-            stage="load_facts",
+            stage=LOAD_FACTS_STAGE,
             duration_seconds=max(time.perf_counter() - load_started, 0.0),
         )
         observability.record_resolution_facts_loaded(
@@ -246,7 +265,7 @@ def project_work_item(
                         stage=stage,
                         error_class=type(exc).__name__,
                     )
-                    raise
+                    raise ProjectionStageError(stage, exc) from exc
             observability.record_resolution_stage_duration(
                 component="resolution-engine",
                 work_type=work_item.work_type,
@@ -263,23 +282,23 @@ def project_work_item(
 
         # -- Stage 1: repos + files + entities-from-file-payloads ----------
         fact_metrics = _run_stage(
-            "project_facts",
+            PROJECT_FACTS_STAGE,
             lambda: fact_projector(builder=builder, fact_records=graph_facts),
         )
 
         # -- Stage 1b: stream standalone entity facts in batches -----------
         if entity_batches is not None:
             entity_extra = _run_stage(
-                "project_entity_batches",
+                PROJECT_ENTITY_BATCHES_STAGE,
                 lambda: _project_entity_batches(builder, entity_batches, graph_facts),
             )
-            fact_metrics["entities"] = (
-                fact_metrics.get("entities", 0) + entity_extra.get("entities", 0)
-            )
+            fact_metrics["entities"] = fact_metrics.get(
+                "entities", 0
+            ) + entity_extra.get("entities", 0)
 
         # -- Stage 2: relationships ----------------------------------------
         relationship_metrics = _run_stage(
-            "project_relationships",
+            PROJECT_RELATIONSHIPS_STAGE,
             lambda: relationship_projector(
                 builder=builder,
                 fact_records=graph_facts,
@@ -289,7 +308,7 @@ def project_work_item(
         )
         _record_projection_decision(
             decision_store=decision_store,
-            stage="project_relationships",
+            stage=PROJECT_RELATIONSHIPS_STAGE,
             work_item=work_item,
             fact_records=graph_facts,
             metrics=relationship_metrics,
@@ -297,7 +316,7 @@ def project_work_item(
 
         # -- Stage 3: workloads --------------------------------------------
         workload_metrics = _run_stage(
-            "project_workloads",
+            PROJECT_WORKLOADS_STAGE,
             lambda: workload_projector(
                 builder=builder,
                 fact_records=graph_facts,
@@ -306,7 +325,7 @@ def project_work_item(
         )
         _record_projection_decision(
             decision_store=decision_store,
-            stage="project_workloads",
+            stage=PROJECT_WORKLOADS_STAGE,
             work_item=work_item,
             fact_records=graph_facts,
             metrics=workload_metrics,
@@ -314,7 +333,7 @@ def project_work_item(
 
         # -- Stage 4: platforms --------------------------------------------
         platform_metrics = _run_stage(
-            "project_platforms",
+            PROJECT_PLATFORMS_STAGE,
             lambda: platform_projector(
                 builder=builder,
                 fact_records=graph_facts,
@@ -345,12 +364,47 @@ def project_work_item(
                 }
             ),
         )
-    return {
+
+    shared_followup_metrics: dict[str, object] = {}
+    merge_shared_projection_payload(shared_followup_metrics, workload_metrics)
+    merge_shared_projection_payload(shared_followup_metrics, platform_metrics)
+    shared_payload = shared_followup_metrics.get("shared_projection")
+    if isinstance(shared_payload, dict):
+        accepted_generation_id = str(
+            shared_payload.get("accepted_generation_id") or ""
+        ).strip()
+        if accepted_generation_id:
+            if fact_work_queue is None:
+                from platform_context_graph.facts.state import get_fact_work_queue
+
+                fact_work_queue = get_fact_work_queue()
+            if shared_projection_intent_store is None:
+                from platform_context_graph.facts.state import (
+                    get_shared_projection_intent_store,
+                )
+
+                shared_projection_intent_store = get_shared_projection_intent_store()
+            shared_followup_metrics = run_inline_shared_followup(
+                builder=builder,
+                repository_id=work_item.repository_id,
+                source_run_id=work_item.source_run_id,
+                accepted_generation_id=accepted_generation_id,
+                authoritative_domains=list(
+                    shared_payload.get("authoritative_domains") or []
+                ),
+                fact_work_queue=fact_work_queue,
+                shared_projection_intent_store=shared_projection_intent_store,
+            )
+
+    result = {
         "facts": fact_metrics,
         "relationships": relationship_metrics,
         "workloads": workload_metrics,
         "platforms": platform_metrics,
     }
+    if shared_followup_metrics:
+        result["shared_projection"] = shared_followup_metrics
+    return result
 
 
 def _load_entity_batches(
@@ -395,13 +449,12 @@ def _project_entity_batches(
             continue
         parsed_file_data = file_fact.payload.get("parsed_file_data")
         if isinstance(parsed_file_data, dict):
-            projected_file_keys.add(
-                (file_fact.checkout_path, file_fact.relative_path)
-            )
+            projected_file_keys.add((file_fact.checkout_path, file_fact.relative_path))
 
     projected = 0
     with builder.driver.session() as session:
         for batch in entity_batches:
+
             def _write(tx: object, _batch: list[FactRecordRow] = batch) -> None:
                 """Project one bounded parsed-entity batch inside a managed write."""
 

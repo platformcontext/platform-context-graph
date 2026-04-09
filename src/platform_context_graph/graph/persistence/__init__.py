@@ -57,6 +57,10 @@ _EXPORTS = {
     "create_inheritance_links": (".inheritance", "create_inheritance_links"),
     "delete_file_from_graph": (".mutations", "delete_file_from_graph"),
     "delete_repository_from_graph": (".mutations", "delete_repository_from_graph"),
+    "reset_repository_subtree_in_graph": (
+        ".mutations",
+        "reset_repository_subtree_in_graph",
+    ),
     "empty_accumulator": (".batching", "empty_accumulator"),
     "emit_call_resolution_otel_metrics": (
         ".call_otel",

@@ -77,18 +77,30 @@ def test_project_platform_facts_targets_projected_repositories() -> None:
         *,
         repo_paths: list[Path] | None,
         progress_callback: object | None = None,
+        projection_context_by_repo_id: dict[str, dict[str, str]] | None = None,
+        shared_projection_intent_store: object | None = None,
     ) -> dict[str, int]:
         captured["session"] = session_arg
         captured["repo_paths"] = repo_paths
         captured["progress_callback"] = progress_callback
+        captured["projection_context_by_repo_id"] = projection_context_by_repo_id
+        captured["shared_projection_intent_store"] = shared_projection_intent_store
         return {"infrastructure_platform_edges_projected": 1}
 
     metrics = project_platform_facts(
         builder=builder,
         fact_records=fact_records,
         materialize_platforms_fn=_materialize_platforms,
+        shared_projection_intent_store="shared-store",
     )
 
     assert metrics == {"infrastructure_platform_edges_projected": 1}
     assert captured["session"] is session
     assert captured["repo_paths"] == [Path("/tmp/infra").resolve()]
+    assert captured["projection_context_by_repo_id"] == {
+        "github.com/acme/infra": {
+            "generation_id": "snapshot-abc",
+            "source_run_id": "run-123",
+        }
+    }
+    assert captured["shared_projection_intent_store"] == "shared-store"

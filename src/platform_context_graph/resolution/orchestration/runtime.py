@@ -13,10 +13,16 @@ from platform_context_graph.observability import initialize_observability
 from platform_context_graph.observability.facts_first_logs import (
     log_resolution_work_item,
 )
+from platform_context_graph.indexing.coordinator_shared_completion import (
+    apply_completion_state,
+)
+from platform_context_graph.indexing.coordinator_shared_completion import (
+    completion_state_from_metrics,
+)
 
 from .failure_classification import classify_resolution_failure
 
-ProjectorFn = Callable[[FactWorkItemRow], None]
+ProjectorFn = Callable[[FactWorkItemRow], object]
 
 
 def _utc_now() -> datetime:
@@ -25,7 +31,7 @@ def _utc_now() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
-def _default_projector(work_item: FactWorkItemRow) -> None:
+def _default_projector(work_item: FactWorkItemRow) -> object:
     """Load the default projector lazily to keep runtime imports light."""
 
     from .engine import project_work_item
@@ -158,7 +164,7 @@ def run_resolution_iteration(
             active_count=1,
         )
         try:
-            projector(work_item)
+            metrics = projector(work_item)
         except Exception as exc:
             failure = classify_resolution_failure(
                 exc,
@@ -211,9 +217,21 @@ def run_resolution_iteration(
                 duration_seconds=max(time.perf_counter() - iteration_started, 0.0),
             )
         else:
-            queue.complete_work_item(work_item_id=work_item.work_item_id)
+            completion_state = completion_state_from_metrics(
+                metrics if isinstance(metrics, dict) else None,
+                default_generation_id="",
+            )
+            apply_completion_state(
+                queue=queue,
+                work_item_id=work_item.work_item_id,
+                completion_state=completion_state,
+            )
             log_resolution_work_item(
-                "completed",
+                (
+                    "awaiting_shared_projection"
+                    if completion_state.pending
+                    else "completed"
+                ),
                 repository_id=work_item.repository_id,
                 source_run_id=work_item.source_run_id,
                 work_item_id=work_item.work_item_id,
@@ -224,7 +242,11 @@ def run_resolution_iteration(
             observability.record_resolution_work_item(
                 component="resolution-engine",
                 work_type=work_item.work_type,
-                outcome="completed",
+                outcome=(
+                    "awaiting_shared_projection"
+                    if completion_state.pending
+                    else "completed"
+                ),
                 duration_seconds=max(time.perf_counter() - iteration_started, 0.0),
             )
         finally:

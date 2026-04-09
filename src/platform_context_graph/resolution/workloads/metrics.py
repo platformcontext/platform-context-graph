@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 
@@ -30,6 +31,54 @@ def merge_metrics(
     return totals
 
 
+def merge_projection_metrics(
+    totals: dict[str, int],
+    current: dict[str, object],
+) -> dict[str, int]:
+    """Merge projection metrics while skipping nested structured payloads."""
+
+    for key, value in current.items():
+        if isinstance(value, dict):
+            continue
+        totals[key] = totals.get(key, 0) + int(value)
+    return totals
+
+
+def merge_shared_projection_payload(
+    totals: dict[str, object],
+    current: dict[str, object],
+) -> dict[str, object]:
+    """Merge authoritative shared projection metadata from one metrics payload."""
+
+    payload = current.get("shared_projection")
+    if not isinstance(payload, dict):
+        return totals
+    merged = dict(totals.get("shared_projection") or {})
+    existing_domains = _normalized_strings(merged.get("authoritative_domains", []))
+    current_domains = _normalized_strings(payload.get("authoritative_domains", []))
+    all_domains = sorted(existing_domains | current_domains)
+    if all_domains:
+        merged["authoritative_domains"] = all_domains
+    intent_count = int(merged.get("intent_count") or 0) + int(
+        payload.get("intent_count") or 0
+    )
+    if intent_count:
+        merged["intent_count"] = intent_count
+    accepted_generation_ids = _normalized_strings(
+        (
+            merged.get("accepted_generation_id"),
+            payload.get("accepted_generation_id"),
+        )
+    )
+    if len(accepted_generation_ids) == 1:
+        merged["accepted_generation_id"] = next(iter(accepted_generation_ids))
+    elif accepted_generation_ids:
+        merged["accepted_generation_id"] = None
+    if merged:
+        totals["shared_projection"] = merged
+    return totals
+
+
 def run_cleanup_query(
     session: Any, query: str, /, **parameters: object
 ) -> dict[str, int]:
@@ -38,4 +87,23 @@ def run_cleanup_query(
     return extract_cleanup_metrics(session.run(query, **parameters))
 
 
-__all__ = ["extract_cleanup_metrics", "merge_metrics", "run_cleanup_query"]
+def _normalized_strings(values: Iterable[object]) -> set[str]:
+    """Return a set of non-empty strings without coercing sentinel values."""
+
+    normalized: set[str] = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        stripped = value.strip()
+        if stripped:
+            normalized.add(stripped)
+    return normalized
+
+
+__all__ = [
+    "extract_cleanup_metrics",
+    "merge_metrics",
+    "merge_projection_metrics",
+    "merge_shared_projection_payload",
+    "run_cleanup_query",
+]

@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from neo4j.exceptions import TransientError
-
 from platform_context_graph.facts.work_queue.failure_types import FailureClass
 from platform_context_graph.facts.work_queue.failure_types import FailureDisposition
 from platform_context_graph.resolution.orchestration.failure_classification import (
     classify_resolution_failure,
 )
+
+
+class TransientError(Exception):
+    """Small Neo4j-like transient error used for unit tests."""
+
+    def __init__(self, *, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def test_classify_timeout_error_as_retryable_timeout() -> None:
@@ -43,7 +49,7 @@ def test_classify_value_error_as_non_retryable_input_invalid() -> None:
 def test_classify_neo4j_deadlock_as_retryable_dependency_unavailable() -> None:
     """Neo4j deadlocks should be treated as retryable transient dependencies."""
 
-    deadlock_error = TransientError._hydrate_neo4j(
+    deadlock_error = TransientError(
         code="Neo.TransientError.Transaction.DeadlockDetected",
         message="Deadlock detected while trying to acquire locks.",
     )

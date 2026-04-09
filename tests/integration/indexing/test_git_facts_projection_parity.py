@@ -65,11 +65,19 @@ def test_emitted_git_facts_preserve_workload_and_platform_repo_inputs() -> None:
         committed_repo_paths,
         info_logger_fn,
         progress_callback=None,
+        projection_context_by_repo_id=None,
+        shared_projection_intent_store=None,
     ) -> dict[str, int]:
         captured["workloads_builder"] = builder
         captured["workloads_info_logger_fn"] = info_logger_fn
         captured["workloads_progress_callback"] = progress_callback
         captured["workloads_repo_paths"] = list(committed_repo_paths)
+        captured["workloads_projection_context_by_repo_id"] = (
+            projection_context_by_repo_id
+        )
+        captured["workloads_shared_projection_intent_store"] = (
+            shared_projection_intent_store
+        )
         return {"workloads_projected": len(committed_repo_paths)}
 
     class _Session:
@@ -84,10 +92,18 @@ def test_emitted_git_facts_preserve_workload_and_platform_repo_inputs() -> None:
         *,
         repo_paths,
         progress_callback=None,
+        projection_context_by_repo_id=None,
+        shared_projection_intent_store=None,
     ) -> dict[str, int]:
         captured["platform_session"] = session
         captured["platform_repo_paths"] = list(repo_paths)
         captured["platform_progress_callback"] = progress_callback
+        captured["platform_projection_context_by_repo_id"] = (
+            projection_context_by_repo_id
+        )
+        captured["platform_shared_projection_intent_store"] = (
+            shared_projection_intent_store
+        )
         return {"platform_edges": len(repo_paths)}
 
     workload_metrics = project_workload_facts(
@@ -109,7 +125,21 @@ def test_emitted_git_facts_preserve_workload_and_platform_repo_inputs() -> None:
     assert captured["workloads_info_logger_fn"] is not None
     assert captured["workloads_progress_callback"] is workload_progress
     assert captured["workloads_repo_paths"] == [expected_repo_path]
+    assert captured["workloads_projection_context_by_repo_id"] == {
+        "github.com/acme/service": {
+            "generation_id": "snapshot-abc",
+            "source_run_id": "run-123",
+        }
+    }
+    assert captured["workloads_shared_projection_intent_store"] is None
     assert captured["platform_repo_paths"] == [expected_repo_path]
     assert captured["platform_progress_callback"] is platform_progress
+    assert captured["platform_projection_context_by_repo_id"] == {
+        "github.com/acme/service": {
+            "generation_id": "snapshot-abc",
+            "source_run_id": "run-123",
+        }
+    }
+    assert captured["platform_shared_projection_intent_store"] is None
     assert workload_metrics == {"workloads_projected": 1}
     assert platform_metrics == {"platform_edges": 1}

@@ -91,6 +91,77 @@ def test_run_resolution_iteration_marks_failures() -> None:
     assert kwargs["error_class"] == "RuntimeError"
 
 
+def test_run_resolution_iteration_marks_shared_projection_pending() -> None:
+    """Resolution runtime should preserve pending shared follow-up honestly."""
+
+    queue = MagicMock()
+    queue.claim_work_item.return_value = FactWorkItemRow(
+        work_item_id="work-pending",
+        work_type="project-git-facts",
+        repository_id="github.com/acme/service",
+        source_run_id="run-123",
+        lease_owner="resolution-worker-1",
+        lease_expires_at=_utc_now(),
+        status="leased",
+        attempt_count=1,
+        created_at=_utc_now(),
+        updated_at=_utc_now(),
+    )
+
+    processed = run_resolution_iteration(
+        queue=queue,
+        projector=lambda _row: {
+            "shared_projection": {
+                "authoritative_domains": ["platform_infra"],
+                "accepted_generation_id": "gen-123",
+            }
+        },
+        lease_owner="resolution-worker-1",
+        lease_ttl_seconds=60,
+    )
+
+    assert processed is True
+    queue.mark_shared_projection_pending.assert_called_once_with(
+        work_item_id="work-pending",
+        accepted_generation_id="gen-123",
+        authoritative_shared_domains=["platform_infra"],
+    )
+    queue.complete_work_item.assert_not_called()
+
+
+def test_run_resolution_iteration_does_not_fence_without_generation_id() -> None:
+    """Resolution runtime should not invent a run-id generation fallback."""
+
+    queue = MagicMock()
+    queue.claim_work_item.return_value = FactWorkItemRow(
+        work_item_id="work-pending",
+        work_type="project-git-facts",
+        repository_id="github.com/acme/service",
+        source_run_id="run-123",
+        lease_owner="resolution-worker-1",
+        lease_expires_at=_utc_now(),
+        status="leased",
+        attempt_count=1,
+        created_at=_utc_now(),
+        updated_at=_utc_now(),
+    )
+
+    processed = run_resolution_iteration(
+        queue=queue,
+        projector=lambda _row: {
+            "shared_projection": {
+                "authoritative_domains": ["platform_infra"],
+            }
+        },
+        lease_owner="resolution-worker-1",
+        lease_ttl_seconds=60,
+    )
+
+    assert processed is True
+    queue.mark_shared_projection_pending.assert_not_called()
+    queue.complete_work_item.assert_called_once_with(work_item_id="work-pending")
+
+
 def test_project_work_item_loads_facts_and_runs_projection_stages() -> None:
     """Projecting one work item should load facts and run both projection stages."""
 
@@ -189,6 +260,59 @@ def test_project_work_item_loads_facts_and_runs_projection_stages() -> None:
             "runtime_platform_edges_projected": 1,
         },
         "platforms": {"infrastructure_platform_edges_projected": 1},
+    }
+
+
+def test_project_work_item_skips_inline_shared_followup_without_generation_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Inline shared follow-up should not run with an invented run-id generation."""
+
+    fact_store = MagicMock()
+    fact_store.list_facts.return_value = [
+        FactRecordRow(
+            fact_id="fact:file",
+            fact_type="FileObserved",
+            repository_id="github.com/acme/service",
+            checkout_path="/tmp/service",
+            relative_path="src/app.py",
+            source_system="git",
+            source_run_id="run-123",
+            source_snapshot_id="snapshot-abc",
+            payload={"language": "python", "is_dependency": False},
+            observed_at=_utc_now(),
+            ingested_at=_utc_now(),
+            provenance={},
+        )
+    ]
+    inline_followup = MagicMock(return_value={"processed": True})
+    monkeypatch.setattr(engine_module, "run_inline_shared_followup", inline_followup)
+
+    metrics = project_work_item(
+        FactWorkItemRow(
+            work_item_id="work-3",
+            work_type="project-git-facts",
+            repository_id="github.com/acme/service",
+            source_run_id="run-123",
+        ),
+        builder=MagicMock(),
+        fact_store=fact_store,
+        fact_projector=lambda **_kwargs: {},
+        relationship_projector=lambda **_kwargs: {},
+        workload_projector=lambda **_kwargs: {
+            "shared_projection": {
+                "authoritative_domains": ["platform_infra"],
+            }
+        },
+        platform_projector=lambda **_kwargs: {},
+        debug_log_fn=MagicMock(),
+        warning_logger_fn=MagicMock(),
+        info_logger_fn=MagicMock(),
+    )
+
+    inline_followup.assert_not_called()
+    assert metrics["shared_projection"] == {
+        "shared_projection": {"authoritative_domains": ["platform_infra"]}
     }
 
 
@@ -399,6 +523,7 @@ def test_project_work_item_clears_repository_state_before_projection() -> None:
     fact_store = MagicMock()
     fact_store.list_facts.return_value = []
     builder = MagicMock()
+    builder.reset_repository_subtree_in_graph = MagicMock(return_value=True)
     builder._content_provider = MagicMock(enabled=True)
 
     project_work_item(
@@ -418,9 +543,10 @@ def test_project_work_item_clears_repository_state_before_projection() -> None:
         },
     )
 
-    builder.delete_repository_from_graph.assert_called_once_with(
+    builder.reset_repository_subtree_in_graph.assert_called_once_with(
         "github.com/acme/service"
     )
+    builder.delete_repository_from_graph.assert_not_called()
     builder._content_provider.delete_repository_content.assert_called_once_with(
         "github.com/acme/service"
     )

@@ -13,6 +13,7 @@ from platform_context_graph.collectors.git.types import RepositoryParseSnapshot
 from platform_context_graph.facts.storage.models import FactRecordRow
 from platform_context_graph.facts.storage.models import FactRunRow
 from platform_context_graph.facts.storage.postgres import PostgresFactStore
+from platform_context_graph.facts.work_queue.stages import ProjectionStageError
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
 from platform_context_graph.facts.work_queue.models import FactWorkQueueSnapshotRow
 from platform_context_graph.facts.work_queue.postgres import PostgresFactWorkQueue
@@ -396,7 +397,7 @@ def test_resolution_stage_failures_emit_error_class_metrics(
         )
     ]
 
-    with pytest.raises(RuntimeError, match="stage-boom"):
+    with pytest.raises(ProjectionStageError, match="stage-boom") as exc_info:
         project_work_item(
             FactWorkItemRow(
                 work_item_id="work-2",
@@ -415,6 +416,8 @@ def test_resolution_stage_failures_emit_error_class_metrics(
                 "infrastructure_platform_edges_projected": 1
             },
         )
+    assert exc_info.value.stage == "project_relationships"
+    assert isinstance(exc_info.value.cause, RuntimeError)
 
     points = _metric_points(metric_reader)
     assert _matching_values(
@@ -845,7 +848,10 @@ def test_resolution_engine_emits_claim_idle_and_stage_failure_metrics(
         )
     ]
 
-    with pytest.raises(ValueError, match="bad relationship stage"):
+    with pytest.raises(
+        ProjectionStageError,
+        match="bad relationship stage",
+    ) as exc_info:
         project_work_item(
             FactWorkItemRow(
                 work_item_id="work-99",
@@ -865,6 +871,8 @@ def test_resolution_engine_emits_claim_idle_and_stage_failure_metrics(
                 "infrastructure_platform_edges_projected": 1
             },
         )
+    assert exc_info.value.stage == "project_relationships"
+    assert isinstance(exc_info.value.cause, ValueError)
 
     points = _metric_points(metric_reader)
 

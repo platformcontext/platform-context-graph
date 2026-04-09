@@ -30,6 +30,7 @@ from ..collectors.git.indexing import (
 from ..graph.persistence import (
     delete_file_from_graph as _delete_file_from_graph,
     delete_repository_from_graph as _delete_repository_from_graph,
+    reset_repository_subtree_in_graph as _reset_repository_subtree_in_graph,
     update_file_in_graph as _update_file_in_graph,
 )
 from ..parsers.registry import (
@@ -277,6 +278,24 @@ class GraphBuilder:
             ``True`` if the repository existed and was deleted.
         """
         return _delete_repository_from_graph(
+            self,
+            repo_identifier,
+            info_logger_fn=info_logger,
+            debug_logger_fn=debug_logger,
+            warning_logger_fn=warning_logger,
+        )
+
+    def reset_repository_subtree_in_graph(self, repo_identifier: str) -> bool:
+        """Delete repo-owned descendants while preserving the Repository node.
+
+        Args:
+            repo_identifier: Canonical repository id or repository path.
+
+        Returns:
+            ``True`` if the repository existed and its subtree was reset.
+        """
+
+        return _reset_repository_subtree_in_graph(
             self,
             repo_identifier,
             info_logger_fn=info_logger,

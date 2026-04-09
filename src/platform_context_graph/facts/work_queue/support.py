@@ -37,6 +37,12 @@ def work_item_params(entry: FactWorkItemRow) -> dict[str, Any]:
         "last_attempt_finished_at": entry.last_attempt_finished_at,
         "next_retry_at": entry.next_retry_at,
         "operator_note": entry.operator_note,
+        "parent_work_item_id": entry.parent_work_item_id,
+        "projection_domain": entry.projection_domain,
+        "accepted_generation_id": entry.accepted_generation_id,
+        "authoritative_shared_domains": entry.authoritative_shared_domains,
+        "completed_shared_domains": entry.completed_shared_domains,
+        "shared_projection_pending": entry.shared_projection_pending,
         "created_at": entry.created_at or utc_now(),
         "updated_at": entry.updated_at or utc_now(),
     }

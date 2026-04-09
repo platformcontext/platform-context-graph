@@ -129,6 +129,98 @@ def delete_repository_from_graph(
         return True
 
 
+def reset_repository_subtree_in_graph(
+    builder: Any,
+    repo_identifier: str,
+    *,
+    info_logger_fn: Any,
+    debug_logger_fn: Any | None = None,
+    warning_logger_fn: Any,
+) -> bool:
+    """Delete one repository-owned subtree while preserving the Repository node.
+
+    Args:
+        builder: ``GraphBuilder`` facade instance.
+        repo_identifier: Canonical repository id or repository path.
+        info_logger_fn: Info logger callable.
+        debug_logger_fn: Debug logger callable for expected no-op resets.
+        warning_logger_fn: Warning logger callable.
+
+    Returns:
+        ``True`` if the repository existed and its owned subtree was reset.
+    """
+
+    lookup_values = _repository_lookup_values(str(repo_identifier))
+    if not lookup_values:
+        warning_logger_fn("Attempted to reset repository subtree with empty identifier")
+        return False
+    display_identifier = (
+        lookup_values[0]
+        if lookup_values and lookup_values[0].startswith("repository:")
+        else str(Path(repo_identifier).resolve())
+    )
+    with builder.driver.session() as session:
+        result = session.run(
+            """
+            MATCH (r:Repository)
+            WHERE r.id IN $lookup_values
+               OR r.path IN $lookup_values
+               OR r[$local_path_key] IN $lookup_values
+            RETURN count(r) as cnt
+            """,
+            lookup_values=lookup_values,
+            local_path_key="local_path",
+        ).single()
+        if not result or result["cnt"] == 0:
+            if debug_logger_fn is not None:
+                debug_logger_fn(
+                    "Repository already absent from graph; nothing to reset: "
+                    f"{display_identifier}"
+                )
+            return False
+
+        session.run(
+            """
+            MATCH (r:Repository)
+            WHERE r.id IN $lookup_values
+               OR r.path IN $lookup_values
+               OR r[$local_path_key] IN $lookup_values
+            OPTIONAL MATCH (r)-[:CONTAINS|REPO_CONTAINS*1..]->(owned_tree)
+            WITH r, collect(DISTINCT owned_tree) AS owned_nodes
+            OPTIONAL MATCH (r)-[:DEFINES]->(defined_workload:Workload)
+            WITH r, owned_nodes + collect(DISTINCT defined_workload) AS owned_nodes
+            OPTIONAL MATCH (owned_workload:Workload {repo_id: r.id})
+            WITH r, owned_nodes + collect(DISTINCT owned_workload) AS owned_nodes
+            OPTIONAL MATCH (owned_instance:WorkloadInstance {repo_id: r.id})
+            WITH r, owned_nodes + collect(DISTINCT owned_instance) AS maybe_owned_nodes
+            UNWIND [owned IN maybe_owned_nodes WHERE owned IS NOT NULL] AS owned
+            DETACH DELETE owned
+            """,
+            lookup_values=lookup_values,
+            local_path_key="local_path",
+        )
+        session.run(
+            """
+            MATCH (r:Repository)
+            WHERE r.id IN $lookup_values
+               OR r.path IN $lookup_values
+               OR r[$local_path_key] IN $lookup_values
+            OPTIONAL MATCH (r)-[rel]-()
+            WITH [relationship IN collect(DISTINCT rel) WHERE relationship IS NOT NULL]
+                AS relationships
+            UNWIND relationships AS rel
+            DELETE rel
+            """,
+            lookup_values=lookup_values,
+            local_path_key="local_path",
+        )
+        info_logger_fn(
+            "Reset repository subtree while preserving repository node: "
+            f"{display_identifier}"
+        )
+        return True
+
+
 def update_file_in_graph(
     builder: Any,
     path: Path,
@@ -172,5 +264,6 @@ def update_file_in_graph(
 __all__ = [
     "delete_file_from_graph",
     "delete_repository_from_graph",
+    "reset_repository_subtree_in_graph",
     "update_file_in_graph",
 ]

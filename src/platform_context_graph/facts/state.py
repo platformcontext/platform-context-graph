@@ -6,6 +6,9 @@ import os
 import threading
 
 from platform_context_graph.resolution.decisions import PostgresProjectionDecisionStore
+from platform_context_graph.resolution.shared_projection import (
+    PostgresSharedProjectionIntentStore,
+)
 
 from .storage import PostgresFactStore
 from .work_queue import PostgresFactWorkQueue
@@ -17,6 +20,7 @@ __all__ = [
     "get_fact_store",
     "get_fact_work_queue",
     "get_projection_decision_store",
+    "get_shared_projection_intent_store",
     "git_facts_first_enabled",
     "reset_fact_runtime_for_tests",
     "reset_facts_runtime_for_tests",
@@ -26,6 +30,7 @@ _LOCK = threading.Lock()
 _FACT_STORE: PostgresFactStore | None = None
 _FACT_WORK_QUEUE: PostgresFactWorkQueue | None = None
 _PROJECTION_DECISION_STORE: PostgresProjectionDecisionStore | None = None
+_SHARED_PROJECTION_INTENT_STORE: PostgresSharedProjectionIntentStore | None = None
 
 
 def _facts_dsn() -> str | None:
@@ -80,6 +85,20 @@ def get_projection_decision_store() -> PostgresProjectionDecisionStore | None:
         return _PROJECTION_DECISION_STORE
 
 
+def get_shared_projection_intent_store() -> PostgresSharedProjectionIntentStore | None:
+    """Return the shared shadow intent store when configured."""
+
+    global _SHARED_PROJECTION_INTENT_STORE
+    dsn = _facts_dsn()
+    if not dsn:
+        return None
+
+    with _LOCK:
+        if _SHARED_PROJECTION_INTENT_STORE is None:
+            _SHARED_PROJECTION_INTENT_STORE = PostgresSharedProjectionIntentStore(dsn)
+        return _SHARED_PROJECTION_INTENT_STORE
+
+
 def facts_runtime_ready() -> bool:
     """Return whether both fact persistence and queue runtime are configured."""
 
@@ -117,6 +136,7 @@ def reset_facts_runtime_for_tests() -> None:
     global _FACT_STORE
     global _FACT_WORK_QUEUE
     global _PROJECTION_DECISION_STORE
+    global _SHARED_PROJECTION_INTENT_STORE
 
     with _LOCK:
         if _FACT_STORE is not None:
@@ -131,9 +151,14 @@ def reset_facts_runtime_for_tests() -> None:
             close_store = getattr(_PROJECTION_DECISION_STORE, "close", None)
             if callable(close_store):
                 close_store()
+        if _SHARED_PROJECTION_INTENT_STORE is not None:
+            close_store = getattr(_SHARED_PROJECTION_INTENT_STORE, "close", None)
+            if callable(close_store):
+                close_store()
         _FACT_STORE = None
         _FACT_WORK_QUEUE = None
         _PROJECTION_DECISION_STORE = None
+        _SHARED_PROJECTION_INTENT_STORE = None
 
 
 def reset_fact_runtime_for_tests() -> None:

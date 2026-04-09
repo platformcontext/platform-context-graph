@@ -6,7 +6,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from platform_context_graph.resolution.workloads.materialization import materialize_workloads
+from platform_context_graph.resolution.workloads.materialization import (
+    materialize_workloads,
+)
 
 
 class _FakeResult:
@@ -157,10 +159,6 @@ def test_materialize_workloads_retracts_targeted_workload_state_before_rebuild(
         recorded_calls,
         "MATCH (repo:Repository)-[rel:PROVISIONS_PLATFORM]->",
     )
-    delete_orphan_platforms_query = _query_text(
-        recorded_calls,
-        "MATCH (p:Platform)",
-    )
     merge_instances_index = next(
         index
         for index, (query, _kwargs) in enumerate(recorded_calls)
@@ -183,8 +181,7 @@ def test_materialize_workloads_retracts_targeted_workload_state_before_rebuild(
     assert "DELETE rel" in delete_repo_depends_query
     assert "DELETE rel" in delete_workload_depends_query
     assert "DELETE rel" in delete_provisions_query
-    assert "DELETE p" in delete_orphan_platforms_query
-    assert "NOT (p)--()" in delete_orphan_platforms_query
+    assert not any("MATCH (p:Platform)" in query for query, _kwargs in recorded_calls)
     assert "DELETE i" in delete_instance_node_query
 
 

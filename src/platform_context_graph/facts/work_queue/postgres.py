@@ -11,12 +11,15 @@ from typing import Any
 
 from platform_context_graph.observability import current_component
 from platform_context_graph.observability import get_observability
+from platform_context_graph.postgres_schema import schema_is_ready
 
 from .claims import claim_work_item
 from .claims import complete_work_item
 from .claims import enqueue_work_item
 from .claims import fail_work_item
 from .claims import lease_work_item
+from .inspection import count_shared_projection_pending
+from .inspection import list_shared_projection_acceptances
 from .inspection import list_queue_snapshot
 from .inspection import list_work_items
 from .models import FactBackfillRequestRow
@@ -28,6 +31,9 @@ from .recovery import dead_letter_work_items
 from .recovery import list_replay_events
 from .recovery import request_backfill
 from .schema import FACT_WORK_QUEUE_SCHEMA
+from .shared_completion import complete_shared_projection_domain
+from .shared_completion import complete_shared_projection_domain_by_generation
+from .shared_completion import mark_shared_projection_pending
 
 try:
     import psycopg
@@ -39,6 +45,28 @@ except ImportError:  # pragma: no cover - exercised without optional dependency.
     _ConnectionPool = None
 
 _logger = logging.getLogger(__name__)
+
+_REQUIRED_FACT_WORK_QUEUE_TABLES = (
+    "fact_work_items",
+    "fact_replay_events",
+    "fact_backfill_requests",
+)
+_REQUIRED_FACT_WORK_QUEUE_COLUMNS = {
+    "fact_work_items": (
+        "parent_work_item_id",
+        "projection_domain",
+        "accepted_generation_id",
+        "authoritative_shared_domains",
+        "completed_shared_domains",
+        "shared_projection_pending",
+    ),
+}
+_REQUIRED_FACT_WORK_QUEUE_INDEXES = (
+    "fact_work_items_status_idx",
+    "fact_work_items_shared_projection_idx",
+    "fact_replay_events_work_item_idx",
+    "fact_backfill_requests_repo_idx",
+)
 
 
 class PostgresFactWorkQueue:
@@ -92,17 +120,14 @@ class PostgresFactWorkQueue:
             return
         with self._schema_lock:
             if not self._initialized:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT 1 FROM information_schema.tables "
-                        "WHERE table_schema = 'public' "
-                        "AND table_name = 'fact_work_items'"
-                    )
-                    if cursor.fetchone() is not None:
-                        self._initialized = True
-                        return
-                with conn.cursor() as cursor:
-                    cursor.execute(FACT_WORK_QUEUE_SCHEMA)
+                if not schema_is_ready(
+                    conn,
+                    required_tables=_REQUIRED_FACT_WORK_QUEUE_TABLES,
+                    required_columns_by_table=_REQUIRED_FACT_WORK_QUEUE_COLUMNS,
+                    required_indexes=_REQUIRED_FACT_WORK_QUEUE_INDEXES,
+                ):
+                    with conn.cursor() as cursor:
+                        cursor.execute(FACT_WORK_QUEUE_SCHEMA)
                 self._initialized = True
 
     def _refresh_pool_metrics(self, *, component: str) -> None:
@@ -247,6 +272,56 @@ class PostgresFactWorkQueue:
 
         complete_work_item(self, work_item_id=work_item_id)
 
+    def mark_shared_projection_pending(
+        self,
+        *,
+        work_item_id: str,
+        accepted_generation_id: str,
+        authoritative_shared_domains: list[str] | tuple[str, ...],
+    ) -> FactWorkItemRow | None:
+        """Fence one parent work item on authoritative shared follow-up."""
+
+        return mark_shared_projection_pending(
+            self,
+            work_item_id=work_item_id,
+            accepted_generation_id=accepted_generation_id,
+            authoritative_shared_domains=authoritative_shared_domains,
+        )
+
+    def complete_shared_projection_domain(
+        self,
+        *,
+        work_item_id: str,
+        projection_domain: str,
+        accepted_generation_id: str,
+    ) -> FactWorkItemRow | None:
+        """Mark one authoritative shared domain complete for a parent work item."""
+
+        return complete_shared_projection_domain(
+            self,
+            work_item_id=work_item_id,
+            projection_domain=projection_domain,
+            accepted_generation_id=accepted_generation_id,
+        )
+
+    def complete_shared_projection_domain_by_generation(
+        self,
+        *,
+        repository_id: str,
+        source_run_id: str,
+        accepted_generation_id: str,
+        projection_domain: str,
+    ) -> FactWorkItemRow | None:
+        """Complete one shared domain for the latest accepted repo generation."""
+
+        return complete_shared_projection_domain_by_generation(
+            self,
+            repository_id=repository_id,
+            source_run_id=source_run_id,
+            accepted_generation_id=accepted_generation_id,
+            projection_domain=projection_domain,
+        )
+
     def replay_failed_work_items(self, **kwargs: Any) -> list[FactWorkItemRow]:
         """Replay terminally failed work items by returning them to pending."""
 
@@ -287,6 +362,27 @@ class PostgresFactWorkQueue:
             work_type=work_type,
             failure_class=failure_class,
             limit=limit,
+        )
+
+    def count_shared_projection_pending(
+        self, *, source_run_id: str | None = None
+    ) -> int:
+        """Return the number of work items awaiting authoritative shared writes."""
+
+        return count_shared_projection_pending(self, source_run_id=source_run_id)
+
+    def list_shared_projection_acceptances(
+        self,
+        *,
+        projection_domain: str,
+        repository_ids: list[str] | None = None,
+    ) -> dict[tuple[str, str], str]:
+        """Return accepted generations for one shared projection domain."""
+
+        return list_shared_projection_acceptances(
+            self,
+            projection_domain=projection_domain,
+            repository_ids=repository_ids,
         )
 
     def list_queue_snapshot(self) -> list[FactWorkQueueSnapshotRow]:

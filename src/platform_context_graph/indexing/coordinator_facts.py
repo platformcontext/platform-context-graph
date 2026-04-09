@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 import time
 from typing import Any
@@ -16,8 +17,23 @@ from platform_context_graph.facts.state import get_fact_work_queue
 from platform_context_graph.facts.state import get_projection_decision_store
 from platform_context_graph.facts.state import git_facts_first_enabled
 from platform_context_graph.facts.storage.models import FactRunRow
+from platform_context_graph.facts.work_queue.stages import (
+    PROJECT_WORK_ITEM_STAGE,
+)
 from platform_context_graph.observability import get_observability
 from platform_context_graph.observability.facts_first_logs import log_inline_projection
+from platform_context_graph.indexing.coordinator_shared_completion import (
+    apply_completion_state,
+)
+from platform_context_graph.indexing.coordinator_shared_completion import (
+    completion_state_from_metrics,
+)
+from platform_context_graph.indexing.coordinator_shared_completion import (
+    decorate_timing_result,
+)
+from platform_context_graph.resolution.orchestration.failure_classification import (
+    classify_resolution_failure,
+)
 from platform_context_graph.resolution.orchestration import project_work_item
 
 from .commit_timing import CommitTimingResult
@@ -56,6 +72,7 @@ def project_repository_snapshot_facts(
     project_work_item_fn: Callable[..., dict[str, Any] | None] = project_work_item,
     lease_owner: str = "indexing",
     lease_ttl_seconds: int = 300,
+    max_attempts: int = 3,
     info_logger_fn: Any = lambda *_args, **_kwargs: None,
     warning_logger_fn: Any = lambda *_args, **_kwargs: None,
     debug_log_fn: Any = lambda *_args, **_kwargs: None,
@@ -149,18 +166,32 @@ def project_repository_snapshot_facts(
             warning_logger_fn=warning_logger_fn,
         )
     except Exception as exc:
+        failure = classify_resolution_failure(
+            exc,
+            failure_stage=PROJECT_WORK_ITEM_STAGE,
+        )
+        terminal = work_item.attempt_count >= max_attempts
+        next_retry_at = None
+        if not terminal and failure.retry_after_seconds is not None:
+            next_retry_at = utc_now() + timedelta(seconds=failure.retry_after_seconds)
         queue.fail_work_item(
             work_item_id=work_item.work_item_id,
             error_message=str(exc),
-            terminal=False,
+            terminal=terminal,
+            failure_stage=failure.failure_stage,
+            error_class=failure.error_class,
+            failure_class=failure.failure_class,
+            failure_code=failure.failure_code,
+            retry_disposition=failure.retry_disposition,
+            next_retry_at=next_retry_at,
         )
         log_inline_projection(
-            "failed",
+            "dead_lettered" if terminal else "failed",
             repository_id=work_item.repository_id,
             source_run_id=work_item.source_run_id,
             work_item_id=work_item.work_item_id,
             attempt_count=work_item.attempt_count,
-            error_class=type(exc).__name__,
+            error_class=failure.error_class,
         )
         observability.record_fact_work_item(
             component="ingester",
@@ -170,9 +201,17 @@ def project_repository_snapshot_facts(
         refresh_fact_queue_metrics(queue, component="ingester")
         raise
 
-    queue.complete_work_item(work_item_id=work_item.work_item_id)
+    completion_state = completion_state_from_metrics(
+        metrics,
+        default_generation_id=fact_emission_result.source_snapshot_id,
+    )
+    apply_completion_state(
+        queue=queue,
+        work_item_id=work_item.work_item_id,
+        completion_state=completion_state,
+    )
     log_inline_projection(
-        "completed",
+        ("awaiting_shared_projection" if completion_state.pending else "completed"),
         repository_id=work_item.repository_id,
         source_run_id=work_item.source_run_id,
         work_item_id=work_item.work_item_id,
@@ -181,7 +220,9 @@ def project_repository_snapshot_facts(
     observability.record_fact_work_item(
         component="ingester",
         work_type=work_item.work_type,
-        outcome="completed",
+        outcome=(
+            "awaiting_shared_projection" if completion_state.pending else "completed"
+        ),
     )
     observability.record_resolution_stage_duration(
         component="ingester",
@@ -195,7 +236,7 @@ def project_repository_snapshot_facts(
         duration_seconds=max(time.perf_counter() - started, 0.0),
         row_count=max(fact_metric_row_count(metrics), 1),
     )
-    return timing
+    return decorate_timing_result(timing, completion_state=completion_state)
 
 
 def commit_repository_snapshot_from_facts(
@@ -210,6 +251,7 @@ def commit_repository_snapshot_from_facts(
     project_work_item_fn: Callable[..., dict[str, Any] | None] = project_work_item,
     lease_owner: str = "indexing",
     lease_ttl_seconds: int = 300,
+    max_attempts: int = 3,
     info_logger_fn: Any = lambda *_args, **_kwargs: None,
     warning_logger_fn: Any = lambda *_args, **_kwargs: None,
     debug_log_fn: Any = lambda *_args, **_kwargs: None,
@@ -230,6 +272,7 @@ def commit_repository_snapshot_from_facts(
         project_work_item_fn=project_work_item_fn,
         lease_owner=lease_owner,
         lease_ttl_seconds=lease_ttl_seconds,
+        max_attempts=max_attempts,
         info_logger_fn=info_logger_fn,
         warning_logger_fn=warning_logger_fn,
         debug_log_fn=debug_log_fn,
@@ -311,6 +354,7 @@ def create_facts_first_commit_callback(
                 project_work_item_fn=project_work_item,
                 lease_owner="indexing",
                 lease_ttl_seconds=300,
+                max_attempts=3,
                 info_logger_fn=info_logger_fn,
                 warning_logger_fn=warning_logger_fn,
                 progress_callback=progress_callback,
@@ -337,9 +381,17 @@ def create_facts_first_commit_callback(
                 source_system="git",
                 source_snapshot_id=emission_result.source_snapshot_id,
                 repository_id=emission_result.repository_id,
-                status="completed",
+                status=(
+                    "awaiting_shared_projection"
+                    if getattr(timing, "shared_projection_pending", False)
+                    else "completed"
+                ),
                 started_at=observed_at_fn(),
-                completed_at=observed_at_fn(),
+                completed_at=(
+                    None
+                    if getattr(timing, "shared_projection_pending", False)
+                    else observed_at_fn()
+                ),
             )
         )
         return timing
