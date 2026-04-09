@@ -25,6 +25,8 @@ class FrameworkSampleModule(BaseModel):
     route_methods: list[str] = Field(default_factory=list)
     route_paths: list[str] = Field(default_factory=list)
     server_symbols: list[str] = Field(default_factory=list)
+    services: list[str] = Field(default_factory=list)
+    client_symbols: list[str] = Field(default_factory=list)
     metadata_exports: NextMetadataExports | None = None
     route_segments: list[str] = Field(default_factory=list)
     runtime_boundary: ReactBoundary | None = None
@@ -62,13 +64,24 @@ class NextJsFrameworkSummary(BaseModel):
 
 
 class NodeHttpFrameworkSummary(BaseModel):
-    """Bounded Express/Hapi route summary for one repository."""
+    """Bounded route-framework summary for one repository."""
 
     model_config = ConfigDict(extra="forbid")
 
     module_count: int = 0
     route_path_count: int = 0
     route_methods: list[str] = Field(default_factory=list)
+    sample_modules: list[FrameworkSampleModule] = Field(default_factory=list)
+
+
+class ProviderFrameworkSummary(BaseModel):
+    """Bounded provider SDK summary for one repository."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    module_count: int = 0
+    services: list[str] = Field(default_factory=list)
+    client_symbols: list[str] = Field(default_factory=list)
     sample_modules: list[FrameworkSampleModule] = Field(default_factory=list)
 
 
@@ -82,3 +95,7 @@ class FrameworkSummary(BaseModel):
     nextjs: NextJsFrameworkSummary | None = None
     express: NodeHttpFrameworkSummary | None = None
     hapi: NodeHttpFrameworkSummary | None = None
+    fastapi: NodeHttpFrameworkSummary | None = None
+    flask: NodeHttpFrameworkSummary | None = None
+    aws: ProviderFrameworkSummary | None = None
+    gcp: ProviderFrameworkSummary | None = None

@@ -17,6 +17,18 @@ import threading
 from tree_sitter import Language, Parser
 from tree_sitter_language_pack import get_language
 
+
+class TreeSitterLanguageBootstrapError(RuntimeError):
+    """Raised when a tree-sitter grammar cannot be bootstrapped."""
+
+    def __init__(self, language_name: str, reason: str):
+        """Initialize the bootstrap error with language context."""
+
+        super().__init__(f"Failed to load language '{language_name}': {reason}")
+        self.language_name = language_name
+        self.reason = reason
+
+
 # Language name aliases for compatibility
 LANGUAGE_ALIASES = {
     # Common aliases
@@ -151,7 +163,7 @@ class TreeSitterManager:
                     f"This may be due to a missing or experimental grammar."
                 )
             except Exception as e:
-                raise Exception(f"Failed to load language '{canonical_name}': {e}")
+                raise TreeSitterLanguageBootstrapError(canonical_name, str(e)) from e
 
     def create_parser(self, lang: str) -> Parser:
         """

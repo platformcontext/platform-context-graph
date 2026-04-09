@@ -256,3 +256,51 @@ async function exercise(server) {
     result = javascript_parser.parse(source_file)
 
     assert "hapi" not in result["framework_semantics"]["frameworks"]
+
+
+def test_parse_javascript_aws_provider_semantics(
+    javascript_parser: JavascriptTreeSitterParser, temp_test_dir
+) -> None:
+    """Expose bounded AWS SDK semantics for JavaScript modules."""
+
+    source = """\
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+
+const client = new S3Client({ region: 'us-east-1' });
+const command = new GetObjectCommand({ Bucket: 'demo', Key: 'boats.csv' });
+"""
+    source_file = temp_test_dir / "consumer-utils.js"
+    source_file.write_text(source, encoding="utf-8")
+
+    result = javascript_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["aws"]
+    assert semantics["aws"]["services"] == ["s3"]
+    assert semantics["aws"]["client_symbols"] == ["S3Client"]
+
+
+def test_parse_javascript_gcp_provider_semantics(
+    javascript_parser: JavascriptTreeSitterParser, temp_test_dir
+) -> None:
+    """Expose bounded GCP SDK semantics for JavaScript modules."""
+
+    source = """\
+const vision = require('@google-cloud/vision');
+
+async function analyze() {
+  const client = new vision.ImageAnnotatorClient();
+  return client;
+}
+"""
+    source_file = temp_test_dir / "ImageAnalysisService.js"
+    source_file.write_text(source, encoding="utf-8")
+
+    result = javascript_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["gcp"]
+    assert semantics["gcp"]["services"] == ["vision"]
+    assert semantics["gcp"]["client_symbols"] == ["ImageAnnotatorClient"]

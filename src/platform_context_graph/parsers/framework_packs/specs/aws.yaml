@@ -1,0 +1,13 @@
+framework: aws
+title: AWS SDK Provider Pack
+strategy: provider_sdk_usage
+compute_order: 70
+surface_order: 70
+languages:
+  - javascript
+  - typescript
+config:
+  import_source_prefixes:
+    - "@aws-sdk/client-"
+  client_name_suffixes:
+    - Client

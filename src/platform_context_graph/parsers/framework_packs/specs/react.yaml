@@ -3,6 +3,10 @@ title: React Base Pack
 strategy: react_module
 compute_order: 10
 surface_order: 20
+languages:
+  - javascript
+  - typescript
+  - typescriptjsx
 config:
   boundary_directives:
     - client

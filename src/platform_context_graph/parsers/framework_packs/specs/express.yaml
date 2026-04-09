@@ -3,6 +3,9 @@ title: Express Base Pack
 strategy: node_http_routes
 compute_order: 30
 surface_order: 30
+languages:
+  - javascript
+  - typescript
 config:
   framework_import_sources:
     - express

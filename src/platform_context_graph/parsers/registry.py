@@ -17,6 +17,7 @@ from .raw_text import (
     register_raw_text_parsers,
 )
 from ..utils.tree_sitter_manager import get_tree_sitter_manager
+from ..utils.tree_sitter_manager import TreeSitterLanguageBootstrapError
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +298,14 @@ def _add_tree_sitter_parser(
             language_name,
             exc,
         )
+    except TreeSitterLanguageBootstrapError as exc:
+        logger.warning(
+            "Skipping parser for extension %s because language %s failed to "
+            "initialize: %s",
+            extension,
+            language_name,
+            exc,
+        )
 
 
 def build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
@@ -333,12 +342,26 @@ def build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
             DOCKERFILE_PARSER_KEY,
             exc,
         )
+    except TreeSitterLanguageBootstrapError as exc:
+        logger.warning(
+            "Skipping parser for special filename %s because language dockerfile "
+            "failed to initialize: %s",
+            DOCKERFILE_PARSER_KEY,
+            exc,
+        )
     try:
         parsers[JENKINSFILE_PARSER_KEY] = TreeSitterParser("groovy")
     except ValueError as exc:
         logger.warning(
             "Skipping parser for special filename %s because language groovy "
             "is unavailable: %s",
+            JENKINSFILE_PARSER_KEY,
+            exc,
+        )
+    except TreeSitterLanguageBootstrapError as exc:
+        logger.warning(
+            "Skipping parser for special filename %s because language groovy "
+            "failed to initialize: %s",
             JENKINSFILE_PARSER_KEY,
             exc,
         )

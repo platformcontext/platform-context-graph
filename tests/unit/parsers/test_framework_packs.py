@@ -15,13 +15,19 @@ from platform_context_graph.parsers.framework_semantics import (
 )
 
 
-def test_load_framework_pack_specs_exposes_react_and_nextjs() -> None:
+def test_load_framework_pack_specs_exposes_supported_framework_packs() -> None:
     """Load the canonical declarative framework packs from disk."""
 
     specs = load_framework_pack_specs()
 
     names = {spec["framework"] for spec in specs}
 
+    assert "aws" in names
+    assert "express" in names
+    assert "fastapi" in names
+    assert "flask" in names
+    assert "gcp" in names
+    assert "hapi" in names
     assert "react" in names
     assert "nextjs" in names
 
@@ -291,3 +297,190 @@ export async function FETCH(_request: RequestLike) {
         "RequestLike",
         "ResponseLike",
     ]
+
+
+def test_build_framework_semantics_skips_packs_for_other_languages() -> None:
+    """Ignore pack specs whose declared parser lanes do not match the file."""
+
+    semantics = build_framework_semantics(
+        Path("service.py"),
+        "def handler():\n    return None\n",
+        parser_language="python",
+        imports=[],
+        functions=[{"name": "handler", "decorators": []}],
+        function_calls=[],
+        variables=[],
+        classes=[],
+        components=[],
+        pack_specs=[
+            {
+                "framework": "react",
+                "strategy": "react_module",
+                "compute_order": 10,
+                "surface_order": 20,
+                "languages": ["javascript", "typescriptjsx"],
+                "config": {
+                    "boundary_directives": ["client", "server"],
+                    "hook_name_pattern": r"^use[A-Z][A-Za-z0-9]*$",
+                    "component_name_pattern": r"^[A-Z][A-Za-z0-9]*$",
+                    "component_export_patterns": [],
+                },
+            }
+        ],
+    )
+
+    assert semantics["frameworks"] == []
+
+
+def test_build_framework_semantics_accepts_custom_provider_pack_specs() -> None:
+    """Use declarative provider packs instead of hard-coded SDK constants."""
+
+    semantics = build_framework_semantics(
+        Path("src/aws/client.ts"),
+        """\
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+
+const client = new S3Client({ region: 'us-east-1' });
+""",
+        parser_language="typescript",
+        imports=[
+            {
+                "source": "@aws-sdk/client-s3",
+                "name": "@aws-sdk/client-s3",
+                "alias": "{ S3Client, GetObjectCommand }",
+            }
+        ],
+        functions=[],
+        function_calls=[
+            {
+                "name": "S3Client",
+                "full_name": "new S3Client({ region: 'us-east-1' })",
+            }
+        ],
+        variables=[],
+        classes=[],
+        components=[],
+        pack_specs=[
+            {
+                "framework": "aws",
+                "strategy": "provider_sdk_usage",
+                "compute_order": 10,
+                "surface_order": 10,
+                "languages": ["javascript", "typescript"],
+                "config": {
+                    "import_source_prefixes": ["@aws-sdk/client-"],
+                    "client_name_suffixes": ["Client"],
+                },
+            }
+        ],
+    )
+
+    assert semantics["frameworks"] == ["aws"]
+    assert semantics["aws"]["services"] == ["s3"]
+    assert semantics["aws"]["client_symbols"] == ["S3Client"]
+
+
+def test_build_framework_semantics_limits_provider_clients_to_imported_sdk_symbols() -> (
+    None
+):
+    """Ignore unrelated `*Client` constructors in SDK-adjacent files."""
+
+    semantics = build_framework_semantics(
+        Path("src/aws/client.ts"),
+        """\
+import { S3Client } from '@aws-sdk/client-s3';
+
+const sdkClient = new S3Client({ region: 'us-east-1' });
+const apiClient = new ApiClient();
+""",
+        parser_language="typescript",
+        imports=[
+            {
+                "source": "@aws-sdk/client-s3",
+                "name": "S3Client",
+                "alias": None,
+            }
+        ],
+        functions=[],
+        function_calls=[
+            {
+                "name": "S3Client",
+                "full_name": "new S3Client({ region: 'us-east-1' })",
+            },
+            {
+                "name": "ApiClient",
+                "full_name": "new ApiClient()",
+            },
+        ],
+        variables=[],
+        classes=[],
+        components=[],
+        pack_specs=[
+            {
+                "framework": "aws",
+                "strategy": "provider_sdk_usage",
+                "compute_order": 10,
+                "surface_order": 10,
+                "languages": ["javascript", "typescript"],
+                "config": {
+                    "import_source_prefixes": ["@aws-sdk/client-"],
+                    "client_name_suffixes": ["Client"],
+                },
+            }
+        ],
+    )
+
+    assert semantics["frameworks"] == ["aws"]
+    assert semantics["aws"]["services"] == ["s3"]
+    assert semantics["aws"]["client_symbols"] == ["S3Client"]
+
+
+def test_build_framework_semantics_ignores_non_constructor_client_helpers() -> None:
+    """Do not classify helper calls ending in Client as SDK client symbols."""
+
+    semantics = build_framework_semantics(
+        Path("src/aws/client.ts"),
+        """\
+import { S3Client } from '@aws-sdk/client-s3';
+
+const getS3Client = () => new S3Client({ region: 'us-east-1' });
+const client = getS3Client();
+""",
+        parser_language="typescript",
+        imports=[
+            {
+                "source": "@aws-sdk/client-s3",
+                "name": "@aws-sdk/client-s3",
+                "alias": "{ S3Client }",
+            }
+        ],
+        functions=[],
+        function_calls=[
+            {
+                "name": "S3Client",
+                "full_name": "new S3Client({ region: 'us-east-1' })",
+            },
+            {
+                "name": "getS3Client",
+                "full_name": "getS3Client()",
+            },
+        ],
+        variables=[],
+        classes=[],
+        components=[],
+        pack_specs=[
+            {
+                "framework": "aws",
+                "strategy": "provider_sdk_usage",
+                "compute_order": 10,
+                "surface_order": 10,
+                "languages": ["javascript", "typescript"],
+                "config": {
+                    "import_source_prefixes": ["@aws-sdk/client-"],
+                    "client_name_suffixes": ["Client"],
+                },
+            }
+        ],
+    )
+
+    assert semantics["aws"]["client_symbols"] == ["S3Client"]

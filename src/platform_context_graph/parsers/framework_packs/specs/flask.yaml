@@ -1,0 +1,34 @@
+framework: flask
+title: Flask Base Pack
+strategy: python_web_routes
+compute_order: 60
+surface_order: 60
+languages:
+  - python
+config:
+  import_full_names:
+    - flask.Flask
+    - flask.Blueprint
+  constructor_names:
+    - Flask
+    - Blueprint
+  factory_function_names:
+    - create_app
+    - create_blueprint
+  route_decorator_map:
+    route: []
+    get:
+      - GET
+    post:
+      - POST
+    put:
+      - PUT
+    patch:
+      - PATCH
+    delete:
+      - DELETE
+  prefix_keyword_names:
+    - url_prefix
+  default_methods:
+    - GET
+  require_known_server_symbol: false

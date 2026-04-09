@@ -48,6 +48,16 @@ def validate_framework_pack_spec(spec: FrameworkPackSpec) -> list[str]:
         if value is not None and not isinstance(value, int):
             errors.append(f"{spec_path}: field '{key}' must be an integer")
 
+    languages = spec.get("languages")
+    if languages is not None and not isinstance(languages, list):
+        errors.append(f"{spec_path}: field 'languages' must be a list of strings")
+    elif isinstance(languages, list):
+        invalid = [item for item in languages if not isinstance(item, str) or not item]
+        if invalid:
+            errors.append(
+                f"{spec_path}: field 'languages' must contain only non-empty strings"
+            )
+
     config = spec.get("config")
     if config is not None and not isinstance(config, dict):
         errors.append(f"{spec_path}: field 'config' must be a mapping")

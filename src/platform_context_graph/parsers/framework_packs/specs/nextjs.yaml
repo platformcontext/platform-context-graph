@@ -3,6 +3,10 @@ title: Next.js App Router Base Pack
 strategy: nextjs_app_router
 compute_order: 20
 surface_order: 10
+languages:
+  - javascript
+  - typescript
+  - typescriptjsx
 config:
   module_root_segments:
     - app

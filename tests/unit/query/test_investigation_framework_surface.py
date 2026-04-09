@@ -12,7 +12,19 @@ def framework_summary() -> dict[str, object]:
     """Return one bounded framework summary payload for the primary repo."""
 
     return {
-        "frameworks": ["express", "nextjs", "react"],
+        "frameworks": ["aws", "express", "fastapi", "flask", "gcp", "nextjs", "react"],
+        "aws": {
+            "module_count": 1,
+            "services": ["s3"],
+            "client_symbols": ["S3Client"],
+            "sample_modules": [
+                {
+                    "relative_path": "lib/s3.js",
+                    "services": ["s3"],
+                    "client_symbols": ["S3Client"],
+                }
+            ],
+        },
         "express": {
             "module_count": 1,
             "route_path_count": 2,
@@ -23,6 +35,44 @@ def framework_summary() -> dict[str, object]:
                     "route_methods": ["GET", "POST"],
                     "route_paths": ["/health", "/orders"],
                     "server_symbols": ["router"],
+                }
+            ],
+        },
+        "fastapi": {
+            "module_count": 1,
+            "route_path_count": 2,
+            "route_methods": ["GET", "POST"],
+            "sample_modules": [
+                {
+                    "relative_path": "app/api.py",
+                    "route_methods": ["GET", "POST"],
+                    "route_paths": ["/health", "/predict"],
+                    "server_symbols": ["app"],
+                }
+            ],
+        },
+        "flask": {
+            "module_count": 1,
+            "route_path_count": 1,
+            "route_methods": ["GET"],
+            "sample_modules": [
+                {
+                    "relative_path": "proxy.py",
+                    "route_methods": ["GET"],
+                    "route_paths": ["/proxy"],
+                    "server_symbols": ["app"],
+                }
+            ],
+        },
+        "gcp": {
+            "module_count": 1,
+            "services": ["vision"],
+            "client_symbols": ["ImageAnnotatorClient"],
+            "sample_modules": [
+                {
+                    "relative_path": "services/vision.js",
+                    "services": ["vision"],
+                    "client_symbols": ["ImageAnnotatorClient"],
                 }
             ],
         },
@@ -152,10 +202,15 @@ def test_investigate_service_surfaces_primary_repo_framework_summary(
         intent="overview",
     )
 
+    assert result["framework_summary"]["aws"]["services"] == ["s3"]
     assert result["framework_summary"]["express"]["route_path_count"] == 2
+    assert result["framework_summary"]["fastapi"]["route_path_count"] == 2
+    assert result["framework_summary"]["flask"]["route_path_count"] == 1
+    assert result["framework_summary"]["gcp"]["services"] == ["vision"]
     assert result["framework_summary"]["nextjs"]["page_count"] == 2
     assert any(
-        line.startswith("Framework evidence shows ") for line in result["summary"]
+        line.startswith("Framework and provider evidence shows ")
+        for line in result["summary"]
     )
     assert any(
         finding["title"] == "Framework profile detected"

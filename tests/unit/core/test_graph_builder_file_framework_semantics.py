@@ -151,6 +151,24 @@ def test_add_file_to_graph_persists_framework_semantics_on_file_nodes(
                     "route_paths": ["/orders/{id}"],
                     "server_symbols": [],
                 },
+                "fastapi": {
+                    "route_methods": ["GET"],
+                    "route_paths": ["/health"],
+                    "server_symbols": ["app"],
+                },
+                "flask": {
+                    "route_methods": ["POST"],
+                    "route_paths": ["/proxy"],
+                    "server_symbols": ["app"],
+                },
+                "aws": {
+                    "services": ["s3"],
+                    "client_symbols": ["S3Client"],
+                },
+                "gcp": {
+                    "services": ["vision"],
+                    "client_symbols": ["ImageAnnotatorClient"],
+                },
             },
         },
         repo_name=repo_path.name,
@@ -179,5 +197,15 @@ def test_add_file_to_graph_persists_framework_semantics_on_file_nodes(
         and params["hapi_route_methods"] == ["POST"]
         and params["hapi_route_paths"] == ["/orders/{id}"]
         and params["hapi_server_symbols"] == []
+        and params["fastapi_route_methods"] == ["GET"]
+        and params["fastapi_route_paths"] == ["/health"]
+        and params["fastapi_server_symbols"] == ["app"]
+        and params["flask_route_methods"] == ["POST"]
+        and params["flask_route_paths"] == ["/proxy"]
+        and params["flask_server_symbols"] == ["app"]
+        and params["aws_services"] == ["s3"]
+        and params["aws_client_symbols"] == ["S3Client"]
+        and params["gcp_services"] == ["vision"]
+        and params["gcp_client_symbols"] == ["ImageAnnotatorClient"]
         for query, params in tx_calls
     ), tx_calls

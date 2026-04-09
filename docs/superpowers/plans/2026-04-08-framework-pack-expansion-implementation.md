@@ -26,12 +26,18 @@ Already complete on this branch:
 - Node HTTP framework packs for Express and Hapi
 - Node HTTP file-node persistence and repo/story/investigation surfacing
 - real repo smoke validation for Express and Hapi semantics
+- Python web framework packs for FastAPI and Flask
+- Python web file-node persistence and repo/story/investigation surfacing
+- real repo smoke validation for FastAPI and Flask semantics
+- JS/TS provider-pack foundation for bounded AWS and GCP SDK evidence
+- provider-pack file-node persistence and repo/story/investigation surfacing
+- graph-backed Python end-to-end validation for FastAPI and Flask repos
+- parser-registry hardening so unrelated tree-sitter grammar bootstrap failures do not block indexing
 
 Still left for this branch:
 
-1. add a thin Python web framework lane for FastAPI and Flask
-2. create the first provider-pack foundation for JS/TS SDK evidence
-3. publish repeatable framework-pack docs and validation expectations
+1. publish repeatable framework-pack docs and validation expectations
+2. run the final branch validation bundle and update branch packaging notes
 
 Out of scope for this branch unless the above finishes early:
 
@@ -243,6 +249,8 @@ git commit -m "feat(parsers): add node framework packs"
 
 ## Chunk 3: Python Web Framework Lane
 
+Status: completed on this branch with parser facts, file-node persistence, query/story/investigation surfacing, and real repo smoke validation.
+
 ### Task 5: Add FastAPI and Flask framework packs
 
 **Files:**
@@ -250,11 +258,11 @@ git commit -m "feat(parsers): add node framework packs"
 - Create: `src/platform_context_graph/parsers/framework_packs/specs/flask.yaml`
 - Create: `src/platform_context_graph/parsers/framework_packs/strategies/python_web.py`
 - Modify: `src/platform_context_graph/parsers/framework_semantics.py`
-- Modify: `src/platform_context_graph/parsers/languages/python_support.py`
+- Modify: `src/platform_context_graph/parsers/languages/python.py`
 - Test: `tests/unit/parsers/test_python_parser.py`
 - Test: `tests/unit/parsers/test_framework_packs.py`
 
-- [ ] **Step 1: Write failing Python parser tests**
+- [x] **Step 1: Write failing Python parser tests**
 
 ```python
 def test_parse_python_fastapi_route_semantics(...) -> None:
@@ -262,21 +270,20 @@ def test_parse_python_fastapi_route_semantics(...) -> None:
     assert semantics["fastapi"]["route_methods"] == ["GET"]
 ```
 
-- [ ] **Step 2: Run the failing tests**
+- [x] **Step 2: Run the failing tests**
 
 Run: `PYTHONPATH=src uv run python -m pytest tests/unit/parsers/test_python_parser.py tests/unit/parsers/test_framework_packs.py -q`
 Expected: FAIL because Python framework semantics are not emitted yet.
 
-- [ ] **Step 3: Implement bounded Python web facts**
+- [x] **Step 3: Implement bounded Python web facts**
 
 Emit only:
 
 - `route_methods`
 - `route_paths`
-- `app_symbols`
-- `handler_names`
+- `server_symbols`
 
-- [ ] **Step 4: Re-run parser tests**
+- [x] **Step 4: Re-run parser tests**
 
 Run: `PYTHONPATH=src uv run python -m pytest tests/unit/parsers/test_python_parser.py tests/unit/parsers/test_framework_packs.py -q`
 Expected: PASS
@@ -293,10 +300,10 @@ Expected: PASS
 - Test: `tests/unit/query/test_repository_framework_summary.py`
 - Test: `tests/unit/query/test_story_frameworks.py`
 
-- [ ] **Step 1: Write failing persistence/query tests for FastAPI and Flask**
-- [ ] **Step 2: Run the failing tests**
-- [ ] **Step 3: Add bounded file-node properties and summary text**
-- [ ] **Step 4: Re-run the focused tests**
+- [x] **Step 1: Write failing persistence/query tests for FastAPI and Flask**
+- [x] **Step 2: Run the failing tests**
+- [x] **Step 3: Add bounded file-node properties and summary text**
+- [x] **Step 4: Re-run the focused tests**
 
 Run: `PYTHONPATH=src uv run python -m pytest tests/unit/core/test_graph_builder_file_framework_semantics.py tests/unit/query/test_repository_framework_summary.py tests/unit/query/test_story_frameworks.py -q`
 Expected: PASS
@@ -308,8 +315,10 @@ Expected: PASS
 - Test: `tests/unit/scripts/test_validate_language_support_e2e.py`
 - Docs: `docs/superpowers/plans/2026-04-07-language-and-framework-parser-maturity-implementation.md`
 
-- [ ] **Step 1: Extend validator expectations for Python web evidence**
-- [ ] **Step 2: Validate real repos**
+- [x] **Step 1: Extend validator expectations for Python web evidence**
+No validator code change was required because the existing framework summary and story validation is generic across framework lanes.
+
+- [x] **Step 2: Validate real repos**
 
 Run:
 
@@ -333,22 +342,31 @@ PYTHONPATH=src uv run python scripts/validate_language_support_e2e.py \
   --require-framework-evidence
 ```
 
+Observed:
+
+- `recos-ranker-service`: FastAPI detected in `app/app.py` with `GET /health` and `POST /predict`
+- `lambda-python-s3-proxy`: Flask detected in `proxy.py` with `GET /` and `GET /<path:url>`
+- `lambda-python-lb-s3-files`: Flask detected in `app.py` with multiple GET routes
+- `lambda-python-s3-proxy/lib/factory.py`: Flask error handlers were not misclassified as routes
+
 Expected: PASS with FastAPI or Flask evidence where present.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/platform_context_graph/parsers/framework_packs src/platform_context_graph/parsers/framework_semantics.py src/platform_context_graph/parsers/languages/python_support.py src/platform_context_graph/graph/persistence/file_nodes.py src/platform_context_graph/resolution/projection/files.py src/platform_context_graph/query/repositories/framework_summary.py src/platform_context_graph/query/story_frameworks.py scripts/validate_language_support_e2e.py tests/unit/parsers/test_python_parser.py tests/unit/core/test_graph_builder_file_framework_semantics.py tests/unit/query/test_repository_framework_summary.py tests/unit/query/test_story_frameworks.py tests/unit/scripts/test_validate_language_support_e2e.py
+git add src/platform_context_graph/parsers/framework_packs src/platform_context_graph/parsers/framework_semantics.py src/platform_context_graph/parsers/languages/python.py src/platform_context_graph/graph/persistence/file_nodes.py src/platform_context_graph/resolution/projection/files.py src/platform_context_graph/query/repositories/framework_summary.py src/platform_context_graph/query/story_frameworks.py tests/unit/parsers/test_python_parser.py tests/unit/core/test_graph_builder_file_framework_semantics.py tests/unit/query/test_repository_framework_summary.py tests/unit/query/test_story_frameworks.py
 git commit -m "feat(parsers): add python framework packs"
 ```
 
 ## Chunk 4: JS/TS Provider Pack Foundation
 
+Status: completed on this branch with bounded parser facts, repo/story/investigation surfacing, and real repo smoke validation.
+
 ### Task 8: Add provider-pack strategy groundwork
 
 **Files:**
-- Create: `src/platform_context_graph/parsers/framework_packs/specs/aws_js.yaml`
-- Create: `src/platform_context_graph/parsers/framework_packs/specs/gcp_js.yaml`
+- Create: `src/platform_context_graph/parsers/framework_packs/specs/aws.yaml`
+- Create: `src/platform_context_graph/parsers/framework_packs/specs/gcp.yaml`
 - Create: `src/platform_context_graph/parsers/framework_packs/strategies/provider_calls.py`
 - Modify: `src/platform_context_graph/parsers/framework_packs/models.py`
 - Modify: `src/platform_context_graph/parsers/framework_semantics.py`
@@ -356,9 +374,9 @@ git commit -m "feat(parsers): add python framework packs"
 - Test: `tests/unit/parsers/test_typescript_parser.py`
 - Test: `tests/unit/parsers/test_framework_packs.py`
 
-- [ ] **Step 1: Write failing provider-pack tests for import + constructor evidence**
-- [ ] **Step 2: Run the failing tests**
-- [ ] **Step 3: Implement bounded provider facts**
+- [x] **Step 1: Write failing provider-pack tests for import + constructor evidence**
+- [x] **Step 2: Run the failing tests**
+- [x] **Step 3: Implement bounded provider facts**
 
 Example:
 
@@ -370,7 +388,7 @@ Example:
 }
 ```
 
-- [ ] **Step 4: Re-run focused tests**
+- [x] **Step 4: Re-run focused tests**
 
 Run: `PYTHONPATH=src uv run python -m pytest tests/unit/parsers/test_javascript_parser.py tests/unit/parsers/test_typescript_parser.py tests/unit/parsers/test_framework_packs.py -q`
 Expected: PASS
@@ -384,30 +402,60 @@ Expected: PASS
 - Test: `tests/unit/query/test_repository_framework_summary.py`
 - Docs: `docs/superpowers/specs/2026-04-07-language-and-framework-parser-maturity-design.md`
 
-- [ ] **Step 1: Keep provider surfacing bounded at file/repo summary level**
-- [ ] **Step 2: Add failing summary tests**
-- [ ] **Step 3: Implement minimal summary fields**
-- [ ] **Step 4: Re-run the query tests**
+- [x] **Step 1: Keep provider surfacing bounded at file/repo summary level**
+- [x] **Step 2: Add failing summary tests**
+- [x] **Step 3: Implement minimal summary fields**
+- [x] **Step 4: Re-run the query tests**
 
 Run: `PYTHONPATH=src uv run python -m pytest tests/unit/query/test_repository_framework_summary.py tests/unit/query/test_story_frameworks.py -q`
 Expected: PASS
+
+Observed:
+
+- `lambda-node-search-price-tiers-processor`: AWS SDK evidence detected in `consumer-utils.js` with `S3Client`
+- `lambda-node-leads-indexer`: AWS SDK evidence detected in `utils/ssm.js` with `SSMClient`
+- `api-node-poc-nlp-search`: GCP SDK evidence detected in `ImageAnalysisService.js` with `ImageAnnotatorClient`
 
 ## Chunk 5: Framework-Pack Docs and Branch Exit Criteria
 
 ### Task 10: Publish framework-pack support docs and completion criteria
 
 **Files:**
-- Create: `docs/docs/frameworks/README.md`
-- Create: `docs/docs/frameworks/support-maturity.md`
 - Modify: `docs/docs/contributing-language-support.md`
+- Modify: `src/platform_context_graph/parsers/capabilities/specs/javascript.yaml`
+- Modify: `src/platform_context_graph/parsers/capabilities/specs/typescript.yaml`
+- Modify: `src/platform_context_graph/parsers/capabilities/specs/python.yaml`
+- Regenerate: `docs/docs/languages/javascript.md`
+- Regenerate: `docs/docs/languages/python.md`
+- Regenerate: `docs/docs/languages/typescript.md`
+- Regenerate: `docs/docs/languages/support-maturity.md`
 - Modify: `docs/superpowers/plans/2026-04-07-language-and-framework-parser-maturity-implementation.md`
-- Modify: `scripts/generate_language_capability_docs.py` or create `scripts/generate_framework_pack_docs.py`
+- Modify: `scripts/validate_language_support_e2e.py`
+- Test: `tests/unit/scripts/test_validate_language_support_e2e.py`
 - Test: `tests/integration/docs/test_language_capability_docs.py`
 
-- [ ] **Step 1: Decide whether framework docs should be generated alongside language docs**
-- [ ] **Step 2: Add failing doc-generation or doc-contract test**
-- [ ] **Step 3: Implement doc generation or checked static docs**
-- [ ] **Step 4: Re-run doc checks**
+- [x] **Step 1: Decide whether framework docs should be generated alongside language docs**
+Use the existing generated language-support docs plus the contributor guide, rather than introducing a second parallel generated frameworks tree.
+
+- [x] **Step 2: Add failing doc-generation or doc-contract test**
+Observed:
+
+- `PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py --check`
+  failed with drift in `javascript.md`, `python.md`, `typescript.md`, and `support-maturity.md`
+
+- [x] **Step 3: Implement doc generation or checked static docs**
+Implemented:
+
+- promoted JavaScript and TypeScript support-maturity pack names to include Node HTTP and provider packs
+- promoted Python support-maturity metadata with FastAPI and Flask real-repo/end-to-end evidence
+- updated contributor docs for the expanded framework-pack strategy set
+- extended the graph-backed validator to support `--language python`
+
+- [x] **Step 4: Re-run doc checks**
+Observed:
+
+- `PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py --check` passed
+- `PYTHONPATH=src uv run python -m pytest tests/integration/docs/test_language_capability_docs.py -q` passed (`3 passed`)
 
 Run:
 
@@ -424,7 +472,7 @@ Expected: PASS
 - Modify: `docs/superpowers/plans/2026-04-07-language-and-framework-parser-maturity-implementation.md`
 - Modify: PR description when the branch is ready
 
-- [ ] **Step 1: Run the final branch validation bundle**
+- [x] **Step 1: Run the final branch validation bundle**
 
 Run:
 
@@ -437,8 +485,16 @@ uv build
 ```
 
 Expected: PASS
+Observed:
 
-- [ ] **Step 2: Run final real-repo validations**
+- focused final regression bundle passed: `94 passed`
+- file-length check passed
+- docstring check passed
+- `py_compile` passed
+- `git diff --check` passed
+- `uv build` passed
+
+- [x] **Step 2: Run final real-repo validations**
 
 Run the validator against at least:
 
@@ -446,6 +502,14 @@ Run the validator against at least:
 - `/Users/allen/repos/services/portal-react-platform`
 - `/Users/allen/repos/services/api-node-search-api`
 - `/Users/allen/repos/services/recos-ranker-service`
+
+Observed:
+
+- `portal-nextjs-platform`: passed on existing run `01e7ca696a30df95`
+- `portal-react-platform`: passed on existing run `773c75cb105c8879`
+- `api-node-search-api`: indexed and passed on run `69e49e214fa2cd8d`
+- `recos-ranker-service`: indexed and passed on run `1cfe41a63cb2bd4a`
+- `lambda-python-s3-proxy`: additional Flask end-to-end validation passed on run `6a792e3bb05f5c69`
 
 - [ ] **Step 3: Update the PR description**
 

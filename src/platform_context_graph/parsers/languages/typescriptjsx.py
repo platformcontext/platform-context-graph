@@ -128,6 +128,7 @@ class TypescriptJSXTreeSitterParser(TypescriptTreeSitterParser):
             "framework_semantics": build_framework_semantics(
                 path,
                 source_code,
+                parser_language="typescriptjsx",
                 imports=imports,
                 functions=functions,
                 function_calls=function_calls,

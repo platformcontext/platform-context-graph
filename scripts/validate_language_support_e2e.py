@@ -13,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 _LANGUAGE_SUFFIXES: dict[str, tuple[str, ...]] = {
     "javascript": (".js", ".mjs", ".cjs", ".jsx"),
+    "python": (".py",),
     "typescript": (".ts", ".mts", ".cts"),
     "typescriptjsx": (".tsx",),
 }
@@ -36,7 +37,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--language",
         required=True,
         choices=sorted(_LANGUAGE_SUFFIXES),
-        help="Language lane to validate (javascript, typescript, typescriptjsx).",
+        help=(
+            "Language lane to validate "
+            "(javascript, python, typescript, typescriptjsx)."
+        ),
     )
     parser.add_argument(
         "--repo-name",

@@ -30,7 +30,7 @@ Canonical source: `src/platform_context_graph/parsers/capabilities/specs/typescr
 - Grammar routing: `supported`
 - Normalization: `supported`
 - Framework pack status: `supported`
-- Framework packs: `react-base`, `nextjs-app-router-base`
+- Framework packs: `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base`
 - Query surfacing: `supported`
 - Real-repo validation: `supported`
 - End-to-end indexing: `supported`
@@ -39,6 +39,7 @@ Canonical source: `src/platform_context_graph/parsers/capabilities/specs/typescr
 - Notes:
   - api-node-platform completed a clean local end-to-end indexing run (run ef02081cb9874275)
   - repo context, repo summary, and repo story all returned successfully on a pure TypeScript repo without requiring framework evidence
+  - TypeScript now participates in the same declarative Node HTTP and provider-pack program as JavaScript
   - generic type aliases and decorators remain partial or unsupported as documented below
 
 

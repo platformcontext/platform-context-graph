@@ -21,19 +21,19 @@ yet been explicitly assessed in the parser maturity program.
 | Haskell | `HaskellTreeSitterParser` | - | - | - | - | - | - | - |
 | Helm | `InfraYAMLParser` | - | - | - | - | - | - | - |
 | Java | `JavaTreeSitterParser` | - | - | - | - | - | - | - |
-| JavaScript | `JavascriptTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | supported | supported |
+| JavaScript | `JavascriptTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base` | supported | supported | supported |
 | JSON Config | `JSONConfigTreeSitterParser` | - | - | - | - | - | - | - |
 | Kotlin | `KotlinTreeSitterParser` | - | - | - | - | - | - | - |
 | Kubernetes | `InfraYAMLParser` | - | - | - | - | - | - | - |
 | Kustomize | `InfraYAMLParser` | - | - | - | - | - | - | - |
 | Perl | `PerlTreeSitterParser` | - | - | - | - | - | - | - |
 | PHP | `PhpTreeSitterParser` | - | - | - | - | - | - | - |
-| Python | `PythonTreeSitterParser` | - | - | - | - | - | - | - |
+| Python | `PythonTreeSitterParser` | supported | supported | supported | `fastapi-base`, `flask-base` | supported | supported | supported |
 | Ruby | `RubyTreeSitterParser` | - | - | - | - | - | - | - |
 | Rust | `RustTreeSitterParser` | - | - | - | - | - | - | - |
 | Scala | `ScalaTreeSitterParser` | - | - | - | - | - | - | - |
 | Swift | `SwiftTreeSitterParser` | - | - | - | - | - | - | - |
 | Terraform | `HCLTerraformParser` | - | - | - | - | - | - | - |
 | Terragrunt | `HCLTerraformParser` | - | - | - | - | - | - | - |
-| TypeScript | `TypescriptTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | supported | supported |
+| TypeScript | `TypescriptTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base` | supported | supported | supported |
 | TypeScript JSX | `TypescriptJSXTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | supported | supported |

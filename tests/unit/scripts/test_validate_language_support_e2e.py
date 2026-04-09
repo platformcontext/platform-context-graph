@@ -132,3 +132,21 @@ def test_main_prints_report_when_validation_passes(
     assert exit_code == 0
     assert stderr.getvalue() == ""
     assert json.loads(stdout.getvalue()) == report
+
+
+def test_parse_args_accepts_python_language() -> None:
+    """The CLI should expose Python as a graph-backed validation lane."""
+
+    module = _load_script_module("validate_language_support_e2e_python")
+
+    args = module.parse_args(
+        [
+            "--repo-path",
+            "/Users/allen/repos/services/recos-ranker-service",
+            "--language",
+            "python",
+        ]
+    )
+
+    assert args.language == "python"
+    assert module._LANGUAGE_SUFFIXES["python"] == (".py",)

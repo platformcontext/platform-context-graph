@@ -8,11 +8,15 @@ FrameworkPackStrategy = Literal[
     "react_module",
     "nextjs_app_router",
     "node_http_routes",
+    "python_web_routes",
+    "provider_sdk_usage",
 ]
 SUPPORTED_FRAMEWORK_PACK_STRATEGIES: Final[set[FrameworkPackStrategy]] = {
     "react_module",
     "nextjs_app_router",
     "node_http_routes",
+    "python_web_routes",
+    "provider_sdk_usage",
 }
 
 
@@ -24,5 +28,6 @@ class FrameworkPackSpec(TypedDict, total=False):
     strategy: FrameworkPackStrategy
     compute_order: int
     surface_order: int
+    languages: list[str]
     config: dict[str, Any]
     spec_path: str

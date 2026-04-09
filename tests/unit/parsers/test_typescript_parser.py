@@ -104,6 +104,10 @@ import type { Config } from './config';
 
     imports = result.get("imports", [])
     assert len(imports) >= 2
+    assert any(
+        item["name"] == "readFileSync" and item["source"] == "fs" for item in imports
+    )
+    assert any(item["name"] == "*" and item["alias"] == "path" for item in imports)
 
 
 def test_parse_variables(ts_parser, temp_test_dir):
@@ -339,6 +343,28 @@ export const steps: StepMeta[] = [
     result = ts_parser.parse(source_file)
 
     assert "hapi" not in result["framework_semantics"]["frameworks"]
+
+
+def test_parse_typescript_aws_provider_semantics(ts_parser, temp_test_dir) -> None:
+    """Expose bounded AWS SDK semantics for TypeScript modules."""
+
+    source = """\
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+
+const client = new SSMClient({ region: 'us-east-1' });
+const command = new GetParameterCommand({ Name: '/configd/demo/path' });
+"""
+    source_file = temp_test_dir / "src" / "ssm.ts"
+    source_file.parent.mkdir(parents=True, exist_ok=True)
+    source_file.write_text(source, encoding="utf-8")
+
+    result = ts_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["aws"]
+    assert semantics["aws"]["services"] == ["ssm"]
+    assert semantics["aws"]["client_symbols"] == ["SSMClient"]
 
 
 def test_parse_decorators_do_not_emit_metadata(ts_parser, temp_test_dir):

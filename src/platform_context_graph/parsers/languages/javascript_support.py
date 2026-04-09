@@ -394,6 +394,7 @@ def parse_javascript_file(
             "framework_semantics": build_framework_semantics(
                 path,
                 source_code,
+                parser_language=parser_wrapper.language_name,
                 imports=imports,
                 functions=functions,
                 function_calls=function_calls,

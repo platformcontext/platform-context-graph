@@ -37,7 +37,7 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
         [
             {
                 "relative_path": "app/orders/page.tsx",
-                "frameworks": ["express", "nextjs", "react"],
+                "frameworks": ["aws", "express", "fastapi", "nextjs", "react"],
                 "react_boundary": "client",
                 "react_component_exports": ["default"],
                 "react_hooks_used": ["useState"],
@@ -53,6 +53,16 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
                 "hapi_route_methods": [],
                 "hapi_route_paths": [],
                 "hapi_server_symbols": [],
+                "fastapi_route_methods": ["GET"],
+                "fastapi_route_paths": ["/health"],
+                "fastapi_server_symbols": ["app"],
+                "flask_route_methods": [],
+                "flask_route_paths": [],
+                "flask_server_symbols": [],
+                "aws_services": ["s3"],
+                "aws_client_symbols": ["S3Client"],
+                "gcp_services": [],
+                "gcp_client_symbols": [],
             },
             {
                 "relative_path": "app/orders/layout.tsx",
@@ -72,10 +82,20 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
                 "hapi_route_methods": [],
                 "hapi_route_paths": [],
                 "hapi_server_symbols": [],
+                "fastapi_route_methods": [],
+                "fastapi_route_paths": [],
+                "fastapi_server_symbols": [],
+                "flask_route_methods": [],
+                "flask_route_paths": [],
+                "flask_server_symbols": [],
+                "aws_services": [],
+                "aws_client_symbols": [],
+                "gcp_services": [],
+                "gcp_client_symbols": [],
             },
             {
-                "relative_path": "routes/orders.js",
-                "frameworks": ["hapi", "nextjs"],
+                "relative_path": "routes/orders.py",
+                "frameworks": ["flask", "gcp", "hapi", "nextjs"],
                 "react_boundary": None,
                 "react_component_exports": [],
                 "react_hooks_used": [],
@@ -91,12 +111,43 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
                 "hapi_route_methods": ["POST", "GET"],
                 "hapi_route_paths": ["/orders", "/orders/{id}"],
                 "hapi_server_symbols": [],
+                "fastapi_route_methods": [],
+                "fastapi_route_paths": [],
+                "fastapi_server_symbols": [],
+                "flask_route_methods": ["POST"],
+                "flask_route_paths": ["/proxy"],
+                "flask_server_symbols": ["app"],
+                "aws_services": [],
+                "aws_client_symbols": [],
+                "gcp_services": ["vision"],
+                "gcp_client_symbols": ["ImageAnnotatorClient"],
             },
         ]
     )
 
     assert summary == {
-        "frameworks": ["express", "hapi", "nextjs", "react"],
+        "frameworks": [
+            "aws",
+            "express",
+            "fastapi",
+            "flask",
+            "gcp",
+            "hapi",
+            "nextjs",
+            "react",
+        ],
+        "aws": {
+            "module_count": 1,
+            "services": ["s3"],
+            "client_symbols": ["S3Client"],
+            "sample_modules": [
+                {
+                    "relative_path": "app/orders/page.tsx",
+                    "services": ["s3"],
+                    "client_symbols": ["S3Client"],
+                }
+            ],
+        },
         "react": {
             "module_count": 2,
             "client_boundary_count": 1,
@@ -132,13 +183,51 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
                 }
             ],
         },
+        "fastapi": {
+            "module_count": 1,
+            "route_path_count": 1,
+            "route_methods": ["GET"],
+            "sample_modules": [
+                {
+                    "relative_path": "app/orders/page.tsx",
+                    "route_methods": ["GET"],
+                    "route_paths": ["/health"],
+                    "server_symbols": ["app"],
+                }
+            ],
+        },
+        "flask": {
+            "module_count": 1,
+            "route_path_count": 1,
+            "route_methods": ["POST"],
+            "sample_modules": [
+                {
+                    "relative_path": "routes/orders.py",
+                    "route_methods": ["POST"],
+                    "route_paths": ["/proxy"],
+                    "server_symbols": ["app"],
+                }
+            ],
+        },
+        "gcp": {
+            "module_count": 1,
+            "services": ["vision"],
+            "client_symbols": ["ImageAnnotatorClient"],
+            "sample_modules": [
+                {
+                    "relative_path": "routes/orders.py",
+                    "services": ["vision"],
+                    "client_symbols": ["ImageAnnotatorClient"],
+                }
+            ],
+        },
         "hapi": {
             "module_count": 1,
             "route_path_count": 2,
             "route_methods": ["GET", "POST"],
             "sample_modules": [
                 {
-                    "relative_path": "routes/orders.js",
+                    "relative_path": "routes/orders.py",
                     "route_methods": ["GET", "POST"],
                     "route_paths": ["/orders", "/orders/{id}"],
                     "server_symbols": [],
@@ -173,7 +262,7 @@ def test_summarize_repository_framework_rows_counts_nextjs_and_react() -> None:
                     "runtime_boundary": "server",
                 },
                 {
-                    "relative_path": "routes/orders.js",
+                    "relative_path": "routes/orders.py",
                     "module_kind": "route",
                     "route_verbs": ["GET", "POST"],
                     "metadata_exports": "none",
@@ -192,7 +281,15 @@ def test_build_repository_framework_summary_queries_file_properties() -> None:
         [
             {
                 "relative_path": "app/page.tsx",
-                "frameworks": ["express", "nextjs", "react"],
+                "frameworks": [
+                    "aws",
+                    "express",
+                    "fastapi",
+                    "flask",
+                    "gcp",
+                    "nextjs",
+                    "react",
+                ],
                 "react_boundary": "client",
                 "react_component_exports": ["default"],
                 "react_hooks_used": [],
@@ -208,6 +305,16 @@ def test_build_repository_framework_summary_queries_file_properties() -> None:
                 "hapi_route_methods": [],
                 "hapi_route_paths": [],
                 "hapi_server_symbols": [],
+                "fastapi_route_methods": ["POST"],
+                "fastapi_route_paths": ["/predict"],
+                "fastapi_server_symbols": ["app"],
+                "flask_route_methods": ["GET"],
+                "flask_route_paths": ["/healthz"],
+                "flask_server_symbols": ["app"],
+                "aws_services": ["ssm"],
+                "aws_client_symbols": ["SSMClient"],
+                "gcp_services": ["vision"],
+                "gcp_client_symbols": ["ImageAnnotatorClient"],
             }
         ]
     )
@@ -223,4 +330,8 @@ def test_build_repository_framework_summary_queries_file_properties() -> None:
     assert "f.next_module_kind as next_module_kind" in query
     assert "f.express_route_methods as express_route_methods" in query
     assert "f.hapi_route_methods as hapi_route_methods" in query
+    assert "f.fastapi_route_methods as fastapi_route_methods" in query
+    assert "f.flask_route_methods as flask_route_methods" in query
+    assert "f.aws_services as aws_services" in query
+    assert "f.gcp_services as gcp_services" in query
     assert params["repo_id"] == "repository:r_demo"

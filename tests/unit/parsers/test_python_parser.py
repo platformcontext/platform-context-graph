@@ -174,3 +174,167 @@ def greet(name: str) -> str:
         result = parser.parse(str(f))
 
         assert "type_annotations" not in result
+
+    def test_parse_fastapi_route_semantics(self, parser, temp_test_dir):
+        """Expose FastAPI route semantics for decorator-based apps."""
+
+        code = """
+from fastapi import APIRouter, FastAPI, Request
+
+app = FastAPI()
+router = APIRouter(prefix="/api")
+
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+@router.post("/predict")
+async def predict(_request: Request):
+    return {"score": 1.0}
+"""
+        f = temp_test_dir / "fastapi_app.py"
+        f.write_text(code)
+
+        result = parser.parse(str(f))
+
+        semantics = result["framework_semantics"]
+
+        assert semantics["frameworks"] == ["fastapi"]
+        assert semantics["fastapi"]["route_methods"] == ["GET", "POST"]
+        assert semantics["fastapi"]["route_paths"] == ["/health", "/api/predict"]
+        assert semantics["fastapi"]["server_symbols"] == ["app", "router"]
+
+    def test_parse_fastapi_route_semantics_with_annotated_assignments(
+        self, parser, temp_test_dir
+    ):
+        """Handle annotated FastAPI app/router assignments as route owners."""
+
+        code = """
+from fastapi import APIRouter, FastAPI
+
+app: FastAPI = FastAPI()
+router: APIRouter = APIRouter(prefix="/v1")
+
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+@router.post("/predict")
+async def predict():
+    return {"score": 1.0}
+"""
+        f = temp_test_dir / "fastapi_annotated.py"
+        f.write_text(code)
+
+        result = parser.parse(str(f))
+
+        semantics = result["framework_semantics"]
+
+        assert semantics["frameworks"] == ["fastapi"]
+        assert semantics["fastapi"]["route_methods"] == ["GET", "POST"]
+        assert semantics["fastapi"]["route_paths"] == ["/health", "/v1/predict"]
+        assert semantics["fastapi"]["server_symbols"] == ["app", "router"]
+
+    def test_parse_flask_route_semantics(self, parser, temp_test_dir):
+        """Expose Flask route semantics for app.route decorators."""
+
+        code = """
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/health")
+def health():
+    return "ok"
+
+@app.route("/proxy", methods=["GET", "POST"])
+def proxy():
+    return "proxied"
+"""
+        f = temp_test_dir / "flask_app.py"
+        f.write_text(code)
+
+        result = parser.parse(str(f))
+
+        semantics = result["framework_semantics"]
+
+        assert semantics["frameworks"] == ["flask"]
+        assert semantics["flask"]["route_methods"] == ["GET", "POST"]
+        assert semantics["flask"]["route_paths"] == ["/health", "/proxy"]
+        assert semantics["flask"]["server_symbols"] == ["app"]
+
+    def test_parse_flask_factory_route_semantics(self, parser, temp_test_dir):
+        """Treat imported Flask app factories as bounded route owners."""
+
+        code = """
+from lib.factory import create_app
+
+app = create_app(__name__)
+
+@app.route("/health", methods=["GET"])
+def health():
+    return "ok"
+"""
+        f = temp_test_dir / "flask_factory_route.py"
+        f.write_text(code)
+
+        result = parser.parse(str(f))
+
+        semantics = result["framework_semantics"]
+
+        assert semantics["frameworks"] == ["flask"]
+        assert semantics["flask"]["route_methods"] == ["GET"]
+        assert semantics["flask"]["route_paths"] == ["/health"]
+        assert semantics["flask"]["server_symbols"] == ["app"]
+
+    def test_parse_flask_error_handlers_do_not_count_as_routes(
+        self, parser, temp_test_dir
+    ):
+        """Ignore Flask error handlers when building route semantics."""
+
+        code = """
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.errorhandler(404)
+def not_found(_error):
+    return "missing", 404
+"""
+        f = temp_test_dir / "flask_factory.py"
+        f.write_text(code)
+
+        result = parser.parse(str(f))
+
+        semantics = result["framework_semantics"]
+
+        assert semantics["frameworks"] == []
+        assert "flask" not in semantics
+
+    def test_parse_unknown_route_decorators_do_not_count_as_flask(
+        self, parser, temp_test_dir
+    ):
+        """Avoid classifying arbitrary `.route()` decorators as Flask."""
+
+        code = """
+class Router:
+    def route(self, _path):
+        def decorator(func):
+            return func
+        return decorator
+
+router = Router()
+
+@router.route("/health")
+def health():
+    return "ok"
+"""
+        f = temp_test_dir / "custom_router.py"
+        f.write_text(code)
+
+        result = parser.parse(str(f))
+
+        semantics = result["framework_semantics"]
+
+        assert semantics["frameworks"] == []
+        assert "flask" not in semantics

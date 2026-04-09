@@ -6,6 +6,17 @@ from typing import Any
 
 from .story_shared import human_list
 
+_ROUTE_FRAMEWORK_LABELS = (
+    ("express", "Express"),
+    ("hapi", "Hapi"),
+    ("fastapi", "FastAPI"),
+    ("flask", "Flask"),
+)
+_PROVIDER_FRAMEWORK_LABELS = (
+    ("aws", "AWS"),
+    ("gcp", "GCP"),
+)
+
 
 def summarize_framework_overview(framework_summary: dict[str, Any] | None) -> str:
     """Return one short human-readable framework summary line."""
@@ -13,8 +24,10 @@ def summarize_framework_overview(framework_summary: dict[str, Any] | None) -> st
     if not isinstance(framework_summary, dict):
         return ""
 
-    parts: list[str] = []
-    for framework, label in (("express", "Express"), ("hapi", "Hapi")):
+    route_parts: list[str] = []
+    provider_parts: list[str] = []
+    app_parts: list[str] = []
+    for framework, label in _ROUTE_FRAMEWORK_LABELS:
         node_http = framework_summary.get(framework)
         if isinstance(node_http, dict) and node_http.get("module_count"):
             node_parts = [_count_phrase(int(node_http["module_count"]), "route module")]
@@ -27,7 +40,23 @@ def summarize_framework_overview(framework_summary: dict[str, Any] | None) -> st
             ]
             if route_methods:
                 summary += f" with verbs {human_list(route_methods)}"
-            parts.append(summary)
+            route_parts.append(summary)
+    for framework, label in _PROVIDER_FRAMEWORK_LABELS:
+        provider = framework_summary.get(framework)
+        if isinstance(provider, dict) and provider.get("module_count"):
+            provider_summary = (
+                f"{label} SDK usage spans "
+                f"{_count_phrase(int(provider['module_count']), 'module')}"
+            )
+            services = [str(value) for value in provider.get("services") or [] if value]
+            if services:
+                provider_summary += f" across services {human_list(services)}"
+            client_symbols = [
+                str(value) for value in provider.get("client_symbols") or [] if value
+            ]
+            if client_symbols:
+                provider_summary += f" with clients {human_list(client_symbols)}"
+            provider_parts.append(provider_summary)
 
     nextjs = framework_summary.get("nextjs")
     if isinstance(nextjs, dict) and nextjs.get("module_count"):
@@ -51,7 +80,7 @@ def summarize_framework_overview(framework_summary: dict[str, Any] | None) -> st
         )
         if route_verbs:
             summary += f" with verbs {human_list(route_verbs)}"
-        parts.append(summary)
+        app_parts.append(summary)
 
     react = framework_summary.get("react")
     if isinstance(react, dict) and react.get("module_count"):
@@ -67,13 +96,19 @@ def summarize_framework_overview(framework_summary: dict[str, Any] | None) -> st
             if count:
                 react_parts.append(_count_phrase(count, label))
         if react_parts:
-            parts.append("React has " + ", ".join(react_parts))
+            app_parts.append("React has " + ", ".join(react_parts))
         else:
-            parts.append("React is present")
+            app_parts.append("React is present")
 
+    parts = route_parts + provider_parts + app_parts
     if not parts:
         return ""
-    return "Framework evidence shows " + " and ".join(parts) + "."
+    prefix = (
+        "Framework and provider evidence shows "
+        if provider_parts
+        else "Framework evidence shows "
+    )
+    return prefix + " and ".join(parts) + "."
 
 
 def build_framework_story_items(
@@ -85,7 +120,14 @@ def build_framework_story_items(
         return []
 
     items: list[dict[str, Any]] = []
-    for framework in ("express", "hapi"):
+    for framework, _label in _PROVIDER_FRAMEWORK_LABELS:
+        provider = framework_summary.get(framework)
+        if isinstance(provider, dict):
+            for row in provider.get("sample_modules") or []:
+                if not isinstance(row, dict):
+                    continue
+                items.append({"framework": framework, **row})
+    for framework, _label in _ROUTE_FRAMEWORK_LABELS:
         node_http = framework_summary.get(framework)
         if isinstance(node_http, dict):
             for row in node_http.get("sample_modules") or []:

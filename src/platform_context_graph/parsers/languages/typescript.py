@@ -314,7 +314,14 @@ class TypescriptTreeSitterParser:
     def _parse_es_import(self, node: Any, line_number: int) -> list[dict[str, Any]]:
         """Parse a TypeScript ES module import statement."""
         source = self._get_node_text(node.child_by_field_name("source")).strip("'\"")
-        import_clause = node.child_by_field_name("import")
+        import_clause = node.child_by_field_name("import") or next(
+            (
+                child
+                for child in node.children
+                if child.is_named and child.type != "string"
+            ),
+            None,
+        )
         if not import_clause:
             return [
                 {
@@ -325,37 +332,46 @@ class TypescriptTreeSitterParser:
                     "lang": self.language_name,
                 }
             ]
-        if import_clause.type == "identifier":
-            return [
-                {
-                    "name": "default",
-                    "source": source,
-                    "alias": self._get_node_text(import_clause),
-                    "line_number": line_number,
-                    "lang": self.language_name,
-                }
-            ]
-        if import_clause.type == "namespace_import":
-            alias_node = import_clause.child_by_field_name("alias")
-            if alias_node:
-                return [
+        clause_nodes = [import_clause]
+        if import_clause.type == "import_clause":
+            clause_nodes = [child for child in import_clause.children if child.is_named]
+        parsed_imports: list[dict[str, Any]] = []
+        for clause_node in clause_nodes:
+            if clause_node.type == "identifier":
+                parsed_imports.append(
                     {
-                        "name": "*",
+                        "name": "default",
                         "source": source,
-                        "alias": self._get_node_text(alias_node),
+                        "alias": self._get_node_text(clause_node),
                         "line_number": line_number,
                         "lang": self.language_name,
                     }
-                ]
-            return []
-        if import_clause.type == "named_imports":
-            named_imports: list[dict[str, Any]] = []
-            for specifier in import_clause.children:
+                )
+                continue
+            if clause_node.type == "namespace_import":
+                alias_node = clause_node.child_by_field_name("alias") or next(
+                    (child for child in clause_node.children if child.is_named),
+                    None,
+                )
+                if alias_node:
+                    parsed_imports.append(
+                        {
+                            "name": "*",
+                            "source": source,
+                            "alias": self._get_node_text(alias_node),
+                            "line_number": line_number,
+                            "lang": self.language_name,
+                        }
+                    )
+                continue
+            if clause_node.type != "named_imports":
+                continue
+            for specifier in clause_node.children:
                 if specifier.type == "import_specifier":
                     name_node = specifier.child_by_field_name("name")
                     alias_node = specifier.child_by_field_name("alias")
                     if name_node:
-                        named_imports.append(
+                        parsed_imports.append(
                             {
                                 "name": self._get_node_text(name_node),
                                 "source": source,
@@ -368,8 +384,7 @@ class TypescriptTreeSitterParser:
                                 "lang": self.language_name,
                             }
                         )
-            return named_imports
-        return []
+        return parsed_imports
 
     def _parse_require_import(
         self, node: Any, line_number: int

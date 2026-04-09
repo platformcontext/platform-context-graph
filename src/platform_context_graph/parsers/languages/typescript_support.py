@@ -147,6 +147,7 @@ def build_parse_result(
         "framework_semantics": build_framework_semantics(
             path,
             source_code,
+            parser_language=language_name,
             imports=imports,
             functions=functions,
             function_calls=function_calls,

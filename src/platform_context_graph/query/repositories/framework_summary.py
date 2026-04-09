@@ -9,7 +9,8 @@ from .graph_counts import repository_scope_predicate
 
 _SAMPLE_LIMIT = 5
 _HTTP_VERB_ORDER = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
-_NODE_HTTP_FRAMEWORKS = ("express", "hapi")
+_ROUTE_FRAMEWORKS = ("express", "hapi", "fastapi", "flask")
+_PROVIDER_FRAMEWORKS = ("aws", "gcp")
 
 
 def build_repository_framework_summary(
@@ -28,6 +29,10 @@ def build_repository_framework_summary(
             OR f.next_module_kind IS NOT NULL
             OR size(coalesce(f.express_route_methods, [])) > 0
             OR size(coalesce(f.hapi_route_methods, [])) > 0
+            OR size(coalesce(f.fastapi_route_methods, [])) > 0
+            OR size(coalesce(f.flask_route_methods, [])) > 0
+            OR size(coalesce(f.aws_services, [])) > 0
+            OR size(coalesce(f.gcp_services, [])) > 0
           )
         RETURN f.relative_path as relative_path,
                f.frameworks as frameworks,
@@ -45,7 +50,17 @@ def build_repository_framework_summary(
                f.express_server_symbols as express_server_symbols,
                f.hapi_route_methods as hapi_route_methods,
                f.hapi_route_paths as hapi_route_paths,
-               f.hapi_server_symbols as hapi_server_symbols
+               f.hapi_server_symbols as hapi_server_symbols,
+               f.fastapi_route_methods as fastapi_route_methods,
+               f.fastapi_route_paths as fastapi_route_paths,
+               f.fastapi_server_symbols as fastapi_server_symbols,
+               f.flask_route_methods as flask_route_methods,
+               f.flask_route_paths as flask_route_paths,
+               f.flask_server_symbols as flask_server_symbols,
+               f.aws_services as aws_services,
+               f.aws_client_symbols as aws_client_symbols,
+               f.gcp_services as gcp_services,
+               f.gcp_client_symbols as gcp_client_symbols
         ORDER BY f.relative_path
         """,
         **repository_scope(repo),
@@ -61,8 +76,11 @@ def summarize_repository_framework_rows(
     framework_names: set[str] = set()
     react = _empty_react_summary()
     nextjs = _empty_nextjs_summary()
-    node_http = {
-        framework: _empty_node_http_summary() for framework in _NODE_HTTP_FRAMEWORKS
+    route_frameworks = {
+        framework: _empty_node_http_summary() for framework in _ROUTE_FRAMEWORKS
+    }
+    provider_frameworks = {
+        framework: _empty_provider_summary() for framework in _PROVIDER_FRAMEWORKS
     }
 
     for row in rows:
@@ -73,11 +91,17 @@ def summarize_repository_framework_rows(
         if _has_nextjs_evidence(normalized):
             framework_names.add("nextjs")
             _accumulate_nextjs_summary(nextjs, normalized)
-        for framework in _NODE_HTTP_FRAMEWORKS:
+        for framework in _ROUTE_FRAMEWORKS:
             if _has_node_http_evidence(normalized, framework):
                 framework_names.add(framework)
                 _accumulate_node_http_summary(
-                    node_http[framework], normalized, framework
+                    route_frameworks[framework], normalized, framework
+                )
+        for framework in _PROVIDER_FRAMEWORKS:
+            if _has_provider_evidence(normalized, framework):
+                framework_names.add(framework)
+                _accumulate_provider_summary(
+                    provider_frameworks[framework], normalized, framework
                 )
 
     if not framework_names:
@@ -88,9 +112,35 @@ def summarize_repository_framework_rows(
         "react": react if react["module_count"] else None,
         "nextjs": nextjs if nextjs["module_count"] else None,
         "express": (
-            node_http["express"] if node_http["express"]["module_count"] else None
+            route_frameworks["express"]
+            if route_frameworks["express"]["module_count"]
+            else None
         ),
-        "hapi": node_http["hapi"] if node_http["hapi"]["module_count"] else None,
+        "hapi": (
+            route_frameworks["hapi"]
+            if route_frameworks["hapi"]["module_count"]
+            else None
+        ),
+        "fastapi": (
+            route_frameworks["fastapi"]
+            if route_frameworks["fastapi"]["module_count"]
+            else None
+        ),
+        "flask": (
+            route_frameworks["flask"]
+            if route_frameworks["flask"]["module_count"]
+            else None
+        ),
+        "aws": (
+            provider_frameworks["aws"]
+            if provider_frameworks["aws"]["module_count"]
+            else None
+        ),
+        "gcp": (
+            provider_frameworks["gcp"]
+            if provider_frameworks["gcp"]["module_count"]
+            else None
+        ),
     }
 
 
@@ -202,6 +252,17 @@ def _empty_node_http_summary() -> dict[str, Any]:
     }
 
 
+def _empty_provider_summary() -> dict[str, Any]:
+    """Return the default provider SDK summary payload."""
+
+    return {
+        "module_count": 0,
+        "services": [],
+        "client_symbols": [],
+        "sample_modules": [],
+    }
+
+
 def _has_react_evidence(row: dict[str, Any]) -> bool:
     """Return whether one file row contains React evidence."""
 
@@ -232,6 +293,16 @@ def _has_node_http_evidence(row: dict[str, Any], framework: str) -> bool:
         or row[f"{framework}_route_methods"]
         or row[f"{framework}_route_paths"]
         or row[f"{framework}_server_symbols"]
+    )
+
+
+def _has_provider_evidence(row: dict[str, Any], framework: str) -> bool:
+    """Return whether one file row contains provider SDK evidence."""
+
+    return bool(
+        framework in row["frameworks"]
+        or row[f"{framework}_services"]
+        or row[f"{framework}_client_symbols"]
     )
 
 
@@ -274,6 +345,20 @@ def _normalize_framework_row(row: dict[str, Any]) -> dict[str, Any]:
         "hapi_route_methods": _normalize_http_verbs(row.get("hapi_route_methods")),
         "hapi_route_paths": _normalize_string_list(row.get("hapi_route_paths")),
         "hapi_server_symbols": _normalize_string_list(row.get("hapi_server_symbols")),
+        "fastapi_route_methods": _normalize_http_verbs(
+            row.get("fastapi_route_methods")
+        ),
+        "fastapi_route_paths": _normalize_string_list(row.get("fastapi_route_paths")),
+        "fastapi_server_symbols": _normalize_string_list(
+            row.get("fastapi_server_symbols")
+        ),
+        "flask_route_methods": _normalize_http_verbs(row.get("flask_route_methods")),
+        "flask_route_paths": _normalize_string_list(row.get("flask_route_paths")),
+        "flask_server_symbols": _normalize_string_list(row.get("flask_server_symbols")),
+        "aws_services": _normalize_string_list(row.get("aws_services")),
+        "aws_client_symbols": _normalize_string_list(row.get("aws_client_symbols")),
+        "gcp_services": _normalize_string_list(row.get("gcp_services")),
+        "gcp_client_symbols": _normalize_string_list(row.get("gcp_client_symbols")),
     }
 
 
@@ -356,6 +441,34 @@ def _accumulate_node_http_summary(
                 "route_methods": route_methods,
                 "route_paths": route_paths,
                 "server_symbols": server_symbols,
+            }
+        )
+
+
+def _accumulate_provider_summary(
+    summary: dict[str, Any],
+    row: dict[str, Any],
+    framework: str,
+) -> None:
+    """Update one provider SDK summary from one normalized file row."""
+
+    services = row[f"{framework}_services"]
+    client_symbols = row[f"{framework}_client_symbols"]
+
+    summary["module_count"] += 1
+    for service in services:
+        if service not in summary["services"]:
+            summary["services"].append(service)
+    for client_symbol in client_symbols:
+        if client_symbol not in summary["client_symbols"]:
+            summary["client_symbols"].append(client_symbol)
+
+    if len(summary["sample_modules"]) < _SAMPLE_LIMIT and row["relative_path"]:
+        summary["sample_modules"].append(
+            {
+                "relative_path": row["relative_path"],
+                "services": services,
+                "client_symbols": client_symbols,
             }
         )
 

@@ -1,0 +1,13 @@
+framework: gcp
+title: GCP SDK Provider Pack
+strategy: provider_sdk_usage
+compute_order: 80
+surface_order: 80
+languages:
+  - javascript
+  - typescript
+config:
+  import_source_prefixes:
+    - "@google-cloud/"
+  client_name_suffixes:
+    - Client

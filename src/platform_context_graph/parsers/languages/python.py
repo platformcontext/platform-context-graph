@@ -8,6 +8,7 @@ from platform_context_graph.utils.debug_log import error_logger, info_logger
 from platform_context_graph.utils.source_text import read_source_text
 from platform_context_graph.utils.tree_sitter_manager import execute_query
 
+from ..framework_semantics import build_framework_semantics
 from .python_support import (
     PY_QUERIES,
     calculate_complexity,
@@ -99,14 +100,28 @@ class PythonTreeSitterParser:
 
             functions = self._find_functions(root_node)
             functions.extend(self._find_lambda_assignments(root_node))
+            classes = self._find_classes(root_node)
+            variables = self._find_variables(root_node)
+            imports = self._find_imports(root_node)
+            function_calls = self._find_calls(root_node)
 
             return {
                 "path": str(original_file_path),
                 "functions": functions,
-                "classes": self._find_classes(root_node),
-                "variables": self._find_variables(root_node),
-                "imports": self._find_imports(root_node),
-                "function_calls": self._find_calls(root_node),
+                "classes": classes,
+                "variables": variables,
+                "imports": imports,
+                "function_calls": function_calls,
+                "framework_semantics": build_framework_semantics(
+                    original_file_path,
+                    source_code,
+                    parser_language=self.language_name,
+                    imports=imports,
+                    functions=functions,
+                    function_calls=function_calls,
+                    variables=variables,
+                    classes=classes,
+                ),
                 "is_dependency": is_dependency,
                 "lang": self.language_name,
             }

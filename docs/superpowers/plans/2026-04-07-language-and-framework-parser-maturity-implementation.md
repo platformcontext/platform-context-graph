@@ -17,6 +17,10 @@ Deliverables on this branch:
 4. real-repo validation against local TSX-heavy repos
 5. PRD/roadmap for broader language and framework support
 6. declarative React/Next.js framework-pack specs and loader
+7. declarative Node HTTP framework packs for JavaScript and TypeScript
+8. declarative Python web framework packs for FastAPI and Flask
+9. declarative provider packs for bounded AWS and GCP JS/TS SDK evidence
+10. graph-backed Python end-to-end validation through the shared support validator
 
 ## Next Slices
 
@@ -144,11 +148,17 @@ And real repo validation scripts that:
 5. React/Next.js semantic packs are implemented through parser facts, file persistence, and query/story surfacing.
 6. Public support-maturity docs are published and generated from specs.
 7. React/Next.js semantic detection is now driven by declarative framework-pack YAML specs under `src/platform_context_graph/parsers/framework_packs/specs/`.
+8. Node HTTP semantic detection is now driven by declarative Express and Hapi framework-pack YAML with repo/story/investigation surfacing.
+9. Python web semantic detection is now driven by declarative FastAPI and Flask framework-pack YAML with repo/story/investigation surfacing.
+10. JS/TS provider semantic detection now emits bounded AWS and GCP SDK evidence at file, repo summary, story, and investigation layers.
+11. The graph-backed support validator now supports Python and validated clean local runs for `recos-ranker-service` and `lambda-python-s3-proxy`.
+12. Parser registry startup now degrades cleanly when an unrelated tree-sitter grammar bootstrap fails, instead of blocking indexing for every language.
 
 ## Open Follow-Ups
 
-1. Reuse the declarative framework-pack format for additional framework/provider lanes beyond React/Next.js.
-2. Expand the same maturity program to additional language/framework pairs beyond the current JS/TS/TSX lane.
+1. Extend provider packs beyond the current bounded AWS/GCP constructor evidence.
+2. Add deeper framework lanes such as NestJS, Remix, or Django when strong local validation targets justify them.
+3. Expand the same maturity program to additional language/framework pairs beyond the current JS/TS/TSX/Python lane.
 
 ## PR Packaging
 

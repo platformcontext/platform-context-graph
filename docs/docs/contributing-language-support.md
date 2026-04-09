@@ -55,6 +55,9 @@ Supported strategies today:
 
 - `react_module`
 - `nextjs_app_router`
+- `node_http_routes`
+- `python_web_routes`
+- `provider_sdk_usage`
 
 Duplicate `framework` keys are invalid because the parser runtime uses the
 framework name as the surfaced semantic bucket key.
@@ -172,6 +175,16 @@ PYTHONPATH=src uv run python scripts/validate_language_support_e2e.py \
   --require-framework-evidence
 ```
 
+Python uses the same graph-backed validator:
+
+```bash
+PYTHONPATH=src uv run python scripts/validate_language_support_e2e.py \
+  --repo-path /Users/allen/repos/services/recos-ranker-service \
+  --language python \
+  --check \
+  --require-framework-evidence
+```
+
 The `--check` mode fails when:
 
 - A spec references a missing test or fixture
@@ -192,6 +205,7 @@ That suite now verifies:
 - unknown strategies are rejected
 - required fields and field types are enforced
 - duplicate framework keys are rejected
+- framework packs cannot target unsupported language lanes
 
 ## Testing Rules
 

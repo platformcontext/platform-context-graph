@@ -3,6 +3,9 @@ title: Hapi Base Pack
 strategy: node_http_routes
 compute_order: 40
 surface_order: 40
+languages:
+  - javascript
+  - typescript
 config:
   framework_import_sources:
     - '@hapi/hapi'
