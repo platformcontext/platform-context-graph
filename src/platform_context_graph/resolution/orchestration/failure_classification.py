@@ -9,6 +9,7 @@ from platform_context_graph.facts.work_queue.failure_types import (
 )
 from platform_context_graph.facts.work_queue.failure_types import FailureClass
 from platform_context_graph.facts.work_queue.failure_types import FailureDisposition
+from platform_context_graph.facts.work_queue.stages import ProjectionStageError
 
 _NEO4J_TRANSIENT_CODE_PREFIX = "Neo.TransientError."
 _NEO4J_TRANSIENT_RETRY_SECONDS = 15
@@ -46,6 +47,18 @@ def _neo4j_failure_code(exc: BaseException) -> str:
     return normalized.lower()
 
 
+def _unwrap_exception_and_stage(
+    exc: BaseException,
+    *,
+    failure_stage: str,
+) -> tuple[BaseException, str]:
+    """Return the underlying exception and the best-known failure stage."""
+
+    if isinstance(exc, ProjectionStageError):
+        return exc.cause, exc.stage
+    return exc, failure_stage
+
+
 def _is_retryable_neo4j_transient(exc: BaseException) -> bool:
     """Return whether the exception is a retryable Neo4j transient error."""
 
@@ -60,51 +73,56 @@ def classify_resolution_failure(
 ) -> FailureClassification:
     """Map one projection exception into durable failure metadata."""
 
-    if _is_retryable_neo4j_transient(exc):
+    underlying_exc, resolved_stage = _unwrap_exception_and_stage(
+        exc,
+        failure_stage=failure_stage,
+    )
+
+    if _is_retryable_neo4j_transient(underlying_exc):
         return FailureClassification(
-            failure_stage=failure_stage,
-            error_class=type(exc).__name__,
+            failure_stage=resolved_stage,
+            error_class=type(underlying_exc).__name__,
             failure_class=FailureClass.DEPENDENCY_UNAVAILABLE,
-            failure_code=_neo4j_failure_code(exc),
+            failure_code=_neo4j_failure_code(underlying_exc),
             retry_disposition=FailureDisposition.RETRYABLE,
             retry_after_seconds=_NEO4J_TRANSIENT_RETRY_SECONDS,
         )
-    if isinstance(exc, TimeoutError):
+    if isinstance(underlying_exc, TimeoutError):
         return FailureClassification(
-            failure_stage=failure_stage,
-            error_class=type(exc).__name__,
+            failure_stage=resolved_stage,
+            error_class=type(underlying_exc).__name__,
             failure_class=FailureClass.TIMEOUT,
-            failure_code=_failure_code(exc),
+            failure_code=_failure_code(underlying_exc),
             retry_disposition=FailureDisposition.RETRYABLE,
         )
-    if isinstance(exc, (ValueError, TypeError)):
+    if isinstance(underlying_exc, (ValueError, TypeError)):
         return FailureClassification(
-            failure_stage=failure_stage,
-            error_class=type(exc).__name__,
+            failure_stage=resolved_stage,
+            error_class=type(underlying_exc).__name__,
             failure_class=FailureClass.INPUT_INVALID,
-            failure_code=_failure_code(exc),
+            failure_code=_failure_code(underlying_exc),
             retry_disposition=FailureDisposition.NON_RETRYABLE,
         )
-    if isinstance(exc, (ConnectionError, OSError)):
+    if isinstance(underlying_exc, (ConnectionError, OSError)):
         return FailureClassification(
-            failure_stage=failure_stage,
-            error_class=type(exc).__name__,
+            failure_stage=resolved_stage,
+            error_class=type(underlying_exc).__name__,
             failure_class=FailureClass.DEPENDENCY_UNAVAILABLE,
-            failure_code=_failure_code(exc),
+            failure_code=_failure_code(underlying_exc),
             retry_disposition=FailureDisposition.RETRYABLE,
         )
-    if isinstance(exc, MemoryError):
+    if isinstance(underlying_exc, MemoryError):
         return FailureClassification(
-            failure_stage=failure_stage,
-            error_class=type(exc).__name__,
+            failure_stage=resolved_stage,
+            error_class=type(underlying_exc).__name__,
             failure_class=FailureClass.RESOURCE_EXHAUSTED,
-            failure_code=_failure_code(exc),
+            failure_code=_failure_code(underlying_exc),
             retry_disposition=FailureDisposition.MANUAL_REVIEW,
         )
     return FailureClassification(
-        failure_stage=failure_stage,
-        error_class=type(exc).__name__,
+        failure_stage=resolved_stage,
+        error_class=type(underlying_exc).__name__,
         failure_class=FailureClass.PROJECTION_BUG,
-        failure_code=_failure_code(exc),
+        failure_code=_failure_code(underlying_exc),
         retry_disposition=FailureDisposition.MANUAL_REVIEW,
     )

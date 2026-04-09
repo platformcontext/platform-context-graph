@@ -26,7 +26,7 @@ def test_list_work_items_preserves_status_and_failure_filters(monkeypatch) -> No
             "work_type": "project-git-facts",
             "repository_id": "repository:r_payments",
             "source_run_id": "run-123",
-            "lease_owner": None,
+            "lease_owner": "indexing",
             "lease_expires_at": None,
             "status": "failed",
             "attempt_count": 3,
@@ -66,3 +66,4 @@ def test_list_work_items_preserves_status_and_failure_filters(monkeypatch) -> No
     assert params["failure_class"] == "timeout"
     assert params["limit"] == 25
     assert rows[0].work_item_id == "work-1"
+    assert rows[0].lease_owner == "indexing"

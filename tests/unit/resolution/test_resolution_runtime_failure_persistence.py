@@ -5,14 +5,24 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-from neo4j.exceptions import TransientError
-
 from platform_context_graph.facts.work_queue.failure_types import FailureClass
 from platform_context_graph.facts.work_queue.failure_types import FailureDisposition
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
+from platform_context_graph.facts.work_queue.stages import (
+    PROJECT_PLATFORMS_STAGE,
+)
+from platform_context_graph.facts.work_queue.stages import ProjectionStageError
 from platform_context_graph.resolution.orchestration.runtime import (
     run_resolution_iteration,
 )
+
+
+class TransientError(Exception):
+    """Small Neo4j-like transient error used for unit tests."""
+
+    def __init__(self, *, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def _utc_now() -> datetime:
@@ -114,7 +124,7 @@ def test_run_resolution_iteration_delays_retry_for_neo4j_deadlock() -> None:
         updated_at=_utc_now(),
     )
 
-    deadlock_error = TransientError._hydrate_neo4j(
+    deadlock_error = TransientError(
         code="Neo.TransientError.Transaction.DeadlockDetected",
         message="Deadlock detected while trying to acquire locks.",
     )
@@ -138,3 +148,43 @@ def test_run_resolution_iteration_delays_retry_for_neo4j_deadlock() -> None:
     assert kwargs["failure_code"] == "neo_transient_error_transaction_deadlock_detected"
     assert kwargs["next_retry_at"] is not None
     assert kwargs["next_retry_at"] > _utc_now()
+
+
+def test_run_resolution_iteration_uses_wrapped_projection_stage() -> None:
+    """Wrapped stage errors should persist the stage that actually failed."""
+
+    queue = MagicMock()
+    queue.claim_work_item.return_value = FactWorkItemRow(
+        work_item_id="work-4",
+        work_type="project-git-facts",
+        repository_id="repository:r_payments",
+        source_run_id="run-123",
+        lease_owner="resolution-worker-1",
+        lease_expires_at=_utc_now(),
+        status="leased",
+        attempt_count=1,
+        created_at=_utc_now(),
+        updated_at=_utc_now(),
+    )
+
+    deadlock_error = TransientError(
+        code="Neo.TransientError.Transaction.DeadlockDetected",
+        message="Deadlock detected while trying to acquire locks.",
+    )
+
+    def _projector(_row: FactWorkItemRow) -> None:
+        raise ProjectionStageError(PROJECT_PLATFORMS_STAGE, deadlock_error)
+
+    processed = run_resolution_iteration(
+        queue=queue,
+        projector=_projector,
+        lease_owner="resolution-worker-1",
+        lease_ttl_seconds=60,
+        max_attempts=3,
+    )
+
+    assert processed is True
+    kwargs = queue.fail_work_item.call_args.kwargs
+    assert kwargs["failure_stage"] == PROJECT_PLATFORMS_STAGE
+    assert kwargs["error_class"] == "TransientError"
+    assert kwargs["failure_class"] == FailureClass.DEPENDENCY_UNAVAILABLE

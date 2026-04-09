@@ -99,6 +99,7 @@ def _serialize_work_item(row: Any) -> dict[str, Any]:
         "work_type": row.work_type,
         "repository_id": row.repository_id,
         "source_run_id": row.source_run_id,
+        "lease_owner": row.lease_owner,
         "status": row.status,
         "attempt_count": row.attempt_count,
         "last_error": row.last_error,

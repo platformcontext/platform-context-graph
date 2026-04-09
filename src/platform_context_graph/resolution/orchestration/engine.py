@@ -10,6 +10,13 @@ from typing import Any
 
 from platform_context_graph.facts.storage.models import FactRecordRow
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
+from platform_context_graph.facts.work_queue.stages import LOAD_FACTS_STAGE
+from platform_context_graph.facts.work_queue.stages import PROJECT_ENTITY_BATCHES_STAGE
+from platform_context_graph.facts.work_queue.stages import PROJECT_FACTS_STAGE
+from platform_context_graph.facts.work_queue.stages import PROJECT_PLATFORMS_STAGE
+from platform_context_graph.facts.work_queue.stages import PROJECT_RELATIONSHIPS_STAGE
+from platform_context_graph.facts.work_queue.stages import PROJECT_WORKLOADS_STAGE
+from platform_context_graph.facts.work_queue.stages import ProjectionStageError
 from platform_context_graph.observability import get_observability
 from platform_context_graph.observability.facts_first_logs import (
     log_projection_decision,
@@ -204,14 +211,14 @@ def project_work_item(
             observability.record_resolution_stage_failure(
                 component="resolution-engine",
                 work_type=work_item.work_type,
-                stage="load_facts",
+                stage=LOAD_FACTS_STAGE,
                 error_class=type(exc).__name__,
             )
-            raise
+            raise ProjectionStageError(LOAD_FACTS_STAGE, exc) from exc
         observability.record_resolution_stage_duration(
             component="resolution-engine",
             work_type=work_item.work_type,
-            stage="load_facts",
+            stage=LOAD_FACTS_STAGE,
             duration_seconds=max(time.perf_counter() - load_started, 0.0),
         )
         observability.record_resolution_facts_loaded(
@@ -246,7 +253,7 @@ def project_work_item(
                         stage=stage,
                         error_class=type(exc).__name__,
                     )
-                    raise
+                    raise ProjectionStageError(stage, exc) from exc
             observability.record_resolution_stage_duration(
                 component="resolution-engine",
                 work_type=work_item.work_type,
@@ -263,23 +270,23 @@ def project_work_item(
 
         # -- Stage 1: repos + files + entities-from-file-payloads ----------
         fact_metrics = _run_stage(
-            "project_facts",
+            PROJECT_FACTS_STAGE,
             lambda: fact_projector(builder=builder, fact_records=graph_facts),
         )
 
         # -- Stage 1b: stream standalone entity facts in batches -----------
         if entity_batches is not None:
             entity_extra = _run_stage(
-                "project_entity_batches",
+                PROJECT_ENTITY_BATCHES_STAGE,
                 lambda: _project_entity_batches(builder, entity_batches, graph_facts),
             )
-            fact_metrics["entities"] = (
-                fact_metrics.get("entities", 0) + entity_extra.get("entities", 0)
-            )
+            fact_metrics["entities"] = fact_metrics.get(
+                "entities", 0
+            ) + entity_extra.get("entities", 0)
 
         # -- Stage 2: relationships ----------------------------------------
         relationship_metrics = _run_stage(
-            "project_relationships",
+            PROJECT_RELATIONSHIPS_STAGE,
             lambda: relationship_projector(
                 builder=builder,
                 fact_records=graph_facts,
@@ -289,7 +296,7 @@ def project_work_item(
         )
         _record_projection_decision(
             decision_store=decision_store,
-            stage="project_relationships",
+            stage=PROJECT_RELATIONSHIPS_STAGE,
             work_item=work_item,
             fact_records=graph_facts,
             metrics=relationship_metrics,
@@ -297,7 +304,7 @@ def project_work_item(
 
         # -- Stage 3: workloads --------------------------------------------
         workload_metrics = _run_stage(
-            "project_workloads",
+            PROJECT_WORKLOADS_STAGE,
             lambda: workload_projector(
                 builder=builder,
                 fact_records=graph_facts,
@@ -306,7 +313,7 @@ def project_work_item(
         )
         _record_projection_decision(
             decision_store=decision_store,
-            stage="project_workloads",
+            stage=PROJECT_WORKLOADS_STAGE,
             work_item=work_item,
             fact_records=graph_facts,
             metrics=workload_metrics,
@@ -314,7 +321,7 @@ def project_work_item(
 
         # -- Stage 4: platforms --------------------------------------------
         platform_metrics = _run_stage(
-            "project_platforms",
+            PROJECT_PLATFORMS_STAGE,
             lambda: platform_projector(
                 builder=builder,
                 fact_records=graph_facts,
@@ -395,13 +402,12 @@ def _project_entity_batches(
             continue
         parsed_file_data = file_fact.payload.get("parsed_file_data")
         if isinstance(parsed_file_data, dict):
-            projected_file_keys.add(
-                (file_fact.checkout_path, file_fact.relative_path)
-            )
+            projected_file_keys.add((file_fact.checkout_path, file_fact.relative_path))
 
     projected = 0
     with builder.driver.session() as session:
         for batch in entity_batches:
+
             def _write(tx: object, _batch: list[FactRecordRow] = batch) -> None:
                 """Project one bounded parsed-entity batch inside a managed write."""
 

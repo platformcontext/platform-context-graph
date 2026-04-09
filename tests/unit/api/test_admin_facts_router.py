@@ -41,6 +41,7 @@ async def test_list_fact_work_items_returns_failure_metadata(
                     work_type="project-git-facts",
                     repository_id="repository:r_payments",
                     source_run_id="run-123",
+                    lease_owner="indexing",
                     status="failed",
                     attempt_count=3,
                     last_error="boom",
@@ -72,6 +73,7 @@ async def test_list_fact_work_items_returns_failure_metadata(
 
     assert response["count"] == 1
     assert response["items"][0]["failure_class"] == "timeout"
+    assert response["items"][0]["lease_owner"] == "indexing"
     assert response["items"][0]["operator_note"] == "watching this one"
 
 

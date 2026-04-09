@@ -157,11 +157,13 @@ def test_commit_repository_snapshot_from_facts_marks_projection_failures_retryab
             warning_logger_fn=lambda *_args, **_kwargs: None,
         )
 
-    work_queue.fail_work_item.assert_called_once_with(
-        work_item_id="work-1",
-        error_message="boom",
-        terminal=False,
-    )
+    work_queue.fail_work_item.assert_called_once()
+    kwargs = work_queue.fail_work_item.call_args.kwargs
+    assert kwargs["work_item_id"] == "work-1"
+    assert kwargs["error_message"] == "boom"
+    assert kwargs["terminal"] is False
+    assert kwargs["failure_stage"] == "project_work_item"
+    assert kwargs["error_class"] == "RuntimeError"
     work_queue.complete_work_item.assert_not_called()
 
 
@@ -323,6 +325,7 @@ def test_create_facts_first_commit_callback_reuses_cached_emission_result() -> N
         project_work_item_fn=ANY,
         lease_owner="indexing",
         lease_ttl_seconds=300,
+        max_attempts=3,
         info_logger_fn=ANY,
         warning_logger_fn=ANY,
         progress_callback=progress_callback,
