@@ -4,6 +4,8 @@ from pathlib import Path
 
 from platform_context_graph.utils.source_text import read_source_text
 
+from ..framework_semantics import build_framework_semantics
+
 
 def pre_scan_typescript(files: list[Path], parser_wrapper) -> dict:
     """
@@ -123,6 +125,17 @@ class TypescriptJSXTreeSitterParser(TypescriptTreeSitterParser):
             "imports": imports,
             "function_calls": function_calls,
             "components": components,
+            "framework_semantics": build_framework_semantics(
+                path,
+                source_code,
+                parser_language="typescriptjsx",
+                imports=imports,
+                functions=functions,
+                function_calls=function_calls,
+                variables=variables,
+                classes=classes,
+                components=components,
+            ),
             "is_dependency": is_dependency,
             "lang": self.language_name,
         }

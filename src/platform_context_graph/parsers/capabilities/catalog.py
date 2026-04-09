@@ -9,6 +9,10 @@ import yaml
 
 from .matrix import render_feature_matrix, render_graph_surface
 from .models import AUTO_GENERATED_BANNER, LanguageCapabilitySpec
+from .support_maturity import (
+    render_support_maturity_matrix,
+    render_support_maturity_section,
+)
 from .validation import validate_spec
 
 
@@ -104,6 +108,10 @@ def render_language_doc(spec: LanguageCapabilitySpec) -> str:
             )
         )
 
+    support_maturity_section = render_support_maturity_section(spec)
+    if support_maturity_section:
+        lines.extend([""])
+        lines.extend(support_maturity_section)
     lines.extend(["", "## Known Limitations"])
     for limitation in spec.get("known_limitations", []):
         lines.append(f"- {limitation}")
@@ -120,6 +128,9 @@ def expected_generated_language_docs(
     specs = load_language_capability_specs(resolved_root)
     docs = {spec["doc_path"]: render_language_doc(spec) for spec in specs}
     docs["docs/docs/languages/feature-matrix.md"] = render_feature_matrix(specs)
+    docs["docs/docs/languages/support-maturity.md"] = render_support_maturity_matrix(
+        specs
+    )
     return docs
 
 

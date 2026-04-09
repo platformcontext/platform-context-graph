@@ -21,7 +21,6 @@ def repository_scope(repo: dict[str, Any]) -> dict[str, Any]:
         "repo_id": repo.get("id"),
         "repo_path": repo.get("local_path") or repo.get("path"),
         "local_path_key": "local_path",
-        "imports_rel_type": "IMPORTS",
     }
 
 
@@ -31,25 +30,23 @@ def repository_scope_predicate() -> str:
     return _SCOPE_PREDICATE
 
 
-def _count_subquery(query: str, alias: str) -> str:
-    """Wrap a count query in a repository-scoped subquery."""
+def _append_count_stage(
+    lines: list[str],
+    carried_aliases: list[str],
+    *,
+    match_query: str | None,
+    alias: str,
+    count_expression: str = "count(DISTINCT counted)",
+) -> None:
+    """Append one backend-compatible count stage to the shared query."""
 
-    return f"""
-        CALL (r) {{
-            {query}
-            RETURN count(DISTINCT counted) AS {alias}
-        }}
-    """
-
-
-def _zero_subquery(alias: str) -> str:
-    """Return a zero-valued subquery for absent relationship types."""
-
-    return f"""
-        CALL (r) {{
-            RETURN 0 AS {alias}
-        }}
-    """
+    with_clause = ", ".join(["r", *carried_aliases])
+    if match_query is None:
+        lines.append(f"WITH {with_clause}, 0 AS {alias}")
+    else:
+        lines.append(match_query)
+        lines.append(f"WITH {with_clause}, {count_expression} AS {alias}")
+    carried_aliases.append(alias)
 
 
 def _build_graph_counts_query(relationship_types: set[str]) -> str:
@@ -59,79 +56,98 @@ def _build_graph_counts_query(relationship_types: set[str]) -> str:
     has_repo_contains = "REPO_CONTAINS" in relationship_types
     has_imports = "IMPORTS" in relationship_types
 
-    subqueries = [
-        _count_subquery(
-            "OPTIONAL MATCH (r)-[:CONTAINS]->(counted:File)",
-            "root_file_count",
-        )
-        if has_contains
-        else _zero_subquery("root_file_count"),
-        _count_subquery(
-            "OPTIONAL MATCH (r)-[:CONTAINS]->(counted:Directory)",
-            "root_directory_count",
-        )
-        if has_contains
-        else _zero_subquery("root_directory_count"),
-        _count_subquery(
-            "OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(counted:File)",
-            "file_count",
-        )
-        if has_repo_contains
-        else _zero_subquery("file_count"),
-        _count_subquery(
-            """
-            OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(counted:Function)
-            WHERE NOT EXISTS {
-                MATCH (:Class)-[:CONTAINS]->(counted)
-            }
-            """.strip(),
-            "top_level_function_count",
-        )
-        if has_repo_contains and has_contains
-        else _zero_subquery("top_level_function_count"),
-        _count_subquery(
-            """
-            OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(:Class)-[:CONTAINS]->(counted:Function)
-            """.strip(),
-            "class_method_count",
-        )
-        if has_repo_contains and has_contains
-        else _zero_subquery("class_method_count"),
-        _count_subquery(
-            "OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(:File)-[:CONTAINS*]->(counted:Function)",
-            "total_function_count",
-        )
-        if has_repo_contains and has_contains
-        else _zero_subquery("total_function_count"),
-        _count_subquery(
-            "OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(:File)-[:CONTAINS*]->(counted:Class)",
-            "class_count",
-        )
-        if has_repo_contains and has_contains
-        else _zero_subquery("class_count"),
-        _count_subquery(
-            """
-            OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(:File)-[rel]->(counted:Module)
-            WHERE type(rel) = $imports_rel_type
-            """.strip(),
-            "module_count",
-        )
-        if has_repo_contains and has_imports
-        else _zero_subquery("module_count"),
+    lines = [
+        "MATCH (r:Repository)",
+        f"WHERE {repository_scope_predicate()}",
     ]
-    return f"""
-        MATCH (r:Repository)
-        WHERE {repository_scope_predicate()}
-        {' '.join(subqueries)}
-        RETURN root_file_count,
-               root_directory_count,
-               file_count,
-               top_level_function_count,
-               class_method_count,
-               total_function_count,
-               class_count,
-               module_count
-    """
+    aliases: list[str] = []
+    _append_count_stage(
+        lines,
+        aliases,
+        match_query=(
+            "OPTIONAL MATCH (r)-[:CONTAINS]->(counted:File)" if has_contains else None
+        ),
+        alias="root_file_count",
+    )
+    _append_count_stage(
+        lines,
+        aliases,
+        match_query=(
+            "OPTIONAL MATCH (r)-[:CONTAINS]->(counted:Directory)"
+            if has_contains
+            else None
+        ),
+        alias="root_directory_count",
+    )
+    _append_count_stage(
+        lines,
+        aliases,
+        match_query=(
+            "OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(counted:File)"
+            if has_repo_contains
+            else None
+        ),
+        alias="file_count",
+    )
+    _append_count_stage(
+        lines,
+        aliases,
+        match_query=("""
+            OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(counted:Function)
+            OPTIONAL MATCH (class_owner:Class)-[:CONTAINS]->(counted)
+            """.strip() if has_repo_contains and has_contains else None),
+        alias="top_level_function_count",
+        count_expression="count(DISTINCT CASE WHEN class_owner IS NULL THEN counted END)",
+    )
+    _append_count_stage(
+        lines,
+        aliases,
+        match_query=("""
+            OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(:Class)-[:CONTAINS]->(counted:Function)
+            """.strip() if has_repo_contains and has_contains else None),
+        alias="class_method_count",
+    )
+    _append_count_stage(
+        lines,
+        aliases,
+        match_query=(
+            "OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(:File)-[:CONTAINS*]->(counted:Function)"
+            if has_repo_contains and has_contains
+            else None
+        ),
+        alias="total_function_count",
+    )
+    _append_count_stage(
+        lines,
+        aliases,
+        match_query=(
+            "OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(:File)-[:CONTAINS*]->(counted:Class)"
+            if has_repo_contains and has_contains
+            else None
+        ),
+        alias="class_count",
+    )
+    _append_count_stage(
+        lines,
+        aliases,
+        match_query=(
+            "OPTIONAL MATCH (r)-[:REPO_CONTAINS]->(:File)-[:IMPORTS]->(counted:Module)"
+            if has_repo_contains and has_imports
+            else None
+        ),
+        alias="module_count",
+    )
+    lines.append(
+        "RETURN root_file_count,\n"
+        "       root_directory_count,\n"
+        "       file_count,\n"
+        "       top_level_function_count,\n"
+        "       class_method_count,\n"
+        "       total_function_count,\n"
+        "       class_count,\n"
+        "       module_count"
+    )
+    return "\n".join(lines)
 
 
 def repository_graph_counts(

@@ -10,6 +10,12 @@ from typing import Iterable
 
 from platform_context_graph.content.ingest import repository_metadata_from_row
 from platform_context_graph.facts.storage.models import FactRecordRow
+from platform_context_graph.graph.persistence.file_nodes import (
+    FILE_NODE_MERGE_QUERY,
+)
+from platform_context_graph.graph.persistence.file_nodes import (
+    build_file_node_write_params,
+)
 from platform_context_graph.graph.persistence.content_store import content_dual_write
 from platform_context_graph.graph.persistence.content_store import (
     content_dual_write_batch,
@@ -236,18 +242,21 @@ def project_file_facts(
                     batch_file_data.append(file_data)
                 run_write_query(
                     tx,
-                    """
-                    MERGE (f:File {path: $file_path})
-                    SET f.name = $name,
-                        f.relative_path = $relative_path,
-                        f.lang = $language,
-                        f.is_dependency = $is_dependency
-                    """,
-                    file_path=str(file_path),
-                    name=file_path.name,
-                    relative_path=fact_record.relative_path,
-                    language=fact_record.payload.get("language"),
-                    is_dependency=bool(fact_record.payload.get("is_dependency", False)),
+                    FILE_NODE_MERGE_QUERY,
+                    **build_file_node_write_params(
+                        file_path=str(file_path),
+                        name=file_path.name,
+                        relative_path=fact_record.relative_path,
+                        language=fact_record.payload.get("language"),
+                        is_dependency=bool(
+                            fact_record.payload.get("is_dependency", False)
+                        ),
+                        file_data=(
+                            parsed_file_data
+                            if isinstance(parsed_file_data, dict)
+                            else None
+                        ),
+                    ),
                 )
                 repo_dir_rows, repo_containment_rows = collect_directory_chain_rows_fn(
                     file_path,

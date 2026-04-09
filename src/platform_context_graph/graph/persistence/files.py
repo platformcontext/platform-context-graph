@@ -10,6 +10,7 @@ from ...observability import get_observability
 from ...utils.debug_log import emit_log_call
 from .batching import collect_file_write_data, flush_write_batches
 from .content_store import content_dual_write
+from .file_nodes import FILE_NODE_MERGE_QUERY, build_file_node_write_params
 from .repositories import (
     _merge_directory_chain,
     _relative_path_with_fallback,
@@ -51,14 +52,15 @@ def write_one_file_graph(
 
     _run_write_query(
         tx,
-        """
-        MERGE (f:File {path: $file_path})
-        SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
-        """,
-        file_path=file_path_str,
-        name=file_name,
-        relative_path=relative_path,
-        is_dependency=is_dependency,
+        FILE_NODE_MERGE_QUERY,
+        **build_file_node_write_params(
+            file_path=file_path_str,
+            name=file_name,
+            relative_path=relative_path,
+            language=file_data.get("lang"),
+            is_dependency=is_dependency,
+            file_data=file_data,
+        ),
     )
 
     if dir_rows_accumulator is not None and containment_rows_accumulator is not None:
@@ -144,14 +146,15 @@ def add_file_to_graph(
             ):
                 _run_write_query(
                     tx,
-                    """
-                    MERGE (f:File {path: $file_path})
-                    SET f.name = $name, f.relative_path = $relative_path, f.is_dependency = $is_dependency
-                    """,
-                    file_path=file_path_str,
-                    name=file_name,
-                    relative_path=relative_path,
-                    is_dependency=is_dependency,
+                    FILE_NODE_MERGE_QUERY,
+                    **build_file_node_write_params(
+                        file_path=file_path_str,
+                        name=file_name,
+                        relative_path=relative_path,
+                        language=file_data.get("lang"),
+                        is_dependency=is_dependency,
+                        file_data=file_data,
+                    ),
                 )
 
                 _merge_directory_chain(

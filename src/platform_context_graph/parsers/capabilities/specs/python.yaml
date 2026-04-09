@@ -7,6 +7,24 @@ doc_path: docs/docs/languages/python.md
 fixture_repo: tests/fixtures/ecosystems/python_comprehensive/
 unit_test_file: tests/unit/parsers/test_python_parser.py
 integration_test_suite: tests/integration/test_language_graph.py::TestPythonGraph
+support_maturity:
+  grammar_routing: supported
+  normalization: supported
+  framework_packs: supported
+  framework_pack_names:
+    - fastapi-base
+    - flask-base
+  query_surfacing: supported
+  real_repo_validation: supported
+  real_repo_examples:
+    - recos-ranker-service (clean end-to-end validation with FastAPI framework evidence)
+    - lambda-python-s3-proxy (clean end-to-end validation with Flask framework evidence)
+    - lambda-python-lb-s3-files (discovery-aware parser validation with Flask route evidence)
+  end_to_end_indexing: supported
+  notes:
+    - recos-ranker-service completed a clean local end-to-end indexing run (run 1cfe41a63cb2bd4a)
+    - lambda-python-s3-proxy completed a clean local end-to-end indexing run (run 6a792e3bb05f5c69)
+    - repo context, repo summary, and repo story all surfaced FastAPI or Flask framework evidence through the default FalkorDB backend
 capabilities:
 - id: functions
   name: Functions

@@ -139,3 +139,168 @@ def test_parse_javascript_minified_value_keeps_full_initializer(
     assert variable["value"] is not None
     assert payload in variable["value"]
     assert len(variable["value"]) > 200
+
+
+def test_parse_javascript_client_component_semantics(
+    javascript_parser: JavascriptTreeSitterParser, temp_test_dir
+) -> None:
+    """Expose React semantic facts for JSX client component modules."""
+
+    source = """\
+'use client';
+
+import React, { useState } from 'react';
+import { useToolbarOverflow } from './hooks/useToolbarOverflow';
+
+export function ToolbarButton() {
+  const [open, setOpen] = useState(false);
+  useToolbarOverflow();
+  return <button onClick={() => setOpen(!open)}>{String(open)}</button>;
+}
+"""
+    source_file = temp_test_dir / "ToolbarButton.jsx"
+    source_file.write_text(source, encoding="utf-8")
+
+    result = javascript_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["react"]
+    assert semantics["react"]["boundary"] == "client"
+    assert semantics["react"]["component_exports"] == ["ToolbarButton"]
+    assert semantics["react"]["hooks_used"] == ["useState", "useToolbarOverflow"]
+
+
+def test_parse_javascript_hapi_route_module_semantics(
+    javascript_parser: JavascriptTreeSitterParser, temp_test_dir
+) -> None:
+    """Expose Hapi route-array semantics for route definition modules."""
+
+    source = """\
+const userController = require('../controller/userController');
+
+const userRoutes = [
+  { method: 'GET', path: '/users', handler: userController.getUsers },
+  { method: 'POST', path: '/users', handler: userController.createUser },
+  { method: 'DELETE', path: '/users/{id}', handler: userController.deleteUser },
+];
+
+module.exports = userRoutes;
+"""
+    source_file = temp_test_dir / "routes" / "userRoutes.js"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text(source, encoding="utf-8")
+
+    result = javascript_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["hapi"]
+    assert semantics["hapi"]["route_methods"] == ["GET", "POST", "DELETE"]
+    assert semantics["hapi"]["route_paths"] == [
+        "/users",
+        "/users/{id}",
+    ]
+    assert semantics["hapi"]["server_symbols"] == []
+
+
+def test_parse_javascript_express_router_semantics(
+    javascript_parser: JavascriptTreeSitterParser, temp_test_dir
+) -> None:
+    """Expose Express router semantics for router modules."""
+
+    source = """\
+const express = require('express');
+const router = express.Router();
+const video = require('./handlers/video');
+
+router.get('/auth/login', video.login);
+router.post('/', video.sendVideo);
+
+module.exports = router;
+"""
+    source_file = temp_test_dir / "server" / "routes.js"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text(source, encoding="utf-8")
+
+    result = javascript_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["express"]
+    assert semantics["express"]["route_methods"] == ["GET", "POST"]
+    assert semantics["express"]["route_paths"] == ["/auth/login", "/"]
+    assert semantics["express"]["server_symbols"] == ["router"]
+
+
+def test_parse_javascript_hapi_request_tests_do_not_count_as_route_modules(
+    javascript_parser: JavascriptTreeSitterParser, temp_test_dir
+) -> None:
+    """Hapi request-injection tests should not be classified as route modules."""
+
+    source = """\
+const { expect } = require('@hapi/code');
+
+async function exercise(server) {
+  const response = await server.inject({
+    method: 'GET',
+    url: '/users/123',
+  });
+  expect(response.statusCode).to.equal(200);
+}
+"""
+    source_file = temp_test_dir / "test" / "users.lab.js"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text(source, encoding="utf-8")
+
+    result = javascript_parser.parse(source_file)
+
+    assert "hapi" not in result["framework_semantics"]["frameworks"]
+
+
+def test_parse_javascript_aws_provider_semantics(
+    javascript_parser: JavascriptTreeSitterParser, temp_test_dir
+) -> None:
+    """Expose bounded AWS SDK semantics for JavaScript modules."""
+
+    source = """\
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+
+const client = new S3Client({ region: 'us-east-1' });
+const command = new GetObjectCommand({ Bucket: 'demo', Key: 'boats.csv' });
+"""
+    source_file = temp_test_dir / "consumer-utils.js"
+    source_file.write_text(source, encoding="utf-8")
+
+    result = javascript_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["aws"]
+    assert semantics["aws"]["services"] == ["s3"]
+    assert semantics["aws"]["client_symbols"] == ["S3Client"]
+
+
+def test_parse_javascript_gcp_provider_semantics(
+    javascript_parser: JavascriptTreeSitterParser, temp_test_dir
+) -> None:
+    """Expose bounded GCP SDK semantics for JavaScript modules."""
+
+    source = """\
+const vision = require('@google-cloud/vision');
+
+async function analyze() {
+  const client = new vision.ImageAnnotatorClient();
+  return client;
+}
+"""
+    source_file = temp_test_dir / "ImageAnalysisService.js"
+    source_file.write_text(source, encoding="utf-8")
+
+    result = javascript_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["gcp"]
+    assert semantics["gcp"]["services"] == ["vision"]
+    assert semantics["gcp"]["client_symbols"] == ["ImageAnnotatorClient"]

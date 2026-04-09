@@ -13,6 +13,117 @@ def test_investigation_response_allows_typed_coverage_and_next_calls() -> None:
     payload = InvestigationResponse.model_validate(
         {
             "summary": ["dual deployment detected"],
+            "framework_summary": {
+                "frameworks": [
+                    "aws",
+                    "express",
+                    "fastapi",
+                    "flask",
+                    "gcp",
+                    "nextjs",
+                    "react",
+                ],
+                "aws": {
+                    "module_count": 1,
+                    "services": ["s3"],
+                    "client_symbols": ["S3Client"],
+                    "sample_modules": [
+                        {
+                            "relative_path": "lib/s3.js",
+                            "services": ["s3"],
+                            "client_symbols": ["S3Client"],
+                        }
+                    ],
+                },
+                "express": {
+                    "module_count": 1,
+                    "route_path_count": 2,
+                    "route_methods": ["GET", "POST"],
+                    "sample_modules": [
+                        {
+                            "relative_path": "server/routes.js",
+                            "route_methods": ["GET", "POST"],
+                            "route_paths": ["/health", "/orders"],
+                            "server_symbols": ["app"],
+                        }
+                    ],
+                },
+                "fastapi": {
+                    "module_count": 1,
+                    "route_path_count": 2,
+                    "route_methods": ["GET", "POST"],
+                    "sample_modules": [
+                        {
+                            "relative_path": "app/api.py",
+                            "route_methods": ["GET", "POST"],
+                            "route_paths": ["/health", "/predict"],
+                            "server_symbols": ["app"],
+                        }
+                    ],
+                },
+                "flask": {
+                    "module_count": 1,
+                    "route_path_count": 1,
+                    "route_methods": ["GET"],
+                    "sample_modules": [
+                        {
+                            "relative_path": "proxy.py",
+                            "route_methods": ["GET"],
+                            "route_paths": ["/proxy"],
+                            "server_symbols": ["app"],
+                        }
+                    ],
+                },
+                "gcp": {
+                    "module_count": 1,
+                    "services": ["vision"],
+                    "client_symbols": ["ImageAnnotatorClient"],
+                    "sample_modules": [
+                        {
+                            "relative_path": "services/vision.js",
+                            "services": ["vision"],
+                            "client_symbols": ["ImageAnnotatorClient"],
+                        }
+                    ],
+                },
+                "react": {
+                    "module_count": 2,
+                    "client_boundary_count": 1,
+                    "server_boundary_count": 0,
+                    "shared_boundary_count": 1,
+                    "component_module_count": 2,
+                    "hook_module_count": 1,
+                    "sample_modules": [
+                        {
+                            "relative_path": "app/orders/page.tsx",
+                            "boundary": "client",
+                            "component_exports": ["default"],
+                            "hooks_used": ["useState"],
+                        }
+                    ],
+                },
+                "nextjs": {
+                    "module_count": 2,
+                    "page_count": 1,
+                    "layout_count": 1,
+                    "route_count": 0,
+                    "metadata_module_count": 1,
+                    "route_handler_module_count": 0,
+                    "client_runtime_count": 1,
+                    "server_runtime_count": 1,
+                    "route_verbs": [],
+                    "sample_modules": [
+                        {
+                            "relative_path": "app/orders/page.tsx",
+                            "module_kind": "page",
+                            "route_verbs": [],
+                            "metadata_exports": "dynamic",
+                            "route_segments": ["orders"],
+                            "runtime_boundary": "client",
+                        }
+                    ],
+                },
+            },
             "repositories_considered": [
                 {
                     "repo_id": "repository:r_app12345",
@@ -84,4 +195,17 @@ def test_investigation_response_allows_typed_coverage_and_next_calls() -> None:
     )
 
     assert payload.coverage_summary.deployment_mode == "multi_plane"
+    assert payload.framework_summary is not None
+    assert payload.framework_summary.aws is not None
+    assert payload.framework_summary.aws.services == ["s3"]
+    assert payload.framework_summary.express is not None
+    assert payload.framework_summary.express.route_path_count == 2
+    assert payload.framework_summary.fastapi is not None
+    assert payload.framework_summary.fastapi.route_path_count == 2
+    assert payload.framework_summary.flask is not None
+    assert payload.framework_summary.flask.route_path_count == 1
+    assert payload.framework_summary.gcp is not None
+    assert payload.framework_summary.gcp.client_symbols == ["ImageAnnotatorClient"]
+    assert payload.framework_summary.nextjs is not None
+    assert payload.framework_summary.nextjs.page_count == 1
     assert payload.recommended_next_calls[0].tool == "get_repo_story"

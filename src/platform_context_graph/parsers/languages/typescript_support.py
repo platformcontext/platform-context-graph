@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any
 
+from ..framework_semantics import build_framework_semantics
 from platform_context_graph.utils.debug_log import warning_logger
 from platform_context_graph.utils.source_text import read_source_text
 from platform_context_graph.utils.tree_sitter_manager import execute_query
@@ -114,6 +115,48 @@ def is_typescript_file(path: Path) -> bool:
         ``True`` when the path has a TypeScript extension.
     """
     return path.suffix in {".ts", ".tsx"}
+
+
+def build_parse_result(
+    path: Path,
+    *,
+    source_code: str,
+    functions: list[dict[str, Any]],
+    classes: list[dict[str, Any]],
+    interfaces: list[dict[str, Any]],
+    type_aliases: list[dict[str, Any]],
+    enums: list[dict[str, Any]],
+    variables: list[dict[str, Any]],
+    imports: list[dict[str, Any]],
+    function_calls: list[dict[str, Any]],
+    is_dependency: bool,
+    language_name: str,
+) -> dict[str, Any]:
+    """Build the canonical TypeScript parse payload."""
+
+    return {
+        "path": str(path),
+        "functions": functions,
+        "classes": classes,
+        "interfaces": interfaces,
+        "type_aliases": type_aliases,
+        "enums": enums,
+        "variables": variables,
+        "imports": imports,
+        "function_calls": function_calls,
+        "framework_semantics": build_framework_semantics(
+            path,
+            source_code,
+            parser_language=language_name,
+            imports=imports,
+            functions=functions,
+            function_calls=function_calls,
+            variables=variables,
+            classes=classes,
+        ),
+        "is_dependency": is_dependency,
+        "lang": language_name,
+    }
 
 
 def get_parent_context(

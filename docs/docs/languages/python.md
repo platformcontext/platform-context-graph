@@ -25,6 +25,24 @@ Canonical source: `src/platform_context_graph/parsers/capabilities/specs/python.
 | Inheritance | `inheritance` | supported | `classes` | `name, line_number, bases` | `relationship:INHERITS` | `tests/unit/parsers/test_python_parser.py::TestPythonParser::test_parse_imports_calls_and_inheritance` | `tests/integration/test_language_graph.py::TestPythonGraph::test_inheritance_edges` | - |
 | Type annotations | `type-annotations` | unsupported | `type_annotations` | `name, line_number, type` | `none:not_persisted` | `tests/unit/parsers/test_python_parser.py::TestPythonParser::test_parse_does_not_emit_type_annotation_bucket` | `tests/integration/test_language_graph.py::TestPythonGraph::test_type_annotation_nodes_not_created` | The parser does not emit a dedicated `type_annotations` bucket, so annotation metadata is neither extracted nor persisted as a first-class graph surface. |
 
+## Support Maturity
+- Grammar routing: `supported`
+- Normalization: `supported`
+- Framework pack status: `supported`
+- Framework packs: `fastapi-base`, `flask-base`
+- Query surfacing: `supported`
+- Real-repo validation: `supported`
+- End-to-end indexing: `supported`
+- Local repo validation evidence:
+  - `recos-ranker-service (clean end-to-end validation with FastAPI framework evidence)`
+  - `lambda-python-s3-proxy (clean end-to-end validation with Flask framework evidence)`
+  - `lambda-python-lb-s3-files (discovery-aware parser validation with Flask route evidence)`
+- Notes:
+  - recos-ranker-service completed a clean local end-to-end indexing run (run 1cfe41a63cb2bd4a)
+  - lambda-python-s3-proxy completed a clean local end-to-end indexing run (run 6a792e3bb05f5c69)
+  - repo context, repo summary, and repo story all surfaced FastAPI or Flask framework evidence through the default FalkorDB backend
+
+
 ## Known Limitations
 - Lambda functions detected as unnamed functions
 - Comprehension-internal functions not always tracked

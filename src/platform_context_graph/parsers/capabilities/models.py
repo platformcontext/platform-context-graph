@@ -6,6 +6,7 @@ from typing import Final, Literal, TypedDict
 
 CapabilityStatus = Literal["supported", "partial", "unsupported"]
 SpecFamily = Literal["language", "iac"]
+MaturityStatus = Literal["supported", "partial", "unsupported"]
 
 
 class GraphSurface(TypedDict, total=False):
@@ -42,8 +43,23 @@ class LanguageCapabilitySpec(TypedDict, total=False):
     unit_test_file: str
     integration_test_suite: str
     capabilities: list[CapabilitySpec]
+    support_maturity: "SupportMaturitySpec"
     known_limitations: list[str]
     spec_path: str
+
+
+class SupportMaturitySpec(TypedDict, total=False):
+    """Support-maturity metadata layered on top of parser capability specs."""
+
+    grammar_routing: MaturityStatus
+    normalization: MaturityStatus
+    framework_packs: MaturityStatus
+    framework_pack_names: list[str]
+    query_surfacing: MaturityStatus
+    real_repo_validation: MaturityStatus
+    real_repo_examples: list[str]
+    end_to_end_indexing: MaturityStatus
+    notes: list[str]
 
 
 AUTO_GENERATED_BANNER: Final = "This file is auto-generated. Do not edit manually."

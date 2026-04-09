@@ -7,6 +7,27 @@ doc_path: docs/docs/languages/typescript.md
 fixture_repo: tests/fixtures/ecosystems/typescript_comprehensive/
 unit_test_file: tests/unit/parsers/test_typescript_parser.py
 integration_test_suite: tests/integration/test_language_graph.py::TestTypeScriptGraph
+support_maturity:
+  grammar_routing: supported
+  normalization: supported
+  framework_packs: supported
+  framework_pack_names:
+    - react-base
+    - nextjs-app-router-base
+    - express-base
+    - hapi-base
+    - aws-sdk-base
+    - gcp-sdk-base
+  query_surfacing: supported
+  real_repo_validation: supported
+  real_repo_examples:
+    - api-node-platform (109 indexed TS files, clean end-to-end validation on a zero-TSX repo)
+  end_to_end_indexing: supported
+  notes:
+    - api-node-platform completed a clean local end-to-end indexing run (run ef02081cb9874275)
+    - repo context, repo summary, and repo story all returned successfully on a pure TypeScript repo without requiring framework evidence
+    - TypeScript now participates in the same declarative Node HTTP and provider-pack program as JavaScript
+    - generic type aliases and decorators remain partial or unsupported as documented below
 capabilities:
 - id: functions
   name: Functions

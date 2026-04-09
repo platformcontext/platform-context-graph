@@ -7,6 +7,7 @@ against Neo4j File nodes and Postgres content store.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import yaml
@@ -40,12 +41,33 @@ def discover_repo_files(
     Returns:
         Sorted list of matching relative paths.
     """
+    regex = None
+    effective_prefix = prefix
+    effective_suffix = suffix
+    if pattern is not None:
+        try:
+            regex = re.compile(pattern)
+        except re.error:
+            logger.warning(
+                "Invalid repository file pattern %r for repo %s",
+                pattern,
+                repo_id,
+            )
+            return []
+        derived_prefix, derived_suffix = _derive_pattern_bounds(pattern)
+        effective_prefix, prefix_conflict = _merge_prefix_filter(
+            effective_prefix, derived_prefix
+        )
+        effective_suffix, suffix_conflict = _merge_suffix_filter(
+            effective_suffix, derived_suffix
+        )
+        if prefix_conflict or suffix_conflict:
+            return []
 
     query = (
         "MATCH (r:Repository {id: $repo_id})-[:REPO_CONTAINS]->(f:File)\n"
         "WHERE ($prefix IS NULL OR f.relative_path STARTS WITH $prefix)\n"
         "  AND ($suffix IS NULL OR f.relative_path ENDS WITH $suffix)\n"
-        "  AND ($pattern IS NULL OR f.relative_path =~ $pattern)\n"
         "RETURN f.relative_path AS relative_path\n"
         "ORDER BY f.relative_path"
     )
@@ -54,11 +76,96 @@ def discover_repo_files(
         rows = session.run(
             query,
             repo_id=repo_id,
-            prefix=prefix,
-            suffix=suffix,
-            pattern=pattern,
+            prefix=effective_prefix,
+            suffix=effective_suffix,
         ).data()
-    return [str(row["relative_path"]) for row in rows if row.get("relative_path")]
+    paths = [str(row["relative_path"]) for row in rows if row.get("relative_path")]
+    if regex is None:
+        return paths
+    return [relative_path for relative_path in paths if regex.search(relative_path)]
+
+
+def _derive_pattern_bounds(pattern: str) -> tuple[str | None, str | None]:
+    """Return deterministic literal prefix/suffix bounds for one regex pattern."""
+
+    normalized = pattern.removeprefix("^")
+    if normalized.endswith(r"\Z"):
+        normalized = normalized[:-2]
+    normalized = normalized.removesuffix("$")
+    return _literal_prefix(normalized), _literal_suffix(normalized)
+
+
+def _literal_prefix(pattern: str) -> str | None:
+    """Return one literal prefix from a regex pattern when available."""
+
+    parts: list[str] = []
+    index = 0
+    while index < len(pattern):
+        char = pattern[index]
+        if char == "\\":
+            if index + 1 >= len(pattern):
+                break
+            parts.append(pattern[index + 1])
+            index += 2
+            continue
+        if char in ".^$*+?{}[]|()":
+            break
+        parts.append(char)
+        index += 1
+    return "".join(parts) or None
+
+
+def _literal_suffix(pattern: str) -> str | None:
+    """Return one literal suffix from a regex pattern when available."""
+
+    parts: list[str] = []
+    index = len(pattern) - 1
+    while index >= 0:
+        char = pattern[index]
+        if char == "\\":
+            break
+        if char in ".^$*+?{}[]|()":
+            if index > 0 and pattern[index - 1] == "\\":
+                parts.append(char)
+                index -= 2
+                continue
+            break
+        parts.append(char)
+        index -= 1
+    suffix = "".join(reversed(parts))
+    return suffix or None
+
+
+def _merge_prefix_filter(
+    existing: str | None, derived: str | None
+) -> tuple[str | None, bool]:
+    """Return the narrower compatible prefix and whether the filters conflict."""
+
+    if existing is None:
+        return derived, False
+    if derived is None:
+        return existing, False
+    if existing.startswith(derived):
+        return existing, False
+    if derived.startswith(existing):
+        return derived, False
+    return existing, True
+
+
+def _merge_suffix_filter(
+    existing: str | None, derived: str | None
+) -> tuple[str | None, bool]:
+    """Return the narrower compatible suffix and whether the filters conflict."""
+
+    if existing is None:
+        return derived, False
+    if derived is None:
+        return existing, False
+    if existing.endswith(derived):
+        return existing, False
+    if derived.endswith(existing):
+        return derived, False
+    return existing, True
 
 
 def file_exists(database: Any, repo_id: str, relative_path: str) -> bool:

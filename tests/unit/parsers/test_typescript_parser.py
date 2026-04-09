@@ -104,6 +104,10 @@ import type { Config } from './config';
 
     imports = result.get("imports", [])
     assert len(imports) >= 2
+    assert any(
+        item["name"] == "readFileSync" and item["source"] == "fs" for item in imports
+    )
+    assert any(item["name"] == "*" and item["alias"] == "path" for item in imports)
 
 
 def test_parse_variables(ts_parser, temp_test_dir):
@@ -251,6 +255,116 @@ def test_parse_object_literal_methods(ts_parser, temp_test_dir):
 
     funcs = result["functions"]
     assert any(fn["name"] == "greet" for fn in funcs)
+
+
+def test_parse_typescript_next_route_semantics(ts_parser, temp_test_dir):
+    """Expose Next.js route semantics for app-router route handlers."""
+
+    route_dir = temp_test_dir / "src" / "app" / "api" / "health"
+    route_dir.mkdir(parents=True)
+    route_file = route_dir / "route.ts"
+    route_file.write_text(
+        """\
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function GET(_request: NextRequest) {
+  return NextResponse.json({ ok: true });
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = ts_parser.parse(route_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["nextjs"]
+    assert semantics["nextjs"]["module_kind"] == "route"
+    assert semantics["nextjs"]["route_verbs"] == ["GET"]
+    assert semantics["nextjs"]["metadata_exports"] == "none"
+    assert semantics["nextjs"]["route_segments"] == ["api", "health"]
+    assert semantics["nextjs"]["runtime_boundary"] == "server"
+    assert semantics["nextjs"]["request_response_apis"] == [
+        "NextRequest",
+        "NextResponse",
+    ]
+
+
+def test_parse_typescript_express_app_semantics(ts_parser, temp_test_dir) -> None:
+    """Expose Express app semantics for TypeScript server modules."""
+
+    source = """\
+import express from 'express';
+
+const app = express();
+
+app.get('/health', (_req, _res) => {
+  return null;
+});
+
+app.post('/uptime-check', handleUptimeCheck);
+"""
+    source_file = temp_test_dir / "src" / "index.ts"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text(source, encoding="utf-8")
+
+    result = ts_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["express"]
+    assert semantics["express"]["route_methods"] == ["GET", "POST"]
+    assert semantics["express"]["route_paths"] == ["/health", "/uptime-check"]
+    assert semantics["express"]["server_symbols"] == ["app"]
+
+
+def test_parse_typescript_path_metadata_does_not_count_as_hapi_routes(
+    ts_parser, temp_test_dir
+) -> None:
+    """Generic config objects with path keys should stay unclassified."""
+
+    source = """\
+type StepMeta = {
+  label: string;
+  path: string;
+};
+
+export const steps: StepMeta[] = [
+  {
+    label: 'Trade',
+    path: 'trade',
+  },
+];
+"""
+    source_file = temp_test_dir / "src" / "meta.ts"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text(source, encoding="utf-8")
+
+    result = ts_parser.parse(source_file)
+
+    assert "hapi" not in result["framework_semantics"]["frameworks"]
+
+
+def test_parse_typescript_aws_provider_semantics(ts_parser, temp_test_dir) -> None:
+    """Expose bounded AWS SDK semantics for TypeScript modules."""
+
+    source = """\
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+
+const client = new SSMClient({ region: 'us-east-1' });
+const command = new GetParameterCommand({ Name: '/configd/demo/path' });
+"""
+    source_file = temp_test_dir / "src" / "ssm.ts"
+    source_file.parent.mkdir(parents=True, exist_ok=True)
+    source_file.write_text(source, encoding="utf-8")
+
+    result = ts_parser.parse(source_file)
+
+    semantics = result["framework_semantics"]
+
+    assert semantics["frameworks"] == ["aws"]
+    assert semantics["aws"]["services"] == ["ssm"]
+    assert semantics["aws"]["client_symbols"] == ["SSMClient"]
 
 
 def test_parse_decorators_do_not_emit_metadata(ts_parser, temp_test_dir):

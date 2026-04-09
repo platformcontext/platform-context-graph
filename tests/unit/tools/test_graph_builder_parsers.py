@@ -5,8 +5,12 @@ import logging
 from pathlib import Path
 import threading
 from types import SimpleNamespace
+import pytest
 
 from platform_context_graph.parsers import registry as parser_registry
+from platform_context_graph.utils.tree_sitter_manager import (
+    TreeSitterLanguageBootstrapError,
+)
 
 
 def test_build_parser_registry_skips_unavailable_language(monkeypatch, caplog) -> None:
@@ -29,6 +33,48 @@ def test_build_parser_registry_skips_unavailable_language(monkeypatch, caplog) -
         "Skipping parser for extension .cs because language c_sharp is unavailable"
         in caplog.text
     )
+
+
+def test_build_parser_registry_skips_failed_language_bootstrap(
+    monkeypatch, caplog
+) -> None:
+    """Startup should skip grammars that fail to bootstrap unexpectedly."""
+
+    class FakeTreeSitterParser:
+        def __init__(self, language_name: str) -> None:
+            if language_name == "tsx":
+                raise TreeSitterLanguageBootstrapError(
+                    language_name,
+                    "checksum mismatch",
+                )
+            self.language_name = language_name
+
+    monkeypatch.setattr(parser_registry, "TreeSitterParser", FakeTreeSitterParser)
+    caplog.set_level(logging.WARNING, logger=parser_registry.__name__)
+
+    registry = parser_registry.build_parser_registry(lambda _key: "false")
+
+    assert ".tsx" not in registry
+    assert registry[".py"].language_name == "python"
+    assert (
+        "Skipping parser for extension .tsx because language tsx failed to initialize"
+        in caplog.text
+    )
+
+
+def test_build_parser_registry_raises_unexpected_parser_init_error(monkeypatch) -> None:
+    """Unexpected parser init bugs should still fail fast."""
+
+    class FakeTreeSitterParser:
+        def __init__(self, language_name: str) -> None:
+            if language_name == "tsx":
+                raise RuntimeError("broken parser class")
+            self.language_name = language_name
+
+    monkeypatch.setattr(parser_registry, "TreeSitterParser", FakeTreeSitterParser)
+
+    with pytest.raises(RuntimeError, match="broken parser class"):
+        parser_registry.build_parser_registry(lambda _key: "false")
 
 
 def test_build_parser_registry_keeps_available_language() -> None:

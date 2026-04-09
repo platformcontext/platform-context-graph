@@ -24,6 +24,25 @@ Canonical source: `src/platform_context_graph/parsers/capabilities/specs/typescr
 | Type aliases | `type-aliases` | partial | `type_aliases` | `name, line_number` | `none:not_persisted` | `tests/unit/parsers/test_typescriptjsx_parser.py::test_parse_tsx_imports_calls_variables_and_type_aliases` | `tests/integration/test_language_graph.py::TestTypeScriptJSXGraph::test_type_alias_nodes_not_created` | TSX files inherit TypeScript type-alias extraction, but those alias definitions are not yet persisted into graph nodes. |
 | JSX component usage | `jsx-component-usage` | partial | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_typescriptjsx_parser.py::test_parse_tsx_components_and_interfaces` | `tests/integration/test_language_graph.py::TestTypeScriptJSXGraph::test_call_edges_created` | JSX tag usage is approximated through call-like capture paths, but there is no dedicated component-reference model or TSX-specific query surface. |
 
+## Support Maturity
+- Grammar routing: `supported`
+- Normalization: `supported`
+- Framework pack status: `supported`
+- Framework packs: `react-base`, `nextjs-app-router-base`
+- Query surfacing: `supported`
+- Real-repo validation: `supported`
+- End-to-end indexing: `supported`
+- Local repo validation evidence:
+  - `portal-nextjs-platform (612 indexed TSX files, 0 parser issues)`
+  - `portal-java-ycm (358 indexed TSX files, 0 parser issues)`
+  - `webapp-node-fsbo (177 indexed TSX files, 0 parser issues)`
+  - `boats-chatgpt-app (local regression fixture plus clean TSX smoke check)`
+- Notes:
+  - portal-nextjs-platform completed a clean local end-to-end indexing run (run 01e7ca696a30df95)
+  - repo context, repo summary, and repo story surfaced React/Next.js framework evidence through the default FalkorDB backend
+  - the validation fixed two backend-compatibility gaps in repository graph counts and indexed file discovery
+
+
 ## Known Limitations
 - JSX element tag names are not modeled as distinct component reference nodes
 - Fragment shorthand (`<>...</>`) is not separately tracked

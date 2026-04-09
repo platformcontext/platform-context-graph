@@ -16,6 +16,11 @@ Deliverables on this branch:
 3. destructured typed prop normalization
 4. real-repo validation against local TSX-heavy repos
 5. PRD/roadmap for broader language and framework support
+6. declarative React/Next.js framework-pack specs and loader
+7. declarative Node HTTP framework packs for JavaScript and TypeScript
+8. declarative Python web framework packs for FastAPI and Flask
+9. declarative provider packs for bounded AWS and GCP JS/TS SDK evidence
+10. graph-backed Python end-to-end validation through the shared support validator
 
 ## Next Slices
 
@@ -72,7 +77,8 @@ Targets:
 Model:
 
 - declarative framework/provider specs for imports, constructors, calls, and
-  semantic evidence
+  semantic evidence built on the same pack-loading pattern now used for the
+  React/Next.js lane
 
 Acceptance:
 
@@ -106,6 +112,16 @@ Use the repo’s real discovery path plus parser smoke checks:
 PYTHONPATH=src uv run python -m pytest tests/unit/parsers/test_typescriptjsx_parser.py tests/unit/parsers/test_typescript_parser.py tests/unit/tools/test_graph_builder_parsers.py -q
 ```
 
+And use the graph-backed validation script for end-to-end support checks:
+
+```bash
+PYTHONPATH=src uv run python scripts/validate_language_support_e2e.py \
+  --repo-path /Users/allen/repos/services/portal-react-platform \
+  --language javascript \
+  --check \
+  --require-framework-evidence
+```
+
 And real repo validation scripts that:
 
 - honor discovery rules
@@ -114,12 +130,35 @@ And real repo validation scripts that:
 - report bogus function names
 - report oversized normalized parameters
 
+## Completed On This Branch
+
+1. End-to-end indexing validation now passes on `/Users/allen/repos/services/portal-nextjs-platform`.
+   - local run: `01e7ca696a30df95`
+   - result: `1 completed / 0 failed / 0 pending`
+   - repo context, repo summary, and repo story all surface React/Next.js framework evidence
+2. End-to-end indexing validation now passes on `/Users/allen/repos/services/portal-react-platform`.
+   - local run: `773c75cb105c8879`
+   - result: `1 completed / 0 failed / 0 pending`
+   - repo context, repo summary, and repo story all surface React framework evidence for the JavaScript lane
+3. End-to-end indexing validation now passes on `/Users/allen/repos/services/api-node-platform`.
+   - local run: `ef02081cb9874275`
+   - result: `1 completed / 0 failed / 0 pending`
+   - repo context, repo summary, and repo story all return successfully for the plain TypeScript lane on a zero-TSX repo
+4. A reusable graph-backed validation script now exists at `scripts/validate_language_support_e2e.py`.
+5. React/Next.js semantic packs are implemented through parser facts, file persistence, and query/story surfacing.
+6. Public support-maturity docs are published and generated from specs.
+7. React/Next.js semantic detection is now driven by declarative framework-pack YAML specs under `src/platform_context_graph/parsers/framework_packs/specs/`.
+8. Node HTTP semantic detection is now driven by declarative Express and Hapi framework-pack YAML with repo/story/investigation surfacing.
+9. Python web semantic detection is now driven by declarative FastAPI and Flask framework-pack YAML with repo/story/investigation surfacing.
+10. JS/TS provider semantic detection now emits bounded AWS and GCP SDK evidence at file, repo summary, story, and investigation layers.
+11. The graph-backed support validator now supports Python and validated clean local runs for `recos-ranker-service` and `lambda-python-s3-proxy`.
+12. Parser registry startup now degrades cleanly when an unrelated tree-sitter grammar bootstrap fails, instead of blocking indexing for every language.
+
 ## Open Follow-Ups
 
-1. Add end-to-end indexing validation for a large TSX-heavy repo.
-2. Add framework semantic packs for React and Next.js.
-3. Design a declarative framework/provider pack format.
-4. Publish a support matrix in public docs.
+1. Extend provider packs beyond the current bounded AWS/GCP constructor evidence.
+2. Add deeper framework lanes such as NestJS, Remix, or Django when strong local validation targets justify them.
+3. Expand the same maturity program to additional language/framework pairs beyond the current JS/TS/TSX/Python lane.
 
 ## PR Packaging
 

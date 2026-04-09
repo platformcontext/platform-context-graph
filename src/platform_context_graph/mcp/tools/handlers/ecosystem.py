@@ -5,6 +5,7 @@ from typing import Any
 from ....core.database import DatabaseManager
 from ....query import infra as infra_queries
 from ....query import repositories as repository_queries
+from ....query.story_frameworks import summarize_framework_overview
 from ....query.story_shared import portable_story_value
 from ....utils.debug_log import emit_log_call, warning_logger
 from .ecosystem_support import repo_summary_note, trace_deployment_chain
@@ -219,6 +220,9 @@ def get_repo_summary(
         "hostnames": context.get("hostnames", []),
         "limitations": limitations,
     }
+    framework_summary = context.get("framework_summary")
+    if framework_summary:
+        summary["framework_summary"] = framework_summary
     summary["deployment_overview"] = build_deployment_overview(
         hostnames=summary["hostnames"],
         api_surface=summary["api_surface"],
@@ -240,6 +244,9 @@ def get_repo_summary(
         deployment_overview=summary["deployment_overview"],
         note=summary.get("note", ""),
     )
+    framework_story = summarize_framework_overview(framework_summary)
+    if framework_story:
+        story = [*story, framework_story]
     if story:
         summary["story"] = story
     if limitations:
