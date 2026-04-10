@@ -107,6 +107,18 @@ The observability surface mirrors that split:
   `pcg_shared_projection_oldest_pending_age_seconds` describe authoritative
   shared follow-up backlog by projection domain
 
+The current deterministic tuning harness gives us a safe interpretation model
+for those gauges:
+
+- move partition count first when shared backlog is accumulating, because
+  better lock-domain spread lowers drain rounds before increasing per-round
+  write volume
+- use batch-limit increases second, once partitioning has already reduced drain
+  rounds and the remaining backlog is tail work rather than lock contention
+
+That keeps the architecture moving forward with parallelism while preserving the
+phase-1 goal of reducing dense-node conflict on shared writes.
+
 ## Recovery And Explainability
 
 Phase 3 keeps more operational meaning in Postgres instead of only in logs:

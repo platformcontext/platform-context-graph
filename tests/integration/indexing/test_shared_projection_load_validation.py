@@ -21,6 +21,10 @@ from platform_context_graph.resolution.shared_projection.runtime import (
 from platform_context_graph.resolution.shared_projection.runtime import (
     WORKLOAD_DEPENDENCY_PROJECTION_DOMAIN,
 )
+from tests.integration.indexing.shared_projection_metric_harness import (
+    matching_metric_values,
+)
+from tests.integration.indexing.shared_projection_metric_harness import metric_points
 from tests.integration.indexing.shared_projection_load_harness import (
     SharedProjectionQueue,
 )
@@ -33,10 +37,6 @@ from tests.integration.indexing.shared_projection_load_harness import (
 from tests.integration.indexing.shared_projection_load_harness import (
     drain_until_empty,
 )
-from tests.integration.indexing.shared_projection_load_harness import (
-    matching_metric_values,
-)
-from tests.integration.indexing.shared_projection_load_harness import metric_points
 
 
 def _pending_totals(rounds: list[Any]) -> list[int]:

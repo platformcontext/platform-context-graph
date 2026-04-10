@@ -111,6 +111,40 @@ When validating shared-write runtime changes in staging or production:
 4. Use logs last to extract exact repository, source run, generation, or lease
    owner context for the stuck or slow path.
 
+## Tuning Guidance For Shared-Write Backlog
+
+The deterministic shared-write load harness currently shows this balanced
+dependency scenario:
+
+| Partition count | Batch limit | Drain rounds | Mean processed per round |
+| --- | --- | --- | --- |
+| 1 | 1 | 16 | 2.0 |
+| 2 | 1 | 8 | 4.0 |
+| 4 | 1 | 5 | 6.4 |
+| 4 | 2 | 2 | 16.0 |
+
+Interpretation:
+
+- Increasing partition count produces the first major drain-round reduction by
+  spreading stable lock domains across more workers.
+- Once partitioning is already helping, a modest batch increase can remove the
+  remaining tail rounds quickly.
+- Batch increases should come after partition increases, not before them, so we
+  avoid hiding a partitioning bottleneck behind larger per-round writes.
+
+Recommended staging order:
+
+1. Increase partition count and watch
+   `pcg_shared_projection_pending_intents` plus
+   `pcg_shared_projection_oldest_pending_age_seconds`.
+2. Confirm fact queue metrics stay flat-to-down at the same time:
+   `pcg_fact_queue_depth` and `pcg_fact_queue_oldest_age_seconds`.
+3. Only then try a modest batch-limit increase if backlog still drains in too
+   many rounds after partitioning is healthy.
+
+If partition count goes up but oldest pending age still rises, traces should be
+the next stop before turning batch size further.
+
 ## Prometheus And ServiceMonitor
 
 - In Docker Compose, validate runtime metrics by curling the direct `/metrics`
