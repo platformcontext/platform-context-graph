@@ -69,3 +69,52 @@ def test_replay_failed_work_items_records_replay_events(monkeypatch) -> None:
     assert "INSERT INTO fact_replay_events" in event_query
     assert event_params[0]["replay_event_id"] == "fact-replay:uuid-1"
     assert event_params[0]["operator_note"] == "operator replay"
+
+
+def test_replay_failed_work_items_builds_dynamic_optional_filters(
+    monkeypatch,
+) -> None:
+    """Replay query should omit null-guard predicates for optional selectors."""
+
+    queue = MagicMock()
+    queue._fetchall.return_value = []
+    queue._record_operation.side_effect = (
+        lambda *, operation, callback, row_count=None: callback()
+    )
+    monkeypatch.setattr(replay_mod, "utc_now", _utc_now)
+
+    replay_failed_work_items(
+        queue,
+        repository_id="repository:r_payments",
+        limit=5,
+    )
+
+    replay_query, replay_params = queue._fetchall.call_args.args
+
+    assert "%(work_item_ids)s IS NULL" not in replay_query
+    assert "%(repository_id)s IS NULL" not in replay_query
+    assert "repository_id = %(repository_id)s" in replay_query
+    assert "work_item_id = ANY(%(work_item_ids)s::text[])" not in replay_query
+    assert "work_item_ids" not in replay_params
+
+
+def test_replay_failed_work_items_casts_array_selector(monkeypatch) -> None:
+    """Replay query should cast array selectors to a concrete Postgres type."""
+
+    queue = MagicMock()
+    queue._fetchall.return_value = []
+    queue._record_operation.side_effect = (
+        lambda *, operation, callback, row_count=None: callback()
+    )
+    monkeypatch.setattr(replay_mod, "utc_now", _utc_now)
+
+    replay_failed_work_items(
+        queue,
+        work_item_ids=["work-1"],
+        limit=5,
+    )
+
+    replay_query, replay_params = queue._fetchall.call_args.args
+
+    assert "work_item_id = ANY(%(work_item_ids)s::text[])" in replay_query
+    assert replay_params["work_item_ids"] == ["work-1"]

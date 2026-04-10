@@ -90,19 +90,37 @@ def replay_failed_work_items(
 ) -> list[FactWorkItemRow]:
     """Replay terminally failed work items by returning them to pending."""
 
+    predicates: list[str] = ["status = 'failed'"]
+    params: dict[str, Any] = {
+        "operator_note": operator_note,
+        "limit": max(limit, 1),
+        "updated_at": utc_now(),
+    }
+    if work_item_ids:
+        predicates.append("work_item_id = ANY(%(work_item_ids)s::text[])")
+        params["work_item_ids"] = work_item_ids
+    if repository_id is not None:
+        predicates.append("repository_id = %(repository_id)s")
+        params["repository_id"] = repository_id
+    if source_run_id is not None:
+        predicates.append("source_run_id = %(source_run_id)s")
+        params["source_run_id"] = source_run_id
+    if work_type is not None:
+        predicates.append("work_type = %(work_type)s")
+        params["work_type"] = work_type
+    if failure_class is not None:
+        predicates.append("failure_class = %(failure_class)s")
+        params["failure_class"] = failure_class
+    where_clause = " AND ".join(predicates)
+
     rows = queue._record_operation(
         operation="replay_failed_work_items",
         callback=lambda: queue._fetchall(
-            """
+            f"""
             WITH replayable AS (
                 SELECT work_item_id
                 FROM fact_work_items
-                WHERE status = 'failed'
-                  AND (%(work_item_ids)s IS NULL OR work_item_id = ANY(%(work_item_ids)s))
-                  AND (%(repository_id)s IS NULL OR repository_id = %(repository_id)s)
-                  AND (%(source_run_id)s IS NULL OR source_run_id = %(source_run_id)s)
-                  AND (%(work_type)s IS NULL OR work_type = %(work_type)s)
-                  AND (%(failure_class)s IS NULL OR failure_class = %(failure_class)s)
+                WHERE {where_clause}
                 ORDER BY updated_at ASC
                 LIMIT %(limit)s
             )
@@ -145,16 +163,7 @@ def replay_failed_work_items(
                       created_at,
                       updated_at
             """,
-            {
-                "work_item_ids": work_item_ids or None,
-                "repository_id": repository_id,
-                "source_run_id": source_run_id,
-                "work_type": work_type,
-                "failure_class": failure_class,
-                "operator_note": operator_note,
-                "limit": max(limit, 1),
-                "updated_at": utc_now(),
-            },
+            params,
         ),
         row_count=None,
     )
