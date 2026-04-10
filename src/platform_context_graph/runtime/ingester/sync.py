@@ -28,7 +28,6 @@ from .git import (
     update_existing_repositories,
     update_existing_repositories_detailed,
 )
-from .repository_selection import archived_skip_summary
 from .retry import classify_sync_error, retry_after_seconds
 from .sync_operations import (
     _run_sync_filesystem as _run_sync_filesystem_impl,
@@ -212,7 +211,6 @@ def _run_sync_git(
 ) -> RepoSyncResult:
     """Run a Git-backed repo sync cycle."""
 
-    token = git_token(config)
     return _run_sync_git_impl(
         config,
         index_workspace=index_workspace,

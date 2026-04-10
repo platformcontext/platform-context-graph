@@ -144,6 +144,11 @@ def _call_with_supported_kwargs(function: Callable[..., object], /, *args, **kwa
     """Call a helper with only the keyword arguments it declares."""
 
     signature = inspect.signature(function)
+    if any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    ):
+        return function(*args, **kwargs)
     supported_kwargs = {
         key: value for key, value in kwargs.items() if key in signature.parameters
     }

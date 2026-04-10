@@ -332,3 +332,36 @@ def test_update_existing_repositories_fetches_remote_tracking_ref_and_ignores_se
         ]
     ]
     assert warnings == []
+
+
+@pytest.mark.parametrize(
+    ("module_name", "payload"),
+    (
+        (
+            "platform_context_graph.runtime.ingester.git",
+            {"selected_repository_ids": ["boatsgroup/active-repo"]},
+        ),
+        (
+            "platform_context_graph.runtime.ingester.sync_operations",
+            {"archived_repository_ids_observer": list.extend},
+        ),
+    ),
+)
+def test_call_with_supported_kwargs_preserves_var_keyword_arguments(
+    module_name: str,
+    payload: dict[str, object],
+) -> None:
+    """Helpers accepting ``**kwargs`` should receive the full forwarded payload."""
+
+    module = importlib.import_module(module_name)
+    observed: dict[str, object] = {}
+
+    def _target(_sentinel: object, **kwargs: object) -> dict[str, object]:
+        observed.update(kwargs)
+        return kwargs
+
+    sentinel = object()
+    result = module._call_with_supported_kwargs(_target, sentinel, **payload)
+
+    assert result == payload
+    assert observed == payload

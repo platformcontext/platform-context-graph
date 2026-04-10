@@ -196,6 +196,8 @@ class RepoSyncConfig:
         component: Observability component name for the runtime.
         repository_rules: Structured include rules loaded from
             ``PCG_REPOSITORY_RULES_JSON``.
+        include_archived_repos: Whether archived GitHub repositories should be
+            included during organization discovery.
     """
 
     repos_dir: Path
@@ -221,6 +223,8 @@ class RepoSyncConfig:
         Environment:
             ``PCG_REPOSITORY_RULES_JSON`` supplies structured exact/regex include
             rules used by the repo-sync runtime.
+            ``PCG_INCLUDE_ARCHIVED_REPOS`` opts archived GitHub repositories into
+            org-wide discovery when set to a truthy value.
 
         Returns:
             Parsed repository sync configuration.
