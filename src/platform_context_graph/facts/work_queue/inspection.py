@@ -21,10 +21,31 @@ def list_work_items(
 ) -> list[FactWorkItemRow]:
     """Return work items filtered by status and failure selectors."""
 
+    predicates: list[str] = []
+    params: dict[str, Any] = {"limit": max(limit, 1)}
+    if statuses:
+        predicates.append("status = ANY(%(statuses)s::text[])")
+        params["statuses"] = statuses
+    if repository_id is not None:
+        predicates.append("repository_id = %(repository_id)s")
+        params["repository_id"] = repository_id
+    if source_run_id is not None:
+        predicates.append("source_run_id = %(source_run_id)s")
+        params["source_run_id"] = source_run_id
+    if work_type is not None:
+        predicates.append("work_type = %(work_type)s")
+        params["work_type"] = work_type
+    if failure_class is not None:
+        predicates.append("failure_class = %(failure_class)s")
+        params["failure_class"] = failure_class
+    where_clause = ""
+    if predicates:
+        where_clause = "WHERE " + " AND ".join(predicates)
+
     rows = queue._record_operation(
         operation="list_work_items",
         callback=lambda: queue._fetchall(
-            """
+            f"""
             SELECT work_item_id,
                    work_type,
                    repository_id,
@@ -53,22 +74,11 @@ def list_work_items(
                    created_at,
                    updated_at
             FROM fact_work_items
-            WHERE (%(statuses)s IS NULL OR status = ANY(%(statuses)s))
-              AND (%(repository_id)s IS NULL OR repository_id = %(repository_id)s)
-              AND (%(source_run_id)s IS NULL OR source_run_id = %(source_run_id)s)
-              AND (%(work_type)s IS NULL OR work_type = %(work_type)s)
-              AND (%(failure_class)s IS NULL OR failure_class = %(failure_class)s)
+            {where_clause}
             ORDER BY updated_at DESC, work_item_id DESC
             LIMIT %(limit)s
             """,
-            {
-                "statuses": statuses or None,
-                "repository_id": repository_id,
-                "source_run_id": source_run_id,
-                "work_type": work_type,
-                "failure_class": failure_class,
-                "limit": max(limit, 1),
-            },
+            params,
         ),
         row_count=None,
     )
