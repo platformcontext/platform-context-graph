@@ -107,6 +107,37 @@ watch -n 2 'curl -fsS http://localhost:19464/metrics | rg "^(pcg_http|pcg_mcp)" 
 watch -n 2 'curl -fsS http://localhost:19466/metrics | rg "^(pcg_fact|pcg_resolution)" | head -60'
 ```
 
+## Shared-Write Tuning Report
+
+Use the local deterministic tuning report when you want a quick recommendation
+before changing shared-write partition or batch settings in staging.
+
+Readable table output:
+
+```bash
+PYTHONPATH=src:. uv run python scripts/shared_projection_tuning_report.py --format table
+```
+
+Machine-readable JSON output:
+
+```bash
+PYTHONPATH=src:. uv run python scripts/shared_projection_tuning_report.py --format json
+```
+
+To include platform shared-followup alongside dependency domains:
+
+```bash
+PYTHONPATH=src:. uv run python scripts/shared_projection_tuning_report.py --format table --include-platform
+```
+
+Use the report to pick a candidate setting, then validate that change in
+staging with:
+
+- `pcg_shared_projection_pending_intents`
+- `pcg_shared_projection_oldest_pending_age_seconds`
+- `pcg_fact_queue_depth`
+- `pcg_fact_queue_oldest_age_seconds`
+
 ## Recommended Test Order
 
 ### 1. Run the smallest targeted test first
