@@ -2,7 +2,54 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any
+
+from platform_context_graph.query.shared_projection_tuning import build_tuning_report
+from platform_context_graph.resolution.shared_projection.runtime import (
+    PLATFORM_INFRA_PROJECTION_DOMAIN,
+)
+
+
+@lru_cache(maxsize=2)
+def _cached_tuning_report(include_platform: bool) -> dict[str, object]:
+    """Return the deterministic tuning report for one projection domain set."""
+
+    return build_tuning_report(include_platform=include_platform)
+
+
+def _shared_projection_uses_platform_domain(
+    backlog: list[dict[str, Any]],
+) -> bool:
+    """Report whether the current backlog includes platform shared work."""
+
+    return any(
+        str(row.get("projection_domain") or "").strip()
+        == PLATFORM_INFRA_PROJECTION_DOMAIN
+        for row in backlog
+    )
+
+
+def _build_shared_projection_tuning(
+    backlog: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Return the status-safe tuning recommendation for the current backlog."""
+
+    if not backlog:
+        return None
+    include_platform = _shared_projection_uses_platform_domain(backlog)
+    report = _cached_tuning_report(include_platform)
+    return {
+        "projection_domains": list(report.get("projection_domains") or []),
+        "include_platform": include_platform,
+        "current_pending_intents": sum(
+            int(row.get("pending_intents") or 0) for row in backlog
+        ),
+        "current_oldest_pending_age_seconds": max(
+            float(row.get("oldest_pending_age_seconds") or 0.0) for row in backlog
+        ),
+        "recommended": dict(report.get("recommended") or {}),
+    }
 
 
 def count_pending_shared_projection_repositories(
@@ -67,6 +114,9 @@ def apply_shared_projection_pending_status(
 
     normalized = dict(payload)
     normalized["shared_projection_backlog"] = list(backlog or [])
+    normalized["shared_projection_tuning"] = _build_shared_projection_tuning(
+        normalized["shared_projection_backlog"]
+    )
     if pending_count is None:
         normalized["shared_projection_pending_repositories"] = int(
             normalized.get("shared_projection_pending_repositories") or 0

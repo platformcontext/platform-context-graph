@@ -6,6 +6,7 @@ from datetime import datetime
 from datetime import timezone
 
 from platform_context_graph.query import status as status_queries
+from platform_context_graph.query import status_shared_projection
 
 
 class _Store:
@@ -86,6 +87,27 @@ def test_get_ingester_status_surfaces_shared_projection_pending(
         lambda: shared_store,
     )
     monkeypatch.setattr(
+        status_shared_projection,
+        "build_tuning_report",
+        lambda *, include_platform=False: {
+            "include_platform": include_platform,
+            "projection_domains": (
+                ["repo_dependency", "workload_dependency"]
+                if not include_platform
+                else ["platform_infra", "repo_dependency", "workload_dependency"]
+            ),
+            "recommended": {
+                "setting": "4x2",
+                "partition_count": 4,
+                "batch_limit": 2,
+                "round_count": 2,
+                "processed_total": 32,
+                "peak_pending_total": 32,
+                "mean_processed_per_round": 16.0,
+            },
+        },
+    )
+    monkeypatch.setattr(
         status_queries, "_checkpoint_status_fallback", lambda _ingester: None
     )
 
@@ -104,6 +126,21 @@ def test_get_ingester_status_surfaces_shared_projection_pending(
             "oldest_pending_age_seconds": 33.0,
         }
     ]
+    assert result["shared_projection_tuning"] == {
+        "projection_domains": ["repo_dependency", "workload_dependency"],
+        "include_platform": False,
+        "current_pending_intents": 2,
+        "current_oldest_pending_age_seconds": 33.0,
+        "recommended": {
+            "setting": "4x2",
+            "partition_count": 4,
+            "batch_limit": 2,
+            "round_count": 2,
+            "processed_total": 32,
+            "peak_pending_total": 32,
+            "mean_processed_per_round": 16.0,
+        },
+    }
     assert queue.calls == ["run-123"]
     assert shared_store.calls == ["run-123"]
 
@@ -146,6 +183,7 @@ def test_get_ingester_status_ignores_shadow_pending_without_active_run(
     assert result["status"] == "idle"
     assert result["shared_projection_pending_repositories"] == 0
     assert result["shared_projection_backlog"] == []
+    assert result["shared_projection_tuning"] is None
     assert queue.calls == []
 
 
@@ -208,3 +246,90 @@ def test_get_ingester_status_preserves_existing_shared_pending_when_queue_unavai
     assert result["pending_repositories"] == 1
     assert result["completed_repositories"] == 3
     assert shared_store.calls == ["run-123"]
+
+
+def test_get_ingester_status_uses_platform_tuning_when_platform_backlog_present(
+    monkeypatch,
+) -> None:
+    """Status should expand the tuning recommendation for platform backlog."""
+
+    store = _Store(
+        {
+            "repository": {
+                "runtime_family": "ingester",
+                "ingester": "repository",
+                "provider": "repository",
+                "status": "completed",
+                "finalization_status": "completed",
+                "active_run_id": "run-123",
+                "repository_count": 4,
+                "pending_repositories": 0,
+                "completed_repositories": 4,
+                "failed_repositories": 0,
+                "updated_at": datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc),
+            }
+        }
+    )
+    queue = _Queue(pending_count=1)
+    shared_store = _SharedStore(
+        [
+            {
+                "projection_domain": "platform_infra",
+                "pending_depth": 1,
+                "oldest_age_seconds": 12.0,
+            }
+        ]
+    )
+    monkeypatch.setattr(status_queries, "get_runtime_status_store", lambda: store)
+    monkeypatch.setattr(status_queries, "get_fact_work_queue", lambda: queue)
+    monkeypatch.setattr(
+        status_queries,
+        "get_shared_projection_intent_store",
+        lambda: shared_store,
+    )
+    monkeypatch.setattr(
+        status_shared_projection,
+        "build_tuning_report",
+        lambda *, include_platform=False: {
+            "include_platform": include_platform,
+            "projection_domains": (
+                ["platform_infra", "repo_dependency", "workload_dependency"]
+                if include_platform
+                else ["repo_dependency", "workload_dependency"]
+            ),
+            "recommended": {
+                "setting": "4x2",
+                "partition_count": 4,
+                "batch_limit": 2,
+                "round_count": 2,
+                "processed_total": 48,
+                "peak_pending_total": 48,
+                "mean_processed_per_round": 24.0,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        status_queries, "_checkpoint_status_fallback", lambda _ingester: None
+    )
+
+    result = status_queries.get_ingester_status(object(), ingester="repository")
+
+    assert result["shared_projection_tuning"] == {
+        "projection_domains": [
+            "platform_infra",
+            "repo_dependency",
+            "workload_dependency",
+        ],
+        "include_platform": True,
+        "current_pending_intents": 1,
+        "current_oldest_pending_age_seconds": 12.0,
+        "recommended": {
+            "setting": "4x2",
+            "partition_count": 4,
+            "batch_limit": 2,
+            "round_count": 2,
+            "processed_total": 48,
+            "peak_pending_total": 48,
+            "mean_processed_per_round": 24.0,
+        },
+    }

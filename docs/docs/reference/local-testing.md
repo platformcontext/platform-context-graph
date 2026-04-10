@@ -138,6 +138,10 @@ staging with:
 - `pcg_fact_queue_depth`
 - `pcg_fact_queue_oldest_age_seconds`
 
+For deployed environments, `pcg workspace status --service-url ...` will also
+surface the live `shared_projection_tuning` recommendation whenever shared
+follow-up backlog is present.
+
 ## Recommended Test Order
 
 ### 1. Run the smallest targeted test first

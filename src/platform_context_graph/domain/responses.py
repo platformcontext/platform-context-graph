@@ -161,6 +161,11 @@ class IngesterStatusResponse(BaseModel):
     pending_repositories: int = 0
     completed_repositories: int = 0
     failed_repositories: int = 0
+    shared_projection_pending_repositories: int = 0
+    shared_projection_backlog: list[SharedProjectionBacklogItem] = Field(
+        default_factory=list
+    )
+    shared_projection_tuning: SharedProjectionTuningStatus | None = None
     scan_request_state: str = "idle"
     scan_request_token: str | None = None
     scan_requested_at: str | None = None
@@ -169,6 +174,42 @@ class IngesterStatusResponse(BaseModel):
     scan_completed_at: str | None = None
     scan_error_message: str | None = None
     updated_at: str | None = None
+
+
+class SharedProjectionBacklogItem(BaseModel):
+    """One shared-follow-up backlog summary entry in ingester status."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    projection_domain: str
+    pending_intents: int
+    oldest_pending_age_seconds: float
+
+
+class SharedProjectionTuningRecommendation(BaseModel):
+    """One deterministic shared-write tuning recommendation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    setting: str
+    partition_count: int
+    batch_limit: int
+    round_count: int
+    processed_total: int
+    peak_pending_total: int
+    mean_processed_per_round: float
+
+
+class SharedProjectionTuningStatus(BaseModel):
+    """Status-safe shared-write tuning summary for operators."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    projection_domains: list[str] = Field(default_factory=list)
+    include_platform: bool = False
+    current_pending_intents: int = 0
+    current_oldest_pending_age_seconds: float = 0.0
+    recommended: SharedProjectionTuningRecommendation
 
 
 class IngesterScanRequestResponse(BaseModel):

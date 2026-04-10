@@ -97,6 +97,28 @@ def render_remote_workspace_status(
         f"failed={status.get('failed_repositories', 0)} "
         f"pending={status.get('pending_repositories', 0)}"
     )
+    shared_tuning = status.get("shared_projection_tuning")
+    if isinstance(shared_tuning, dict):
+        pending_repositories = int(
+            status.get("shared_projection_pending_repositories", 0) or 0
+        )
+        pending_intents = int(shared_tuning.get("current_pending_intents", 0) or 0)
+        oldest_age_seconds = float(
+            shared_tuning.get("current_oldest_pending_age_seconds", 0.0) or 0.0
+        )
+        main_module.console.print(
+            "[cyan]Shared follow-up:[/cyan] "
+            f"repos={pending_repositories} "
+            f"intents={pending_intents} "
+            f"oldest={oldest_age_seconds:.1f}s"
+        )
+        recommendation = shared_tuning.get("recommended")
+        if isinstance(recommendation, dict):
+            recommended_setting = str(recommendation.get("setting") or "").strip()
+            if recommended_setting:
+                main_module.console.print(
+                    f"[cyan]Recommended tuning:[/cyan] {recommended_setting}"
+                )
 
 
 def run_remote_admin_reindex(

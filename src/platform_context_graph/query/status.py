@@ -81,6 +81,7 @@ def _default_status(ingester: str) -> dict[str, Any]:
         "failed_repositories": 0,
         "shared_projection_pending_repositories": 0,
         "shared_projection_backlog": [],
+        "shared_projection_tuning": None,
         "scan_request_state": "idle",
         "scan_request_token": None,
         "scan_requested_at": None,

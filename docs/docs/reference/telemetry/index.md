@@ -55,6 +55,10 @@ For shared-write debugging specifically:
   and shared follow-up growth answer different questions.
 - Pivot to traces when backlog exists but is not draining. Pivot to logs when
   you need the exact repository, run, generation, or partition owner involved.
+- The runtime status surface now carries `shared_projection_tuning` whenever
+  shared backlog is present, so operators can see the current recommended
+  partition/batch setting from `get_ingester_status` before opening the
+  separate admin tuning report.
 
 ## By Runtime
 
