@@ -7,23 +7,29 @@ from typing import Any
 
 def count_pending_shared_projection_repositories(
     queue: Any | None, *, source_run_id: str | None
-) -> int:
+) -> int | None:
     """Return the number of repositories still waiting on shared authoritative work."""
 
     if queue is None or not getattr(queue, "enabled", True):
-        return 0
+        return None
     count_fn = getattr(queue, "count_shared_projection_pending", None)
     if not callable(count_fn) or not source_run_id:
-        return 0
+        return None
     return int(count_fn(source_run_id=source_run_id) or 0)
 
 
 def apply_shared_projection_pending_status(
-    payload: dict[str, Any], *, pending_count: int
+    payload: dict[str, Any], *, pending_count: int | None
 ) -> dict[str, Any]:
     """Project shared-follow-up pending state into the public ingester payload."""
 
     normalized = dict(payload)
+    if pending_count is None:
+        normalized["shared_projection_pending_repositories"] = int(
+            normalized.get("shared_projection_pending_repositories") or 0
+        )
+        return normalized
+
     normalized["shared_projection_pending_repositories"] = max(pending_count, 0)
     if pending_count <= 0:
         return normalized

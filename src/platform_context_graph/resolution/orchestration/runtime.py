@@ -7,6 +7,7 @@ import threading
 import time
 from collections.abc import Callable
 
+from platform_context_graph.facts.state import get_shared_projection_intent_store
 from platform_context_graph.facts.work_queue.models import FactWorkItemRow
 from platform_context_graph.observability import get_observability
 from platform_context_graph.observability import initialize_observability
@@ -43,25 +44,40 @@ def _refresh_queue_metrics(queue: object) -> None:
     """Update queue depth and lag gauges when the queue supports snapshots."""
 
     snapshot_fn = getattr(queue, "list_queue_snapshot", None)
-    if not callable(snapshot_fn):
-        return
     observability = get_observability()
-    for row in snapshot_fn():
-        observability.set_fact_queue_depth(
-            component="resolution-engine",
-            work_type=row.work_type,
-            status=row.status,
-            depth=row.depth,
-        )
-        observability.set_fact_queue_oldest_age_seconds(
-            component="resolution-engine",
-            work_type=row.work_type,
-            status=row.status,
-            age_seconds=row.oldest_age_seconds,
-        )
+    if callable(snapshot_fn):
+        for row in snapshot_fn():
+            observability.set_fact_queue_depth(
+                component="resolution-engine",
+                work_type=row.work_type,
+                status=row.status,
+                depth=row.depth,
+            )
+            observability.set_fact_queue_oldest_age_seconds(
+                component="resolution-engine",
+                work_type=row.work_type,
+                status=row.status,
+                age_seconds=row.oldest_age_seconds,
+            )
     refresh_pool_metrics = getattr(queue, "refresh_pool_metrics", None)
     if callable(refresh_pool_metrics):
         refresh_pool_metrics(component="resolution-engine")
+    list_shared_backlog = getattr(
+        queue, "list_shared_projection_backlog_snapshot", None
+    )
+    shared_backlog_rows = list_shared_backlog() if callable(list_shared_backlog) else []
+    if not shared_backlog_rows:
+        shared_projection_store = get_shared_projection_intent_store()
+        list_shared_backlog = getattr(
+            shared_projection_store, "list_pending_backlog_snapshot", None
+        )
+        shared_backlog_rows = (
+            list_shared_backlog() if callable(list_shared_backlog) else []
+        )
+    observability.replace_shared_projection_backlog(
+        component="resolution-engine",
+        snapshot_rows=shared_backlog_rows,
+    )
 
 
 def run_queue_metrics_sampler_once(*, queue: object) -> None:

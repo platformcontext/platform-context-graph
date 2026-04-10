@@ -105,3 +105,42 @@ def test_get_ingester_status_ignores_shadow_pending_without_active_run(
     assert result["status"] == "idle"
     assert result["shared_projection_pending_repositories"] == 0
     assert queue.calls == []
+
+
+def test_get_ingester_status_preserves_existing_shared_pending_when_queue_unavailable(
+    monkeypatch,
+) -> None:
+    """Status should preserve known shared pending state without a fresh queue."""
+
+    store = _Store(
+        {
+            "repository": {
+                "runtime_family": "ingester",
+                "ingester": "repository",
+                "provider": "repository",
+                "status": "completed",
+                "finalization_status": "completed",
+                "active_phase": "awaiting_shared_projection",
+                "active_run_id": "run-123",
+                "repository_count": 4,
+                "pending_repositories": 1,
+                "completed_repositories": 3,
+                "failed_repositories": 0,
+                "shared_projection_pending_repositories": 2,
+                "updated_at": datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc),
+            }
+        }
+    )
+    monkeypatch.setattr(status_queries, "get_runtime_status_store", lambda: store)
+    monkeypatch.setattr(status_queries, "get_fact_work_queue", lambda: None)
+    monkeypatch.setattr(
+        status_queries, "_checkpoint_status_fallback", lambda _ingester: None
+    )
+
+    result = status_queries.get_ingester_status(object(), ingester="repository")
+
+    assert result["status"] == "completed"
+    assert result["active_phase"] == "awaiting_shared_projection"
+    assert result["shared_projection_pending_repositories"] == 2
+    assert result["pending_repositories"] == 1
+    assert result["completed_repositories"] == 3

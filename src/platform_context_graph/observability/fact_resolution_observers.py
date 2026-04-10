@@ -15,6 +15,10 @@ class RuntimeFactResolutionObserverMixin:
     _fact_queue_depth: dict[tuple[tuple[str, str], ...], int]
     _fact_queue_oldest_age_seconds: dict[tuple[tuple[str, str], ...], float]
     _resolution_workers_active: dict[tuple[tuple[str, str], ...], int]
+    _shared_projection_pending_intents: dict[tuple[tuple[str, str], ...], int]
+    _shared_projection_oldest_pending_age_seconds: dict[
+        tuple[tuple[str, str], ...], float
+    ]
 
     def _observe_fact_queue_depth(self, _options: Any) -> list[Observation]:
         """Produce facts queue depth observations."""
@@ -43,4 +47,30 @@ class RuntimeFactResolutionObserverMixin:
             return [
                 Observation(value, dict(key))
                 for key, value in sorted(self._resolution_workers_active.items())
+            ]
+
+    def _observe_shared_projection_pending_intents(
+        self, _options: Any
+    ) -> list[Observation]:
+        """Produce pending shared-projection backlog observations."""
+
+        with self._lock:
+            return [
+                Observation(value, dict(key))
+                for key, value in sorted(
+                    self._shared_projection_pending_intents.items()
+                )
+            ]
+
+    def _observe_shared_projection_oldest_pending_age_seconds(
+        self, _options: Any
+    ) -> list[Observation]:
+        """Produce oldest pending shared-projection backlog age observations."""
+
+        with self._lock:
+            return [
+                Observation(value, dict(key))
+                for key, value in sorted(
+                    self._shared_projection_oldest_pending_age_seconds.items()
+                )
             ]

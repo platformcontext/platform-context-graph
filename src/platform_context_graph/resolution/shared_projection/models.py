@@ -24,6 +24,15 @@ class SharedProjectionIntentRow:
     completed_at: datetime | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class SharedProjectionBacklogSnapshotRow:
+    """Aggregated pending shared-projection backlog for one domain."""
+
+    projection_domain: str
+    pending_depth: int
+    oldest_age_seconds: float
+
+
 def _normalize_json_value(value: Any) -> Any:
     """Return a JSON-stable representation for deterministic intent ids."""
 
@@ -85,4 +94,8 @@ def build_shared_projection_intent(
     )
 
 
-__all__ = ["SharedProjectionIntentRow", "build_shared_projection_intent"]
+__all__ = [
+    "SharedProjectionBacklogSnapshotRow",
+    "SharedProjectionIntentRow",
+    "build_shared_projection_intent",
+]

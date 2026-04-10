@@ -84,6 +84,12 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
     _resolution_workers_active: dict[ActiveStateKey, int] = field(
         init=False, default_factory=dict
     )
+    _shared_projection_pending_intents: dict[ActiveStateKey, int] = field(
+        init=False, default_factory=dict
+    )
+    _shared_projection_oldest_pending_age_seconds: dict[ActiveStateKey, float] = field(
+        init=False, default_factory=dict
+    )
     _process_rss_bytes: int = field(init=False, default=-1)
     _cgroup_memory_bytes: int = field(init=False, default=-1)
     _cgroup_memory_limit_bytes: int = field(init=False, default=-1)

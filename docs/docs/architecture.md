@@ -18,6 +18,13 @@ partitioned follow-up domains keyed by stable lock identifiers. That preserves
 commit-worker throughput without letting concurrent writers fight over the same
 dense shared nodes.
 
+That split means steady-state health needs two different backlog views:
+
+- the fact work queue tells you whether repository projection work is arriving,
+  waiting, retrying, or dead-lettering
+- the shared projection backlog tells you whether authoritative shared follow-up
+  domains are draining after repo-local projection finishes
+
 ## Local Request Path
 
 ```mermaid
@@ -92,6 +99,14 @@ without a separate runtime hop.
 Status surfaces can report `awaiting_shared_projection` while authoritative
 shared follow-up remains pending for an accepted repository generation.
 
+The observability surface mirrors that split:
+
+- `pcg_fact_queue_depth` and `pcg_fact_queue_oldest_age_seconds` describe the
+  fact work queue
+- `pcg_shared_projection_pending_intents` and
+  `pcg_shared_projection_oldest_pending_age_seconds` describe authoritative
+  shared follow-up backlog by projection domain
+
 ## Recovery And Explainability
 
 Phase 3 keeps more operational meaning in Postgres instead of only in logs:
@@ -129,9 +144,14 @@ Each primary runtime has a distinct telemetry surface:
 - **Ingester**: repo queue wait, parse timing, fact emission timing, workspace
   pressure
 - **Resolution Engine**: queue depth and age, claim latency, projection stage
-  timing, retries, dead letters, decision volume
+  timing, retries, dead letters, decision volume, shared follow-up backlog
 - **Facts layer**: fact-store and queue SQL latency, row volume, pool
   saturation, backlog
+
+Operationally, use metrics first to decide whether the bottleneck is still in
+the fact queue or has moved into shared follow-up. Then use traces to inspect
+the slow path and logs to recover the exact repository, run, or generation
+context.
 
 See:
 

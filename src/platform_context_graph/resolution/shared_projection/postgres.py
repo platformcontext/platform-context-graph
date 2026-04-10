@@ -11,6 +11,7 @@ from typing import Any
 
 from platform_context_graph.postgres_schema import schema_is_ready
 
+from .models import SharedProjectionBacklogSnapshotRow
 from .models import SharedProjectionIntentRow
 from .schema import SHARED_PROJECTION_INTENT_SCHEMA
 
@@ -239,6 +240,39 @@ class PostgresSharedProjectionIntentStore:
             )
             rows = cursor.fetchall()
         return [SharedProjectionIntentRow(**row) for row in rows]
+
+    def list_pending_backlog_snapshot(
+        self,
+    ) -> list[SharedProjectionBacklogSnapshotRow]:
+        """Return aggregate pending intent depth and age by projection domain."""
+
+        now = _utc_now()
+        with self._cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT projection_domain,
+                       COUNT(*) AS pending_depth,
+                       COALESCE(
+                           EXTRACT(EPOCH FROM (%(now)s - MIN(created_at))),
+                           0
+                       ) AS oldest_age_seconds
+                FROM shared_projection_intents
+                WHERE completed_at IS NULL
+                GROUP BY projection_domain
+                ORDER BY projection_domain ASC
+                """,
+                {"now": now},
+            )
+            rows = cursor.fetchall()
+        return [
+            SharedProjectionBacklogSnapshotRow(
+                projection_domain=str(row.get("projection_domain") or "").strip(),
+                pending_depth=int(row.get("pending_depth") or 0),
+                oldest_age_seconds=float(row.get("oldest_age_seconds") or 0.0),
+            )
+            for row in rows
+            if str(row.get("projection_domain") or "").strip()
+        ]
 
     def mark_intents_completed(self, *, intent_ids: list[str]) -> None:
         """Mark one or more shared projection intents completed."""

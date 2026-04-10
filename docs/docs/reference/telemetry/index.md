@@ -14,6 +14,7 @@ Use this page to choose where to look first.
 | --- | --- | --- |
 | API is slow or erroring | API metrics | API traces and logs |
 | backlog is growing | queue depth and queue age metrics | resolution-engine traces and queue logs |
+| shared follow-up looks stuck | shared-projection backlog metrics | resolution-engine traces and shared-projection logs |
 | one repository is slow | ingester metrics | ingester traces and resolution-engine stage timings |
 | graph writes are slow | resolution metrics | Neo4j traces and graph persistence logs |
 | content reads are missing or slow | API metrics and content metrics | content traces and logs |
@@ -44,6 +45,17 @@ flowchart LR
   request or projection.
 - Use **logs** when you need exact repository, run, or work-item context.
 
+For shared-write debugging specifically:
+
+- Start with `pcg_shared_projection_pending_intents` and
+  `pcg_shared_projection_oldest_pending_age_seconds` to see whether
+  authoritative platform or dependency follow-up is actually building up.
+- Use `pcg_fact_queue_depth` and `pcg_fact_queue_oldest_age_seconds` alongside
+  the shared-projection gauges rather than instead of them. Fact queue growth
+  and shared follow-up growth answer different questions.
+- Pivot to traces when backlog exists but is not draining. Pivot to logs when
+  you need the exact repository, run, generation, or partition owner involved.
+
 ## By Runtime
 
 ### API
@@ -70,10 +82,34 @@ flowchart LR
 ### Resolution Engine
 
 - Metrics answer claim latency, worker activity, stage duration, stage output
-  volume, stage failures, and dead-letter pressure.
+  volume, stage failures, dead-letter pressure, and shared authoritative
+  follow-up backlog.
 - Traces show one projection attempt from claim to graph write.
 - Logs capture work-item completion, retry, dead-letter, and per-stage failure
   context.
+
+Shared-write-specific gauges:
+
+- `pcg_shared_projection_pending_intents` reports how many uncompleted shared
+  projection intents exist per `pcg.projection_domain`.
+- `pcg_shared_projection_oldest_pending_age_seconds` reports the age of the
+  oldest uncompleted shared projection intent per `pcg.projection_domain`.
+
+These gauges are intentionally domain-scoped and do not carry repository
+identity. Use traces and logs when you need repository-level detail.
+
+## Rollout Validation For Shared-Write Changes
+
+When validating shared-write runtime changes in staging or production:
+
+1. Start with `pcg_fact_queue_depth`, `pcg_fact_queue_oldest_age_seconds`,
+   `pcg_shared_projection_pending_intents`, and
+   `pcg_shared_projection_oldest_pending_age_seconds`.
+2. Confirm backlog trends are flat-to-down, not simply that pods are up.
+3. If shared backlog remains non-zero, inspect traces for the affected
+   projection domain before assuming the fact queue is the bottleneck.
+4. Use logs last to extract exact repository, source run, generation, or lease
+   owner context for the stuck or slow path.
 
 ## Prometheus And ServiceMonitor
 
