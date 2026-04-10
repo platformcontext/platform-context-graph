@@ -220,6 +220,25 @@ def test_list_pending_backlog_snapshot_groups_by_projection_domain(
     assert snapshot[1].pending_depth == 1
 
 
+def test_list_pending_backlog_snapshot_filters_by_source_run(monkeypatch) -> None:
+    """Pending backlog snapshots should support one source-run filter."""
+
+    store = PostgresSharedProjectionIntentStore("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = []
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    store.list_pending_backlog_snapshot(source_run_id="run-123")
+
+    _query, params = cursor.execute.call_args.args
+    assert params["source_run_id"] == "run-123"
+
+
 def test_upsert_intents_preserves_completed_at_on_conflict(monkeypatch) -> None:
     """Re-emitting the same intent should not reopen a completed row."""
 

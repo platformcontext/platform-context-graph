@@ -161,7 +161,9 @@ class _Queue:
         del repository_ids
         return {("repository:r_payments", "run-123"): "snapshot-abc"}
 
-    def complete_shared_projection_domain_by_generation(self, **_kwargs: object) -> None:
+    def complete_shared_projection_domain_by_generation(
+        self, **_kwargs: object
+    ) -> None:
         return None
 
     def list_shared_projection_backlog_snapshot(
@@ -216,7 +218,9 @@ def test_shared_projection_backlog_metrics_return_to_zero_after_dependency_follo
     runtime_mod.run_queue_metrics_sampler_once(queue=queue)
     before_points = _metric_points(metric_reader)
 
-    session = cast(object, type("Session", (), {"run": lambda self, query, **params: []})())
+    session = cast(
+        object, type("Session", (), {"run": lambda self, query, **params: []})()
+    )
     process_dependency_partition_once(
         session,
         shared_projection_intent_store=store,
@@ -238,11 +242,14 @@ def test_shared_projection_backlog_metrics_return_to_zero_after_dependency_follo
             "pcg.projection_domain": "repo_dependency",
         },
     ) == [1]
-    assert _matching_values(
-        after_points,
-        "pcg_shared_projection_pending_intents",
-        **{
-            "pcg.component": "resolution-engine",
-            "pcg.projection_domain": "repo_dependency",
-        },
-    ) == []
+    assert (
+        _matching_values(
+            after_points,
+            "pcg_shared_projection_pending_intents",
+            **{
+                "pcg.component": "resolution-engine",
+                "pcg.projection_domain": "repo_dependency",
+            },
+        )
+        == []
+    )

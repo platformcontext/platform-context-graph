@@ -243,6 +243,8 @@ class PostgresSharedProjectionIntentStore:
 
     def list_pending_backlog_snapshot(
         self,
+        *,
+        source_run_id: str | None = None,
     ) -> list[SharedProjectionBacklogSnapshotRow]:
         """Return aggregate pending intent depth and age by projection domain."""
 
@@ -258,10 +260,14 @@ class PostgresSharedProjectionIntentStore:
                        ) AS oldest_age_seconds
                 FROM shared_projection_intents
                 WHERE completed_at IS NULL
+                  AND (
+                      %(source_run_id)s IS NULL
+                      OR source_run_id = %(source_run_id)s
+                  )
                 GROUP BY projection_domain
                 ORDER BY projection_domain ASC
                 """,
-                {"now": now},
+                {"now": now, "source_run_id": source_run_id},
             )
             rows = cursor.fetchall()
         return [
