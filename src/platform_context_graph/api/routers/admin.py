@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from ..dependencies import get_database
 from ...query.status import request_ingester_reindex_control
+from ...query.shared_projection_tuning import build_tuning_report
 from ...core.jobs import JobManager
 from ...runtime.status_store_runtime import (
     update_latest_repository_coverage_finalization,
@@ -375,6 +376,15 @@ async def refinalize_status() -> dict[str, Any]:
         "last_error": _finalization_state["last_error"],
         "repo_count": _finalization_state["repo_count"],
     }
+
+
+@router.get("/shared-projection/tuning-report")
+async def shared_projection_tuning_report(
+    include_platform: bool = False,
+) -> dict[str, Any]:
+    """Return the deterministic shared-write tuning report payload."""
+
+    return build_tuning_report(include_platform=include_platform)
 
 
 @router.post("/reindex")

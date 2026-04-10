@@ -52,6 +52,26 @@ def test_build_default_report_returns_deterministic_recommendation() -> None:
     assert report["recommended"]["round_count"] == 2
 
 
+def test_build_default_report_uses_shared_query_module(monkeypatch) -> None:
+    """The script support should delegate to the shared query module."""
+
+    module = _load_module(
+        SUPPORT_PATH,
+        "shared_projection_tuning_report_support_delegate",
+    )
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        module,
+        "_build_tuning_report",
+        lambda **kwargs: captured.update(kwargs) or {"recommended": {"setting": "2x1"}},
+    )
+
+    report = module.build_tuning_report(include_platform=True)
+
+    assert report["recommended"]["setting"] == "2x1"
+    assert captured["include_platform"] is True
+
+
 def test_main_prints_json_report(monkeypatch) -> None:
     """The CLI should print JSON when requested."""
 

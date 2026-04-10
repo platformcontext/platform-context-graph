@@ -10,6 +10,7 @@ from . import (
     impact,
     infra,
     repositories,
+    shared_projection_tuning,
     status,
 )
 
@@ -23,5 +24,6 @@ __all__ = [
     "impact",
     "infra",
     "repositories",
+    "shared_projection_tuning",
     "status",
 ]

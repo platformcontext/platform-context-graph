@@ -6,9 +6,11 @@ from typing import Any
 
 import typer
 
+from ..query.shared_projection_tuning import format_tuning_report_table
 from .remote import (
     RemoteAPIError,
     print_json_payload,
+    remote_mode_requested,
     request_json,
     resolve_remote_target,
 )
@@ -142,6 +144,46 @@ def run_remote_admin_reindex(
         f"[cyan]Scope:[/cyan] {payload.get('scope')} "
         f"[dim](force={payload.get('force')})[/dim]"
     )
+
+
+def render_admin_tuning_report(
+    main_module: Any,
+    *,
+    output_format: str,
+    include_platform: bool,
+    service_url: str | None,
+    api_key: str | None,
+    profile: str | None,
+    local_report_builder: Any,
+) -> None:
+    """Render the deterministic shared-write tuning report locally or remotely."""
+
+    if remote_mode_requested(service_url=service_url, profile=profile):
+        remote_target = resolve_remote_target(
+            service_url=service_url,
+            api_key=api_key,
+            profile=profile,
+            require_remote=True,
+        )
+        try:
+            payload = request_json(
+                remote_target,
+                method="GET",
+                path="/api/v0/admin/shared-projection/tuning-report",
+                params={"include_platform": "true"} if include_platform else None,
+            )
+        except RemoteAPIError as exc:
+            main_module.console.print(
+                f"[bold red]Remote tuning report failed:[/bold red] {exc}"
+            )
+            raise typer.Exit(code=1) from exc
+    else:
+        payload = local_report_builder(include_platform=include_platform)
+
+    if output_format == "json":
+        main_module.console.print_json(data=payload, default=str)
+        return
+    main_module.console.print(format_tuning_report_table(payload).rstrip("\n"))
 
 
 def render_remote_search(
