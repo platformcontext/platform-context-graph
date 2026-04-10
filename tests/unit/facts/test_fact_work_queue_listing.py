@@ -60,10 +60,35 @@ def test_list_work_items_preserves_status_and_failure_filters(monkeypatch) -> No
     )
 
     query, params = cursor.execute.call_args.args
-    assert "status = ANY(%(statuses)s)" in query
+    assert "status = ANY(%(statuses)s::text[])" in query
+    assert "repository_id = %(repository_id)s" in query
     assert "failure_class = %(failure_class)s" in query
     assert params["statuses"] == ["failed"]
     assert params["failure_class"] == "timeout"
     assert params["limit"] == 25
     assert rows[0].work_item_id == "work-1"
     assert rows[0].lease_owner == "indexing"
+
+
+def test_list_work_items_omits_status_filter_when_statuses_are_absent(
+    monkeypatch,
+) -> None:
+    """Work-item listing should not bind a status array when no filter is set."""
+
+    queue = PostgresFactWorkQueue("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = []
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(queue, "_cursor", _cursor)
+
+    queue.list_work_items(limit=10)
+
+    query, params = cursor.execute.call_args.args
+    assert "status = ANY(%(statuses)s::text[])" not in query
+    assert "WHERE" not in query
+    assert "statuses" not in params
+    assert params["limit"] == 10
