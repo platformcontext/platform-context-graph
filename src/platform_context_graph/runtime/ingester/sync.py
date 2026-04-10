@@ -11,6 +11,8 @@ from platform_context_graph.observability import (
     get_observability,
     initialize_observability,
 )
+from platform_context_graph.facts.state import get_fact_work_queue
+from platform_context_graph.repository_identity import repository_metadata
 
 from .bootstrap import _request_index
 from .config import RepoSyncConfig, RepoSyncResult
@@ -22,9 +24,11 @@ from .git import (
     filesystem_sync_all,
     git_token,
     repo_checkout_name,
+    repo_remote_url,
     update_existing_repositories,
     update_existing_repositories_detailed,
 )
+from .repository_selection import archived_skip_summary
 from .retry import classify_sync_error, retry_after_seconds
 from .sync_operations import (
     _run_sync_filesystem as _run_sync_filesystem_impl,
@@ -208,6 +212,7 @@ def _run_sync_git(
 ) -> RepoSyncResult:
     """Run a Git-backed repo sync cycle."""
 
+    token = git_token(config)
     return _run_sync_git_impl(
         config,
         index_workspace=index_workspace,
@@ -222,7 +227,52 @@ def _run_sync_git(
         record_phase_fn=record_phase,
         request_index_fn=_request_index,
         log_fn=log,
+        skip_archived_repository_work_items_fn=lambda repository_ids: (
+            _skip_archived_repository_work_items(
+                config,
+                archived_repository_ids=repository_ids,
+            )
+        ),
     )
+
+
+def _skip_archived_repository_work_items(
+    config: RepoSyncConfig,
+    *,
+    archived_repository_ids: list[str],
+) -> int:
+    """Reclassify archived repositories' actionable work items to skipped."""
+
+    queue = get_fact_work_queue()
+    if (
+        not archived_repository_ids
+        or queue is None
+        or not getattr(queue, "enabled", True)
+    ):
+        return 0
+
+    operator_note = "Repository is archived and excluded by repo-sync policy."
+    skipped_rows = 0
+    for repo_id in archived_repository_ids:
+        metadata = repository_metadata(
+            name=repo_id.rsplit("/", 1)[-1],
+            local_path=None,
+            remote_url=repo_remote_url(config, repo_id, token=None),
+            repo_slug=repo_id,
+            has_remote=True,
+        )
+        rows = queue.skip_repository_work_items(
+            repository_id=str(metadata["id"]),
+            operator_note=operator_note,
+        )
+        skipped_rows += len(rows)
+
+    if skipped_rows:
+        log(
+            config.component,
+            f"Reclassified {skipped_rows} archived-repository work item(s) to skipped",
+        )
+    return skipped_rows
 
 
 def run_repo_sync_cycle(

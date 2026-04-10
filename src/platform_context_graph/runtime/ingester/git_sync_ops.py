@@ -168,13 +168,14 @@ def _fetch_branch(
 ):
     """Fetch one branch and retry once if a stale shallow lock is present."""
 
+    remote_tracking_ref = f"refs/remotes/origin/{branch}"
     fetch_command = [
         "git",
         "-C",
         str(repo_dir),
         "fetch",
         "origin",
-        branch,
+        f"+refs/heads/{branch}:{remote_tracking_ref}",
         f"--depth={clone_depth}",
     ]
     fetch_result = subprocess_run_fn(
@@ -212,10 +213,7 @@ def _set_remote_head_branch(
         env=env,
     )
     if set_head_result.returncode != 0:
-        warning_logger(
-            f"[{component}] Failed to update origin/HEAD for {repo_dir.name}: "
-            f"{set_head_result.stderr.strip()}"
-        )
+        return
 
 
 def refreshed_origin_url(remote_url: str, token: str | None) -> str | None:
@@ -275,7 +273,7 @@ def clone_missing_repositories_detailed_impl(
     config: RepoSyncConfig,
     token: str | None,
     *,
-    list_repo_identifiers_fn,
+    repository_ids,
     repo_checkout_name_fn,
     repo_remote_url_fn,
     git_env_fn,
@@ -284,7 +282,7 @@ def clone_missing_repositories_detailed_impl(
     """Clone repositories that are not already present in the workspace."""
 
     config.repos_dir.mkdir(parents=True, exist_ok=True)
-    discovered = list_repo_identifiers_fn(config, token)
+    discovered = list(repository_ids)
     cloned_paths: list[Path] = []
     skipped = 0
     failed = 0
@@ -491,6 +489,7 @@ def update_existing_repositories_detailed_impl(
     config: RepoSyncConfig,
     token: str | None,
     force_default_branch_refresh: bool = False,
+    selected_repository_paths: set[Path] | None = None,
     *,
     git_env_fn,
     refresh_repository_origin_url_fn,
@@ -511,6 +510,12 @@ def update_existing_repositories_detailed_impl(
         component=config.component,
     ):
         for repo_dir in managed_repository_roots(config.repos_dir):
+            resolved_repo_dir = repo_dir.resolve()
+            if (
+                selected_repository_paths is not None
+                and resolved_repo_dir not in selected_repository_paths
+            ):
+                continue
             cache_key = branchless_retry_key(config, repo_dir)
             if not force_default_branch_refresh:
                 expires_at = retry_cache.get(cache_key)
@@ -558,6 +563,7 @@ def update_existing_repositories_detailed_impl(
                 retry_cache.pop(cache_key, None)
                 default_branch = default_branch_resolution.branch
                 heal_remote_head = default_branch_resolution.from_remote_head
+                remote_tracking_ref = f"refs/remotes/origin/{default_branch}"
                 fetch_result = _fetch_branch(
                     repo_dir,
                     default_branch,
@@ -589,6 +595,9 @@ def update_existing_repositories_detailed_impl(
                         if remote_branch_resolution.branch != default_branch:
                             default_branch = remote_branch_resolution.branch
                             heal_remote_head = remote_branch_resolution.from_remote_head
+                            remote_tracking_ref = (
+                                f"refs/remotes/origin/{default_branch}"
+                            )
                             fetch_result = _fetch_branch(
                                 repo_dir,
                                 default_branch,
@@ -623,7 +632,7 @@ def update_existing_repositories_detailed_impl(
                     env=env,
                 ).stdout.strip()
                 remote_head = subprocess_run_fn(
-                    ["git", "-C", str(repo_dir), "rev-parse", "FETCH_HEAD"],
+                    ["git", "-C", str(repo_dir), "rev-parse", remote_tracking_ref],
                     capture_output=True,
                     text=True,
                     check=False,
@@ -633,7 +642,14 @@ def update_existing_repositories_detailed_impl(
                     continue
 
                 reset_result = subprocess_run_fn(
-                    ["git", "-C", str(repo_dir), "reset", "--hard", "FETCH_HEAD"],
+                    [
+                        "git",
+                        "-C",
+                        str(repo_dir),
+                        "reset",
+                        "--hard",
+                        remote_tracking_ref,
+                    ],
                     capture_output=True,
                     text=True,
                     check=False,

@@ -209,6 +209,7 @@ class RepoSyncConfig:
     sync_lock_dir: Path
     component: str
     repository_rules: tuple[RepoSyncRepositoryRule, ...] = ()
+    include_archived_repos: bool = False
 
     @classmethod
     def from_env(cls, *, component: str) -> "RepoSyncConfig":
@@ -252,6 +253,10 @@ class RepoSyncConfig:
             sync_lock_dir=repos_dir / ".pcg-sync.lock",
             component=component,
             repository_rules=repository_rules,
+            include_archived_repos=(
+                os.getenv("PCG_INCLUDE_ARCHIVED_REPOS", "").strip().lower()
+                in {"1", "true", "yes", "on"}
+            ),
         )
 
 

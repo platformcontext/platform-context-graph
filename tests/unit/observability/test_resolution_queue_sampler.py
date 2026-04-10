@@ -114,6 +114,52 @@ def test_run_queue_metrics_sampler_once_emits_queue_and_pool_gauges(
     )
 
 
+def test_run_queue_metrics_sampler_once_emits_skipped_queue_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Independent queue sampling should expose skipped queue status separately."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+    class _SkippedQueue:
+        def list_queue_snapshot(self) -> list[FactWorkQueueSnapshotRow]:
+            return [
+                FactWorkQueueSnapshotRow(
+                    work_type="project-git-facts",
+                    status="skipped",
+                    depth=2,
+                    oldest_age_seconds=7.0,
+                )
+            ]
+
+        def refresh_pool_metrics(self, *, component: str) -> None:
+            del component
+
+    reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    metric_reader = InMemoryMetricReader()
+    initialize_observability(
+        component="resolution-engine",
+        metric_reader=metric_reader,
+    )
+
+    runtime_mod.run_queue_metrics_sampler_once(queue=_SkippedQueue())
+
+    points = _metric_points(metric_reader)
+
+    assert _matching_values(
+        points,
+        "pcg_fact_queue_depth",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.work_type": "project-git-facts",
+            "pcg.queue_status": "skipped",
+        },
+    )
+
+
 def test_start_resolution_engine_starts_independent_sampler(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
