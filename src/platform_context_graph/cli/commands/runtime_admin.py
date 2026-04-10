@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from typing import Any
 
 import typer
@@ -12,7 +13,15 @@ from ..remote_admin_facts import run_remote_admin_facts_dead_letter
 from ..remote_admin_facts import run_remote_admin_facts_list_decisions
 from ..remote_admin_facts import run_remote_admin_facts_list_work_items
 from ..remote_admin_facts import run_remote_admin_facts_replay
+from ..remote_commands import render_admin_tuning_report
 from ..remote_commands import run_remote_admin_reindex
+
+
+def _build_tuning_report(*, include_platform: bool) -> dict[str, object]:
+    """Load the deterministic tuning builder only when the command needs it."""
+
+    module = import_module("platform_context_graph.query.shared_projection_tuning")
+    return module.build_tuning_report(include_platform=include_platform)
 
 
 def register_admin_commands(main_module: Any, admin_app: typer.Typer) -> None:
@@ -67,6 +76,49 @@ def register_admin_commands(main_module: Any, admin_app: typer.Typer) -> None:
             ingester=ingester,
             scope=scope,
             force=force,
+        )
+
+    @admin_app.command("tuning-report")
+    def admin_tuning_report(
+        service_url: str | None = typer.Option(
+            None,
+            "--service-url",
+            help="Base URL of the remote PlatformContextGraph HTTP service.",
+        ),
+        api_key: str | None = typer.Option(
+            None,
+            "--api-key",
+            help="Bearer token for the remote PlatformContextGraph HTTP service.",
+        ),
+        profile: str | None = typer.Option(
+            None,
+            "--profile",
+            help="Named remote profile used to resolve service URL and token.",
+        ),
+        output_format: str = typer.Option(
+            "table",
+            "--format",
+            help="Output format: table or json.",
+        ),
+        include_platform: bool = typer.Option(
+            False,
+            "--include-platform",
+            help="Include platform shared-followup work in the deterministic report.",
+        ),
+    ) -> None:
+        """Render the deterministic shared-write tuning report."""
+
+        normalized_format = str(output_format or "table").strip().lower()
+        if normalized_format not in {"table", "json"}:
+            raise typer.BadParameter("--format must be 'table' or 'json'.")
+        render_admin_tuning_report(
+            main_module,
+            output_format=normalized_format,
+            include_platform=include_platform,
+            service_url=service_url,
+            api_key=api_key,
+            profile=profile,
+            local_report_builder=_build_tuning_report,
         )
 
     @admin_facts_app.command("replay")

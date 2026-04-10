@@ -103,5 +103,14 @@ def setup_fact_resolution_instruments(runtime: Any) -> None:
         "pcg_resolution_workers_active",
         callbacks=[runtime._observe_resolution_workers_active],
     )
+    runtime.meter.create_observable_gauge(
+        "pcg_shared_projection_pending_intents",
+        callbacks=[runtime._observe_shared_projection_pending_intents],
+    )
+    runtime.meter.create_observable_gauge(
+        "pcg_shared_projection_oldest_pending_age_seconds",
+        callbacks=[runtime._observe_shared_projection_oldest_pending_age_seconds],
+        unit="s",
+    )
     setup_fact_scaling_instruments(runtime)
     setup_projection_hot_path_instruments(runtime)

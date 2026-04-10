@@ -28,6 +28,7 @@ from .otel import (
     current_transport,
     request_context_scope,
 )
+from .runtime_scope import _IndexRunScope
 
 
 @dataclass(slots=True)
@@ -82,6 +83,12 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         init=False, default_factory=dict
     )
     _resolution_workers_active: dict[ActiveStateKey, int] = field(
+        init=False, default_factory=dict
+    )
+    _shared_projection_pending_intents: dict[ActiveStateKey, int] = field(
+        init=False, default_factory=dict
+    )
+    _shared_projection_oldest_pending_age_seconds: dict[ActiveStateKey, float] = field(
         init=False, default_factory=dict
     )
     _process_rss_bytes: int = field(init=False, default=-1)
@@ -489,11 +496,3 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
                 self._checkpoint_pending_repositories.pop(key, None)
             else:
                 self._checkpoint_pending_repositories[key] = pending_count
-
-
-@dataclass(slots=True)
-class _IndexRunScope:
-    """Mutable status returned to callers inside an index-run context."""
-
-    status: str
-    finalization_status: str

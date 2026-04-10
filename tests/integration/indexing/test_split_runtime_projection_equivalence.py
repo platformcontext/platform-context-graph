@@ -16,6 +16,9 @@ from platform_context_graph.resolution.orchestration.runtime import (
     run_resolution_iteration,
 )
 from platform_context_graph.resolution.shared_projection.models import (
+    SharedProjectionBacklogSnapshotRow,
+)
+from platform_context_graph.resolution.shared_projection.models import (
     SharedProjectionIntentRow,
 )
 from platform_context_graph.resolution.shared_projection.models import (
@@ -103,6 +106,28 @@ class _InMemorySharedIntentStore:
             and row.projection_domain == projection_domain
         )
 
+    def list_pending_backlog_snapshot(self) -> list[SharedProjectionBacklogSnapshotRow]:
+        pending_by_domain: dict[str, int] = {}
+        oldest_by_domain: dict[str, float] = {}
+        now = _utc_now(10)
+        for row in self.rows:
+            if row.completed_at is not None or row.intent_id in self.completed_ids:
+                continue
+            pending_by_domain[row.projection_domain] = (
+                pending_by_domain.get(row.projection_domain, 0) + 1
+            )
+            age_seconds = max((now - row.created_at).total_seconds(), 0.0)
+            current_oldest = oldest_by_domain.get(row.projection_domain, 0.0)
+            oldest_by_domain[row.projection_domain] = max(current_oldest, age_seconds)
+        return [
+            SharedProjectionBacklogSnapshotRow(
+                projection_domain=projection_domain,
+                pending_depth=pending_depth,
+                oldest_age_seconds=oldest_by_domain.get(projection_domain, 0.0),
+            )
+            for projection_domain, pending_depth in sorted(pending_by_domain.items())
+        ]
+
 
 class _FakeSession:
     """Minimal session that records graph writes for equivalence checks."""
@@ -137,6 +162,7 @@ class _ResolutionQueue:
         self.completed_work_item_id: str | None = None
         self.pending_calls: list[dict[str, object]] = []
         self.domain_completion_calls: list[dict[str, object]] = []
+        self.shared_store: _InMemorySharedIntentStore | None = None
 
     def claim_work_item(
         self,
@@ -175,6 +201,13 @@ class _ResolutionQueue:
 
     def list_queue_snapshot(self) -> list[object]:
         return []
+
+    def list_shared_projection_backlog_snapshot(
+        self,
+    ) -> list[SharedProjectionBacklogSnapshotRow]:
+        if self.shared_store is None:
+            return []
+        return self.shared_store.list_pending_backlog_snapshot()
 
 
 def _fact_store() -> MagicMock:
@@ -298,6 +331,9 @@ def test_split_runtime_entrypoints_converge_after_inline_followup() -> None:
             updated_at=_utc_now(),
         )
     )
+    runtime_queue.shared_store = shared_store_runtime
+
+    pending_before = runtime_queue.list_shared_projection_backlog_snapshot()
 
     processed = run_resolution_iteration(
         queue=runtime_queue,
@@ -310,9 +346,12 @@ def test_split_runtime_entrypoints_converge_after_inline_followup() -> None:
         lease_owner="resolution-engine",
         lease_ttl_seconds=60,
     )
+    pending_after = runtime_queue.list_shared_projection_backlog_snapshot()
 
     assert "shared_projection" not in inline_metrics
     assert processed is True
+    assert pending_before
+    assert pending_after == []
     assert runtime_queue.completed_work_item_id == "work-runtime"
     assert not runtime_queue.pending_calls
     assert inline_queue.complete_shared_projection_domain_by_generation.called

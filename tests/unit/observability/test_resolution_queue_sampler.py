@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import cast
 
 import pytest
@@ -70,6 +71,15 @@ class _SamplerQueue:
             available=2,
             waiting=1,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class _SharedBacklogRow:
+    """One shared-projection backlog row for sampler tests."""
+
+    projection_domain: str
+    pending_depth: int
+    oldest_age_seconds: float
 
 
 def test_run_queue_metrics_sampler_once_emits_queue_and_pool_gauges(
@@ -158,6 +168,53 @@ def test_run_queue_metrics_sampler_once_emits_skipped_queue_status(
             "pcg.queue_status": "skipped",
         },
     )
+
+
+def test_run_queue_metrics_sampler_once_prefers_queue_shared_backlog_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Queue-owned shared backlog snapshots should drive the shared gauges."""
+
+    pytest.importorskip("opentelemetry.sdk")
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+    class _SharedBacklogQueue(_SamplerQueue):
+        def list_shared_projection_backlog_snapshot(self) -> list[_SharedBacklogRow]:
+            return [
+                _SharedBacklogRow(
+                    projection_domain="platform_runtime",
+                    pending_depth=4,
+                    oldest_age_seconds=19.0,
+                )
+            ]
+
+    reset_observability_for_tests()
+    monkeypatch.delenv("OTEL_SDK_DISABLED", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    metric_reader = InMemoryMetricReader()
+    initialize_observability(
+        component="resolution-engine",
+        metric_reader=metric_reader,
+    )
+    monkeypatch.setattr(
+        runtime_mod,
+        "get_shared_projection_intent_store",
+        lambda: None,
+        raising=False,
+    )
+
+    runtime_mod.run_queue_metrics_sampler_once(queue=_SharedBacklogQueue())
+
+    points = _metric_points(metric_reader)
+
+    assert _matching_values(
+        points,
+        "pcg_shared_projection_pending_intents",
+        **{
+            "pcg.component": "resolution-engine",
+            "pcg.projection_domain": "platform_runtime",
+        },
+    ) == [4]
 
 
 def test_start_resolution_engine_starts_independent_sampler(

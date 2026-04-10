@@ -195,3 +195,25 @@ async def test_reindex_rejects_unknown_scope() -> None:
 
     assert exc_info.value.status_code == 400
     assert "workspace" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_shared_projection_tuning_report_returns_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The admin router should expose the deterministic tuning report payload."""
+
+    monkeypatch.setattr(
+        admin,
+        "build_tuning_report",
+        lambda **kwargs: {
+            "projection_domains": ["repo_dependency"],
+            "include_platform": kwargs["include_platform"],
+            "recommended": {"setting": "4x2"},
+        },
+    )
+
+    response = await admin.shared_projection_tuning_report(include_platform=True)
+
+    assert response["include_platform"] is True
+    assert response["recommended"]["setting"] == "4x2"

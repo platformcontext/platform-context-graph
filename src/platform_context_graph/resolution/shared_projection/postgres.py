@@ -11,6 +11,7 @@ from typing import Any
 
 from platform_context_graph.postgres_schema import schema_is_ready
 
+from .models import SharedProjectionBacklogSnapshotRow
 from .models import SharedProjectionIntentRow
 from .schema import SHARED_PROJECTION_INTENT_SCHEMA
 
@@ -69,7 +70,35 @@ _REQUIRED_SHARED_PROJECTION_COLUMNS = {
 _REQUIRED_SHARED_PROJECTION_INDEXES = (
     "shared_projection_intents_repo_run_idx",
     "shared_projection_intents_pending_idx",
+    "shared_projection_intents_pending_run_idx",
 )
+
+_LIST_PENDING_BACKLOG_SQL = """
+SELECT projection_domain,
+       COUNT(*) AS pending_depth,
+       COALESCE(
+           EXTRACT(EPOCH FROM (%(now)s - MIN(created_at))),
+           0
+       ) AS oldest_age_seconds
+FROM shared_projection_intents
+WHERE completed_at IS NULL
+GROUP BY projection_domain
+ORDER BY projection_domain ASC
+"""
+
+_LIST_PENDING_BACKLOG_BY_RUN_SQL = """
+SELECT projection_domain,
+       COUNT(*) AS pending_depth,
+       COALESCE(
+           EXTRACT(EPOCH FROM (%(now)s - MIN(created_at))),
+           0
+       ) AS oldest_age_seconds
+FROM shared_projection_intents
+WHERE completed_at IS NULL
+  AND source_run_id = %(source_run_id)s
+GROUP BY projection_domain
+ORDER BY projection_domain ASC
+"""
 
 
 def _intent_params(entry: SharedProjectionIntentRow) -> dict[str, Any]:
@@ -239,6 +268,33 @@ class PostgresSharedProjectionIntentStore:
             )
             rows = cursor.fetchall()
         return [SharedProjectionIntentRow(**row) for row in rows]
+
+    def list_pending_backlog_snapshot(
+        self,
+        *,
+        source_run_id: str | None = None,
+    ) -> list[SharedProjectionBacklogSnapshotRow]:
+        """Return aggregate pending intent depth and age by projection domain."""
+
+        now = _utc_now()
+        if source_run_id is None:
+            query = _LIST_PENDING_BACKLOG_SQL
+            params = {"now": now}
+        else:
+            query = _LIST_PENDING_BACKLOG_BY_RUN_SQL
+            params = {"now": now, "source_run_id": source_run_id}
+        with self._cursor() as cursor:
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+        return [
+            SharedProjectionBacklogSnapshotRow(
+                projection_domain=str(row.get("projection_domain") or "").strip(),
+                pending_depth=int(row.get("pending_depth") or 0),
+                oldest_age_seconds=float(row.get("oldest_age_seconds") or 0.0),
+            )
+            for row in rows
+            if str(row.get("projection_domain") or "").strip()
+        ]
 
     def mark_intents_completed(self, *, intent_ids: list[str]) -> None:
         """Mark one or more shared projection intents completed."""

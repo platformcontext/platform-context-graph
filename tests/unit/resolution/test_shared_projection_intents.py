@@ -18,6 +18,7 @@ from platform_context_graph.resolution.shared_projection.emission import (
 from platform_context_graph.resolution.shared_projection.models import (
     build_shared_projection_intent,
 )
+from platform_context_graph.resolution.shared_projection import postgres as postgres_mod
 from platform_context_graph.resolution.shared_projection.postgres import (
     PostgresSharedProjectionIntentStore,
 )
@@ -88,6 +89,12 @@ def _utc_now() -> datetime:
     return datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
 
 
+def _patch_jsonb(monkeypatch) -> None:
+    """Avoid requiring a live psycopg Jsonb adapter in unit tests."""
+
+    monkeypatch.setattr(postgres_mod, "Jsonb", lambda payload: payload)
+
+
 def test_build_shared_projection_intent_uses_generation_in_identity() -> None:
     """Intent identity should be stable per generation, not just repo/run."""
 
@@ -126,6 +133,7 @@ def test_build_shared_projection_intent_uses_generation_in_identity() -> None:
 def test_upsert_and_list_shared_projection_intents_round_trip(monkeypatch) -> None:
     """Intent storage should preserve domain, partition, and generation fields."""
 
+    _patch_jsonb(monkeypatch)
     store = PostgresSharedProjectionIntentStore("postgresql://example")
     cursor = MagicMock()
     cursor.fetchall.return_value = [
@@ -174,9 +182,69 @@ def test_upsert_and_list_shared_projection_intents_round_trip(monkeypatch) -> No
     assert intents[0].generation_id == "snapshot-abc"
 
 
+def test_list_pending_backlog_snapshot_groups_by_projection_domain(
+    monkeypatch,
+) -> None:
+    """Pending backlog snapshots should aggregate depth and age per domain."""
+
+    store = PostgresSharedProjectionIntentStore("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = [
+        {
+            "projection_domain": "platform_runtime",
+            "pending_depth": 3,
+            "oldest_age_seconds": 18.5,
+        },
+        {
+            "projection_domain": "workload_dependency",
+            "pending_depth": 1,
+            "oldest_age_seconds": 7.0,
+        },
+    ]
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    snapshot = store.list_pending_backlog_snapshot()
+
+    query, params = cursor.execute.call_args.args
+    assert "GROUP BY projection_domain" in query
+    assert params is not None
+    assert snapshot[0].projection_domain == "platform_runtime"
+    assert snapshot[0].pending_depth == 3
+    assert snapshot[0].oldest_age_seconds == 18.5
+    assert snapshot[1].projection_domain == "workload_dependency"
+    assert snapshot[1].pending_depth == 1
+
+
+def test_list_pending_backlog_snapshot_filters_by_source_run(monkeypatch) -> None:
+    """Pending backlog snapshots should support one source-run filter."""
+
+    store = PostgresSharedProjectionIntentStore("postgresql://example")
+    cursor = MagicMock()
+    cursor.fetchall.return_value = []
+
+    @contextmanager
+    def _cursor():
+        yield cursor
+
+    monkeypatch.setattr(store, "_cursor", _cursor)
+
+    store.list_pending_backlog_snapshot(source_run_id="run-123")
+
+    query, params = cursor.execute.call_args.args
+    assert "source_run_id = %(source_run_id)s" in query
+    assert "%(source_run_id)s IS NULL" not in query
+    assert params["source_run_id"] == "run-123"
+
+
 def test_upsert_intents_preserves_completed_at_on_conflict(monkeypatch) -> None:
     """Re-emitting the same intent should not reopen a completed row."""
 
+    _patch_jsonb(monkeypatch)
     store = PostgresSharedProjectionIntentStore("postgresql://example")
     cursor = MagicMock()
 
@@ -219,6 +287,7 @@ def test_ensure_schema_upgrades_existing_shared_projection_tables() -> None:
     assert "shared_projection_intents" in queries
     assert "ADD COLUMN IF NOT EXISTS completed_at" in queries
     assert "CREATE TABLE IF NOT EXISTS shared_projection_partition_leases" in queries
+    assert "shared_projection_intents_pending_run_idx" in queries
     assert store._initialized is True
 
 

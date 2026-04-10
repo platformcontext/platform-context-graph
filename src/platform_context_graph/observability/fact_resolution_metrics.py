@@ -9,12 +9,14 @@ from .fact_resolution_instruments import setup_fact_resolution_instruments
 from .fact_resolution_observers import RuntimeFactResolutionObserverMixin
 from .fact_scaling_metrics import RuntimeFactScalingMetricsMixin
 from .projection_hot_path_metrics import RuntimeProjectionHotPathMetricsMixin
+from .shared_projection_metrics import RuntimeSharedProjectionMetricsMixin
 
 
 class RuntimeFactResolutionMetricsMixin(
     RuntimeFactResolutionObserverMixin,
     RuntimeProjectionHotPathMetricsMixin,
     RuntimeFactScalingMetricsMixin,
+    RuntimeSharedProjectionMetricsMixin,
 ):
     """Provide facts-first and resolution-engine metric helpers."""
 

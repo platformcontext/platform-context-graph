@@ -131,6 +131,42 @@ def test_admin_reindex_posts_remote_request(
 
 
 @patch("platform_context_graph.cli.remote.requests.request")
+def test_admin_tuning_report_fetches_remote_report(
+    mock_request: MagicMock,
+) -> None:
+    """`pcg admin tuning-report` should fetch the deterministic admin report."""
+
+    mock_request.return_value = _Response(
+        {
+            "projection_domains": ["repo_dependency", "workload_dependency"],
+            "scenarios": [{"setting": "4x2", "round_count": 2}],
+            "recommended": {"setting": "4x2", "round_count": 2},
+        }
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "tuning-report",
+            "--service-url",
+            "https://pcg.example.com",
+            "--include-platform",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Recommended setting: 4x2" in _combined_output(result)
+    _args, kwargs = mock_request.call_args
+    assert kwargs["method"] == "GET"
+    assert (
+        kwargs["url"]
+        == "https://pcg.example.com/api/v0/admin/shared-projection/tuning-report"
+    )
+    assert kwargs["params"] == {"include_platform": "true"}
+
+
+@patch("platform_context_graph.cli.remote.requests.request")
 def test_admin_facts_replay_posts_remote_request(
     mock_request: MagicMock,
 ) -> None:
@@ -221,7 +257,9 @@ def test_admin_facts_list_posts_remote_request(
     assert result.exit_code == 0
     _args, kwargs = mock_request.call_args
     assert kwargs["method"] == "POST"
-    assert kwargs["url"] == "https://pcg.example.com/api/v0/admin/facts/work-items/query"
+    assert (
+        kwargs["url"] == "https://pcg.example.com/api/v0/admin/facts/work-items/query"
+    )
     assert kwargs["json"] == {
         "statuses": ["failed"],
         "repository_id": None,
@@ -401,7 +439,10 @@ def test_admin_facts_replay_events_posts_remote_request(
     assert result.exit_code == 0
     _args, kwargs = mock_request.call_args
     assert kwargs["method"] == "POST"
-    assert kwargs["url"] == "https://pcg.example.com/api/v0/admin/facts/replay-events/query"
+    assert (
+        kwargs["url"]
+        == "https://pcg.example.com/api/v0/admin/facts/replay-events/query"
+    )
     assert kwargs["json"] == {
         "repository_id": "repository:r_payments",
         "source_run_id": None,

@@ -6,9 +6,11 @@ from typing import Any
 
 import typer
 
+from ..query.shared_projection_tuning_format import format_tuning_report_table
 from .remote import (
     RemoteAPIError,
     print_json_payload,
+    remote_mode_requested,
     request_json,
     resolve_remote_target,
 )
@@ -95,6 +97,28 @@ def render_remote_workspace_status(
         f"failed={status.get('failed_repositories', 0)} "
         f"pending={status.get('pending_repositories', 0)}"
     )
+    shared_tuning = status.get("shared_projection_tuning")
+    if isinstance(shared_tuning, dict):
+        pending_repositories = int(
+            status.get("shared_projection_pending_repositories", 0) or 0
+        )
+        pending_intents = int(shared_tuning.get("current_pending_intents", 0) or 0)
+        oldest_age_seconds = float(
+            shared_tuning.get("current_oldest_pending_age_seconds", 0.0) or 0.0
+        )
+        main_module.console.print(
+            "[cyan]Shared follow-up:[/cyan] "
+            f"repos={pending_repositories} "
+            f"intents={pending_intents} "
+            f"oldest={oldest_age_seconds:.1f}s"
+        )
+        recommendation = shared_tuning.get("recommended")
+        if isinstance(recommendation, dict):
+            recommended_setting = str(recommendation.get("setting") or "").strip()
+            if recommended_setting:
+                main_module.console.print(
+                    f"[cyan]Recommended tuning:[/cyan] {recommended_setting}"
+                )
 
 
 def run_remote_admin_reindex(
@@ -142,6 +166,46 @@ def run_remote_admin_reindex(
         f"[cyan]Scope:[/cyan] {payload.get('scope')} "
         f"[dim](force={payload.get('force')})[/dim]"
     )
+
+
+def render_admin_tuning_report(
+    main_module: Any,
+    *,
+    output_format: str,
+    include_platform: bool,
+    service_url: str | None,
+    api_key: str | None,
+    profile: str | None,
+    local_report_builder: Any,
+) -> None:
+    """Render the deterministic shared-write tuning report locally or remotely."""
+
+    if remote_mode_requested(service_url=service_url, profile=profile):
+        remote_target = resolve_remote_target(
+            service_url=service_url,
+            api_key=api_key,
+            profile=profile,
+            require_remote=True,
+        )
+        try:
+            payload = request_json(
+                remote_target,
+                method="GET",
+                path="/api/v0/admin/shared-projection/tuning-report",
+                params={"include_platform": "true"} if include_platform else None,
+            )
+        except RemoteAPIError as exc:
+            main_module.console.print(
+                f"[bold red]Remote tuning report failed:[/bold red] {exc}"
+            )
+            raise typer.Exit(code=1) from exc
+    else:
+        payload = local_report_builder(include_platform=include_platform)
+
+    if output_format == "json":
+        main_module.console.print_json(data=payload, default=str)
+        return
+    main_module.console.print(format_tuning_report_table(payload).rstrip("\n"))
 
 
 def render_remote_search(
