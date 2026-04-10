@@ -18,7 +18,10 @@ def init_parse_worker() -> None:
     """Initialize the process-local parser registry once per worker."""
 
     global _WORKER_BUILDER
-    initialize_observability(component="repository")
+    initialize_observability(
+        component="repository",
+        allow_prometheus_scrape=False,
+    )
     _WORKER_BUILDER = SimpleNamespace(parsers=build_parser_registry(get_config_value))
 
 

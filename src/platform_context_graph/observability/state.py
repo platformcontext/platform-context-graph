@@ -68,6 +68,7 @@ def initialize_observability(
     app: FastAPI | None = None,
     span_exporter: SpanExporter | None = None,
     metric_reader: MetricReader | None = None,
+    allow_prometheus_scrape: bool = True,
 ) -> ObservabilityRuntime:
     """Create or reuse the process-wide observability runtime.
 
@@ -76,6 +77,8 @@ def initialize_observability(
         app: A FastAPI application to instrument, if one should be attached.
         span_exporter: An explicit span exporter override, typically for tests.
         metric_reader: An explicit metric reader override, typically for tests.
+        allow_prometheus_scrape: Whether this process may create the Prometheus
+            metric reader and bind the shared HTTP scrape listener.
 
     Returns:
         The shared observability runtime for the current process.
@@ -113,7 +116,9 @@ def initialize_observability(
                 metric_readers.append(
                     PeriodicExportingMetricReader(OTLPMetricExporter())
                 )
-            if prometheus_requested or "prometheus" in metric_exporters:
+            if allow_prometheus_scrape and (
+                prometheus_requested or "prometheus" in metric_exporters
+            ):
                 prometheus_reader = _create_prometheus_reader()
                 if prometheus_reader is not None:
                     metric_readers.append(prometheus_reader)
