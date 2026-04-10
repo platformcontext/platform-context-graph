@@ -2,11 +2,27 @@
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Callable, Iterable
 
 from .config import RepoSyncConfig, RepoSyncResult
 from .repository_layout import managed_repository_roots
+
+
+def _call_with_supported_kwargs(function: Callable[..., object], /, *args, **kwargs):
+    """Call a helper with only the keyword arguments it declares."""
+
+    signature = inspect.signature(function)
+    if any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    ):
+        return function(*args, **kwargs)
+    supported_kwargs = {
+        key: value for key, value in kwargs.items() if key in signature.parameters
+    }
+    return function(*args, **supported_kwargs)
 
 
 def _run_sync_filesystem(
@@ -92,6 +108,7 @@ def _run_sync_git(
     record_phase_fn: Callable[..., None],
     request_index_fn: Callable[..., None],
     log_fn: Callable[..., None],
+    skip_archived_repository_work_items_fn: Callable[[list[str]], None] | None = None,
 ) -> RepoSyncResult:
     """Run a Git-backed repo sync cycle."""
 
@@ -104,12 +121,21 @@ def _run_sync_git(
         except ValueError:
             return resolved_path.name
 
+    archived_repository_ids: list[str] = []
     token = git_token_fn(config)
-    discovered, cloned_paths, clone_skipped, clone_failed = (
-        clone_missing_repositories_detailed_fn(config, token)
+    discovered, cloned_paths, clone_skipped, clone_failed = _call_with_supported_kwargs(
+        clone_missing_repositories_detailed_fn,
+        config,
+        token,
+        archived_repository_ids_observer=archived_repository_ids.extend,
     )
-    updated_paths, update_failed = update_existing_repositories_detailed_fn(
-        config, token
+    if archived_repository_ids and skip_archived_repository_work_items_fn is not None:
+        skip_archived_repository_work_items_fn(archived_repository_ids)
+    updated_paths, update_failed = _call_with_supported_kwargs(
+        update_existing_repositories_detailed_fn,
+        config,
+        token,
+        selected_repository_ids=discovered,
     )
     cloned = len(cloned_paths)
     updated = len(updated_paths)

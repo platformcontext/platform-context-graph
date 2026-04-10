@@ -1434,7 +1434,7 @@ def test_update_existing_repositories_refreshes_https_origin_with_fresh_token(
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if command[3:] == ["rev-parse", "HEAD"]:
             return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
-        if command[3:] == ["rev-parse", "FETCH_HEAD"]:
+        if command[3:] == ["rev-parse", "refs/remotes/origin/main"]:
             return SimpleNamespace(returncode=0, stdout="remote-head\n", stderr="")
         if command[3:5] == ["reset", "--hard"]:
             return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -1469,7 +1469,7 @@ def test_update_existing_repositories_refreshes_https_origin_with_fresh_token(
         str(repo_dir),
         "fetch",
         "origin",
-        "main",
+        "+refs/heads/main:refs/remotes/origin/main",
         "--depth=1",
     ]
     assert get_url_call in calls
@@ -1532,7 +1532,7 @@ def test_update_existing_repositories_skips_origin_refresh_without_token(
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if command[3:] == ["rev-parse", "HEAD"]:
             return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
-        if command[3:] == ["rev-parse", "FETCH_HEAD"]:
+        if command[3:] == ["rev-parse", "refs/remotes/origin/main"]:
             return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
         raise AssertionError(f"unexpected command: {command}")
 
@@ -1709,7 +1709,7 @@ def test_update_existing_repositories_retries_after_stale_shallow_lock(
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if command[3:] == ["rev-parse", "HEAD"]:
             return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
-        if command[3:] == ["rev-parse", "FETCH_HEAD"]:
+        if command[3:] == ["rev-parse", "refs/remotes/origin/main"]:
             return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
         raise AssertionError(f"unexpected command: {command}")
 
@@ -1726,7 +1726,7 @@ def test_update_existing_repositories_retries_after_stale_shallow_lock(
             str(repo_dir),
             "fetch",
             "origin",
-            "main",
+            "+refs/heads/main:refs/remotes/origin/main",
             "--depth=1",
         ],
         [
@@ -1735,7 +1735,7 @@ def test_update_existing_repositories_retries_after_stale_shallow_lock(
             str(repo_dir),
             "fetch",
             "origin",
-            "main",
+            "+refs/heads/main:refs/remotes/origin/main",
             "--depth=1",
         ],
     ]
@@ -1921,20 +1921,20 @@ def test_update_existing_repositories_retries_with_remote_default_branch_after_f
             )
         if command[3:4] == ["fetch"]:
             fetch_calls.append(command)
-            if command[5] == "main":
+            if command[5].startswith("+refs/heads/main:"):
                 return SimpleNamespace(
                     returncode=128,
                     stdout="",
                     stderr="fatal: couldn't find remote ref main",
                 )
-            if command[5] == "master":
+            if command[5].startswith("+refs/heads/master:"):
                 return SimpleNamespace(returncode=0, stdout="", stderr="")
         if command[3:5] == ["remote", "set-head"]:
             set_head_calls.append(command)
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if command[3:] == ["rev-parse", "HEAD"]:
             return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
-        if command[3:] == ["rev-parse", "FETCH_HEAD"]:
+        if command[3:] == ["rev-parse", "refs/remotes/origin/master"]:
             return SimpleNamespace(returncode=0, stdout="local-head\n", stderr="")
         raise AssertionError(f"unexpected command: {command}")
 
@@ -1950,7 +1950,7 @@ def test_update_existing_repositories_retries_with_remote_default_branch_after_f
             str(repo_dir),
             "fetch",
             "origin",
-            "main",
+            "+refs/heads/main:refs/remotes/origin/main",
             "--depth=1",
         ],
         [
@@ -1959,7 +1959,7 @@ def test_update_existing_repositories_retries_with_remote_default_branch_after_f
             str(repo_dir),
             "fetch",
             "origin",
-            "master",
+            "+refs/heads/master:refs/remotes/origin/master",
             "--depth=1",
         ],
     ]

@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import base64
+import inspect
 import os
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Callable
 
 from ...cli.config_manager import get_config_value
 from .config import RepoSyncConfig, RepoSyncRepositoryRule, RepoSyncResult
-from .github_auth import github_api_request, github_app_token, github_headers
+from .github_auth import github_app_token
 from .git_sync_ops import (
     clone_missing_repositories_detailed_impl,
     filesystem_sync_all_impl,
@@ -18,10 +20,12 @@ from .git_sync_ops import (
     refreshed_origin_url as _refreshed_origin_url_impl,
     update_existing_repositories_detailed_impl,
 )
-from .repository_layout import (
-    discover_filesystem_repository_ids,
-    managed_repository_roots,
+from .repository_layout import managed_repository_roots
+from .repository_selection import (
+    archived_skip_summary,
+    discover_repository_selection,
 )
+from .support import log
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +140,21 @@ def _git_operation_env(config: RepoSyncConfig, token: str | None) -> dict[str, s
     return git_env(config, operation_token)
 
 
+def _call_with_supported_kwargs(function: Callable[..., object], /, *args, **kwargs):
+    """Call a helper with only the keyword arguments it declares."""
+
+    signature = inspect.signature(function)
+    if any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    ):
+        return function(*args, **kwargs)
+    supported_kwargs = {
+        key: value for key, value in kwargs.items() if key in signature.parameters
+    }
+    return function(*args, **supported_kwargs)
+
+
 def list_repo_identifiers(config: RepoSyncConfig, token: str | None) -> list[str]:
     """Discover repository identifiers for the configured source mode.
 
@@ -147,54 +166,7 @@ def list_repo_identifiers(config: RepoSyncConfig, token: str | None) -> list[str
         Repository identifiers suitable for checkout naming and cloning.
     """
 
-    if config.source_mode == "filesystem":
-        if config.filesystem_root is None:
-            raise ValueError("filesystem source mode requires PCG_FILESYSTEM_ROOT")
-        if config.repositories:
-            return sorted(
-                "/".join(part for part in repo.strip().strip("/").split("/") if part)
-                for repo in config.repositories
-                if repo.strip()
-            )
-        return discover_filesystem_repository_ids(config.filesystem_root)
-
-    if config.source_mode == "explicit":
-        return sorted(config.repositories)
-
-    if config.source_mode != "githubOrg":
-        raise ValueError(f"Unsupported PCG_REPO_SOURCE_MODE={config.source_mode}")
-    if not config.github_org:
-        raise ValueError("githubOrg source mode requires PCG_GITHUB_ORG")
-    if token is None:
-        raise ValueError("githubOrg source mode requires GitHub token or App auth")
-
-    repos: list[str] = []
-    page = 1
-    while len(repos) < config.repo_limit:
-        response = github_api_request(
-            "get",
-            f"https://api.github.com/orgs/{config.github_org}/repos",
-            headers=github_headers(token),
-            params={
-                "per_page": min(100, config.repo_limit - len(repos)),
-                "page": page,
-                "type": "all",
-            },
-            timeout=15,
-        )
-        items = response.json()
-        if not items:
-            break
-        repos.extend(item["full_name"] for item in items if item.get("full_name"))
-        page += 1
-    candidates = repos[: config.repo_limit]
-    if not config.repository_rules:
-        return candidates
-    return [
-        repo_id
-        for repo_id in candidates
-        if repository_matches_rules(repo_id, config.repository_rules)
-    ]
+    return discover_repository_selection(config, token).repository_ids
 
 
 def count_stale_checkouts(config: RepoSyncConfig, discovered: list[str]) -> int:
@@ -252,10 +224,19 @@ def run_workspace_sync(config: RepoSyncConfig) -> RepoSyncResult:
         )
 
     token = git_token(config)
+    selection = discover_repository_selection(config, token)
+    if selection.archived_repository_ids:
+        log(config.component, archived_skip_summary(selection.archived_repository_ids))
     discovered, cloned, skipped, clone_failed = clone_missing_repositories(
-        config, token
+        config,
+        token,
+        selected_repository_ids=selection.repository_ids,
     )
-    updated, update_failed = update_existing_repositories(config, token)
+    updated, update_failed = update_existing_repositories(
+        config,
+        token,
+        selected_repository_ids=selection.repository_ids,
+    )
     return RepoSyncResult(
         discovered=len(discovered),
         cloned=cloned,
@@ -349,18 +330,29 @@ def _refresh_repository_origin_url(
 
 
 def clone_missing_repositories(
-    config: RepoSyncConfig, token: str | None
+    config: RepoSyncConfig,
+    token: str | None,
+    *,
+    selected_repository_ids: list[str] | None = None,
+    archived_repository_ids_observer: Callable[[list[str]], None] | None = None,
 ) -> tuple[list[str], int, int, int]:
     """Clone repositories that are not already present in the workspace."""
 
     discovered, cloned_paths, skipped, failed = clone_missing_repositories_detailed(
-        config, token
+        config,
+        token,
+        selected_repository_ids=selected_repository_ids,
+        archived_repository_ids_observer=archived_repository_ids_observer,
     )
     return discovered, len(cloned_paths), skipped, failed
 
 
 def clone_missing_repositories_detailed(
-    config: RepoSyncConfig, token: str | None
+    config: RepoSyncConfig,
+    token: str | None,
+    *,
+    selected_repository_ids: list[str] | None = None,
+    archived_repository_ids_observer: Callable[[list[str]], None] | None = None,
 ) -> tuple[list[str], list[Path], int, int]:
     """Clone repositories that are not already present in the workspace.
 
@@ -373,10 +365,25 @@ def clone_missing_repositories_detailed(
         count, and failed count.
     """
 
-    return clone_missing_repositories_detailed_impl(
+    if selected_repository_ids is None:
+        if archived_repository_ids_observer is None:
+            selected_repository_ids = list_repo_identifiers(config, token)
+        else:
+            selection = discover_repository_selection(config, token)
+            selected_repository_ids = selection.repository_ids
+            if selection.archived_repository_ids:
+                log(
+                    config.component,
+                    archived_skip_summary(selection.archived_repository_ids),
+                )
+            archived_repository_ids_observer(selection.archived_repository_ids)
+
+    return _call_with_supported_kwargs(
+        clone_missing_repositories_detailed_impl,
         config,
         token,
-        list_repo_identifiers_fn=list_repo_identifiers,
+        repository_ids=selected_repository_ids,
+        list_repo_identifiers_fn=lambda *_args: selected_repository_ids,
         repo_checkout_name_fn=repo_checkout_name,
         repo_remote_url_fn=repo_remote_url,
         git_env_fn=_git_operation_env,
@@ -407,6 +414,7 @@ def update_existing_repositories(
     token: str | None,
     *,
     force_default_branch_refresh: bool = False,
+    selected_repository_ids: list[str] | None = None,
 ) -> tuple[int, int]:
     """Fetch and hard-reset repositories that changed upstream."""
 
@@ -414,6 +422,7 @@ def update_existing_repositories(
         config,
         token,
         force_default_branch_refresh=force_default_branch_refresh,
+        selected_repository_ids=selected_repository_ids,
     )
     return len(updated_paths), failed
 
@@ -423,6 +432,7 @@ def update_existing_repositories_detailed(
     token: str | None,
     *,
     force_default_branch_refresh: bool = False,
+    selected_repository_ids: list[str] | None = None,
 ) -> tuple[list[Path], int]:
     """Fetch and hard-reset repositories that changed upstream.
 
@@ -434,10 +444,23 @@ def update_existing_repositories_detailed(
         Tuple of updated repository paths and failed count.
     """
 
-    return update_existing_repositories_detailed_impl(
+    if selected_repository_ids is None:
+        selected_repository_ids = [
+            repo_dir.resolve().relative_to(config.repos_dir.resolve()).as_posix()
+            for repo_dir in managed_repository_roots(config.repos_dir)
+        ]
+
+    selected_repository_paths = {
+        (config.repos_dir / repo_checkout_name(repo_id)).resolve()
+        for repo_id in selected_repository_ids
+    }
+
+    return _call_with_supported_kwargs(
+        update_existing_repositories_detailed_impl,
         config,
         token,
         force_default_branch_refresh=force_default_branch_refresh,
+        selected_repository_paths=selected_repository_paths,
         git_env_fn=_git_operation_env,
         refresh_repository_origin_url_fn=_refresh_repository_origin_url,
         subprocess_run_fn=subprocess.run,

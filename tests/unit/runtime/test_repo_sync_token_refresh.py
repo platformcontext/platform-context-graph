@@ -32,10 +32,7 @@ def _decode_extraheader(env: dict[str, str]) -> str:
 
     config_count = int(env.get("GIT_CONFIG_COUNT", "0"))
     for index in range(config_count):
-        if (
-            env.get(f"GIT_CONFIG_KEY_{index}")
-            == "http.https://github.com/.extraheader"
-        ):
+        if env.get(f"GIT_CONFIG_KEY_{index}") == "http.https://github.com/.extraheader":
             header = env[f"GIT_CONFIG_VALUE_{index}"]
             encoded = header.removeprefix("AUTHORIZATION: basic ")
             return base64.b64decode(encoded).decode("utf-8")
@@ -65,7 +62,7 @@ def test_clone_missing_repositories_builds_git_env_for_each_repository(
         git_sync_ops.clone_missing_repositories_detailed_impl(
             config,
             "stale-token",
-            list_repo_identifiers_fn=lambda *_args: [
+            repository_ids=[
                 "boatsgroup/alpha",
                 "boatsgroup/beta",
             ],
@@ -120,7 +117,7 @@ def test_update_existing_repositories_builds_git_env_for_each_repository(
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if command[3:] == ["rev-parse", "HEAD"]:
             return SimpleNamespace(returncode=0, stdout="local\n", stderr="")
-        if command[3:] == ["rev-parse", "FETCH_HEAD"]:
+        if command[3:] == ["rev-parse", "refs/remotes/origin/main"]:
             return SimpleNamespace(returncode=0, stdout="remote\n", stderr="")
         if command[3:5] == ["reset", "--hard"]:
             return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -154,13 +151,19 @@ def test_clone_missing_repositories_refreshes_github_app_token_per_operation(
         _config,
         token,
         *,
-        list_repo_identifiers_fn,
+        repository_ids,
         repo_checkout_name_fn,
         repo_remote_url_fn,
         git_env_fn,
         subprocess_run_fn,
     ):
-        del token, list_repo_identifiers_fn, repo_checkout_name_fn, repo_remote_url_fn, subprocess_run_fn
+        del (
+            token,
+            repository_ids,
+            repo_checkout_name_fn,
+            repo_remote_url_fn,
+            subprocess_run_fn,
+        )
         refreshed_envs.append(git_env_fn(_config, "stale-token"))
         refreshed_envs.append(git_env_fn(_config, "stale-token"))
         return [], [], 0, 0
@@ -174,7 +177,11 @@ def test_clone_missing_repositories_refreshes_github_app_token_per_operation(
         lambda: f"fresh-token-{len(refreshed_envs) + 1}",
     )
 
-    git_module.clone_missing_repositories_detailed(config, "stale-token")
+    git_module.clone_missing_repositories_detailed(
+        config,
+        "stale-token",
+        selected_repository_ids=["boatsgroup/alpha", "boatsgroup/beta"],
+    )
 
     assert [_decode_extraheader(env) for env in refreshed_envs] == [
         "x-access-token:fresh-token-1",
@@ -198,11 +205,18 @@ def test_update_existing_repositories_refreshes_github_app_token_per_operation(
         token,
         *,
         force_default_branch_refresh,
+        selected_repository_paths,
         git_env_fn,
         refresh_repository_origin_url_fn,
         subprocess_run_fn,
     ):
-        del token, force_default_branch_refresh, refresh_repository_origin_url_fn, subprocess_run_fn
+        del (
+            token,
+            force_default_branch_refresh,
+            selected_repository_paths,
+            refresh_repository_origin_url_fn,
+            subprocess_run_fn,
+        )
         refreshed_envs.append(git_env_fn(_config, "stale-token"))
         refreshed_envs.append(git_env_fn(_config, "stale-token"))
         return [], 0

@@ -11,6 +11,7 @@ from .models import FactWorkItemRow
 from .support import utc_now
 
 _DEFAULT_DEAD_LETTER_ERROR = "Operator moved work item to dead letter"
+_ARCHIVED_SKIP_NOTE = "Repository is archived and excluded by repo-sync policy."
 
 
 def dead_letter_work_items(
@@ -91,6 +92,76 @@ def dead_letter_work_items(
                 "last_error": _DEFAULT_DEAD_LETTER_ERROR,
                 "operator_note": operator_note,
                 "limit": max(limit, 1),
+                "updated_at": updated_at,
+            },
+        ),
+        row_count=None,
+    )
+    return [FactWorkItemRow(**row) for row in rows]
+
+
+def skip_repository_work_items(
+    queue: Any,
+    *,
+    repository_id: str,
+    operator_note: str | None = None,
+) -> list[FactWorkItemRow]:
+    """Mark one repository's actionable work items as intentionally skipped."""
+
+    updated_at = utc_now()
+    rows = queue._record_operation(
+        operation="skip_repository_work_items",
+        callback=lambda: queue._fetchall(
+            """
+            WITH selected AS (
+                SELECT work_item_id
+                FROM fact_work_items
+                WHERE repository_id = %(repository_id)s
+                  AND status NOT IN ('completed', 'skipped')
+                ORDER BY updated_at ASC, work_item_id ASC
+            )
+            UPDATE fact_work_items
+            SET status = 'skipped',
+                lease_owner = NULL,
+                lease_expires_at = NULL,
+                failure_stage = 'repo_sync',
+                failure_class = %(failure_class)s,
+                failure_code = %(failure_code)s,
+                retry_disposition = %(retry_disposition)s,
+                dead_lettered_at = NULL,
+                last_attempt_finished_at = %(updated_at)s,
+                next_retry_at = NULL,
+                operator_note = %(operator_note)s,
+                updated_at = %(updated_at)s
+            WHERE work_item_id IN (SELECT work_item_id FROM selected)
+            RETURNING work_item_id,
+                      work_type,
+                      repository_id,
+                      source_run_id,
+                      lease_owner,
+                      lease_expires_at,
+                      status,
+                      attempt_count,
+                      last_error,
+                      failure_stage,
+                      error_class,
+                      failure_class,
+                      failure_code,
+                      retry_disposition,
+                      dead_lettered_at,
+                      last_attempt_started_at,
+                      last_attempt_finished_at,
+                      next_retry_at,
+                      operator_note,
+                      created_at,
+                      updated_at
+            """,
+            {
+                "repository_id": repository_id,
+                "failure_class": "skipped_repository",
+                "failure_code": "archived_repository",
+                "retry_disposition": "non_retryable",
+                "operator_note": operator_note or _ARCHIVED_SKIP_NOTE,
                 "updated_at": updated_at,
             },
         ),

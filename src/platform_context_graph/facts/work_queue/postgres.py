@@ -30,6 +30,7 @@ from .replay import replay_failed_work_items
 from .recovery import dead_letter_work_items
 from .recovery import list_replay_events
 from .recovery import request_backfill
+from .recovery import skip_repository_work_items
 from .schema import FACT_WORK_QUEUE_SCHEMA
 from .shared_completion import complete_shared_projection_domain
 from .shared_completion import complete_shared_projection_domain_by_generation
@@ -331,6 +332,11 @@ class PostgresFactWorkQueue:
         """Move selected work items into durable dead-letter state."""
 
         return dead_letter_work_items(self, **kwargs)
+
+    def skip_repository_work_items(self, **kwargs: Any) -> list[FactWorkItemRow]:
+        """Mark one repository's actionable work items as skipped."""
+
+        return skip_repository_work_items(self, **kwargs)
 
     def request_backfill(self, **kwargs: Any) -> FactBackfillRequestRow:
         """Persist one durable operator backfill request."""

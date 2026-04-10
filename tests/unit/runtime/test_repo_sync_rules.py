@@ -103,6 +103,9 @@ def test_git_discovery_applies_exact_and_regex_include_rules(
 
     repo_sync = importlib.import_module("platform_context_graph.runtime.ingester")
     git = importlib.import_module("platform_context_graph.runtime.ingester.git")
+    selection = importlib.import_module(
+        "platform_context_graph.runtime.ingester.repository_selection"
+    )
 
     config = repo_sync.RepoSyncConfig(
         repos_dir=Path("/tmp/repos"),
@@ -144,7 +147,7 @@ def test_git_discovery_applies_exact_and_regex_include_rules(
             )
         return _FakeResponse([])
 
-    monkeypatch.setattr(git, "github_api_request", fake_request)
+    monkeypatch.setattr(selection, "github_api_request", fake_request)
 
     assert git.list_repo_identifiers(config, token="token") == [
         "org/service-a",

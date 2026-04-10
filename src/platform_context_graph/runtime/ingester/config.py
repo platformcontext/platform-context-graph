@@ -196,6 +196,8 @@ class RepoSyncConfig:
         component: Observability component name for the runtime.
         repository_rules: Structured include rules loaded from
             ``PCG_REPOSITORY_RULES_JSON``.
+        include_archived_repos: Whether archived GitHub repositories should be
+            included during organization discovery.
     """
 
     repos_dir: Path
@@ -209,6 +211,7 @@ class RepoSyncConfig:
     sync_lock_dir: Path
     component: str
     repository_rules: tuple[RepoSyncRepositoryRule, ...] = ()
+    include_archived_repos: bool = False
 
     @classmethod
     def from_env(cls, *, component: str) -> "RepoSyncConfig":
@@ -220,6 +223,8 @@ class RepoSyncConfig:
         Environment:
             ``PCG_REPOSITORY_RULES_JSON`` supplies structured exact/regex include
             rules used by the repo-sync runtime.
+            ``PCG_INCLUDE_ARCHIVED_REPOS`` opts archived GitHub repositories into
+            org-wide discovery when set to a truthy value.
 
         Returns:
             Parsed repository sync configuration.
@@ -252,6 +257,10 @@ class RepoSyncConfig:
             sync_lock_dir=repos_dir / ".pcg-sync.lock",
             component=component,
             repository_rules=repository_rules,
+            include_archived_repos=(
+                os.getenv("PCG_INCLUDE_ARCHIVED_REPOS", "").strip().lower()
+                in {"1", "true", "yes", "on"}
+            ),
         )
 
 
