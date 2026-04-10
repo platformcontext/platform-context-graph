@@ -6,7 +6,7 @@ from typing import Any
 
 import typer
 
-from ..query.shared_projection_tuning import format_tuning_report_table
+from ..query.shared_projection_tuning_format import format_tuning_report_table
 from .remote import (
     RemoteAPIError,
     print_json_payload,

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from typing import Any
 
 import typer
 
-from ...query.shared_projection_tuning import build_tuning_report
 from ..remote_admin_facts import run_remote_admin_fact_backfill
 from ..remote_admin_facts import run_remote_admin_fact_replay_events
 from ..remote_admin_facts import run_remote_admin_facts_dead_letter
@@ -15,6 +15,13 @@ from ..remote_admin_facts import run_remote_admin_facts_list_work_items
 from ..remote_admin_facts import run_remote_admin_facts_replay
 from ..remote_commands import render_admin_tuning_report
 from ..remote_commands import run_remote_admin_reindex
+
+
+def _build_tuning_report(*, include_platform: bool) -> dict[str, object]:
+    """Load the deterministic tuning builder only when the command needs it."""
+
+    module = import_module("platform_context_graph.query.shared_projection_tuning")
+    return module.build_tuning_report(include_platform=include_platform)
 
 
 def register_admin_commands(main_module: Any, admin_app: typer.Typer) -> None:
@@ -111,7 +118,7 @@ def register_admin_commands(main_module: Any, admin_app: typer.Typer) -> None:
             service_url=service_url,
             api_key=api_key,
             profile=profile,
-            local_report_builder=build_tuning_report,
+            local_report_builder=_build_tuning_report,
         )
 
     @admin_facts_app.command("replay")

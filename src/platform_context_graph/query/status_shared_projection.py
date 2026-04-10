@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from functools import lru_cache
 from typing import Any
 
-from platform_context_graph.query.shared_projection_tuning import build_tuning_report
 from platform_context_graph.resolution.shared_projection.runtime import (
     PLATFORM_INFRA_PROJECTION_DOMAIN,
 )
+
+
+def build_tuning_report(*, include_platform: bool) -> dict[str, object]:
+    """Load the deterministic tuning report builder only when needed."""
+
+    module = import_module("platform_context_graph.query.shared_projection_tuning")
+    return module.build_tuning_report(include_platform=include_platform)
 
 
 @lru_cache(maxsize=2)

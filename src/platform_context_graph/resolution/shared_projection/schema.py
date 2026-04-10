@@ -28,6 +28,13 @@ CREATE INDEX IF NOT EXISTS shared_projection_intents_pending_idx
         completed_at,
         created_at
     );
+CREATE INDEX IF NOT EXISTS shared_projection_intents_pending_run_idx
+    ON shared_projection_intents (
+        source_run_id,
+        completed_at,
+        projection_domain,
+        created_at
+    );
 
 CREATE TABLE IF NOT EXISTS shared_projection_partition_leases (
     projection_domain TEXT NOT NULL,

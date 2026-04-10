@@ -70,7 +70,35 @@ _REQUIRED_SHARED_PROJECTION_COLUMNS = {
 _REQUIRED_SHARED_PROJECTION_INDEXES = (
     "shared_projection_intents_repo_run_idx",
     "shared_projection_intents_pending_idx",
+    "shared_projection_intents_pending_run_idx",
 )
+
+_LIST_PENDING_BACKLOG_SQL = """
+SELECT projection_domain,
+       COUNT(*) AS pending_depth,
+       COALESCE(
+           EXTRACT(EPOCH FROM (%(now)s - MIN(created_at))),
+           0
+       ) AS oldest_age_seconds
+FROM shared_projection_intents
+WHERE completed_at IS NULL
+GROUP BY projection_domain
+ORDER BY projection_domain ASC
+"""
+
+_LIST_PENDING_BACKLOG_BY_RUN_SQL = """
+SELECT projection_domain,
+       COUNT(*) AS pending_depth,
+       COALESCE(
+           EXTRACT(EPOCH FROM (%(now)s - MIN(created_at))),
+           0
+       ) AS oldest_age_seconds
+FROM shared_projection_intents
+WHERE completed_at IS NULL
+  AND source_run_id = %(source_run_id)s
+GROUP BY projection_domain
+ORDER BY projection_domain ASC
+"""
 
 
 def _intent_params(entry: SharedProjectionIntentRow) -> dict[str, Any]:
@@ -249,26 +277,14 @@ class PostgresSharedProjectionIntentStore:
         """Return aggregate pending intent depth and age by projection domain."""
 
         now = _utc_now()
+        if source_run_id is None:
+            query = _LIST_PENDING_BACKLOG_SQL
+            params = {"now": now}
+        else:
+            query = _LIST_PENDING_BACKLOG_BY_RUN_SQL
+            params = {"now": now, "source_run_id": source_run_id}
         with self._cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT projection_domain,
-                       COUNT(*) AS pending_depth,
-                       COALESCE(
-                           EXTRACT(EPOCH FROM (%(now)s - MIN(created_at))),
-                           0
-                       ) AS oldest_age_seconds
-                FROM shared_projection_intents
-                WHERE completed_at IS NULL
-                  AND (
-                      %(source_run_id)s IS NULL
-                      OR source_run_id = %(source_run_id)s
-                  )
-                GROUP BY projection_domain
-                ORDER BY projection_domain ASC
-                """,
-                {"now": now, "source_run_id": source_run_id},
-            )
+            cursor.execute(query, params)
             rows = cursor.fetchall()
         return [
             SharedProjectionBacklogSnapshotRow(

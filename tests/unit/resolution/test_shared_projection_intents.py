@@ -235,7 +235,9 @@ def test_list_pending_backlog_snapshot_filters_by_source_run(monkeypatch) -> Non
 
     store.list_pending_backlog_snapshot(source_run_id="run-123")
 
-    _query, params = cursor.execute.call_args.args
+    query, params = cursor.execute.call_args.args
+    assert "source_run_id = %(source_run_id)s" in query
+    assert "%(source_run_id)s IS NULL" not in query
     assert params["source_run_id"] == "run-123"
 
 
@@ -285,6 +287,7 @@ def test_ensure_schema_upgrades_existing_shared_projection_tables() -> None:
     assert "shared_projection_intents" in queries
     assert "ADD COLUMN IF NOT EXISTS completed_at" in queries
     assert "CREATE TABLE IF NOT EXISTS shared_projection_partition_leases" in queries
+    assert "shared_projection_intents_pending_run_idx" in queries
     assert store._initialized is True
 
 

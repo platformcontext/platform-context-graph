@@ -28,6 +28,7 @@ from .otel import (
     current_transport,
     request_context_scope,
 )
+from .runtime_scope import _IndexRunScope
 
 
 @dataclass(slots=True)
@@ -495,11 +496,3 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
                 self._checkpoint_pending_repositories.pop(key, None)
             else:
                 self._checkpoint_pending_repositories[key] = pending_count
-
-
-@dataclass(slots=True)
-class _IndexRunScope:
-    """Mutable status returned to callers inside an index-run context."""
-
-    status: str
-    finalization_status: str
