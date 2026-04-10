@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
+import multiprocessing
 from pathlib import Path
+import socket
 from types import SimpleNamespace
 
 import pytest
 
 from platform_context_graph.collectors.git.parse_execution import (
     parse_repository_snapshot_async,
+)
+from platform_context_graph.collectors.git.parse_worker import (
+    init_parse_worker,
+    parse_file_in_worker,
 )
 from platform_context_graph.parsers import registry as parser_registry
 
@@ -152,3 +159,51 @@ async def test_parse_repository_snapshot_uses_process_pool_dispatch_when_enabled
             (str(repo_path), str(file_path), False),
         )
     ]
+
+
+def _reserve_free_port() -> int:
+    """Return an unused localhost TCP port for test-only configuration."""
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def test_parse_worker_process_pool_succeeds_with_prometheus_enabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Prometheus-enabled child workers should not break the process pool."""
+
+    pytest.importorskip("opentelemetry.sdk")
+
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    first_file = repo_path / "alpha.py"
+    second_file = repo_path / "beta.py"
+    first_file.write_text("print('alpha')\n", encoding="utf-8")
+    second_file.write_text("print('beta')\n", encoding="utf-8")
+
+    monkeypatch.setenv("PCG_PROMETHEUS_METRICS_ENABLED", "true")
+    monkeypatch.setenv("PCG_PROMETHEUS_METRICS_PORT", str(_reserve_free_port()))
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+
+    with ProcessPoolExecutor(
+        max_workers=2,
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=init_parse_worker,
+    ) as executor:
+        first_result = executor.submit(
+            parse_file_in_worker,
+            str(repo_path),
+            str(first_file),
+            False,
+        ).result(timeout=15)
+        second_result = executor.submit(
+            parse_file_in_worker,
+            str(repo_path),
+            str(second_file),
+            False,
+        ).result(timeout=15)
+
+    assert first_result["path"] == str(first_file)
+    assert second_result["path"] == str(second_file)
