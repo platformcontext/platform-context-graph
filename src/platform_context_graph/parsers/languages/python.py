@@ -9,6 +9,7 @@ from platform_context_graph.utils.source_text import read_source_text
 from platform_context_graph.utils.tree_sitter_manager import execute_query
 
 from ..framework_semantics import build_framework_semantics
+from .python_sql_support import extract_python_sql_mappings
 from .python_support import (
     PY_QUERIES,
     calculate_complexity,
@@ -122,6 +123,7 @@ class PythonTreeSitterParser:
                     variables=variables,
                     classes=classes,
                 ),
+                "orm_table_mappings": extract_python_sql_mappings(source_code),
                 "is_dependency": is_dependency,
                 "lang": self.language_name,
             }

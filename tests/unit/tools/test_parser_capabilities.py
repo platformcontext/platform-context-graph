@@ -23,6 +23,7 @@ def test_load_language_capability_specs_exposes_known_languages() -> None:
     names = {spec["language"] for spec in specs}
 
     assert "python" in names
+    assert "sql" in names
     assert "typescript" in names
     assert "terraform" in names
     assert "kubernetes" in names

@@ -238,6 +238,176 @@ def test_trace_resource_to_code_has_minimal_db_backed_fallback():
     assert result["paths"][0]["evidence"]
 
 
+def test_content_entity_ids_resolve_through_uid_for_impact_queries():
+    db = make_mock_db(
+        {
+            "WHERE n.uid = $id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "content-entity:e_users",
+                        "name": "public.users",
+                        "type": "content_entity",
+                        "path": "/tmp/sql/schema.sql",
+                    }
+                )
+            ),
+            "WHERE coalesce(source.id, source.uid) = $id": MockResult(
+                records=[
+                    {
+                        "source": "content-entity:e_users",
+                        "source_type": "content_entity",
+                        "target": "repository:r_5f4f4b74",
+                        "target_type": "repository",
+                        "type": "MIGRATES",
+                        "confidence": 0.9,
+                        "reason": "Migration file updates the users table",
+                        "evidence": [
+                            {
+                                "source": "sql-migration",
+                                "detail": "V1__bootstrap.sql alters public.users",
+                                "weight": 0.9,
+                            }
+                        ],
+                    }
+                ]
+            ),
+        }
+    )
+
+    result = find_change_surface(db, target="content-entity:e_users")
+
+    assert result["target"]["id"] == "content-entity:e_users"
+    assert result["impacted"][0]["entity"]["id"] == "repository:r_5f4f4b74"
+
+
+def test_content_entity_impact_queries_bridge_path_only_file_nodes():
+    migration_path = "/tmp/sql/V1__bootstrap.sql"
+
+    def file_lookup(_query, **kwargs):
+        return MockResult(
+            single_record=MockRecord(
+                {
+                    "id": kwargs["id"],
+                    "name": "V1__bootstrap.sql",
+                    "type": "file",
+                    "path": kwargs["path"],
+                    "repo_id": "repository:r_5f4f4b74",
+                }
+            )
+        )
+
+    db = make_mock_db(
+        {
+            "WHERE n.uid = $id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "content-entity:e_users",
+                        "name": "public.users",
+                        "type": "content_entity",
+                        "path": "/tmp/sql/schema.sql",
+                    }
+                )
+            ),
+            "WHERE coalesce(source.id, source.uid) = $id": MockResult(
+                records=[
+                    {
+                        "source_id": None,
+                        "source_uid": None,
+                        "source_type": None,
+                        "source_name": None,
+                        "source_path": migration_path,
+                        "source_labels": ["File"],
+                        "target_id": None,
+                        "target_uid": "content-entity:e_users",
+                        "target_type": "content_entity",
+                        "target_name": "public.users",
+                        "target_path": "/tmp/sql/schema.sql",
+                        "target_labels": ["SqlTable"],
+                        "type": "MIGRATES",
+                        "confidence": 0.9,
+                        "reason": "Migration file updates the users table",
+                        "evidence": [
+                            {
+                                "source": "sql-migration",
+                                "detail": "V1__bootstrap.sql alters public.users",
+                                "weight": 0.9,
+                            }
+                        ],
+                    }
+                ]
+            ),
+            "WHERE f.path = $path": file_lookup,
+            "WHERE (source:File AND source.path = $path) OR (target:File AND target.path = $path)": MockResult(
+                records=[
+                    {
+                        "source_id": "repository:r_5f4f4b74",
+                        "source_uid": None,
+                        "source_type": "repository",
+                        "source_name": "api-node-search",
+                        "source_path": "/data/repos/api-node-search",
+                        "source_labels": ["Repository"],
+                        "target_id": None,
+                        "target_uid": None,
+                        "target_type": None,
+                        "target_name": None,
+                        "target_path": migration_path,
+                        "target_labels": ["File"],
+                        "type": "REPO_CONTAINS",
+                        "confidence": 1.0,
+                        "reason": "Repository contains the migration file",
+                        "evidence": [
+                            {
+                                "source": "repository-scan",
+                                "detail": migration_path,
+                                "weight": 1.0,
+                            }
+                        ],
+                    }
+                ]
+            ),
+            "WHERE r.id = $id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "repository:r_5f4f4b74",
+                        "name": "api-node-search",
+                        "path": "/data/repos/api-node-search",
+                    }
+                )
+            ),
+        }
+    )
+
+    change_surface = find_change_surface(db, target="content-entity:e_users")
+    trace = trace_resource_to_code(db, start="content-entity:e_users")
+
+    assert change_surface["target"]["id"] == "content-entity:e_users"
+    assert change_surface["impacted"][0]["entity"]["id"] == "repository:r_5f4f4b74"
+    assert trace["paths"][0]["target"]["id"] == "repository:r_5f4f4b74"
+
+
+def test_content_entity_snapshots_ignore_non_canonical_domain_type_fields():
+    db = make_mock_db(
+        {
+            "WHERE n.uid = $id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "content-entity:e_users",
+                        "name": "public.users",
+                        "type": "enum",
+                        "path": "/tmp/sql/schema.sql",
+                    }
+                )
+            ),
+            "WHERE coalesce(source.id, source.uid) = $id": MockResult(records=[]),
+        }
+    )
+
+    result = find_change_surface(db, target="content-entity:e_users")
+
+    assert result["target"]["id"] == "content-entity:e_users"
+    assert result["target"]["type"] == "content_entity"
+
+
 def test_find_change_surface_ignores_db_edges_without_canonical_endpoints():
     db = make_mock_db(
         {

@@ -5,7 +5,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+from platform_context_graph.core.database import graph_store_capabilities_for_backend
 from platform_context_graph.graph.schema.builder import _run_schema_statement
+from platform_context_graph.graph.schema.builder import _schema_statements_for_capabilities
 
 
 def test_run_schema_statement_retries_neo4j_fulltext_with_modern_syntax() -> None:
@@ -63,3 +65,20 @@ def test_run_schema_statement_does_not_retry_unrelated_failures() -> None:
         assert str(exc) == "constraint failure"
     else:
         raise AssertionError("Expected unrelated schema failures to be re-raised")
+
+
+def test_schema_statements_include_sql_content_entity_constraints() -> None:
+    """SQL labels should receive the same UID constraints as other content entities."""
+
+    statements = _schema_statements_for_capabilities(
+        graph_store_capabilities_for_backend("neo4j")
+    )
+
+    assert any(
+        "FOR (n:SqlTable) REQUIRE n.uid IS UNIQUE" in statement
+        for statement in statements
+    )
+    assert any(
+        "FOR (n:SqlColumn) REQUIRE n.uid IS UNIQUE" in statement
+        for statement in statements
+    )

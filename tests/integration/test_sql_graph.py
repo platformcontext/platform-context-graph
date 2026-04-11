@@ -1,0 +1,77 @@
+"""Integration tests verifying SQL fixtures persist into graph nodes and edges."""
+
+import os
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not os.getenv("NEO4J_URI"),
+    reason="NEO4J_URI not set — start Neo4j with docker compose up -d",
+)
+
+
+def _count(indexed_ecosystems, query: str, **params: object) -> int:
+    """Return an integer count from a simple count-only Cypher query."""
+
+    driver = indexed_ecosystems.get_driver()
+    with driver.session() as session:
+        record = session.run(query, **params).single()
+    assert record is not None
+    return int(record["cnt"])
+
+
+class TestSqlGraph:
+    """Verify the SQL fixture ecosystem persists SQL graph entities and edges."""
+
+    def test_sql_nodes_are_created(self, indexed_ecosystems) -> None:
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (t:SqlTable) WHERE t.path CONTAINS 'sql_comprehensive' "
+                "RETURN count(t) as cnt",
+            )
+            >= 2
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (v:SqlView) WHERE v.path CONTAINS 'sql_comprehensive' "
+                "RETURN count(v) as cnt",
+            )
+            >= 1
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (f:SqlFunction) WHERE f.path CONTAINS 'sql_comprehensive' "
+                "RETURN count(f) as cnt",
+            )
+            >= 1
+        )
+
+    def test_sql_relationships_are_created(self, indexed_ecosystems) -> None:
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (:SqlTable)-[:HAS_COLUMN]->(:SqlColumn) "
+                "RETURN count(*) as cnt",
+            )
+            >= 1
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (:SqlView)-[:READS_FROM]->(:SqlTable) "
+                "RETURN count(*) as cnt",
+            )
+            >= 1
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (:File)-[:MIGRATES]->(:SqlTable) "
+                "WHERE EXISTS { MATCH (f:File) WHERE f.path CONTAINS 'sql_comprehensive' } "
+                "RETURN count(*) as cnt",
+            )
+            >= 1
+        )

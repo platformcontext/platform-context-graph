@@ -1,0 +1,122 @@
+language: sql
+title: SQL Parser
+family: language
+parser: SQLTreeSitterParser
+parser_entrypoint: src/platform_context_graph/parsers/languages/sql.py
+doc_path: docs/docs/languages/sql.md
+fixture_repo: tests/fixtures/ecosystems/sql_comprehensive/
+unit_test_file: tests/unit/parsers/test_sql_parser.py
+integration_test_suite: tests/integration/test_sql_graph.py::TestSqlGraph
+support_maturity:
+  grammar_routing: supported
+  normalization: supported
+  framework_packs: unsupported
+  query_surfacing: supported
+  real_repo_validation: partial
+  end_to_end_indexing: partial
+  notes:
+    - SQL support is validated through local service repositories with checked-in SQL corpus plus targeted external ORM and Go examples.
+capabilities:
+  - id: sql-tables
+    name: Tables
+    status: supported
+    extracted_bucket: sql_tables
+    required_fields:
+      - name
+      - line_number
+    graph_surface:
+      kind: node
+      target: SqlTable
+    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created
+  - id: sql-columns
+    name: Columns
+    status: supported
+    extracted_bucket: sql_columns
+    required_fields:
+      - name
+      - line_number
+    graph_surface:
+      kind: node
+      target: SqlColumn
+    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_relationships_are_created
+  - id: sql-views
+    name: Views
+    status: supported
+    extracted_bucket: sql_views
+    required_fields:
+      - name
+      - line_number
+    graph_surface:
+      kind: node
+      target: SqlView
+    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created
+  - id: sql-functions
+    name: Functions
+    status: supported
+    extracted_bucket: sql_functions
+    required_fields:
+      - name
+      - line_number
+    graph_surface:
+      kind: node
+      target: SqlFunction
+    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created
+  - id: sql-triggers
+    name: Triggers
+    status: supported
+    extracted_bucket: sql_triggers
+    required_fields:
+      - name
+      - line_number
+    graph_surface:
+      kind: node
+      target: SqlTrigger
+    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created
+  - id: sql-indexes
+    name: Indexes
+    status: supported
+    extracted_bucket: sql_indexes
+    required_fields:
+      - name
+      - line_number
+    graph_surface:
+      kind: node
+      target: SqlIndex
+    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created
+  - id: sql-relationships
+    name: SQL relationships
+    status: supported
+    extracted_bucket: sql_relationships
+    required_fields:
+      - type
+      - source_name
+      - target_name
+      - line_number
+    graph_surface:
+      kind: relationship
+      target: HAS_COLUMN/REFERENCES_TABLE/READS_FROM/TRIGGERS_ON/EXECUTES/INDEXES
+    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_relationships_are_created
+  - id: sql-migrations
+    name: Migration intelligence
+    status: supported
+    extracted_bucket: sql_migrations
+    required_fields:
+      - tool
+      - target_kind
+      - target_name
+      - line_number
+    graph_surface:
+      kind: relationship
+      target: MIGRATES
+    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_migration_metadata_from_common_layouts
+    integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_relationships_are_created
+known_limitations:
+  - Dialect-specific procedural SQL beyond common Postgres-style bodies may surface only partial table references.
+  - ALTER/DDL mutation parsing currently prioritizes affected object names over full clause normalization.

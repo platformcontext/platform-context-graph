@@ -61,6 +61,7 @@ class RepositoryEventHandler(FileSystemEventHandler):
         file_data = list(self.file_data_by_path.values())
         self.graph_builder._create_all_function_calls(file_data, self.imports_map)
         self.graph_builder._create_all_inheritance_links(file_data, self.imports_map)
+        self.graph_builder._create_all_sql_relationships(file_data)
         self.graph_builder._create_all_infra_links(file_data)
 
     def _initial_scan(self) -> None:

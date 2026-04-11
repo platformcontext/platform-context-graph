@@ -83,6 +83,7 @@ _LANGUAGE_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
         "platform_context_graph.parsers.languages.dockerfile",
         "DockerfileTreeSitterParser",
     ),
+    "sql": ("platform_context_graph.parsers.languages.sql", "SQLTreeSitterParser"),
 }
 _EXTENSION_SPECIFIC_PARSERS: dict[str, tuple[str, str]] = {
     ".tsx": (
@@ -127,6 +128,7 @@ _TREE_SITTER_PARSER_EXTENSIONS: tuple[tuple[str, str], ...] = (
     (".ex", "elixir"),
     (".exs", "elixir"),
     (".groovy", "groovy"),
+    (".sql", "sql"),
 )
 _PRE_SCAN_HANDLER_GROUPS: tuple[tuple[tuple[str, ...], tuple[str, str]], ...] = (
     (

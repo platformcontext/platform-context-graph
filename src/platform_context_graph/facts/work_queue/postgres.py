@@ -54,6 +54,16 @@ _REQUIRED_FACT_WORK_QUEUE_TABLES = (
 )
 _REQUIRED_FACT_WORK_QUEUE_COLUMNS = {
     "fact_work_items": (
+        "failure_stage",
+        "error_class",
+        "failure_class",
+        "failure_code",
+        "retry_disposition",
+        "dead_lettered_at",
+        "last_attempt_started_at",
+        "last_attempt_finished_at",
+        "next_retry_at",
+        "operator_note",
         "parent_work_item_id",
         "projection_domain",
         "accepted_generation_id",

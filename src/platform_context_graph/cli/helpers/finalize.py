@@ -195,12 +195,18 @@ def finalize_helper(
     ALL_STAGES = [
         "inheritance",
         "function_calls",
+        "sql_relationships",
         "infra_links",
         "workloads",
         "relationship_resolution",
     ]
     GRAPH_ONLY_STAGES = ["workloads", "relationship_resolution"]
-    FILE_DEPENDENT_STAGES = {"inheritance", "function_calls", "infra_links"}
+    FILE_DEPENDENT_STAGES = {
+        "inheritance",
+        "function_calls",
+        "sql_relationships",
+        "infra_links",
+    }
 
     console.print("[bold cyan]PCG Standalone Finalization[/bold cyan]")
     console.print()

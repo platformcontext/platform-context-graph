@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, Callable
 from dataclasses import replace
 
 from platform_context_graph.facts.emission.git_snapshot import (
@@ -40,6 +40,8 @@ from .commit_timing import CommitTimingResult
 from .coordinator_facts_emission import create_snapshot_fact_emitter
 from .coordinator_facts_emission import emit_repository_snapshot_facts
 from .coordinator_facts_emission import facts_first_projection_enabled
+from .coordinator_facts_finalize import finalize_fact_projection_batch
+from .coordinator_facts_finalize import finalize_facts_first_run
 from .coordinator_facts_support import fact_metric_row_count
 from .coordinator_facts_support import clear_repository_projection_state
 from .coordinator_facts_support import graph_store_adapter
@@ -397,82 +399,3 @@ def create_facts_first_commit_callback(
         return timing
 
     return _commit_snapshot_from_facts
-
-
-def finalize_fact_projection_batch(*_args, **_kwargs) -> dict[str, float]:
-    """Return an empty stage map for facts-first projection batches."""
-
-    return {}
-
-
-def finalize_facts_first_run(
-    *,
-    run_state: Any,
-    persist_run_state_fn: Callable[[Any], None],
-    delete_snapshots_fn: Callable[[str], None],
-    publish_runtime_progress_fn: Callable[..., None],
-    publish_run_repository_coverage_fn: Callable[..., None],
-    builder: object,
-    repo_paths: list[Path],
-    committed_repo_paths: list[Path],
-    component: str,
-    source: str,
-    utc_now_fn: Callable[[], str],
-    run_started_at: str | None = None,
-    last_metrics: dict[str, Any] | None = None,
-) -> None:
-    """Close out one facts-first indexing run without legacy finalization."""
-
-    blocking_count = run_state.blocking_repositories()
-    has_committed_repos = bool(committed_repo_paths)
-    run_state.finalization_stage_details = (
-        {"facts_projection": last_metrics.get("facts", {})}
-        if isinstance(last_metrics, dict) and "facts" in last_metrics
-        else {}
-    )
-    if not has_committed_repos and blocking_count > 0:
-        run_state.status = "partial_failure"
-        run_state.finalization_status = "pending"
-        persist_run_state_fn(run_state)
-        publish_run_repository_coverage_fn(
-            builder=builder,
-            run_state=run_state,
-            repo_paths=repo_paths,
-            include_graph_counts=True,
-            include_content_counts=True,
-        )
-        publish_runtime_progress_fn(
-            ingester=component,
-            source=source,
-            run_state=run_state,
-            repository_count=len(repo_paths),
-            status="partial_failure",
-        )
-        return
-
-    finished_at = utc_now_fn()
-    run_state.status = "completed"
-    run_state.finalization_status = "completed"
-    run_state.finalization_started_at = run_started_at or finished_at
-    run_state.finalization_finished_at = finished_at
-    run_state.finalization_duration_seconds = 0.0
-    run_state.finalization_current_stage = None
-    run_state.finalization_stage_started_at = None
-    run_state.finalization_stage_durations = {}
-    persist_run_state_fn(run_state)
-    publish_run_repository_coverage_fn(
-        builder=builder,
-        run_state=run_state,
-        repo_paths=repo_paths,
-        include_graph_counts=True,
-        include_content_counts=True,
-    )
-    publish_runtime_progress_fn(
-        ingester=component,
-        source=source,
-        run_state=run_state,
-        repository_count=len(repo_paths),
-        status="completed",
-        last_success_at=finished_at,
-    )
-    delete_snapshots_fn(run_state.run_id)

@@ -633,12 +633,16 @@ async def execute_index_run(
                 )
             )
         if facts_first_enabled:
-            finalize_fact_projection_batch(
+            facts_finalize_metrics = finalize_fact_projection_batch(
                 builder=builder,
                 root_path=root_path,
                 run_state=run_state,
                 repo_paths=repo_paths,
                 committed_repo_paths=committed_repo_paths,
+                iter_snapshot_file_data_fn=lambda repo_path: _iter_snapshot_file_data(
+                    run_state.run_id, repo_path
+                ),
+                info_logger_fn=info_logger_fn,
             )
             finalize_facts_first_run(
                 run_state=run_state,
@@ -652,7 +656,10 @@ async def execute_index_run(
                 publish_run_repository_coverage_fn=publish_run_repository_coverage,
                 publish_runtime_progress_fn=_publish_runtime_progress,
                 utc_now_fn=_utc_now,
-                last_metrics={"projected_repositories": len(committed_repo_paths)},
+                last_metrics={
+                    "projected_repositories": len(committed_repo_paths),
+                    **(facts_finalize_metrics or {}),
+                },
             )
             if run_state.status == "running":
                 run_state.status = "completed"

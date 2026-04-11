@@ -74,6 +74,30 @@ class _RecordingCursor:
         ]
 
 
+class _LegacyFailureMetadataCursor(_RecordingCursor):
+    """Simulate a queue table created before failure metadata columns existed."""
+
+    def fetchall(self) -> list[dict[str, str]]:
+        """Return fact_work_items columns without failure metadata additions."""
+
+        rows = super().fetchall()
+        if "FROM information_schema.columns" not in self._last_query:
+            return rows
+        missing = {
+            "failure_stage",
+            "error_class",
+            "failure_class",
+            "failure_code",
+            "retry_disposition",
+            "dead_lettered_at",
+            "last_attempt_started_at",
+            "last_attempt_finished_at",
+            "next_retry_at",
+            "operator_note",
+        }
+        return [row for row in rows if row["column_name"] not in missing]
+
+
 class _RecordingConnection:
     """Return the same recording cursor for each schema bootstrap cursor call."""
 
@@ -134,6 +158,24 @@ def test_ensure_schema_upgrades_existing_fact_work_items_table() -> None:
     assert "information_schema.columns" in queries
     assert "ADD COLUMN IF NOT EXISTS parent_work_item_id" in queries
     assert "ADD COLUMN IF NOT EXISTS shared_projection_pending" in queries
+    assert queue._initialized is True
+
+
+def test_ensure_schema_upgrades_legacy_failure_metadata_columns() -> None:
+    """Schema bootstrap should add missing failure metadata columns."""
+
+    queue = PostgresFactWorkQueue("postgresql://example")
+    cursor = _LegacyFailureMetadataCursor()
+    conn = _RecordingConnection(cursor)
+
+    queue._ensure_schema(conn)
+
+    queries = "\n".join(query for query, _params in cursor.executed)
+
+    assert "ADD COLUMN IF NOT EXISTS failure_stage" in queries
+    assert "ADD COLUMN IF NOT EXISTS error_class" in queries
+    assert "ADD COLUMN IF NOT EXISTS retry_disposition" in queries
+    assert "ADD COLUMN IF NOT EXISTS operator_note" in queries
     assert queue._initialized is True
 
 

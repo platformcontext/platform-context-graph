@@ -74,6 +74,7 @@ LANGUAGE_ALIASES = {
     "hcl": "hcl",
     "json": "json",
     "dockerfile": "dockerfile",
+    "sql": "sql",
 }
 
 

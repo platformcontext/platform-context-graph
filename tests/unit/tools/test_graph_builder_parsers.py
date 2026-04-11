@@ -231,6 +231,16 @@ def test_build_parser_registry_uses_tree_sitter_for_json() -> None:
     assert registry[".json"].language_name == "json"
 
 
+def test_build_parser_registry_uses_tree_sitter_for_sql() -> None:
+    """SQL files should be registered through the tree-sitter wrapper."""
+
+    registry = parser_registry.build_parser_registry(lambda _key: "true")
+
+    assert ".sql" in registry
+    assert registry[".sql"].__class__.__name__ == "TreeSitterParser"
+    assert registry[".sql"].language_name == "sql"
+
+
 def test_parse_file_uses_structured_parser_for_dockerfile(tmp_path: Path) -> None:
     """Direct parsing should extract Dockerfile structure and keep dockerfile language."""
 

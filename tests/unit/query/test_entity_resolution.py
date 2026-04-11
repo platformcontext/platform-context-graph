@@ -568,3 +568,52 @@ def test_valid_canonical_repository_ref_keeps_url_safe_id():
     )
     assert "/" not in ref.id
     assert ref.id != ref.local_path
+
+
+def test_resolve_entity_supports_live_content_entities_via_sql_nodes() -> None:
+    class _MockResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def data(self):
+            return self._rows
+
+    session = MagicMock()
+    session.run.side_effect = [
+        _MockResult(
+            [
+                {
+                    "id": "content-entity:e_users",
+                    "type": "content_entity",
+                    "name": "public.users",
+                    "path": "/tmp/sql/schema.sql",
+                    "relative_path": "schema.sql",
+                    "repo_id": "repository:r_sql",
+                    "repo_name": "warehouse",
+                    "repo_slug": "platformcontext/warehouse",
+                    "remote_url": "https://github.com/platformcontext/warehouse",
+                    "entity_type": "SqlTable",
+                    "aliases": ["users", "public.users", "warehouse schema"],
+                }
+            ]
+        ),
+    ]
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+    driver = MagicMock()
+    driver.session.return_value = session
+    db = MagicMock()
+    db.get_driver.return_value = driver
+
+    result = resolve_entity(
+        db,
+        query="public.users",
+        types=["content_entity"],
+        exact=False,
+        limit=5,
+    )
+
+    assert [match["ref"]["id"] for match in result["matches"]] == [
+        "content-entity:e_users"
+    ]
+    assert result["matches"][0]["ref"]["type"] == "content_entity"

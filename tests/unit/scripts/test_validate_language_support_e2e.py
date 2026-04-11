@@ -150,3 +150,39 @@ def test_parse_args_accepts_python_language() -> None:
 
     assert args.language == "python"
     assert module._LANGUAGE_SUFFIXES["python"] == (".py",)
+
+
+def test_parse_args_accepts_go_language() -> None:
+    """The CLI should expose Go as a graph-backed validation lane."""
+
+    module = _load_script_module("validate_language_support_e2e_go")
+
+    args = module.parse_args(
+        [
+            "--repo-path",
+            "/Users/allen/tmp/sql-parser-validation/gopherci",
+            "--language",
+            "go",
+        ]
+    )
+
+    assert args.language == "go"
+    assert module._LANGUAGE_SUFFIXES["go"] == (".go",)
+
+
+def test_parse_args_accepts_sql_language() -> None:
+    """The CLI should expose SQL as a graph-backed validation lane."""
+
+    module = _load_script_module("validate_language_support_e2e_sql")
+
+    args = module.parse_args(
+        [
+            "--repo-path",
+            "/Users/allen/repos/services/api-node-communicator",
+            "--language",
+            "sql",
+        ]
+    )
+
+    assert args.language == "sql"
+    assert module._LANGUAGE_SUFFIXES["sql"] == (".sql",)

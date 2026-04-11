@@ -57,6 +57,12 @@ CONTENT_ENTITY_BUCKETS: tuple[tuple[str, str], ...] = (
     ("cloudformation_resources", "CloudFormationResource"),
     ("cloudformation_parameters", "CloudFormationParameter"),
     ("cloudformation_outputs", "CloudFormationOutput"),
+    ("sql_tables", "SqlTable"),
+    ("sql_columns", "SqlColumn"),
+    ("sql_views", "SqlView"),
+    ("sql_functions", "SqlFunction"),
+    ("sql_triggers", "SqlTrigger"),
+    ("sql_indexes", "SqlIndex"),
 )
 CONTENT_ENTITY_LABELS = frozenset(label for _, label in CONTENT_ENTITY_BUCKETS)
 
@@ -95,6 +101,12 @@ _TRAILING_NEWLINE_LABELS = _SOURCE_FIELD_CONTAINS_CODE | {
     "TerraformResource",
     "TerraformVariable",
     "TerragruntConfig",
+    "SqlColumn",
+    "SqlFunction",
+    "SqlIndex",
+    "SqlTable",
+    "SqlTrigger",
+    "SqlView",
 }
 
 
