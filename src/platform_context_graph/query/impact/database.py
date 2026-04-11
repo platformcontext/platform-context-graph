@@ -2,9 +2,81 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+from urllib.parse import quote, unquote
 
 from .common import edge_from_record, entity_from_record, record_to_dict
+
+
+def _file_entity_id(path: str | None) -> str | None:
+    """Return a canonical file entity ID for a file path."""
+
+    if not path:
+        return None
+    return f"file:{quote(path, safe='')}"
+
+
+def _file_path(entity_id: str) -> str | None:
+    """Return the raw file path encoded in a canonical file entity ID."""
+
+    if not entity_id.startswith("file:"):
+        return None
+    encoded_path = entity_id.split(":", 1)[1]
+    if not encoded_path:
+        return None
+    return unquote(encoded_path)
+
+
+def _canonical_endpoint_id(record: dict[str, Any], prefix: str) -> str | None:
+    """Return the best canonical identifier for an edge endpoint."""
+
+    direct_ref = record.get(prefix)
+    if isinstance(direct_ref, str) and direct_ref:
+        return direct_ref
+    direct_id = record.get(f"{prefix}_id")
+    if isinstance(direct_id, str) and direct_id:
+        return direct_id
+    direct_uid = record.get(f"{prefix}_uid")
+    if isinstance(direct_uid, str) and direct_uid:
+        return direct_uid
+    path = record.get(f"{prefix}_path")
+    labels = record.get(f"{prefix}_labels")
+    if isinstance(labels, list) and "File" in labels and isinstance(path, str):
+        return _file_entity_id(path)
+    return None
+
+
+def _normalized_edge_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Normalize raw database edge rows into canonical edge snapshots."""
+
+    source_id = _canonical_endpoint_id(record, "source")
+    target_id = _canonical_endpoint_id(record, "target")
+    if not source_id or not target_id:
+        return {}
+    return {
+        "source": source_id,
+        "target": target_id,
+        "type": record.get("type"),
+        "confidence": record.get("confidence"),
+        "reason": record.get("reason"),
+        "evidence": record.get("evidence"),
+    }
+
+
+def _edge_query(where_clause: str) -> str:
+    """Return the shared Cypher used to fetch connected graph edges."""
+
+    return (
+        "MATCH (source)-[rel]->(target) "
+        f"WHERE {where_clause} "
+        "RETURN source.id as source_id, source.uid as source_uid, "
+        "source.path as source_path, labels(source) as source_labels, "
+        "target.id as target_id, target.uid as target_uid, "
+        "target.path as target_path, labels(target) as target_labels, "
+        "type(rel) as type, rel.confidence as confidence, "
+        "rel.reason as reason, rel.evidence as evidence"
+    )
 
 
 def db_fetch_entity(database: Any, entity_id: str) -> dict[str, Any] | None:
@@ -50,12 +122,40 @@ def db_fetch_entity(database: Any, entity_id: str) -> dict[str, Any] | None:
             "WHERE c.id = $id "
             "RETURN c.id as id, c.name as name, c.environment as environment, c.repo_id as repo_id LIMIT 1"
         )
+    elif entity_id.startswith("content-entity:"):
+        query = (
+            "MATCH (n) "
+            "WHERE n.uid = $id "
+            "RETURN coalesce(n.uid, n.id) as id, n.name as name, "
+            "'content_entity' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
+        )
+    elif entity_id.startswith("file:"):
+        path = _file_path(entity_id)
+        if path is None:
+            return None
+        query = (
+            "MATCH (f:File) "
+            "WHERE f.path = $path "
+            "OPTIONAL MATCH (repo:Repository)-[:REPO_CONTAINS]->(f) "
+            "RETURN $id as id, coalesce(f.relative_path, f.path) as name, "
+            "'file' as type, f.path as path, repo.id as repo_id LIMIT 1"
+        )
     else:
         query = "MATCH (n) WHERE n.id = $id RETURN n.id as id, n.name as name LIMIT 1"
 
     with driver.session() as session:
-        record = session.run(query, id=entity_id).single()
+        if entity_id.startswith("file:"):
+            record = session.run(query, id=entity_id, path=path).single()
+        else:
+            record = session.run(query, id=entity_id).single()
     if record is None:
+        if entity_id.startswith("file:") and path is not None:
+            return {
+                "id": entity_id,
+                "type": "file",
+                "name": Path(path).name or path,
+                "path": path,
+            }
         return None
     return entity_from_record(record)
 
@@ -109,22 +209,29 @@ def db_fetch_edges(database: Any, entity_id: str) -> list[dict[str, Any]]:
     """
 
     driver = database.get_driver()
-    query = (
-        "MATCH (source)-[rel]->(target) "
-        "WHERE source.id = $id OR target.id = $id "
-        "RETURN source.id as source, source.name as source_name, source.type as source_type, "
-        "source.kind as source_kind, source.environment as source_environment, "
-        "source.workload_id as source_workload_id, source.repo_id as source_repo_id, "
-        "target.id as target, target.name as target_name, target.type as target_type, "
-        "target.kind as target_kind, target.environment as target_environment, "
-        "target.workload_id as target_workload_id, target.repo_id as target_repo_id, "
-        "type(rel) as type, rel.confidence as confidence, rel.reason as reason, rel.evidence as evidence"
-    )
+    if entity_id.startswith("content-entity:"):
+        query = _edge_query(
+            "coalesce(source.id, source.uid) = $id OR "
+            "coalesce(target.id, target.uid) = $id"
+        )
+        params = {"id": entity_id}
+    elif entity_id.startswith("file:"):
+        path = _file_path(entity_id)
+        if path is None:
+            return []
+        query = _edge_query(
+            "(source:File AND source.path = $path) OR "
+            "(target:File AND target.path = $path)"
+        )
+        params = {"path": path}
+    else:
+        query = _edge_query("source.id = $id OR target.id = $id")
+        params = {"id": entity_id}
     with driver.session() as session:
-        rows = session.run(query, id=entity_id).data()
+        rows = session.run(query, **params).data()
     edges: list[dict[str, Any]] = []
     for row in rows:
-        record = record_to_dict(row)
+        record = _normalized_edge_record(record_to_dict(row))
         if record:
             edges.append(edge_from_record(record))
     return edges

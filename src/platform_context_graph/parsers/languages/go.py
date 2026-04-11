@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict
 
+from .go_sql_support import extract_go_embedded_sql_queries
 from .go_support import parse_go_file, pre_scan_go
 
 
@@ -27,9 +28,11 @@ class GoTreeSitterParser:
         self, path: Path, is_dependency: bool = False, index_source: bool = False
     ) -> Dict[str, Any]:
         """Parse one Go file."""
-        return parse_go_file(
+        result = parse_go_file(
             self, path, is_dependency=is_dependency, index_source=index_source
         )
+        result["embedded_sql_queries"] = extract_go_embedded_sql_queries(path)
+        return result
 
 
 __all__ = ["GoTreeSitterParser", "pre_scan_go"]

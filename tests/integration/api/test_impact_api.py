@@ -48,12 +48,14 @@ def test_change_surface_returns_impacted_entities() -> None:
     ]
 
 
-def test_change_surface_rejects_content_entities() -> None:
+def test_change_surface_accepts_content_entities() -> None:
+    calls: list[dict[str, object]] = []
+
     services = SimpleNamespace(
         database=object(),
         impact=SimpleNamespace(
-            find_change_surface=lambda *_args, **_kwargs: pytest.fail(
-                "service should not be called"
+            find_change_surface=lambda database, **kwargs: (
+                calls.append({"database": database, **kwargs}) or {"impacted": []}
             )
         ),
     )
@@ -64,6 +66,11 @@ def test_change_surface_rejects_content_entities() -> None:
             json={"target": "content-entity:e_ab12cd34ef56"},
         )
 
-    assert response.status_code == 400
-    assert response.headers["content-type"].startswith("application/problem+json")
-    assert response.json()["title"] == "Invalid canonical entity identifier"
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "database": services.database,
+            "target": "content-entity:e_ab12cd34ef56",
+            "environment": None,
+        }
+    ]

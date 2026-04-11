@@ -31,6 +31,26 @@ CREATE TABLE IF NOT EXISTS fact_work_items (
     updated_at TIMESTAMPTZ NOT NULL
 );
 ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS failure_stage TEXT NULL;
+ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS error_class TEXT NULL;
+ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS failure_class TEXT NULL;
+ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS failure_code TEXT NULL;
+ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS retry_disposition TEXT NULL;
+ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS dead_lettered_at TIMESTAMPTZ NULL;
+ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS last_attempt_started_at TIMESTAMPTZ NULL;
+ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS last_attempt_finished_at TIMESTAMPTZ NULL;
+ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ NULL;
+ALTER TABLE fact_work_items
+    ADD COLUMN IF NOT EXISTS operator_note TEXT NULL;
+ALTER TABLE fact_work_items
     ADD COLUMN IF NOT EXISTS parent_work_item_id TEXT NULL;
 ALTER TABLE fact_work_items
     ADD COLUMN IF NOT EXISTS projection_domain TEXT NULL;

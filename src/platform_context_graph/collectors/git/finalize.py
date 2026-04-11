@@ -262,6 +262,10 @@ def finalize_index_batch(
         ),
         ("function_calls", _run_function_call_stage),
         (
+            "sql_relationships",
+            lambda: builder._create_all_sql_relationships(committed_repo_data_iter()),
+        ),
+        (
             "infra_links",
             lambda: builder._create_all_infra_links(committed_repo_data_iter()),
         ),

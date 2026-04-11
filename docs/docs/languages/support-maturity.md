@@ -32,6 +32,7 @@ yet been explicitly assessed in the parser maturity program.
 | Ruby | `RubyTreeSitterParser` | - | - | - | - | - | - | - |
 | Rust | `RustTreeSitterParser` | - | - | - | - | - | - | - |
 | Scala | `ScalaTreeSitterParser` | - | - | - | - | - | - | - |
+| SQL | `SQLTreeSitterParser` | supported | supported | unsupported | - | supported | partial | partial |
 | Swift | `SwiftTreeSitterParser` | - | - | - | - | - | - | - |
 | Terraform | `HCLTerraformParser` | - | - | - | - | - | - | - |
 | Terragrunt | `HCLTerraformParser` | - | - | - | - | - | - | - |

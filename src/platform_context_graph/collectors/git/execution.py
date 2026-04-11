@@ -300,6 +300,7 @@ async def build_graph_from_path_async(
         link_start = time_monotonic_fn()
         builder._create_all_inheritance_links(all_file_data, imports_map)
         builder._create_all_function_calls(all_file_data, imports_map)
+        builder._create_all_sql_relationships(all_file_data)
         builder._create_all_infra_links(all_file_data)
         builder._materialize_workloads()
         committed_repo_paths = sorted(git_repos) if git_repos else [repo_root]

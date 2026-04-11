@@ -25,6 +25,9 @@ def test_finalize_index_batch_filters_to_requested_stages_and_reports_progress()
         _create_all_function_calls=lambda *_args, **_kwargs: calls.append(
             "function_calls"
         ),
+        _create_all_sql_relationships=lambda *_args, **_kwargs: calls.append(
+            "sql_relationships"
+        ),
         _create_all_infra_links=lambda *_args, **_kwargs: calls.append("infra_links"),
         _materialize_workloads=lambda: calls.append("workloads"),
         _resolve_repository_relationships=lambda repo_paths, run_id=None: calls.append(
@@ -103,6 +106,7 @@ def test_finalize_index_batch_forwards_workload_progress_details() -> None:
     builder = SimpleNamespace(
         _create_all_inheritance_links=lambda *_args, **_kwargs: None,
         _create_all_function_calls=lambda *_args, **_kwargs: None,
+        _create_all_sql_relationships=lambda *_args, **_kwargs: None,
         _create_all_infra_links=lambda *_args, **_kwargs: None,
         _materialize_workloads=_materialize_workloads,
         _resolve_repository_relationships=lambda *_args, **_kwargs: None,
@@ -181,6 +185,7 @@ def test_finalize_index_batch_filters_progress_details_for_narrow_callbacks() ->
     builder = SimpleNamespace(
         _create_all_inheritance_links=lambda *_args, **_kwargs: None,
         _create_all_function_calls=lambda *_args, **_kwargs: None,
+        _create_all_sql_relationships=lambda *_args, **_kwargs: None,
         _create_all_infra_links=lambda *_args, **_kwargs: None,
         _materialize_workloads=_materialize_workloads,
         _resolve_repository_relationships=lambda *_args, **_kwargs: None,

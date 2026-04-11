@@ -70,12 +70,14 @@ def test_trace_resource_to_code_rejects_non_canonical_start_ids() -> None:
     assert response.json()["title"] == "Invalid canonical entity identifier"
 
 
-def test_trace_resource_to_code_rejects_content_entities() -> None:
+def test_trace_resource_to_code_accepts_content_entities() -> None:
+    calls: list[dict[str, object]] = []
+
     services = SimpleNamespace(
         database=object(),
         impact=SimpleNamespace(
-            trace_resource_to_code=lambda *_args, **_kwargs: pytest.fail(
-                "service should not be called"
+            trace_resource_to_code=lambda database, **kwargs: (
+                calls.append({"database": database, **kwargs}) or {"paths": []}
             )
         ),
     )
@@ -86,6 +88,12 @@ def test_trace_resource_to_code_rejects_content_entities() -> None:
             json={"start": "content-entity:e_ab12cd34ef56"},
         )
 
-    assert response.status_code == 400
-    assert response.headers["content-type"].startswith("application/problem+json")
-    assert response.json()["title"] == "Invalid canonical entity identifier"
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "database": services.database,
+            "start": "content-entity:e_ab12cd34ef56",
+            "environment": None,
+            "max_depth": 8,
+        }
+    ]

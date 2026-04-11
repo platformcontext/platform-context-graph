@@ -17,6 +17,7 @@ from platform_context_graph.facts.work_queue.models import FactWorkItemRow
 from platform_context_graph.indexing.coordinator_facts import (
     commit_repository_snapshot_from_facts,
     create_facts_first_commit_callback,
+    finalize_fact_projection_batch,
     finalize_facts_first_run,
 )
 from platform_context_graph.indexing.coordinator_models import IndexRunState
@@ -436,6 +437,61 @@ def test_finalize_facts_first_run_marks_completed_and_deletes_snapshots() -> Non
     delete_snapshots.assert_called_once_with("run-123")
 
 
+def test_finalize_fact_projection_batch_runs_sql_relationship_stage() -> None:
+    """Facts-first finalization should still materialize SQL relationships."""
+
+    recorded: dict[str, object] = {}
+    run_state = IndexRunState(
+        run_id="run-123",
+        root_path="/tmp/root",
+        family="index",
+        source="manual",
+        discovery_signature="sig",
+        is_dependency=False,
+        status="running",
+        finalization_status="pending",
+        created_at="2026-04-02T12:00:00Z",
+        updated_at="2026-04-02T12:00:00Z",
+        repositories={
+            "/tmp/root/repo": RepositoryRunState(
+                repo_path="/tmp/root/repo",
+                status="completed",
+            )
+        },
+    )
+    builder = SimpleNamespace(
+        _create_all_sql_relationships=lambda file_data: (
+            recorded.__setitem__("file_data", list(file_data)) or {"has_column_edges": 1}
+        )
+    )
+
+    result = finalize_fact_projection_batch(
+        builder=builder,
+        root_path=Path("/tmp/root"),
+        run_state=run_state,
+        repo_paths=[Path("/tmp/root/repo")],
+        committed_repo_paths=[Path("/tmp/root/repo")],
+        iter_snapshot_file_data_fn=lambda _repo_path: iter(
+            [
+                {
+                    "path": "/tmp/root/repo/schema.sql",
+                    "sql_relationships": [{"type": "HAS_COLUMN"}],
+                }
+            ]
+        ),
+        info_logger_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert recorded["file_data"] == [
+        {
+            "path": "/tmp/root/repo/schema.sql",
+            "sql_relationships": [{"type": "HAS_COLUMN"}],
+        }
+    ]
+    assert result["stage_durations"]["sql_relationships"] >= 0.0
+    assert result["sql_relationships"] == {"has_column_edges": 1}
+
+
 def test_finalize_facts_first_run_records_partial_failure_details() -> None:
     """Partial-failure runs should keep facts-first status and publish details."""
 
@@ -482,3 +538,51 @@ def test_finalize_facts_first_run_records_partial_failure_details() -> None:
         "facts_projection": {"repositories": 0}
     }
     assert published_statuses == ["partial_failure"]
+
+
+def test_finalize_facts_first_run_preserves_sql_stage_details() -> None:
+    """Facts-first completion should keep SQL finalization details when present."""
+
+    run_state = IndexRunState(
+        run_id="run-123",
+        root_path="/tmp/root",
+        family="index",
+        source="manual",
+        discovery_signature="sig",
+        is_dependency=False,
+        status="running",
+        finalization_status="pending",
+        created_at="2026-04-02T12:00:00Z",
+        updated_at="2026-04-02T12:00:00Z",
+        repositories={
+            "/tmp/root/repo": RepositoryRunState(
+                repo_path="/tmp/root/repo",
+                status="completed",
+            )
+        },
+    )
+
+    finalize_facts_first_run(
+        run_state=run_state,
+        repo_paths=[Path("/tmp/root/repo")],
+        committed_repo_paths=[Path("/tmp/root/repo")],
+        builder=SimpleNamespace(),
+        component="ingester",
+        source="manual",
+        persist_run_state_fn=lambda _state: None,
+        delete_snapshots_fn=MagicMock(),
+        publish_run_repository_coverage_fn=lambda **_kwargs: None,
+        publish_runtime_progress_fn=lambda **_kwargs: None,
+        utc_now_fn=lambda: "2026-04-02T12:05:00Z",
+        last_metrics={
+            "facts": {"repositories": 1},
+            "sql_relationships": {"has_column_edges": 3},
+            "stage_durations": {"sql_relationships": 0.25},
+        },
+    )
+
+    assert run_state.finalization_stage_details == {
+        "facts_projection": {"repositories": 1},
+        "sql_relationships": {"has_column_edges": 3},
+    }
+    assert run_state.finalization_stage_durations == {"sql_relationships": 0.25}

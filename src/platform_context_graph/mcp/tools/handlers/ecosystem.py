@@ -38,7 +38,7 @@ def find_blast_radius(
         db_manager: Database manager.
         target: Name of the target (repo, module, XRD).
         target_type: One of 'repository', 'terraform_module',
-            'crossplane_xrd'.
+            'crossplane_xrd', 'sql_table'.
 
     Returns:
         Affected repos with hop counts and tier info.
@@ -103,6 +103,56 @@ def find_blast_radius(
                     claim.name as claim
             """,
                 target_name=target,
+            ).data()
+        elif target_type == "sql_table":
+            affected = session.run(
+                """
+                CALL {
+                    MATCH (table:SqlTable)
+                    WHERE table.name CONTAINS $target_name
+                    MATCH (repo:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(table)
+                    RETURN DISTINCT repo, 0 as hops
+                    UNION
+                    MATCH (table:SqlTable)
+                    WHERE table.name CONTAINS $target_name
+                    MATCH (repo:Repository)-[:REPO_CONTAINS]->(:File)-[:MIGRATES]->(table)
+                    RETURN DISTINCT repo, 1 as hops
+                    UNION
+                    MATCH (table:SqlTable)
+                    WHERE table.name CONTAINS $target_name
+                    MATCH (repo:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(:Class)-[:MAPS_TO_TABLE]->(table)
+                    RETURN DISTINCT repo, 1 as hops
+                    UNION
+                    MATCH (table:SqlTable)
+                    WHERE table.name CONTAINS $target_name
+                    MATCH (repo:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(:Function)-[:QUERIES_TABLE]->(table)
+                    RETURN DISTINCT repo, 1 as hops
+                    UNION
+                    MATCH (table:SqlTable)
+                    WHERE table.name CONTAINS $target_name
+                    MATCH (repo:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(:SqlTable)-[:REFERENCES_TABLE]->(table)
+                    RETURN DISTINCT repo, 1 as hops
+                    UNION
+                    MATCH (table:SqlTable)
+                    WHERE table.name CONTAINS $target_name
+                    MATCH (repo:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(sql_node)
+                    WHERE (sql_node:SqlView OR sql_node:SqlFunction OR sql_node:SqlTrigger OR sql_node:SqlIndex)
+                      AND EXISTS {
+                          MATCH (sql_node)-[:READS_FROM|TRIGGERS_ON|INDEXES]->(table)
+                      }
+                    RETURN DISTINCT repo, 1 as hops
+                }
+                OPTIONAL MATCH (repo)<-[:CONTAINS]-(tier:Tier)
+                RETURN DISTINCT
+                    repo.name as repo,
+                    repo.id as repo_id,
+                    tier.name as tier,
+                    tier[$risk_level_key] as risk,
+                    hops
+                ORDER BY hops, repo
+            """,
+                target_name=target,
+                risk_level_key="risk_level",
             ).data()
         else:
             return {"error": f"Unknown target_type: {target_type}"}

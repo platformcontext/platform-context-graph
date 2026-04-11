@@ -35,6 +35,14 @@ def _aliases(*groups: list[str]) -> list[str]:
     return aliases
 
 
+def _string_list(value: Any) -> list[str]:
+    """Return a normalized list of non-empty strings."""
+
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str) and item]
+
+
 def db_workload_entities(
     database: Any, *, query: str, repo_id: str | None
 ) -> list[dict[str, Any]]:
@@ -264,4 +272,92 @@ def db_workload_entities(
     return entities
 
 
-__all__ = ["db_workload_entities"]
+def db_content_entities(
+    database: Any,
+    *,
+    query: str,
+    repo_id: str | None,
+) -> list[dict[str, Any]]:
+    """Return SQL-backed content entities from the live database."""
+
+    terms = _search_terms(query)
+    if not terms:
+        return []
+
+    driver = database.get_driver()
+    with driver.session() as session:
+        rows = session.run(
+            f"""
+            MATCH (file:File)-[:CONTAINS]->(entity)
+            WHERE (
+                entity:SqlTable
+                OR entity:SqlColumn
+                OR entity:SqlView
+                OR entity:SqlFunction
+                OR entity:SqlTrigger
+                OR entity:SqlIndex
+            )
+              AND (
+                  {_name_match('entity.name')}
+                  OR {_name_match('entity.uid')}
+                  OR {_name_match('entity.path')}
+                  OR {_name_match('file.relative_path')}
+              )
+            OPTIONAL MATCH (repo:Repository)-[:REPO_CONTAINS]->(file)
+            WITH entity, file, repo
+            WHERE $repo_id IS NULL OR repo.id = $repo_id
+            RETURN coalesce(entity.uid, entity.id) as id,
+                   'content_entity' as type,
+                   entity.name as name,
+                   entity.path as path,
+                   file.relative_path as relative_path,
+                   repo.id as repo_id,
+                   repo.name as repo_name,
+                   coalesce(repo[$repo_slug_key], '') as repo_slug,
+                   coalesce(repo[$remote_url_key], '') as remote_url,
+                   head([label IN labels(entity) WHERE label IN ['SqlTable', 'SqlColumn', 'SqlView', 'SqlFunction', 'SqlTrigger', 'SqlIndex'] | label]) as entity_type,
+                   coalesce(entity.aliases, []) as aliases
+            ORDER BY entity.name
+            """,
+            terms=terms,
+            repo_id=repo_id,
+            repo_slug_key="repo_slug",
+            remote_url_key="remote_url",
+        ).data()
+
+    entities: list[dict[str, Any]] = []
+    for row in rows:
+        entity_id = str(row.get("id") or "").strip()
+        name = str(row.get("name") or "").strip()
+        if not entity_id or not name:
+            continue
+        aliases = _aliases(
+            [name, name.rsplit(".", 1)[-1]],
+            _string_list(row.get("aliases")),
+            [
+                row.get("repo_name", ""),
+                row.get("repo_slug", ""),
+                row.get("remote_url", ""),
+                row.get("relative_path", ""),
+            ],
+        )
+        entity: dict[str, Any] = {
+            "id": entity_id,
+            "type": "content_entity",
+            "name": name,
+            "repo_id": row.get("repo_id"),
+            "aliases": aliases,
+        }
+        if row.get("path"):
+            entity["path"] = row["path"]
+        if row.get("relative_path"):
+            entity["relative_path"] = row["relative_path"]
+        if row.get("repo_slug"):
+            entity["repo_slug"] = row["repo_slug"]
+        if row.get("remote_url"):
+            entity["remote_url"] = row["remote_url"]
+        entities.append(entity)
+    return entities
+
+
+__all__ = ["db_content_entities", "db_workload_entities"]

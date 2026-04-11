@@ -114,6 +114,41 @@ def test_find_blast_radius_tags_graph_rows_and_adds_consumer_evidence(
     assert "consumer evidence" in result["note"]
 
 
+def test_find_blast_radius_supports_sql_tables() -> None:
+    """SQL-table blast radius should surface affected repositories."""
+
+    db = make_mock_db(
+        {
+            "MATCH (table:SqlTable)": MockResult(
+                records=[
+                    {
+                        "repo": "api-node-search",
+                        "repo_id": "repository:r_api_node_search",
+                        "tier": "app",
+                        "risk": "medium",
+                    }
+                ]
+            )
+        }
+    )
+
+    result = ecosystem.find_blast_radius(db, "public.users", "sql_table")
+
+    assert result["target_type"] == "sql_table"
+    assert result["affected"] == [
+        {
+            "repo": "api-node-search",
+            "repo_id": "repository:r_api_node_search",
+            "tier": "app",
+            "risk": "medium",
+            "hops": None,
+            "evidence_source": "graph_dependency",
+            "inferred": False,
+        }
+    ]
+    assert result["affected_count"] == 1
+
+
 def test_trace_deployment_chain_defaults_to_a_direct_focused_view(
     monkeypatch,
 ) -> None:

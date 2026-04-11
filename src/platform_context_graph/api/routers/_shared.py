@@ -16,11 +16,7 @@ _CANONICAL_ID_RE = re.compile(r"^[a-z][a-z0-9_-]*:[^/\s:][^/\s]*(?::[^/\s:][^/\s
 _KNOWN_CANONICAL_PREFIXES = frozenset(
     entity_type.value.replace("_", "-") for entity_type in EntityType
 )
-_TRAVERSABLE_CANONICAL_PREFIXES = frozenset(
-    entity_type.value.replace("_", "-")
-    for entity_type in EntityType
-    if entity_type != EntityType.content_entity
-)
+_TRAVERSABLE_CANONICAL_PREFIXES = _KNOWN_CANONICAL_PREFIXES
 _NOT_FOUND_MARKERS = (
     "not found",
     "has no instance for environment",

@@ -45,6 +45,12 @@ ITEM_MAPPINGS_KEYS: list[tuple[str, str]] = [
     ("cloudformation_resources", "CloudFormationResource"),
     ("cloudformation_parameters", "CloudFormationParameter"),
     ("cloudformation_outputs", "CloudFormationOutput"),
+    ("sql_tables", "SqlTable"),
+    ("sql_columns", "SqlColumn"),
+    ("sql_views", "SqlView"),
+    ("sql_functions", "SqlFunction"),
+    ("sql_triggers", "SqlTrigger"),
+    ("sql_indexes", "SqlIndex"),
 ]
 
 VALUE_TRUNCATION_MARKER = " [truncated]"

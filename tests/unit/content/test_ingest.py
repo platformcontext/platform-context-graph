@@ -186,6 +186,43 @@ def test_prepare_content_entries_reads_cp1252_source_text(
     assert entity_entries[0].source_cache == "$price = '£9';\n"
 
 
+def test_prepare_content_entries_assigns_uids_to_sql_entities(
+    tmp_path: Path,
+) -> None:
+    """SQL buckets should participate in the content-entity dual-write path."""
+
+    repo_path = tmp_path / "warehouse"
+    repo_path.mkdir()
+    file_path = repo_path / "schema.sql"
+    file_path.write_text(
+        "CREATE TABLE public.users (\n  id BIGSERIAL PRIMARY KEY\n);\n",
+        encoding="utf-8",
+    )
+
+    repository = repository_metadata(
+        name="warehouse",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/warehouse.git",
+    )
+    file_data = {
+        "path": str(file_path),
+        "repo_path": str(repo_path),
+        "lang": "sql",
+        "sql_tables": [{"name": "public.users", "line_number": 1}],
+        "sql_columns": [{"name": "public.users.id", "line_number": 2}],
+    }
+
+    _file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert {entry.entity_type for entry in entity_entries} == {"SqlTable", "SqlColumn"}
+    assert all(is_content_entity_id(entry.entity_id) for entry in entity_entries)
+    assert file_data["sql_tables"][0]["uid"].startswith("content-entity:")
+    assert file_data["sql_columns"][0]["uid"].startswith("content-entity:")
+
+
 def test_prepare_content_entries_strips_nul_bytes_for_content_store(
     tmp_path: Path,
 ) -> None:

@@ -12,8 +12,10 @@ from typing import Any, TextIO
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 _LANGUAGE_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "go": (".go",),
     "javascript": (".js", ".mjs", ".cjs", ".jsx"),
     "python": (".py",),
+    "sql": (".sql",),
     "typescript": (".ts", ".mts", ".cts"),
     "typescriptjsx": (".tsx",),
 }
@@ -39,7 +41,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         choices=sorted(_LANGUAGE_SUFFIXES),
         help=(
             "Language lane to validate "
-            "(javascript, python, typescript, typescriptjsx)."
+            f"({', '.join(sorted(_LANGUAGE_SUFFIXES))})."
         ),
     )
     parser.add_argument(

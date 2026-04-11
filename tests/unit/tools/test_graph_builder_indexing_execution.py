@@ -48,12 +48,17 @@ def test_finalize_index_batch_streams_committed_repo_file_data() -> None:
         recorded["function_calls"] = (list(file_data), imports_map)
         return {"total_duration_seconds": 0.5}
 
+    def _record_sql_relationships(file_data: object) -> dict[str, int]:
+        recorded["sql_relationships"] = list(file_data)
+        return {"has_column_edges": 1}
+
     def _record_infra_links(file_data: object) -> None:
         recorded["infra_links"] = list(file_data)
 
     builder = SimpleNamespace(
         _create_all_inheritance_links=_record_inheritance,
         _create_all_function_calls=_record_function_calls,
+        _create_all_sql_relationships=_record_sql_relationships,
         _create_all_infra_links=_record_infra_links,
         _materialize_workloads=lambda: recorded.setdefault("workloads", True),
         _resolve_repository_relationships=lambda committed_repo_paths, run_id=None: recorded.setdefault(
@@ -84,9 +89,13 @@ def test_finalize_index_batch_streams_committed_repo_file_data() -> None:
     assert recorded["infra_links"] == [
         {"path": "/tmp/example/main.py", "functions": []}
     ]
+    assert recorded["sql_relationships"] == [
+        {"path": "/tmp/example/main.py", "functions": []}
+    ]
     assert recorded["workloads"] is True
     assert recorded["relationships"] == ([Path("/tmp/example")], None)
     assert load_calls == [
+        Path("/tmp/example"),
         Path("/tmp/example"),
         Path("/tmp/example"),
         Path("/tmp/example"),
@@ -200,7 +209,22 @@ def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
     messages: list[str] = []
     stages: list[str] = []
     monotonic_values = iter(
-        [10.0, 10.0, 11.5, 11.5, 14.0, 14.0, 14.2, 14.2, 15.0, 15.0, 15.0, 15.0]
+        [
+            10.0,
+            10.0,
+            11.5,
+            11.5,
+            14.0,
+            14.0,
+            14.0,
+            14.0,
+            14.2,
+            14.2,
+            15.0,
+            15.0,
+            15.0,
+            15.0,
+        ]
     )
     monkeypatch.setattr(
         "platform_context_graph.collectors.git.finalize.time.monotonic",
@@ -211,6 +235,9 @@ def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
         _create_all_inheritance_links=lambda *_args, **_kwargs: None,
         _create_all_function_calls=lambda *_args, **_kwargs: {
             "total_duration_seconds": 0.0
+        },
+        _create_all_sql_relationships=lambda *_args, **_kwargs: {
+            "has_column_edges": 1
         },
         _create_all_infra_links=lambda *_args, **_kwargs: None,
         _materialize_workloads=lambda: None,
@@ -234,6 +261,7 @@ def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
         {
             "inheritance": 1.5,
             "function_calls": 2.5,
+            "sql_relationships": 0.0,
             "infra_links": 0.2,
             "workloads": 0.8,
             "relationship_resolution": 0.0,
@@ -242,6 +270,7 @@ def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
     assert stages == [
         "inheritance",
         "function_calls",
+        "sql_relationships",
         "infra_links",
         "workloads",
         "relationship_resolution",
@@ -255,6 +284,7 @@ def test_finalize_index_batch_raises_when_committed_repo_file_data_is_missing() 
     builder = SimpleNamespace(
         _create_all_inheritance_links=lambda *_args, **_kwargs: None,
         _create_all_function_calls=lambda *_args, **_kwargs: {},
+        _create_all_sql_relationships=lambda *_args, **_kwargs: {},
         _create_all_infra_links=lambda *_args, **_kwargs: None,
         _materialize_workloads=lambda: None,
         _resolve_repository_relationships=lambda *_args, **_kwargs: None,

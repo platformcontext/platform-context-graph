@@ -383,10 +383,12 @@ def test_find_blast_radius_uses_repo_contains_for_flat_repo_file_lookups():
 
     find_blast_radius(db, "terraform-aws-vpc", "terraform_module")
     find_blast_radius(db, "composite-postgres", "crossplane_xrd")
+    find_blast_radius(db, "public.users", "sql_table")
 
     assert any(
         "MATCH (repo:Repository)-[:REPO_CONTAINS]->(f)" in q for q in recorded_queries
     )
+    assert any("MATCH (repo:Repository)-[:REPO_CONTAINS]->(:File)" in q for q in recorded_queries)
     assert not any(
         "MATCH (repo:Repository)-[:CONTAINS*]->(f)" in q for q in recorded_queries
     )

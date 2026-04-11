@@ -81,7 +81,7 @@ def test_main_reports_validation_errors(monkeypatch: pytest.MonkeyPatch) -> None
     exit_code = module.main(
         [
             "--repo-path",
-            "/Users/allen/repos/services/portal-react-platform",
+            "/tmp/repos/services/portal-react-platform",
             "--language",
             "javascript",
             "--check",
@@ -120,7 +120,7 @@ def test_main_prints_report_when_validation_passes(
     exit_code = module.main(
         [
             "--repo-path",
-            "/Users/allen/repos/services/api-node-platform",
+            "/tmp/repos/services/api-node-platform",
             "--language",
             "typescript",
             "--check",
@@ -142,7 +142,7 @@ def test_parse_args_accepts_python_language() -> None:
     args = module.parse_args(
         [
             "--repo-path",
-            "/Users/allen/repos/services/recos-ranker-service",
+            "/tmp/repos/services/recos-ranker-service",
             "--language",
             "python",
         ]
@@ -150,3 +150,39 @@ def test_parse_args_accepts_python_language() -> None:
 
     assert args.language == "python"
     assert module._LANGUAGE_SUFFIXES["python"] == (".py",)
+
+
+def test_parse_args_accepts_go_language() -> None:
+    """The CLI should expose Go as a graph-backed validation lane."""
+
+    module = _load_script_module("validate_language_support_e2e_go")
+
+    args = module.parse_args(
+        [
+            "--repo-path",
+            "/tmp/sql-parser-validation/gopherci",
+            "--language",
+            "go",
+        ]
+    )
+
+    assert args.language == "go"
+    assert module._LANGUAGE_SUFFIXES["go"] == (".go",)
+
+
+def test_parse_args_accepts_sql_language() -> None:
+    """The CLI should expose SQL as a graph-backed validation lane."""
+
+    module = _load_script_module("validate_language_support_e2e_sql")
+
+    args = module.parse_args(
+        [
+            "--repo-path",
+            "/tmp/repos/services/api-node-communicator",
+            "--language",
+            "sql",
+        ]
+    )
+
+    assert args.language == "sql"
+    assert module._LANGUAGE_SUFFIXES["sql"] == (".sql",)

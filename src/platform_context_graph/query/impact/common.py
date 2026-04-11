@@ -61,6 +61,19 @@ def name_from_id(entity_id: str) -> str:
     return entity_id.split(":", 1)[1] if ":" in entity_id else entity_id
 
 
+def _normalize_entity_type(value: Any, entity_id: str) -> EntityType:
+    """Return a canonical entity type, falling back to the ID prefix."""
+
+    if isinstance(value, EntityType):
+        return value
+    if isinstance(value, str):
+        try:
+            return EntityType(value)
+        except ValueError:
+            pass
+    return entity_type_from_id(entity_id)
+
+
 def ref_from_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Build a portable entity reference payload from a snapshot dictionary.
 
@@ -71,9 +84,7 @@ def ref_from_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
         JSON-ready entity reference payload.
     """
 
-    entity_type = EntityType(
-        snapshot.get("type") or entity_type_from_id(snapshot["id"]).value
-    )
+    entity_type = _normalize_entity_type(snapshot.get("type"), snapshot["id"])
     name = snapshot.get("name") or name_from_id(snapshot["id"])
     payload: dict[str, Any] = {
         "id": snapshot["id"],
@@ -232,7 +243,7 @@ def entity_from_record(record: Any) -> dict[str, Any]:
     entity_id = data.get("id")
     if not entity_id:
         return {}
-    entity_type = data.get("type") or entity_type_from_id(entity_id).value
+    entity_type = _normalize_entity_type(data.get("type"), entity_id).value
     snapshot = {
         "id": entity_id,
         "type": entity_type,
