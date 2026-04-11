@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -10,10 +11,19 @@ from platform_context_graph.cli.main import app
 runner = CliRunner()
 
 
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
 def _combined_output(result) -> str:
     """Return combined stdout/stderr CLI output for assertions."""
 
     return f"{result.stdout}{result.stderr}"
+
+
+def _plain_output(result) -> str:
+    """Return combined CLI output without ANSI styling codes."""
+
+    return _ANSI_ESCAPE_RE.sub("", _combined_output(result))
 
 
 class _Response:
@@ -397,7 +407,7 @@ def test_admin_facts_skip_requires_repository_id() -> None:
     )
 
     assert result.exit_code == 2
-    assert "repository-id" in _combined_output(result)
+    assert "repository-id" in _plain_output(result)
 
 
 @patch("platform_context_graph.cli.remote.requests.request")
