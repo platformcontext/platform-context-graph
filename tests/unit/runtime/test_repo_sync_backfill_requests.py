@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from platform_context_graph.facts.work_queue.models import FactBackfillRequestRow
 
 
 def _config(repo_sync: object, repos_dir: Path):
@@ -385,3 +386,64 @@ def test_repo_sync_cycle_keeps_backfill_pending_when_indexing_fails(
         )
 
     assert queue._fetchall.call_count == 1
+
+
+def test_plan_repo_sync_backfills_reuses_source_run_lookup_per_cycle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planning should query each source run at most once per cycle."""
+
+    backfill_requests = importlib.import_module(
+        "platform_context_graph.runtime.ingester.backfill_requests"
+    )
+
+    repos_dir = tmp_path / "workspace" / "repos"
+    repo_a = repos_dir / "platformcontext" / "payments-api"
+    repo_b = repos_dir / "platformcontext" / "orders-api"
+    repo_a.mkdir(parents=True)
+    repo_b.mkdir(parents=True)
+
+    source_run_calls: list[str] = []
+    queue = MagicMock()
+    queue.enabled = True
+
+    monkeypatch.setattr(
+        backfill_requests,
+        "list_backfill_requests",
+        lambda _queue: [
+            FactBackfillRequestRow(
+                backfill_request_id="fact-backfill:1",
+                source_run_id="run-123",
+            ),
+            FactBackfillRequestRow(
+                backfill_request_id="fact-backfill:2",
+                source_run_id="run-123",
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        backfill_requests,
+        "list_repository_ids_for_source_run",
+        lambda _queue, *, source_run_id: (
+            source_run_calls.append(source_run_id)
+            or ["repository:r_orders", "repository:r_payments"]
+        ),
+    )
+
+    selection = backfill_requests.plan_repo_sync_backfills(
+        discovered_repository_paths=[repo_a, repo_b],
+        get_fact_work_queue_fn=lambda: queue,
+        repository_id_for_path_fn=lambda path: (
+            "repository:r_payments"
+            if path == repo_a.resolve()
+            else "repository:r_orders"
+        ),
+    )
+
+    assert selection.forced_repositories == (repo_b.resolve(), repo_a.resolve())
+    assert selection.satisfiable_request_ids == (
+        "fact-backfill:1",
+        "fact-backfill:2",
+    )
+    assert source_run_calls == ["run-123"]

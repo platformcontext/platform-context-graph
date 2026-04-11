@@ -55,9 +55,14 @@ def plan_repo_sync_backfills(
 
     forced_paths: set[Path] = set()
     satisfiable_request_ids: list[str] = []
+    source_run_repository_ids_cache: dict[str, set[str]] = {}
     unresolved_summaries: list[str] = []
     for request in requests:
-        requested_repository_ids = _request_repository_ids(queue=queue, request=request)
+        requested_repository_ids = _request_repository_ids(
+            queue=queue,
+            request=request,
+            source_run_repository_ids_cache=source_run_repository_ids_cache,
+        )
         if not requested_repository_ids:
             unresolved_summaries.append(_request_summary(request))
             continue
@@ -106,23 +111,50 @@ def _request_repository_ids(
     *,
     queue: object,
     request: FactBackfillRequestRow,
+    source_run_repository_ids_cache: dict[str, set[str]] | None = None,
 ) -> set[str]:
     """Resolve the repository ids targeted by one backfill request."""
 
     repository_id = str(request.repository_id or "").strip()
     source_run_id = str(request.source_run_id or "").strip()
     if repository_id and source_run_id:
-        source_run_repository_ids = set(
-            list_repository_ids_for_source_run(queue, source_run_id=source_run_id)
+        source_run_repository_ids = _source_run_repository_ids(
+            queue=queue,
+            source_run_id=source_run_id,
+            source_run_repository_ids_cache=source_run_repository_ids_cache,
         )
         return {repository_id} if repository_id in source_run_repository_ids else set()
     if repository_id:
         return {repository_id}
     if source_run_id:
+        return _source_run_repository_ids(
+            queue=queue,
+            source_run_id=source_run_id,
+            source_run_repository_ids_cache=source_run_repository_ids_cache,
+        )
+    return set()
+
+
+def _source_run_repository_ids(
+    *,
+    queue: object,
+    source_run_id: str,
+    source_run_repository_ids_cache: dict[str, set[str]] | None = None,
+) -> set[str]:
+    """Return cached repository ids for one source run when available."""
+
+    if source_run_repository_ids_cache is None:
         return set(
             list_repository_ids_for_source_run(queue, source_run_id=source_run_id)
         )
-    return set()
+
+    cached_repository_ids = source_run_repository_ids_cache.get(source_run_id)
+    if cached_repository_ids is None:
+        cached_repository_ids = set(
+            list_repository_ids_for_source_run(queue, source_run_id=source_run_id)
+        )
+        source_run_repository_ids_cache[source_run_id] = cached_repository_ids
+    return cached_repository_ids
 
 
 def _request_summary(
