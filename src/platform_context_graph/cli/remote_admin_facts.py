@@ -200,6 +200,42 @@ def run_remote_admin_facts_dead_letter(
     print_json_payload(main_module.console, payload)
 
 
+def run_remote_admin_facts_skip(
+    main_module: Any,
+    *,
+    service_url: str | None,
+    api_key: str | None,
+    profile: str | None,
+    repository_id: str,
+    operator_note: str | None,
+) -> None:
+    """Skip one repository's actionable fact work items through the admin API."""
+
+    remote_target = resolve_remote_target(
+        service_url=service_url,
+        api_key=api_key,
+        profile=profile,
+        require_remote=True,
+    )
+    try:
+        payload = request_json(
+            remote_target,
+            method="POST",
+            path="/api/v0/admin/facts/skip",
+            json_body={
+                "repository_id": repository_id,
+                "operator_note": operator_note,
+            },
+        )
+    except RemoteAPIError as exc:
+        main_module.console.print(
+            f"[bold red]Remote fact skip failed:[/bold red] {exc}"
+        )
+        raise typer.Exit(code=1) from exc
+
+    print_json_payload(main_module.console, payload)
+
+
 def run_remote_admin_fact_backfill(
     main_module: Any,
     *,

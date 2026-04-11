@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -10,10 +11,19 @@ from platform_context_graph.cli.main import app
 runner = CliRunner()
 
 
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
 def _combined_output(result) -> str:
     """Return combined stdout/stderr CLI output for assertions."""
 
     return f"{result.stdout}{result.stderr}"
+
+
+def _plain_output(result) -> str:
+    """Return combined CLI output without ANSI styling codes."""
+
+    return _ANSI_ESCAPE_RE.sub("", _combined_output(result))
 
 
 class _Response:
@@ -347,6 +357,57 @@ def test_admin_facts_dead_letter_posts_remote_request(
         "operator_note": "manual stop",
         "limit": 100,
     }
+
+
+@patch("platform_context_graph.cli.remote.requests.request")
+def test_admin_facts_skip_posts_remote_request(
+    mock_request: MagicMock,
+) -> None:
+    """`pcg admin facts skip` should post the repository skip payload."""
+
+    mock_request.return_value = _Response({"count": 2, "items": []})
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "skip",
+            "--service-url",
+            "https://pcg.example.com",
+            "--repository-id",
+            "repository:r_archived",
+            "--note",
+            "historical residue",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _args, kwargs = mock_request.call_args
+    assert kwargs["method"] == "POST"
+    assert kwargs["url"] == "https://pcg.example.com/api/v0/admin/facts/skip"
+    assert kwargs["json"] == {
+        "repository_id": "repository:r_archived",
+        "operator_note": "historical residue",
+    }
+
+
+def test_admin_facts_skip_requires_repository_id() -> None:
+    """The CLI should reject repository skip without an explicit repo id."""
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "skip",
+            "--service-url",
+            "https://pcg.example.com",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "repository-id" in _plain_output(result)
 
 
 @patch("platform_context_graph.cli.remote.requests.request")
