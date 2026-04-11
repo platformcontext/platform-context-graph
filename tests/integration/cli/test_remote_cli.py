@@ -350,6 +350,57 @@ def test_admin_facts_dead_letter_posts_remote_request(
 
 
 @patch("platform_context_graph.cli.remote.requests.request")
+def test_admin_facts_skip_posts_remote_request(
+    mock_request: MagicMock,
+) -> None:
+    """`pcg admin facts skip` should post the repository skip payload."""
+
+    mock_request.return_value = _Response({"count": 2, "items": []})
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "skip",
+            "--service-url",
+            "https://pcg.example.com",
+            "--repository-id",
+            "repository:r_archived",
+            "--note",
+            "historical residue",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _args, kwargs = mock_request.call_args
+    assert kwargs["method"] == "POST"
+    assert kwargs["url"] == "https://pcg.example.com/api/v0/admin/facts/skip"
+    assert kwargs["json"] == {
+        "repository_id": "repository:r_archived",
+        "operator_note": "historical residue",
+    }
+
+
+def test_admin_facts_skip_requires_repository_id() -> None:
+    """The CLI should reject repository skip without an explicit repo id."""
+
+    result = runner.invoke(
+        app,
+        [
+            "admin",
+            "facts",
+            "skip",
+            "--service-url",
+            "https://pcg.example.com",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "repository-id" in _combined_output(result)
+
+
+@patch("platform_context_graph.cli.remote.requests.request")
 def test_admin_facts_backfill_posts_remote_request(
     mock_request: MagicMock,
 ) -> None:

@@ -49,6 +49,13 @@ class DeadLetterFactWorkItemsRequest(BaseModel):
     limit: int = 100
 
 
+class SkipRepositoryFactWorkItemsRequest(BaseModel):
+    """Request body for intentionally skipping one repository's work items."""
+
+    repository_id: str
+    operator_note: str | None = None
+
+
 class RequestFactBackfillRequest(BaseModel):
     """Request body for creating a durable fact backfill request."""
 
@@ -283,6 +290,42 @@ async def dead_letter_fact_work_items(
     get_observability().record_admin_fact_action(
         component="api",
         action="dead_letter_fact_work_items",
+        outcome="success",
+    )
+    return {
+        "count": len(rows),
+        "items": [_serialize_work_item(row) for row in rows],
+    }
+
+
+@router.post("/skip")
+async def skip_repository_fact_work_items(
+    payload: SkipRepositoryFactWorkItemsRequest,
+) -> dict[str, Any]:
+    """Mark one repository's actionable work items as intentionally skipped."""
+
+    repository_id = payload.repository_id.strip()
+    if not repository_id:
+        raise HTTPException(
+            status_code=400,
+            detail="admin facts skip requires a non-empty repository_id",
+        )
+    queue = _require_fact_queue()
+    rows = queue.skip_repository_work_items(
+        repository_id=repository_id,
+        operator_note=payload.operator_note,
+    )
+    info_logger(
+        "Skipped repository fact work items through admin API",
+        event_name="admin.facts.skipped",
+        extra_keys={
+            "count": len(rows),
+            "repository_id": repository_id,
+        },
+    )
+    get_observability().record_admin_fact_action(
+        component="api",
+        action="skip_repository_fact_work_items",
         outcome="success",
     )
     return {

@@ -75,6 +75,71 @@ async def test_dead_letter_fact_work_items_returns_updated_rows(
 
 
 @pytest.mark.asyncio
+async def test_skip_repository_work_items_returns_skipped_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The admin skip endpoint should return repository-scoped skipped rows."""
+
+    class _FakeQueue:
+        enabled = True
+
+        def skip_repository_work_items(self, **kwargs):
+            assert kwargs == {
+                "repository_id": "repository:r_archived",
+                "operator_note": "historical residue",
+            }
+            return [
+                SimpleNamespace(
+                    work_item_id="work-archived-1",
+                    work_type="project-git-facts",
+                    repository_id="repository:r_archived",
+                    source_run_id="run-archived",
+                    status="skipped",
+                    attempt_count=4,
+                    last_error="historical failure",
+                    failure_stage="repo_sync",
+                    error_class=None,
+                    failure_class="skipped_repository",
+                    failure_code="archived_repository",
+                    retry_disposition="non_retryable",
+                    dead_lettered_at=None,
+                    last_attempt_started_at=None,
+                    last_attempt_finished_at=_utc_now(),
+                    next_retry_at=None,
+                    operator_note="historical residue",
+                    created_at=_utc_now(),
+                    updated_at=_utc_now(),
+                )
+            ]
+
+    monkeypatch.setattr(admin_facts, "get_fact_work_queue", lambda: _FakeQueue())
+
+    response = await admin_facts.skip_repository_fact_work_items(
+        admin_facts.SkipRepositoryFactWorkItemsRequest(
+            repository_id="repository:r_archived",
+            operator_note="historical residue",
+        )
+    )
+
+    assert response["count"] == 1
+    assert response["items"][0]["status"] == "skipped"
+    assert response["items"][0]["failure_code"] == "archived_repository"
+
+
+@pytest.mark.asyncio
+async def test_skip_repository_work_items_requires_repository_id() -> None:
+    """The admin skip endpoint should reject unscoped requests."""
+
+    with pytest.raises(HTTPException) as exc_info:
+        await admin_facts.skip_repository_fact_work_items(
+            admin_facts.SkipRepositoryFactWorkItemsRequest(repository_id="")
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "repository_id" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
 async def test_replay_failed_facts_returns_replayed_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

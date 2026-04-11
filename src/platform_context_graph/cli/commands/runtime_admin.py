@@ -13,6 +13,7 @@ from ..remote_admin_facts import run_remote_admin_facts_dead_letter
 from ..remote_admin_facts import run_remote_admin_facts_list_decisions
 from ..remote_admin_facts import run_remote_admin_facts_list_work_items
 from ..remote_admin_facts import run_remote_admin_facts_replay
+from ..remote_admin_facts import run_remote_admin_facts_skip
 from ..remote_commands import render_admin_tuning_report
 from ..remote_commands import run_remote_admin_reindex
 
@@ -321,6 +322,30 @@ def register_admin_commands(main_module: Any, admin_app: typer.Typer) -> None:
             profile=profile,
             repository_id=repository_id,
             source_run_id=source_run_id,
+            operator_note=operator_note,
+        )
+
+    @admin_facts_app.command("skip")
+    def admin_facts_skip(
+        service_url: str | None = typer.Option(None, "--service-url"),
+        api_key: str | None = typer.Option(None, "--api-key"),
+        profile: str | None = typer.Option(None, "--profile"),
+        repository_id: str | None = typer.Option(None, "--repository-id"),
+        operator_note: str | None = typer.Option(None, "--note"),
+    ) -> None:
+        """Skip one repository's actionable facts-first work items."""
+
+        normalized_repository_id = (repository_id or "").strip()
+        if not normalized_repository_id:
+            raise typer.BadParameter(
+                "A non-empty --repository-id is required for admin facts skip."
+            )
+        run_remote_admin_facts_skip(
+            main_module,
+            service_url=service_url,
+            api_key=api_key,
+            profile=profile,
+            repository_id=normalized_repository_id,
             operator_note=operator_note,
         )
 
