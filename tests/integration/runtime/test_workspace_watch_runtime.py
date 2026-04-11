@@ -128,6 +128,7 @@ def test_workspace_watch_repo_handlers_keep_gitignore_scoped_to_each_repo(
         delete_file_from_graph=lambda *_args, **_kwargs: None,
         _create_all_function_calls=lambda *_args, **_kwargs: None,
         _create_all_inheritance_links=lambda *_args, **_kwargs: None,
+        _create_all_sql_relationships=lambda *_args, **_kwargs: None,
         _create_all_infra_links=lambda *_args, **_kwargs: None,
     )
 

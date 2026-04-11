@@ -72,6 +72,7 @@ This inventory is the current-state map for PlatformContextGraph documentation.
 | `docs/docs/languages/csharp.md` | C# parser spec | active |
 | `docs/docs/languages/c.md` | C parser spec | active |
 | `docs/docs/languages/scala.md` | Scala parser spec | active |
+| `docs/docs/languages/sql.md` | SQL parser spec | active |
 | `docs/docs/languages/javascript.md` | JavaScript parser spec | active |
 | `docs/docs/languages/ruby.md` | Ruby parser spec | active |
 | `docs/docs/languages/kotlin.md` | Kotlin parser spec | active |
