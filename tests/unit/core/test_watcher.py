@@ -171,6 +171,7 @@ def test_repository_event_handlers_keep_workspace_repo_updates_partitioned(
         delete_file_from_graph=lambda _path: None,
         _create_all_function_calls=lambda _file_data, _imports_map: None,
         _create_all_inheritance_links=lambda _file_data, _imports_map: None,
+        _create_all_sql_relationships=lambda _file_data: None,
         _create_all_infra_links=lambda _file_data: None,
     )
 
@@ -316,6 +317,7 @@ def test_repository_event_handler_initial_scan_skips_gitignored_files(
         delete_file_from_graph=lambda *_args, **_kwargs: None,
         _create_all_function_calls=lambda *_args, **_kwargs: None,
         _create_all_inheritance_links=lambda *_args, **_kwargs: None,
+        _create_all_sql_relationships=lambda *_args, **_kwargs: None,
         _create_all_infra_links=lambda *_args, **_kwargs: None,
     )
 
@@ -374,6 +376,7 @@ def test_repository_event_handler_gitignore_change_removes_newly_ignored_files(
         delete_file_from_graph=delete_file_from_graph,
         _create_all_function_calls=lambda *_args, **_kwargs: None,
         _create_all_inheritance_links=lambda *_args, **_kwargs: None,
+        _create_all_sql_relationships=lambda *_args, **_kwargs: None,
         _create_all_infra_links=lambda *_args, **_kwargs: None,
     )
 

@@ -31,6 +31,7 @@ _DEPENDENCY_ROOTS_BY_ECOSYSTEM: Final[dict[str, tuple[str, ...]]] = {
     "ruby": ("vendor/bundle",),
     "rust": (),
     "scala": (),
+    "sql": (),
     "swift": ("Carthage/Checkouts", ".build/checkouts", "Pods"),
     "terraform": (".terraform",),
     "terragrunt": (".terragrunt-cache",),
