@@ -617,3 +617,58 @@ def test_resolve_entity_supports_live_content_entities_via_sql_nodes() -> None:
         "content-entity:e_users"
     ]
     assert result["matches"][0]["ref"]["type"] == "content_entity"
+
+
+def test_resolve_entity_supports_live_sql_columns() -> None:
+    """Live SQL content-entity resolution should include persisted columns."""
+
+    class _MockResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def data(self):
+            return self._rows
+
+    session = MagicMock()
+
+    def _run(query: str, **_kwargs):
+        if "SqlColumn" not in query:
+            return _MockResult([])
+        return _MockResult(
+            [
+                {
+                    "id": "content-entity:e_users_id",
+                    "type": "content_entity",
+                    "name": "public.users.id",
+                    "path": "/tmp/sql/schema.sql",
+                    "relative_path": "schema.sql",
+                    "repo_id": "repository:r_sql",
+                    "repo_name": "warehouse",
+                    "repo_slug": "platformcontext/warehouse",
+                    "remote_url": "https://github.com/platformcontext/warehouse",
+                    "entity_type": "SqlColumn",
+                    "aliases": ["users.id", "public.users.id"],
+                }
+            ]
+        )
+
+    session.run.side_effect = _run
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+    driver = MagicMock()
+    driver.session.return_value = session
+    db = MagicMock()
+    db.get_driver.return_value = driver
+
+    result = resolve_entity(
+        db,
+        query="public.users.id",
+        types=["content_entity"],
+        exact=False,
+        limit=5,
+    )
+
+    assert [match["ref"]["id"] for match in result["matches"]] == [
+        "content-entity:e_users_id"
+    ]
+    assert result["matches"][0]["ref"]["type"] == "content_entity"

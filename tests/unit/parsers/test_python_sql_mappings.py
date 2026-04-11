@@ -49,6 +49,7 @@ class User(Base):
     assert result["orm_table_mappings"] == [
         {
             "class_name": "User",
+            "class_line_number": 8,
             "table_name": "users",
             "framework": "sqlalchemy",
             "line_number": 9,
@@ -82,6 +83,7 @@ class AuditEvent(models.Model):
     assert result["orm_table_mappings"] == [
         {
             "class_name": "AuditEvent",
+            "class_line_number": 4,
             "table_name": "audit.events",
             "framework": "django",
             "line_number": 8,

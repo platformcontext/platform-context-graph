@@ -12,10 +12,6 @@ _FUNCTION_PATTERN = re.compile(
     r"func\s+(?:\([^)]*\)\s*)?(?P<name>[A-Za-z_]\w*)\s*\([^)]*\)\s*(?:\([^)]*\)|[^{\n]+)?\{",
     re.MULTILINE,
 )
-_STRING_PATTERN = re.compile(
-    r'(?P<quote>`|")(?P<body>.*?)(?P=quote)',
-    re.DOTALL,
-)
 _SQL_CALL_PATTERN = re.compile(
     r"\.\s*(?P<call>ExecContext|Exec|QueryContext|QueryRowContext|QueryRow|QueryxContext|Queryx|GetContext|Get|SelectContext|Select)\s*\(",
     re.MULTILINE,
@@ -57,7 +53,12 @@ def extract_go_embedded_sql_queries(path: Path | str) -> list[dict[str, Any]]:
 
     source = read_source_text(path)
     queries: list[dict[str, Any]] = []
-    for function_name, function_body, start_offset in _iter_function_bodies(source):
+    for (
+        function_name,
+        function_body,
+        start_offset,
+        function_line_number,
+    ) in _iter_function_bodies(source):
         for body, body_offset in _iter_string_literals(function_body):
             api = _detect_api_for_offset(function_body, body_offset)
             if api is None:
@@ -69,6 +70,7 @@ def extract_go_embedded_sql_queries(path: Path | str) -> list[dict[str, Any]]:
                 queries.append(
                     {
                         "function_name": function_name,
+                        "function_line_number": function_line_number,
                         "table_name": match.group("name"),
                         "operation": operation,
                         "line_number": _line_number_for_offset(
@@ -82,10 +84,10 @@ def extract_go_embedded_sql_queries(path: Path | str) -> list[dict[str, Any]]:
     return queries
 
 
-def _iter_function_bodies(source: str) -> list[tuple[str, str, int]]:
+def _iter_function_bodies(source: str) -> list[tuple[str, str, int, int]]:
     """Return function names, body text, and body start offsets from Go source."""
 
-    functions: list[tuple[str, str, int]] = []
+    functions: list[tuple[str, str, int, int]] = []
     for match in _FUNCTION_PATTERN.finditer(source):
         open_brace = source.find("{", match.start())
         close_brace = _matching_brace(source, open_brace)
@@ -93,7 +95,12 @@ def _iter_function_bodies(source: str) -> list[tuple[str, str, int]]:
             continue
         body_start = open_brace + 1
         functions.append(
-            (match.group("name"), source[body_start:close_brace], body_start)
+            (
+                match.group("name"),
+                source[body_start:close_brace],
+                body_start,
+                _line_number_for_offset(source, match.start()),
+            )
         )
     return functions
 
@@ -117,8 +124,37 @@ def _iter_string_literals(source: str) -> list[tuple[str, int]]:
     """Return string literal contents with offsets relative to ``source``."""
 
     literals: list[tuple[str, int]] = []
-    for match in _STRING_PATTERN.finditer(source):
-        literals.append((match.group("body"), match.start("body")))
+    index = 0
+    while index < len(source):
+        current = source[index]
+        if current == "`":
+            end = source.find("`", index + 1)
+            if end < 0:
+                break
+            literals.append((source[index + 1 : end], index + 1))
+            index = end + 1
+            continue
+        if current != '"':
+            index += 1
+            continue
+        body_start = index + 1
+        body: list[str] = []
+        index += 1
+        while index < len(source):
+            current = source[index]
+            if current == "\\" and index + 1 < len(source):
+                body.append(current)
+                body.append(source[index + 1])
+                index += 2
+                continue
+            if current == '"':
+                literals.append(("".join(body), body_start))
+                index += 1
+                break
+            body.append(current)
+            index += 1
+        else:
+            break
     return literals
 
 

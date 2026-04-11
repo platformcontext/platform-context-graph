@@ -90,10 +90,10 @@ def _has_sql_relationship_work(file_data_list: list[dict[str, Any]]) -> bool:
 def _build_entity_lookup(
     session: Any,
     file_data_list: list[dict[str, Any]]
-) -> dict[str, dict[str, str]]:
+) -> dict[str, dict[str, Any]]:
     """Return entity-name lookup tables grouped by graph kind."""
 
-    lookup: dict[str, dict[str, str]] = defaultdict(dict)
+    resolved_entries: list[dict[str, Any]] = []
     pending: dict[str, list[dict[str, Any]]] = defaultdict(list)
     seen_keys: set[tuple[str, str, str, int]] = set()
     for file_data in file_data_list:
@@ -107,7 +107,15 @@ def _build_entity_lookup(
                 uid = item.get("uid")
                 for kind in kinds:
                     if isinstance(uid, str) and uid:
-                        lookup[kind].setdefault(name, uid)
+                        resolved_entries.append(
+                            {
+                                "kind": kind,
+                                "file_path": file_path,
+                                "name": name,
+                                "line_number": line_number,
+                                "uid": uid,
+                            }
+                        )
                         continue
                     dedupe_key = (kind, file_path, name, line_number)
                     if dedupe_key in seen_keys:
@@ -123,11 +131,69 @@ def _build_entity_lookup(
 
     for kind, rows in pending.items():
         for row in _lookup_uids_in_graph(session, kind, rows):
+            file_path = row.get("file_path")
             name = row.get("name")
+            line_number = row.get("line_number")
             uid = row.get("uid")
-            if isinstance(name, str) and isinstance(uid, str) and uid:
-                lookup[kind].setdefault(name, uid)
-    return lookup
+            if (
+                isinstance(file_path, str)
+                and isinstance(name, str)
+                and isinstance(line_number, int)
+                and isinstance(uid, str)
+                and uid
+            ):
+                resolved_entries.append(
+                    {
+                        "kind": kind,
+                        "file_path": file_path,
+                        "name": name,
+                        "line_number": line_number,
+                        "uid": uid,
+                    }
+                )
+    return _compile_entity_lookup(resolved_entries)
+
+
+def _compile_entity_lookup(
+    resolved_entries: list[dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    """Compile exact and fallback UID lookups from resolved entity entries."""
+
+    by_location: dict[str, dict[tuple[str, str, int], str]] = defaultdict(dict)
+    path_name_candidates: dict[str, dict[tuple[str, str], set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
+    name_candidates: dict[str, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
+
+    for entry in resolved_entries:
+        kind = entry["kind"]
+        file_path = entry["file_path"]
+        name = entry["name"]
+        line_number = entry["line_number"]
+        uid = entry["uid"]
+        by_location[kind][(file_path, name, line_number)] = uid
+        path_name_candidates[kind][(file_path, name)].add(uid)
+        name_candidates[kind][name].add(uid)
+
+    by_path_name: dict[str, dict[tuple[str, str], str]] = defaultdict(dict)
+    for kind, rows in path_name_candidates.items():
+        for key, uids in rows.items():
+            if len(uids) == 1:
+                by_path_name[kind][key] = next(iter(uids))
+
+    by_name: dict[str, dict[str, str]] = defaultdict(dict)
+    for kind, rows in name_candidates.items():
+        for name, uids in rows.items():
+            if len(uids) == 1:
+                by_name[kind][name] = next(iter(uids))
+
+    return {
+        "by_location": dict(by_location),
+        "by_path_name": dict(by_path_name),
+        "by_name": dict(by_name),
+    }
 
 
 def _lookup_uids_in_graph(
@@ -147,7 +213,10 @@ def _lookup_uids_in_graph(
         WHERE n.path = row.file_path
           AND n.name = row.name
           AND n.line_number = row.line_number
-        RETURN row.name AS name, n.uid AS uid
+        RETURN row.file_path AS file_path,
+               row.name AS name,
+               row.line_number AS line_number,
+               n.uid AS uid
         """,
         rows=rows,
     ).data()
@@ -167,16 +236,19 @@ def _materialize_sql_links(
     query_rows: list[dict[str, Any]] = []
 
     for file_data in file_data_list:
+        file_path = str(Path(file_data["path"]).resolve())
         for item in file_data.get("sql_relationships", []):
             source_uid = _resolve_uid(
                 entity_lookup,
                 item.get("source_name"),
                 _RELATIONSHIP_SOURCE_KINDS.get(item.get("type", ""), ()),
+                file_path=file_path,
             )
             target_uid = _resolve_uid(
                 entity_lookup,
                 item.get("target_name"),
                 _RELATIONSHIP_TARGET_KINDS.get(item.get("type", ""), ()),
+                file_path=file_path,
             )
             if source_uid is None or target_uid is None:
                 continue
@@ -193,12 +265,13 @@ def _materialize_sql_links(
                 entity_lookup,
                 item.get("target_name"),
                 (item.get("target_kind"),),
+                file_path=file_path,
             )
             if target_uid is None:
                 continue
             migrate_rows.append(
                 {
-                    "file_path": str(Path(file_data["path"]).resolve()),
+                    "file_path": file_path,
                     "target_uid": target_uid,
                     "line_number": item.get("line_number"),
                     "tool": item.get("tool"),
@@ -206,11 +279,18 @@ def _materialize_sql_links(
             )
 
         for item in file_data.get("orm_table_mappings", []):
-            source_uid = _resolve_uid(entity_lookup, item.get("class_name"), ("Class",))
+            source_uid = _resolve_uid(
+                entity_lookup,
+                item.get("class_name"),
+                ("Class",),
+                file_path=file_path,
+                line_number=item.get("class_line_number"),
+            )
             target_uid = _resolve_uid(
                 entity_lookup,
                 item.get("table_name"),
                 ("SqlTable",),
+                file_path=file_path,
             )
             if source_uid is None or target_uid is None:
                 continue
@@ -228,11 +308,14 @@ def _materialize_sql_links(
                 entity_lookup,
                 item.get("function_name"),
                 ("Function",),
+                file_path=file_path,
+                line_number=item.get("function_line_number"),
             )
             target_uid = _resolve_uid(
                 entity_lookup,
                 item.get("table_name"),
                 ("SqlTable",),
+                file_path=file_path,
             )
             if source_uid is None or target_uid is None:
                 continue
@@ -268,9 +351,12 @@ def _materialize_sql_links(
 
 
 def _resolve_uid(
-    entity_lookup: dict[str, dict[str, str]],
+    entity_lookup: dict[str, dict[str, Any]],
     entity_name: str | None,
     kinds: tuple[str | None, ...],
+    *,
+    file_path: str | None = None,
+    line_number: int | None = None,
 ) -> str | None:
     """Return the UID for one entity name constrained to the allowed kinds."""
 
@@ -279,7 +365,19 @@ def _resolve_uid(
     for kind in kinds:
         if not kind:
             continue
-        uid = entity_lookup.get(kind, {}).get(entity_name)
+        if isinstance(file_path, str) and isinstance(line_number, int):
+            uid = entity_lookup.get("by_location", {}).get(kind, {}).get(
+                (file_path, entity_name, line_number)
+            )
+            if uid is not None:
+                return uid
+        if isinstance(file_path, str):
+            uid = entity_lookup.get("by_path_name", {}).get(kind, {}).get(
+                (file_path, entity_name)
+            )
+            if uid is not None:
+                return uid
+        uid = entity_lookup.get("by_name", {}).get(kind, {}).get(entity_name)
         if uid is not None:
             return uid
     return None

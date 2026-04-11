@@ -159,11 +159,25 @@ def test_create_all_sql_links_resolves_missing_uids_from_graph() -> None:
     def _run(query: str, **_kwargs: object) -> _FakeResult | Mock:
         if "MATCH (n:SqlTable)" in query:
             return _FakeResult(
-                [{"name": "public.users", "uid": "content-entity:e_users"}]
+                [
+                    {
+                        "file_path": "/tmp/sql/schema.sql",
+                        "name": "public.users",
+                        "line_number": 1,
+                        "uid": "content-entity:e_users",
+                    }
+                ]
             )
         if "MATCH (n:SqlColumn)" in query:
             return _FakeResult(
-                [{"name": "public.users.id", "uid": "content-entity:e_users_id"}]
+                [
+                    {
+                        "file_path": "/tmp/sql/schema.sql",
+                        "name": "public.users.id",
+                        "line_number": 2,
+                        "uid": "content-entity:e_users_id",
+                    }
+                ]
             )
         return Mock()
 
@@ -241,3 +255,141 @@ def test_create_all_sql_links_consumes_write_results() -> None:
     create_all_sql_links(session, file_data)
 
     assert write_result.consume.call_count == 2
+
+
+def test_create_all_sql_links_scopes_code_entities_by_file_path() -> None:
+    """ORM and embedded-SQL links should not cross-wire duplicate names across files."""
+
+    session = Mock()
+    file_data = [
+        {
+            "path": "/tmp/service_a/models.py",
+            "classes": [
+                {
+                    "name": "User",
+                    "uid": "content-entity:e_service_a_user_class",
+                    "line_number": 3,
+                }
+            ],
+            "functions": [
+                {
+                    "name": "loadUsers",
+                    "uid": "content-entity:e_service_a_load_users",
+                    "line_number": 8,
+                }
+            ],
+            "sql_tables": [
+                {
+                    "name": "service_a.users",
+                    "uid": "content-entity:e_service_a_users",
+                    "line_number": 1,
+                }
+            ],
+            "orm_table_mappings": [
+                {
+                    "class_name": "User",
+                    "class_line_number": 3,
+                    "table_name": "service_a.users",
+                    "framework": "sqlalchemy",
+                    "line_number": 4,
+                }
+            ],
+            "embedded_sql_queries": [
+                {
+                    "function_name": "loadUsers",
+                    "function_line_number": 8,
+                    "table_name": "service_a.users",
+                    "operation": "select",
+                    "line_number": 9,
+                    "api": "database/sql",
+                }
+            ],
+        },
+        {
+            "path": "/tmp/service_b/models.py",
+            "classes": [
+                {
+                    "name": "User",
+                    "uid": "content-entity:e_service_b_user_class",
+                    "line_number": 30,
+                }
+            ],
+            "functions": [
+                {
+                    "name": "loadUsers",
+                    "uid": "content-entity:e_service_b_load_users",
+                    "line_number": 40,
+                }
+            ],
+            "sql_tables": [
+                {
+                    "name": "service_b.users",
+                    "uid": "content-entity:e_service_b_users",
+                    "line_number": 20,
+                }
+            ],
+            "orm_table_mappings": [
+                {
+                    "class_name": "User",
+                    "class_line_number": 30,
+                    "table_name": "service_b.users",
+                    "framework": "sqlalchemy",
+                    "line_number": 31,
+                }
+            ],
+            "embedded_sql_queries": [
+                {
+                    "function_name": "loadUsers",
+                    "function_line_number": 40,
+                    "table_name": "service_b.users",
+                    "operation": "select",
+                    "line_number": 41,
+                    "api": "sqlx",
+                }
+            ],
+        },
+    ]
+
+    create_all_sql_links(session, file_data)
+
+    maps_to_table_rows = next(
+        call.kwargs["rows"]
+        for call in session.run.call_args_list
+        if "MAPS_TO_TABLE" in call.args[0]
+    )
+    queries_table_rows = next(
+        call.kwargs["rows"]
+        for call in session.run.call_args_list
+        if "QUERIES_TABLE" in call.args[0]
+    )
+
+    assert maps_to_table_rows == [
+        {
+            "source_uid": "content-entity:e_service_a_user_class",
+            "target_uid": "content-entity:e_service_a_users",
+            "line_number": 4,
+            "framework": "sqlalchemy",
+        },
+        {
+            "source_uid": "content-entity:e_service_b_user_class",
+            "target_uid": "content-entity:e_service_b_users",
+            "line_number": 31,
+            "framework": "sqlalchemy",
+        },
+    ]
+    assert queries_table_rows == [
+        {
+            "source_uid": "content-entity:e_service_a_load_users",
+            "target_uid": "content-entity:e_service_a_users",
+            "line_number": 9,
+            "operation": "select",
+            "api": "database/sql",
+        },
+        {
+            "source_uid": "content-entity:e_service_b_load_users",
+            "target_uid": "content-entity:e_service_b_users",
+            "line_number": 41,
+            "operation": "select",
+            "api": "sqlx",
+        },
+    ]

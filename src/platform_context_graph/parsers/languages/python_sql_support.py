@@ -40,6 +40,7 @@ def _extract_sqlalchemy_mapping(node: ast.ClassDef) -> dict[str, Any] | None:
                     return None
                 return {
                     "class_name": node.name,
+                    "class_line_number": node.lineno,
                     "table_name": value,
                     "framework": "sqlalchemy",
                     "line_number": child.lineno,
@@ -63,6 +64,7 @@ def _extract_django_mapping(node: ast.ClassDef) -> dict[str, Any] | None:
                         return None
                     return {
                         "class_name": node.name,
+                        "class_line_number": node.lineno,
                         "table_name": value,
                         "framework": "django",
                         "line_number": meta_child.lineno,

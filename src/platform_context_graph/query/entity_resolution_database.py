@@ -289,7 +289,14 @@ def db_content_entities(
         rows = session.run(
             f"""
             MATCH (file:File)-[:CONTAINS]->(entity)
-            WHERE (entity:SqlTable OR entity:SqlView OR entity:SqlFunction OR entity:SqlTrigger OR entity:SqlIndex)
+            WHERE (
+                entity:SqlTable
+                OR entity:SqlColumn
+                OR entity:SqlView
+                OR entity:SqlFunction
+                OR entity:SqlTrigger
+                OR entity:SqlIndex
+            )
               AND (
                   {_name_match('entity.name')}
                   OR {_name_match('entity.uid')}
@@ -308,7 +315,7 @@ def db_content_entities(
                    repo.name as repo_name,
                    coalesce(repo[$repo_slug_key], '') as repo_slug,
                    coalesce(repo[$remote_url_key], '') as remote_url,
-                   head([label IN labels(entity) WHERE label IN ['SqlTable', 'SqlView', 'SqlFunction', 'SqlTrigger', 'SqlIndex'] | label]) as entity_type,
+                   head([label IN labels(entity) WHERE label IN ['SqlTable', 'SqlColumn', 'SqlView', 'SqlFunction', 'SqlTrigger', 'SqlIndex'] | label]) as entity_type,
                    coalesce(entity.aliases, []) as aliases
             ORDER BY entity.name
             """,

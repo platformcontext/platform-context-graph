@@ -81,7 +81,7 @@ def test_main_reports_validation_errors(monkeypatch: pytest.MonkeyPatch) -> None
     exit_code = module.main(
         [
             "--repo-path",
-            "/Users/allen/repos/services/portal-react-platform",
+            "/tmp/repos/services/portal-react-platform",
             "--language",
             "javascript",
             "--check",
@@ -120,7 +120,7 @@ def test_main_prints_report_when_validation_passes(
     exit_code = module.main(
         [
             "--repo-path",
-            "/Users/allen/repos/services/api-node-platform",
+            "/tmp/repos/services/api-node-platform",
             "--language",
             "typescript",
             "--check",
@@ -142,7 +142,7 @@ def test_parse_args_accepts_python_language() -> None:
     args = module.parse_args(
         [
             "--repo-path",
-            "/Users/allen/repos/services/recos-ranker-service",
+            "/tmp/repos/services/recos-ranker-service",
             "--language",
             "python",
         ]
@@ -160,7 +160,7 @@ def test_parse_args_accepts_go_language() -> None:
     args = module.parse_args(
         [
             "--repo-path",
-            "/Users/allen/tmp/sql-parser-validation/gopherci",
+            "/tmp/sql-parser-validation/gopherci",
             "--language",
             "go",
         ]
@@ -178,7 +178,7 @@ def test_parse_args_accepts_sql_language() -> None:
     args = module.parse_args(
         [
             "--repo-path",
-            "/Users/allen/repos/services/api-node-communicator",
+            "/tmp/repos/services/api-node-communicator",
             "--language",
             "sql",
         ]

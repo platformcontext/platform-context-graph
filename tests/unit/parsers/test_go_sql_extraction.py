@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from platform_context_graph.parsers.languages.go import GoTreeSitterParser
+from platform_context_graph.parsers.languages.go_sql_support import _iter_string_literals
 from platform_context_graph.utils.tree_sitter_manager import get_tree_sitter_manager
 
 
@@ -59,6 +60,7 @@ func loadOrgs(db *sqlx.DB) error {
     assert result["embedded_sql_queries"] == [
         {
             "function_name": "listUsers",
+            "function_line_number": 9,
             "table_name": "public.users",
             "operation": "update",
             "line_number": 10,
@@ -66,9 +68,22 @@ func loadOrgs(db *sqlx.DB) error {
         },
         {
             "function_name": "loadOrgs",
+            "function_line_number": 14,
             "table_name": "public.orgs",
             "operation": "select",
             "line_number": 15,
             "api": "sqlx",
         },
+    ]
+
+
+def test_iter_string_literals_handles_escaped_quotes_in_go_strings() -> None:
+    """Interpreted Go strings should not split on escaped double quotes."""
+
+    literals = _iter_string_literals(
+        'db.Exec("SELECT id /* \\"audit\\" */ FROM public.users WHERE id = $1", 42)'
+    )
+
+    assert literals == [
+        ('SELECT id /* \\"audit\\" */ FROM public.users WHERE id = $1', 9)
     ]
