@@ -12,8 +12,12 @@ from platform_context_graph.observability import (
     initialize_observability,
 )
 from platform_context_graph.facts.state import get_fact_work_queue
+from platform_context_graph.indexing.coordinator_facts_support import (
+    repository_id_for_path,
+)
 from platform_context_graph.repository_identity import repository_metadata
 
+from .backfill_requests import plan_repo_sync_backfills, satisfy_repo_sync_backfills
 from .bootstrap import _request_index
 from .config import RepoSyncConfig, RepoSyncResult
 from .graph_state import graph_recovery_repository_paths
@@ -225,6 +229,19 @@ def _run_sync_git(
         record_phase_fn=record_phase,
         request_index_fn=_request_index,
         log_fn=log,
+        plan_repo_sync_backfills_fn=lambda discovered_repository_paths: (
+            plan_repo_sync_backfills(
+                discovered_repository_paths=discovered_repository_paths,
+                get_fact_work_queue_fn=get_fact_work_queue,
+                repository_id_for_path_fn=repository_id_for_path,
+            )
+        ),
+        satisfy_repo_sync_backfills_fn=lambda backfill_request_ids: (
+            satisfy_repo_sync_backfills(
+                backfill_request_ids=backfill_request_ids,
+                get_fact_work_queue_fn=get_fact_work_queue,
+            )
+        ),
         skip_archived_repository_work_items_fn=lambda repository_ids: (
             _skip_archived_repository_work_items(
                 config,
