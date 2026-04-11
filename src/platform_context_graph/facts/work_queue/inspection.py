@@ -123,16 +123,21 @@ def count_shared_projection_pending(
 ) -> int:
     """Return the number of work items blocked on authoritative shared follow-up."""
 
+    predicates = ["shared_projection_pending = TRUE"]
+    params: dict[str, Any] = {}
+    if source_run_id is not None:
+        predicates.append("source_run_id = %(source_run_id)s")
+        params["source_run_id"] = source_run_id
+
     row = queue._record_operation(
         operation="count_shared_projection_pending",
         callback=lambda: queue._fetchone(
-            """
+            f"""
             SELECT COUNT(*) AS pending_count
             FROM fact_work_items
-            WHERE shared_projection_pending = TRUE
-              AND (%(source_run_id)s IS NULL OR source_run_id = %(source_run_id)s)
+            WHERE {" AND ".join(predicates)}
             """,
-            {"source_run_id": source_run_id},
+            params,
         ),
         row_count=None,
     )
