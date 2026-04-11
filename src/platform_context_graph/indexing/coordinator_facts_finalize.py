@@ -29,6 +29,8 @@ def finalize_fact_projection_batch(
         return {}
 
     def _iter_snapshot_rows() -> Any:
+        """Yield committed snapshot rows for SQL relationship materialization."""
+
         for repo_path in committed_repo_paths:
             yield from iter_snapshot_file_data_fn(repo_path)
 
