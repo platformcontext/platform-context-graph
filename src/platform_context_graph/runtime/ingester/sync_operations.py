@@ -108,6 +108,8 @@ def _run_sync_git(
     record_phase_fn: Callable[..., None],
     request_index_fn: Callable[..., None],
     log_fn: Callable[..., None],
+    plan_repo_sync_backfills_fn: Callable[..., object] | None = None,
+    satisfy_repo_sync_backfills_fn: Callable[[list[str]], int] | None = None,
     skip_archived_repository_work_items_fn: Callable[[list[str]], None] | None = None,
 ) -> RepoSyncResult:
     """Run a Git-backed repo sync cycle."""
@@ -150,6 +152,23 @@ def _run_sync_git(
         repo_path.resolve()
         for repo_path in resumable_repository_paths_fn(config.repos_dir)
     }
+    backfill_selection = (
+        _call_with_supported_kwargs(
+            plan_repo_sync_backfills_fn,
+            discovered_repository_paths=discovered_repository_paths,
+        )
+        if plan_repo_sync_backfills_fn is not None
+        else None
+    )
+    forced_backfill_repositories = tuple(
+        getattr(backfill_selection, "forced_repositories", ()) or ()
+    )
+    satisfiable_backfill_request_ids = list(
+        getattr(backfill_selection, "satisfiable_request_ids", ()) or ()
+    )
+    unresolved_backfill_summaries = list(
+        getattr(backfill_selection, "unresolved_summaries", ()) or ()
+    )
     resumable_managed_repositories = sorted(
         discovered_repository_path_set.intersection(resumable_repository_paths),
         key=str,
@@ -163,9 +182,30 @@ def _run_sync_git(
             *[repo_path.resolve() for repo_path in updated_paths],
             *graph_missing_repositories,
             *resumable_managed_repositories,
+            *[repo_path.resolve() for repo_path in forced_backfill_repositories],
         },
         key=str,
     )
+    if forced_backfill_repositories:
+        preview = ", ".join(
+            _repo_label(path) for path in forced_backfill_repositories[:5]
+        )
+        if len(forced_backfill_repositories) > 5:
+            preview = f"{preview}, ..."
+        log_fn(
+            config.component,
+            "Forcing repo reindex for pending fact backfill request(s): "
+            f"requests={len(satisfiable_backfill_request_ids)} repos={preview}",
+        )
+    if unresolved_backfill_summaries:
+        preview = "; ".join(unresolved_backfill_summaries[:3])
+        if len(unresolved_backfill_summaries) > 3:
+            preview = f"{preview}; ..."
+        log_fn(
+            config.component,
+            "Leaving pending fact backfill request(s) unresolved during repo sync: "
+            f"count={len(unresolved_backfill_summaries)} requests={preview}",
+        )
     should_index = bool(selected_repositories)
     if not should_index:
         with begin_index_cycle_fn(
@@ -280,6 +320,18 @@ def _run_sync_git(
             selected_repositories=selected_repositories,
             family="sync",
         )
+        if (
+            satisfiable_backfill_request_ids
+            and satisfy_repo_sync_backfills_fn is not None
+        ):
+            satisfied_count = satisfy_repo_sync_backfills_fn(
+                satisfiable_backfill_request_ids
+            )
+            if satisfied_count:
+                log_fn(
+                    config.component,
+                    f"Satisfied {satisfied_count} pending fact backfill request(s)",
+                )
     return RepoSyncResult(
         discovered=len(discovered),
         cloned=cloned,

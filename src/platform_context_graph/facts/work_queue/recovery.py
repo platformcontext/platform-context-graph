@@ -217,6 +217,100 @@ def request_backfill(
     return row
 
 
+def list_backfill_requests(
+    queue: Any,
+    *,
+    limit: int = 1000,
+) -> list[FactBackfillRequestRow]:
+    """Return durable backfill requests ordered from oldest to newest."""
+
+    rows = queue._record_operation(
+        operation="list_backfill_requests",
+        callback=lambda: queue._fetchall(
+            """
+            SELECT backfill_request_id,
+                   repository_id,
+                   source_run_id,
+                   operator_note,
+                   created_at
+            FROM fact_backfill_requests
+            ORDER BY created_at ASC, backfill_request_id ASC
+            LIMIT %(limit)s
+            """,
+            {"limit": max(limit, 1)},
+        ),
+        row_count=None,
+    )
+    return [FactBackfillRequestRow(**row) for row in rows]
+
+
+def delete_backfill_requests(
+    queue: Any,
+    *,
+    backfill_request_ids: list[str],
+) -> int:
+    """Delete satisfied backfill requests and return the removed row count."""
+
+    request_ids = sorted(
+        {
+            request_id.strip()
+            for request_id in backfill_request_ids
+            if request_id.strip()
+        }
+    )
+    if not request_ids:
+        return 0
+    rows = queue._record_operation(
+        operation="delete_backfill_requests",
+        callback=lambda: queue._fetchall(
+            """
+            DELETE FROM fact_backfill_requests
+            WHERE backfill_request_id = ANY(%(backfill_request_ids)s::text[])
+            RETURNING backfill_request_id
+            """,
+            {"backfill_request_ids": request_ids},
+        ),
+        row_count=None,
+    )
+    return len(rows)
+
+
+def list_repository_ids_for_source_run(
+    queue: Any,
+    *,
+    source_run_id: str,
+    limit: int = 5000,
+) -> list[str]:
+    """Return distinct repository ids that participated in one source run."""
+
+    source_run_id = source_run_id.strip()
+    if not source_run_id:
+        return []
+    rows = queue._record_operation(
+        operation="list_repository_ids_for_source_run",
+        callback=lambda: queue._fetchall(
+            """
+            SELECT DISTINCT repository_id
+            FROM fact_work_items
+            WHERE source_run_id = %(source_run_id)s
+              AND repository_id IS NOT NULL
+            ORDER BY repository_id ASC
+            LIMIT %(limit)s
+            """,
+            {
+                "source_run_id": source_run_id,
+                "limit": max(limit, 1),
+            },
+        ),
+        row_count=None,
+    )
+    return [
+        repository_id
+        for row in rows
+        if (repository_id := str(row.get("repository_id") or "").strip())
+    ]
+
+
 def list_replay_events(
     queue: Any,
     *,
