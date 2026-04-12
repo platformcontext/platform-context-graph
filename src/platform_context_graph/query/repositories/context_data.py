@@ -15,6 +15,9 @@ from .context_infrastructure_support import (
     infrastructure_label_queries,
     infrastructure_query_kwargs,
 )
+from .context_data_intelligence import (
+    build_repository_data_intelligence_summary as _fetch_data_intelligence,
+)
 from .framework_summary import build_repository_framework_summary
 from .context_limitations import build_context_limitations
 from .graph_counts import (
@@ -124,6 +127,7 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         **scope,
     ).data()
     ecosystem = _fetch_ecosystem(session, repo)
+    data_intelligence = _fetch_data_intelligence(session, repo)
     framework_summary = build_repository_framework_summary(session, repo)
     relationship_summary = build_relationship_summary(
         session,
@@ -228,6 +232,8 @@ def build_repository_context(session: Any, repo_id: str) -> dict[str, Any]:
         "ecosystem": ecosystem,
         "framework_summary": framework_summary,
     }
+    if data_intelligence is not None:
+        context_payload["data_intelligence"] = data_intelligence
     framework_story = summarize_framework_overview(framework_summary)
     if framework_story:
         context_payload["framework_story"] = framework_story

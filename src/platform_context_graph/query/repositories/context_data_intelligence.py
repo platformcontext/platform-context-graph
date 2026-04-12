@@ -1,0 +1,141 @@
+"""Repository-scoped compiled analytics summary helpers."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from .graph_counts import repository_scope, repository_scope_predicate
+
+_DATA_RELATIONSHIP_FIELDS = {
+    "COMPILES_TO": "compiles_to",
+    "ASSET_DERIVES_FROM": "asset_derives_from",
+    "COLUMN_DERIVES_FROM": "column_derives_from",
+}
+
+
+def build_repository_data_intelligence_summary(
+    session: Any,
+    repo: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Return repository-scoped compiled analytics coverage when present."""
+
+    summary = {
+        "analytics_model_count": _count_label(session, repo, "AnalyticsModel"),
+        "data_asset_count": _count_label(session, repo, "DataAsset"),
+        "data_column_count": _count_label(session, repo, "DataColumn"),
+        "relationship_counts": _relationship_counts(session, repo),
+        "parse_states": _parse_state_counts(session, repo),
+        "sample_models": _sample_models(session, repo),
+        "sample_assets": _sample_assets(session, repo),
+    }
+    if not any(
+        (
+            summary["analytics_model_count"],
+            summary["data_asset_count"],
+            summary["data_column_count"],
+        )
+    ):
+        return None
+    return summary
+
+
+def _count_label(session: Any, repo: dict[str, Any], label: str) -> int:
+    """Count one repository-scoped content entity label."""
+
+    row = session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(n:{label})
+        WHERE {repository_scope_predicate()}
+        RETURN count(DISTINCT n) AS count
+        """,
+        **repository_scope(repo),
+    ).single()
+    if row is None:
+        return 0
+    return int(row.get("count") or 0)
+
+
+def _relationship_counts(session: Any, repo: dict[str, Any]) -> dict[str, int]:
+    """Count repository-scoped compiled analytics lineage edges by type."""
+
+    counts = {field_name: 0 for field_name in _DATA_RELATIONSHIP_FIELDS.values()}
+    rows = session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(source)
+        WHERE {repository_scope_predicate()}
+          AND (
+            source:AnalyticsModel
+            OR source:DataAsset
+            OR source:DataColumn
+          )
+        MATCH (source)-[rel]->()
+        WHERE type(rel) IN {list(_DATA_RELATIONSHIP_FIELDS)}
+        RETURN type(rel) AS relationship_type,
+               count(*) AS count
+        """,
+        **repository_scope(repo),
+    ).data()
+    for row in rows:
+        relationship_type = str(row.get("relationship_type") or "")
+        field_name = _DATA_RELATIONSHIP_FIELDS.get(relationship_type)
+        if field_name is None:
+            continue
+        counts[field_name] = int(row.get("count") or 0)
+    return counts
+
+
+def _parse_state_counts(session: Any, repo: dict[str, Any]) -> dict[str, int]:
+    """Return parse-state counts for repository analytics models."""
+
+    rows = session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(m:AnalyticsModel)
+        WHERE {repository_scope_predicate()}
+        RETURN coalesce(m.parse_state, 'unknown') AS parse_state,
+               count(*) AS count
+        ORDER BY parse_state
+        """,
+        **repository_scope(repo),
+    ).data()
+    return {
+        str(row.get("parse_state") or "unknown"): int(row.get("count") or 0)
+        for row in rows
+        if int(row.get("count") or 0) > 0
+    }
+
+
+def _sample_models(session: Any, repo: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return a compact ordered sample of repository analytics models."""
+
+    return session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(m:AnalyticsModel)
+        WHERE {repository_scope_predicate()}
+        RETURN m.name AS name,
+               m.path AS path,
+               coalesce(m.parse_state, 'unknown') AS parse_state,
+               coalesce(m.confidence, 0.0) AS confidence
+        ORDER BY m.name
+        LIMIT 5
+        """,
+        **repository_scope(repo),
+    ).data()
+
+
+def _sample_assets(session: Any, repo: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return a compact ordered sample of repository data assets."""
+
+    return session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(a:DataAsset)
+        WHERE {repository_scope_predicate()}
+        RETURN a.name AS name,
+               coalesce(a.kind, 'asset') AS kind
+        ORDER BY a.name
+        LIMIT 5
+        """,
+        **repository_scope(repo),
+    ).data()
+
+
+__all__ = ["build_repository_data_intelligence_summary"]

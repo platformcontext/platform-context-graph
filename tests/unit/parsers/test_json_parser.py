@@ -341,3 +341,27 @@ class TestJSONConfigParser:
             for item in result["data_relationships"]
         )
         assert result["data_intelligence_coverage"]["state"] == "complete"
+
+    def test_parse_dbt_replay_manifest_filename_variant(
+        self, temp_test_dir: Path
+    ) -> None:
+        """Replay fixtures named ``dbt_manifest.json`` should parse as dbt artifacts."""
+
+        manifest_path = temp_test_dir / "dbt_manifest.json"
+        source_path = (
+            Path(__file__).resolve().parents[2]
+            / "fixtures"
+            / "ecosystems"
+            / "analytics_compiled_comprehensive"
+            / "dbt_manifest.json"
+        )
+        manifest_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+        parser = JSONConfigTreeSitterParser("json")
+        result = parser.parse(manifest_path)
+
+        assert [item["name"] for item in result["analytics_models"]] == [
+            "order_metrics",
+            "orders_expanded",
+        ]
+        assert result["data_intelligence_coverage"]["state"] == "partial"

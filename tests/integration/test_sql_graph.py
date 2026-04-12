@@ -58,6 +58,67 @@ class TestSqlGraph:
             )
             >= 1
         )
+
+    def test_compiled_analytics_nodes_are_created(self, indexed_ecosystems) -> None:
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (m:AnalyticsModel) "
+                "WHERE m.path CONTAINS 'analytics_compiled_comprehensive' "
+                "RETURN count(m) as cnt",
+            )
+            == 2
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (a:DataAsset {name: 'analytics.public.order_metrics'}) "
+                "RETURN count(a) as cnt",
+            )
+            == 1
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (c:DataColumn {name: 'analytics.public.order_metrics.order_id'}) "
+                "RETURN count(c) as cnt",
+            )
+            == 1
+        )
+
+    def test_compiled_analytics_relationships_are_created(
+        self, indexed_ecosystems
+    ) -> None:
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (:AnalyticsModel {name: 'order_metrics'})"
+                "-[:COMPILES_TO]->"
+                "(:DataAsset {name: 'analytics.public.order_metrics'}) "
+                "RETURN count(*) as cnt",
+            )
+            == 1
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (:DataAsset {name: 'analytics.public.order_metrics'})"
+                "-[:ASSET_DERIVES_FROM]->"
+                "(:DataAsset {name: 'raw.public.orders'}) "
+                "RETURN count(*) as cnt",
+            )
+            == 1
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (:DataColumn {name: 'analytics.public.order_metrics.order_id'})"
+                "-[:COLUMN_DERIVES_FROM]->"
+                "(:DataColumn {name: 'raw.public.orders.id'}) "
+                "RETURN count(*) as cnt",
+            )
+            == 1
+        )
         assert (
             _count(
                 indexed_ecosystems,

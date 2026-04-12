@@ -10,7 +10,10 @@ from ...data_intelligence.dbt import DbtCompiledSqlPlugin
 def is_dbt_manifest_document(document: Any, *, filename: str) -> bool:
     """Return whether one JSON document looks like a dbt manifest artifact."""
 
-    if filename.lower() != "manifest.json" or not isinstance(document, dict):
+    lowered = filename.lower()
+    if lowered not in {"manifest.json", "dbt_manifest.json"} or not isinstance(
+        document, dict
+    ):
         return False
     metadata = document.get("metadata")
     return (
