@@ -88,6 +88,41 @@ def test_semantic_replay_nodes_and_lineage_relationships_are_created(
         )
         == 1
     )
+
+
+def test_quality_replay_nodes_and_quality_relationships_are_created(
+    indexed_ecosystems,
+) -> None:
+    """Quality replay fixtures should persist checks and ASSERTS_QUALITY_ON edges."""
+
+    assert (
+        _count(
+            indexed_ecosystems,
+            "MATCH (q:DataQualityCheck {name: 'daily_revenue_freshness'}) "
+            "RETURN count(q) as cnt",
+        )
+        == 1
+    )
+    assert (
+        _count(
+            indexed_ecosystems,
+            "MATCH (:DataQualityCheck {name: 'daily_revenue_freshness'})"
+            "-[:ASSERTS_QUALITY_ON]->"
+            "(:DataAsset {name: 'analytics.finance.daily_revenue'}) "
+            "RETURN count(*) as cnt",
+        )
+        == 1
+    )
+    assert (
+        _count(
+            indexed_ecosystems,
+            "MATCH (:DataQualityCheck {name: 'gross_amount_non_negative'})"
+            "-[:ASSERTS_QUALITY_ON]->"
+            "(:DataColumn {name: 'analytics.finance.daily_revenue.gross_amount'}) "
+            "RETURN count(*) as cnt",
+        )
+        == 1
+    )
     assert (
         _count(
             indexed_ecosystems,

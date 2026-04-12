@@ -173,6 +173,9 @@ The current foundation slice proves:
 - semantic datasets and fields reusing `DataAsset` and `DataColumn`
 - post-commit semantic lineage materialization for `ASSET_DERIVES_FROM` and
   `COLUMN_DERIVES_FROM`
+- replay-backed quality normalization through `quality_replay.json`
+- graph/content persistence registration for `DataQualityCheck`
+- post-commit quality assertion materialization for `ASSERTS_QUALITY_ON`
 
 ### Fast foundation gate
 
@@ -269,6 +272,34 @@ PYTHONPATH=src uv run pytest \
   tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/query/test_repository_context_data_intelligence.py \
+  tests/unit/query/test_story_data_intelligence.py \
+  tests/unit/query/test_change_surface.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_warehouse_replay_graph.py \
+  tests/integration/test_mcp_data_intelligence_queries.py -q
+```
+
+### Quality replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_quality_replay.py \
+  tests/unit/parsers/test_json_parser.py \
+  tests/unit/content/test_ingest.py \
+  tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/tools/test_graph_builder_schema.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py \
   tests/unit/query/test_change_surface.py -q

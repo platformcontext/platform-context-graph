@@ -61,6 +61,13 @@ def test_create_all_data_intelligence_links_materializes_compiled_lineage() -> N
                     "line_number": 1,
                 }
             ],
+            "data_quality_checks": [
+                {
+                    "name": "gross_amount_non_negative",
+                    "uid": "content-entity:e_quality_gross_amount_non_negative",
+                    "line_number": 1,
+                }
+            ],
             "data_relationships": [
                 {
                     "type": "COMPILES_TO",
@@ -92,6 +99,12 @@ def test_create_all_data_intelligence_links_materializes_compiled_lineage() -> N
                     "target_name": "Revenue Overview",
                     "line_number": 1,
                 },
+                {
+                    "type": "ASSERTS_QUALITY_ON",
+                    "source_name": "gross_amount_non_negative",
+                    "target_name": "analytics.public.order_metrics.order_id",
+                    "line_number": 1,
+                },
             ],
         }
     ]
@@ -100,9 +113,10 @@ def test_create_all_data_intelligence_links_materializes_compiled_lineage() -> N
 
     assert metrics == {
         "asset_derives_from_edges": 1,
+        "asserts_quality_on_edges": 1,
         "column_derives_from_edges": 1,
         "compiles_to_edges": 1,
         "powers_edges": 1,
         "runs_query_against_edges": 1,
     }
-    assert session.run.call_count == 5
+    assert session.run.call_count == 6

@@ -166,6 +166,7 @@ Fixture groups:
 - `warehouse_replay_comprehensive`
 - `bi_replay_comprehensive`
 - `semantic_replay_comprehensive`
+- `quality_replay_comprehensive`
 
 Rules:
 
@@ -226,3 +227,12 @@ This branch starts the roadmap with the generic foundation slice:
   downstream `DashboardAsset` nodes
 - graph-backed change-surface coverage proving warehouse columns reach semantic
   fields and downstream dashboards locally
+- checked-in `quality_replay_comprehensive` replay fixture for local
+  data-quality validation
+- `QualityReplayPlugin` normalization into `DataQualityCheck` plus
+  `ASSERTS_QUALITY_ON` relationships to assets and columns
+- graph/content bucket registration for `DataQualityCheck`
+- repository context and story surfacing for quality-check counts and sample
+  failing checks
+- graph-backed change-surface coverage proving changed columns reach downstream
+  quality checks locally

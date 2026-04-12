@@ -34,6 +34,7 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
         "column_derives_from": 6,
         "runs_query_against": 0,
         "powers": 0,
+        "asserts_quality_on": 0,
     }
 
 
@@ -71,6 +72,7 @@ def test_warehouse_replay_repo_context_surfaces_observed_queries(
         "column_derives_from": 0,
         "runs_query_against": 4,
         "powers": 0,
+        "asserts_quality_on": 0,
     }
 
 
@@ -154,6 +156,7 @@ def test_bi_replay_repo_context_surfaces_dashboard_downstreams(
         "column_derives_from": 0,
         "runs_query_against": 1,
         "powers": 3,
+        "asserts_quality_on": 0,
     }
 
 
@@ -194,6 +197,7 @@ def test_semantic_replay_repo_context_surfaces_semantic_lineage(
         "column_derives_from": 2,
         "runs_query_against": 1,
         "powers": 2,
+        "asserts_quality_on": 0,
     }
 
 
@@ -232,3 +236,60 @@ def test_semantic_replay_change_surface_reaches_semantic_field_and_dashboard(
 
     assert "data-column:semantic.finance.revenue_semantic.gross_amount" in impacted_ids
     assert "dashboard-asset:finance:semantic-revenue-overview" in impacted_ids
+
+
+def test_quality_replay_repo_context_surfaces_quality_checks(
+    indexed_ecosystems,
+) -> None:
+    """Repo context should expose quality-check counts and relationships."""
+
+    result = get_repository_context(
+        indexed_ecosystems,
+        repo_id="quality_replay_comprehensive",
+    )
+
+    assert result["data_intelligence"]["query_execution_count"] == 1
+    assert result["data_intelligence"]["data_quality_check_count"] == 2
+    assert result["data_intelligence"]["relationship_counts"] == {
+        "compiles_to": 0,
+        "asset_derives_from": 0,
+        "column_derives_from": 0,
+        "runs_query_against": 1,
+        "powers": 0,
+        "asserts_quality_on": 2,
+    }
+
+
+def test_quality_replay_repo_story_mentions_quality_checks(indexed_ecosystems) -> None:
+    """Repo story should summarize quality-check coverage."""
+
+    result = get_repository_story(
+        indexed_ecosystems,
+        repo_id="quality_replay_comprehensive",
+    )
+
+    data_section = next(
+        section
+        for section in result["story_sections"]
+        if section["id"] == "data_intelligence"
+    )
+    assert "2 quality checks" in data_section["summary"]
+    assert [item["name"] for item in data_section["items"]] == [
+        "daily_revenue_freshness",
+        "gross_amount_non_negative",
+    ]
+
+
+def test_quality_replay_change_surface_reaches_failing_quality_check(
+    indexed_ecosystems,
+) -> None:
+    """Change surface should traverse data columns into downstream quality checks."""
+
+    result = find_change_surface(
+        indexed_ecosystems,
+        target="data-column:analytics.finance.daily_revenue.gross_amount",
+    )
+
+    impacted_ids = [item["entity"]["id"] for item in result["impacted"]]
+
+    assert "data-quality-check:finance:gross-amount-non-negative" in impacted_ids

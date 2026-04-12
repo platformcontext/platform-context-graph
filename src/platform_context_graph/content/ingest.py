@@ -68,6 +68,7 @@ CONTENT_ENTITY_BUCKETS: tuple[tuple[str, str], ...] = (
     ("data_columns", "DataColumn"),
     ("query_executions", "QueryExecution"),
     ("dashboard_assets", "DashboardAsset"),
+    ("data_quality_checks", "DataQualityCheck"),
 )
 CONTENT_ENTITY_LABELS = frozenset(label for _, label in CONTENT_ENTITY_BUCKETS)
 

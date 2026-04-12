@@ -361,6 +361,49 @@ def test_prepare_content_entries_assigns_uids_to_dashboard_assets(
     assert file_data["dashboard_assets"][0]["uid"].startswith("content-entity:")
 
 
+def test_prepare_content_entries_assigns_uids_to_data_quality_checks(
+    tmp_path: Path,
+) -> None:
+    """Quality replay checks should dual-write through content entities."""
+
+    repo_path = tmp_path / "quality-replay"
+    repo_path.mkdir()
+    file_path = repo_path / "quality_replay.json"
+    file_path.write_text(
+        '{"metadata":{"quality_vendor":"generic"}}\n',
+        encoding="utf-8",
+    )
+
+    repository = repository_metadata(
+        name="quality-replay",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/quality-replay.git",
+    )
+    file_data = {
+        "path": str(file_path),
+        "repo_path": str(repo_path),
+        "lang": "json",
+        "data_quality_checks": [
+            {
+                "id": "data-quality-check:finance:gross-amount-non-negative",
+                "name": "gross_amount_non_negative",
+                "line_number": 1,
+                "status": "failing",
+                "severity": "high",
+            }
+        ],
+    }
+
+    _file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert {entry.entity_type for entry in entity_entries} == {"DataQualityCheck"}
+    assert all(is_content_entity_id(entry.entity_id) for entry in entity_entries)
+    assert file_data["data_quality_checks"][0]["uid"].startswith("content-entity:")
+
+
 def test_prepare_content_entries_strips_nul_bytes_for_content_store(
     tmp_path: Path,
 ) -> None:

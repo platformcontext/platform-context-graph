@@ -88,6 +88,37 @@ def test_registry_supports_semantic_category_plugins() -> None:
     assert plugins[2].category == "semantic"
 
 
+class _QualityReplayPlugin:
+    """Minimal quality replay plugin implementing the public plugin protocol."""
+
+    name = "quality-replay"
+    category = "quality"
+    replay_fixture_groups = ("quality_replay_comprehensive",)
+
+    def normalize(self, payload):
+        return payload
+
+
+def test_registry_supports_quality_category_plugins() -> None:
+    """The registry should keep quality adapters alongside other plugin types."""
+
+    registry = DataIntelligenceRegistry()
+    registry.register(_ReplayPlugin())
+    registry.register(_BIReplayPlugin())
+    registry.register(_SemanticReplayPlugin())
+    registry.register(_QualityReplayPlugin())
+
+    plugins = registry.list_plugins()
+
+    assert [plugin.name for plugin in plugins] == [
+        "warehouse-replay",
+        "bi-replay",
+        "semantic-replay",
+        "quality-replay",
+    ]
+    assert plugins[3].category == "quality"
+
+
 def test_registry_rejects_duplicate_plugin_names() -> None:
     """The registry should fail fast when names collide."""
 

@@ -18,6 +18,7 @@ _CONTENT_ENTITY_BUCKETS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("data_columns", ("DataColumn",)),
     ("query_executions", ("QueryExecution",)),
     ("dashboard_assets", ("DashboardAsset",)),
+    ("data_quality_checks", ("DataQualityCheck",)),
 )
 _RELATIONSHIP_SOURCE_KINDS = {
     "COMPILES_TO": ("AnalyticsModel",),
@@ -25,6 +26,7 @@ _RELATIONSHIP_SOURCE_KINDS = {
     "COLUMN_DERIVES_FROM": ("DataColumn",),
     "RUNS_QUERY_AGAINST": ("QueryExecution",),
     "POWERS": ("DataAsset", "DataColumn"),
+    "ASSERTS_QUALITY_ON": ("DataQualityCheck",),
 }
 _RELATIONSHIP_TARGET_KINDS = {
     "COMPILES_TO": ("DataAsset",),
@@ -32,6 +34,7 @@ _RELATIONSHIP_TARGET_KINDS = {
     "COLUMN_DERIVES_FROM": ("DataColumn",),
     "RUNS_QUERY_AGAINST": ("DataAsset",),
     "POWERS": ("DashboardAsset",),
+    "ASSERTS_QUALITY_ON": ("DataAsset", "DataColumn"),
 }
 
 

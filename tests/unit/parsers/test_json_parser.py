@@ -469,3 +469,39 @@ class TestJSONConfigParser:
             for item in result["data_relationships"]
         )
         assert result["data_intelligence_coverage"]["state"] == "complete"
+
+    def test_parse_quality_replay_json_into_data_intelligence_payload(
+        self, temp_test_dir: Path
+    ) -> None:
+        """Quality replay JSON should emit checks and quality-assertion hints."""
+
+        fixture_path = (
+            Path(__file__).resolve().parents[2]
+            / "fixtures"
+            / "ecosystems"
+            / "quality_replay_comprehensive"
+            / "quality_replay.json"
+        )
+        file_path = temp_test_dir / "quality_replay.json"
+        file_path.write_text(fixture_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+        parser = JSONConfigTreeSitterParser("json")
+        result = parser.parse(file_path)
+
+        assert [item["name"] for item in result["data_quality_checks"]] == [
+            "daily_revenue_freshness",
+            "gross_amount_non_negative",
+        ]
+        assert any(
+            item["type"] == "ASSERTS_QUALITY_ON"
+            and item["source_name"] == "daily_revenue_freshness"
+            and item["target_name"] == "analytics.finance.daily_revenue"
+            for item in result["data_relationships"]
+        )
+        assert any(
+            item["type"] == "ASSERTS_QUALITY_ON"
+            and item["source_name"] == "gross_amount_non_negative"
+            and item["target_name"] == "analytics.finance.daily_revenue.gross_amount"
+            for item in result["data_relationships"]
+        )
+        assert result["data_intelligence_coverage"]["state"] == "complete"
