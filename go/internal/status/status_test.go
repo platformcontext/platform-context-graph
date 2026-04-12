@@ -257,6 +257,39 @@ func TestRenderTextIncludesOperatorSummary(t *testing.T) {
 	}
 }
 
+func TestRenderTextDoesNotRepeatTopLevelSummaries(t *testing.T) {
+	t.Parallel()
+
+	report := status.BuildReport(
+		status.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeCounts: []status.NamedCount{
+				{Name: "active", Count: 2},
+			},
+			GenerationCounts: []status.NamedCount{
+				{Name: "completed", Count: 3},
+			},
+			Queue: status.QueueSnapshot{
+				Outstanding:          1,
+				InFlight:             1,
+				OldestOutstandingAge: 30 * time.Second,
+			},
+		},
+		status.DefaultOptions(),
+	)
+
+	rendered := status.RenderText(report)
+	for _, want := range []string{
+		"Queue: outstanding=1 in_flight=1 retrying=0 failed=0 oldest=30s overdue_claims=0",
+		"Scopes: active=2",
+		"Generations: completed=3",
+	} {
+		if got := strings.Count(rendered, want); got != 1 {
+			t.Fatalf("RenderText() occurrences of %q = %d, want 1\n%s", want, got, rendered)
+		}
+	}
+}
+
 func TestBuildReportAddsFlowSummaries(t *testing.T) {
 	t.Parallel()
 

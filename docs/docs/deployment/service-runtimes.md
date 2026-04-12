@@ -34,6 +34,8 @@ operator/admin contract:
 
 - one shared status/report seam
 - one CLI surface for local and on-host inspection
+- one reusable HTTP/admin adapter that can be mounted by a runtime without
+  redefining the report shape
 - one API/admin surface when the transport is mounted
 - explicit live-versus-inferred labeling
 - stage, backlog, success, and failure summaries in a familiar shape
@@ -41,6 +43,14 @@ operator/admin contract:
 This is intentionally a platform rule, not a one-off `admin-status` feature.
 Operators should not need a different mental model for collector, projector,
 reducer, or future background services.
+
+Current rewrite status:
+
+- `go/internal/status/` owns the shared reader/report seam
+- `go/cmd/admin-status/` renders that report through the local CLI
+- `go/internal/status/http.go` provides the reusable HTTP transport adapter
+- the actual runtime mount stays a separate slice so we do not mix transport
+  wiring with report semantics
 
 ## Naming Note
 

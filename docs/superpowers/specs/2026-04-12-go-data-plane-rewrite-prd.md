@@ -89,15 +89,16 @@ into two stages:
 
 - implement `go/internal/status` as the storage-agnostic reader/report seam
   that both the CLI now and future HTTP/admin handlers can share
-- defer the actual HTTP/admin transport mount to a later slice
+- implement the shared HTTP/admin adapter on that same seam
+- defer the actual runtime transport mount to a later slice
 
 This split applies to every long-running Go service, not only one shared admin
 tool. The platform rule is:
 
 - every long-running service must expose the same operator story
 - every service should be inspectable through a shared status/report contract
-- every service should have a local CLI view and an API/admin view once the
-  transport layer is mounted
+- every service should have a local CLI view, plus a reusable HTTP/admin
+  adapter, and an API/admin view once the runtime transport layer is mounted
 - service-specific metrics are allowed, but the operator shape must stay
   consistent enough that an engineer can move from collector to projector to
   reducer without learning a different debugging model each time

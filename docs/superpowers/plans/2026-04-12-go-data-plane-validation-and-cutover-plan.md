@@ -22,6 +22,8 @@ Required before any cloud proof:
 - operator status surfaces can summarize queue and runtime state locally
 - `go/internal/status` is exercised as the shared operator-status reader/report
   seam through the CLI without depending on an HTTP transport
+- the reusable HTTP adapter for the same report seam is validated locally
+  without requiring a runtime mount
 - every long-running service exposes the same operator/status shape through that
   shared seam, even when some counters are service-specific
 - scope lifecycle tests pass
@@ -74,8 +76,8 @@ package is accepted.
 The new Go data plane is locally healthy for one bounded path.
 
 For the operator-status slice, "green" means the storage-agnostic report seam
-exists and the CLI uses it successfully. It does not yet require the future
-HTTP/admin mount.
+exists, the CLI uses it successfully, and the shared HTTP adapter is locally
+validated. It does not yet require the future runtime mount.
 
 For later slices, "green" also means each long-running service follows the same
 operator contract:
@@ -95,9 +97,9 @@ new substrate is proven. This is temporary and explicitly documented.
 The proof domain becomes owned by the new substrate. The legacy path stops
 owning it.
 
-When the future HTTP/admin transport lands, it should reuse the same
-`go/internal/status` reader/report seam validated in the CLI slice rather than
-introducing a second status projection or transport-specific status path.
+When the future HTTP/admin transport lands, it should mount the already-tested
+shared adapter from `go/internal/status` rather than introducing a second
+status projection or transport-specific status path.
 
 ### Phase 4: Legacy retirement
 

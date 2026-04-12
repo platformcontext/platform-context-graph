@@ -177,20 +177,6 @@ func RenderText(report Report) string {
 		lines = append(lines, fmt.Sprintf("Reasons: %s", strings.Join(report.Health.Reasons, "; ")))
 	}
 	lines = append(lines, renderFlowLines(report.FlowSummaries)...)
-	lines = append(
-		lines,
-		fmt.Sprintf(
-			"Queue: outstanding=%d in_flight=%d retrying=%d failed=%d oldest=%s overdue_claims=%d",
-			report.Queue.Outstanding,
-			report.Queue.InFlight,
-			report.Queue.Retrying,
-			report.Queue.Failed,
-			report.Queue.OldestOutstandingAge,
-			report.Queue.OverdueClaims,
-		),
-	)
-	lines = append(lines, fmt.Sprintf("Scopes: %s", formatNamedTotals(report.ScopeTotals)))
-	lines = append(lines, fmt.Sprintf("Generations: %s", formatNamedTotals(report.GenerationTotals)))
 	if len(report.StageSummaries) > 0 {
 		lines = append(lines, "Stages:")
 		for _, row := range report.StageSummaries {
