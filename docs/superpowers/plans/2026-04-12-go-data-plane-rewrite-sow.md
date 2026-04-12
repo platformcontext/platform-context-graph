@@ -10,6 +10,18 @@
 
 **Primary design constraint:** accuracy first, then performance, then stability, then scalability. Telemetry, tracing, and logging are not add-ons; they are acceptance criteria.
 
+## Companion Execution Documents
+
+Use these documents together with this SOW before parallel implementation
+begins:
+
+- [Rewrite Documentation Index](2026-04-12-go-data-plane-doc-set-index.md)
+- [Service Boundaries And Ownership](2026-04-12-go-data-plane-service-boundaries-and-ownership.md)
+- [Contract Freeze Plan](2026-04-12-go-data-plane-contract-freeze-plan.md)
+- [Parallel Execution Plan](2026-04-12-go-data-plane-parallel-execution-plan.md)
+- [Validation And Cutover Plan](2026-04-12-go-data-plane-validation-and-cutover-plan.md)
+- [ADR Index](../../docs/adrs/index.md)
+
 ---
 
 ## Locked Architecture
@@ -472,4 +484,3 @@ The branch is done when:
 - the acceptance criteria above are met
 - the branch can be merged without preserving a second hidden write architecture
 - the next collector family can be added without redesigning the substrate again
-

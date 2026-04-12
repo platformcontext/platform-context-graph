@@ -1,6 +1,6 @@
 # Go Data Plane Rewrite PRD
 
-**Status:** Draft
+**Status:** Locked for rewrite branch
 
 **Date:** April 12, 2026
 
@@ -36,6 +36,17 @@ The new data plane will be built in **Go** and defined by **versioned Protobuf c
 - canonical-first query and MCP responses
 
 This PRD locks down the target shape so implementation can proceed with less ambiguity and fewer cross-cutting guesses.
+
+## Companion Documents
+
+This PRD is the top-level design contract for the rewrite. It is paired with:
+
+- [Rewrite Documentation Index](../plans/2026-04-12-go-data-plane-doc-set-index.md)
+- [Service Boundaries And Ownership](../plans/2026-04-12-go-data-plane-service-boundaries-and-ownership.md)
+- [Contract Freeze Plan](../plans/2026-04-12-go-data-plane-contract-freeze-plan.md)
+- [Parallel Execution Plan](../plans/2026-04-12-go-data-plane-parallel-execution-plan.md)
+- [Validation And Cutover Plan](../plans/2026-04-12-go-data-plane-validation-and-cutover-plan.md)
+- [ADR Index](../../docs/adrs/index.md)
 
 ## Why This Rewrite Happens Now
 
