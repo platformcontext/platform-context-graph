@@ -34,8 +34,14 @@ SELECT domain,
        COUNT(*) FILTER (WHERE status = 'retrying') AS retrying_count,
        COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
        COALESCE(
-         EXTRACT(EPOCH FROM ($1 - MIN(created_at)))
-           FILTER (WHERE status IN ('pending', 'claimed', 'running', 'retrying')),
+         EXTRACT(
+           EPOCH FROM (
+             $1 - (
+               MIN(created_at)
+                 FILTER (WHERE status IN ('pending', 'claimed', 'running', 'retrying'))
+             )
+           )
+         ),
          0
        ) AS oldest_outstanding_age_seconds
 FROM fact_work_items
@@ -52,8 +58,14 @@ SELECT COUNT(*) AS total_count,
        COUNT(*) FILTER (WHERE status = 'succeeded') AS succeeded_count,
        COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
        COALESCE(
-         EXTRACT(EPOCH FROM ($1 - MIN(created_at)))
-           FILTER (WHERE status IN ('pending', 'claimed', 'running', 'retrying')),
+         EXTRACT(
+           EPOCH FROM (
+             $1 - (
+               MIN(created_at)
+                 FILTER (WHERE status IN ('pending', 'claimed', 'running', 'retrying'))
+             )
+           )
+         ),
          0
        ) AS oldest_outstanding_age_seconds,
        COUNT(*) FILTER (

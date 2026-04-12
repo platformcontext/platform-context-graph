@@ -358,6 +358,9 @@ func TestRenderJSONIncludesFlowSummaries(t *testing.T) {
 			Queue: status.QueueSnapshot{
 				Outstanding: 1,
 			},
+			StageCounts: []status.StageStatusCount{
+				{Stage: "projector", Status: "pending", Count: 1},
+			},
 		},
 		status.DefaultOptions(),
 	)
@@ -368,5 +371,17 @@ func TestRenderJSONIncludesFlowSummaries(t *testing.T) {
 	}
 	if !strings.Contains(string(payload), "\"flow\"") {
 		t.Fatalf("RenderJSON() = %s, want flow summaries", payload)
+	}
+	if !strings.Contains(string(payload), "\"state\": \"progressing\"") {
+		t.Fatalf("RenderJSON() = %s, want lower-case health state", payload)
+	}
+	if !strings.Contains(string(payload), "\"stage\": \"projector\"") {
+		t.Fatalf("RenderJSON() = %s, want lower-case stage summary keys", payload)
+	}
+	if strings.Contains(string(payload), "\"State\"") {
+		t.Fatalf("RenderJSON() = %s, want no exported-case health keys", payload)
+	}
+	if strings.Contains(string(payload), "\"Stage\"") {
+		t.Fatalf("RenderJSON() = %s, want no exported-case stage keys", payload)
 	}
 }

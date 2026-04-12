@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 from datetime import datetime
@@ -173,8 +174,10 @@ def main() -> int:
     from platform_context_graph.facts.models.base import utc_now
 
     config = RepoSyncConfig.from_env(component="collector-git-snapshot-bridge")
+    with contextlib.redirect_stdout(sys.stderr):
+        batch = collect_snapshot_batch(config, utc_now_fn=utc_now)
     json.dump(
-        collect_snapshot_batch(config, utc_now_fn=utc_now),
+        batch,
         sys.stdout,
         sort_keys=True,
     )

@@ -69,6 +69,33 @@ class _BridgeBuilder:
 
         return pre_scan_for_imports(self, files)
 
+    def parse_file(
+        self,
+        repo_path: Path,
+        path: Path,
+        is_dependency: bool = False,
+    ) -> dict[str, Any]:
+        """Parse one file through the shared parser-registry entrypoint."""
+
+        from platform_context_graph.cli.config_manager import get_config_value
+        from platform_context_graph.parsers.registry import parse_file
+        from platform_context_graph.utils.debug_log import (
+            debug_log,
+            error_logger,
+            warning_logger,
+        )
+
+        return parse_file(
+            self,
+            repo_path,
+            path,
+            is_dependency,
+            get_config_value_fn=get_config_value,
+            debug_log_fn=debug_log,
+            error_logger_fn=error_logger,
+            warning_logger_fn=warning_logger,
+        )
+
 
 def _default_build_parser_registry(_get_config_value: object) -> dict[str, Any]:
     """Load the parser registry lazily."""

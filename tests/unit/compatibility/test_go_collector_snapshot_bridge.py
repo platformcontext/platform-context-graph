@@ -6,10 +6,14 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from platform_context_graph.collectors.git.types import RepositoryParseSnapshot
 from platform_context_graph.runtime.ingester.config import RepoSyncConfig, RepoSyncResult
+from platform_context_graph.runtime.ingester.go_collector_bridge import _BridgeBuilder
 from platform_context_graph.runtime.ingester.go_collector_snapshot_bridge import (
     collect_snapshot_batch,
+    main,
 )
 
 
@@ -173,3 +177,97 @@ def test_collect_snapshot_batch_emits_repo_snapshots_and_content_entries(
     assert entity_names == ["handler", "Worker"]
     assert collected["content_entities"][0]["entity_type"] == "Function"
     assert collected["content_entities"][1]["entity_type"] == "Class"
+
+
+def test_bridge_builder_parse_file_delegates_to_registry_entrypoint(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """The bridge builder should provide the parse surface async parse expects."""
+
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    file_path = repo_path / "app.py"
+    file_path.write_text("print('ok')\n", encoding="utf-8")
+
+    captured: dict[str, object] = {}
+
+    def fake_parse_file(
+        builder: object,
+        repo_root: Path,
+        path: Path,
+        is_dependency: bool,
+        *,
+        get_config_value_fn,
+        debug_log_fn,
+        error_logger_fn,
+        warning_logger_fn,
+    ) -> dict[str, object]:
+        del get_config_value_fn, debug_log_fn, error_logger_fn, warning_logger_fn
+        captured["builder"] = builder
+        captured["repo_path"] = repo_root
+        captured["path"] = path
+        captured["is_dependency"] = is_dependency
+        return {"path": str(path), "lang": "python"}
+
+    monkeypatch.setattr(
+        "platform_context_graph.parsers.registry.parse_file",
+        fake_parse_file,
+    )
+
+    builder = _BridgeBuilder(parsers={".py": object()})
+    result = builder.parse_file(repo_path, file_path, is_dependency=True)
+
+    assert result == {"path": str(file_path), "lang": "python"}
+    assert captured == {
+        "builder": builder,
+        "repo_path": repo_path,
+        "path": file_path,
+        "is_dependency": True,
+    }
+
+
+def test_main_reserves_stdout_for_json_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """The snapshot bridge should keep incidental bridge logs off stdout."""
+
+    config = RepoSyncConfig(
+        repos_dir=tmp_path / "workspace",
+        source_mode="filesystem",
+        git_auth_method="none",
+        github_org=None,
+        repositories=[],
+        filesystem_root=tmp_path,
+        clone_depth=1,
+        repo_limit=50,
+        sync_lock_dir=tmp_path / ".pcg-sync.lock",
+        component="collector-git-snapshot-bridge",
+    )
+
+    def fake_collect_snapshot_batch(
+        _config: RepoSyncConfig,
+        *,
+        utc_now_fn,
+    ) -> dict[str, object]:
+        print("bridge-noise")
+        return {
+            "observed_at": utc_now_fn().isoformat(),
+            "collected": [],
+        }
+
+    monkeypatch.setattr(RepoSyncConfig, "from_env", lambda *, component: config)
+    monkeypatch.setattr(
+        "platform_context_graph.runtime.ingester.go_collector_snapshot_bridge.collect_snapshot_batch",
+        fake_collect_snapshot_batch,
+    )
+
+    assert main() == 0
+
+    captured = capsys.readouterr()
+    assert "bridge-noise" not in captured.out
+    assert "bridge-noise" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["collected"] == []

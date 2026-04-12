@@ -77,19 +77,19 @@ type Options struct {
 
 // HealthSummary captures the operator-facing health verdict and reasons.
 type HealthSummary struct {
-	State   string
-	Reasons []string
+	State   string   `json:"state"`
+	Reasons []string `json:"reasons"`
 }
 
 // StageSummary collapses queue counts into one row per stage.
 type StageSummary struct {
-	Stage     string
-	Pending   int
-	Claimed   int
-	Running   int
-	Retrying  int
-	Succeeded int
-	Failed    int
+	Stage     string `json:"stage"`
+	Pending   int    `json:"pending"`
+	Claimed   int    `json:"claimed"`
+	Running   int    `json:"running"`
+	Retrying  int    `json:"retrying"`
+	Succeeded int    `json:"succeeded"`
+	Failed    int    `json:"failed"`
 }
 
 // Report is the operator-facing summary rendered by CLI and future admin APIs.

@@ -116,6 +116,22 @@ func TestStatusStoreReadRawSnapshotPropagatesQueryErrors(t *testing.T) {
 	}
 }
 
+func TestStatusQueriesUseAggregateFilterSyntax(t *testing.T) {
+	t.Parallel()
+
+	for name, query := range map[string]string{
+		"domainBacklogQuery": domainBacklogQuery,
+		"queueSnapshotQuery": queueSnapshotQuery,
+	} {
+		if !strings.Contains(query, "MIN(created_at)\n                 FILTER") {
+			t.Fatalf("%s missing aggregate FILTER placement:\n%s", name, query)
+		}
+		if strings.Contains(query, "EXTRACT(EPOCH FROM ($1 - MIN(created_at)))\n           FILTER") {
+			t.Fatalf("%s uses invalid FILTER placement:\n%s", name, query)
+		}
+	}
+}
+
 type fakeQueryer struct {
 	responses []fakeRows
 	queries   []string
