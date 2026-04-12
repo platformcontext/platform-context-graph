@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/runtime"
+	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
@@ -151,6 +153,40 @@ func TestComposeLifecyclesStartsAndStopsBoth(t *testing.T) {
 	}
 }
 
+func TestNewHostedWithStatusServerRejectsNilReader(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewHostedWithStatusServer("collector-git", runtime.ContextRunner{}, nil)
+	if err == nil {
+		t.Fatal("NewHostedWithStatusServer() error = nil, want non-nil")
+	}
+}
+
+func TestMountStatusServerComposesRuntimeLifecycle(t *testing.T) {
+	t.Setenv("PCG_LISTEN_ADDR", "127.0.0.1:0")
+
+	base, err := NewHosted("collector-git", runtime.ContextRunner{})
+	if err != nil {
+		t.Fatalf("NewHosted() error = %v, want nil", err)
+	}
+
+	mounted, err := MountStatusServer(base, &fakeStatusReader{
+		snapshot: statuspkg.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+		},
+	})
+	if err != nil {
+		t.Fatalf("MountStatusServer() error = %v, want nil", err)
+	}
+
+	if err := mounted.Lifecycle.Start(context.Background()); err != nil {
+		t.Fatalf("Lifecycle.Start() error = %v, want nil", err)
+	}
+	if err := mounted.Lifecycle.Stop(context.Background()); err != nil {
+		t.Fatalf("Lifecycle.Stop() error = %v, want nil", err)
+	}
+}
+
 type stubLifecycle struct {
 	startCalls int
 	stopCalls  int
@@ -174,4 +210,16 @@ type stubRunner struct {
 func (r *stubRunner) Run(context.Context) error {
 	r.runCalls++
 	return r.runErr
+}
+
+type fakeStatusReader struct {
+	snapshot statuspkg.RawSnapshot
+	err      error
+}
+
+func (r *fakeStatusReader) ReadStatusSnapshot(context.Context, time.Time) (statuspkg.RawSnapshot, error) {
+	if r.err != nil {
+		return statuspkg.RawSnapshot{}, r.err
+	}
+	return r.snapshot, nil
 }

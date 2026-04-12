@@ -34,18 +34,14 @@ func run(parent context.Context) error {
 	defer graphCloser.Close()
 
 	runner := buildProjectorService(postgres.SQLDB{DB: db}, graphWriter)
-	service, err := app.NewHosted("projector", runner)
-	if err != nil {
-		return err
-	}
-	adminServer, err := runtimecfg.NewStatusAdminServer(
-		service.Config,
+	service, err := app.NewHostedWithStatusServer(
+		"projector",
+		runner,
 		postgres.NewStatusStore(postgres.SQLQueryer{DB: db}),
 	)
 	if err != nil {
 		return err
 	}
-	service.Lifecycle = app.ComposeLifecycles(service.Lifecycle, adminServer)
 
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()

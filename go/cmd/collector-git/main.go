@@ -31,18 +31,14 @@ func run(parent context.Context) error {
 	if err != nil {
 		return err
 	}
-	service, err := app.NewHosted("collector-git", runner)
-	if err != nil {
-		return err
-	}
-	adminServer, err := runtimecfg.NewStatusAdminServer(
-		service.Config,
+	service, err := app.NewHostedWithStatusServer(
+		"collector-git",
+		runner,
 		postgres.NewStatusStore(postgres.SQLQueryer{DB: db}),
 	)
 	if err != nil {
 		return err
 	}
-	service.Lifecycle = app.ComposeLifecycles(service.Lifecycle, adminServer)
 
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
