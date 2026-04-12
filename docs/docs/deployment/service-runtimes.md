@@ -18,6 +18,14 @@ Every long-running runtime should also follow one operator principle:
 - the exact counters may differ by runtime, but the operator experience should
   not
 
+For the Go rewrite, that contract is the same for every long-running service:
+
+- `/healthz` and `/readyz` describe process health and readiness
+- `/metrics` exposes runtime and backlog signals
+- `/admin/status` renders the shared status/report shape
+- the CLI and HTTP/admin views should render the same underlying report
+- live-versus-inferred state must be explicit in both views
+
 ## Runtime Contract
 
 | Runtime | Owns | Default command | Storage access | Metrics exposure | Kubernetes shape |
@@ -54,6 +62,23 @@ Current rewrite status:
   `/admin/status`
 - hosted Go runtimes can now compose that shared admin server into their
   lifecycle without bespoke HTTP bootstrap code
+
+## Incremental Refresh And Reconciliation
+
+PCG should refresh incrementally by default and reconcile instead of forcing a
+full re-index whenever possible.
+
+- the `ingester` should reconcile only the scopes and generations that changed
+- the `resolution-engine` should drain queued follow-up work and shared
+  corrections from durable state
+- `bootstrap-index` remains the one-shot escape hatch for empty environments or
+  operator recovery
+- future collector services should follow the same scope/generation contract
+  rather than inventing a second freshness model
+
+This means operators should use status, queue age, and generation state before
+choosing to restart or reindex. A full re-index is a recovery tool, not the
+normal freshness path.
 
 ## Naming Note
 
@@ -233,6 +258,10 @@ steady-state Kubernetes service in the public chart.
 - keep the workspace mounted only on the ingester in Kubernetes
 - use direct `/metrics` endpoints for local verification
 - use `ServiceMonitor` only for the long-running Kubernetes runtimes
+- treat the shared admin/status report as the first place to look for live,
+  inferred, backlog, and failure state
+- prefer incremental scope refresh and reconciliation over platform-wide
+  re-indexing
 - use the [Telemetry Overview](../reference/telemetry/index.md) to decide which
   signal to inspect first
 - use the [Local Testing Runbook](../reference/local-testing.md) before calling

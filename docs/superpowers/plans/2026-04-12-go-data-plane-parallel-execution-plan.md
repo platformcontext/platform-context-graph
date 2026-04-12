@@ -71,18 +71,29 @@ Parallel work allowed after Wave 3:
 - validation harnesses
 - cutover documentation and retirement tasks
 
+## Milestone Summary
+
+| Milestone | Primary outcome | Effort | Sequencing dependency | Validation expectation |
+| --- | --- | --- | --- | --- |
+| 0 | Lock contracts and documentation | Small | start here | docs build, contract freeze, no open design gaps |
+| 1 | Native Git cutover and operability | Large | milestone 0 | local runtime proof, admin/status visibility, Git path tests |
+| 2 | Scope-first ingestion | Large | milestone 1 substrate | scope/generation lifecycle, replay-safe incremental refresh |
+| 3 | Canonical truth layers | Large | milestone 2 substrate | cross-source correlation and layered truth tests |
+| 4 | Legacy write-path retirement | Medium | milestone 1-3 proof | bridge regression tests and no new logic on the old seam |
+| 5 | Multi-collector expansion | Large | milestone 4 authority flip | AWS/Kubernetes collector proof and end-to-end scale checks |
+
 ## Workstream Ownership
 
-| Workstream | Dependencies | Owned paths | Done means |
-| --- | --- | --- | --- |
-| A. Contracts | docs locked | `proto/`, `buf*.yaml`, `go/gen/proto/` | schemas compile and version rules are documented |
-| B. Runtime bootstrap | docs locked | `go/go.mod`, `go/cmd/`, `go/internal/app/`, `go/internal/runtime/`, `go/internal/telemetry/` | services boot with health, config, and telemetry shape |
-| C. Scope lifecycle | A, B | `go/internal/scope/`, `schema/data-plane/postgres/`, `go/internal/storage/postgres/` | scopes and generations persist and transition correctly |
-| D. Facts and queue | A, B | `go/internal/facts/`, `go/internal/queue/`, `go/internal/storage/postgres/` | bounded fact and work-item flow is durable |
-| E. Projector runtime | C, D | `go/internal/projector/`, `go/internal/graph/`, `go/internal/content/` | source-local projection runs by scope generation |
-| F. Reducer runtime | C, D | `go/internal/reducer/`, reducer-domain packages | reducer intents drain and write canonical shared truth |
-| G. Compatibility bridge | E, F | `go/internal/compatibility/pythonbridge/` and minimal Python touch points | one proof domain can bridge safely during cutover |
-| H. Validation and docs | every wave | tests, fixtures, runbooks, milestone docs | each slice has repeatable proof and updated docs |
+| Workstream | Dependencies | Owned paths | Effort | Done means | Validation |
+| --- | --- | --- | --- | --- | --- |
+| A. Contracts | docs locked | `proto/`, `buf*.yaml`, `go/gen/proto/` | Medium | schemas compile and version rules are documented | contract tests and docs build |
+| B. Runtime bootstrap | docs locked | `go/go.mod`, `go/cmd/`, `go/internal/app/`, `go/internal/runtime/`, `go/internal/telemetry/` | Large | services boot with health, config, and telemetry shape | service bootstrap and runtime tests |
+| C. Scope lifecycle | A, B | `go/internal/scope/`, `schema/data-plane/postgres/`, `go/internal/storage/postgres/` | Large | scopes and generations persist and transition correctly | scope lifecycle and replay tests |
+| D. Facts and queue | A, B | `go/internal/facts/`, `go/internal/queue/`, `go/internal/storage/postgres/` | Large | bounded fact and work-item flow is durable | fact/queue persistence tests |
+| E. Projector runtime | C, D | `go/internal/projector/`, `go/internal/graph/`, `go/internal/content/` | Large | source-local projection runs by scope generation | projector integration tests |
+| F. Reducer runtime | C, D | `go/internal/reducer/`, reducer-domain packages | Large | reducer intents drain and write canonical shared truth | reducer integration and replay tests |
+| G. Compatibility bridge | E, F | `go/internal/compatibility/pythonbridge/` and minimal Python touch points | Medium | one proof domain can bridge safely during cutover | bridge regression and proof-domain tests |
+| H. Validation and docs | every wave | tests, fixtures, runbooks, milestone docs | Medium | each slice has repeatable proof and updated docs | docs build plus targeted validation commands |
 
 ## Coordination Rules
 
@@ -94,6 +105,8 @@ Parallel work allowed after Wave 3:
   them.
 - Validation workers should not mask architecture gaps by hardcoding test-only
   behavior into production packages.
+- Every slice should report which milestone it advances, which validation gate
+  it satisfied, and whether the change is final or a temporary bridge.
 
 ## Slice Reporting Template
 

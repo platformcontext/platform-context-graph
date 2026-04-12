@@ -129,99 +129,42 @@ This PRD is written for the people who will build, operate, validate, and consum
 
 ## Current Pain Points
 
-The current system has delivered important value, but the architecture is now showing its limits.
+The current system is useful but stretched:
 
-- The write path is still too procedural and too tightly coupled to repository indexing.
-- Python runtime behavior has introduced too many null and type surprises for a long-running data plane.
-- Full re-index behavior is too coarse to be the normal freshness mechanism.
-- Shared mutation and cross-domain projection still leak through hot finalize paths.
-- New source systems would inherit Git-shaped assumptions if we keep extending the current substrate.
-- Collector growth will make the current service topology harder to reason about, not easier.
-- Telemetry is useful today, but the future platform needs richer source, scope, generation, and reducer visibility than the current model exposes.
+- the write path is still too procedural and repository-shaped
+- Python runtime behavior still creates too many null and type surprises for a
+  long-running data plane
+- full re-index is too coarse to be the normal freshness mechanism
+- shared mutation and cross-domain projection still leak through finalize paths
+- new source systems would inherit Git-shaped assumptions if we keep extending
+  the current substrate
+- telemetry needs more source, scope, generation, and reducer visibility
 
 ## Design Principles
 
-### Accuracy First
-
-PCG must prefer correct, explainable answers over optimistic shortcuts. When the platform cannot prove a relationship or identity, it must say so explicitly.
-
-### Performance Without Correctness Debt
-
-The rewrite should scale by scope, partition, and service boundary. It must not trade away determinism just to make the pipeline look fast.
-
-### Stability Is A Product Feature
-
-Collectors, scopes, generations, reducers, and query surfaces must remain operational under partial failure, stale data, and source outages.
-
-### Scalability Comes From Bounded Work
-
-PCG must be able to refresh a single scope, a shard, a collector, or a reducer domain without forcing a full platform rebuild.
-
-### Telemetry Must Be First-Class
-
-Tracing, structured logs, and metrics are not optional debug tools. They are part of the platform contract.
-
-### Resiliency And Performance Are Architecture Concerns
-
-The rewrite should not "add performance later." Resiliency and performance must
-be part of the design contract for every long-running service.
-
-That means:
-
-- bounded worker pools instead of unbounded goroutines
-- channels used where they improve in-process coordination and backpressure
-- durable queues used where replay, leasing, retries, and cross-service
-  ownership matter
-- explicit database pool tuning and service concurrency tuning
-- multi-processor execution for CPU-bound work such as parsing and
-  normalization
-- no design that requires a full platform rebuild to recover one failed work
-  unit
-
-### Data Traversal Must Be Documented
-
-Every major data-plane slice must leave behind an end-to-end traversal map that
-shows:
-
-- the bounded work unit
-- the owning service at each stage
-- the durable or in-memory boundary between stages
-- the retry and backpressure semantics
-- the telemetry and status signals that prove that stage is healthy
-
-### Operator Surfaces Must Be First-Class
-
-Every long-running Go service must have a clear operator surface that answers:
-
-- is the service healthy
-- what stage it is in
-- how much work is queued, running, succeeded, and failed
-- whether the reported state is live or inferred
-- what an operator should inspect next when the service is unhealthy
-- which shared probe and admin routes expose that state:
-  `/healthz`, `/readyz`, optional `/metrics`, and optional `/admin/status`
-
-The exact transport may vary by phase, but the contract must stay shared. The
-CLI and future API/admin endpoints should render the same underlying service
-report, not separate ad hoc views.
-
-### Canonical Truth Comes First
-
-The MCP and query plane should answer with canonical resolved truth by default. Source-local and raw evidence views are opt-in, not the default.
+- Accuracy first: if PCG cannot prove a relationship or identity, it should
+  say so explicitly.
+- Performance through bounded work: scale by scope, partition, and service
+  boundary instead of hiding slow paths.
+- Stability under partial failure: collectors, scopes, generations, reducers,
+  and query surfaces must keep operating through retries and stale data.
+- Telemetry as a contract: tracing, logs, and metrics are required platform
+  behavior, not optional debug tools.
+- Documented traversal: every major data-plane slice must leave behind an
+  end-to-end map of work unit, owner, boundary, retry semantics, and status
+  signals.
+- Canonical-first answers: the MCP and query plane should return resolved truth
+  by default, with raw evidence only when asked.
 
 ## Monorepo And Microservice Stance
 
-PCG should remain a **monorepo** and evolve into a **true microservice runtime architecture** inside that monorepo.
+PCG should remain a **monorepo** and evolve into a **true microservice runtime
+architecture** inside that monorepo.
 
-That means:
-
-- one repository for contracts, services, docs, fixtures, and deployment assets
-- multiple Go services with clear runtime ownership
-- a shared contract set generated from versioned schema definitions
-- one coordinated release train while the rewrite is in progress
-- no early repo split that would force cross-repo version skew during the foundational redesign
-
-The monorepo is the right choice for this rewrite because the contracts, services, docs, and tests all change together. The runtime is microservice-shaped; the Git boundary is not.
+That means one repository for contracts, services, docs, fixtures, and
+deployment assets, with multiple Go services, a shared contract set, and one
+coordinated release train while the rewrite is in progress. The runtime should
+be microservice-shaped even though the Git boundary is not.
 
 ## Target Runtime Architecture
 
@@ -251,19 +194,12 @@ flowchart LR
 | API / MCP | read canonical truth first, with evidence and freshness on demand |
 
 The operator-status report should not live behind a separate admin service or a
-new transport surface. Instead, `go/internal/status` should remain the shared
-reader/report seam that the CLI renders now and the existing API runtime can
-mount later.
+new transport surface. `go/internal/status` remains the shared reader/report
+seam that the CLI renders now and the API/admin transport can mount later.
 
-The same principle should apply to every long-running Go runtime:
-
-- collector services
-- source projector services
-- reducer services
-- future background runtimes
-
-Each should present the same style of operator/admin status view even when the
-exact counters differ by service role.
+The same principle applies to every long-running Go runtime: collector,
+projector, reducer, and future background services should present the same
+operator/admin status shape even when the counters differ by role.
 
 ## Resiliency And Concurrency Model
 
@@ -271,8 +207,7 @@ The target platform uses two layers of concurrency on purpose.
 
 Inside a service:
 
-- use bounded worker pools
-- use channels when they improve producer/worker/result flow
+- use bounded worker pools and channels for in-process coordination
 - size CPU-heavy work for available processors and service tuning
 - keep I/O-heavy work bounded separately from CPU-heavy work
 
@@ -280,27 +215,22 @@ Across services or ownership boundaries:
 
 - use durable queue records, leases, and idempotent writes
 - never rely on channels for replayable platform behavior
-- keep backlog age, retry state, and failure classification visible to
-  operators
+- keep backlog age, retry state, and failure classification visible
 
-This is especially important as AWS, Kubernetes, and ETL collectors arrive. A
-large inventory should increase bounded queue depth and worker activity, not
-force one giant in-memory job.
+This matters as AWS, Kubernetes, and ETL collectors arrive. A larger inventory
+should increase bounded queue depth and worker activity, not force one giant
+in-memory job.
 
 ## Scope-First Ingestion
 
 Scope-first ingestion replaces repository-first ingestion as the durable model.
 
-The primary durable unit is a **scope**, not a repository. A scope may represent:
+The primary durable unit is a **scope**, not a repository. A scope may be a Git
+repository snapshot, an AWS shard, a Kubernetes slice, a Terraform state
+object, a CloudFormation stack, or a future ETL or CI/CD unit of work.
 
-- a Git repository snapshot
-- an AWS account-region-service shard
-- a Kubernetes cluster or namespace slice
-- a Terraform state object
-- a CloudFormation stack
-- a future ETL or CI/CD unit of work
-
-Each scope has a generation. Each generation is an authoritative snapshot of what the collector observed at a point in time.
+Each scope has a generation. Each generation is the authoritative snapshot of
+what the collector observed at a point in time.
 
 ### First-Class Scope Objects
 
@@ -333,57 +263,36 @@ The authoritative truth model is snapshot-first.
 - A generation is the truth boundary.
 - Events can accelerate refresh and narrow the workset.
 - Events do not replace generation truth.
-- Deletes, retractions, and drift must be reconciled from the latest generation state, not from orphaned event fragments.
+- Deletes, retractions, and drift must be reconciled from the latest generation
+  state, not orphaned event fragments.
 
-This gives PCG deterministic replay, honest deletes, and bounded refreshes without forcing a full rebuild for every update.
+This gives PCG deterministic replay, honest deletes, and bounded refreshes
+without forcing a full rebuild for every update.
 
 ## Layered Truth Model
 
 The infrastructure model must distinguish four layers:
 
-1. **SourceDeclaration**
-   - repo-authored Terraform, CloudFormation, Helm, Kustomize, Kubernetes YAML, or similar source truth
-2. **AppliedDeclaration**
-   - Terraform state, CloudFormation stack state, and other applied-but-not-live-or-sourced snapshots
-3. **ObservedResource**
-   - live cloud or cluster observations from provider APIs
-4. **CloudAsset**
-   - the canonical resolved asset that ties the other three layers together
+1. `SourceDeclaration`: repo-authored Terraform, CloudFormation, Helm, Kustomize, Kubernetes YAML, or similar source truth
+2. `AppliedDeclaration`: Terraform state, CloudFormation stack state, and other applied-but-not-live-or-sourced snapshots
+3. `ObservedResource`: live cloud or cluster observations from provider APIs
+4. `CloudAsset`: the canonical resolved asset that ties the other layers together
 
-This layering is what lets PCG answer the questions operators actually ask:
-
-- what is declared in code but not applied
-- what is applied but no longer matches source
-- what is running but not managed by IaC
-- what is the canonical asset across source, state, and live observation
+This layering lets PCG answer the questions operators actually ask about
+declared, applied, observed, and canonical state.
 
 ## Identity Rules
 
-### Provider-Native Identity First
+PCG should use provider-native identifiers whenever they are stable and
+portable, such as AWS ARN, Azure resource ID, GCP resource name, or a stable
+Kubernetes identity.
 
-PCG should use provider-native identifiers whenever they are stable and portable.
+If a provider-native identifier exists and is stable, it should anchor the
+canonical identity. If not, PCG may synthesize a canonical identifier, but the
+original source identity must remain visible for provenance and debugging.
 
-Examples:
-
-- AWS ARN
-- Kubernetes cluster UID or stable `(cluster, namespace, kind, name)` identity where appropriate
-- Azure resource ID
-- GCP resource name
-
-If a provider-native identifier exists and is stable, it should anchor the canonical identity.
-
-If not, PCG may synthesize a canonical identifier, but the original source identity must remain visible for provenance and debugging.
-
-### Canonical Asset Identity
-
-`CloudAsset` identity must preserve:
-
-- the provider-native identifier when available
-- the source system that observed or declared it
-- the scope generation that produced it
-- the layer that contributed the evidence
-
-PCG should not hide provenance behind a single opaque ID.
+`CloudAsset` identity must preserve the provider-native identifier when
+available, the source system, the scope generation, and the evidence layer.
 
 ## Workload Model
 
@@ -394,75 +303,40 @@ The platform must model:
 - `Workload`
 - `WorkloadInstance`
 
-`Workload` is the logical thing the organization operates. `WorkloadInstance` is the runtime or environment-specific realization of that logical workload.
+`Workload` is the logical thing the organization operates. `WorkloadInstance`
+is the runtime or environment-specific realization of that logical workload.
 
-This model must support:
-
-- services
-- APIs
-- ETL pipelines
-- jobs
-- schedulers
-- batch processors
-- stream consumers
-- controllers
-- serverless workloads
-
-### ETL And Job Subtypes
-
-ETL pipelines, batch jobs, and schedulers are not a separate universe. They are workload subtypes.
-
-That means PCG should be able to reason about:
-
-- `Workload: customer-sync`
-- `WorkloadInstance: customer-sync / airflow`
-- `WorkloadInstance: customer-sync / k8s-cronjob`
-- `WorkloadInstance: customer-sync / lambda`
-
-while still keeping `DataAsset` and `AnalyticsModel` as separate first-class entities connected to the workload spine.
+The model must support services, APIs, ETL pipelines, jobs, schedulers, batch
+processors, stream consumers, controllers, and serverless workloads. ETL and
+job subtypes remain workload subtypes, not a separate universe.
 
 ## Source Projector, Reducer-Intent, And Reducer Model
 
 The new write path is a three-stage contract:
 
-1. **Source projector**
-   - consumes `scope_generation`
-   - materializes source-local truth
-   - emits durable reducer intents for shared domains
-2. **Reducer-intent queue**
-   - persists scope-generation-driven follow-up work
-   - remains the authoritative trigger for cross-source or cross-scope recompute
-3. **Reducer**
-   - consumes durable intents
-   - updates canonical shared truth
-   - owns domains such as workload identity, cloud asset resolution, deployment mapping, and data-lineage correlation
+1. `Source projector`: consumes `scope_generation`, materializes source-local
+   truth, and emits durable reducer intents for shared domains
+2. `Reducer-intent queue`: persists scope-generation-driven follow-up work and
+   remains the authoritative trigger for cross-source or cross-scope recompute
+3. `Reducer`: consumes durable intents, updates canonical shared truth, and
+   owns domains such as workload identity, cloud asset resolution, deployment
+   mapping, and data-lineage correlation
 
-This separation is the key to avoiding a single procedural write beast.
-
-### Why The Reducer Queue Is Scope-Generation Driven
-
-Durable reducer intents should be keyed by scope generation because that is the truth boundary for deletes, retractions, and replay.
-
-Entity-keyed recompute remains useful as an internal scheduler optimization, but it is not the durable source of truth. The durable boundary is the scope generation.
+Durable reducer intents should be keyed by scope generation because that is the
+truth boundary for deletes, retractions, and replay.
 
 ## Query And MCP Contract
 
-The query plane and MCP plane must be **canonical-first**.
-
-That means:
+The query and MCP planes must be **canonical-first**:
 
 - default responses should return resolved canonical truth
 - source-local and raw inspection modes should be explicit
-- evidence, freshness, confidence, and provenance should be available when needed
+- evidence, freshness, confidence, and provenance should be available when
+  needed
 - the system should explain why a result is partial, inferred, or unresolved
 
-The user experience should be:
-
-1. give the best resolved answer
-2. show why the platform believes it
-3. expose raw source detail only when asked
-
-This makes PCG more usable for humans and more reliable for automation.
+The user experience should be: give the best resolved answer, show why the
+platform believes it, and expose raw source detail only when asked.
 
 ## Service Topology
 
@@ -476,59 +350,38 @@ PCG should run as separate services with clear runtime ownership:
 - `reducer`
 
 The services live in one repo, but they do not share one giant runtime process.
-
-The rewrite should keep the read plane stable while the data plane changes underneath it.
+The rewrite should keep the read plane stable while the data plane changes
+underneath it.
 
 ## Why This Happens Before New Collectors
 
-This rewrite must happen before GCP, Azure, and the next wave of collectors because the substrate is the hard part.
+The rewrite must land before GCP, Azure, and the next wave of collectors
+because the substrate is the hard part.
 
-If PCG adds more collectors before the data plane is rebuilt, it will inherit:
+If PCG adds more collectors before the data plane is rebuilt, it will inherit
+repository-shaped assumptions, full-reindex pressure, weak scope identity,
+ambiguous truth boundaries, procedural finalize logic, and runtime type
+fragility.
 
-- repository-shaped assumptions
-- full-reindex pressure
-- weak scope identity
-- ambiguous truth boundaries
-- procedural finalize logic
-- runtime type fragility
-
-The rewrite is the chance to make all future collectors boring.
-
-If the substrate is right, new collectors are just adapters to the same platform contract.
-
-If the substrate is wrong, each new collector becomes a new special case.
+If the substrate is right, new collectors are just adapters to the same
+platform contract. If it is wrong, each new collector becomes a new special
+case.
 
 ## Operational Priorities
 
 The implementation order is not negotiable:
 
-1. **Accuracy**
-2. **Stability**
-3. **Scalability**
-4. **Performance**
-5. **Telemetry, tracing, and logging**
+1. Accuracy
+2. Stability
+3. Scalability
+4. Performance
+5. Telemetry, tracing, and logging
 
-Performance matters, but not at the expense of correctness. Stability matters, but not by hiding broken state. Scalability matters, but only if the answers stay trustworthy.
-
-Telemetry must make it obvious:
-
-- what scope is being processed
-- what generation is current
-- which stage failed
-- which reducer intent is pending
-- which canonical relationship was accepted or rejected
-
-That telemetry is not enough on its own. The rewrite must also produce
-operator-readable status surfaces so an engineer can answer live questions such
-as:
-
-- how many scopes or generations are queued, running, completed, or failed
-- how many repos or scopes are in flight at each stage right now
-- which reducer domains are draining or backlogged
-- which runtime is healthy, degraded, or stalled
-
-The target user experience is an admin-style CLI and API view, not a requirement
-to inspect raw metrics directly for ordinary operational questions.
+Telemetry must make it obvious what scope is being processed, what generation
+is current, which stage failed, which reducer intent is pending, and which
+canonical relationship was accepted or rejected. The rewrite must also produce
+operator-readable status surfaces so engineers can answer live questions
+without starting from raw metrics.
 
 ## Implementation Boundaries
 
@@ -549,27 +402,22 @@ Excluded from the first cut:
 - full MCP and HTTP read-plane rewrite
 - new collector features beyond the substrate work
 - repo splitting
-- introducing multiple incompatible write paths
+- multiple incompatible write paths
 
 ## Definition Of Done
 
-The rewrite is not complete until all of the following are true:
-
-- collectors emit scope-based facts through the new contracts
-- `ingestion_scopes` and `scope_generations` are real durable concepts
-- source-local projection and shared reduction are separated cleanly
-- snapshot truth and event acceleration both work as designed
-- the layered truth model is queryable and explainable
-- workloads are logical-first with ETL/job subtypes
-- canonical query and MCP responses are resolved-first by default
-- telemetry, tracing, and logging make the new flow operable
-- the platform is ready for AWS, Kubernetes, and future collectors without another substrate rewrite
+The rewrite is complete when collectors emit scope-based facts, scopes and
+generations are durable, source-local projection and shared reduction are
+separated, the layered truth model is queryable, canonical query and MCP
+responses are resolved-first, telemetry is operable, and the platform is ready
+for AWS, Kubernetes, and future collectors without another substrate rewrite.
 
 ## Summary
 
-PCG is becoming a long-lived enterprise knowledge platform, not just a repository indexer.
+PCG is becoming a long-lived enterprise knowledge platform, not just a
+repository indexer.
 
-The right architecture is:
+The architecture target is:
 
 - one monorepo
 - true microservices

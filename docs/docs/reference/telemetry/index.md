@@ -8,6 +8,11 @@ PlatformContextGraph uses three signal types:
 
 Use this page to choose where to look first.
 
+Operator/admin status is part of the telemetry contract, not a separate debug
+path. If a service exposes `/admin/status`, treat that report as the fastest
+way to understand what stage is running, how much work is queued, and whether
+the reported state is live or inferred.
+
 ## Start Here
 
 | If you are debugging | Start with | Then check |
@@ -35,6 +40,7 @@ flowchart LR
   I --> F
   J["Admin API / CLI"] --> G
   J --> H
+  J --> I
 ```
 
 ## How To Use The Signals
@@ -44,6 +50,23 @@ flowchart LR
 - Move to **traces** when you need to understand where time went across a
   request or projection.
 - Use **logs** when you need exact repository, run, or work-item context.
+- Use the shared admin/status report when you want a quick read on stage,
+  backlog, live-versus-inferred state, and failure classification.
+
+## Incremental Refresh And Reconciliation Signals
+
+The rewrite is moving toward incremental refresh and reconciliation, not full
+re-indexing as the normal freshness model.
+
+Watch these signals together:
+
+- scope and generation status for what changed
+- work-queue depth and age for what still needs to be reconciled
+- projection decisions for what has been accepted or deferred
+- retry and dead-letter state for what needs operator attention
+
+If a repository, scope, or collector appears stale, start with the admin/status
+surface and queue/generation metrics before assuming a full rebuild is needed.
 
 For shared-write debugging specifically:
 
@@ -91,6 +114,15 @@ For shared-write debugging specifically:
 - Traces show one projection attempt from claim to graph write.
 - Logs capture work-item completion, retry, dead-letter, and per-stage failure
   context.
+
+### Admin / CLI Status
+
+- The admin/status report answers stage, backlog, health, and live-versus-
+  inferred questions in one place.
+- It should mirror the service runtime shape so operators do not need a
+  different mental model for collector, projector, reducer, or future Go
+  services.
+- Use the report before restarting a service or forcing a broader re-index.
 
 Shared-write-specific gauges:
 
@@ -157,6 +189,9 @@ the next stop before turning batch size further.
   `ServiceMonitor` resources for the API, ingester, and resolution-engine.
 - Bootstrap indexing is a local or operator-run one-shot activity, not a
   steady-state `ServiceMonitor` target in the public chart.
+- Incremental refresh and reconciliation should be observed through queue age,
+  generation status, and the admin/status surface rather than through a
+  platform-wide re-index trigger.
 
 ## Where To Go Next
 

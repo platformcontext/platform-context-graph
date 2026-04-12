@@ -1,250 +1,102 @@
 # Go Data Plane Milestone Operating Model
 
-This document defines how rewrite milestones should be shaped, staffed, and
-reported on this branch.
+This document explains how the rewrite should be decomposed, staffed, and
+reported so future workers can keep moving without re-litigating the branch
+shape.
 
-The goal is to stop turning major platform work into disconnected micro-slices
-and instead execute **whole architectural outcomes** with clear ownership and
-repeatable proof.
+## Purpose
 
-## Why This Model Exists
+The rewrite is not a list of tiny tickets. Each milestone should represent one
+observable architecture outcome that can be validated locally before the next
+wave begins.
 
-The rewrite is large enough that we need parallel execution, but broad enough
-that uncontrolled parallelism creates drift, rework, and false confidence.
+Use this operating model when you need to decide:
 
-This operating model exists to keep each milestone:
+- what belongs in the current milestone
+- how much work a slice should contain
+- which validation gate proves the slice
+- what needs to be documented before the slice is complete
 
-- large enough to represent a real system outcome
-- small enough to validate locally and in the cloud test environment
-- decomposed by subsystem ownership instead of helper-by-helper edits
-- explainable to future workers without rereading chat history
+## Milestone Anatomy
 
-## Milestone Shape
+Every milestone should have:
 
-Each rewrite milestone must be defined as one coherent platform outcome.
+1. one architecture outcome
+2. two to four workstreams
+3. explicit owned paths
+4. a validation command or small command set
+5. a doc update requirement
+6. a short report describing what remains
 
-Examples of good milestone shapes:
+If a milestone does not have those pieces, it is too vague to delegate.
 
-- native Git collector cutover with end-to-end operability
-- source projector and reducer domain authority flip for one proof domain
-- operator/admin runtime status surfaces across all long-running services
-- deterministic local and cloud validation gate for one authority boundary
+## Effort Bands
 
-Examples of bad milestone shapes:
+Use these bands to keep work meaningful without making it monolithic:
 
-- add one helper
-- split one file
-- wire one extra metric without owning the operator story
-- land one internal seam without the validation or admin contract around it
+- `Small`: a focused doc or contract update, usually one owner and one
+  validation command
+- `Medium`: a bounded runtime or query change with one integration proof
+- `Large`: a full service-slice or contract-family change with multiple tests
+- `Extra Large`: only when the milestone outcome is truly cross-cutting and
+  cannot be split without losing architectural meaning
 
-## Required Sections For Every Milestone
+Prefer a `Large` milestone with a few clear workstreams over a dozen `Small`
+patches that do not produce a visible platform outcome.
 
-Every milestone plan must include:
+## Sequencing Rules
 
-1. Summary
-2. Architectural outcome
-3. In-scope and out-of-scope work
-4. Workstreams with owned paths
-5. Subagent assignment model
-6. Dependency waves
-7. Acceptance criteria
-8. Local validation commands
-9. Cloud proof requirements when applicable
-10. Backlog split into completed, current, and remaining work
+- lock the architecture and contract shape first
+- build the substrate before adding more collectors
+- prove one bounded path locally before claiming rewrite readiness
+- keep read-plane compatibility while the data plane changes underneath it
+- do not let validation depend on a future service shape that has not landed
 
-No milestone is considered executable until these sections exist in the repo.
+## Validation Rules
 
-## Workstream Rules
+Every milestone should prove four things:
 
-Each milestone should usually have between **3 and 5 workstreams**.
+- the code compiles and the targeted tests pass
+- the docs explain the new boundary or contract
+- the runtime/admin/status surface matches the service shape
+- the work can be explained as a flow from source to canonical state
 
-Each workstream should own a **vertical subsystem outcome**, not a thin edit
-category.
+The default validation stack is:
 
-Good workstream examples:
+- focused unit tests
+- focused integration tests
+- docs build or lint where docs changed
+- one local runtime proof command when the milestone touches service behavior
 
-- contract and architecture lock
-- native collector implementation
-- projector and persistence path
-- operability and admin surface
-- end-to-end validation and proof harness
+## Slice Reporting Format
 
-Bad workstream examples:
+After each slice, report in the same order:
 
-- tests only
-- helper refactors
-- comments and docs
-- one file per agent
+- what milestone and workstream changed
+- what owned paths were touched
+- what validation command passed
+- what remains blocked
+- whether the change is final architecture or a temporary bridge
 
-## Subagent Model
+## Parallelism Guidance
 
-The main agent stays responsible for:
+When multiple workers are available:
 
-- architecture decisions
-- shared contract review
-- integration order
-- conflict resolution
-- final verification
-- commit, push, PR, and milestone reporting
+- give each worker one workstream or one bounded validation slice
+- avoid overlapping root docs and generated contract files
+- keep the main agent on integration, review, and milestone reporting
+- do not split a single architectural decision across multiple workers
 
-Subagents should own **disjoint write scopes** and one full workstream each.
+## Default Milestone Pattern
 
-Recommended default staffing:
+For this branch, the preferred sequence is:
 
-- 1 main agent
-- 2 to 4 worker subagents
+1. lock contracts and operator rules
+2. deliver one native runtime proof path
+3. add scope-first ingestion and incremental refresh
+4. separate canonical truth and reducer ownership
+5. retire the legacy write seam
+6. expand to new collectors on the same contract
 
-Do not spawn more workers unless the workstreams are truly independent and the
-contracts are already frozen.
-
-## Dependency Waves
-
-Milestones should run in waves instead of free-form parallel work.
-
-### Wave 0: Contract lock
-
-Outputs:
-
-- ADRs and plan docs updated
-- interfaces frozen for the milestone
-- acceptance criteria written
-
-Parallel implementation does not begin before this wave is done.
-
-### Wave 1: Core implementation
-
-Outputs:
-
-- the primary subsystem workstreams land in parallel
-- each workstream has focused tests and local proof
-
-Typical staffing:
-
-- collector worker
-- projector/persistence worker
-- operability or validation worker
-
-### Wave 2: Integration
-
-Outputs:
-
-- workstreams are stitched together
-- compatibility and drift issues are resolved
-- end-to-end local validation passes
-
-### Wave 3: Proof and report
-
-Outputs:
-
-- final local validation passes
-- docs are updated to match reality
-- remaining backlog is reported by workstream and effort
-
-## Effort Scale
-
-Use these effort bands in milestone plans:
-
-- `Small`: 1 focused slice, limited file ownership, low integration risk
-- `Medium`: several files or one subsystem, moderate contract touch points
-- `Large`: multi-package subsystem, important integration boundary, needs full validation
-- `XL`: broad milestone umbrella; should usually be broken into multiple workstreams
-
-Milestones should be made of several `Medium` and `Large` workstreams, not many
-`Small` ones.
-
-## Completion Rules
-
-A workstream is only complete when all of the following are true:
-
-- code is implemented without placeholder logic
-- tests for the owned contract pass
-- relevant docs are updated
-- local validation for that workstream passes
-- the result is reported with what changed, what was verified, and what remains
-
-A milestone is only complete when:
-
-- all workstreams satisfy their completion rules
-- the end-to-end validation layer passes
-- operator/admin visibility exists for the new behavior
-- remaining legacy bridge behavior is explicitly documented
-
-## Reporting Rules
-
-After each commit and push, milestone reporting should include:
-
-- what workstream was advanced
-- what exact validation passed
-- what remains in the milestone
-- effort for each remaining workstream
-- whether the next work is parallelizable or blocked
-
-This branch should never rely on “we probably finished most of it.”
-
-## Anti-Patterns
-
-Avoid these execution patterns:
-
-- splitting one subsystem across multiple workers without a frozen contract
-- making one worker “tests only” while another edits the same subsystem
-- landing scaffolding and calling the workstream complete
-- hiding milestone risk behind green unit tests only
-- deferring docs until after multiple implementation waves
-- using the legacy path as an excuse to skip the new operator/admin story
-
-## Standard Milestone Template
-
-Every new milestone plan should use this outline:
-
-```md
-# <Milestone Name>
-
-## Summary
-
-## Architectural Outcome
-
-## Scope
-
-### In Scope
-
-### Out Of Scope
-
-## Workstreams
-
-### Workstream A: <name>
-- Purpose
-- Owned paths
-- Deliverables
-- Acceptance criteria
-- Effort
-
-### Workstream B: <name>
-...
-
-## Subagent Assignment
-
-## Dependency Waves
-
-## Validation
-
-## Current Status
-
-### Completed
-
-### In Flight
-
-### Remaining
-```
-
-## Branch Rule
-
-For the rewrite branch, each milestone should get its own milestone plan file.
-
-The plan file must be updated when:
-
-- a workstream is completed
-- a dependency wave changes
-- a major acceptance criterion changes
-- remaining effort is materially re-estimated
-
-This is the mechanism we should use for each milestone on this branch.
+That pattern should stay visible in the milestone docs, the public roadmap, and
+the runtime/telemetry guidance so future workers know what phase they are in.

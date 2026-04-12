@@ -22,8 +22,16 @@ That runtime is the historical baseline for the current branch. The next
 architecture phase keeps the same correctness goals, but it moves the write
 path into a schema-first Go data plane built around scoped ingestion, snapshot
 generations, source-local projectors, and shared reducers. The goal is to let
-Git, AWS, Kubernetes, and future collectors all feed one canonical knowledge
-graph without inheriting Git-shaped storage or finalization assumptions.
+Git, AWS, Kubernetes, SQL, and future collectors all feed one canonical
+knowledge graph without inheriting Git-shaped storage or finalization
+assumptions. Each collector family owns its own service boundary and emits the
+same shared fact contract, so the platform can scale by source instead of
+forcing every update through one generic ingester.
+
+The rewrite also favors incremental ingestion and reconciliation over full
+re-indexing. Normal updates should touch the affected scope or shard, produce a
+new generation, and reconcile only the changed unit of truth. Full rebuilds
+remain available as explicit bootstrap or recovery operations.
 
 That split means steady-state health needs two different backlog views:
 
@@ -60,7 +68,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  subgraph Sources["Collector services"]
+  subgraph Sources["Source-specific collector services"]
     G["Git collector"]
     A["AWS collector"]
     K["Kubernetes collector"]
@@ -106,9 +114,9 @@ architecture.
 
 | Stage | Owner | Work unit | Boundary type | Retry owner | Primary health signals |
 | --- | --- | --- | --- | --- | --- |
-| Source observation | collector service | scope candidate or source shard | in-process | collector | collector latency, discovery backlog, source error rate |
-| Scope assignment | collector service | `ingestion_scope` + `scope_generation` | durable write | collector | scope create/update rate, generation status, duplicate suppression |
-| Fact emission | collector service | facts for one scope generation | durable write | collector | fact emit latency, fact count, Postgres pool saturation |
+| Source observation | source-specific collector service | scope candidate or source shard | in-process | collector | collector latency, discovery backlog, source error rate |
+| Scope assignment | source-specific collector service | `ingestion_scope` + `scope_generation` | durable write | collector | scope create/update rate, generation status, duplicate suppression |
+| Fact emission | source-specific collector service | facts for one scope generation | durable write | collector | fact emit latency, fact count, Postgres pool saturation |
 | Source-local projection | projector | one claimed scope generation | durable queue claim | projector | queue depth, oldest age, claim latency, projector duration |
 | Reducer-intent emission | projector | reducer intents for one generation | durable write | projector | intent count, enqueue latency, pending intents by domain |
 | Canonical reduction | reducer | one reducer intent | durable queue claim | reducer | reducer queue age, reducer duration, retry and dead-letter counts |
@@ -142,6 +150,16 @@ This distinction is what lets PCG leverage multiple processors while still
 remaining resilient under retries, partial failure, and large cloud or
 Kubernetes inventories.
 
+Every long-running service should also expose the shared admin contract:
+
+- `GET` and `HEAD` `/healthz`
+- `GET` and `HEAD` `/readyz`
+- `GET` and `HEAD` `/admin/status`
+- `/metrics` when the runtime exposes metrics
+
+The status surface should come from the same report model whether the operator
+is using the CLI or the HTTP endpoint.
+
 ## Deployed Control Plane
 
 ```mermaid
@@ -162,7 +180,7 @@ flowchart LR
 | MCP | AI-oriented query surface over the same shared model |
 | HTTP API | OpenAPI-backed automation surface plus admin endpoints |
 | Query layer | Shared read model used by CLI, MCP, and HTTP |
-| Collectors | Source-specific discovery and ingestion helpers |
+| Collectors | Source-specific discovery, normalization, and ingestion helpers |
 | Parsers | Language and IaC parsing, capability specs, and SCIP helpers |
 | Facts layer | Typed facts, Postgres fact storage, queue state, recovery state |
 | Resolution | Fact-to-graph projection, workload/platform materialization, decisions |
@@ -172,10 +190,10 @@ flowchart LR
 
 ## Facts-First Flow
 
-1. The ingester discovers repositories and parses a repository snapshot.
+1. The source-specific collector discovers a bounded scope and parses a source snapshot.
 2. Repository, file, and entity facts are written to Postgres.
 3. A fact work item is enqueued for that snapshot.
-4. The resolution-engine, or the ingester’s inline facts-first commit path,
+4. The resolution-engine, or the collector’s transitional inline commit path,
    claims the work item and loads the stored facts.
 5. Repo-local projection refreshes repository, file, entity, relationship,
    workload, and repo-owned platform state in Neo4j.
@@ -229,8 +247,12 @@ architecture page:
 
 - [Architecture Decision Records](adrs/index.md)
 - [Go Data Plane in a Monorepo](adrs/2026-04-12-go-data-plane-monorepo.md)
+- [Source-Specific Ingestors And Shared Fact Contract](adrs/2026-04-12-source-specific-ingestors-and-shared-fact-contract.md)
 - [Scope-First Ingestion](adrs/2026-04-12-scope-first-ingestion.md)
+- [Incremental Ingestion And Reconciliation](adrs/2026-04-12-incremental-ingestion-and-reconciliation.md)
+- [Resolution Owns Cross-Domain Truth](adrs/2026-04-12-resolution-owns-cross-domain-truth.md)
 - [Reducer Intent Architecture](adrs/2026-04-12-reducer-intent-architecture.md)
+- [Service Admin And Observability Contract](adrs/2026-04-12-service-admin-and-observability-contract.md)
 
 ## Recovery And Explainability
 
@@ -261,16 +283,16 @@ Target-state ownership after the rewrite:
 
 | Runtime | Owns |
 | --- | --- |
-| Collector services | Source-specific discovery and normalized fact emission |
+| Collector services | Source-specific discovery, incremental refresh, and normalized fact emission |
 | Go scope layer | Ingestion scopes, scope generations, and change-unit routing |
 | Go projector services | Source-local graph materialization |
 | Go reducer services | Cross-source canonical correlation and shared graph writes |
 | API | HTTP and MCP serving, graph reads, content reads, admin surface |
 | Bootstrap Index | One-shot initial indexing and replay orchestration |
 
-The content store is owned by the projection path, not by the raw parser. The
-ingester emits facts; the resolution-engine turns those facts into canonical
-graph and content state.
+The content store is owned by the projection path, not by the raw parser.
+Source-specific collectors emit facts; the resolution-engine turns those facts
+into canonical graph and content state.
 
 In the rewritten data plane, the resolution-engine is the projection and
 reduction runtime, not the place where parser, collector, or source-specific
@@ -292,6 +314,10 @@ Operationally, use metrics first to decide whether the bottleneck is still in
 the fact queue or has moved into shared follow-up. Then use traces to inspect
 the slow path and logs to recover the exact repository, run, or generation
 context.
+
+Every runtime should report health, readiness, and status through the shared
+admin contract so operators do not need a different probe model for each
+service.
 
 See:
 
