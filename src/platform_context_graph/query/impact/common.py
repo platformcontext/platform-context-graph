@@ -249,7 +249,24 @@ def entity_from_record(record: Any) -> dict[str, Any]:
         "type": entity_type,
         "name": data.get("name") or name_from_id(entity_id),
     }
-    for key in ("kind", "environment", "workload_id", "repo_id", "path"):
+    for key in (
+        "kind",
+        "environment",
+        "workload_id",
+        "repo_id",
+        "path",
+        "status",
+        "severity",
+        "check_type",
+        "owner_names",
+        "owner_teams",
+        "contract_names",
+        "contract_levels",
+        "change_policies",
+        "sensitivity",
+        "is_protected",
+        "protection_kind",
+    ):
         if data.get(key) is not None:
             snapshot[key] = data[key]
     if snapshot["type"] == EntityType.workload.value:

@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from ...domain import EntityType
+from ..data_change_classification import (
+    classify_data_change,
+    classify_impacted_data_change,
+    summarize_data_change_classifications,
+)
 from .common import dedupe_evidence
 from ..data_lineage_evidence import merge_lineage_summaries, summarize_lineage_hops
 from .store import _GraphStore
@@ -193,6 +198,8 @@ def change_surface_store(
     """
 
     impacted_ids: dict[str, dict[str, Any]] = {}
+    target_snapshot = store.entities.get(target_id) or store.snapshot(target_id)
+    target_change_classification = classify_data_change(target_snapshot)
     paths = store.paths_to(
         source_id=target_id,
         target_predicate=lambda ref: ref["id"] != target_id
@@ -223,12 +230,18 @@ def change_surface_store(
             continue
         target = summary["target"]
         existing = impacted_ids.get(target["id"])
+        impacted_snapshot = store.entities.get(target["id"]) or target
+        change_classification = classify_impacted_data_change(
+            impacted_snapshot,
+            path=summary,
+        )
         item = {
             "entity": target,
             "path": summary,
             "confidence": summary["confidence"],
             "reason": summary["reason"],
             "evidence": summary["evidence"],
+            "change_classification": change_classification,
             **(
                 {"lineage_evidence": summary.get("lineage_evidence")}
                 if summary.get("lineage_evidence") is not None
@@ -246,9 +259,15 @@ def change_surface_store(
     lineage_evidence = merge_lineage_summaries(
         item.get("lineage_evidence") for item in impacted
     )
+    classification_summary = summarize_data_change_classifications(
+        [target_change_classification]
+        + [item.get("change_classification") for item in impacted]
+    )
     return {
         "target": store.snapshot(target_id),
         "environment": environment,
+        "target_change_classification": target_change_classification,
+        "classification_summary": classification_summary,
         "impacted": impacted,
         "confidence": top["confidence"] if top else 0.0,
         "reason": (
