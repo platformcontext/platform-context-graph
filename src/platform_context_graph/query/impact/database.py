@@ -162,7 +162,15 @@ def db_fetch_entity(database: Any, entity_id: str) -> dict[str, Any] | None:
             "MATCH (n:AnalyticsModel) "
             "WHERE n.id = $id "
             "RETURN n.id as id, n.name as name, "
-            "'analytics_model' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
+            "'analytics_model' as type, n.path as path, n.repo_id as repo_id, "
+            "n.parse_state as parse_state, "
+            "n.confidence as confidence, "
+            "n.materialization as materialization, "
+            "n.projection_count as projection_count, "
+            "n.unresolved_reference_count as unresolved_reference_count, "
+            "n.unresolved_reference_reasons as unresolved_reference_reasons, "
+            "n.unresolved_reference_expressions as unresolved_reference_expressions "
+            "LIMIT 1"
         )
     elif entity_id.startswith("query-execution:"):
         query = (

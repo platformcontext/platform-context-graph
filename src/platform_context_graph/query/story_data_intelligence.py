@@ -18,6 +18,7 @@ def summarize_data_intelligence_overview(overview: dict[str, Any]) -> str:
     contract_count = int(overview.get("data_contract_count") or 0)
     protected_column_count = int(overview.get("protected_column_count") or 0)
     reconciliation = dict(overview.get("reconciliation") or {})
+    lineage_gap_summary = dict(overview.get("lineage_gap_summary") or {})
     parse_states = dict(overview.get("parse_states") or {})
     partial_count = int(parse_states.get("partial") or 0)
     summary = (
@@ -46,9 +47,10 @@ def summarize_data_intelligence_overview(overview: dict[str, Any]) -> str:
     if reconciliation_summary:
         summary += f"; {reconciliation_summary}"
     if partial_count:
-        suffix = f"lineage is partial for {partial_count} model"
-        if partial_count != 1:
-            suffix += "s"
+        suffix = _partial_lineage_summary_text(
+            partial_count=partial_count,
+            lineage_gap_summary=lineage_gap_summary,
+        )
         return f"{summary}; {suffix}."
     return f"{summary}; lineage is complete for all indexed models."
 
@@ -97,6 +99,39 @@ def _reconciliation_summary_text(reconciliation: dict[str, Any]) -> str:
         f"{observed_only_asset_count} observed-only asset"
         f"{'' if observed_only_asset_count == 1 and declared_only_asset_count == 1 else 's'}"
     )
+
+
+def _partial_lineage_summary_text(
+    *,
+    partial_count: int,
+    lineage_gap_summary: dict[str, Any],
+) -> str:
+    """Return a repo-story explanation for partial compiled lineage."""
+
+    base = f"lineage is partial for {partial_count} model"
+    if partial_count != 1:
+        base += "s"
+
+    reason_counts = dict(lineage_gap_summary.get("reason_counts") or {})
+    if reason_counts:
+        reason, _count = next(iter(reason_counts.items()))
+        base += f" because {_humanize_gap_reason(reason)} remains unresolved"
+
+    sample_expressions = [
+        str(expression).strip()
+        for expression in lineage_gap_summary.get("sample_expressions") or []
+        if str(expression).strip()
+    ]
+    if sample_expressions:
+        base += f" (for example {sample_expressions[0]})"
+    return base
+
+
+def _humanize_gap_reason(reason: str) -> str:
+    """Return a user-facing unresolved-lineage reason label."""
+
+    normalized = str(reason or "").strip().replace("_", " ")
+    return normalized or "unsupported lineage pattern"
 
 
 __all__ = [

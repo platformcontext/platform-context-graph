@@ -142,6 +142,7 @@ class DbtCompiledSqlPlugin:
                     )
 
             unresolved_references.extend(model_unresolved)
+            unresolved_summary = _unresolved_reference_summary(model_unresolved)
             analytics_models.append(
                 {
                     "id": f"analytics-model:{unique_id}",
@@ -155,6 +156,11 @@ class DbtCompiledSqlPlugin:
                     "parse_state": "partial" if model_unresolved else "complete",
                     "confidence": 0.5 if model_unresolved else 1.0,
                     "projection_count": projection_count,
+                    "unresolved_reference_count": unresolved_summary["count"],
+                    "unresolved_reference_reasons": unresolved_summary["reasons"],
+                    "unresolved_reference_expressions": unresolved_summary[
+                        "expressions"
+                    ],
                 }
             )
 
@@ -384,6 +390,33 @@ def _coverage_summary(
         "confidence": round(mean_confidence, 2),
         "state": "partial" if unresolved_references else "complete",
         "unresolved_references": list(unresolved_references),
+    }
+
+
+def _unresolved_reference_summary(
+    unresolved_references: Sequence[Mapping[str, str]],
+) -> dict[str, Any]:
+    """Return graph-safe unresolved-lineage fields for one analytics model."""
+
+    reasons: list[str] = []
+    expressions: list[str] = []
+    seen_reasons: set[str] = set()
+    seen_expressions: set[str] = set()
+
+    for item in unresolved_references:
+        reason = str(item.get("reason") or "").strip()
+        expression = str(item.get("expression") or "").strip()
+        if reason and reason not in seen_reasons:
+            seen_reasons.add(reason)
+            reasons.append(reason)
+        if expression and expression not in seen_expressions:
+            seen_expressions.add(expression)
+            expressions.append(expression)
+
+    return {
+        "count": len(unresolved_references),
+        "reasons": reasons,
+        "expressions": expressions,
     }
 
 

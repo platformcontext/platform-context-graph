@@ -47,6 +47,14 @@ def test_repository_story_exposes_data_intelligence_section() -> None:
                     "declared_only_assets": ["raw.public.payments"],
                     "observed_only_assets": ["raw.public.refunds"],
                 },
+                "lineage_gap_summary": {
+                    "partial_model_count": 1,
+                    "reason_counts": {
+                        "wildcard_projection_not_supported": 1,
+                    },
+                    "sample_models": ["orders_expanded"],
+                    "sample_expressions": ["o.*"],
+                },
                 "parse_states": {"complete": 1, "partial": 1},
                 "sample_models": [
                     {
@@ -95,7 +103,7 @@ def test_repository_story_exposes_data_intelligence_section() -> None:
     assert data_section["summary"] == (
         "Compiled analytics covers 2 models, 5 data assets, 10 data columns, 2 warehouse queries, 1 dashboard, and 1 quality check; "
         "declared and observed lineage overlap on 2 assets, with 1 declared-only and 1 observed-only asset; "
-        "lineage is partial for 1 model."
+        "lineage is partial for 1 model because wildcard projection not supported remains unresolved (for example o.*)."
     )
     assert [item["name"] for item in data_section["items"]] == [
         "order_metrics",

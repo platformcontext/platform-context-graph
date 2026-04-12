@@ -36,6 +36,7 @@ def build_repository_data_intelligence_summary(
         "protected_column_count": _count_protected_columns(session, repo),
         "relationship_counts": _relationship_counts(session, repo),
         "reconciliation": _reconciliation_summary(session, repo),
+        "lineage_gap_summary": _lineage_gap_summary(session, repo),
         "parse_states": _parse_state_counts(session, repo),
         "sample_models": _sample_models(session, repo),
         "sample_queries": _sample_queries(session, repo),
@@ -130,6 +131,63 @@ def _parse_state_counts(session: Any, repo: dict[str, Any]) -> dict[str, int]:
         str(row.get("parse_state") or "unknown"): int(row.get("count") or 0)
         for row in rows
         if int(row.get("count") or 0) > 0
+    }
+
+
+def _lineage_gap_summary(session: Any, repo: dict[str, Any]) -> dict[str, Any] | None:
+    """Return aggregated unresolved-lineage details for partial analytics models."""
+
+    rows = session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(m:AnalyticsModel)
+        WHERE {repository_scope_predicate()}
+          AND coalesce(m.parse_state, 'unknown') = 'partial'
+        RETURN m.name AS name,
+               coalesce(m.unresolved_reference_reasons, []) AS reasons,
+               coalesce(m.unresolved_reference_expressions, []) AS expressions
+        ORDER BY m.name
+        """,
+        **repository_scope(repo),
+    ).data()
+    if not rows:
+        return None
+
+    reason_counts: dict[str, int] = {}
+    sample_models: list[str] = []
+    sample_expressions: list[str] = []
+    seen_expressions: set[str] = set()
+
+    for row in rows:
+        model_name = str(row.get("name") or "").strip()
+        if model_name:
+            sample_models.append(model_name)
+        for reason in row.get("reasons") or []:
+            normalized_reason = str(reason or "").strip()
+            if not normalized_reason:
+                continue
+            reason_counts[normalized_reason] = reason_counts.get(normalized_reason, 0) + 1
+        for expression in row.get("expressions") or []:
+            normalized_expression = str(expression or "").strip()
+            if (
+                not normalized_expression
+                or normalized_expression in seen_expressions
+            ):
+                continue
+            seen_expressions.add(normalized_expression)
+            sample_expressions.append(normalized_expression)
+
+    sorted_reason_counts = {
+        reason: count
+        for reason, count in sorted(
+            reason_counts.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
+    }
+    return {
+        "partial_model_count": len(rows),
+        "reason_counts": sorted_reason_counts,
+        "sample_models": sample_models[:5],
+        "sample_expressions": sample_expressions[:5],
     }
 
 

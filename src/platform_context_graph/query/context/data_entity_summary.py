@@ -61,6 +61,7 @@ def build_data_entity_summary(
     """
 
     lineage_evidence = summarize_lineage_edges(edges)
+    lineage_coverage = _lineage_coverage(entity)
     downstream_counts = _downstream_counts(change_surface)
     direct_relationship_counts = _direct_relationship_counts(edges)
     sample_impacted_entities = _sample_impacted_entities(change_surface)
@@ -89,12 +90,14 @@ def build_data_entity_summary(
         "summary": _summary_text(
             entity=entity,
             lineage_evidence=lineage_evidence,
+            lineage_coverage=lineage_coverage,
             downstream_counts=downstream_counts,
             ownership=ownership,
             governance=governance,
             change_classification=change_classification,
         ),
         "lineage_evidence": lineage_evidence,
+        "lineage_coverage": lineage_coverage,
         "change_classification": change_classification,
         "highest_downstream_classification": highest_downstream_classification,
         "downstream_counts": downstream_counts,
@@ -159,6 +162,7 @@ def _summary_text(
     *,
     entity: Mapping[str, Any],
     lineage_evidence: dict[str, Any] | None,
+    lineage_coverage: dict[str, Any] | None,
     downstream_counts: Mapping[str, int],
     ownership: Mapping[str, list[str]],
     governance: Mapping[str, Any],
@@ -177,6 +181,9 @@ def _summary_text(
     ]
     if lineage_evidence is not None:
         parts.append(f"lineage evidence is {lineage_evidence['status']}")
+    coverage_summary = _lineage_coverage_summary(lineage_coverage)
+    if coverage_summary:
+        parts.append(coverage_summary)
     owner_names = list(ownership.get("owner_names") or [])
     owner_teams = list(ownership.get("owner_teams") or [])
     owner_labels = owner_names or owner_teams
@@ -224,6 +231,86 @@ def _count_label(count: int, label: str) -> str:
     if count <= 0:
         return ""
     return f"{count} {label}{'' if count == 1 else 's'}"
+
+
+def _lineage_coverage(entity: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return compiled-lineage coverage details when the entity carries them."""
+
+    state = _optional_string(entity.get("parse_state"))
+    confidence = entity.get("confidence")
+    materialization = _optional_string(entity.get("materialization"))
+    projection_count_value = entity.get("projection_count")
+    unresolved_count_value = entity.get("unresolved_reference_count")
+    unresolved_reasons = _string_list(entity.get("unresolved_reference_reasons"))
+    unresolved_expressions = _string_list(
+        entity.get("unresolved_reference_expressions")
+    )
+
+    if (
+        state is None
+        and confidence is None
+        and materialization is None
+        and projection_count_value is None
+        and unresolved_count_value is None
+        and not unresolved_reasons
+        and not unresolved_expressions
+    ):
+        return None
+
+    coverage: dict[str, Any] = {}
+    if state is not None:
+        coverage["state"] = state
+    if confidence is not None:
+        coverage["confidence"] = float(confidence)
+    if materialization is not None:
+        coverage["materialization"] = materialization
+    if projection_count_value is not None:
+        coverage["projection_count"] = int(projection_count_value)
+    if unresolved_count_value is not None:
+        coverage["unresolved_reference_count"] = int(unresolved_count_value)
+    if unresolved_reasons:
+        coverage["unresolved_reference_reasons"] = unresolved_reasons
+    if unresolved_expressions:
+        coverage["unresolved_reference_expressions"] = unresolved_expressions
+    return coverage
+
+
+def _lineage_coverage_summary(lineage_coverage: Mapping[str, Any] | None) -> str:
+    """Return a compact explanation for compiled-lineage coverage gaps."""
+
+    if not lineage_coverage:
+        return ""
+    state = str(lineage_coverage.get("state") or "").strip()
+    if not state:
+        return ""
+    if state == "complete":
+        return "compiled lineage is complete"
+    if state == "failed":
+        return "compiled lineage extraction failed"
+
+    reasons = [
+        _humanize_gap_reason(reason)
+        for reason in _string_list(lineage_coverage.get("unresolved_reference_reasons"))
+    ]
+    expressions = _string_list(lineage_coverage.get("unresolved_reference_expressions"))
+    detail_parts: list[str] = []
+    if reasons:
+        detail_parts.append(", ".join(reasons))
+    if expressions:
+        sample = ", ".join(expressions[:2])
+        detail_parts.append(f"for example {sample}")
+
+    summary = "compiled lineage is partial"
+    if detail_parts:
+        summary += " because " + "; ".join(detail_parts)
+    return summary
+
+
+def _humanize_gap_reason(reason: str) -> str:
+    """Return a user-facing unresolved-lineage reason label."""
+
+    normalized = str(reason or "").strip().replace("_", " ")
+    return normalized or "unsupported lineage pattern"
 
 
 def _optional_string(value: Any) -> str | None:

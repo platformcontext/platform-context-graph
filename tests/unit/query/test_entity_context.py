@@ -481,3 +481,125 @@ def test_get_entity_context_enriches_data_entities_with_persona_summary(
     assert "1 dashboard" in result["data_intelligence"]["summary"]
     assert "1 quality check" in result["data_intelligence"]["summary"]
     assert "owners: Finance Analytics" in result["data_intelligence"]["summary"]
+
+
+def test_get_entity_context_surfaces_partial_analytics_model_lineage_gaps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Analytics-model context should explain why compiled lineage is partial."""
+
+    db = make_mock_db(
+        {
+            "MATCH (entity)\n            WHERE entity.id = $entity_id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "analytics-model:model.jaffle_shop.orders_expanded",
+                        "name": "orders_expanded",
+                        "type": "analytics_model",
+                        "path": (
+                            "/srv/repos/analytics/target/compiled/jaffle_shop/"
+                            "models/marts/orders_expanded.sql"
+                        ),
+                        "repo_id": "repository:r_analytics",
+                        "relative_path": (
+                            "target/compiled/jaffle_shop/models/marts/"
+                            "orders_expanded.sql"
+                        ),
+                    }
+                )
+            ),
+            "WHERE r.id = $repo_id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "repository:r_analytics",
+                        "name": "analytics-platform",
+                        "path": "/srv/repos/analytics-platform",
+                        "local_path": "/srv/repos/analytics-platform",
+                        "repo_slug": "platformcontext/analytics-platform",
+                        "remote_url": "https://github.com/platformcontext/analytics-platform",
+                        "has_remote": True,
+                    }
+                )
+            ),
+        }
+    )
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.data_entity.db_fetch_entity",
+        lambda _database, _entity_id: {
+            "id": "analytics-model:model.jaffle_shop.orders_expanded",
+            "type": "analytics_model",
+            "name": "orders_expanded",
+            "path": (
+                "/srv/repos/analytics/target/compiled/jaffle_shop/models/marts/"
+                "orders_expanded.sql"
+            ),
+            "repo_id": "repository:r_analytics",
+            "parse_state": "partial",
+            "confidence": 0.5,
+            "materialization": "table",
+            "projection_count": 2,
+            "unresolved_reference_count": 1,
+            "unresolved_reference_reasons": ["wildcard_projection_not_supported"],
+            "unresolved_reference_expressions": ["o.*"],
+        },
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.data_entity.db_fetch_edges",
+        lambda _database, _entity_id: [
+            {
+                "from": "analytics-model:model.jaffle_shop.orders_expanded",
+                "to": "data-asset:analytics.public.orders_expanded",
+                "type": "COMPILES_TO",
+                "confidence": 1.0,
+                "reason": "Compiled SQL materializes the orders_expanded asset",
+                "evidence": [],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.data_entity.find_change_surface",
+        lambda _database, *, target, environment=None: {
+            "target": {
+                "id": target,
+                "type": "analytics_model",
+                "name": "orders_expanded",
+            },
+            "target_change_classification": {
+                "primary": "informational",
+                "signals": ["informational"],
+                "reasons": ["Compiled lineage metadata is incomplete."],
+            },
+            "classification_summary": {
+                "highest": "informational",
+                "counts": {
+                    "governance-sensitive": 0,
+                    "breaking": 0,
+                    "quality-risk": 0,
+                    "additive": 0,
+                    "informational": 0,
+                },
+            },
+            "impacted": [],
+        },
+    )
+
+    result = get_entity_context(
+        db,
+        entity_id="analytics-model:model.jaffle_shop.orders_expanded",
+    )
+
+    assert result["data_intelligence"]["lineage_coverage"] == {
+        "state": "partial",
+        "confidence": 0.5,
+        "materialization": "table",
+        "projection_count": 2,
+        "unresolved_reference_count": 1,
+        "unresolved_reference_reasons": ["wildcard_projection_not_supported"],
+        "unresolved_reference_expressions": ["o.*"],
+    }
+    assert "compiled lineage is partial" in result["data_intelligence"]["summary"]
+    assert "wildcard projection not supported" in result["data_intelligence"][
+        "summary"
+    ]
+    assert "o.*" in result["data_intelligence"]["summary"]

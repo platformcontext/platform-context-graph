@@ -124,3 +124,20 @@ def test_normalize_dbt_manifest_surfaces_partial_lineage_gaps() -> None:
         for item in report["analytics_models"]
         if item["name"] == "orders_expanded"
     ] == ["partial"]
+    assert [
+        {
+            "unresolved_reference_count": item["unresolved_reference_count"],
+            "unresolved_reference_reasons": item["unresolved_reference_reasons"],
+            "unresolved_reference_expressions": item[
+                "unresolved_reference_expressions"
+            ],
+        }
+        for item in report["analytics_models"]
+        if item["name"] == "orders_expanded"
+    ] == [
+        {
+            "unresolved_reference_count": 1,
+            "unresolved_reference_reasons": ["wildcard_projection_not_supported"],
+            "unresolved_reference_expressions": ["o.*"],
+        }
+    ]

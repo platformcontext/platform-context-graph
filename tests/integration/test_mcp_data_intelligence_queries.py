@@ -29,6 +29,14 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
 
     assert result["data_intelligence"]["analytics_model_count"] == 2
     assert result["data_intelligence"]["data_asset_count"] >= 5
+    assert result["data_intelligence"]["lineage_gap_summary"] == {
+        "partial_model_count": 1,
+        "reason_counts": {
+            "wildcard_projection_not_supported": 1,
+        },
+        "sample_models": ["orders_expanded"],
+        "sample_expressions": ["o.*"],
+    }
     assert result["data_intelligence"]["relationship_counts"] == {
         "compiles_to": 2,
         "asset_derives_from": 5,
@@ -54,7 +62,10 @@ def test_analytics_repo_story_surfaces_data_intelligence(indexed_ecosystems) -> 
         for section in result["story_sections"]
         if section["id"] == "data_intelligence"
     )
-    assert "Compiled analytics covers 2 models" in data_section["summary"]
+    assert (
+        "lineage is partial for 1 model because wildcard projection not supported remains unresolved"
+        in data_section["summary"]
+    )
     assert result["data_intelligence_overview"]["analytics_model_count"] == 2
 
 
@@ -360,3 +371,28 @@ def test_data_entity_context_surfaces_downstream_consumers_for_finance_columns(
         "dashboard-asset:finance:revenue-overview" in sample_ids
         or "dashboard-asset:finance:semantic-revenue-overview" in sample_ids
     )
+
+
+def test_analytics_model_context_surfaces_partial_compiled_lineage_gaps(
+    indexed_ecosystems,
+) -> None:
+    """Analytics-model context should explain partial compiled lineage coverage."""
+
+    result = get_entity_context(
+        indexed_ecosystems,
+        entity_id="analytics-model:model.jaffle_shop.orders_expanded",
+    )
+
+    assert result["data_intelligence"]["lineage_coverage"] == {
+        "state": "partial",
+        "confidence": 0.5,
+        "materialization": "table",
+        "projection_count": 2,
+        "unresolved_reference_count": 1,
+        "unresolved_reference_reasons": ["wildcard_projection_not_supported"],
+        "unresolved_reference_expressions": ["o.*"],
+    }
+    assert "compiled lineage is partial" in result["data_intelligence"]["summary"]
+    assert "wildcard projection not supported" in result["data_intelligence"][
+        "summary"
+    ]
