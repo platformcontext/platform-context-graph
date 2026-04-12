@@ -5,10 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
+	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 )
 
 func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) {
@@ -94,8 +96,34 @@ func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) 
 
 	ingestionStore := NewIngestionStore(db)
 	ingestionStore.Now = func() time.Time { return now }
-	if err := ingestionStore.CommitScopeGeneration(context.Background(), scopeValue, generation, envelopes); err != nil {
-		t.Fatalf("CommitScopeGeneration() error = %v, want nil", err)
+	collectorCtx, cancelCollector := context.WithCancel(context.Background())
+	defer cancelCollector()
+	collectorService := collector.Service{
+		Source: &proofCollectorSource{
+			collected: []collector.CollectedGeneration{{
+				Scope:      scopeValue,
+				Generation: generation,
+				Facts:      envelopes,
+			}},
+		},
+		Committer: collectorCommitterFunc(func(
+			ctx context.Context,
+			scopeValue scope.IngestionScope,
+			generationValue scope.ScopeGeneration,
+			envelopes []facts.Envelope,
+		) error {
+			defer cancelCollector()
+			return ingestionStore.CommitScopeGeneration(
+				ctx,
+				scopeValue,
+				generationValue,
+				envelopes,
+			)
+		}),
+		PollInterval: time.Millisecond,
+	}
+	if err := collectorService.Run(collectorCtx); err != nil {
+		t.Fatalf("collector service Run() error = %v, want nil", err)
 	}
 
 	projectorQueue := ProjectorQueue{
@@ -185,4 +213,63 @@ func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) 
 	if got, want := db.reducerAcked, 1; got != want {
 		t.Fatalf("reducer acknowledgements = %d, want %d", got, want)
 	}
+
+	statusStore := NewStatusStore(db)
+	rawStatus, err := statusStore.ReadStatusSnapshot(context.Background(), now)
+	if err != nil {
+		t.Fatalf("ReadStatusSnapshot() error = %v, want nil", err)
+	}
+	report := statuspkg.BuildReport(rawStatus, statuspkg.DefaultOptions())
+	if got, want := report.Health.State, "progressing"; got != want {
+		t.Fatalf("status health = %q, want %q", got, want)
+	}
+	if got, want := report.Queue.Succeeded, 2; got != want {
+		t.Fatalf("status queue succeeded = %d, want %d", got, want)
+	}
+	if got, want := report.Queue.Outstanding, 0; got != want {
+		t.Fatalf("status queue outstanding = %d, want %d", got, want)
+	}
+	if got, want := report.ScopeTotals["pending"], 1; got != want {
+		t.Fatalf("status pending scope count = %d, want %d", got, want)
+	}
+	if got, want := report.GenerationTotals["pending"], 1; got != want {
+		t.Fatalf("status pending generation count = %d, want %d", got, want)
+	}
+	if got, want := len(report.FlowSummaries), 3; got != want {
+		t.Fatalf("status flow summary count = %d, want %d", got, want)
+	}
+}
+
+type proofCollectorSource struct {
+	collected []collector.CollectedGeneration
+	index     int
+}
+
+func (s *proofCollectorSource) Next(
+	ctx context.Context,
+) (collector.CollectedGeneration, bool, error) {
+	if s.index >= len(s.collected) {
+		<-ctx.Done()
+		return collector.CollectedGeneration{}, false, ctx.Err()
+	}
+
+	item := s.collected[s.index]
+	s.index++
+	return item, true, nil
+}
+
+type collectorCommitterFunc func(
+	context.Context,
+	scope.IngestionScope,
+	scope.ScopeGeneration,
+	[]facts.Envelope,
+) error
+
+func (f collectorCommitterFunc) CommitScopeGeneration(
+	ctx context.Context,
+	scopeValue scope.IngestionScope,
+	generationValue scope.ScopeGeneration,
+	envelopes []facts.Envelope,
+) error {
+	return f(ctx, scopeValue, generationValue, envelopes)
 }

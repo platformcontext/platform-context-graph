@@ -5,34 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	pythonbridge "github.com/platformcontext/platform-context-graph/go/internal/compatibility/pythonbridge"
-	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
-
-func buildCollectorService(
-	database postgres.SQLDB,
-	getenv func(string) string,
-	getwd func() (string, error),
-	environ func() []string,
-) (Service, error) {
-	repoRoot, err := resolveCollectorRepoRoot(getenv, getwd)
-	if err != nil {
-		return Service{}, err
-	}
-
-	return Service{
-		Source: &pythonbridge.BufferedSource{
-			Runner: pythonbridge.GitCollectorRunner{
-				PythonExecutable: getenv("PCG_PYTHON_EXECUTABLE"),
-				RepoRoot:         repoRoot,
-				Env:              environ(),
-			},
-		},
-		Committer:    postgres.NewIngestionStore(database),
-		PollInterval: defaultCollectorPollInterval,
-	}, nil
-}
 
 func resolveCollectorRepoRoot(
 	getenv func(string) string,

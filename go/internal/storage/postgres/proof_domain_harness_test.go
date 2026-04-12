@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -42,10 +41,11 @@ type proofDomainDB struct {
 }
 
 type proofState struct {
-	scopes      map[string]scope.IngestionScope
-	generations map[string]scope.ScopeGeneration
-	facts       map[string]facts.Envelope
-	workItems   map[string]proofWorkItem
+	scopes        map[string]scope.IngestionScope
+	scopeStatuses map[string]string
+	generations   map[string]scope.ScopeGeneration
+	facts         map[string]facts.Envelope
+	workItems     map[string]proofWorkItem
 }
 
 type proofScopeRow struct {
@@ -74,10 +74,11 @@ func newProofDomainDB(t *testing.T, now time.Time) *proofDomainDB {
 	return &proofDomainDB{
 		now: now.UTC(),
 		state: proofState{
-			scopes:      make(map[string]scope.IngestionScope),
-			generations: make(map[string]scope.ScopeGeneration),
-			facts:       make(map[string]facts.Envelope),
-			workItems:   make(map[string]proofWorkItem),
+			scopes:        make(map[string]scope.IngestionScope),
+			scopeStatuses: make(map[string]string),
+			generations:   make(map[string]scope.ScopeGeneration),
+			facts:         make(map[string]facts.Envelope),
+			workItems:     make(map[string]proofWorkItem),
 		},
 	}
 }
@@ -86,10 +87,11 @@ func (db *proofDomainDB) Begin(context.Context) (Transaction, error) {
 	return &proofDomainTx{
 		db: db,
 		state: proofState{
-			scopes:      cloneScopes(db.state.scopes),
-			generations: cloneGenerations(db.state.generations),
-			facts:       cloneFacts(db.state.facts),
-			workItems:   cloneWorkItems(db.state.workItems),
+			scopes:        cloneScopes(db.state.scopes),
+			scopeStatuses: cloneStrings(db.state.scopeStatuses),
+			generations:   cloneGenerations(db.state.generations),
+			facts:         cloneFacts(db.state.facts),
+			workItems:     cloneWorkItems(db.state.workItems),
 		},
 	}, nil
 }
@@ -145,6 +147,26 @@ func (db *proofDomainDB) ExecContext(_ context.Context, query string, args ...an
 
 func (db *proofDomainDB) QueryContext(_ context.Context, query string, args ...any) (Rows, error) {
 	switch {
+	case strings.Contains(query, "FROM ingestion_scopes") && strings.Contains(query, "GROUP BY status"):
+		return newProofRows(proofScopeCountRows(db.state.scopeStatuses)), nil
+	case strings.Contains(query, "FROM scope_generations") && strings.Contains(query, "GROUP BY status"):
+		return newProofRows(proofGenerationCountRows(db.state.generations)), nil
+	case strings.Contains(query, "FROM fact_work_items") && strings.Contains(query, "GROUP BY stage, status"):
+		return newProofRows(proofStageCountRows(db.state.workItems)), nil
+	case strings.Contains(query, "GROUP BY domain") && strings.Contains(query, "oldest_outstanding_age_seconds"):
+		if len(args) != 1 {
+			return nil, fmt.Errorf("domain backlog args = %d, want 1", len(args))
+		}
+		return newProofRows(
+			proofDomainBacklogRows(db.state.workItems, args[0].(time.Time)),
+		), nil
+	case strings.Contains(query, "SELECT COUNT(*) AS total_count"):
+		if len(args) != 1 {
+			return nil, fmt.Errorf("queue snapshot args = %d, want 1", len(args))
+		}
+		return newProofRows([][]any{
+			proofQueueSnapshotRow(db.state.workItems, args[0].(time.Time)),
+		}), nil
 	case strings.Contains(query, "FROM fact_records"):
 		if len(args) != 2 {
 			return nil, fmt.Errorf("list facts args = %d, want 2", len(args))
@@ -284,6 +306,7 @@ func (tx *proofDomainTx) ExecContext(ctx context.Context, query string, args ...
 			Metadata:      nil,
 		}
 		tx.state.scopes[scopeValue.ScopeID] = scopeValue
+		tx.state.scopeStatuses[scopeValue.ScopeID] = args[9].(string)
 		return proofResult{}, nil
 	case strings.Contains(query, "INSERT INTO scope_generations"):
 		generation := scope.ScopeGeneration{
@@ -355,132 +378,4 @@ func (tx *proofDomainTx) Rollback() error { return nil }
 type proofDomainTx struct {
 	db    *proofDomainDB
 	state proofState
-}
-
-type proofRows struct {
-	rows  [][]any
-	index int
-}
-
-func newProofRows(rows [][]any) *proofRows {
-	return &proofRows{rows: rows}
-}
-
-func (r *proofRows) Next() bool {
-	return r.index < len(r.rows)
-}
-
-func (r *proofRows) Scan(dest ...any) error {
-	if r.index >= len(r.rows) {
-		return errors.New("scan called without row")
-	}
-	row := r.rows[r.index]
-	if len(dest) != len(row) {
-		return fmt.Errorf("scan destination count = %d, want %d", len(dest), len(row))
-	}
-
-	for i := range dest {
-		switch target := dest[i].(type) {
-		case *string:
-			value, ok := row[i].(string)
-			if !ok {
-				return fmt.Errorf("row[%d] type = %T, want string", i, row[i])
-			}
-			*target = value
-		case *bool:
-			value, ok := row[i].(bool)
-			if !ok {
-				return fmt.Errorf("row[%d] type = %T, want bool", i, row[i])
-			}
-			*target = value
-		case *[]byte:
-			value, ok := row[i].([]byte)
-			if !ok {
-				return fmt.Errorf("row[%d] type = %T, want []byte", i, row[i])
-			}
-			*target = value
-		case *time.Time:
-			value, ok := row[i].(time.Time)
-			if !ok {
-				return fmt.Errorf("row[%d] type = %T, want time.Time", i, row[i])
-			}
-			*target = value
-		default:
-			return fmt.Errorf("unsupported scan target %T", dest[i])
-		}
-	}
-
-	r.index++
-	return nil
-}
-
-func (r *proofRows) Err() error { return nil }
-
-func (r *proofRows) Close() error { return nil }
-
-type proofResult struct{}
-
-func (proofResult) LastInsertId() (int64, error) { return 0, nil }
-func (proofResult) RowsAffected() (int64, error) { return 1, nil }
-
-func cloneScopes(input map[string]scope.IngestionScope) map[string]scope.IngestionScope {
-	cloned := make(map[string]scope.IngestionScope, len(input))
-	for key, value := range input {
-		cloned[key] = value
-	}
-	return cloned
-}
-
-func cloneGenerations(input map[string]scope.ScopeGeneration) map[string]scope.ScopeGeneration {
-	cloned := make(map[string]scope.ScopeGeneration, len(input))
-	for key, value := range input {
-		cloned[key] = value
-	}
-	return cloned
-}
-
-func cloneFacts(input map[string]facts.Envelope) map[string]facts.Envelope {
-	cloned := make(map[string]facts.Envelope, len(input))
-	for key, value := range input {
-		cloned[key] = value.Clone()
-	}
-	return cloned
-}
-
-func cloneWorkItems(input map[string]proofWorkItem) map[string]proofWorkItem {
-	cloned := make(map[string]proofWorkItem, len(input))
-	for key, value := range input {
-		cloned[key] = value
-	}
-	return cloned
-}
-
-func proofFactRows(input map[string]facts.Envelope, scopeID, generationID string) [][]any {
-	rows := [][]any{}
-	for _, envelope := range input {
-		if envelope.ScopeID != scopeID || envelope.GenerationID != generationID {
-			continue
-		}
-		payload, _ := json.Marshal(envelope.Payload)
-		rows = append(rows, []any{
-			envelope.FactID,
-			envelope.ScopeID,
-			envelope.GenerationID,
-			envelope.FactKind,
-			envelope.StableFactKey,
-			envelope.SourceRef.SourceSystem,
-			envelope.SourceRef.FactKey,
-			envelope.SourceRef.SourceURI,
-			envelope.SourceRef.SourceRecordID,
-			envelope.ObservedAt.UTC(),
-			envelope.IsTombstone,
-			payload,
-		})
-	}
-	return rows
-}
-
-func stringFromAny(value any) string {
-	text, _ := value.(string)
-	return text
 }
