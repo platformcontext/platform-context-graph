@@ -38,10 +38,21 @@ def test_extract_compiled_model_lineage_supports_single_column_upper_wrapper(
 
     assert lineage.unresolved_references == ()
     assert [
-        (item.output_column, item.source_columns) for item in lineage.column_lineage
+        (
+            item.output_column,
+            item.source_columns,
+            item.transform_kind,
+            item.transform_expression,
+        )
+        for item in lineage.column_lineage
     ] == [
-        ("order_id", ("raw.public.orders.id",)),
-        ("customer_name", ("raw.public.customers.full_name",)),
+        ("order_id", ("raw.public.orders.id",), None, None),
+        (
+            "customer_name",
+            ("raw.public.customers.full_name",),
+            "upper",
+            "upper(source_customer_name)",
+        ),
     ]
 
 
@@ -63,6 +74,8 @@ def test_extract_compiled_model_lineage_supports_coalesce_with_literal_default(
         ColumnLineage(
             output_column="customer_segment",
             source_columns=("raw.public.customers.segment",),
+            transform_kind="coalesce",
+            transform_expression="coalesce(c.segment, 'unknown')",
         ),
     )
     assert lineage.unresolved_references == ()
@@ -85,6 +98,8 @@ def test_extract_compiled_model_lineage_supports_cast_wrapper() -> None:
         ColumnLineage(
             output_column="order_id_bigint",
             source_columns=("raw.public.orders.id",),
+            transform_kind="cast",
+            transform_expression="cast(o.id as bigint)",
         ),
     )
     assert lineage.unresolved_references == ()
@@ -107,6 +122,37 @@ def test_extract_compiled_model_lineage_supports_literal_parameter_wrappers() ->
         ColumnLineage(
             output_column="created_day",
             source_columns=("raw.public.orders.created_at",),
+            transform_kind="date_trunc",
+            transform_expression="date_trunc('day', o.created_at)",
+        ),
+    )
+    assert lineage.unresolved_references == ()
+
+
+def test_extract_compiled_model_lineage_propagates_cte_transform_metadata() -> None:
+    """Direct selects from transformed CTE columns should preserve metadata."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        with normalized_customers as (
+          select
+            upper(c.full_name) as normalized_name
+          from raw.public.customers c
+        )
+        select
+          normalized_name as customer_name
+        from normalized_customers
+        """,
+        model_name="customer_names",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == (
+        ColumnLineage(
+            output_column="customer_name",
+            source_columns=("raw.public.customers.full_name",),
+            transform_kind="upper",
+            transform_expression="upper(c.full_name)",
         ),
     )
     assert lineage.unresolved_references == ()

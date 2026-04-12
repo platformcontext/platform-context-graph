@@ -42,6 +42,12 @@ _RELATIONSHIP_TARGET_KINDS = {
     "OWNS": ("DataAsset", "DataColumn"),
     "DECLARES_CONTRACT_FOR": ("DataAsset", "DataColumn"),
 }
+_RELATIONSHIP_PROPERTY_KEYS = {
+    "COLUMN_DERIVES_FROM": (
+        "transform_kind",
+        "transform_expression",
+    ),
+}
 
 
 def create_all_data_intelligence_links(
@@ -108,11 +114,24 @@ def _materialize_data_relationships(
                     "source_uid": source_uid,
                     "target_uid": target_uid,
                     "line_number": item.get("line_number"),
+                    **(
+                        {
+                            "transform_kind": item.get("transform_kind"),
+                            "transform_expression": item.get("transform_expression"),
+                        }
+                        if item.get("type") == "COLUMN_DERIVES_FROM"
+                        else {}
+                    ),
                 }
             )
 
     for relationship_type, rows in rows_by_type.items():
-        _run_uid_relationship_query(session, relationship_type, rows)
+        _run_uid_relationship_query(
+            session,
+            relationship_type,
+            rows,
+            property_keys=_RELATIONSHIP_PROPERTY_KEYS.get(relationship_type, ()),
+        )
         metrics[f"{relationship_type.lower()}_edges"] += len(rows)
     governance_rows = _collect_governance_annotations(file_data_list, entity_lookup)
     _apply_governance_annotations(session, governance_rows)

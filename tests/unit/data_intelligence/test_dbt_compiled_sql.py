@@ -89,6 +89,8 @@ def test_normalize_dbt_manifest_extracts_static_column_lineage() -> None:
         item["type"] == "COLUMN_DERIVES_FROM"
         and item["source_name"] == "analytics.public.order_metrics.customer_name"
         and item["target_name"] == "raw.public.customers.full_name"
+        and item["transform_kind"] == "upper"
+        and item["transform_expression"] == "upper(source_customer_name)"
         for item in report["relationships"]
     )
     assert any(
@@ -101,6 +103,8 @@ def test_normalize_dbt_manifest_extracts_static_column_lineage() -> None:
         item["type"] == "COLUMN_DERIVES_FROM"
         and item["source_name"] == "analytics.public.orders_expanded.customer_segment"
         and item["target_name"] == "raw.public.customers.segment"
+        and item["transform_kind"] == "coalesce"
+        and item["transform_expression"] == "coalesce(c.segment, 'unknown')"
         for item in report["relationships"]
     )
     assert any(

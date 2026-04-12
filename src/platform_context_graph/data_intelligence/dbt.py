@@ -99,16 +99,21 @@ class DbtCompiledSqlPlugin:
                     },
                 )
                 for source_column_name in column_lineage.source_columns:
-                    relationships.append(
-                        {
-                            "type": "COLUMN_DERIVES_FROM",
-                            "source_id": f"data-column:{output_column_name}",
-                            "source_name": output_column_name,
-                            "target_id": f"data-column:{source_column_name}",
-                            "target_name": source_column_name,
-                            "confidence": 0.95,
-                        }
-                    )
+                    relationship = {
+                        "type": "COLUMN_DERIVES_FROM",
+                        "source_id": f"data-column:{output_column_name}",
+                        "source_name": output_column_name,
+                        "target_id": f"data-column:{source_column_name}",
+                        "target_name": source_column_name,
+                        "confidence": 0.95,
+                    }
+                    if column_lineage.transform_kind is not None:
+                        relationship["transform_kind"] = column_lineage.transform_kind
+                    if column_lineage.transform_expression is not None:
+                        relationship["transform_expression"] = (
+                            column_lineage.transform_expression
+                        )
+                    relationships.append(relationship)
 
             asset_columns[model_asset["name"]] = tuple(model_column_names)
             unresolved_references.extend(model_unresolved)

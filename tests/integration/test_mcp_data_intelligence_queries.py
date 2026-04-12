@@ -400,6 +400,30 @@ def test_data_entity_context_surfaces_downstream_consumers_for_finance_columns(
     )
 
 
+def test_data_entity_context_surfaces_compiled_column_transforms(
+    indexed_ecosystems,
+) -> None:
+    """Entity context should expose supported transform metadata for columns."""
+
+    result = get_entity_context(
+        indexed_ecosystems,
+        entity_id="data-column:analytics.public.order_metrics.customer_name",
+    )
+
+    assert result["data_intelligence"]["lineage_transforms"] == [
+        {
+            "direction": "upstream",
+            "kind": "upper",
+            "expression": "upper(source_customer_name)",
+            "related_entity_id": "data-column:raw.public.customers.full_name",
+            "related_name": "raw.public.customers.full_name",
+        }
+    ]
+    assert "supported upstream transforms: upper" in result["data_intelligence"][
+        "summary"
+    ]
+
+
 def test_analytics_model_context_surfaces_complete_compiled_lineage(
     indexed_ecosystems,
 ) -> None:

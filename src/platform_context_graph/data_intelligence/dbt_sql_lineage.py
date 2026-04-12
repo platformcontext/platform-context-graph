@@ -12,6 +12,7 @@ from .dbt_sql_expressions import (
     expression_partial_reason,
 )
 from .dbt_sql_identifiers import unqualified_identifiers
+from .dbt_sql_lineage_metadata import transform_metadata_for_projection
 
 _SELECT_CLAUSE_RE = re.compile(
     r"\bselect\b(?P<select>.*?)\bfrom\b", re.IGNORECASE | re.DOTALL
@@ -38,6 +39,8 @@ class ColumnLineage:
 
     output_column: str
     source_columns: tuple[str, ...]
+    transform_kind: str | None = None
+    transform_expression: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +58,7 @@ class _RelationBinding:
 
     asset_name: str | None
     column_names: tuple[str, ...]
-    column_lineage: Mapping[str, tuple[str, ...]]
+    column_lineage: Mapping[str, ColumnLineage]
 
 
 def extract_compiled_model_lineage(
@@ -105,10 +108,10 @@ def _binding_for_column_lineage(
 ) -> _RelationBinding:
     """Build a CTE relation binding from projected column lineage."""
 
-    lineage_by_name: dict[str, tuple[str, ...]] = {}
+    lineage_by_name: dict[str, ColumnLineage] = {}
     column_names: list[str] = []
     for item in column_lineage:
-        lineage_by_name[item.output_column] = item.source_columns
+        lineage_by_name[item.output_column] = item
         column_names.append(item.output_column)
     return _RelationBinding(
         asset_name=None,
@@ -363,11 +366,17 @@ def _lineage_for_projection(
                 reason=partial_reason,
             )
         )
+    transform_metadata = transform_metadata_for_projection(
+        expression,
+        relation_bindings=relation_bindings,
+    )
     if output_column is not None and source_columns:
         column_lineage.append(
             ColumnLineage(
                 output_column=output_column.strip(),
                 source_columns=tuple(source_columns),
+                transform_kind=transform_metadata.get("transform_kind"),
+                transform_expression=transform_metadata.get("transform_expression"),
             )
         )
 
@@ -417,7 +426,7 @@ def _resolve_reference_columns(
         return [
             (
                 expanded_column,
-                binding.column_lineage.get(expanded_column, ()),
+                binding.column_lineage[expanded_column].source_columns,
             )
             for expanded_column in binding.column_names
             if binding.column_lineage.get(expanded_column)
@@ -426,14 +435,14 @@ def _resolve_reference_columns(
     if binding.asset_name is not None:
         return (f"{binding.asset_name}.{column}",)
 
-    source_columns = tuple(binding.column_lineage.get(column, ()))
-    if not source_columns:
+    source_lineage = binding.column_lineage.get(column)
+    if source_lineage is None:
         return {
             "expression": f"{alias}.{column}",
             "model_name": model_name,
             "reason": "cte_column_not_resolved",
         }
-    return source_columns
+    return source_lineage.source_columns
 
 
 def _resolve_unqualified_reference_columns(
@@ -475,7 +484,10 @@ def _binding_columns_for_identifier(
         if identifier not in binding.column_names:
             return ()
         return (f"{binding.asset_name}.{identifier}",)
-    return tuple(binding.column_lineage.get(identifier, ()))
+    item = binding.column_lineage.get(identifier)
+    if item is None:
+        return ()
+    return item.source_columns
 
 
 def _implicit_output_column(expression: str) -> str | None:
@@ -485,6 +497,4 @@ def _implicit_output_column(expression: str) -> str | None:
     if len(references) == 1 and references[0].group("column") != "*":
         return references[0].group("column")
     return None
-
-
 __all__ = ["ColumnLineage", "CompiledModelLineage", "extract_compiled_model_lineage"]

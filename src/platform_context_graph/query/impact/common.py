@@ -305,6 +305,8 @@ def edge_from_record(record: dict[str, Any]) -> dict[str, Any]:
         "confidence": record.get("confidence"),
         "reason": record.get("reason"),
         "evidence": normalize_evidence(record.get("evidence")),
+        "transform_kind": record.get("transform_kind"),
+        "transform_expression": record.get("transform_expression"),
     }
 
 

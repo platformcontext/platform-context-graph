@@ -603,3 +603,118 @@ def test_get_entity_context_surfaces_partial_analytics_model_lineage_gaps(
         "summary"
     ]
     assert "o.*" in result["data_intelligence"]["summary"]
+
+
+def test_get_entity_context_surfaces_column_lineage_transform_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Data-column context should surface supported lineage transforms."""
+
+    db = make_mock_db(
+        {
+            "MATCH (entity)\n            WHERE entity.id = $entity_id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "data-column:analytics.public.order_metrics.customer_name",
+                        "name": "analytics.public.order_metrics.customer_name",
+                        "type": "data_column",
+                        "path": (
+                            "/srv/repos/analytics/target/compiled/jaffle_shop/models/"
+                            "marts/order_metrics.sql"
+                        ),
+                        "repo_id": "repository:r_analytics",
+                        "relative_path": (
+                            "target/compiled/jaffle_shop/models/marts/"
+                            "order_metrics.sql"
+                        ),
+                    }
+                )
+            ),
+            "WHERE r.id = $repo_id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "repository:r_analytics",
+                        "name": "analytics-platform",
+                        "path": "/srv/repos/analytics-platform",
+                        "local_path": "/srv/repos/analytics-platform",
+                        "repo_slug": "platformcontext/analytics-platform",
+                        "remote_url": "https://github.com/platformcontext/analytics-platform",
+                        "has_remote": True,
+                    }
+                )
+            ),
+        }
+    )
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.data_entity.db_fetch_entity",
+        lambda _database, _entity_id: {
+            "id": "data-column:analytics.public.order_metrics.customer_name",
+            "type": "data_column",
+            "name": "analytics.public.order_metrics.customer_name",
+            "path": (
+                "/srv/repos/analytics/target/compiled/jaffle_shop/models/marts/"
+                "order_metrics.sql"
+            ),
+            "repo_id": "repository:r_analytics",
+        },
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.data_entity.db_fetch_edges",
+        lambda _database, _entity_id: [
+            {
+                "from": "data-column:analytics.public.order_metrics.customer_name",
+                "to": "data-column:raw.public.customers.full_name",
+                "type": "COLUMN_DERIVES_FROM",
+                "confidence": 0.95,
+                "reason": "Compiled SQL applies upper() to the source column",
+                "evidence": [],
+                "transform_kind": "upper",
+                "transform_expression": "upper(source_customer_name)",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.data_entity.find_change_surface",
+        lambda _database, *, target, environment=None: {
+            "target": {
+                "id": target,
+                "type": "data_column",
+                "name": "analytics.public.order_metrics.customer_name",
+            },
+            "target_change_classification": {
+                "primary": "informational",
+                "signals": ["informational"],
+                "reasons": ["No downstream consumers are indexed in this fixture."],
+            },
+            "classification_summary": {
+                "highest": "informational",
+                "counts": {
+                    "governance-sensitive": 0,
+                    "breaking": 0,
+                    "quality-risk": 0,
+                    "additive": 0,
+                    "informational": 0,
+                },
+            },
+            "impacted": [],
+        },
+    )
+
+    result = get_entity_context(
+        db,
+        entity_id="data-column:analytics.public.order_metrics.customer_name",
+    )
+
+    assert result["data_intelligence"]["lineage_transforms"] == [
+        {
+            "direction": "upstream",
+            "kind": "upper",
+            "expression": "upper(source_customer_name)",
+            "related_entity_id": "data-column:raw.public.customers.full_name",
+            "related_name": "raw.public.customers.full_name",
+        }
+    ]
+    assert "supported upstream transforms: upper" in result["data_intelligence"][
+        "summary"
+    ]

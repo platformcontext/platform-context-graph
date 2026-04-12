@@ -64,12 +64,21 @@ Status on this branch:
   `date_trunc('day', column)` now stay on the supported lineage path as well,
   which broadens safe analytics-model coverage without treating aggregates as
   fully understood
+- supported non-identity compiled-lineage edges now persist transform metadata
+  (`transform_kind` and `transform_expression`) for row-preserving wrappers
+  such as `upper`, `coalesce`, `cast`, and `date_trunc`
+- transform metadata now propagates through simple CTE reuse, so direct final
+  projections from transformed intermediate columns keep the original compiled
+  SQL context instead of collapsing back to a plain rename
 - remaining unsupported derived cases now surface more specific partial-gap
   reasons, separating aggregate expressions from multi-input transforms so repo
   stories and model samples are more actionable
 - analytics-model entity context now exposes compiled-lineage coverage state,
   confidence, materialization, projection count, and unresolved reasons and
   expressions
+- data-column entity context now exposes supported compiled-lineage transform
+  summaries, so downstream consumers can see when a column derives through a
+  preserved transform instead of a direct passthrough
 - repository context and story summaries now explain partial compiled lineage
   with aggregated unresolved-gap reasons instead of count-only wording
 - repository analytics-model samples now prioritize partial models first and
@@ -239,10 +248,12 @@ PYTHONPATH=src uv run pytest \
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_plugins.py \
+  tests/unit/data_intelligence/test_dbt_sql_lineage.py \
   tests/unit/data_intelligence/test_dbt_compiled_sql.py \
   tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/query/test_entity_context.py \
   tests/unit/tools/test_graph_builder_schema.py -q
 ```
 

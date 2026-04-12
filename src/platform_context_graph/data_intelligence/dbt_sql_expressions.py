@@ -43,6 +43,66 @@ def expression_requires_partial_reporting(expression: str) -> bool:
     return expression_partial_reason(expression) is not None
 
 
+def expression_transform_metadata(expression: str) -> dict[str, str] | None:
+    """Return transform metadata for supported non-identity expressions."""
+
+    normalized = _strip_wrapping_parentheses(expression.strip())
+    if not normalized:
+        return None
+    if _BARE_IDENTIFIER_RE.fullmatch(normalized):
+        return None
+    if _QUALIFIED_REFERENCE_RE.fullmatch(normalized):
+        return None
+
+    cast_expression = _supported_cast_expression(normalized)
+    if cast_expression is not None:
+        return {
+            "transform_kind": "cast",
+            "transform_expression": normalized,
+        }
+
+    match = _FUNCTION_CALL_RE.fullmatch(normalized)
+    if match is None:
+        return None
+
+    function_name = match.group("name").strip().lower()
+    arguments = _split_top_level_arguments(match.group("arguments"))
+    if function_name in _SIMPLE_SCALAR_FUNCTIONS and len(arguments) == 1:
+        if _is_simple_reference_expression(arguments[0]):
+            return {
+                "transform_kind": function_name,
+                "transform_expression": normalized,
+            }
+        return None
+    if function_name == "coalesce" and len(arguments) >= 2:
+        if _is_simple_reference_expression(arguments[0]) and all(
+            _is_literal_expression(argument) for argument in arguments[1:]
+        ):
+            return {
+                "transform_kind": "coalesce",
+                "transform_expression": normalized,
+            }
+        return None
+    if function_name in _LITERAL_PARAMETER_SCALAR_FUNCTIONS and len(arguments) >= 2:
+        reference_arguments = [
+            argument
+            for argument in arguments
+            if _is_simple_reference_expression(argument)
+        ]
+        if len(reference_arguments) != 1:
+            return None
+        if all(
+            _is_simple_reference_expression(argument)
+            or _is_literal_expression(argument)
+            for argument in arguments
+        ):
+            return {
+                "transform_kind": function_name,
+                "transform_expression": normalized,
+            }
+    return None
+
+
 def expression_partial_reason(expression: str) -> str | None:
     """Return a specific partial-lineage reason when the expression is unsupported."""
 
@@ -267,5 +327,6 @@ __all__ = [
     "derived_expression_gap",
     "expression_ignored_identifiers",
     "expression_partial_reason",
+    "expression_transform_metadata",
     "expression_requires_partial_reporting",
 ]

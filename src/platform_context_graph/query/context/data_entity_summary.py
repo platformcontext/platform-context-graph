@@ -62,6 +62,7 @@ def build_data_entity_summary(
 
     lineage_evidence = summarize_lineage_edges(edges)
     lineage_coverage = _lineage_coverage(entity)
+    lineage_transforms = _lineage_transforms(entity, edges)
     downstream_counts = _downstream_counts(change_surface)
     direct_relationship_counts = _direct_relationship_counts(edges)
     sample_impacted_entities = _sample_impacted_entities(change_surface)
@@ -91,6 +92,7 @@ def build_data_entity_summary(
             entity=entity,
             lineage_evidence=lineage_evidence,
             lineage_coverage=lineage_coverage,
+            lineage_transforms=lineage_transforms,
             downstream_counts=downstream_counts,
             ownership=ownership,
             governance=governance,
@@ -98,6 +100,7 @@ def build_data_entity_summary(
         ),
         "lineage_evidence": lineage_evidence,
         "lineage_coverage": lineage_coverage,
+        "lineage_transforms": lineage_transforms,
         "change_classification": change_classification,
         "highest_downstream_classification": highest_downstream_classification,
         "downstream_counts": downstream_counts,
@@ -163,6 +166,7 @@ def _summary_text(
     entity: Mapping[str, Any],
     lineage_evidence: dict[str, Any] | None,
     lineage_coverage: dict[str, Any] | None,
+    lineage_transforms: list[dict[str, str]],
     downstream_counts: Mapping[str, int],
     ownership: Mapping[str, list[str]],
     governance: Mapping[str, Any],
@@ -184,6 +188,9 @@ def _summary_text(
     coverage_summary = _lineage_coverage_summary(lineage_coverage)
     if coverage_summary:
         parts.append(coverage_summary)
+    transform_summary = _lineage_transform_summary(entity, lineage_transforms)
+    if transform_summary:
+        parts.append(transform_summary)
     owner_names = list(ownership.get("owner_names") or [])
     owner_teams = list(ownership.get("owner_teams") or [])
     owner_labels = owner_names or owner_teams
@@ -304,6 +311,93 @@ def _lineage_coverage_summary(lineage_coverage: Mapping[str, Any] | None) -> str
     if detail_parts:
         summary += " because " + "; ".join(detail_parts)
     return summary
+
+
+def _lineage_transforms(
+    entity: Mapping[str, Any],
+    edges: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    """Return compact transform metadata for connected column-lineage edges."""
+
+    entity_id = _optional_string(entity.get("id"))
+    if entity_id is None:
+        return []
+
+    transforms: list[dict[str, str]] = []
+    for edge in edges:
+        if str(edge.get("type") or "").strip() != "COLUMN_DERIVES_FROM":
+            continue
+        transform_kind = _optional_string(edge.get("transform_kind"))
+        transform_expression = _optional_string(edge.get("transform_expression"))
+        if transform_kind is None or transform_expression is None:
+            continue
+
+        source_id = _optional_string(edge.get("from"))
+        target_id = _optional_string(edge.get("to"))
+        if source_id == entity_id and target_id is not None:
+            related_entity_id = target_id
+            direction = "upstream"
+        elif target_id == entity_id and source_id is not None:
+            related_entity_id = source_id
+            direction = "downstream"
+        else:
+            continue
+
+        transforms.append(
+            {
+                "direction": direction,
+                "kind": transform_kind,
+                "expression": transform_expression,
+                "related_entity_id": related_entity_id,
+                "related_name": _entity_display_name(related_entity_id),
+            }
+        )
+
+    transforms.sort(
+        key=lambda item: (
+            item["direction"],
+            item["kind"],
+            item["related_name"],
+            item["expression"],
+        )
+    )
+    return transforms[:5]
+
+
+def _lineage_transform_summary(
+    entity: Mapping[str, Any],
+    lineage_transforms: list[dict[str, str]],
+) -> str:
+    """Return a compact summary of supported lineage transforms."""
+
+    if str(entity.get("type") or "").strip() != "data_column" or not lineage_transforms:
+        return ""
+
+    upstream_kinds = sorted(
+        {
+            item["kind"]
+            for item in lineage_transforms
+            if item.get("direction") == "upstream"
+        }
+    )
+    downstream_kinds = sorted(
+        {
+            item["kind"]
+            for item in lineage_transforms
+            if item.get("direction") == "downstream"
+        }
+    )
+    if upstream_kinds:
+        return "supported upstream transforms: " + ", ".join(upstream_kinds)
+    if downstream_kinds:
+        return "downstream transforms include " + ", ".join(downstream_kinds)
+    return ""
+
+
+def _entity_display_name(entity_id: str) -> str:
+    """Return a stable user-facing display name from one canonical entity ID."""
+
+    return entity_id.split(":", maxsplit=1)[-1] if ":" in entity_id else entity_id
 
 
 def _humanize_gap_reason(reason: str) -> str:

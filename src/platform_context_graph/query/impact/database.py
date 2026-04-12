@@ -61,6 +61,8 @@ def _normalized_edge_record(record: dict[str, Any]) -> dict[str, Any]:
         "confidence": record.get("confidence"),
         "reason": record.get("reason"),
         "evidence": record.get("evidence"),
+        "transform_kind": record.get("transform_kind"),
+        "transform_expression": record.get("transform_expression"),
     }
 
 
@@ -75,7 +77,9 @@ def _edge_query(where_clause: str) -> str:
         "target.id as target_id, target.uid as target_uid, "
         "target.path as target_path, labels(target) as target_labels, "
         "type(rel) as type, rel.confidence as confidence, "
-        "rel.reason as reason, rel.evidence as evidence"
+        "rel.reason as reason, rel.evidence as evidence, "
+        "rel.transform_kind as transform_kind, "
+        "rel.transform_expression as transform_expression"
     )
 
 

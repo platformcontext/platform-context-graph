@@ -86,6 +86,8 @@ def test_create_all_data_intelligence_links_materializes_compiled_lineage() -> N
                     "source_name": "analytics.public.order_metrics.order_id",
                     "target_name": "raw.public.orders.id",
                     "line_number": 1,
+                    "transform_kind": "cast",
+                    "transform_expression": "cast(raw_order_id as bigint)",
                 },
                 {
                     "type": "RUNS_QUERY_AGAINST",
@@ -120,3 +122,22 @@ def test_create_all_data_intelligence_links_materializes_compiled_lineage() -> N
         "runs_query_against_edges": 1,
     }
     assert session.run.call_count == 6
+    column_lineage_call = next(
+        call
+        for call in session.run.call_args_list
+        if "COLUMN_DERIVES_FROM" in call.args[0]
+    )
+    assert "rel.transform_kind = row.transform_kind" in column_lineage_call.args[0]
+    assert (
+        "rel.transform_expression = row.transform_expression"
+        in column_lineage_call.args[0]
+    )
+    assert column_lineage_call.kwargs["rows"] == [
+        {
+            "source_uid": "content-entity:e_column_order_id",
+            "target_uid": "content-entity:e_column_orders_id",
+            "line_number": 1,
+            "transform_kind": "cast",
+            "transform_expression": "cast(raw_order_id as bigint)",
+        }
+    ]
