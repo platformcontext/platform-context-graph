@@ -19,6 +19,7 @@ Required before substrate fan-out:
 Required before any cloud proof:
 
 - service bootstrap tests pass
+- operator status surfaces can summarize queue and runtime state locally
 - scope lifecycle tests pass
 - queue and retry semantics pass
 - projector and reducer integration tests pass
@@ -40,6 +41,7 @@ Required before authority flip:
 - the chosen proof domain runs in the cloud test environment
 - no full re-index is required for ordinary source updates
 - backlog, retry, and reducer behavior remain understandable under load
+- CLI and API admin/status views report live progress and health meaningfully
 - API and MCP reads continue to use canonical truth correctly
 
 ## Cutover Phases

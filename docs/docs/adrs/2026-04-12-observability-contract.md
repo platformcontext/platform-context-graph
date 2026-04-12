@@ -50,6 +50,12 @@ Required metric families are:
 - stale-generation count
 - pending intents by domain
 
+In addition to raw telemetry, the platform must expose operator-readable status
+surfaces over CLI and API/admin endpoints. Those surfaces should summarize the
+live state of collectors, scopes, generations, queue depth, in-flight work,
+backlog age, and reducer progress without forcing operators to reconstruct the
+system from raw metric names alone.
+
 ## Why This Choice
 
 - It makes the platform operable under real load.
@@ -64,6 +70,7 @@ Positive:
 - Failures can be diagnosed without code archaeology.
 - Performance tuning can be driven by comparable signals across services.
 - Future collectors inherit an expected observability surface.
+- Operators get a live service-health view instead of a metrics scavenger hunt.
 
 Tradeoffs:
 
@@ -76,5 +83,7 @@ Tradeoffs:
 - Keep metric and span names stable once the first contract freeze happens.
 - Require structured logs for every terminal failure and every retryable failure
   classification.
+- Design the status CLI and admin/status API as first-class consumers of the
+  observability contract, not as a separate ad hoc reporting path.
 - Document any observability contract change alongside the relevant milestone
   plan and versioned contract note.

@@ -75,6 +75,7 @@ The rewrite must deliver all of the following:
 - authoritative snapshot truth with event acceleration for freshness
 - a source projector plus reducer-intent plus reducer model
 - canonical-first query and MCP outputs
+- operator-facing live status surfaces through CLI and API admin endpoints
 - logical-first workloads with ETL/job subtypes
 - a layered truth model that distinguishes source declaration, applied declaration, observed resource, and canonical cloud asset
 - provider-native identity whenever the provider gives us a stable identifier
@@ -413,6 +414,18 @@ Telemetry must make it obvious:
 - which stage failed
 - which reducer intent is pending
 - which canonical relationship was accepted or rejected
+
+That telemetry is not enough on its own. The rewrite must also produce
+operator-readable status surfaces so an engineer can answer live questions such
+as:
+
+- how many scopes or generations are queued, running, completed, or failed
+- how many repos or scopes are in flight at each stage right now
+- which reducer domains are draining or backlogged
+- which runtime is healthy, degraded, or stalled
+
+The target user experience is an admin-style CLI and API view, not a requirement
+to inspect raw metrics directly for ordinary operational questions.
 
 ## Implementation Boundaries
 
