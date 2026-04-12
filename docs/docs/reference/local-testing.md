@@ -157,6 +157,9 @@ The current foundation slice proves:
 - generic entity context for vendor-neutral data entities
 - impact-query compatibility for data-asset and dashboard-style IDs
 - plugin registration foundations for future warehouse and BI replay adapters
+- dbt-style compiled manifest normalization through a checked-in replay fixture
+- supported-subset compiled SQL column lineage extraction
+- explicit partial coverage reporting for unsupported wildcard projections
 
 ### Fast foundation gate
 
@@ -178,6 +181,14 @@ PYTHONPATH=src uv run pytest \
   tests/unit/relationships/test_sql_links.py \
   tests/unit/query/test_change_surface.py \
   tests/unit/mcp/test_ecosystem_sql_blast_radius.py -q
+```
+
+### Compiled analytics replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_plugins.py \
+  tests/unit/data_intelligence/test_dbt_compiled_sql.py -q
 ```
 
 Future replay-backed fixture groups for compiled analytics, warehouse history,

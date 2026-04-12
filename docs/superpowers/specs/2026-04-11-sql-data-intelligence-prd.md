@@ -182,3 +182,9 @@ This branch starts the roadmap with the generic foundation slice:
 - generic impact-query compatibility
 - plugin registration foundation
 - repo-tracked roadmap and local validation guidance
+- checked-in `analytics_compiled_comprehensive` replay fixture
+- dbt-style compiled manifest normalization into `analytics_models`,
+  `data_assets`, and `data_columns`
+- exact `COMPILES_TO`, `ASSET_DERIVES_FROM`, and supported-subset
+  `COLUMN_DERIVES_FROM` relationships from compiled SQL
+- explicit partial coverage reporting for unsupported wildcard projections

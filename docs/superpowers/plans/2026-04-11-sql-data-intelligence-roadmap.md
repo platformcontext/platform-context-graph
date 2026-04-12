@@ -41,6 +41,13 @@ Acceptance:
   and compiled fixtures
 - partial lineage is surfaced explicitly
 
+Status on this branch:
+
+- checked-in `analytics_compiled_comprehensive` replay fixture
+- dbt-style compiled manifest normalization
+- supported-subset column lineage from compiled SQL projections
+- explicit unresolved-reference reporting for wildcard projections
+
 ### Milestone 3: Warehouse Adapter Framework
 
 Deliver:
@@ -114,6 +121,14 @@ PYTHONPATH=src uv run pytest \
   tests/unit/relationships/test_sql_links.py \
   tests/unit/query/test_change_surface.py \
   tests/unit/mcp/test_ecosystem_sql_blast_radius.py -q
+```
+
+### Compiled analytics gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_plugins.py \
+  tests/unit/data_intelligence/test_dbt_compiled_sql.py -q
 ```
 
 ### Docs and quality gate
