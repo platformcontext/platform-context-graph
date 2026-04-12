@@ -111,6 +111,7 @@ def test_build_repository_context_surfaces_governance_overlay_summary(
                 "asserts_quality_on": 0,
                 "owns": 2,
                 "declares_contract_for": 3,
+                "masks": 1,
             },
             "reconciliation": None,
             "parse_states": {},
@@ -160,7 +161,7 @@ def test_build_repository_context_surfaces_governance_overlay_summary(
     assert result["data_intelligence"]["relationship_counts"][
         "declares_contract_for"
     ] == 3
+    assert result["data_intelligence"]["relationship_counts"]["masks"] == 1
     assert [
         item["name"] for item in result["data_intelligence"]["sample_contracts"]
     ] == ["daily_revenue_contract"]
-

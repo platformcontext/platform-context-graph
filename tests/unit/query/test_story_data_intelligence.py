@@ -34,6 +34,7 @@ def test_repository_story_exposes_data_intelligence_section() -> None:
                     "runs_query_against": 4,
                     "powers": 3,
                     "asserts_quality_on": 1,
+                    "masks": 0,
                 },
                 "reconciliation": {
                     "status": "partial_overlap",
@@ -147,6 +148,7 @@ def test_repository_story_uses_dashboards_when_semantic_repo_has_no_models() -> 
                     "runs_query_against": 1,
                     "powers": 2,
                     "asserts_quality_on": 0,
+                    "masks": 0,
                 },
                 "reconciliation": {
                     "status": "aligned",
@@ -223,6 +225,7 @@ def test_repository_story_mentions_observed_hot_and_low_use_assets() -> None:
                     "runs_query_against": 4,
                     "powers": 0,
                     "asserts_quality_on": 0,
+                    "masks": 0,
                 },
                 "reconciliation": None,
                 "observed_usage_summary": {
@@ -313,6 +316,7 @@ def test_repository_story_uses_quality_checks_when_no_models_or_dashboards() -> 
                     "runs_query_against": 1,
                     "powers": 0,
                     "asserts_quality_on": 2,
+                    "masks": 0,
                 },
                 "reconciliation": None,
                 "parse_states": {},

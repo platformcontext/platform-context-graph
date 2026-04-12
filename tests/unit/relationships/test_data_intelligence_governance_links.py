@@ -57,6 +57,14 @@ def test_create_all_data_intelligence_links_materializes_governance_edges() -> N
                     "target_name": "analytics.finance.daily_revenue.customer_email",
                     "line_number": 1,
                 },
+                {
+                    "type": "MASKS",
+                    "source_name": "daily_revenue_contract",
+                    "target_name": "analytics.finance.daily_revenue.customer_email",
+                    "line_number": 1,
+                    "protection_kind": "masked",
+                    "sensitivity": "pii",
+                },
             ],
             "data_governance_annotations": [
                 {
@@ -80,7 +88,7 @@ def test_create_all_data_intelligence_links_materializes_governance_edges() -> N
     assert metrics == {
         "declares_contract_for_edges": 1,
         "governance_annotations_applied": 1,
+        "masks_edges": 1,
         "owns_edges": 1,
     }
-    assert session.run.call_count == 3
-
+    assert session.run.call_count == 4

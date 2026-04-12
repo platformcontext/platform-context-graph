@@ -39,6 +39,7 @@ def test_repository_story_mentions_governance_overlay_coverage() -> None:
                     "asserts_quality_on": 0,
                     "owns": 2,
                     "declares_contract_for": 3,
+                    "masks": 1,
                 },
                 "reconciliation": None,
                 "parse_states": {},
@@ -82,4 +83,3 @@ def test_repository_story_mentions_governance_overlay_coverage() -> None:
     assert [item["name"] for item in data_section["items"]] == [
         "daily_revenue_contract"
     ]
-

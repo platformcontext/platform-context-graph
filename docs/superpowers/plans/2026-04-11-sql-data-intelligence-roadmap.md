@@ -151,6 +151,9 @@ Status on this branch:
   (touched by multiple warehouse queries) and low-use assets (seen only once),
   which turns replay history into a more operational signal for DBAs and ETL
   owners instead of leaving it as raw query counts alone
+- `data_asset` entity context now surfaces observed usage level and query-count
+  signals directly from replay history, so warehouse-heavy assets can be
+  recognized as hot or low-use without leaving the persona-focused entity view
 - repository story wording for aligned and mismatched declared-versus-observed
   lineage
 - generic impact responses and content-entity context now expose
@@ -225,14 +228,19 @@ Status on this branch:
 - `GovernanceReplayPlugin` as the first governance-category replay adapter
 - `governance_replay.json` parsing through the JSON config lane
 - graph/content registration for `DataOwner` and `DataContract`
-- post-commit materialization for `OWNS` and `DECLARES_CONTRACT_FOR` edges
+- post-commit materialization for `OWNS`, `DECLARES_CONTRACT_FOR`, and
+  protected-column `MASKS` edges
 - governance metadata overlays applied onto `DataAsset` and `DataColumn`
   targets, including owner teams, contract levels, change policies, and
   protected-field metadata
 - repository context and story summaries include owner counts, contract counts,
-  and protected-column coverage
+  protected-column coverage, and explicit `masks` relationship counts
 - graph-backed integration coverage for persisted governance nodes, exact
-  overlay relationships, and protected-column metadata on target columns
+  overlay relationships, exact `MASKS` edges, and protected-column metadata on
+  target columns
+- path-aware change classification treats `MASKS` the same as other
+  governance-overlay relationships, so protected sibling columns do not
+  over-propagate governance-sensitive blast radius through shared contracts
 - `get_entity_context` for `data_asset`, `data_column`, `analytics_model`,
   `query_execution`, `dashboard_asset`, and `data_quality_check` now returns a
   persona-friendly summary with lineage evidence, change classification,
@@ -365,6 +373,7 @@ PYTHONPATH=src uv run pytest \
   tests/unit/parsers/test_json_governance_replay.py \
   tests/unit/content/test_data_intelligence_ingest.py \
   tests/unit/relationships/test_data_intelligence_governance_links.py \
+  tests/unit/query/test_change_surface_classification.py \
   tests/unit/query/test_repository_context_data_governance.py \
   tests/unit/query/test_story_data_governance.py \
   tests/unit/tools/test_graph_builder_schema.py -q
@@ -381,7 +390,8 @@ export PYTHONPATH=src
 
 uv run pytest \
   tests/integration/test_governance_replay_graph.py \
-  tests/integration/test_mcp_data_governance_queries.py -q
+  tests/integration/test_mcp_data_governance_queries.py \
+  tests/integration/test_mcp_data_change_classification.py -q
 ```
 
 ### Quality replay gate

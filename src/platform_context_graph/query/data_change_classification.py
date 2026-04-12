@@ -26,6 +26,7 @@ _NON_PROPAGATING_RELATIONSHIP_TYPES = frozenset(
         "DEFINES",
         "OWNS",
         "DECLARES_CONTRACT_FOR",
+        "MASKS",
     }
 )
 

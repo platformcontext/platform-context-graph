@@ -31,6 +31,7 @@ _RELATIONSHIP_SOURCE_KINDS = {
     "ASSERTS_QUALITY_ON": ("DataQualityCheck",),
     "OWNS": ("DataOwner",),
     "DECLARES_CONTRACT_FOR": ("DataContract",),
+    "MASKS": ("DataContract",),
 }
 _RELATIONSHIP_TARGET_KINDS = {
     "COMPILES_TO": ("DataAsset",),
@@ -41,11 +42,16 @@ _RELATIONSHIP_TARGET_KINDS = {
     "ASSERTS_QUALITY_ON": ("DataAsset", "DataColumn"),
     "OWNS": ("DataAsset", "DataColumn"),
     "DECLARES_CONTRACT_FOR": ("DataAsset", "DataColumn"),
+    "MASKS": ("DataColumn",),
 }
 _RELATIONSHIP_PROPERTY_KEYS = {
     "COLUMN_DERIVES_FROM": (
         "transform_kind",
         "transform_expression",
+    ),
+    "MASKS": (
+        "protection_kind",
+        "sensitivity",
     ),
 }
 
@@ -109,21 +115,15 @@ def _materialize_data_relationships(
             )
             if source_uid is None or target_uid is None:
                 continue
-            rows_by_type[str(item["type"])].append(
-                {
-                    "source_uid": source_uid,
-                    "target_uid": target_uid,
-                    "line_number": item.get("line_number"),
-                    **(
-                        {
-                            "transform_kind": item.get("transform_kind"),
-                            "transform_expression": item.get("transform_expression"),
-                        }
-                        if item.get("type") == "COLUMN_DERIVES_FROM"
-                        else {}
-                    ),
-                }
-            )
+            relationship_type = str(item["type"])
+            row = {
+                "source_uid": source_uid,
+                "target_uid": target_uid,
+                "line_number": item.get("line_number"),
+            }
+            for property_key in _RELATIONSHIP_PROPERTY_KEYS.get(relationship_type, ()):
+                row[property_key] = item.get(property_key)
+            rows_by_type[relationship_type].append(row)
 
     for relationship_type, rows in rows_by_type.items():
         _run_uid_relationship_query(

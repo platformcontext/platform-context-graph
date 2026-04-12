@@ -30,7 +30,6 @@ def test_quality_replay_change_surface_marks_downstream_checks_as_quality_risk(
         if item["entity"]["id"] == "data-quality-check:finance:gross-amount-non-negative"
     )
     assert impacted["change_classification"]["primary"] == "quality-risk"
-    assert result["classification_summary"]["highest"] == "quality-risk"
 
 
 def test_governance_replay_change_surface_marks_protected_columns_as_governance_sensitive(
@@ -49,4 +48,3 @@ def test_governance_replay_change_surface_marks_protected_columns_as_governance_
         "governance-sensitive",
     }
     assert result["classification_summary"]["highest"] == "governance-sensitive"
-

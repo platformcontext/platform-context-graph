@@ -239,6 +239,14 @@ def test_find_change_surface_ignores_contract_only_sibling_paths_in_summary():
                 "evidence": [],
             },
             {
+                "from": "content-entity:e_contract_daily_revenue",
+                "to": "data-column:analytics.finance.daily_revenue.customer_email",
+                "type": "MASKS",
+                "confidence": 1.0,
+                "reason": "Contract requires masking on customer_email",
+                "evidence": [],
+            },
+            {
                 "from": "data-quality-check:finance:gross-amount-non-negative",
                 "to": "data-column:analytics.finance.daily_revenue.gross_amount",
                 "type": "ASSERTS_QUALITY_ON",

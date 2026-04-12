@@ -24,6 +24,7 @@ _DIRECT_RELATIONSHIP_FIELDS = {
     "ASSERTS_QUALITY_ON": "asserts_quality_on",
     "OWNS": "owns",
     "DECLARES_CONTRACT_FOR": "declares_contract_for",
+    "MASKS": "masks",
 }
 _ENTITY_LABELS = {
     "analytics_model": "analytics model",
@@ -63,6 +64,7 @@ def build_data_entity_summary(
     lineage_evidence = summarize_lineage_edges(edges)
     lineage_coverage = _lineage_coverage(entity)
     lineage_transforms = _lineage_transforms(entity, edges)
+    observed_usage = _observed_usage(entity, edges)
     downstream_counts = _downstream_counts(change_surface)
     direct_relationship_counts = _direct_relationship_counts(edges)
     sample_impacted_entities = _sample_impacted_entities(change_surface)
@@ -93,6 +95,7 @@ def build_data_entity_summary(
             lineage_evidence=lineage_evidence,
             lineage_coverage=lineage_coverage,
             lineage_transforms=lineage_transforms,
+            observed_usage=observed_usage,
             downstream_counts=downstream_counts,
             ownership=ownership,
             governance=governance,
@@ -101,6 +104,7 @@ def build_data_entity_summary(
         "lineage_evidence": lineage_evidence,
         "lineage_coverage": lineage_coverage,
         "lineage_transforms": lineage_transforms,
+        "observed_usage": observed_usage,
         "change_classification": change_classification,
         "highest_downstream_classification": highest_downstream_classification,
         "downstream_counts": downstream_counts,
@@ -167,6 +171,7 @@ def _summary_text(
     lineage_evidence: dict[str, Any] | None,
     lineage_coverage: dict[str, Any] | None,
     lineage_transforms: list[dict[str, str]],
+    observed_usage: dict[str, Any] | None,
     downstream_counts: Mapping[str, int],
     ownership: Mapping[str, list[str]],
     governance: Mapping[str, Any],
@@ -191,6 +196,9 @@ def _summary_text(
     transform_summary = _lineage_transform_summary(entity, lineage_transforms)
     if transform_summary:
         parts.append(transform_summary)
+    observed_usage_summary = _observed_usage_summary(entity, observed_usage)
+    if observed_usage_summary:
+        parts.append(observed_usage_summary)
     owner_names = list(ownership.get("owner_names") or [])
     owner_teams = list(ownership.get("owner_teams") or [])
     owner_labels = owner_names or owner_teams
@@ -392,6 +400,57 @@ def _lineage_transform_summary(
     if downstream_kinds:
         return "downstream transforms include " + ", ".join(downstream_kinds)
     return ""
+
+
+def _observed_usage(
+    entity: Mapping[str, Any],
+    edges: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Return replay-observed usage signals for one data asset."""
+
+    if str(entity.get("type") or "").strip() != "data_asset":
+        return None
+
+    query_execution_ids = sorted(
+        {
+            str(edge.get("from") or "").strip()
+            for edge in edges
+            if str(edge.get("type") or "").strip() == "RUNS_QUERY_AGAINST"
+            and str(edge.get("to") or "").strip() == str(entity.get("id") or "").strip()
+            and str(edge.get("from") or "").strip().startswith("query-execution:")
+        }
+    )
+    if not query_execution_ids:
+        return None
+
+    query_execution_count = len(query_execution_ids)
+    usage_level = "hot" if query_execution_count >= 2 else "low_use"
+    return {
+        "query_execution_count": query_execution_count,
+        "usage_level": usage_level,
+        "query_execution_ids": query_execution_ids[:5],
+    }
+
+
+def _observed_usage_summary(
+    entity: Mapping[str, Any],
+    observed_usage: Mapping[str, Any] | None,
+) -> str:
+    """Return a compact observed-usage sentence for one data asset."""
+
+    if str(entity.get("type") or "").strip() != "data_asset" or not observed_usage:
+        return ""
+
+    query_execution_count = int(observed_usage.get("query_execution_count") or 0)
+    if query_execution_count <= 0:
+        return ""
+    usage_level = str(observed_usage.get("usage_level") or "").strip().replace("_", "-")
+    if not usage_level:
+        return ""
+    return (
+        f"observed usage is {usage_level} across {query_execution_count} warehouse "
+        f"query execution{'' if query_execution_count == 1 else 's'}"
+    )
 
 
 def _entity_display_name(entity_id: str) -> str:

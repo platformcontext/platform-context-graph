@@ -15,6 +15,7 @@ _DATA_RELATIONSHIP_FIELDS = {
     "ASSERTS_QUALITY_ON": "asserts_quality_on",
     "OWNS": "owns",
     "DECLARES_CONTRACT_FOR": "declares_contract_for",
+    "MASKS": "masks",
 }
 
 

@@ -62,6 +62,14 @@ def test_normalize_governance_replay_emits_relationships_and_annotations() -> No
         for item in report["relationships"]
     )
     assert any(
+        item["type"] == "MASKS"
+        and item["source_name"] == "daily_revenue_contract"
+        and item["target_name"] == "analytics.finance.daily_revenue.customer_email"
+        and item["protection_kind"] == "masked"
+        and item["sensitivity"] == "pii"
+        for item in report["relationships"]
+    )
+    assert any(
         item["target_name"] == "analytics.finance.daily_revenue.customer_email"
         and item["is_protected"] is True
         and item["sensitivity"] == "pii"
@@ -70,4 +78,3 @@ def test_normalize_governance_replay_emits_relationships_and_annotations() -> No
         for item in report["governance_annotations"]
     )
     assert report["coverage"]["state"] == "complete"
-

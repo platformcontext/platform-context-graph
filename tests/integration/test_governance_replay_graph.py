@@ -59,6 +59,16 @@ def test_governance_replay_nodes_and_edges_are_created(indexed_ecosystems) -> No
         )
         == 1
     )
+    assert (
+        _count(
+            indexed_ecosystems,
+            "MATCH (:DataContract {name: 'daily_revenue_contract'})"
+            "-[:MASKS {protection_kind: 'masked'}]->"
+            "(:DataColumn {name: 'analytics.finance.daily_revenue.customer_email'}) "
+            "RETURN count(*) as cnt",
+        )
+        == 1
+    )
 
 
 def test_governance_replay_annotations_are_applied_to_targets(
@@ -87,4 +97,3 @@ def test_governance_replay_annotations_are_applied_to_targets(
     assert record["owner_teams"] == ["finance-analytics"]
     assert record["contract_names"] == ["daily_revenue_contract"]
     assert record["change_policies"] == ["breaking"]
-

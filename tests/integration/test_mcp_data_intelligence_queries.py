@@ -69,6 +69,7 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
         "asserts_quality_on": 0,
         "owns": 0,
         "declares_contract_for": 0,
+        "masks": 0,
     }
 
 
@@ -115,6 +116,7 @@ def test_warehouse_replay_repo_context_surfaces_observed_queries(
         "asserts_quality_on": 0,
         "owns": 0,
         "declares_contract_for": 0,
+        "masks": 0,
     }
     assert result["data_intelligence"]["observed_usage_summary"] == {
         "hot_asset_count": 1,
@@ -216,6 +218,7 @@ def test_bi_replay_repo_context_surfaces_dashboard_downstreams(
         "asserts_quality_on": 0,
         "owns": 0,
         "declares_contract_for": 0,
+        "masks": 0,
     }
 
 
@@ -259,6 +262,7 @@ def test_semantic_replay_repo_context_surfaces_semantic_lineage(
         "asserts_quality_on": 0,
         "owns": 0,
         "declares_contract_for": 0,
+        "masks": 0,
     }
 
 
@@ -320,6 +324,7 @@ def test_quality_replay_repo_context_surfaces_quality_checks(
         "asserts_quality_on": 2,
         "owns": 0,
         "declares_contract_for": 0,
+        "masks": 0,
     }
 
 
@@ -412,6 +417,22 @@ def test_data_entity_context_surfaces_downstream_consumers_for_finance_columns(
     assert (
         "dashboard-asset:finance:revenue-overview" in sample_ids
         or "dashboard-asset:finance:semantic-revenue-overview" in sample_ids
+    )
+
+
+def test_data_asset_context_surfaces_observed_hot_usage(indexed_ecosystems) -> None:
+    """Data-asset context should expose observed hot usage from replay history."""
+
+    result = get_entity_context(
+        indexed_ecosystems,
+        entity_id="data-asset:analytics.finance.daily_revenue",
+    )
+
+    assert result["data_intelligence"]["observed_usage"]["usage_level"] == "hot"
+    assert result["data_intelligence"]["observed_usage"]["query_execution_count"] >= 2
+    assert (
+        "observed usage is hot across"
+        in result["data_intelligence"]["summary"]
     )
 
 

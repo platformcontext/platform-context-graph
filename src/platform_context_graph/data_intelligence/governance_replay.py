@@ -96,6 +96,16 @@ class GovernanceReplayPlugin:
                     is_protected=column.get("is_protected"),
                     protection_kind=column.get("protection_kind"),
                 )
+                if column.get("is_protected"):
+                    relationships.append(
+                        _relationship_record(
+                            relationship_type="MASKS",
+                            source_name=contract_record["name"],
+                            target_name=target_name,
+                            sensitivity=column.get("sensitivity"),
+                            protection_kind=column.get("protection_kind"),
+                        )
+                    )
 
         data_owners.sort(key=lambda item: item["name"])
         data_contracts.sort(key=lambda item: item["name"])
@@ -124,15 +134,22 @@ def _relationship_record(
     relationship_type: str,
     source_name: str,
     target_name: str,
+    sensitivity: str | None = None,
+    protection_kind: str | None = None,
 ) -> dict[str, Any]:
     """Return one normalized governance relationship row."""
 
-    return {
+    record = {
         "type": relationship_type,
         "source_name": source_name,
         "target_name": target_name,
         "confidence": 1.0,
     }
+    if sensitivity:
+        record["sensitivity"] = sensitivity
+    if protection_kind:
+        record["protection_kind"] = protection_kind
+    return record
 
 
 def _owner_record(owner: Mapping[str, Any], *, workspace: str) -> dict[str, Any]:

@@ -144,14 +144,15 @@ def test_build_repository_context_adds_data_intelligence_summary(
             "query_execution_count": 2,
             "dashboard_asset_count": 1,
             "data_quality_check_count": 1,
-            "relationship_counts": {
-                "compiles_to": 2,
-                "asset_derives_from": 5,
-                "column_derives_from": 4,
-                "runs_query_against": 4,
-                "powers": 3,
-                "asserts_quality_on": 1,
-            },
+                "relationship_counts": {
+                    "compiles_to": 2,
+                    "asset_derives_from": 5,
+                    "column_derives_from": 4,
+                    "runs_query_against": 4,
+                    "powers": 3,
+                    "asserts_quality_on": 1,
+                    "masks": 0,
+                },
             "reconciliation": {
                 "status": "partial_overlap",
                 "shared_asset_count": 2,
@@ -211,6 +212,7 @@ def test_build_repository_context_adds_data_intelligence_summary(
         "runs_query_against": 4,
         "powers": 3,
         "asserts_quality_on": 1,
+        "masks": 0,
     }
     assert result["data_intelligence"]["query_execution_count"] == 2
     assert result["data_intelligence"]["dashboard_asset_count"] == 1
@@ -330,14 +332,15 @@ def test_build_repository_context_handles_semantic_and_dashboard_only_repos(
             "query_execution_count": 1,
             "dashboard_asset_count": 1,
             "data_quality_check_count": 0,
-            "relationship_counts": {
-                "compiles_to": 0,
-                "asset_derives_from": 1,
-                "column_derives_from": 2,
-                "runs_query_against": 1,
-                "powers": 2,
-                "asserts_quality_on": 0,
-            },
+                "relationship_counts": {
+                    "compiles_to": 0,
+                    "asset_derives_from": 1,
+                    "column_derives_from": 2,
+                    "runs_query_against": 1,
+                    "powers": 2,
+                    "asserts_quality_on": 0,
+                    "masks": 0,
+                },
             "reconciliation": {
                 "status": "aligned",
                 "shared_asset_count": 1,
@@ -382,6 +385,7 @@ def test_build_repository_context_handles_semantic_and_dashboard_only_repos(
         "runs_query_against": 1,
         "powers": 2,
         "asserts_quality_on": 0,
+        "masks": 0,
     }
     assert result["data_intelligence"]["dashboard_asset_count"] == 1
 

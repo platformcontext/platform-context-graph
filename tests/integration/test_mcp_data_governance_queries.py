@@ -40,6 +40,7 @@ def test_governance_replay_repo_context_surfaces_overlay_counts(
         "asserts_quality_on": 0,
         "owns": 2,
         "declares_contract_for": 3,
+        "masks": 1,
     }
 
 
@@ -64,4 +65,3 @@ def test_governance_replay_repo_story_mentions_governance_overlays(
     assert [item["name"] for item in data_section["items"]] == [
         "daily_revenue_contract"
     ]
-
