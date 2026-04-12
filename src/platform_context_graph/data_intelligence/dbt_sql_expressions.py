@@ -15,7 +15,16 @@ _FUNCTION_CALL_RE = re.compile(
 _SINGLE_QUOTED_LITERAL_RE = re.compile(r"^'(?:[^'\\\\]|\\\\.)*'$", re.DOTALL)
 _NUMERIC_LITERAL_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$")
 _TYPE_IDENTIFIER_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+_AGGREGATE_EXPRESSION_REASON = "aggregate_expression_semantics_not_captured"
 _DERIVED_EXPRESSION_REASON = "derived_expression_semantics_not_captured"
+_MULTI_INPUT_EXPRESSION_REASON = "multi_input_expression_semantics_not_captured"
+_AGGREGATE_FUNCTIONS = {
+    "avg",
+    "count",
+    "max",
+    "min",
+    "sum",
+}
 _SIMPLE_SCALAR_FUNCTIONS = {
     "upper",
     "lower",
@@ -31,16 +40,25 @@ _LITERAL_PARAMETER_SCALAR_FUNCTIONS = {
 def expression_requires_partial_reporting(expression: str) -> bool:
     """Return whether a projection expression should report partial semantics."""
 
+    return expression_partial_reason(expression) is not None
+
+
+def expression_partial_reason(expression: str) -> str | None:
+    """Return a specific partial-lineage reason when the expression is unsupported."""
+
     normalized = _strip_wrapping_parentheses(expression.strip())
     if not normalized:
-        return False
+        return None
     if _BARE_IDENTIFIER_RE.fullmatch(normalized):
-        return False
+        return None
     if _QUALIFIED_REFERENCE_RE.fullmatch(normalized):
-        return False
+        return None
     if _is_supported_scalar_wrapper(normalized):
-        return False
-    return True
+        return None
+    function_reason = _unsupported_function_reason(normalized)
+    if function_reason is not None:
+        return function_reason
+    return _DERIVED_EXPRESSION_REASON
 
 
 def expression_ignored_identifiers(expression: str) -> set[str]:
@@ -55,13 +73,18 @@ def expression_ignored_identifiers(expression: str) -> set[str]:
     }
 
 
-def derived_expression_gap(*, expression: str, model_name: str) -> dict[str, str]:
+def derived_expression_gap(
+    *,
+    expression: str,
+    model_name: str,
+    reason: str,
+) -> dict[str, str]:
     """Return the standardized unresolved-gap record for one derived expression."""
 
     return {
         "expression": expression.strip(),
         "model_name": model_name,
-        "reason": _DERIVED_EXPRESSION_REASON,
+        "reason": reason,
     }
 
 
@@ -133,6 +156,26 @@ def _supported_cast_expression(expression: str) -> tuple[str, str] | None:
     if not type_expression.strip():
         return None
     return value_expression, type_expression
+
+
+def _unsupported_function_reason(expression: str) -> str | None:
+    """Return a more specific unsupported-function reason when possible."""
+
+    match = _FUNCTION_CALL_RE.fullmatch(expression)
+    if match is None:
+        return None
+
+    function_name = match.group("name").strip().lower()
+    if function_name in _AGGREGATE_FUNCTIONS:
+        return _AGGREGATE_EXPRESSION_REASON
+
+    arguments = _split_top_level_arguments(match.group("arguments"))
+    reference_count = sum(
+        1 for argument in arguments if _is_simple_reference_expression(argument)
+    )
+    if reference_count > 1:
+        return _MULTI_INPUT_EXPRESSION_REASON
+    return None
 
 
 def _is_simple_reference_expression(expression: str) -> bool:
@@ -223,5 +266,6 @@ def _split_cast_arguments(arguments: str) -> tuple[str | None, str | None]:
 __all__ = [
     "derived_expression_gap",
     "expression_ignored_identifiers",
+    "expression_partial_reason",
     "expression_requires_partial_reporting",
 ]

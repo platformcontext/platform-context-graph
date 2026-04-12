@@ -33,7 +33,7 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
     assert result["data_intelligence"]["lineage_gap_summary"] == {
         "partial_model_count": 1,
         "reason_counts": {
-            "derived_expression_semantics_not_captured": 1,
+            "aggregate_expression_semantics_not_captured": 1,
         },
         "sample_models": [
             "order_metrics",
@@ -54,7 +54,7 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
         "materialization": "view",
         "unresolved_reference_count": 1,
         "unresolved_reference_reasons": [
-            "derived_expression_semantics_not_captured"
+            "aggregate_expression_semantics_not_captured"
         ],
         "unresolved_reference_expressions": [
             "sum(p.amount)",
@@ -86,6 +86,7 @@ def test_analytics_repo_story_surfaces_data_intelligence(indexed_ecosystems) -> 
         if section["id"] == "data_intelligence"
     )
     assert "lineage is partial for 1 model" in data_section["summary"]
+    assert "aggregate expression semantics not captured" in data_section["summary"]
     assert "sum(p.amount)" in data_section["summary"]
     assert [item["name"] for item in data_section["items"][:2]] == [
         "order_metrics",

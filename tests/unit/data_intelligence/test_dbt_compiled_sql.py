@@ -164,7 +164,7 @@ def test_normalize_dbt_manifest_supports_simple_scalar_wrappers() -> None:
             {
                 "expression": "sum(p.amount)",
                 "model_name": "order_metrics",
-                "reason": "derived_expression_semantics_not_captured",
+                "reason": "aggregate_expression_semantics_not_captured",
             },
         ],
     }
@@ -187,7 +187,7 @@ def test_normalize_dbt_manifest_supports_simple_scalar_wrappers() -> None:
             "confidence": 0.5,
             "unresolved_reference_count": 1,
             "unresolved_reference_reasons": [
-                "derived_expression_semantics_not_captured"
+                "aggregate_expression_semantics_not_captured"
             ],
             "unresolved_reference_expressions": [
                 "sum(p.amount)",

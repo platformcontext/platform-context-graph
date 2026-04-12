@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from .dbt_sql_expressions import (
     derived_expression_gap,
     expression_ignored_identifiers,
-    expression_requires_partial_reporting,
+    expression_partial_reason,
 )
 from .dbt_sql_identifiers import unqualified_identifiers
 
@@ -354,9 +354,14 @@ def _lineage_for_projection(
 
     if output_column is None and source_columns:
         output_column = source_columns[0].rsplit(".", maxsplit=1)[-1]
-    if source_columns and expression_requires_partial_reporting(expression):
+    partial_reason = expression_partial_reason(expression)
+    if source_columns and partial_reason is not None:
         unresolved_references.append(
-            derived_expression_gap(expression=expression, model_name=model_name)
+            derived_expression_gap(
+                expression=expression,
+                model_name=model_name,
+                reason=partial_reason,
+            )
         )
     if output_column is not None and source_columns:
         column_lineage.append(

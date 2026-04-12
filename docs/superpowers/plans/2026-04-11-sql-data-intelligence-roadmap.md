@@ -64,6 +64,9 @@ Status on this branch:
   `date_trunc('day', column)` now stay on the supported lineage path as well,
   which broadens safe analytics-model coverage without treating aggregates as
   fully understood
+- remaining unsupported derived cases now surface more specific partial-gap
+  reasons, separating aggregate expressions from multi-input transforms so repo
+  stories and model samples are more actionable
 - analytics-model entity context now exposes compiled-lineage coverage state,
   confidence, materialization, projection count, and unresolved reasons and
   expressions

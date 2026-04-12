@@ -147,6 +147,6 @@ def test_parse_dbt_replay_manifest_filename_variant(
         {
             "expression": "sum(p.amount)",
             "model_name": "order_metrics",
-            "reason": "derived_expression_semantics_not_captured",
+            "reason": "aggregate_expression_semantics_not_captured",
         },
     ]

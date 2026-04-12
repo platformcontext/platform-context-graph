@@ -135,7 +135,7 @@ def test_extract_compiled_model_lineage_marks_aggregate_projection_partial() -> 
         {
             "expression": "sum(p.amount)",
             "model_name": "payment_metrics",
-            "reason": "derived_expression_semantics_not_captured",
+            "reason": "aggregate_expression_semantics_not_captured",
         },
     )
 
@@ -166,7 +166,7 @@ def test_extract_compiled_model_lineage_keeps_multi_input_expressions_partial() 
         {
             "expression": "concat(c.full_name, '-', c.segment)",
             "model_name": "customer_labels",
-            "reason": "derived_expression_semantics_not_captured",
+            "reason": "multi_input_expression_semantics_not_captured",
         },
     )
 
