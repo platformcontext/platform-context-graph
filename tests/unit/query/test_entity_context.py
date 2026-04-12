@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -283,6 +284,74 @@ def test_content_entity_context_summarizes_declared_and_observed_lineage(
     assert result["lineage_evidence"] == {
         "status": "combined",
         "evidence_sources": ["declared_lineage", "observed_lineage"],
+    }
+
+
+def test_content_entity_context_accepts_db_manager_wrappers_for_lineage_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Content-entity context should fetch lineage edges through db_manager wrappers."""
+
+    db = make_mock_db(
+        {
+            "WHERE r.id = $id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "repository:r_ab12cd34",
+                        "name": "analytics-warehouse",
+                        "path": "/srv/repos/analytics-warehouse",
+                        "local_path": "/srv/repos/analytics-warehouse",
+                        "repo_slug": "platformcontext/analytics-warehouse",
+                        "remote_url": "https://github.com/platformcontext/analytics-warehouse",
+                        "has_remote": True,
+                    }
+                )
+            ),
+            "WHERE coalesce(source.id, source.uid) = $id": MockResult(
+                records=[
+                    {
+                        "source_id": "content-entity:e_ab12cd34ef56",
+                        "source_uid": "content-entity:e_ab12cd34ef56",
+                        "source_path": "/srv/repos/analytics-warehouse/models/order_metrics.sql",
+                        "source_labels": ["DataAsset"],
+                        "target_id": "data-asset:warehouse:raw.orders",
+                        "target_uid": None,
+                        "target_path": "/warehouse/raw/orders.sql",
+                        "target_labels": ["DataAsset"],
+                        "type": "ASSET_DERIVES_FROM",
+                        "confidence": 0.93,
+                        "reason": "Model derives from raw.orders",
+                        "evidence": [],
+                    }
+                ]
+            ),
+        }
+    )
+    wrapper = SimpleNamespace(db_manager=db)
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.content_entity.get_content_service",
+        lambda _database: MagicMock(
+            get_entity_content=lambda *, entity_id: {
+                "available": True,
+                "entity_id": entity_id,
+                "repo_id": "repository:r_ab12cd34",
+                "relative_path": "models/order_metrics.sql",
+                "entity_type": "DataAsset",
+                "entity_name": "analytics.order_metrics",
+                "start_line": 1,
+                "end_line": 12,
+                "content": "select * from raw.orders\n",
+                "language": "sql",
+                "source_backend": "postgres",
+            }
+        ),
+    )
+
+    result = get_entity_context(wrapper, entity_id="content-entity:e_ab12cd34ef56")
+
+    assert result["lineage_evidence"] == {
+        "status": "declared_only",
+        "evidence_sources": ["declared_lineage"],
     }
 
 

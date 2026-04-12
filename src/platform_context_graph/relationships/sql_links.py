@@ -42,7 +42,9 @@ def create_all_sql_links(
 ) -> dict[str, int]:
     """Create SQL relationship edges after indexing completes."""
 
-    file_data_list = list(all_file_data)
+    file_data_list = (
+        all_file_data if isinstance(all_file_data, list) else list(all_file_data)
+    )
     if not _has_sql_relationship_work(file_data_list):
         return {}
 

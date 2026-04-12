@@ -97,11 +97,12 @@ def _reconciliation_summary_text(reconciliation: dict[str, Any]) -> str:
         return ""
     if declared_only_asset_count == 0 and observed_only_asset_count == 0:
         return f"declared and observed lineage align on {shared_asset_count} assets"
+    unmatched_asset_count = declared_only_asset_count + observed_only_asset_count
     return (
         f"declared and observed lineage overlap on {shared_asset_count} assets, "
         f"with {declared_only_asset_count} declared-only and "
         f"{observed_only_asset_count} observed-only asset"
-        f"{'' if observed_only_asset_count == 1 and declared_only_asset_count == 1 else 's'}"
+        f"{'' if unmatched_asset_count == 1 else 's'}"
     )
 
 

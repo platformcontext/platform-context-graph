@@ -193,7 +193,7 @@ def test_reconciliation_repo_story_summarizes_declared_vs_observed_mismatch(
         if section["id"] == "data_intelligence"
     )
     assert (
-        "declared and observed lineage overlap on 2 assets, with 1 declared-only and 1 observed-only asset"
+        "declared and observed lineage overlap on 2 assets, with 1 declared-only and 1 observed-only assets"
         in data_section["summary"]
     )
 

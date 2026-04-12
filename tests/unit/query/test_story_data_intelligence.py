@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from platform_context_graph.domain.responses import StoryResponse
 from platform_context_graph.query.story import build_repository_story_response
 
 
@@ -103,7 +104,7 @@ def test_repository_story_exposes_data_intelligence_section() -> None:
     )
     assert data_section["summary"] == (
         "Compiled analytics covers 2 models, 5 data assets, 10 data columns, 2 warehouse queries, 1 dashboard, and 1 quality check; "
-        "declared and observed lineage overlap on 2 assets, with 1 declared-only and 1 observed-only asset; "
+        "declared and observed lineage overlap on 2 assets, with 1 declared-only and 1 observed-only assets; "
         "lineage is partial for 1 model because wildcard projection not supported remains unresolved (for example o.*)."
     )
     assert [item["name"] for item in data_section["items"]] == [
@@ -117,6 +118,56 @@ def test_repository_story_exposes_data_intelligence_section() -> None:
     assert result["data_intelligence_overview"]["reconciliation"]["status"] == (
         "partial_overlap"
     )
+
+
+def test_repository_story_validates_with_data_intelligence_overview() -> None:
+    """Repository stories should validate with data-intelligence overview payloads."""
+
+    result = build_repository_story_response(
+        {
+            "repository": {
+                "id": "repository:r_analytics_warehouse",
+                "name": "analytics-warehouse",
+                "repo_slug": "platformcontext/analytics-warehouse",
+                "remote_url": (
+                    "https://github.com/platformcontext/analytics-warehouse"
+                ),
+                "has_remote": True,
+            },
+            "code": {"functions": 0, "classes": 0, "class_methods": 0},
+            "data_intelligence": {
+                "analytics_model_count": 1,
+                "data_asset_count": 2,
+                "data_column_count": 3,
+                "query_execution_count": 0,
+                "dashboard_asset_count": 0,
+                "data_quality_check_count": 0,
+                "relationship_counts": {
+                    "compiles_to": 1,
+                    "asset_derives_from": 1,
+                    "column_derives_from": 2,
+                    "runs_query_against": 0,
+                    "powers": 0,
+                    "asserts_quality_on": 0,
+                    "masks": 0,
+                },
+                "parse_states": {"complete": 1},
+                "sample_models": [
+                    {
+                        "name": "order_metrics",
+                        "path": "target/compiled/order_metrics.sql",
+                        "parse_state": "complete",
+                    }
+                ],
+            },
+            "limitations": [],
+        }
+    )
+
+    validated = StoryResponse.model_validate(result)
+
+    assert validated.data_intelligence_overview is not None
+    assert validated.data_intelligence_overview["analytics_model_count"] == 1
 
 
 def test_repository_story_uses_dashboards_when_semantic_repo_has_no_models() -> None:

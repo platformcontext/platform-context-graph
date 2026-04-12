@@ -183,14 +183,60 @@ def _apply_governance_annotations(session: Any, rows: list[dict[str, Any]]) -> N
         """
         UNWIND $rows AS row
         MATCH (target {uid: row.target_uid})
-        SET target.owner_names = row.owner_names,
-            target.owner_teams = row.owner_teams,
-            target.contract_names = row.contract_names,
-            target.contract_levels = row.contract_levels,
-            target.change_policies = row.change_policies,
-            target.sensitivity = row.sensitivity,
-            target.is_protected = row.is_protected,
-            target.protection_kind = row.protection_kind
+        SET target.owner_names = reduce(
+                acc = coalesce(target.owner_names, []),
+                value IN coalesce(row.owner_names, []) |
+                CASE
+                    WHEN value IS NULL OR value = '' OR value IN acc THEN acc
+                    ELSE acc + value
+                END
+            ),
+            target.owner_teams = reduce(
+                acc = coalesce(target.owner_teams, []),
+                value IN coalesce(row.owner_teams, []) |
+                CASE
+                    WHEN value IS NULL OR value = '' OR value IN acc THEN acc
+                    ELSE acc + value
+                END
+            ),
+            target.contract_names = reduce(
+                acc = coalesce(target.contract_names, []),
+                value IN coalesce(row.contract_names, []) |
+                CASE
+                    WHEN value IS NULL OR value = '' OR value IN acc THEN acc
+                    ELSE acc + value
+                END
+            ),
+            target.contract_levels = reduce(
+                acc = coalesce(target.contract_levels, []),
+                value IN coalesce(row.contract_levels, []) |
+                CASE
+                    WHEN value IS NULL OR value = '' OR value IN acc THEN acc
+                    ELSE acc + value
+                END
+            ),
+            target.change_policies = reduce(
+                acc = coalesce(target.change_policies, []),
+                value IN coalesce(row.change_policies, []) |
+                CASE
+                    WHEN value IS NULL OR value = '' OR value IN acc THEN acc
+                    ELSE acc + value
+                END
+            ),
+            target.sensitivity = CASE
+                WHEN row.sensitivity IS NULL OR row.sensitivity = ''
+                THEN target.sensitivity
+                ELSE row.sensitivity
+            END,
+            target.is_protected = (
+                coalesce(target.is_protected, false)
+                OR coalesce(row.is_protected, false)
+            ),
+            target.protection_kind = CASE
+                WHEN row.protection_kind IS NULL OR row.protection_kind = ''
+                THEN target.protection_kind
+                ELSE row.protection_kind
+            END
         """,
         rows=rows,
     )

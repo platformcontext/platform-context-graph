@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import Mock
 
+import platform_context_graph.relationships.sql_links as sql_links
 from platform_context_graph.relationships.sql_links import create_all_sql_links
 
 
@@ -393,3 +394,43 @@ def test_create_all_sql_links_scopes_code_entities_by_file_path() -> None:
             "api": "sqlx",
         },
     ]
+
+
+def test_create_all_sql_links_reuses_prematerialized_lists(monkeypatch) -> None:
+    """SQL link creation should reuse an already materialized file-data list."""
+
+    session = Mock()
+    file_data = [
+        {
+            "path": "/tmp/sql/schema.sql",
+            "sql_relationships": [
+                {
+                    "type": "HAS_COLUMN",
+                    "source_name": "public.users",
+                    "target_name": "public.users.id",
+                    "line_number": 2,
+                }
+            ],
+        }
+    ]
+    observed_lists: list[object] = []
+
+    def _capture_has_work(rows):
+        observed_lists.append(rows)
+        return True
+
+    def _capture_lookup(_session, rows, *_args, **_kwargs):
+        observed_lists.append(rows)
+        return {}
+
+    def _capture_materialize(_session, rows, _entity_lookup, _metrics):
+        observed_lists.append(rows)
+
+    monkeypatch.setattr(sql_links, "_has_sql_relationship_work", _capture_has_work)
+    monkeypatch.setattr(sql_links, "_build_entity_lookup", _capture_lookup)
+    monkeypatch.setattr(sql_links, "_materialize_sql_links", _capture_materialize)
+
+    create_all_sql_links(session, file_data)
+
+    assert observed_lists
+    assert all(rows is file_data for rows in observed_lists)

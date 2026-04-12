@@ -69,17 +69,33 @@ def build_repository_data_intelligence_summary(
 def _count_label(session: Any, repo: dict[str, Any], label: str) -> int:
     """Count one repository-scoped content entity label."""
 
-    row = session.run(
+    row = _single_result_row(
+        session.run(
         f"""
         MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(n:{label})
         WHERE {repository_scope_predicate()}
         RETURN count(DISTINCT n) AS count
         """,
         **repository_scope(repo),
-    ).single()
+        )
+    )
     if row is None:
         return 0
     return int(row.get("count") or 0)
+
+
+def _single_result_row(result: Any) -> Any | None:
+    """Return one row from a Neo4j-like result object or minimal test double."""
+
+    single = getattr(result, "single", None)
+    if callable(single):
+        return single()
+    data = getattr(result, "data", None)
+    if callable(data):
+        rows = data()
+        if rows:
+            return rows[0]
+    return None
 
 
 def _relationship_counts(session: Any, repo: dict[str, Any]) -> dict[str, int]:
@@ -286,7 +302,8 @@ def _sample_quality_checks(session: Any, repo: dict[str, Any]) -> list[dict[str,
 def _count_protected_columns(session: Any, repo: dict[str, Any]) -> int:
     """Count repository-scoped protected data columns."""
 
-    row = session.run(
+    row = _single_result_row(
+        session.run(
         f"""
         MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(c:DataColumn)
         WHERE {repository_scope_predicate()}
@@ -294,7 +311,8 @@ def _count_protected_columns(session: Any, repo: dict[str, Any]) -> int:
         RETURN count(DISTINCT c) AS count
         """,
         **repository_scope(repo),
-    ).single()
+        )
+    )
     if row is None:
         return 0
     return int(row.get("count") or 0)
