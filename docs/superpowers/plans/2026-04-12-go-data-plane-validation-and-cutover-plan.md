@@ -20,6 +20,8 @@ Required before any cloud proof:
 
 - service bootstrap tests pass
 - operator status surfaces can summarize queue and runtime state locally
+- `go/internal/status` is exercised as the shared operator-status reader/report
+  seam through the CLI without depending on an HTTP transport
 - scope lifecycle tests pass
 - queue and retry semantics pass
 - projector and reducer integration tests pass
@@ -55,6 +57,10 @@ package is accepted.
 
 The new Go data plane is locally healthy for one bounded path.
 
+For the operator-status slice, "green" means the storage-agnostic report seam
+exists and the CLI uses it successfully. It does not yet require the future
+HTTP/admin mount.
+
 ### Phase 2: Proof bridge
 
 One domain is allowed to bridge through a narrow compatibility layer while the
@@ -64,6 +70,10 @@ new substrate is proven. This is temporary and explicitly documented.
 
 The proof domain becomes owned by the new substrate. The legacy path stops
 owning it.
+
+When the future HTTP/admin transport lands, it should reuse the same
+`go/internal/status` reader/report seam validated in the CLI slice rather than
+introducing a second status projection or transport-specific status path.
 
 ### Phase 4: Legacy retirement
 

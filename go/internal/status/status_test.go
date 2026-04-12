@@ -1,12 +1,82 @@
 package status_test
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/status"
 )
+
+func TestLoadReportBuildsProjectionFromReader(t *testing.T) {
+	t.Parallel()
+
+	reader := &fakeReader{
+		snapshot: status.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			GenerationCounts: []status.NamedCount{
+				{Name: "active", Count: 2},
+			},
+			Queue: status.QueueSnapshot{
+				Outstanding:          2,
+				InFlight:             1,
+				OldestOutstandingAge: 30 * time.Second,
+			},
+		},
+	}
+	asOf := time.Date(2026, 4, 12, 12, 0, 0, 0, time.FixedZone("EDT", -4*60*60))
+
+	report, err := status.LoadReport(context.Background(), reader, asOf, status.DefaultOptions())
+	if err != nil {
+		t.Fatalf("LoadReport() error = %v, want nil", err)
+	}
+
+	if got := reader.asOf; !got.Equal(asOf.UTC()) {
+		t.Fatalf("LoadReport() reader asOf = %v, want %v", got, asOf.UTC())
+	}
+	if report.Health.State != "progressing" {
+		t.Fatalf("LoadReport().Health.State = %q, want %q", report.Health.State, "progressing")
+	}
+	if report.AsOf != reader.snapshot.AsOf {
+		t.Fatalf("LoadReport().AsOf = %v, want %v", report.AsOf, reader.snapshot.AsOf)
+	}
+}
+
+func TestLoadReportRequiresReader(t *testing.T) {
+	t.Parallel()
+
+	_, err := status.LoadReport(
+		context.Background(),
+		nil,
+		time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+		status.DefaultOptions(),
+	)
+	if err == nil {
+		t.Fatal("LoadReport() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "reader is required") {
+		t.Fatalf("LoadReport() error = %q, want mention of missing reader", err)
+	}
+}
+
+func TestLoadReportPropagatesReaderErrors(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("boom")
+	reader := &fakeReader{err: wantErr}
+
+	_, err := status.LoadReport(
+		context.Background(),
+		reader,
+		time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+		status.DefaultOptions(),
+	)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("LoadReport() error = %v, want wrapped %v", err, wantErr)
+	}
+}
 
 func TestBuildReportClassifiesProgressingQueue(t *testing.T) {
 	t.Parallel()
@@ -63,6 +133,21 @@ func TestBuildReportClassifiesProgressingQueue(t *testing.T) {
 	if got := report.StageSummaries[1].Claimed; got != 1 {
 		t.Fatalf("BuildReport().StageSummaries[1].Claimed = %d, want 1", got)
 	}
+}
+
+type fakeReader struct {
+	snapshot status.RawSnapshot
+	err      error
+	asOf     time.Time
+}
+
+func (r *fakeReader) ReadStatusSnapshot(_ context.Context, asOf time.Time) (status.RawSnapshot, error) {
+	r.asOf = asOf
+	if r.err != nil {
+		return status.RawSnapshot{}, r.err
+	}
+
+	return r.snapshot, nil
 }
 
 func TestBuildReportClassifiesStalledBacklog(t *testing.T) {

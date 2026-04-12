@@ -6,6 +6,15 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
+// ContextRunner blocks until the parent process context is canceled.
+type ContextRunner struct{}
+
+// Run blocks until the process context is canceled.
+func (ContextRunner) Run(ctx context.Context) error {
+	<-ctx.Done()
+	return nil
+}
+
 // Lifecycle is the minimal start-run-stop surface shared by the bootstrap
 // lane.
 type Lifecycle struct {
@@ -37,8 +46,7 @@ func (l Lifecycle) Start(context.Context) error {
 
 // Run blocks until the process context is canceled.
 func (l Lifecycle) Run(ctx context.Context) error {
-	<-ctx.Done()
-	return nil
+	return ContextRunner{}.Run(ctx)
 }
 
 // Stop performs shutdown hooks for the service.

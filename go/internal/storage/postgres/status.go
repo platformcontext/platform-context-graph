@@ -101,6 +101,12 @@ func NewStatusStore(queryer Queryer) StatusStore {
 // ReadRawSnapshot returns the raw aggregate snapshot needed by the operator
 // status surface.
 func (s StatusStore) ReadRawSnapshot(ctx context.Context, asOf time.Time) (statuspkg.RawSnapshot, error) {
+	return s.ReadStatusSnapshot(ctx, asOf)
+}
+
+// ReadStatusSnapshot returns the raw aggregate snapshot needed by the shared
+// operator status surface.
+func (s StatusStore) ReadStatusSnapshot(ctx context.Context, asOf time.Time) (statuspkg.RawSnapshot, error) {
 	if s.queryer == nil {
 		return statuspkg.RawSnapshot{}, fmt.Errorf("queryer is required")
 	}

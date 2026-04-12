@@ -129,7 +129,7 @@ func (r *Runtime) RunOnce(ctx context.Context, now time.Time, max int) (RunRepor
 		}
 
 		r.markRunning(position)
-		result, err := r.execute(ctx, intent)
+		result, err := r.Execute(ctx, intent)
 		if err != nil {
 			r.markFailed(position, now, "execution failed", err.Error())
 			report.Failed++
@@ -164,6 +164,11 @@ func (r *Runtime) RunOnce(ctx context.Context, now time.Time, max int) (RunRepor
 	report.FinishedAt = now
 
 	return report, nil
+}
+
+// Execute runs one reducer intent through its registered handler.
+func (r *Runtime) Execute(ctx context.Context, intent Intent) (Result, error) {
+	return r.execute(ctx, intent)
 }
 
 // Stats snapshots the queue and domain state.

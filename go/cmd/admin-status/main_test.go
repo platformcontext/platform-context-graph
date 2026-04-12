@@ -1,0 +1,115 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
+)
+
+func TestRenderStatusOutputsTextFromSharedStatusReport(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	reader := &fakeReader{
+		snapshot: statuspkg.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			Queue: statuspkg.QueueSnapshot{
+				Outstanding:          2,
+				InFlight:             1,
+				OldestOutstandingAge: 45 * time.Second,
+			},
+		},
+	}
+
+	err := renderStatus(
+		context.Background(),
+		[]string{"--format=text"},
+		stdout,
+		stderr,
+		reader,
+		func() time.Time {
+			return time.Date(2026, 4, 12, 12, 0, 0, 0, time.FixedZone("EDT", -4*60*60))
+		},
+	)
+	if err != nil {
+		t.Fatalf("renderStatus() error = %v, want nil", err)
+	}
+	if !reader.asOf.Equal(time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC)) {
+		t.Fatalf("renderStatus() reader asOf = %v, want UTC timestamp", reader.asOf)
+	}
+	if got := stdout.String(); !strings.Contains(got, "Health: progressing") {
+		t.Fatalf("renderStatus() stdout = %q, want health summary", got)
+	}
+}
+
+func TestRenderStatusOutputsJSONFromSharedStatusReport(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	reader := &fakeReader{
+		snapshot: statuspkg.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+		},
+	}
+
+	err := renderStatus(
+		context.Background(),
+		[]string{"--format=json"},
+		stdout,
+		stderr,
+		reader,
+		func() time.Time {
+			return time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC)
+		},
+	)
+	if err != nil {
+		t.Fatalf("renderStatus() error = %v, want nil", err)
+	}
+	if got := stdout.String(); !strings.Contains(got, "\"health\"") {
+		t.Fatalf("renderStatus() stdout = %q, want json payload", got)
+	}
+}
+
+func TestRenderStatusPropagatesReaderErrors(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	wantErr := errors.New("boom")
+
+	err := renderStatus(
+		context.Background(),
+		nil,
+		stdout,
+		stderr,
+		&fakeReader{err: wantErr},
+		func() time.Time {
+			return time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC)
+		},
+	)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("renderStatus() error = %v, want wrapped %v", err, wantErr)
+	}
+}
+
+type fakeReader struct {
+	snapshot statuspkg.RawSnapshot
+	err      error
+	asOf     time.Time
+}
+
+func (r *fakeReader) ReadStatusSnapshot(_ context.Context, asOf time.Time) (statuspkg.RawSnapshot, error) {
+	r.asOf = asOf
+	if r.err != nil {
+		return statuspkg.RawSnapshot{}, r.err
+	}
+
+	return r.snapshot, nil
+}

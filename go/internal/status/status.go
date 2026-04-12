@@ -3,6 +3,7 @@
 package status
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -63,6 +64,11 @@ type RawSnapshot struct {
 	Queue            QueueSnapshot
 }
 
+// Reader loads the raw status snapshot from an underlying storage backend.
+type Reader interface {
+	ReadStatusSnapshot(context.Context, time.Time) (RawSnapshot, error)
+}
+
 // Options controls operator-health projection behavior.
 type Options struct {
 	StallAfter  time.Duration
@@ -104,6 +110,21 @@ func DefaultOptions() Options {
 		StallAfter:  10 * time.Minute,
 		DomainLimit: 5,
 	}
+}
+
+// LoadReport reads one snapshot through the shared reader contract and
+// projects it into an operator-facing report.
+func LoadReport(ctx context.Context, reader Reader, asOf time.Time, opts Options) (Report, error) {
+	if reader == nil {
+		return Report{}, fmt.Errorf("status reader is required")
+	}
+
+	raw, err := reader.ReadStatusSnapshot(ctx, asOf.UTC())
+	if err != nil {
+		return Report{}, fmt.Errorf("read status snapshot: %w", err)
+	}
+
+	return BuildReport(raw, opts), nil
 }
 
 // BuildReport projects one raw substrate snapshot into an operator-facing

@@ -1,8 +1,11 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"testing"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
@@ -30,8 +33,17 @@ func TestNewWiresBootstrapForService(t *testing.T) {
 		t.Fatalf("Config.MetricsAddr = %q, want %q", got.Config.MetricsAddr, "0.0.0.0:9464")
 	}
 
-	if got.Lifecycle.ServiceName != "collector-git" {
-		t.Fatalf("Lifecycle.ServiceName = %q, want %q", got.Lifecycle.ServiceName, "collector-git")
+	lifecycle, ok := got.Lifecycle.(runtime.Lifecycle)
+	if !ok {
+		t.Fatalf("Lifecycle type = %T, want runtime.Lifecycle", got.Lifecycle)
+	}
+
+	if lifecycle.ServiceName != "collector-git" {
+		t.Fatalf("Lifecycle.ServiceName = %q, want %q", lifecycle.ServiceName, "collector-git")
+	}
+
+	if _, ok := got.Runner.(runtime.ContextRunner); !ok {
+		t.Fatalf("Runner type = %T, want runtime.ContextRunner", got.Runner)
 	}
 }
 
@@ -59,4 +71,76 @@ func TestNewWiresObservabilityContract(t *testing.T) {
 	if telemetry.MetricDimensionKeys()[0] != telemetry.MetricDimensionScopeID {
 		t.Fatalf("telemetry contract was mutated through bootstrap seam")
 	}
+}
+
+func TestRunStartsLifecycleRunsServiceAndStopsLifecycle(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &stubLifecycle{}
+	runner := &stubRunner{}
+
+	app := Application{
+		Lifecycle: lifecycle,
+		Runner:    runner,
+	}
+
+	if err := app.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	if got, want := lifecycle.startCalls, 1; got != want {
+		t.Fatalf("lifecycle start calls = %d, want %d", got, want)
+	}
+	if got, want := runner.runCalls, 1; got != want {
+		t.Fatalf("runner run calls = %d, want %d", got, want)
+	}
+	if got, want := lifecycle.stopCalls, 1; got != want {
+		t.Fatalf("lifecycle stop calls = %d, want %d", got, want)
+	}
+}
+
+func TestRunReturnsRunnerErrorAfterStoppingLifecycle(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("runner failed")
+	lifecycle := &stubLifecycle{}
+	runner := &stubRunner{runErr: wantErr}
+
+	app := Application{
+		Lifecycle: lifecycle,
+		Runner:    runner,
+	}
+
+	if err := app.Run(context.Background()); !errors.Is(err, wantErr) {
+		t.Fatalf("Run() error = %v, want %v", err, wantErr)
+	}
+
+	if got, want := lifecycle.stopCalls, 1; got != want {
+		t.Fatalf("lifecycle stop calls = %d, want %d", got, want)
+	}
+}
+
+type stubLifecycle struct {
+	startCalls int
+	stopCalls  int
+}
+
+func (l *stubLifecycle) Start(context.Context) error {
+	l.startCalls++
+	return nil
+}
+
+func (l *stubLifecycle) Stop(context.Context) error {
+	l.stopCalls++
+	return nil
+}
+
+type stubRunner struct {
+	runCalls int
+	runErr   error
+}
+
+func (r *stubRunner) Run(context.Context) error {
+	r.runCalls++
+	return r.runErr
 }

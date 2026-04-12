@@ -81,6 +81,13 @@ The rewrite must deliver all of the following:
 - provider-native identity whenever the provider gives us a stable identifier
 - strong priorities on accuracy, performance, stability, scalability, telemetry, tracing, and logging
 
+For the current rewrite slice, the operator-status work is intentionally split
+into two stages:
+
+- implement `go/internal/status` as the storage-agnostic reader/report seam
+  that both the CLI now and future HTTP/admin handlers can share
+- defer the actual HTTP/admin transport mount to a later slice
+
 ## Non-Goals
 
 This rewrite does not try to do everything at once.
@@ -183,6 +190,11 @@ flowchart LR
 | Source projector | materialize source-local truth for a scope generation |
 | Reducer | update shared canonical truth for cross-source or cross-scope domains |
 | API / MCP | read canonical truth first, with evidence and freshness on demand |
+
+The operator-status report should not live behind a separate admin service or a
+new transport surface. Instead, `go/internal/status` should remain the shared
+reader/report seam that the CLI renders now and the existing API runtime can
+mount later.
 
 ## Scope-First Ingestion
 

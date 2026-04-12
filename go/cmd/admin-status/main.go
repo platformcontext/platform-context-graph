@@ -32,14 +32,6 @@ func run(
 	stderr io.Writer,
 	getenv func(string) string,
 ) error {
-	flags := flag.NewFlagSet("admin-status", flag.ContinueOnError)
-	flags.SetOutput(stderr)
-
-	format := flags.String("format", defaultFormat, "output format: text or json")
-	if err := flags.Parse(args); err != nil {
-		return err
-	}
-
 	dsn := factStoreDSN(getenv)
 	if dsn == "" {
 		return fmt.Errorf("set PCG_FACT_STORE_DSN, PCG_CONTENT_STORE_DSN, or PCG_POSTGRES_DSN")
@@ -58,13 +50,37 @@ func run(
 		return fmt.Errorf("ping postgres: %w", err)
 	}
 
-	store := postgres.NewStatusStore(postgres.SQLQueryer{DB: db})
-	raw, err := store.ReadRawSnapshot(ctx, time.Now().UTC())
+	return renderStatus(
+		ctx,
+		args,
+		stdout,
+		stderr,
+		postgres.NewStatusStore(postgres.SQLQueryer{DB: db}),
+		func() time.Time { return time.Now().UTC() },
+	)
+}
+
+func renderStatus(
+	ctx context.Context,
+	args []string,
+	stdout io.Writer,
+	stderr io.Writer,
+	reader statuspkg.Reader,
+	now func() time.Time,
+) error {
+	flags := flag.NewFlagSet("admin-status", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+
+	format := flags.String("format", defaultFormat, "output format: text or json")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	report, err := statuspkg.LoadReport(ctx, reader, now(), statuspkg.DefaultOptions())
 	if err != nil {
 		return err
 	}
 
-	report := statuspkg.BuildReport(raw, statuspkg.DefaultOptions())
 	switch strings.ToLower(strings.TrimSpace(*format)) {
 	case "text", "":
 		_, err = fmt.Fprintln(stdout, statuspkg.RenderText(report))

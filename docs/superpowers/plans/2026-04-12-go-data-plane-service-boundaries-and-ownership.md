@@ -60,6 +60,11 @@ schema/
 - `go/internal/reducer/` owns cross-source and cross-scope reconciliation only.
 - `go/internal/graph/` and `go/internal/content/` own canonical write adapters,
   not source parsing or reducer policy.
+- `go/internal/status/` owns the storage-agnostic operator-status reader/report
+  seam shared by CLI now and HTTP/admin handlers later.
+- `go/internal/storage/postgres/` may implement the status reader against SQL,
+  but it must not absorb report projection, rendering, or future transport
+  concerns.
 - `go/internal/compatibility/pythonbridge/` is the only allowed home for
   temporary bridge code.
 
@@ -79,6 +84,7 @@ These areas should stay stable during early implementation:
 | Runtime bootstrap | `go/go.mod`, `go/cmd/`, `go/internal/app/`, `go/internal/runtime/`, `go/internal/telemetry/` |
 | Scope and generation | `go/internal/scope/`, `schema/data-plane/postgres/` |
 | Facts and queue | `go/internal/facts/`, `go/internal/queue/`, `go/internal/storage/postgres/` |
+| Operator status | `go/internal/status/`, `go/cmd/admin-status/`, storage-specific readers under `go/internal/storage/` |
 | Projector | `go/internal/projector/`, `go/internal/graph/`, `go/internal/content/` |
 | Reducer | `go/internal/reducer/`, reducer-domain packages under `go/internal/reducer/` |
 | Compatibility bridge | `go/internal/compatibility/pythonbridge/` and minimal touched bridge points in Python |
@@ -93,6 +99,9 @@ These areas should stay stable during early implementation:
   packages.
 - No worker should add new long-lived code to legacy finalize paths without an
   explicit cutover exception.
+- Operator-status work should prepare `go/internal/status` as the shared
+  reader/report seam before any future API/admin transport is added, not create
+  a second transport-specific status path.
 
 ## Handoff Requirement
 
