@@ -6,17 +6,22 @@ import (
 	"fmt"
 	"time"
 
-	pythonbridge "github.com/platformcontext/platform-context-graph/go/internal/compatibility/pythonbridge"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 )
 
 // Source yields one collected scope generation at a time for durable commit.
-type Source = pythonbridge.Source
+type Source interface {
+	Next(context.Context) (CollectedGeneration, bool, error)
+}
 
 // CollectedGeneration is one repo-scoped source generation gathered by the
 // collector boundary.
-type CollectedGeneration = pythonbridge.CollectedGeneration
+type CollectedGeneration struct {
+	Scope      scope.IngestionScope
+	Generation scope.ScopeGeneration
+	Facts      []facts.Envelope
+}
 
 // Committer owns the collector durable write boundary.
 type Committer interface {

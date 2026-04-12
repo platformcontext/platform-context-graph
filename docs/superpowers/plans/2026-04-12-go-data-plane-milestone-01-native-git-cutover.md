@@ -301,10 +301,15 @@ Milestone-complete validation should also include:
   `content_entity` facts
 - Go projector and content writer now persist `content_entities`
   correctly from bridge facts
+- narrowed Python snapshot bridge now transports repo parse snapshots and content
+  entries without owning final fact envelopes
+- `collector-git` now uses a native Go `GitSource` that builds scope,
+  generation, repository, file, content, content-entity, and
+  `shared_followup` facts
 
 ### In Flight
 
-- milestone execution model is now being documented through this plan
+- local runtime proof for the native `collector-git` path
 
 ### Remaining
 
@@ -319,13 +324,15 @@ Remaining effort:
 
 #### Workstream B
 
-- replace Python bridge authority with native Go collector fact emission
-- narrow bridge usage until it is no longer required for Git correctness
+- replace Python snapshot transport with native Go repo selection and parse
+  execution
+- retire the legacy fact-shaped Python bridge after the runtime proof path is
+  established
 - prove native collector output in the real local runtime loop
 
 Remaining effort:
 
-- `Large`
+- `Medium`
 
 #### Workstream C
 

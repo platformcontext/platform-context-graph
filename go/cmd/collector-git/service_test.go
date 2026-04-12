@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	pythonbridge "github.com/platformcontext/platform-context-graph/go/internal/compatibility/pythonbridge"
+	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
@@ -30,9 +30,9 @@ func TestBuildCollectorServiceUsesIngestionStoreBoundary(t *testing.T) {
 	if service.Source == nil {
 		t.Fatal("buildCollectorService() source = nil, want non-nil")
 	}
-	if _, ok := service.Source.(*pythonbridge.BufferedSource); !ok {
+	if _, ok := service.Source.(*collector.GitSource); !ok {
 		t.Fatalf(
-			"buildCollectorService() source type = %T, want *pythonbridge.BufferedSource",
+			"buildCollectorService() source type = %T, want *collector.GitSource",
 			service.Source,
 		)
 	}

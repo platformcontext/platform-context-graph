@@ -22,8 +22,9 @@ func buildCollectorService(
 	}
 
 	return collector.Service{
-		Source: &pythonbridge.BufferedSource{
-			Runner: pythonbridge.GitCollectorRunner{
+		Source: &collector.GitSource{
+			Component: "collector-git",
+			Runner: pythonbridge.GitSnapshotRunner{
 				PythonExecutable: getenv("PCG_PYTHON_EXECUTABLE"),
 				RepoRoot:         repoRoot,
 				Env:              environ(),
