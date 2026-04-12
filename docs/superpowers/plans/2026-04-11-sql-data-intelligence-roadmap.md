@@ -247,6 +247,93 @@ Status on this branch:
   ownership, contracts, governance metadata, downstream impact counts, and
   sample impacted entities
 
+## MCP Persona Workflows
+
+These workflows are the practical reason this branch exists. The parser and
+graph work matter only if they improve the answers MCP can give to data-heavy
+questions through `resolve_entity`, `get_entity_context`,
+`get_repository_context`, `get_repository_story`, and `find_change_surface`.
+
+### DBA workflows
+
+- What breaks if this table or column changes?
+  Start from a `data_asset` or `data_column` and use `find_change_surface` to
+  see downstream semantic fields, dashboards, and data-quality checks.
+- Which warehouse assets are actually hot versus only declared in code?
+  Use `get_entity_context` or `get_repository_context` to inspect replay-backed
+  observed-usage signals such as hot assets and low-use assets.
+- Who owns this protected column and how is it governed?
+  Use `get_entity_context` on a `data_column` to surface owner names, teams,
+  contracts, sensitivity, protection state, and `MASKS`-backed governance
+  context.
+
+### ETL and data-engineering workflows
+
+- Does declared lineage match observed warehouse usage?
+  Use `get_repository_context` and `get_repository_story` to compare declared
+  `ASSET_DERIVES_FROM` dependencies against observed `RUNS_QUERY_AGAINST`
+  history.
+- Which downstream quality checks are tied to this dataset or column?
+  Use `find_change_surface` to follow `ASSERTS_QUALITY_ON` edges into failing
+  or high-severity checks before changing upstream transforms.
+- Why is this model still partial?
+  Use `get_entity_context` on an `analytics_model` to inspect parse state,
+  confidence, unresolved reasons, and sample unresolved expressions.
+
+### Analytics-engineering workflows
+
+- What compiled SQL produced this model or field?
+  Use `get_entity_context` on an `analytics_model` to inspect materialization,
+  compiled artifact path, and unresolved-gap detail from the checked-in replay
+  corpora.
+- How was this derived column transformed?
+  Use `get_entity_context` on a `data_column` to surface preserved
+  `transform_kind` and `transform_expression` summaries for supported compiled
+  lineage.
+- Which dashboards or semantic fields depend on this warehouse column?
+  Use `find_change_surface` or repository story/context surfaces to walk from
+  warehouse columns into semantic fields and dashboard consumers.
+
+### Platform-team workflows
+
+- Can MCP resolve data-native things directly, not only repos and workloads?
+  `resolve_entity` now accepts data-native IDs and ranked matches for
+  `data_asset`, `data_column`, `analytics_model`, `query_execution`,
+  `dashboard_asset`, and `data_quality_check`.
+- Can one repo story summarize the data posture of a service or analytics repo?
+  `get_repository_context` and `get_repository_story` now summarize compiled
+  lineage coverage, warehouse replay usage, BI/semantic consumers, governance,
+  and quality overlays in one response.
+- Can impact answers classify risk instead of only counting dependents?
+  `find_change_surface` now distinguishes additive, breaking, quality-risk,
+  governance-sensitive, and informational outcomes for data-native entities.
+
+## Remaining Work and Effort
+
+Assumption for sizing below: one focused engineer already familiar with the
+current PCG query and graph architecture. Estimates exclude release and deploy
+overhead.
+
+| Work item | Why it matters | Rough effort |
+| --- | --- | --- |
+| Templated SQL and macro resolution | Biggest remaining trust gap for dbt-style analytics repos; reduces partial lineage from unresolved Jinja and package macros. | Large, about 2-3 weeks |
+| Deeper compiled SQL semantics | Improves column-lineage fidelity for harder cases such as unions, nested subqueries, richer window logic, and aggregate semantics. | Large, about 2-4 weeks |
+| Real-repo data-intelligence validation corpus | Moves this branch from strong fixture confidence to stronger pre-image regression coverage on realistic local repos. | Medium, about 1-1.5 weeks |
+| Warehouse adapter realism beyond replay | Needed before claiming production-grade DBA utility; likely starts with richer replay evidence and may end with one live adapter behind guarded config. | Extra large, about 3-5 weeks |
+| BI and semantic adapter breadth | Extends the current first-slice dashboard and semantic coverage into broader downstream consumer systems and richer field mappings. | Large, about 2-3 weeks |
+| Governance and contract depth | Adds richer policy, masking, ownership, and contract semantics beyond the first protected-column overlay and `MASKS` edge. | Medium, about 1-2 weeks |
+| MCP persona polish | Turns the existing graph and query surface into easier day-to-day workflows through better prompts, examples, and response shaping. | Medium, about 1 week |
+
+### Recommended next sequence
+
+1. Templated SQL and macro resolution.
+2. Deeper compiled SQL semantics.
+3. Real-repo data-intelligence validation corpus.
+4. Warehouse adapter realism beyond replay.
+5. BI and semantic adapter breadth.
+6. Governance and contract depth.
+7. MCP persona polish.
+
 ## Local Validation
 
 ### Foundation gate
