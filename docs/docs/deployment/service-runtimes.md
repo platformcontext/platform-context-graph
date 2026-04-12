@@ -49,6 +49,9 @@ Current rewrite status:
 - `go/internal/status/` owns the shared reader/report seam
 - `go/cmd/admin-status/` renders that report through the local CLI
 - `go/internal/status/http.go` provides the reusable HTTP transport adapter
+- `go/internal/runtime/admin.go` provides the shared runtime probe and admin
+  route mount for `/healthz`, `/readyz`, optional `/metrics`, and optional
+  `/admin/status`
 - the actual runtime mount stays a separate slice so we do not mix transport
   wiring with report semantics
 

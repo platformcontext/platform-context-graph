@@ -198,6 +198,8 @@ Every long-running Go service must have a clear operator surface that answers:
 - how much work is queued, running, succeeded, and failed
 - whether the reported state is live or inferred
 - what an operator should inspect next when the service is unhealthy
+- which shared probe and admin routes expose that state:
+  `/healthz`, `/readyz`, optional `/metrics`, and optional `/admin/status`
 
 The exact transport may vary by phase, but the contract must stay shared. The
 CLI and future API/admin endpoints should render the same underlying service

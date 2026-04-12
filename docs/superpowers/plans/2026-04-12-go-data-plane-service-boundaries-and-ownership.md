@@ -51,7 +51,7 @@ schema/
 - `proto/` owns schema contracts and generated compatibility inputs.
 - `go/cmd/` owns service entrypoints only.
 - `go/internal/runtime/` owns shared process bootstrap, config, lifecycle, and
-  dependency wiring.
+  dependency wiring, including the shared probe/admin route mount.
 - `go/internal/scope/` owns scope and generation semantics.
 - `go/internal/facts/` owns fact envelopes and normalization helpers.
 - `go/internal/queue/` owns durable work-item and reducer-intent queue
@@ -102,6 +102,10 @@ These areas should stay stable during early implementation:
 - Operator-status work should prepare `go/internal/status` as the shared
   reader/report seam before any future API/admin transport is added, not create
   a second transport-specific status path.
+- Runtime bootstrap work should keep `go/internal/runtime/admin.go` as the
+  shared home for probe and admin route mounting rather than letting each
+  service create bespoke `healthz`, `readyz`, `/metrics`, or `/admin/status`
+  route wiring.
 
 ## Collector Authoring Contract
 
