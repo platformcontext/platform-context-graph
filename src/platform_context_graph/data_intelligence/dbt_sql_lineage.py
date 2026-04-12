@@ -6,6 +6,8 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from .dbt_sql_identifiers import unqualified_identifiers
+
 _SELECT_CLAUSE_RE = re.compile(
     r"\bselect\b(?P<select>.*?)\bfrom\b", re.IGNORECASE | re.DOTALL
 )
@@ -293,11 +295,14 @@ def _lineage_for_projection(
     source_columns: list[str] = []
     unresolved_references: list[dict[str, str]] = []
     seen_columns: set[str] = set()
+    matched_unqualified_identifiers: set[str] = set()
 
     for reference in _QUALIFIED_REFERENCE_RE.finditer(expression):
         alias = reference.group("alias")
         column = reference.group("column")
         binding = relation_bindings.get(alias)
+        matched_unqualified_identifiers.add(alias)
+        matched_unqualified_identifiers.add(column)
 
         resolved_columns = _resolve_reference_columns(
             binding,
@@ -323,9 +328,27 @@ def _lineage_for_projection(
             seen_columns.add(source_column)
             source_columns.append(source_column)
 
+    for identifier in unqualified_identifiers(
+        expression,
+        matched_identifiers=matched_unqualified_identifiers,
+    ):
+        resolved_columns = _resolve_unqualified_reference_columns(
+            identifier,
+            relation_bindings=relation_bindings,
+            model_name=model_name,
+        )
+        if isinstance(resolved_columns, dict):
+            unresolved_references.append(resolved_columns)
+            continue
+        for source_column in resolved_columns:
+            if source_column in seen_columns:
+                continue
+            seen_columns.add(source_column)
+            source_columns.append(source_column)
+
     if output_column is None and source_columns:
         output_column = source_columns[0].rsplit(".", maxsplit=1)[-1]
-    if output_column is not None:
+    if output_column is not None and source_columns:
         column_lineage.append(
             ColumnLineage(
                 output_column=output_column.strip(),
@@ -396,6 +419,48 @@ def _resolve_reference_columns(
             "reason": "cte_column_not_resolved",
         }
     return source_columns
+
+
+def _resolve_unqualified_reference_columns(
+    identifier: str,
+    *,
+    relation_bindings: Mapping[str, _RelationBinding],
+    model_name: str,
+) -> tuple[str, ...] | dict[str, str]:
+    """Resolve one bare identifier when it maps to a unique visible source."""
+
+    candidates: dict[tuple[str, ...], tuple[str, ...]] = {}
+    for binding in relation_bindings.values():
+        resolved_columns = _binding_columns_for_identifier(binding, identifier)
+        if resolved_columns:
+            candidates.setdefault(tuple(resolved_columns), tuple(resolved_columns))
+
+    if not candidates:
+        return {
+            "expression": identifier,
+            "model_name": model_name,
+            "reason": "unqualified_column_reference_not_resolved",
+        }
+    if len(candidates) > 1:
+        return {
+            "expression": identifier,
+            "model_name": model_name,
+            "reason": "unqualified_column_reference_ambiguous",
+        }
+    return next(iter(candidates.values()))
+
+
+def _binding_columns_for_identifier(
+    binding: _RelationBinding,
+    identifier: str,
+) -> tuple[str, ...]:
+    """Return resolved source columns for one identifier within one binding."""
+
+    if binding.asset_name is not None:
+        if identifier not in binding.column_names:
+            return ()
+        return (f"{binding.asset_name}.{identifier}",)
+    return tuple(binding.column_lineage.get(identifier, ()))
 
 
 def _implicit_output_column(expression: str) -> str | None:

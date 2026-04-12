@@ -52,6 +52,9 @@ Status on this branch:
   replay fixture
 - simple CTE-backed compiled models now propagate renamed final projections
   back to base source columns in the checked-in dbt replay fixture
+- unqualified columns now resolve through one visible source or CTE binding,
+  and ambiguous bare references surface an explicit lineage gap instead of a
+  silent empty result
 - analytics-model entity context now exposes compiled-lineage coverage state,
   confidence, materialization, projection count, and unresolved reasons and
   expressions
