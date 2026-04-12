@@ -408,6 +408,68 @@ def test_content_entity_snapshots_ignore_non_canonical_domain_type_fields():
     assert result["target"]["type"] == "content_entity"
 
 
+def test_data_asset_ids_work_with_generic_impact_queries():
+    """Canonical data-asset IDs should participate in generic impact queries."""
+
+    def entity_lookup(_query, **kwargs):
+        entity_id = kwargs["id"]
+        if entity_id == "data-asset:warehouse:finance.revenue":
+            return MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": entity_id,
+                        "name": "finance.revenue",
+                        "type": "data_asset",
+                        "path": "/tmp/analytics/models/finance/revenue.sql",
+                    }
+                )
+            )
+        return MockResult(
+            single_record=MockRecord(
+                {
+                    "id": entity_id,
+                    "name": "Revenue Overview",
+                    "type": "dashboard_asset",
+                    "path": "/tmp/analytics/dashboards/revenue_overview.json",
+                }
+            )
+        )
+
+    db = make_mock_db(
+        {
+            "WHERE n.id = $id": entity_lookup,
+            "WHERE source.id = $id OR target.id = $id": MockResult(
+                records=[
+                    {
+                        "source": "data-asset:warehouse:finance.revenue",
+                        "source_type": "data_asset",
+                        "target": "dashboard-asset:finance:revenue-overview",
+                        "target_type": "dashboard_asset",
+                        "type": "POWERS",
+                        "confidence": 0.96,
+                        "reason": "Revenue dashboard is sourced from the finance.revenue data asset",
+                        "evidence": [
+                            {
+                                "source": "bi-replay",
+                                "detail": "dashboard revenue_overview depends on finance.revenue",
+                                "weight": 0.96,
+                            }
+                        ],
+                    }
+                ]
+            ),
+        }
+    )
+
+    result = find_change_surface(db, target="data-asset:warehouse:finance.revenue")
+
+    assert result["target"]["id"] == "data-asset:warehouse:finance.revenue"
+    assert result["target"]["type"] == "data_asset"
+    assert result["impacted"][0]["entity"]["id"] == (
+        "dashboard-asset:finance:revenue-overview"
+    )
+
+
 def test_find_change_surface_ignores_db_edges_without_canonical_endpoints():
     db = make_mock_db(
         {

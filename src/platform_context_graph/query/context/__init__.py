@@ -11,6 +11,7 @@ from ..story_documentation import (
 )
 from ..story import build_workload_story_response
 from .content_entity import content_entity_context
+from .data_entity import data_entity_context
 from .database import db_workload_context
 from .fixture import fixture_entity_context
 from .support import load_fixture_graph, parse_workload_id
@@ -180,6 +181,17 @@ def _entity_context(
         )
     if entity_id.startswith("content-entity:"):
         return content_entity_context(database, entity_id=entity_id)
+    if entity_id.startswith(
+        (
+            "data-asset:",
+            "data-column:",
+            "analytics-model:",
+            "query-execution:",
+            "dashboard-asset:",
+            "data-quality-check:",
+        )
+    ):
+        return data_entity_context(database, entity_id=entity_id)
     if entity_id.startswith("repository:"):
         from .. import repositories as repository_queries
 

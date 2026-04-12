@@ -129,6 +129,48 @@ def db_fetch_entity(database: Any, entity_id: str) -> dict[str, Any] | None:
             "RETURN coalesce(n.uid, n.id) as id, n.name as name, "
             "'content_entity' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
         )
+    elif entity_id.startswith("data-asset:"):
+        query = (
+            "MATCH (n:DataAsset) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'data_asset' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
+        )
+    elif entity_id.startswith("data-column:"):
+        query = (
+            "MATCH (n:DataColumn) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'data_column' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
+        )
+    elif entity_id.startswith("analytics-model:"):
+        query = (
+            "MATCH (n:AnalyticsModel) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'analytics_model' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
+        )
+    elif entity_id.startswith("query-execution:"):
+        query = (
+            "MATCH (n:QueryExecution) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'query_execution' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
+        )
+    elif entity_id.startswith("dashboard-asset:"):
+        query = (
+            "MATCH (n:DashboardAsset) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'dashboard_asset' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
+        )
+    elif entity_id.startswith("data-quality-check:"):
+        query = (
+            "MATCH (n:DataQualityCheck) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'data_quality_check' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
+        )
     elif entity_id.startswith("file:"):
         path = _file_path(entity_id)
         if path is None:

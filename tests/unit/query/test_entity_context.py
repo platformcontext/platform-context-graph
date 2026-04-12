@@ -191,3 +191,45 @@ def test_get_entity_context_supports_content_entities(monkeypatch):
     assert validated.entity.type == "content_entity"
     assert validated.repositories[0].id == "repository:r_ab12cd34"
     assert result["relative_path"] == "src/payments.py"
+
+
+def test_get_entity_context_supports_data_assets() -> None:
+    """Entity context should support generic data-intelligence entities."""
+
+    db = make_mock_db(
+        {
+            "MATCH (entity)\n            WHERE entity.id = $entity_id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "data-asset:warehouse:finance.revenue",
+                        "name": "finance.revenue",
+                        "type": "data_asset",
+                        "path": "/srv/repos/analytics/models/finance/revenue.sql",
+                        "repo_id": "repository:r_analytics",
+                        "relative_path": "models/finance/revenue.sql",
+                    }
+                )
+            ),
+            "WHERE r.id = $repo_id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "repository:r_analytics",
+                        "name": "analytics-platform",
+                        "path": "/srv/repos/analytics-platform",
+                        "local_path": "/srv/repos/analytics-platform",
+                        "repo_slug": "platformcontext/analytics-platform",
+                        "remote_url": "https://github.com/platformcontext/analytics-platform",
+                        "has_remote": True,
+                    }
+                )
+            ),
+        }
+    )
+
+    result = get_entity_context(db, entity_id="data-asset:warehouse:finance.revenue")
+    validated = EntityContextResponse.model_validate(result)
+
+    assert validated.entity.id == "data-asset:warehouse:finance.revenue"
+    assert validated.entity.type == "data_asset"
+    assert validated.repositories[0].id == "repository:r_analytics"
+    assert result["relative_path"] == "models/finance/revenue.sql"

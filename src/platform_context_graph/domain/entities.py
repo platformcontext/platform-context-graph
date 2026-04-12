@@ -29,6 +29,12 @@ class EntityType(str, Enum):
 
     repository = "repository"
     content_entity = "content_entity"
+    data_asset = "data_asset"
+    data_column = "data_column"
+    analytics_model = "analytics_model"
+    query_execution = "query_execution"
+    dashboard_asset = "dashboard_asset"
+    data_quality_check = "data_quality_check"
     file = "file"
     workload = "workload"
     workload_instance = "workload_instance"

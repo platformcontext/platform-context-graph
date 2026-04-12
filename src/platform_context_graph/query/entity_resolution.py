@@ -12,7 +12,11 @@ from ..domain import (
 )
 from ..observability import trace_query
 from ..repository_identity import repository_metadata
-from .entity_resolution_database import db_content_entities, db_workload_entities
+from .entity_resolution_database import (
+    db_content_entities,
+    db_data_entities,
+    db_workload_entities,
+)
 from .entity_resolution_support import (
     build_match,
     entity_matches_filters,
@@ -196,6 +200,55 @@ def _db_content_entity_matches(
     return {"matches": matches[:limit]}
 
 
+def _db_data_entity_matches(
+    database: Any,
+    *,
+    query: str,
+    allowed_types: set[EntityType],
+    repo_id: str | None,
+    exact: bool,
+    limit: int,
+) -> dict[str, Any]:
+    """Resolve generic data-intelligence entities against the live database."""
+
+    data_entity_types = {
+        EntityType.data_asset,
+        EntityType.data_column,
+        EntityType.analytics_model,
+        EntityType.query_execution,
+        EntityType.dashboard_asset,
+        EntityType.data_quality_check,
+    }
+    if allowed_types and not allowed_types.intersection(data_entity_types):
+        return {"matches": []}
+
+    matches: list[dict[str, Any]] = []
+    for entity in db_data_entities(database, query=query, repo_id=repo_id):
+        if not entity_matches_filters(
+            entity,
+            allowed_types=allowed_types,
+            allowed_kinds=set(),
+            environment=None,
+            repo_id=repo_id,
+        ):
+            continue
+        score, source, matched_value = score_match(entity, query=query, exact=exact)
+        if score <= 0:
+            continue
+        matches.append(
+            build_match(
+                entity,
+                score=score,
+                source=source,
+                matched_value=matched_value,
+                graph=None,
+                query=query,
+            )
+        )
+    matches.sort(key=lambda item: (-item["score"], item["ref"]["id"]))
+    return {"matches": matches[:limit]}
+
+
 def resolve_entity(
     database: Any,
     *,
@@ -264,10 +317,19 @@ def resolve_entity(
                 exact=exact,
                 limit=limit,
             )
+            data_entity_matches = _db_data_entity_matches(
+                database,
+                query=query,
+                allowed_types=allowed_types,
+                repo_id=repo_id,
+                exact=exact,
+                limit=limit,
+            )
             matches = (
                 repo_matches["matches"]
                 + workload_matches["matches"]
                 + content_entity_matches["matches"]
+                + data_entity_matches["matches"]
             )
             matches.sort(key=lambda item: (-item["score"], item["ref"]["id"]))
             return {"matches": matches[:limit]}

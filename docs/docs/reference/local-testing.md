@@ -142,6 +142,47 @@ For deployed environments, `pcg workspace status --service-url ...` will also
 surface the live `shared_projection_tuning` recommendation whenever shared
 follow-up backlog is present.
 
+## Data Intelligence Foundation Gate
+
+Use this gate when a change touches the vendor-neutral data-intelligence core,
+canonical data entity types, or SQL/data impact-query surfacing.
+
+### Current branch coverage
+
+The current foundation slice proves:
+
+- canonical data-native entity types in the query/domain model
+- entity resolution for `data_asset`, `data_column`, `analytics_model`,
+  `query_execution`, `dashboard_asset`, and `data_quality_check`
+- generic entity context for vendor-neutral data entities
+- impact-query compatibility for data-asset and dashboard-style IDs
+- plugin registration foundations for future warehouse and BI replay adapters
+
+### Fast foundation gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/query/test_entity_resolution.py \
+  tests/unit/query/test_entity_context.py \
+  tests/unit/query/test_change_surface.py \
+  tests/unit/data_intelligence/test_plugins.py -q
+```
+
+### SQL + data-query regression gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/parsers/test_sql_parser.py \
+  tests/unit/parsers/test_python_sql_mappings.py \
+  tests/unit/parsers/test_go_sql_extraction.py \
+  tests/unit/relationships/test_sql_links.py \
+  tests/unit/query/test_change_surface.py \
+  tests/unit/mcp/test_ecosystem_sql_blast_radius.py -q
+```
+
+Future replay-backed fixture groups for compiled analytics, warehouse history,
+and BI downstreams belong in this section once those adapters are implemented.
+
 ## Recommended Test Order
 
 ### 1. Run the smallest targeted test first
