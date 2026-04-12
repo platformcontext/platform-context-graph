@@ -24,37 +24,65 @@ The immediate goal in Phase 3 is to make the system easier to operate and trust:
 
 ## Next phase
 
-### Phase 4: Backend And Scale Decision
+### Phase 4: Go Data-Plane Rewrite
 
-Use the new facts-first telemetry to decide what actually limits scale.
+Replace the current Python write path with a schema-first Go data plane.
 
-- measure graph write contention
-- measure Postgres fact-store and queue pressure
-- measure resolution-engine throughput and saturation
-- decide whether Neo4j remains the right backend
-- evaluate alternatives only with real performance evidence
+- introduce scope-first ingestion contracts
+- add first-class ingestion scopes and scope generations
+- move collector output into typed facts and queueable change units
+- split source-local projection from shared cross-source reduction
+- keep the API, MCP, and CLI read-only over canonical state
+- keep the current facts-first behavior as the historical baseline while the
+  new runtime lands
 
-Why it comes before the next collector:
+Why it comes next:
 
-- it is better to understand scaling limits before adding another major source
-- the new telemetry should drive the backend discussion instead of assumptions
+- the current write path is the main architectural bottleneck for future scale
+- AWS, Kubernetes, and data/ETL collectors need a substrate that is not
+  repository-shaped
+- the new design is the best place to lock down accuracy, stability, telemetry,
+  tracing, and logging before collector count grows
 
-## After that
+The rewrite contract for this phase is captured in:
+
+- [Architecture](architecture.md)
+- [Architecture Decision Records](adrs/index.md)
+
+## After That
 
 ### Phase 5: Multi-Collector Expansion
 
-After resolution maturity and backend clarity, add the next collector.
+After the Go data plane is in place, add new collectors without changing the
+core platform contract.
 
-- likely start with AWS
-- plug the collector into the same facts-first path
-- extend canonical identity and relationship resolution across sources
-- validate code -> IaC -> cloud -> documentation graph flows
+- start with the next source family, likely AWS
+- add Kubernetes and other infrastructure collectors on the same scope model
+- keep Git, cloud, and data sources aligned through shared reducers
+- validate code -> IaC -> cloud -> workload -> data graph flows end to end
 
 Why it comes later:
 
-- the collector model is cleaner once resolution is stronger
-- backend decisions will be better informed before expanding write volume
-- the next collector should build on a stable operational foundation
+- collectors should plug into a stable substrate, not define the substrate
+- the rewrite should settle the platform contract before write volume expands
+- a shared scope/generation model is the right base for enterprise-scale growth
+
+### Phase 6: Backend And Scale Validation
+
+Use the rewritten data plane and the first multi-collector workloads to measure
+what actually limits scale.
+
+- measure canonical graph write contention
+- measure fact-store and queue pressure
+- measure reducer throughput and saturation
+- decide whether the backend mix still fits the workload
+- evaluate alternatives only with real performance evidence
+
+Why it still matters:
+
+- the rewrite should give us reliable numbers instead of guesses
+- backend decisions are better after the new write path and multiple collectors
+  are operating on the same contract
 
 ## Longer-term
 

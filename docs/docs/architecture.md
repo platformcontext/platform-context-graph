@@ -18,6 +18,13 @@ partitioned follow-up domains keyed by stable lock identifiers. That preserves
 commit-worker throughput without letting concurrent writers fight over the same
 dense shared nodes.
 
+That runtime is the historical baseline for the current branch. The next
+architecture phase keeps the same correctness goals, but it moves the write
+path into a schema-first Go data plane built around scoped ingestion, snapshot
+generations, source-local projectors, and shared reducers. The goal is to let
+Git, AWS, Kubernetes, and future collectors all feed one canonical knowledge
+graph without inheriting Git-shaped storage or finalization assumptions.
+
 That split means steady-state health needs two different backlog views:
 
 - the fact work queue tells you whether repository projection work is arriving,
@@ -47,6 +54,49 @@ flowchart LR
   F --> H["Postgres content store"]
   I["API / MCP"] --> G
   I --> H
+```
+
+## Target Data Plane
+
+```mermaid
+flowchart LR
+  subgraph Sources["Collector services"]
+    G["Git collector"]
+    A["AWS collector"]
+    K["Kubernetes collector"]
+    F["Future collectors"]
+  end
+
+  subgraph Scope["Scope and generation layer"]
+    S["Ingestion scopes"]
+    SG["Scope generations"]
+  end
+
+  subgraph GoPlane["Go data plane"]
+    T["Typed facts and work items"]
+    P["Source-local projectors"]
+    Q["Reducer-intent queue"]
+    R["Domain reducers"]
+  end
+
+  subgraph Canonical["Canonical state"]
+    C["Neo4j canonical graph"]
+    D["Postgres content store"]
+  end
+
+  G --> S
+  A --> S
+  K --> S
+  F --> S
+  S --> SG
+  SG --> T
+  T --> P
+  P --> Q
+  Q --> R
+  R --> C
+  R --> D
+  C --> API["API / MCP / CLI reads"]
+  D --> API
 ```
 
 ## Deployed Control Plane
@@ -96,6 +146,16 @@ For the current Git cutover, the indexing coordinator can still drive the same
 resolution path in-process so one indexing run completes deterministically even
 without a separate runtime hop.
 
+That is the current operating baseline, not the destination. In the target
+architecture:
+
+- collectors own source discovery and raw normalization
+- the Go data plane owns scoped facts, queueing, and snapshot generations
+- source-local projectors own repository-, account-, or cluster-scoped graph
+  materialization
+- reducers own shared cross-source correlation
+- the API, MCP, and CLI stay read-only over canonical state
+
 Status surfaces can report `awaiting_shared_projection` while authoritative
 shared follow-up remains pending for an accepted repository generation.
 
@@ -118,6 +178,16 @@ for those gauges:
 
 That keeps the architecture moving forward with parallelism while preserving the
 phase-1 goal of reducing dense-node conflict on shared writes.
+
+## Related Rewrite Records
+
+The Go data-plane rewrite has a locked decision set that complements this public
+architecture page:
+
+- [Architecture Decision Records](adrs/index.md)
+- [Go Data Plane in a Monorepo](adrs/2026-04-12-go-data-plane-monorepo.md)
+- [Scope-First Ingestion](adrs/2026-04-12-scope-first-ingestion.md)
+- [Reducer Intent Architecture](adrs/2026-04-12-reducer-intent-architecture.md)
 
 ## Recovery And Explainability
 
@@ -144,9 +214,24 @@ That lets operators answer:
 | Resolution Engine | queue draining, projection, retries, replay, recovery |
 | Bootstrap Index | one-shot initial indexing in local/full-stack workflows |
 
+Target-state ownership after the rewrite:
+
+| Runtime | Owns |
+| --- | --- |
+| Collector services | Source-specific discovery and normalized fact emission |
+| Go scope layer | Ingestion scopes, scope generations, and change-unit routing |
+| Go projector services | Source-local graph materialization |
+| Go reducer services | Cross-source canonical correlation and shared graph writes |
+| API | HTTP and MCP serving, graph reads, content reads, admin surface |
+| Bootstrap Index | One-shot initial indexing and replay orchestration |
+
 The content store is owned by the projection path, not by the raw parser. The
 ingester emits facts; the resolution-engine turns those facts into canonical
 graph and content state.
+
+In the rewritten data plane, the resolution-engine is the projection and
+reduction runtime, not the place where parser, collector, or source-specific
+logic keeps accumulating.
 
 ## Observability Model
 

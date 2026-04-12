@@ -80,6 +80,11 @@ nav:
     - Language Support Maturity: languages/support-maturity.md
     - PHP Parser: languages/php.md
   - Project:
+    - Architecture Decisions:
+      - Overview: adrs/index.md
+      - Go Data Plane in a Monorepo: adrs/2026-04-12-go-data-plane-monorepo.md
+      - Scope-First Ingestion: adrs/2026-04-12-scope-first-ingestion.md
+      - Reducer Intent Architecture: adrs/2026-04-12-reducer-intent-architecture.md
     - Terraform Providers:
       - Overview: guides/terraform-providers/index.md
       - Adding Providers: guides/terraform-providers/adding-providers.md
