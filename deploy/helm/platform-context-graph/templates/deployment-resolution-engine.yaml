@@ -58,6 +58,7 @@ spec:
             - name: NEO4J_URI
               value: {{ .Values.neo4j.uri | quote }}
             {{- include "pcg.renderContentStoreEnv" . | nindent 12 }}
+            {{- include "pcg.renderConnectionTuningEnv" .Values.resolutionEngine.connectionTuning | nindent 12 }}
             {{- include "pcg.renderOtelEnv" (dict "Values" .Values "component" "resolution-engine") | nindent 12 }}
             {{- include "pcg.renderPrometheusEnv" . | nindent 12 }}
             - name: NEO4J_USERNAME

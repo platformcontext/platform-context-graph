@@ -51,6 +51,19 @@ apiAuth:
 api:
   replicas: 1
   revisionHistoryLimit: 3
+  connectionTuning:
+    postgres:
+      maxOpenConns: ""
+      maxIdleConns: ""
+      connMaxLifetime: ""
+      connMaxIdleTime: ""
+      pingTimeout: ""
+    neo4j:
+      maxConnectionPoolSize: ""
+      maxConnectionLifetime: ""
+      connectionAcquisitionTimeout: ""
+      socketConnectTimeout: ""
+      verifyTimeout: ""
   resources:
     requests:
       cpu: 500m
@@ -63,6 +76,19 @@ resolutionEngine:
   enabled: true
   replicas: 1
   revisionHistoryLimit: 3
+  connectionTuning:
+    postgres:
+      maxOpenConns: ""
+      maxIdleConns: ""
+      connMaxLifetime: ""
+      connMaxIdleTime: ""
+      pingTimeout: ""
+    neo4j:
+      maxConnectionPoolSize: ""
+      maxConnectionLifetime: ""
+      connectionAcquisitionTimeout: ""
+      socketConnectTimeout: ""
+      verifyTimeout: ""
   resources:
     requests:
       cpu: 500m
@@ -86,6 +112,19 @@ exposure:
 ingester:
   replicas: 1
   revisionHistoryLimit: 3
+  connectionTuning:
+    postgres:
+      maxOpenConns: ""
+      maxIdleConns: ""
+      connMaxLifetime: ""
+      connMaxIdleTime: ""
+      pingTimeout: ""
+    neo4j:
+      maxConnectionPoolSize: ""
+      maxConnectionLifetime: ""
+      connectionAcquisitionTimeout: ""
+      socketConnectTimeout: ""
+      verifyTimeout: ""
   persistence:
     enabled: true
     existingClaim: ""

@@ -185,9 +185,10 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert (
         worker_statefulset["spec"]["serviceName"] == "platform-context-graph-ingester"
     )
-    assert worker_statefulset["spec"]["volumeClaimTemplates"][0]["metadata"][
-        "name"
-    ] == "data"
+    assert (
+        worker_statefulset["spec"]["volumeClaimTemplates"][0]["metadata"]["name"]
+        == "data"
+    )
     assert api_deployment["spec"]["revisionHistoryLimit"] == 3
     assert resolution_engine_deployment["spec"]["revisionHistoryLimit"] == 3
     assert worker_statefulset["spec"]["revisionHistoryLimit"] == 3
@@ -251,8 +252,7 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     assert "PCG_REPOS_DIR" in worker_env_names
     assert "/data" not in api_volume_mounts
     assert (
-        resolution_engine_env_items["PCG_RUNTIME_ROLE"]["value"]
-        == "resolution-engine"
+        resolution_engine_env_items["PCG_RUNTIME_ROLE"]["value"] == "resolution-engine"
     )
     assert "PCG_API_KEY" not in resolution_engine_env_items
     assert "/data" not in resolution_engine_volume_mounts
@@ -835,6 +835,77 @@ def test_chart_renders_content_store_envs_for_all_runtime_containers() -> None:
         assert env_by_name["PCG_POSTGRES_DSN"].startswith("postgresql://")
 
 
+def test_chart_renders_component_scoped_connection_tuning_envs() -> None:
+    docs = _render_chart(
+        "--set-string",
+        "api.connectionTuning.postgres.maxOpenConns=31",
+        "--set-string",
+        "api.connectionTuning.neo4j.maxConnectionPoolSize=45",
+        "--set-string",
+        "resolutionEngine.connectionTuning.postgres.connMaxIdleTime=7m",
+        "--set-string",
+        "resolutionEngine.connectionTuning.neo4j.verifyTimeout=11s",
+        "--set-string",
+        "ingester.connectionTuning.postgres.pingTimeout=9s",
+        "--set-string",
+        "ingester.connectionTuning.neo4j.connectionAcquisitionTimeout=15s",
+    )
+    api_deployment = next(
+        doc
+        for doc in docs
+        if doc["kind"] == "Deployment"
+        and doc["metadata"]["name"] == "platform-context-graph-api"
+    )
+    resolution_engine_deployment = next(
+        doc
+        for doc in docs
+        if doc["kind"] == "Deployment"
+        and doc["metadata"]["name"] == "platform-context-graph-resolution-engine"
+    )
+    ingester_statefulset = next(doc for doc in docs if doc["kind"] == "StatefulSet")
+
+    api_env_by_name = {
+        env["name"]: env.get("value", "")
+        for env in api_deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+        if "name" in env
+    }
+    resolution_engine_env_by_name = {
+        env["name"]: env.get("value", "")
+        for env in resolution_engine_deployment["spec"]["template"]["spec"][
+            "containers"
+        ][0]["env"]
+        if "name" in env
+    }
+    ingester_env_by_name = {
+        env["name"]: env.get("value", "")
+        for env in ingester_statefulset["spec"]["template"]["spec"]["containers"][0][
+            "env"
+        ]
+        if "name" in env
+    }
+
+    assert api_env_by_name["PCG_POSTGRES_MAX_OPEN_CONNS"] == "31"
+    assert api_env_by_name["PCG_NEO4J_MAX_CONNECTION_POOL_SIZE"] == "45"
+    assert "PCG_POSTGRES_CONN_MAX_IDLE_TIME" not in api_env_by_name
+
+    assert resolution_engine_env_by_name["PCG_POSTGRES_CONN_MAX_IDLE_TIME"] == "7m"
+    assert resolution_engine_env_by_name["PCG_NEO4J_VERIFY_TIMEOUT"] == "11s"
+    assert "PCG_POSTGRES_MAX_OPEN_CONNS" not in resolution_engine_env_by_name
+
+    assert ingester_env_by_name["PCG_POSTGRES_PING_TIMEOUT"] == "9s"
+    assert ingester_env_by_name["PCG_NEO4J_CONNECTION_ACQUISITION_TIMEOUT"] == "15s"
+    assert "PCG_NEO4J_VERIFY_TIMEOUT" not in ingester_env_by_name
+
+
+def test_minimal_manifest_exposes_connection_tuning_defaults() -> None:
+    configmap = (MINIMAL_MANIFEST_DIR / "configmap.yaml").read_text()
+
+    assert "PCG_POSTGRES_MAX_OPEN_CONNS" in configmap
+    assert "PCG_POSTGRES_CONN_MAX_IDLE_TIME" in configmap
+    assert "PCG_NEO4J_MAX_CONNECTION_POOL_SIZE" in configmap
+    assert "PCG_NEO4J_VERIFY_TIMEOUT" in configmap
+
+
 def test_argocd_base_values_include_external_content_store_and_repository_rules() -> (
     None
 ):
@@ -948,7 +1019,6 @@ def test_checked_in_mcp_example_uses_compose_service_runtime() -> None:
     assert server["command"] == "sh"
     assert server["args"] == [
         "-lc",
-        "cd <REPO_ROOT> && "
-        "docker-compose exec -T platform-context-graph pcg mcp start",
+        "cd <REPO_ROOT> && docker-compose exec -T platform-context-graph pcg mcp start",
     ]
     assert "env" not in server
