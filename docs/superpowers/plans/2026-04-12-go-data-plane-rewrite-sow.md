@@ -10,18 +10,17 @@
 
 **Primary design constraint:** accuracy first, then performance, then stability, then scalability. Telemetry, tracing, and logging are not add-ons; they are acceptance criteria.
 
-**Concurrency rule:** use channels and goroutines where they improve bounded
-in-process work, but keep cross-service handoffs durable, replayable, and
-operator-visible.
+**Concurrency rule:** use channels and goroutines where they improve bounded in-process work, but keep cross-service handoffs durable, replayable, and operator-visible.
 
 ## Companion Execution Documents
 
-Use these documents together with this SOW before parallel implementation
-begins:
+Use these documents together with this SOW before parallel implementation begins:
 
 - [Rewrite Documentation Index](2026-04-12-go-data-plane-doc-set-index.md)
 - [Service Boundaries And Ownership](2026-04-12-go-data-plane-service-boundaries-and-ownership.md)
 - [Contract Freeze Plan](2026-04-12-go-data-plane-contract-freeze-plan.md)
+- [Milestone Operating Model](2026-04-12-go-data-plane-milestone-operating-model.md)
+- [Milestone 1: Native Git Cutover And Operability](2026-04-12-go-data-plane-milestone-01-native-git-cutover.md)
 - [Parallel Execution Plan](2026-04-12-go-data-plane-parallel-execution-plan.md)
 - [Validation And Cutover Plan](2026-04-12-go-data-plane-validation-and-cutover-plan.md)
 - [ADR Index](../../docs/adrs/index.md)
@@ -55,9 +54,7 @@ The intended service boundaries are:
 
 The rewrite is successful only when the system can support separate collector services without requiring a full re-index for every repo or cloud resource change.
 
-Every material architecture change must also update a repo-hosted end-to-end
-traversal map that shows how a bounded work unit crosses collector, projector,
-reducer, and canonical write stages.
+Every material architecture change must also update a repo-hosted end-to-end traversal map that shows how a bounded work unit crosses collector, projector, reducer, and canonical write stages.
 
 ---
 

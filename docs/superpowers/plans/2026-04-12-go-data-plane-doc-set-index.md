@@ -15,8 +15,10 @@ Read these documents in order before implementation work begins:
 3. [ADR Index](../../docs/adrs/index.md)
 4. [Service Boundaries And Ownership](2026-04-12-go-data-plane-service-boundaries-and-ownership.md)
 5. [Contract Freeze Plan](2026-04-12-go-data-plane-contract-freeze-plan.md)
-6. [Parallel Execution Plan](2026-04-12-go-data-plane-parallel-execution-plan.md)
-7. [Validation And Cutover Plan](2026-04-12-go-data-plane-validation-and-cutover-plan.md)
+6. [Milestone Operating Model](2026-04-12-go-data-plane-milestone-operating-model.md)
+7. [Milestone 1: Native Git Cutover And Operability](2026-04-12-go-data-plane-milestone-01-native-git-cutover.md)
+8. [Parallel Execution Plan](2026-04-12-go-data-plane-parallel-execution-plan.md)
+9. [Validation And Cutover Plan](2026-04-12-go-data-plane-validation-and-cutover-plan.md)
 
 ## Canonical Roles
 
@@ -27,6 +29,8 @@ Read these documents in order before implementation work begins:
 | ADRs | Locked design decisions and rationale |
 | Service boundaries plan | Directory ownership, runtime boundaries, and allowed write scopes |
 | Contract freeze plan | v1 contract shape and compatibility rules |
+| Milestone operating model | How rewrite milestones are decomposed, staffed, and reported |
+| Milestone plan | Current milestone workstreams, waves, effort, and remaining backlog |
 | Parallel execution plan | How multiple agents can work safely in parallel |
 | Validation and cutover plan | How the new substrate is proven and flipped into authority |
 
@@ -58,6 +62,6 @@ The documentation set is considered locked for implementation when:
 
 - the PRD and SOW are accepted for the branch
 - the ADR set covers the core architecture choices
-- the service boundaries, contract freeze, parallel execution, and validation
-  plans are present and cross-linked
+- the service boundaries, contract freeze, milestone, parallel execution, and
+  validation plans are present and cross-linked
 - future work can be assigned without guessing where logic belongs
