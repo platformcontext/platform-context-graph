@@ -326,3 +326,158 @@ def test_get_entity_context_supports_data_assets() -> None:
     assert validated.entity.type == "data_asset"
     assert validated.repositories[0].id == "repository:r_analytics"
     assert result["relative_path"] == "models/finance/revenue.sql"
+
+
+def test_get_entity_context_enriches_data_entities_with_persona_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Data-entity context should expose a compact impact and governance summary."""
+
+    db = make_mock_db(
+        {
+            "MATCH (entity)\n            WHERE entity.id = $entity_id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "data-asset:analytics.finance.daily_revenue",
+                        "name": "analytics.finance.daily_revenue",
+                        "type": "data_asset",
+                        "path": "/srv/repos/analytics/models/finance/daily_revenue.sql",
+                        "repo_id": "repository:r_analytics",
+                        "relative_path": "models/finance/daily_revenue.sql",
+                    }
+                )
+            ),
+            "WHERE r.id = $repo_id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "repository:r_analytics",
+                        "name": "analytics-platform",
+                        "path": "/srv/repos/analytics-platform",
+                        "local_path": "/srv/repos/analytics-platform",
+                        "repo_slug": "platformcontext/analytics-platform",
+                        "remote_url": "https://github.com/platformcontext/analytics-platform",
+                        "has_remote": True,
+                    }
+                )
+            ),
+        }
+    )
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.data_entity.db_fetch_entity",
+        lambda _database, _entity_id: {
+            "id": "data-asset:analytics.finance.daily_revenue",
+            "type": "data_asset",
+            "name": "analytics.finance.daily_revenue",
+            "path": "/srv/repos/analytics/models/finance/daily_revenue.sql",
+            "repo_id": "repository:r_analytics",
+            "owner_names": ["Finance Analytics"],
+            "owner_teams": ["Finance Analytics"],
+            "contract_names": ["daily_revenue_contract"],
+            "contract_levels": ["gold"],
+            "change_policies": ["additive"],
+        },
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.data_entity.db_fetch_edges",
+        lambda _database, _entity_id: [
+            {
+                "from": "analytics-model:finance:daily_revenue_model",
+                "to": "data-asset:analytics.finance.daily_revenue",
+                "type": "COMPILES_TO",
+                "confidence": 0.94,
+                "reason": "Compiled SQL produces the daily revenue asset",
+                "evidence": [],
+            },
+            {
+                "from": "query-execution:warehouse:query-123",
+                "to": "data-asset:analytics.finance.daily_revenue",
+                "type": "RUNS_QUERY_AGAINST",
+                "confidence": 0.91,
+                "reason": "Warehouse replay observed a query against daily revenue",
+                "evidence": [],
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.data_entity.find_change_surface",
+        lambda _database, *, target, environment=None: {
+            "target": {
+                "id": target,
+                "type": "data_asset",
+                "name": "analytics.finance.daily_revenue",
+            },
+            "target_change_classification": {
+                "primary": "additive",
+                "signals": ["additive"],
+                "reasons": ["Contract change policy marks this entity as additive."],
+            },
+            "classification_summary": {
+                "highest": "quality-risk",
+                "counts": {
+                    "governance-sensitive": 0,
+                    "breaking": 0,
+                    "quality-risk": 1,
+                    "additive": 0,
+                    "informational": 2,
+                },
+            },
+            "impacted": [
+                {
+                    "entity": {
+                        "id": "data-quality-check:finance:gross-amount-non-negative",
+                        "type": "data_quality_check",
+                        "name": "gross_amount_non_negative",
+                    }
+                },
+                {
+                    "entity": {
+                        "id": "dashboard-asset:finance:revenue-overview",
+                        "type": "dashboard_asset",
+                        "name": "Revenue Overview",
+                    }
+                },
+                {
+                    "entity": {
+                        "id": "data-column:semantic.finance.revenue_semantic.gross_amount",
+                        "type": "data_column",
+                        "name": "semantic.finance.revenue_semantic.gross_amount",
+                    }
+                },
+            ],
+        },
+    )
+
+    result = get_entity_context(
+        db,
+        entity_id="data-asset:analytics.finance.daily_revenue",
+    )
+
+    assert result["lineage_evidence"] == {
+        "status": "combined",
+        "evidence_sources": ["declared_lineage", "observed_lineage"],
+    }
+    assert result["data_intelligence"]["change_classification"]["primary"] == "additive"
+    assert result["data_intelligence"]["highest_downstream_classification"] == (
+        "quality-risk"
+    )
+    assert result["data_intelligence"]["downstream_counts"] == {
+        "analytics_model_count": 0,
+        "data_asset_count": 0,
+        "data_column_count": 1,
+        "query_execution_count": 0,
+        "dashboard_asset_count": 1,
+        "data_quality_check_count": 1,
+    }
+    assert result["data_intelligence"]["ownership"]["owner_teams"] == [
+        "Finance Analytics"
+    ]
+    assert result["data_intelligence"]["contracts"]["contract_levels"] == ["gold"]
+    assert [item["id"] for item in result["data_intelligence"]["sample_impacted_entities"]] == [
+        "dashboard-asset:finance:revenue-overview",
+        "data-quality-check:finance:gross-amount-non-negative",
+        "data-column:semantic.finance.revenue_semantic.gross_amount",
+    ]
+    assert "1 dashboard" in result["data_intelligence"]["summary"]
+    assert "1 quality check" in result["data_intelligence"]["summary"]
+    assert "owners: Finance Analytics" in result["data_intelligence"]["summary"]

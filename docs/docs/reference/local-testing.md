@@ -182,6 +182,9 @@ The current foundation slice proves:
   `DECLARES_CONTRACT_FOR`
 - governance overlays stamped onto `DataAsset` and `DataColumn` targets for
   owner, contract, sensitivity, and protected-field metadata
+- persona-friendly `get_entity_context` summaries for data-native entities,
+  including lineage evidence, change classification, ownership, contract, and
+  downstream-impact summaries
 
 ### Fast foundation gate
 

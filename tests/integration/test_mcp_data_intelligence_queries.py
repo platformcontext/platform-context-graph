@@ -6,6 +6,7 @@ import os
 
 import pytest
 
+from platform_context_graph.query.context import get_entity_context
 from platform_context_graph.query.repositories import (
     get_repository_context,
     get_repository_story,
@@ -303,3 +304,59 @@ def test_quality_replay_change_surface_reaches_failing_quality_check(
     impacted_ids = [item["entity"]["id"] for item in result["impacted"]]
 
     assert "data-quality-check:finance:gross-amount-non-negative" in impacted_ids
+
+
+def test_data_entity_context_surfaces_governance_summary_for_protected_columns(
+    indexed_ecosystems,
+) -> None:
+    """Entity context should expose ownership, contracts, and protection metadata."""
+
+    result = get_entity_context(
+        indexed_ecosystems,
+        entity_id="data-column:analytics.finance.daily_revenue.customer_email",
+    )
+
+    assert result["data_intelligence"]["change_classification"]["primary"] == (
+        "governance-sensitive"
+    )
+    assert result["data_intelligence"]["governance"] == {
+        "sensitivity": "pii",
+        "is_protected": True,
+        "protection_kind": "masked",
+    }
+    assert result["data_intelligence"]["ownership"]["owner_names"] == [
+        "Finance Analytics"
+    ]
+    assert result["data_intelligence"]["contracts"]["contract_names"] == [
+        "daily_revenue_contract"
+    ]
+    assert "owners: Finance Analytics" in result["data_intelligence"]["summary"]
+
+
+def test_data_entity_context_surfaces_downstream_consumers_for_finance_columns(
+    indexed_ecosystems,
+) -> None:
+    """Entity context should expose downstream dashboards and quality checks."""
+
+    result = get_entity_context(
+        indexed_ecosystems,
+        entity_id="data-column:analytics.finance.daily_revenue.gross_amount",
+    )
+
+    assert result["data_intelligence"]["highest_downstream_classification"] == (
+        "quality-risk"
+    )
+    assert result["data_intelligence"]["downstream_counts"][
+        "dashboard_asset_count"
+    ] >= 1
+    assert result["data_intelligence"]["downstream_counts"][
+        "data_quality_check_count"
+    ] >= 1
+    sample_ids = [
+        item["id"] for item in result["data_intelligence"]["sample_impacted_entities"]
+    ]
+    assert "data-quality-check:finance:gross-amount-non-negative" in sample_ids
+    assert (
+        "dashboard-asset:finance:revenue-overview" in sample_ids
+        or "dashboard-asset:finance:semantic-revenue-overview" in sample_ids
+    )

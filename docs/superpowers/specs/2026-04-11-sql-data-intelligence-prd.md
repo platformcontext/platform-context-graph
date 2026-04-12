@@ -247,3 +247,7 @@ This branch starts the roadmap with the generic foundation slice:
   metadata are queryable without a second lookup
 - repository context and story surfacing for owner counts, contract counts, and
   protected-column coverage
+- persona-friendly `get_entity_context` summaries for data-native entities,
+  including lineage evidence, change classification, ownership, contracts,
+  governance metadata, downstream impact counts, and sample downstream
+  consumers

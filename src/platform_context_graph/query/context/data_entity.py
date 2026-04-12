@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..impact import find_change_surface
+from ..impact.database import db_fetch_edges, db_fetch_entity
 from ...core.records import record_to_dict
 from .content_entity import _lookup_repository_ref
+from .data_entity_summary import build_data_entity_summary
 from .support import canonical_ref
 
 _DATA_ENTITY_TYPES: dict[str, str] = {
@@ -89,6 +92,13 @@ def data_entity_context(database: Any, *, entity_id: str) -> dict[str, Any]:
     repositories = (
         [_lookup_repository_ref(database, repo_id)] if isinstance(repo_id, str) else []
     )
+    entity_snapshot = db_fetch_entity(db_manager, entity_id) or {
+        "id": entity_id,
+        "type": entity_type,
+        "name": payload.get("name") or entity_id,
+        "path": payload.get("path"),
+        "repo_id": repo_id,
+    }
     entity = {
         "id": entity_id,
         "type": entity_type,
@@ -98,14 +108,25 @@ def data_entity_context(database: Any, *, entity_id: str) -> dict[str, Any]:
         entity["path"] = payload["path"]
     if payload.get("relative_path"):
         entity["relative_path"] = payload["relative_path"]
+    edges = db_fetch_edges(db_manager, entity_id)
+    change_surface = find_change_surface(db_manager, target=entity_id)
+    data_intelligence = build_data_entity_summary(
+        entity_snapshot,
+        edges=edges,
+        change_surface=change_surface,
+    )
 
-    return {
+    response = {
         "entity": canonical_ref(entity),
-        "related": [],
+        "related": list(data_intelligence["sample_impacted_entities"]),
         "repositories": [repo for repo in repositories if repo is not None],
         "relative_path": payload.get("relative_path"),
         "entity_type": payload.get("entity_type"),
+        "data_intelligence": data_intelligence,
     }
+    if data_intelligence.get("lineage_evidence") is not None:
+        response["lineage_evidence"] = data_intelligence["lineage_evidence"]
+    return response
 
 
 __all__ = ["data_entity_context"]

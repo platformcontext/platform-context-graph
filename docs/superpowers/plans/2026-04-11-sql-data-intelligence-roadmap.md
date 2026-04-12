@@ -176,6 +176,11 @@ Status on this branch:
   and protected-column coverage
 - graph-backed integration coverage for persisted governance nodes, exact
   overlay relationships, and protected-column metadata on target columns
+- `get_entity_context` for `data_asset`, `data_column`, `analytics_model`,
+  `query_execution`, `dashboard_asset`, and `data_quality_check` now returns a
+  persona-friendly summary with lineage evidence, change classification,
+  ownership, contracts, governance metadata, downstream impact counts, and
+  sample impacted entities
 
 ## Local Validation
 
