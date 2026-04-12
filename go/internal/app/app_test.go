@@ -120,6 +120,37 @@ func TestRunReturnsRunnerErrorAfterStoppingLifecycle(t *testing.T) {
 	}
 }
 
+func TestComposeLifecyclesStartsAndStopsBoth(t *testing.T) {
+	t.Parallel()
+
+	first := &stubLifecycle{}
+	second := &stubLifecycle{}
+	lifecycle := ComposeLifecycles(first, second)
+	runner := &stubRunner{}
+
+	app := Application{
+		Lifecycle: lifecycle,
+		Runner:    runner,
+	}
+
+	if err := app.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	if got, want := first.startCalls, 1; got != want {
+		t.Fatalf("first start calls = %d, want %d", got, want)
+	}
+	if got, want := second.startCalls, 1; got != want {
+		t.Fatalf("second start calls = %d, want %d", got, want)
+	}
+	if got, want := second.stopCalls, 1; got != want {
+		t.Fatalf("second stop calls = %d, want %d", got, want)
+	}
+	if got, want := first.stopCalls, 1; got != want {
+		t.Fatalf("first stop calls = %d, want %d", got, want)
+	}
+}
+
 type stubLifecycle struct {
 	startCalls int
 	stopCalls  int

@@ -52,8 +52,8 @@ Current rewrite status:
 - `go/internal/runtime/admin.go` provides the shared runtime probe and admin
   route mount for `/healthz`, `/readyz`, optional `/metrics`, and optional
   `/admin/status`
-- the actual runtime mount stays a separate slice so we do not mix transport
-  wiring with report semantics
+- hosted Go runtimes can now compose that shared admin server into their
+  lifecycle without bespoke HTTP bootstrap code
 
 ## Naming Note
 

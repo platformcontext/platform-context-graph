@@ -38,6 +38,14 @@ func run(parent context.Context) error {
 	if err != nil {
 		return err
 	}
+	adminServer, err := runtimecfg.NewStatusAdminServer(
+		service.Config,
+		postgres.NewStatusStore(postgres.SQLQueryer{DB: db}),
+	)
+	if err != nil {
+		return err
+	}
+	service.Lifecycle = app.ComposeLifecycles(service.Lifecycle, adminServer)
 
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
