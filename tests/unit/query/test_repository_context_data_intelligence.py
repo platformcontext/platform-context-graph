@@ -94,10 +94,12 @@ def test_build_repository_context_adds_data_intelligence_summary(
             "analytics_model_count": 2,
             "data_asset_count": 5,
             "data_column_count": 10,
+            "query_execution_count": 2,
             "relationship_counts": {
                 "compiles_to": 2,
                 "asset_derives_from": 5,
                 "column_derives_from": 4,
+                "runs_query_against": 4,
             },
             "parse_states": {"complete": 1, "partial": 1},
             "sample_models": [
@@ -129,7 +131,9 @@ def test_build_repository_context_adds_data_intelligence_summary(
         "compiles_to": 2,
         "asset_derives_from": 5,
         "column_derives_from": 4,
+        "runs_query_against": 4,
     }
+    assert result["data_intelligence"]["query_execution_count"] == 2
     assert result["data_intelligence"]["parse_states"] == {
         "complete": 1,
         "partial": 1,

@@ -193,3 +193,10 @@ This branch starts the roadmap with the generic foundation slice:
   `DataColumn`
 - post-commit compiled-analytics lineage materialization through the existing
   finalization flow
+- checked-in `warehouse_replay_comprehensive` replay fixture for local warehouse
+  metadata and query history
+- `WarehouseReplayPlugin` normalization into `DataAsset`, `DataColumn`, and
+  `QueryExecution`
+- exact observed `RUNS_QUERY_AGAINST` relationships from replayed query history
+- graph/content bucket registration for `QueryExecution`
+- repository context and story surfacing for replayed warehouse query counts

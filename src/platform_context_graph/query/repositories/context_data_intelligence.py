@@ -10,6 +10,7 @@ _DATA_RELATIONSHIP_FIELDS = {
     "COMPILES_TO": "compiles_to",
     "ASSET_DERIVES_FROM": "asset_derives_from",
     "COLUMN_DERIVES_FROM": "column_derives_from",
+    "RUNS_QUERY_AGAINST": "runs_query_against",
 }
 
 
@@ -23,9 +24,11 @@ def build_repository_data_intelligence_summary(
         "analytics_model_count": _count_label(session, repo, "AnalyticsModel"),
         "data_asset_count": _count_label(session, repo, "DataAsset"),
         "data_column_count": _count_label(session, repo, "DataColumn"),
+        "query_execution_count": _count_label(session, repo, "QueryExecution"),
         "relationship_counts": _relationship_counts(session, repo),
         "parse_states": _parse_state_counts(session, repo),
         "sample_models": _sample_models(session, repo),
+        "sample_queries": _sample_queries(session, repo),
         "sample_assets": _sample_assets(session, repo),
     }
     if not any(
@@ -33,6 +36,7 @@ def build_repository_data_intelligence_summary(
             summary["analytics_model_count"],
             summary["data_asset_count"],
             summary["data_column_count"],
+            summary["query_execution_count"],
         )
     ):
         return None
@@ -67,6 +71,7 @@ def _relationship_counts(session: Any, repo: dict[str, Any]) -> dict[str, int]:
             source:AnalyticsModel
             OR source:DataAsset
             OR source:DataColumn
+            OR source:QueryExecution
           )
         MATCH (source)-[rel]->()
         WHERE type(rel) IN {list(_DATA_RELATIONSHIP_FIELDS)}
@@ -132,6 +137,23 @@ def _sample_assets(session: Any, repo: dict[str, Any]) -> list[dict[str, Any]]:
         RETURN a.name AS name,
                coalesce(a.kind, 'asset') AS kind
         ORDER BY a.name
+        LIMIT 5
+        """,
+        **repository_scope(repo),
+    ).data()
+
+
+def _sample_queries(session: Any, repo: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return a compact ordered sample of repository query executions."""
+
+    return session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(q:QueryExecution)
+        WHERE {repository_scope_predicate()}
+        RETURN q.name AS name,
+               coalesce(q.status, 'unknown') AS status,
+               coalesce(q.executed_by, '') AS executed_by
+        ORDER BY q.name
         LIMIT 5
         """,
         **repository_scope(repo),

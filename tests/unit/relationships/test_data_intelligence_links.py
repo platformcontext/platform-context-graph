@@ -47,6 +47,13 @@ def test_create_all_data_intelligence_links_materializes_compiled_lineage() -> N
                     "line_number": 1,
                 },
             ],
+            "query_executions": [
+                {
+                    "name": "daily_revenue_build",
+                    "uid": "content-entity:e_query_daily_revenue_build",
+                    "line_number": 1,
+                }
+            ],
             "data_relationships": [
                 {
                     "type": "COMPILES_TO",
@@ -66,6 +73,12 @@ def test_create_all_data_intelligence_links_materializes_compiled_lineage() -> N
                     "target_name": "raw.public.orders.id",
                     "line_number": 1,
                 },
+                {
+                    "type": "RUNS_QUERY_AGAINST",
+                    "source_name": "daily_revenue_build",
+                    "target_name": "raw.public.orders",
+                    "line_number": 1,
+                },
             ],
         }
     ]
@@ -76,5 +89,6 @@ def test_create_all_data_intelligence_links_materializes_compiled_lineage() -> N
         "asset_derives_from_edges": 1,
         "column_derives_from_edges": 1,
         "compiles_to_edges": 1,
+        "runs_query_against_edges": 1,
     }
-    assert session.run.call_count == 3
+    assert session.run.call_count == 4

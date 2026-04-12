@@ -16,16 +16,19 @@ _CONTENT_ENTITY_BUCKETS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("analytics_models", ("AnalyticsModel",)),
     ("data_assets", ("DataAsset",)),
     ("data_columns", ("DataColumn",)),
+    ("query_executions", ("QueryExecution",)),
 )
 _RELATIONSHIP_SOURCE_KINDS = {
     "COMPILES_TO": ("AnalyticsModel",),
     "ASSET_DERIVES_FROM": ("DataAsset",),
     "COLUMN_DERIVES_FROM": ("DataColumn",),
+    "RUNS_QUERY_AGAINST": ("QueryExecution",),
 }
 _RELATIONSHIP_TARGET_KINDS = {
     "COMPILES_TO": ("DataAsset",),
     "ASSET_DERIVES_FROM": ("DataAsset",),
     "COLUMN_DERIVES_FROM": ("DataColumn",),
+    "RUNS_QUERY_AGAINST": ("DataAsset",),
 }
 
 

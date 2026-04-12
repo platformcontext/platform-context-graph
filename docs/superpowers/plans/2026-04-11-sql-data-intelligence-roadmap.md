@@ -66,6 +66,15 @@ Acceptance:
 - replay fixtures can materialize `DataAsset`, `DataColumn`, and
   `QueryExecution` entities locally
 
+Status on this branch:
+
+- checked-in `warehouse_replay_comprehensive` replay fixture
+- `WarehouseReplayPlugin` as the first warehouse-category replay adapter
+- `warehouse_replay.json` parsing through the JSON config lane
+- graph/content registration for `QueryExecution`
+- post-commit materialization for observed `RUNS_QUERY_AGAINST` edges
+- repository context and story summaries include warehouse query replay counts
+
 ### Milestone 4: First Warehouse Adapter
 
 Deliver:
@@ -137,6 +146,33 @@ PYTHONPATH=src uv run pytest \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/tools/test_graph_builder_schema.py -q
+```
+
+### Warehouse replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_plugins.py \
+  tests/unit/data_intelligence/test_warehouse_replay.py \
+  tests/unit/parsers/test_json_parser.py \
+  tests/unit/content/test_ingest.py \
+  tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/query/test_repository_context_data_intelligence.py \
+  tests/unit/query/test_story_data_intelligence.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_warehouse_replay_graph.py \
+  tests/integration/test_mcp_data_intelligence_queries.py -q
 ```
 
 ### Docs and quality gate

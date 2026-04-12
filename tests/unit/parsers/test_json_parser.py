@@ -365,3 +365,33 @@ class TestJSONConfigParser:
             "orders_expanded",
         ]
         assert result["data_intelligence_coverage"]["state"] == "partial"
+
+    def test_parse_warehouse_replay_json_into_data_intelligence_payload(
+        self, temp_test_dir: Path
+    ) -> None:
+        """Warehouse replay JSON should emit assets, queries, and observed edges."""
+
+        fixture_path = (
+            Path(__file__).resolve().parents[2]
+            / "fixtures"
+            / "ecosystems"
+            / "warehouse_replay_comprehensive"
+            / "warehouse_replay.json"
+        )
+        file_path = temp_test_dir / "warehouse_replay.json"
+        file_path.write_text(fixture_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+        parser = JSONConfigTreeSitterParser("json")
+        result = parser.parse(file_path)
+
+        assert [item["name"] for item in result["query_executions"]] == [
+            "daily_revenue_build",
+            "revenue_dashboard_lookup",
+        ]
+        assert any(
+            item["type"] == "RUNS_QUERY_AGAINST"
+            and item["source_name"] == "daily_revenue_build"
+            and item["target_name"] == "analytics.finance.revenue"
+            for item in result["data_relationships"]
+        )
+        assert result["data_intelligence_coverage"]["state"] == "complete"

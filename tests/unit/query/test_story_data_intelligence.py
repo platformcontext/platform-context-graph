@@ -24,10 +24,12 @@ def test_repository_story_exposes_data_intelligence_section() -> None:
                 "analytics_model_count": 2,
                 "data_asset_count": 5,
                 "data_column_count": 10,
+                "query_execution_count": 2,
                 "relationship_counts": {
                     "compiles_to": 2,
                     "asset_derives_from": 5,
                     "column_derives_from": 4,
+                    "runs_query_against": 4,
                 },
                 "parse_states": {"complete": 1, "partial": 1},
                 "sample_models": [
@@ -61,7 +63,7 @@ def test_repository_story_exposes_data_intelligence_section() -> None:
         if section["id"] == "data_intelligence"
     )
     assert data_section["summary"] == (
-        "Compiled analytics covers 2 models, 5 data assets, and 10 data columns; "
+        "Compiled analytics covers 2 models, 5 data assets, 10 data columns, and 2 warehouse queries; "
         "lineage is partial for 1 model."
     )
     assert [item["name"] for item in data_section["items"]] == [
