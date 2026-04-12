@@ -103,31 +103,43 @@ def test_normalize_dbt_manifest_extracts_static_column_lineage() -> None:
         and item["target_name"] == "raw.public.customers.segment"
         for item in report["relationships"]
     )
+    assert any(
+        item["type"] == "COLUMN_DERIVES_FROM"
+        and item["source_name"] == "analytics.public.orders_expanded.id"
+        and item["target_name"] == "raw.public.orders.id"
+        for item in report["relationships"]
+    )
+    assert any(
+        item["type"] == "COLUMN_DERIVES_FROM"
+        and item["source_name"] == "analytics.public.orders_expanded.customer_id"
+        and item["target_name"] == "raw.public.orders.customer_id"
+        for item in report["relationships"]
+    )
+    assert any(
+        item["type"] == "COLUMN_DERIVES_FROM"
+        and item["source_name"] == "analytics.public.orders_expanded.created_at"
+        and item["target_name"] == "raw.public.orders.created_at"
+        for item in report["relationships"]
+    )
 
 
-def test_normalize_dbt_manifest_surfaces_partial_lineage_gaps() -> None:
-    """Unsupported wildcard projections should remain visible as partial gaps."""
+def test_normalize_dbt_manifest_expands_known_wildcard_projections() -> None:
+    """Wildcard projections should expand when the source schema is known."""
 
     plugin = DbtCompiledSqlPlugin()
 
     report = plugin.normalize(_load_fixture())
 
     assert report["coverage"] == {
-        "confidence": 0.75,
-        "state": "partial",
-        "unresolved_references": [
-            {
-                "expression": "o.*",
-                "model_name": "orders_expanded",
-                "reason": "wildcard_projection_not_supported",
-            }
-        ],
+        "confidence": 1.0,
+        "state": "complete",
+        "unresolved_references": [],
     }
     assert [
         item["parse_state"]
         for item in report["analytics_models"]
         if item["name"] == "orders_expanded"
-    ] == ["partial"]
+    ] == ["complete"]
     assert [
         {
             "unresolved_reference_count": item["unresolved_reference_count"],
@@ -140,8 +152,8 @@ def test_normalize_dbt_manifest_surfaces_partial_lineage_gaps() -> None:
         if item["name"] == "orders_expanded"
     ] == [
         {
-            "unresolved_reference_count": 1,
-            "unresolved_reference_reasons": ["wildcard_projection_not_supported"],
-            "unresolved_reference_expressions": ["o.*"],
+            "unresolved_reference_count": 0,
+            "unresolved_reference_reasons": [],
+            "unresolved_reference_expressions": [],
         }
     ]

@@ -130,6 +130,18 @@ class TestSqlGraph:
         assert (
             _count(
                 indexed_ecosystems,
+                "MATCH (source:DataColumn {name: 'analytics.public.orders_expanded.id'})"
+                "-[:COLUMN_DERIVES_FROM]->"
+                "(target:DataColumn {name: 'raw.public.orders.id'}) "
+                "WHERE source.path CONTAINS 'analytics_compiled_comprehensive' "
+                "  AND target.path CONTAINS 'analytics_compiled_comprehensive' "
+                "RETURN count(*) as cnt",
+            )
+            == 1
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
                 "MATCH (:SqlView)-[:READS_FROM]->(:SqlTable) "
                 "RETURN count(*) as cnt",
             )

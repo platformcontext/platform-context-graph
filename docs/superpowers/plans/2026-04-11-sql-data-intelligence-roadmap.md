@@ -47,6 +47,9 @@ Status on this branch:
 - dbt-style compiled manifest normalization
 - supported-subset column lineage from compiled SQL projections
 - explicit unresolved-reference reporting for wildcard projections
+- manifest-known wildcard projections now expand into exact column lineage,
+  removing the previous `orders_expanded` partial-gap case from the checked-in
+  replay fixture
 - analytics-model entity context now exposes compiled-lineage coverage state,
   confidence, materialization, projection count, and unresolved reasons and
   expressions

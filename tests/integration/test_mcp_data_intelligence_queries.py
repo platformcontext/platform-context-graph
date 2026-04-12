@@ -28,29 +28,26 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
     )
 
     assert result["data_intelligence"]["analytics_model_count"] == 2
-    assert result["data_intelligence"]["data_asset_count"] >= 5
-    assert result["data_intelligence"]["lineage_gap_summary"] == {
-        "partial_model_count": 1,
-        "reason_counts": {
-            "wildcard_projection_not_supported": 1,
-        },
-        "sample_models": ["orders_expanded"],
-        "sample_expressions": ["o.*"],
+    assert result["data_intelligence"]["data_asset_count"] == 5
+    assert result["data_intelligence"]["data_column_count"] == 17
+    assert result["data_intelligence"]["lineage_gap_summary"] is None
+    assert result["data_intelligence"]["parse_states"] == {
+        "complete": 2,
     }
     assert result["data_intelligence"]["sample_models"][0] == {
-        "name": "orders_expanded",
-        "path": "target/compiled/jaffle_shop/models/marts/orders_expanded.sql",
-        "parse_state": "partial",
-        "confidence": 0.5,
-        "materialization": "table",
-        "unresolved_reference_count": 1,
-        "unresolved_reference_reasons": ["wildcard_projection_not_supported"],
-        "unresolved_reference_expressions": ["o.*"],
+        "name": "order_metrics",
+        "path": "target/compiled/jaffle_shop/models/marts/order_metrics.sql",
+        "parse_state": "complete",
+        "confidence": 1.0,
+        "materialization": "view",
+        "unresolved_reference_count": 0,
+        "unresolved_reference_reasons": [],
+        "unresolved_reference_expressions": [],
     }
     assert result["data_intelligence"]["relationship_counts"] == {
         "compiles_to": 2,
         "asset_derives_from": 5,
-        "column_derives_from": 6,
+        "column_derives_from": 9,
         "runs_query_against": 0,
         "powers": 0,
         "asserts_quality_on": 0,
@@ -72,13 +69,10 @@ def test_analytics_repo_story_surfaces_data_intelligence(indexed_ecosystems) -> 
         for section in result["story_sections"]
         if section["id"] == "data_intelligence"
     )
-    assert (
-        "lineage is partial for 1 model because wildcard projection not supported remains unresolved"
-        in data_section["summary"]
-    )
+    assert "lineage is complete for all indexed models" in data_section["summary"]
     assert [item["name"] for item in data_section["items"][:2]] == [
-        "orders_expanded",
         "order_metrics",
+        "orders_expanded",
     ]
     assert result["data_intelligence_overview"]["analytics_model_count"] == 2
 
@@ -387,10 +381,10 @@ def test_data_entity_context_surfaces_downstream_consumers_for_finance_columns(
     )
 
 
-def test_analytics_model_context_surfaces_partial_compiled_lineage_gaps(
+def test_analytics_model_context_surfaces_complete_compiled_lineage(
     indexed_ecosystems,
 ) -> None:
-    """Analytics-model context should explain partial compiled lineage coverage."""
+    """Analytics-model context should report complete compiled lineage coverage."""
 
     result = get_entity_context(
         indexed_ecosystems,
@@ -404,15 +398,10 @@ def test_analytics_model_context_surfaces_partial_compiled_lineage_gaps(
         "target/compiled/jaffle_shop/models/marts/orders_expanded.sql"
     )
     assert result["data_intelligence"]["lineage_coverage"] == {
-        "state": "partial",
-        "confidence": 0.5,
+        "state": "complete",
+        "confidence": 1.0,
         "materialization": "table",
         "projection_count": 2,
-        "unresolved_reference_count": 1,
-        "unresolved_reference_reasons": ["wildcard_projection_not_supported"],
-        "unresolved_reference_expressions": ["o.*"],
+        "unresolved_reference_count": 0,
     }
-    assert "compiled lineage is partial" in result["data_intelligence"]["summary"]
-    assert "wildcard projection not supported" in result["data_intelligence"][
-        "summary"
-    ]
+    assert "compiled lineage is complete" in result["data_intelligence"]["summary"]
