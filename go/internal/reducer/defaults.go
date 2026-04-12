@@ -1,7 +1,5 @@
 package reducer
 
-import "slices"
-
 // DefaultHandlers captures the reducer-owned backend adapters available for the
 // default domain catalog.
 type DefaultHandlers struct {
@@ -36,13 +34,15 @@ func NewDefaultRuntime(handlers DefaultHandlers) (*Runtime, error) {
 }
 
 func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefinition {
+	definitions := make([]DomainDefinition, 0, len(DefaultDomainDefinitions()))
 	for _, def := range DefaultDomainDefinitions() {
 		if def.Domain != DomainWorkloadIdentity {
 			continue
 		}
+
 		def.Handler = WorkloadIdentityHandler{Writer: handlers.WorkloadIdentityWriter}
-		return []DomainDefinition{def}
+		definitions = append(definitions, def)
 	}
 
-	return slices.Clip([]DomainDefinition{})
+	return definitions
 }

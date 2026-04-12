@@ -323,8 +323,8 @@ func TestBuildReportAddsFlowSummaries(t *testing.T) {
 	if got := len(report.FlowSummaries); got != 3 {
 		t.Fatalf("BuildReport().FlowSummaries len = %d, want 3", got)
 	}
-	if got := report.FlowSummaries[0]; got.Lane != "collector" || got.Source != "inferred" {
-		t.Fatalf("BuildReport().FlowSummaries[0] = %+v, want collector/inferred", got)
+	if got := report.FlowSummaries[0]; got.Lane != "collector" || got.Source != "live" {
+		t.Fatalf("BuildReport().FlowSummaries[0] = %+v, want collector/live", got)
 	}
 	if got := report.FlowSummaries[1]; got.Lane != "projector" || got.Source != "live" {
 		t.Fatalf("BuildReport().FlowSummaries[1] = %+v, want projector/live", got)
@@ -334,6 +334,12 @@ func TestBuildReportAddsFlowSummaries(t *testing.T) {
 	}
 	if !strings.Contains(report.FlowSummaries[0].Progress, "scopes active=3 pending=1") {
 		t.Fatalf("collector progress = %q, want scope totals", report.FlowSummaries[0].Progress)
+	}
+	if !strings.Contains(report.FlowSummaries[0].Backlog, "generations active=1 completed=4") {
+		t.Fatalf("collector backlog = %q, want generation totals", report.FlowSummaries[0].Backlog)
+	}
+	if strings.Contains(report.FlowSummaries[0].Backlog, "not yet wired") {
+		t.Fatalf("collector backlog = %q, want no placeholder wording", report.FlowSummaries[0].Backlog)
 	}
 	if !strings.Contains(report.FlowSummaries[1].Backlog, "queue") {
 		t.Fatalf("projector backlog = %q, want queue pressure", report.FlowSummaries[1].Backlog)

@@ -24,9 +24,9 @@ func buildFlowSummaries(
 	return []FlowSummary{
 		{
 			Lane:     "collector",
-			Source:   "inferred",
-			Progress: fmt.Sprintf("scopes %s generations %s", formatNamedTotals(scopeTotals), formatNamedTotals(generationTotals)),
-			Backlog:  "collector runtime tags not yet wired",
+			Source:   "live",
+			Progress: fmt.Sprintf("scopes %s", formatNamedTotals(scopeTotals)),
+			Backlog:  fmt.Sprintf("generations %s", formatNamedTotals(generationTotals)),
 		},
 		{
 			Lane:     "projector",

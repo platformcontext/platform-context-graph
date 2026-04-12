@@ -125,57 +125,13 @@ func (r Registry) SortedDomains() []Domain {
 	return domains
 }
 
-// DefaultDomainDefinitions returns the canonical reducer domain catalog.
+// DefaultDomainDefinitions returns the truthful default reducer domain catalog
+// for the domains implemented by the current rewrite slice.
 func DefaultDomainDefinitions() []DomainDefinition {
 	return []DomainDefinition{
 		{
 			Domain:  DomainWorkloadIdentity,
 			Summary: "resolve canonical workload identity across sources",
-			Ownership: OwnershipShape{
-				CrossSource:    true,
-				CrossScope:     true,
-				CanonicalWrite: true,
-			},
-		},
-		{
-			Domain:  DomainCloudAssetResolution,
-			Summary: "resolve canonical cloud asset identity across sources",
-			Ownership: OwnershipShape{
-				CrossSource:    true,
-				CrossScope:     true,
-				CanonicalWrite: true,
-			},
-		},
-		{
-			Domain:  DomainDeploymentMapping,
-			Summary: "resolve deployment mapping across sources",
-			Ownership: OwnershipShape{
-				CrossSource:    true,
-				CrossScope:     true,
-				CanonicalWrite: true,
-			},
-		},
-		{
-			Domain:  DomainDataLineage,
-			Summary: "resolve lineage across source-local and canonical truth",
-			Ownership: OwnershipShape{
-				CrossSource:    true,
-				CrossScope:     true,
-				CanonicalWrite: true,
-			},
-		},
-		{
-			Domain:  DomainOwnership,
-			Summary: "resolve ownership and responsibility across sources",
-			Ownership: OwnershipShape{
-				CrossSource:    true,
-				CrossScope:     true,
-				CanonicalWrite: true,
-			},
-		},
-		{
-			Domain:  DomainGovernance,
-			Summary: "resolve governance and policy attribution across sources",
 			Ownership: OwnershipShape{
 				CrossSource:    true,
 				CrossScope:     true,

@@ -60,3 +60,15 @@ func TestNewDefaultRuntimeUsesDefaultDomainHandlers(t *testing.T) {
 		t.Fatalf("runtime.Execute(governance) error = %q, want %q", got, want)
 	}
 }
+
+func TestDefaultDomainDefinitionsMatchImplementedRuntimeCatalog(t *testing.T) {
+	t.Parallel()
+
+	got := DefaultDomainDefinitions()
+	if len(got) != 1 {
+		t.Fatalf("len(DefaultDomainDefinitions()) = %d, want 1", len(got))
+	}
+	if got[0].Domain != DomainWorkloadIdentity {
+		t.Fatalf("DefaultDomainDefinitions()[0].Domain = %q, want %q", got[0].Domain, DomainWorkloadIdentity)
+	}
+}
