@@ -24,12 +24,14 @@ The checked-in OpenAPI contract for that runtime surface lives at:
 
 The shared mounted runtime contract currently covers:
 
-- `GET /healthz`
-- `GET /readyz`
-- `GET /admin/status`
+- `GET` and `HEAD` `/healthz`
+- `GET` and `HEAD` `/readyz`
+- `GET` and `HEAD` `/admin/status`
 
 `/metrics` remains runtime-specific and is mounted only when a metrics handler
 is provided by that service.
+
+Unsupported verbs return `405 Method Not Allowed` with `Allow: GET, HEAD`.
 
 ## Response Shape
 
@@ -37,10 +39,15 @@ is provided by that service.
 
 - `format=text`
 - `format=json`
+- `Accept: application/json` when `format` is omitted
+
+`HEAD /admin/status` follows the same format-selection rules as `GET`, but it
+returns headers and status code only.
 
 The JSON response follows the shared status report shape from
 `go/internal/status/`:
 
+- `as_of`
 - `health`
 - `flow`
 - `queue`
@@ -48,6 +55,16 @@ The JSON response follows the shared status report shape from
 - `generations`
 - `stages`
 - `domains`
+
+Queue entries include both a duration string and seconds value:
+
+- `oldest_outstanding_age`
+- `oldest_outstanding_age_seconds`
+
+Domain entries include both a duration string and seconds value:
+
+- `oldest_age`
+- `oldest_age_seconds`
 
 ## Runtime Ownership
 

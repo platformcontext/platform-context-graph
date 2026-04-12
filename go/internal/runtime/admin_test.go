@@ -34,6 +34,40 @@ func TestAdminMuxServesHealthz(t *testing.T) {
 	}
 }
 
+func TestAdminMuxRejectsUnsupportedProbeMethod(t *testing.T) {
+	t.Parallel()
+
+	mux := mustNewAdminMux(t, AdminMuxConfig{ServiceName: "collector-git"})
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/healthz", nil)
+
+	mux.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusMethodNotAllowed; got != want {
+		t.Fatalf("POST /healthz status = %d, want %d", got, want)
+	}
+	if got, want := recorder.Header().Get("Allow"), "GET, HEAD"; got != want {
+		t.Fatalf("POST /healthz Allow = %q, want %q", got, want)
+	}
+}
+
+func TestAdminMuxServesHeadProbeWithoutBody(t *testing.T) {
+	t.Parallel()
+
+	mux := mustNewAdminMux(t, AdminMuxConfig{ServiceName: "collector-git"})
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodHead, "/readyz", nil)
+
+	mux.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("HEAD /readyz status = %d, want %d", got, want)
+	}
+	if got := recorder.Body.String(); got != "" {
+		t.Fatalf("HEAD /readyz body = %q, want empty", got)
+	}
+}
+
 func TestAdminMuxServesReadyzFailures(t *testing.T) {
 	t.Parallel()
 

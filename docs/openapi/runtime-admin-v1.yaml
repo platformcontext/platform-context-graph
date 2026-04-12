@@ -16,6 +16,7 @@ paths:
     get:
       summary: Liveness probe
       operationId: getRuntimeHealth
+      description: Returns the runtime liveness probe body. Only `GET` and `HEAD` are supported.
       responses:
         "200":
           description: Runtime process is alive.
@@ -24,10 +25,32 @@ paths:
               schema:
                 type: string
               example: service=collector-git probe=healthz status=ok
+        "405":
+          description: Unsupported method.
+          headers:
+            Allow:
+              schema:
+                type: string
+              example: GET, HEAD
+    head:
+      summary: Liveness probe metadata
+      operationId: headRuntimeHealth
+      description: Returns the liveness probe status without a response body.
+      responses:
+        "200":
+          description: Runtime process is alive.
+        "405":
+          description: Unsupported method.
+          headers:
+            Allow:
+              schema:
+                type: string
+              example: GET, HEAD
   /readyz:
     get:
       summary: Readiness probe
       operationId: getRuntimeReadiness
+      description: Returns the runtime readiness probe body. Only `GET` and `HEAD` are supported.
       responses:
         "200":
           description: Runtime can satisfy its readiness contract.
@@ -43,10 +66,37 @@ paths:
               schema:
                 type: string
               example: "service=collector-git probe=readyz status=error error=read status snapshot: postgres unavailable"
+        "405":
+          description: Unsupported method.
+          headers:
+            Allow:
+              schema:
+                type: string
+              example: GET, HEAD
+    head:
+      summary: Readiness probe metadata
+      operationId: headRuntimeReadiness
+      description: Returns the readiness probe status without a response body.
+      responses:
+        "200":
+          description: Runtime can satisfy its readiness contract.
+        "503":
+          description: Runtime dependency check failed.
+        "405":
+          description: Unsupported method.
+          headers:
+            Allow:
+              schema:
+                type: string
+              example: GET, HEAD
   /admin/status:
     get:
       summary: Operator status report
       operationId: getRuntimeStatus
+      description: >
+        Returns the shared operator status report. When `format` is omitted, the
+        handler serves text by default unless the request `Accept` header prefers
+        `application/json`. Only `GET` and `HEAD` are supported.
       parameters:
         - in: query
           name: format
@@ -80,6 +130,13 @@ paths:
               schema:
                 type: string
               example: unsupported format "yaml"
+        "405":
+          description: Unsupported method.
+          headers:
+            Allow:
+              schema:
+                type: string
+              example: GET, HEAD
         "500":
           description: Report load or render failure.
           content:
@@ -87,6 +144,35 @@ paths:
               schema:
                 type: string
               example: "load status report: read status snapshot: postgres unavailable"
+    head:
+      summary: Operator status metadata
+      operationId: headRuntimeStatus
+      description: Returns the operator status response headers and status code without a body.
+      parameters:
+        - in: query
+          name: format
+          required: false
+          description: Response content type selection rules match `GET /admin/status`.
+          schema:
+            type: string
+            enum:
+              - text
+              - json
+            default: text
+      responses:
+        "200":
+          description: Operator-facing status report metadata.
+        "400":
+          description: Unsupported response format.
+        "405":
+          description: Unsupported method.
+          headers:
+            Allow:
+              schema:
+                type: string
+              example: GET, HEAD
+        "500":
+          description: Report load or render failure.
 components:
   schemas:
     HealthSummary:
@@ -138,6 +224,7 @@ components:
         - retrying
         - succeeded
         - failed
+        - oldest_outstanding_age
         - oldest_outstanding_age_seconds
         - overdue_claims
       properties:
@@ -155,6 +242,8 @@ components:
           type: integer
         failed:
           type: integer
+        oldest_outstanding_age:
+          type: string
         oldest_outstanding_age_seconds:
           type: number
         overdue_claims:
@@ -193,6 +282,7 @@ components:
         - outstanding
         - retrying
         - failed
+        - oldest_age
         - oldest_age_seconds
       properties:
         domain:
@@ -203,6 +293,8 @@ components:
           type: integer
         failed:
           type: integer
+        oldest_age:
+          type: string
         oldest_age_seconds:
           type: number
     StatusReport:

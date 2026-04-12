@@ -75,6 +75,29 @@ func TestHTTPHandlerRendersJSONWhenRequested(t *testing.T) {
 	}
 }
 
+func TestHTTPHandlerUsesAcceptHeaderForJSON(t *testing.T) {
+	t.Parallel()
+
+	handler := mustNewStatusHandler(t, &fakeReader{
+		snapshot: status.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+		},
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/admin/status", nil)
+	request.Header.Set("Accept", "application/json")
+
+	handler.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("ServeHTTP() status = %d, want %d", got, want)
+	}
+	if got := recorder.Header().Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("ServeHTTP() Content-Type = %q, want application/json", got)
+	}
+}
+
 func TestHTTPHandlerRejectsUnsupportedFormat(t *testing.T) {
 	t.Parallel()
 
@@ -108,6 +131,31 @@ func TestHTTPHandlerRejectsUnsupportedMethod(t *testing.T) {
 	}
 	if got, want := recorder.Header().Get("Allow"), "GET, HEAD"; got != want {
 		t.Fatalf("ServeHTTP() Allow = %q, want %q", got, want)
+	}
+}
+
+func TestHTTPHandlerSupportsHeadRequests(t *testing.T) {
+	t.Parallel()
+
+	handler := mustNewStatusHandler(t, &fakeReader{
+		snapshot: status.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+		},
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodHead, "/admin/status?format=json", nil)
+
+	handler.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("ServeHTTP() status = %d, want %d", got, want)
+	}
+	if got := recorder.Header().Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("ServeHTTP() Content-Type = %q, want application/json", got)
+	}
+	if got := recorder.Body.String(); got != "" {
+		t.Fatalf("ServeHTTP() body = %q, want empty", got)
 	}
 }
 
