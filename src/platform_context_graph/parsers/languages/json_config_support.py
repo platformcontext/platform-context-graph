@@ -6,6 +6,20 @@ import re
 from typing import Any
 
 from .cloudformation import is_cloudformation_template, parse_cloudformation_template
+from .json_data_intelligence_support import (
+    apply_bi_replay_document,
+    apply_dbt_manifest_document,
+    apply_governance_replay_document,
+    apply_quality_replay_document,
+    apply_semantic_replay_document,
+    apply_warehouse_replay_document,
+    is_bi_replay_document,
+    is_dbt_manifest_document,
+    is_governance_replay_document,
+    is_quality_replay_document,
+    is_semantic_replay_document,
+    is_warehouse_replay_document,
+)
 
 _NOISY_JSON_FILENAMES = frozenset(
     {
@@ -43,6 +57,21 @@ def build_empty_result(
         "cloudformation_resources": [],
         "cloudformation_parameters": [],
         "cloudformation_outputs": [],
+        "analytics_models": [],
+        "data_assets": [],
+        "data_columns": [],
+        "query_executions": [],
+        "dashboard_assets": [],
+        "data_quality_checks": [],
+        "data_owners": [],
+        "data_contracts": [],
+        "data_relationships": [],
+        "data_governance_annotations": [],
+        "data_intelligence_coverage": {
+            "confidence": 0.0,
+            "state": "unavailable",
+            "unresolved_references": [],
+        },
         "json_metadata": {"top_level_keys": []},
     }
 
@@ -96,6 +125,24 @@ def apply_json_document(
         result.update(
             parse_cloudformation_template(document, result["path"], 1, language_name)
         )
+        return
+    if is_dbt_manifest_document(document, filename=filename):
+        apply_dbt_manifest_document(result, document)
+        return
+    if is_warehouse_replay_document(document, filename=filename):
+        apply_warehouse_replay_document(result, document)
+        return
+    if is_bi_replay_document(document, filename=filename):
+        apply_bi_replay_document(result, document)
+        return
+    if is_semantic_replay_document(document, filename=filename):
+        apply_semantic_replay_document(result, document)
+        return
+    if is_quality_replay_document(document, filename=filename):
+        apply_quality_replay_document(result, document)
+        return
+    if is_governance_replay_document(document, filename=filename):
+        apply_governance_replay_document(result, document)
         return
 
     if should_skip_json_entities(filename):

@@ -12,6 +12,10 @@ from .story_documentation import (
     build_documentation_overview,
     summarize_documentation_overview,
 )
+from .story_data_intelligence import (
+    build_data_intelligence_story_items,
+    summarize_data_intelligence_overview,
+)
 from .story_frameworks import build_framework_story_items
 from .story_frameworks import summarize_framework_overview
 from .story_gitops import build_gitops_overview, summarize_gitops_overview
@@ -38,6 +42,7 @@ def build_repository_story_response(
     consumer_repositories = list(context.get("consumer_repositories") or [])
     deploys_from = list(context.get("deploys_from") or [])
     dependencies = list((context.get("ecosystem") or {}).get("dependencies") or [])
+    data_intelligence_overview = context.get("data_intelligence")
     limitations = list(context.get("limitations") or [])
 
     deployment_overview = build_repository_deployment_overview(context)
@@ -116,6 +121,11 @@ def build_repository_story_response(
     framework_story = summarize_framework_overview(framework_summary)
     if framework_story and framework_story not in story:
         story.append(framework_story)
+    data_story = None
+    if data_intelligence_overview:
+        data_story = summarize_data_intelligence_overview(data_intelligence_overview)
+        if data_story not in story:
+            story.append(data_story)
 
     story_sections: list[dict[str, Any]] = []
     public_hostnames = [
@@ -254,6 +264,15 @@ def build_repository_story_response(
                 items=build_framework_story_items(framework_summary),
             )
         )
+    if data_story is not None and data_intelligence_overview is not None:
+        story_sections.append(
+            story_section(
+                "data_intelligence",
+                "Data Intelligence",
+                data_story,
+                items=build_data_intelligence_story_items(data_intelligence_overview),
+            )
+        )
 
     if deploys_from or consumer_repositories or dependencies:
         dependency_summary_parts: list[str] = []
@@ -366,6 +385,7 @@ def build_repository_story_response(
             "gitops_overview": gitops_overview,
             "documentation_overview": documentation_overview,
             "support_overview": support_overview,
+            "data_intelligence_overview": data_intelligence_overview,
             "controller_overview": controller_overview,
             "runtime_overview": runtime_overview,
             "deployment_facts": deployment_facts,

@@ -353,6 +353,7 @@ class StoryResponse(BaseModel):
     deployment_facts: list[dict[str, Any]] = Field(default_factory=list)
     deployment_fact_summary: dict[str, Any] | None = None
     code_overview: dict[str, Any] | None = None
+    data_intelligence_overview: dict[str, Any] | None = None
     evidence: list[EvidenceItem] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     coverage: dict[str, Any] | None = None

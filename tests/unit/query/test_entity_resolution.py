@@ -672,3 +672,58 @@ def test_resolve_entity_supports_live_sql_columns() -> None:
         "content-entity:e_users_id"
     ]
     assert result["matches"][0]["ref"]["type"] == "content_entity"
+
+
+def test_resolve_entity_supports_live_data_native_entities() -> None:
+    """Live entity resolution should surface generic data-intelligence nodes."""
+
+    class _MockResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def data(self):
+            return self._rows
+
+    session = MagicMock()
+
+    def _run(query: str, **_kwargs):
+        if "DashboardAsset" not in query:
+            return _MockResult([])
+        return _MockResult(
+            [
+                {
+                    "id": "dashboard-asset:finance:revenue-overview",
+                    "type": "dashboard_asset",
+                    "name": "Revenue Overview",
+                    "path": None,
+                    "relative_path": "dashboards/revenue_overview.json",
+                    "repo_id": "repository:r_analytics",
+                    "repo_name": "analytics-platform",
+                    "repo_slug": "platformcontext/analytics-platform",
+                    "remote_url": "https://github.com/platformcontext/analytics-platform",
+                    "entity_type": "DashboardAsset",
+                    "aliases": ["revenue dashboard", "finance overview"],
+                }
+            ]
+        )
+
+    session.run.side_effect = _run
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+    driver = MagicMock()
+    driver.session.return_value = session
+    db = MagicMock()
+    db.get_driver.return_value = driver
+
+    result = resolve_entity(
+        db,
+        query="revenue dashboard",
+        types=["dashboard_asset"],
+        exact=False,
+        limit=5,
+    )
+
+    assert [match["ref"]["id"] for match in result["matches"]] == [
+        "dashboard-asset:finance:revenue-overview"
+    ]
+    assert result["matches"][0]["ref"]["type"] == "dashboard_asset"

@@ -142,6 +142,248 @@ For deployed environments, `pcg workspace status --service-url ...` will also
 surface the live `shared_projection_tuning` recommendation whenever shared
 follow-up backlog is present.
 
+## Data Intelligence Foundation Gate
+
+Use this gate when a change touches the vendor-neutral data-intelligence core,
+canonical data entity types, or SQL/data impact-query surfacing.
+
+### Current branch coverage
+
+The current foundation slice proves:
+
+- canonical data-native entity types in the query/domain model
+- entity resolution for `data_asset`, `data_column`, `analytics_model`,
+  `query_execution`, `dashboard_asset`, and `data_quality_check`
+- generic entity context for vendor-neutral data entities
+- impact-query compatibility for data-asset and dashboard-style IDs
+- plugin registration foundations for future warehouse and BI replay adapters
+- dbt-style compiled manifest normalization through a checked-in replay fixture
+- supported-subset compiled SQL column lineage extraction
+- explicit partial coverage reporting for remaining unsupported derived
+  expressions
+- safe scalar wrapper coverage for `upper(column)`, `coalesce(column, 'literal')`,
+  `cast(column as type)`, and `date_trunc('day', column)`
+- `manifest.json` parsing through the targeted JSON lane
+- graph/content persistence registration for `AnalyticsModel`, `DataAsset`, and
+  `DataColumn`
+- post-commit compiled-analytics lineage materialization
+- content-entity context and generic impact responses can label declared versus
+  observed lineage evidence for data-native entities
+- replay-backed dashboard normalization through `bi_replay.json`
+- graph/content persistence registration for `DashboardAsset`
+- post-commit BI downstream materialization for `POWERS`
+- replay-backed semantic normalization through `semantic_replay.json`
+- semantic datasets and fields reusing `DataAsset` and `DataColumn`
+- post-commit semantic lineage materialization for `ASSET_DERIVES_FROM` and
+  `COLUMN_DERIVES_FROM`
+- replay-backed quality normalization through `quality_replay.json`
+- graph/content persistence registration for `DataQualityCheck`
+- post-commit quality assertion materialization for `ASSERTS_QUALITY_ON`
+- replay-backed governance normalization through `governance_replay.json`
+- graph/content persistence registration for `DataOwner` and `DataContract`
+- post-commit governance materialization for `OWNS` and
+  `DECLARES_CONTRACT_FOR`
+- governance overlays stamped onto `DataAsset` and `DataColumn` targets for
+  owner, contract, sensitivity, and protected-field metadata
+- persona-friendly `get_entity_context` summaries for data-native entities,
+  including lineage evidence, change classification, ownership, contract, and
+  downstream-impact summaries
+
+### Fast foundation gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/query/test_entity_resolution.py \
+  tests/unit/query/test_entity_context.py \
+  tests/unit/query/test_change_surface.py \
+  tests/unit/data_intelligence/test_plugins.py -q
+```
+
+### SQL + data-query regression gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/parsers/test_sql_parser.py \
+  tests/unit/parsers/test_python_sql_mappings.py \
+  tests/unit/parsers/test_go_sql_extraction.py \
+  tests/unit/relationships/test_sql_links.py \
+  tests/unit/query/test_change_surface.py \
+  tests/unit/mcp/test_ecosystem_sql_blast_radius.py -q
+```
+
+### Compiled analytics replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_plugins.py \
+  tests/unit/data_intelligence/test_dbt_compiled_sql.py \
+  tests/unit/parsers/test_json_parser.py \
+  tests/unit/content/test_ingest.py \
+  tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/tools/test_graph_builder_schema.py -q
+```
+
+### Warehouse replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_plugins.py \
+  tests/unit/data_intelligence/test_warehouse_replay.py \
+  tests/unit/parsers/test_json_parser.py \
+  tests/unit/content/test_ingest.py \
+  tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/query/test_repository_context_data_intelligence.py \
+  tests/unit/query/test_story_data_intelligence.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_warehouse_replay_graph.py \
+  tests/integration/test_mcp_data_intelligence_queries.py -q
+```
+
+### BI replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_bi_replay.py \
+  tests/unit/parsers/test_json_parser.py \
+  tests/unit/content/test_ingest.py \
+  tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/query/test_repository_context_data_intelligence.py \
+  tests/unit/query/test_story_data_intelligence.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_warehouse_replay_graph.py \
+  tests/integration/test_mcp_data_intelligence_queries.py -q
+```
+
+### Semantic replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_semantic_replay.py \
+  tests/unit/parsers/test_json_parser.py \
+  tests/unit/content/test_ingest.py \
+  tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/query/test_repository_context_data_intelligence.py \
+  tests/unit/query/test_story_data_intelligence.py \
+  tests/unit/query/test_change_surface.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_warehouse_replay_graph.py \
+  tests/integration/test_mcp_data_intelligence_queries.py -q
+```
+
+### Governance replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_governance_replay.py \
+  tests/unit/parsers/test_json_governance_replay.py \
+  tests/unit/content/test_data_intelligence_ingest.py \
+  tests/unit/relationships/test_data_intelligence_governance_links.py \
+  tests/unit/query/test_repository_context_data_governance.py \
+  tests/unit/query/test_story_data_governance.py \
+  tests/unit/tools/test_graph_builder_schema.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_governance_replay_graph.py \
+  tests/integration/test_mcp_data_governance_queries.py -q
+```
+
+### Quality replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_quality_replay.py \
+  tests/unit/parsers/test_json_parser.py \
+  tests/unit/content/test_ingest.py \
+  tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/tools/test_graph_builder_schema.py \
+  tests/unit/query/test_repository_context_data_intelligence.py \
+  tests/unit/query/test_story_data_intelligence.py \
+  tests/unit/query/test_change_surface.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_warehouse_replay_graph.py \
+  tests/integration/test_mcp_data_intelligence_queries.py -q
+```
+
+### Declared vs observed reconciliation gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/query/test_repository_context_data_intelligence.py \
+  tests/unit/query/test_story_data_intelligence.py \
+  tests/unit/query/test_change_surface.py \
+  tests/unit/query/test_entity_context.py \
+  tests/unit/query/test_entity_resolution.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_sql_graph.py \
+  tests/integration/test_warehouse_replay_graph.py \
+  tests/integration/test_mcp_data_intelligence_queries.py -q
+```
+
 ## Recommended Test Order
 
 ### 1. Run the smallest targeted test first

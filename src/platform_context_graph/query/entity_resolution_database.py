@@ -360,4 +360,114 @@ def db_content_entities(
     return entities
 
 
-__all__ = ["db_content_entities", "db_workload_entities"]
+def db_data_entities(
+    database: Any,
+    *,
+    query: str,
+    repo_id: str | None,
+) -> list[dict[str, Any]]:
+    """Return generic data-intelligence entities from the live database."""
+
+    terms = _search_terms(query)
+    if not terms:
+        return []
+
+    driver = database.get_driver()
+    with driver.session() as session:
+        rows = session.run(
+            f"""
+            MATCH (entity)
+            WHERE (
+                entity:DataAsset
+                OR entity:DataColumn
+                OR entity:AnalyticsModel
+                OR entity:QueryExecution
+                OR entity:DashboardAsset
+                OR entity:DataQualityCheck
+            )
+              AND (
+                  {_name_match('entity.name')}
+                  OR {_name_match('entity.id')}
+                  OR {_name_match('entity.path')}
+                  OR ANY(term IN $terms WHERE ANY(alias IN coalesce(entity.aliases, []) WHERE toLower(alias) CONTAINS term))
+              )
+            OPTIONAL MATCH (file:File)-[:CONTAINS]->(entity)
+            OPTIONAL MATCH (repo_from_file:Repository)-[:REPO_CONTAINS]->(file)
+            OPTIONAL MATCH (repo_from_id:Repository)
+            WHERE repo_from_id.id = entity.repo_id
+            WITH entity, file, coalesce(repo_from_file, repo_from_id) as repo
+            WHERE $repo_id IS NULL OR repo.id = $repo_id OR entity.repo_id = $repo_id
+            RETURN entity.id as id,
+                   entity.name as name,
+                   entity.path as path,
+                   coalesce(entity.relative_path, file.relative_path) as relative_path,
+                   coalesce(entity.repo_id, repo.id) as repo_id,
+                   repo.name as repo_name,
+                   coalesce(repo[$repo_slug_key], '') as repo_slug,
+                   coalesce(repo[$remote_url_key], '') as remote_url,
+                   head([
+                       label IN labels(entity)
+                       WHERE label IN [
+                           'DataAsset',
+                           'DataColumn',
+                           'AnalyticsModel',
+                           'QueryExecution',
+                           'DashboardAsset',
+                           'DataQualityCheck'
+                       ]
+                       | label
+                   ]) as entity_type,
+                   coalesce(entity.aliases, []) as aliases
+            ORDER BY entity.name
+            """,
+            terms=terms,
+            repo_id=repo_id,
+            repo_slug_key="repo_slug",
+            remote_url_key="remote_url",
+        ).data()
+
+    label_to_type = {
+        "DataAsset": "data_asset",
+        "DataColumn": "data_column",
+        "AnalyticsModel": "analytics_model",
+        "QueryExecution": "query_execution",
+        "DashboardAsset": "dashboard_asset",
+        "DataQualityCheck": "data_quality_check",
+    }
+    entities: list[dict[str, Any]] = []
+    for row in rows:
+        entity_id = str(row.get("id") or "").strip()
+        name = str(row.get("name") or "").strip()
+        entity_type = label_to_type.get(str(row.get("entity_type") or "").strip())
+        if not entity_id or not name or entity_type is None:
+            continue
+        aliases = _aliases(
+            [name],
+            _string_list(row.get("aliases")),
+            [
+                row.get("repo_name", ""),
+                row.get("repo_slug", ""),
+                row.get("remote_url", ""),
+                row.get("relative_path", ""),
+            ],
+        )
+        entity: dict[str, Any] = {
+            "id": entity_id,
+            "type": entity_type,
+            "name": name,
+            "repo_id": row.get("repo_id"),
+            "aliases": aliases,
+        }
+        if row.get("path"):
+            entity["path"] = row["path"]
+        if row.get("relative_path"):
+            entity["relative_path"] = row["relative_path"]
+        if row.get("repo_slug"):
+            entity["repo_slug"] = row["repo_slug"]
+        if row.get("remote_url"):
+            entity["remote_url"] = row["remote_url"]
+        entities.append(entity)
+    return entities
+
+
+__all__ = ["db_content_entities", "db_data_entities", "db_workload_entities"]

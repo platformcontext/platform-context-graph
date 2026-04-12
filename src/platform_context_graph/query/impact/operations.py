@@ -5,7 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 from ...domain import EntityType
+from ..data_change_classification import (
+    classify_data_change,
+    classify_impacted_data_change,
+    summarize_data_change_classifications,
+)
 from .common import dedupe_evidence
+from ..data_lineage_evidence import merge_lineage_summaries, summarize_lineage_hops
 from .store import _GraphStore
 
 
@@ -22,6 +28,7 @@ def path_summary(hops: list[dict[str, Any]]) -> dict[str, Any]:
     evidence = dedupe_evidence(item for hop in hops for item in hop.get("evidence", []))
     confidences = [float(hop.get("confidence") or 0.0) for hop in hops] or [0.0]
     reason = hops[-1].get("reason") if hops else None
+    lineage_evidence = summarize_lineage_hops(hops)
     return {
         "source": hops[0]["from"] if hops else None,
         "target": hops[-1]["to"] if hops else None,
@@ -29,6 +36,11 @@ def path_summary(hops: list[dict[str, Any]]) -> dict[str, Any]:
         "confidence": round(min(confidences), 2),
         "reason": reason,
         "evidence": evidence,
+        **(
+            {"lineage_evidence": lineage_evidence}
+            if lineage_evidence is not None
+            else {}
+        ),
     }
 
 
@@ -94,6 +106,9 @@ def trace_resource_to_code_store(
     summaries = [path_summary(hops) for hops in paths]
     summaries.sort(key=lambda item: path_sort_key(item, environment))
     top = summaries[0] if summaries else None
+    lineage_evidence = merge_lineage_summaries(
+        summary.get("lineage_evidence") for summary in summaries
+    )
     return {
         "start": store.snapshot(start_id),
         "environment": environment,
@@ -101,6 +116,11 @@ def trace_resource_to_code_store(
         "confidence": top["confidence"] if top else 0.0,
         "reason": top["reason"] if top else f"No repository path found for {start_id}",
         "evidence": top["evidence"] if top else [],
+        **(
+            {"lineage_evidence": lineage_evidence}
+            if lineage_evidence is not None
+            else {}
+        ),
     }
 
 
@@ -150,6 +170,11 @@ def explain_dependency_path_store(
         "confidence": summary["confidence"],
         "reason": summary["reason"],
         "evidence": summary["evidence"],
+        **(
+            {"lineage_evidence": summary.get("lineage_evidence")}
+            if summary.get("lineage_evidence") is not None
+            else {}
+        ),
     }
 
 
@@ -173,6 +198,8 @@ def change_surface_store(
     """
 
     impacted_ids: dict[str, dict[str, Any]] = {}
+    target_snapshot = store.entities.get(target_id) or store.snapshot(target_id)
+    target_change_classification = classify_data_change(target_snapshot)
     paths = store.paths_to(
         source_id=target_id,
         target_predicate=lambda ref: ref["id"] != target_id
@@ -183,6 +210,12 @@ def change_surface_store(
             EntityType.workload_instance.value,
             EntityType.cloud_resource.value,
             EntityType.terraform_module.value,
+            EntityType.data_asset.value,
+            EntityType.data_column.value,
+            EntityType.analytics_model.value,
+            EntityType.query_execution.value,
+            EntityType.dashboard_asset.value,
+            EntityType.data_quality_check.value,
         },
         environment=environment,
         max_depth=max_depth,
@@ -197,12 +230,23 @@ def change_surface_store(
             continue
         target = summary["target"]
         existing = impacted_ids.get(target["id"])
+        impacted_snapshot = store.entities.get(target["id"]) or target
+        change_classification = classify_impacted_data_change(
+            impacted_snapshot,
+            path=summary,
+        )
         item = {
             "entity": target,
             "path": summary,
             "confidence": summary["confidence"],
             "reason": summary["reason"],
             "evidence": summary["evidence"],
+            "change_classification": change_classification,
+            **(
+                {"lineage_evidence": summary.get("lineage_evidence")}
+                if summary.get("lineage_evidence") is not None
+                else {}
+            ),
         }
         if existing is None or item["confidence"] > existing["confidence"]:
             impacted_ids[target["id"]] = item
@@ -212,13 +256,27 @@ def change_surface_store(
         key=lambda item: (-item["confidence"], item["entity"]["id"]),
     )
     top = impacted[0] if impacted else None
+    lineage_evidence = merge_lineage_summaries(
+        item.get("lineage_evidence") for item in impacted
+    )
+    classification_summary = summarize_data_change_classifications(
+        [target_change_classification]
+        + [item.get("change_classification") for item in impacted]
+    )
     return {
         "target": store.snapshot(target_id),
         "environment": environment,
+        "target_change_classification": target_change_classification,
+        "classification_summary": classification_summary,
         "impacted": impacted,
         "confidence": top["confidence"] if top else 0.0,
         "reason": (
             top["reason"] if top else f"No impacted entities found for {target_id}"
         ),
         "evidence": top["evidence"] if top else [],
+        **(
+            {"lineage_evidence": lineage_evidence}
+            if lineage_evidence is not None
+            else {}
+        ),
     }

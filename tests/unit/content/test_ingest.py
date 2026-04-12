@@ -223,6 +223,187 @@ def test_prepare_content_entries_assigns_uids_to_sql_entities(
     assert file_data["sql_columns"][0]["uid"].startswith("content-entity:")
 
 
+def test_prepare_content_entries_assigns_uids_to_data_intelligence_entities(
+    tmp_path: Path,
+) -> None:
+    """Data-intelligence buckets should participate in content-entity dual write."""
+
+    repo_path = tmp_path / "analytics"
+    repo_path.mkdir()
+    file_path = repo_path / "target" / "manifest.json"
+    file_path.parent.mkdir(parents=True)
+    file_path.write_text('{"metadata":{"project_name":"jaffle_shop"}}\n', encoding="utf-8")
+
+    repository = repository_metadata(
+        name="analytics",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/analytics.git",
+    )
+    file_data = {
+        "path": str(file_path),
+        "repo_path": str(repo_path),
+        "lang": "json",
+        "analytics_models": [
+            {
+                "id": "analytics-model:model.jaffle_shop.order_metrics",
+                "name": "order_metrics",
+                "line_number": 1,
+                "path": "target/compiled/jaffle_shop/models/marts/order_metrics.sql",
+            }
+        ],
+        "data_assets": [
+            {
+                "id": "data-asset:analytics.public.order_metrics",
+                "name": "analytics.public.order_metrics",
+                "line_number": 1,
+            }
+        ],
+        "data_columns": [
+            {
+                "id": "data-column:analytics.public.order_metrics.order_id",
+                "name": "analytics.public.order_metrics.order_id",
+                "line_number": 1,
+            }
+        ],
+    }
+
+    _file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert {entry.entity_type for entry in entity_entries} == {
+        "AnalyticsModel",
+        "DataAsset",
+        "DataColumn",
+    }
+    assert all(is_content_entity_id(entry.entity_id) for entry in entity_entries)
+    assert file_data["analytics_models"][0]["uid"].startswith("content-entity:")
+    assert file_data["data_assets"][0]["uid"].startswith("content-entity:")
+    assert file_data["data_columns"][0]["uid"].startswith("content-entity:")
+
+
+def test_prepare_content_entries_assigns_uids_to_query_executions(
+    tmp_path: Path,
+) -> None:
+    """Warehouse replay executions should dual-write through content entities."""
+
+    repo_path = tmp_path / "warehouse-replay"
+    repo_path.mkdir()
+    file_path = repo_path / "warehouse_replay.json"
+    file_path.write_text('{"metadata":{"warehouse_vendor":"generic"}}\n', encoding="utf-8")
+
+    repository = repository_metadata(
+        name="warehouse-replay",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/warehouse-replay.git",
+    )
+    file_data = {
+        "path": str(file_path),
+        "repo_path": str(repo_path),
+        "lang": "json",
+        "query_executions": [
+            {
+                "id": "query-execution:q_001",
+                "name": "daily_revenue_build",
+                "line_number": 1,
+                "executed_by": "etl_runner",
+            }
+        ],
+    }
+
+    _file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert {entry.entity_type for entry in entity_entries} == {"QueryExecution"}
+    assert all(is_content_entity_id(entry.entity_id) for entry in entity_entries)
+    assert file_data["query_executions"][0]["uid"].startswith("content-entity:")
+
+
+def test_prepare_content_entries_assigns_uids_to_dashboard_assets(
+    tmp_path: Path,
+) -> None:
+    """BI replay dashboards should dual-write through content entities."""
+
+    repo_path = tmp_path / "bi-replay"
+    repo_path.mkdir()
+    file_path = repo_path / "bi_replay.json"
+    file_path.write_text('{"metadata":{"bi_vendor":"generic"}}\n', encoding="utf-8")
+
+    repository = repository_metadata(
+        name="bi-replay",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/bi-replay.git",
+    )
+    file_data = {
+        "path": str(file_path),
+        "repo_path": str(repo_path),
+        "lang": "json",
+        "dashboard_assets": [
+            {
+                "id": "dashboard-asset:finance:revenue-overview",
+                "name": "Revenue Overview",
+                "line_number": 1,
+                "path": "dashboards/revenue_overview.json",
+            }
+        ],
+    }
+
+    _file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert {entry.entity_type for entry in entity_entries} == {"DashboardAsset"}
+    assert all(is_content_entity_id(entry.entity_id) for entry in entity_entries)
+    assert file_data["dashboard_assets"][0]["uid"].startswith("content-entity:")
+
+
+def test_prepare_content_entries_assigns_uids_to_data_quality_checks(
+    tmp_path: Path,
+) -> None:
+    """Quality replay checks should dual-write through content entities."""
+
+    repo_path = tmp_path / "quality-replay"
+    repo_path.mkdir()
+    file_path = repo_path / "quality_replay.json"
+    file_path.write_text(
+        '{"metadata":{"quality_vendor":"generic"}}\n',
+        encoding="utf-8",
+    )
+
+    repository = repository_metadata(
+        name="quality-replay",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/quality-replay.git",
+    )
+    file_data = {
+        "path": str(file_path),
+        "repo_path": str(repo_path),
+        "lang": "json",
+        "data_quality_checks": [
+            {
+                "id": "data-quality-check:finance:gross-amount-non-negative",
+                "name": "gross_amount_non_negative",
+                "line_number": 1,
+                "status": "failing",
+                "severity": "high",
+            }
+        ],
+    }
+
+    _file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert {entry.entity_type for entry in entity_entries} == {"DataQualityCheck"}
+    assert all(is_content_entity_id(entry.entity_id) for entry in entity_entries)
+    assert file_data["data_quality_checks"][0]["uid"].startswith("content-entity:")
+
+
 def test_prepare_content_entries_strips_nul_bytes_for_content_store(
     tmp_path: Path,
 ) -> None:
@@ -397,3 +578,6 @@ def test_content_entity_bucket_labels_include_expected_infra_and_code_types() ->
     assert "CloudFormationResource" in bucket_labels
     assert "CloudFormationParameter" in bucket_labels
     assert "CloudFormationOutput" in bucket_labels
+    assert "AnalyticsModel" in bucket_labels
+    assert "DataAsset" in bucket_labels
+    assert "DataColumn" in bucket_labels

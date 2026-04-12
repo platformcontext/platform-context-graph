@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from ...content.state import get_content_service
+from ..data_lineage_evidence import summarize_lineage_edges
+from ..impact.database import db_fetch_edges
 from ..repositories import _repository_projection
 from .support import canonical_ref, record_to_dict
 
@@ -65,6 +67,11 @@ def _lookup_repository_ref(database: Any, repo_id: str) -> dict[str, Any] | None
 
 def content_entity_context(database: Any, *, entity_id: str) -> dict[str, Any]:
     """Build a generic entity-context payload for a content-bearing entity."""
+    db_manager = (
+        database
+        if callable(getattr(database, "get_driver", None))
+        else getattr(database, "db_manager", database)
+    )
     result = get_content_service(database).get_entity_content(entity_id=entity_id)
     if isinstance(result, dict) and isinstance(result.get("error"), str):
         return result
@@ -73,7 +80,7 @@ def content_entity_context(database: Any, *, entity_id: str) -> dict[str, Any]:
     repositories = (
         [_lookup_repository_ref(database, repo_id)] if isinstance(repo_id, str) else []
     )
-    return {
+    response = {
         "entity": canonical_ref(
             {
                 "id": entity_id,
@@ -91,6 +98,10 @@ def content_entity_context(database: Any, *, entity_id: str) -> dict[str, Any]:
         "language": result.get("language"),
         "source_backend": result.get("source_backend"),
     }
+    lineage_evidence = summarize_lineage_edges(db_fetch_edges(db_manager, entity_id))
+    if lineage_evidence is not None:
+        response["lineage_evidence"] = lineage_evidence
+    return response
 
 
 __all__ = ["content_entity_context"]

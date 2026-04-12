@@ -58,6 +58,87 @@ class TestSqlGraph:
             )
             >= 1
         )
+
+    def test_compiled_analytics_nodes_are_created(self, indexed_ecosystems) -> None:
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (m:AnalyticsModel) "
+                "WHERE m.path CONTAINS 'analytics_compiled_comprehensive' "
+                "RETURN count(m) as cnt",
+            )
+            == 2
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (a:DataAsset {name: 'analytics.public.order_metrics'}) "
+                "WHERE a.path CONTAINS 'analytics_compiled_comprehensive' "
+                "RETURN count(a) as cnt",
+            )
+            == 1
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (c:DataColumn {name: 'analytics.public.order_metrics.order_id'}) "
+                "WHERE c.path CONTAINS 'analytics_compiled_comprehensive' "
+                "RETURN count(c) as cnt",
+            )
+            == 1
+        )
+
+    def test_compiled_analytics_relationships_are_created(
+        self, indexed_ecosystems
+    ) -> None:
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (m:AnalyticsModel {name: 'order_metrics'})"
+                "-[:COMPILES_TO]->"
+                "(a:DataAsset {name: 'analytics.public.order_metrics'}) "
+                "WHERE m.path CONTAINS 'analytics_compiled_comprehensive' "
+                "  AND a.path CONTAINS 'analytics_compiled_comprehensive' "
+                "RETURN count(*) as cnt",
+            )
+            == 1
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (source:DataAsset {name: 'analytics.public.order_metrics'})"
+                "-[:ASSET_DERIVES_FROM]->"
+                "(target:DataAsset {name: 'raw.public.orders'}) "
+                "WHERE source.path CONTAINS 'analytics_compiled_comprehensive' "
+                "  AND target.path CONTAINS 'analytics_compiled_comprehensive' "
+                "RETURN count(*) as cnt",
+            )
+            == 1
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (source:DataColumn {name: 'analytics.public.order_metrics.order_id'})"
+                "-[:COLUMN_DERIVES_FROM]->"
+                "(target:DataColumn {name: 'raw.public.orders.id'}) "
+                "WHERE source.path CONTAINS 'analytics_compiled_comprehensive' "
+                "  AND target.path CONTAINS 'analytics_compiled_comprehensive' "
+                "RETURN count(*) as cnt",
+            )
+            == 1
+        )
+        assert (
+            _count(
+                indexed_ecosystems,
+                "MATCH (source:DataColumn {name: 'analytics.public.orders_expanded.id'})"
+                "-[:COLUMN_DERIVES_FROM]->"
+                "(target:DataColumn {name: 'raw.public.orders.id'}) "
+                "WHERE source.path CONTAINS 'analytics_compiled_comprehensive' "
+                "  AND target.path CONTAINS 'analytics_compiled_comprehensive' "
+                "RETURN count(*) as cnt",
+            )
+            == 1
+        )
         assert (
             _count(
                 indexed_ecosystems,

@@ -61,6 +61,8 @@ def _normalized_edge_record(record: dict[str, Any]) -> dict[str, Any]:
         "confidence": record.get("confidence"),
         "reason": record.get("reason"),
         "evidence": record.get("evidence"),
+        "transform_kind": record.get("transform_kind"),
+        "transform_expression": record.get("transform_expression"),
     }
 
 
@@ -75,7 +77,9 @@ def _edge_query(where_clause: str) -> str:
         "target.id as target_id, target.uid as target_uid, "
         "target.path as target_path, labels(target) as target_labels, "
         "type(rel) as type, rel.confidence as confidence, "
-        "rel.reason as reason, rel.evidence as evidence"
+        "rel.reason as reason, rel.evidence as evidence, "
+        "rel.transform_kind as transform_kind, "
+        "rel.transform_expression as transform_expression"
     )
 
 
@@ -128,6 +132,73 @@ def db_fetch_entity(database: Any, entity_id: str) -> dict[str, Any] | None:
             "WHERE n.uid = $id "
             "RETURN coalesce(n.uid, n.id) as id, n.name as name, "
             "'content_entity' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
+        )
+    elif entity_id.startswith("data-asset:"):
+        query = (
+            "MATCH (n:DataAsset) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'data_asset' as type, n.path as path, n.repo_id as repo_id, "
+            "n.owner_names as owner_names, n.owner_teams as owner_teams, "
+            "n.contract_names as contract_names, "
+            "n.contract_levels as contract_levels, "
+            "n.change_policies as change_policies, "
+            "n.sensitivity as sensitivity, "
+            "n.is_protected as is_protected, "
+            "n.protection_kind as protection_kind LIMIT 1"
+        )
+    elif entity_id.startswith("data-column:"):
+        query = (
+            "MATCH (n:DataColumn) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'data_column' as type, n.path as path, n.repo_id as repo_id, "
+            "n.owner_names as owner_names, n.owner_teams as owner_teams, "
+            "n.contract_names as contract_names, "
+            "n.contract_levels as contract_levels, "
+            "n.change_policies as change_policies, "
+            "n.sensitivity as sensitivity, "
+            "n.is_protected as is_protected, "
+            "n.protection_kind as protection_kind LIMIT 1"
+        )
+    elif entity_id.startswith("analytics-model:"):
+        query = (
+            "MATCH (n:AnalyticsModel) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'analytics_model' as type, coalesce(n.compiled_path, n.path) as path, "
+            "n.repo_id as repo_id, "
+            "n.parse_state as parse_state, "
+            "n.confidence as confidence, "
+            "n.materialization as materialization, "
+            "n.projection_count as projection_count, "
+            "n.unresolved_reference_count as unresolved_reference_count, "
+            "n.unresolved_reference_reasons as unresolved_reference_reasons, "
+            "n.unresolved_reference_expressions as unresolved_reference_expressions "
+            "LIMIT 1"
+        )
+    elif entity_id.startswith("query-execution:"):
+        query = (
+            "MATCH (n:QueryExecution) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'query_execution' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
+        )
+    elif entity_id.startswith("dashboard-asset:"):
+        query = (
+            "MATCH (n:DashboardAsset) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'dashboard_asset' as type, n.path as path, n.repo_id as repo_id LIMIT 1"
+        )
+    elif entity_id.startswith("data-quality-check:"):
+        query = (
+            "MATCH (n:DataQualityCheck) "
+            "WHERE n.id = $id "
+            "RETURN n.id as id, n.name as name, "
+            "'data_quality_check' as type, n.path as path, n.repo_id as repo_id, "
+            "n.status as status, n.severity as severity, "
+            "n.check_type as check_type LIMIT 1"
         )
     elif entity_id.startswith("file:"):
         path = _file_path(entity_id)

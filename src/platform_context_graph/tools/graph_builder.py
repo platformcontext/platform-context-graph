@@ -58,6 +58,9 @@ from ..graph.persistence.inheritance import (
 from ..relationships.infra_links import (
     create_all_infra_links as _create_all_infra_links,
 )
+from ..relationships.data_intelligence_links import (
+    create_all_data_intelligence_links as _create_all_data_intelligence_links,
+)
 from ..relationships.sql_links import create_all_sql_links as _create_all_sql_links
 from ..graph.schema import create_schema as _create_schema
 from ..parsers.scip import build_graph_from_scip as _build_graph_from_scip
@@ -217,11 +220,21 @@ class GraphBuilder:
     def _create_all_sql_relationships(self, all_file_data: Any) -> dict[str, int]:
         """Create SQL relationships after indexing completes."""
 
-        return _create_all_sql_links(
+        file_data_list = list(all_file_data)
+        sql_metrics = _create_all_sql_links(
             self,
-            all_file_data,
+            file_data_list,
             info_logger_fn=info_logger,
         )
+        data_metrics = _create_all_data_intelligence_links(
+            self,
+            file_data_list,
+            info_logger_fn=info_logger,
+        )
+        return {
+            **sql_metrics,
+            **data_metrics,
+        }
 
     def _materialize_workloads(
         self,
