@@ -401,3 +401,108 @@ def test_normalize_dbt_manifest_supports_case_and_arithmetic_transforms() -> Non
         "state": "complete",
         "unresolved_references": [],
     }
+
+
+def test_normalize_dbt_manifest_reports_template_and_macro_honesty_gaps() -> None:
+    """Normalization should surface explicit templating and macro gap reasons."""
+
+    plugin = DbtCompiledSqlPlugin()
+
+    report = plugin.normalize(
+        {
+            "metadata": {
+                "adapter_type": "postgres",
+                "project_name": "jaffle_shop",
+            },
+            "nodes": {
+                "model.jaffle_shop.unresolved_macros": {
+                    "unique_id": "model.jaffle_shop.unresolved_macros",
+                    "resource_type": "model",
+                    "name": "unresolved_macros",
+                    "database": "analytics",
+                    "schema": "public",
+                    "alias": "unresolved_macros",
+                    "path": "models/marts/unresolved_macros.sql",
+                    "compiled_path": (
+                        "target/compiled/jaffle_shop/models/marts/unresolved_macros.sql"
+                    ),
+                    "relation_name": "analytics.public.unresolved_macros",
+                    "config": {"materialized": "view"},
+                    "depends_on": {
+                        "nodes": [
+                            "source.jaffle_shop.raw.orders",
+                        ]
+                    },
+                    "compiled_code": (
+                        "select "
+                        "{{ dbt_utils.generate_surrogate_key(['customer_id']) }} "
+                        "as templated_customer_key, "
+                        "dbt_utils.generate_surrogate_key(customer_id) "
+                        "as macro_customer_key "
+                        "from raw.public.orders o"
+                    ),
+                    "columns": {
+                        "templated_customer_key": {"name": "templated_customer_key"},
+                        "macro_customer_key": {"name": "macro_customer_key"},
+                    },
+                }
+            },
+            "sources": {
+                "source.jaffle_shop.raw.orders": {
+                    "unique_id": "source.jaffle_shop.raw.orders",
+                    "resource_type": "source",
+                    "source_name": "raw",
+                    "name": "orders",
+                    "database": "raw",
+                    "schema": "public",
+                    "identifier": "orders",
+                    "columns": {
+                        "customer_id": {"name": "customer_id"},
+                    },
+                }
+            },
+        }
+    )
+
+    assert [
+        item["type"] for item in report["relationships"] if item["type"] == "COLUMN_DERIVES_FROM"
+    ] == []
+    assert report["coverage"] == {
+        "confidence": 0.5,
+        "state": "partial",
+        "unresolved_references": [
+            {
+                "expression": "{{ dbt_utils.generate_surrogate_key(['customer_id']) }}",
+                "model_name": "unresolved_macros",
+                "reason": "templated_expression_not_resolved",
+            },
+            {
+                "expression": "dbt_utils.generate_surrogate_key(customer_id)",
+                "model_name": "unresolved_macros",
+                "reason": "macro_expression_not_resolved",
+            },
+        ],
+    }
+    assert report["analytics_models"] == [
+        {
+            "id": "analytics-model:model.jaffle_shop.unresolved_macros",
+            "name": "unresolved_macros",
+            "asset_name": "analytics.public.unresolved_macros",
+            "line_number": 1,
+            "path": "target/compiled/jaffle_shop/models/marts/unresolved_macros.sql",
+            "compiled_path": "target/compiled/jaffle_shop/models/marts/unresolved_macros.sql",
+            "materialization": "view",
+            "parse_state": "partial",
+            "confidence": 0.5,
+            "projection_count": 2,
+            "unresolved_reference_count": 2,
+            "unresolved_reference_reasons": [
+                "templated_expression_not_resolved",
+                "macro_expression_not_resolved",
+            ],
+            "unresolved_reference_expressions": [
+                "{{ dbt_utils.generate_surrogate_key(['customer_id']) }}",
+                "dbt_utils.generate_surrogate_key(customer_id)",
+            ],
+        }
+    ]

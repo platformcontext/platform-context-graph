@@ -74,6 +74,9 @@ Status on this branch:
   operands now stay on the supported lineage path as transform-aware derived
   columns, which reduces avoidable partial coverage for common analytics
   bucketing and scaling patterns
+- unresolved Jinja-style templating delimiters and package-qualified macro
+  calls now short-circuit to explicit partial-gap reasons instead of producing
+  misleading source-alias misses or weak generic derived-expression noise
 - remaining unsupported derived cases now surface more specific partial-gap
   reasons, separating aggregate expressions from multi-input transforms so repo
   stories and model samples are more actionable

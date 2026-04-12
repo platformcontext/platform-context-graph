@@ -316,6 +316,54 @@ def test_extract_compiled_model_lineage_keeps_multi_source_case_partial() -> Non
     )
 
 
+def test_extract_compiled_model_lineage_reports_unresolved_template_expression(
+) -> None:
+    """Raw templating delimiters should produce an explicit honesty gap."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        select
+          {{ dbt_utils.generate_surrogate_key(['customer_id']) }} as customer_key
+        from raw.public.orders o
+        """,
+        model_name="templated_metrics",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == ()
+    assert lineage.unresolved_references == (
+        {
+            "expression": "{{ dbt_utils.generate_surrogate_key(['customer_id']) }}",
+            "model_name": "templated_metrics",
+            "reason": "templated_expression_not_resolved",
+        },
+    )
+
+
+def test_extract_compiled_model_lineage_reports_unresolved_macro_expression(
+) -> None:
+    """Package-qualified macro calls should surface as macro gaps, not alias misses."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        select
+          dbt_utils.generate_surrogate_key(customer_id) as customer_key
+        from raw.public.orders o
+        """,
+        model_name="macro_metrics",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == ()
+    assert lineage.unresolved_references == (
+        {
+            "expression": "dbt_utils.generate_surrogate_key(customer_id)",
+            "model_name": "macro_metrics",
+            "reason": "macro_expression_not_resolved",
+        },
+    )
+
+
 def test_extract_compiled_model_lineage_flags_ambiguous_unqualified_columns() -> None:
     """Bare columns should stay explicit gaps when multiple bindings can match."""
 

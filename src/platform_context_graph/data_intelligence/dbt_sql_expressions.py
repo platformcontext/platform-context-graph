@@ -33,9 +33,15 @@ _CASE_KEYWORD_RE = re.compile(
     r"\b(?:case|when|then|else|end|is|null|and|or|not|in|like|between|true|false)\b",
     re.IGNORECASE,
 )
+_QUALIFIED_MACRO_CALL_RE = re.compile(
+    r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)\((?P<arguments>.*)\)$",
+    re.DOTALL,
+)
 _AGGREGATE_EXPRESSION_REASON = "aggregate_expression_semantics_not_captured"
 _DERIVED_EXPRESSION_REASON = "derived_expression_semantics_not_captured"
 _MULTI_INPUT_EXPRESSION_REASON = "multi_input_expression_semantics_not_captured"
+_MACRO_EXPRESSION_REASON = "macro_expression_not_resolved"
+_TEMPLATED_EXPRESSION_REASON = "templated_expression_not_resolved"
 _AGGREGATE_FUNCTIONS = {
     "avg",
     "count",
@@ -70,6 +76,9 @@ def expression_transform_metadata(expression: str) -> dict[str, str] | None:
     if _BARE_IDENTIFIER_RE.fullmatch(normalized):
         return None
     if _QUALIFIED_REFERENCE_RE.fullmatch(normalized):
+        return None
+
+    if expression_honesty_gap_reason(normalized) is not None:
         return None
 
     cast_expression = _supported_cast_expression(normalized)
@@ -137,6 +146,9 @@ def expression_partial_reason(expression: str) -> str | None:
     normalized = _strip_wrapping_parentheses(expression.strip())
     if not normalized:
         return None
+    honesty_gap_reason = expression_honesty_gap_reason(normalized)
+    if honesty_gap_reason is not None:
+        return honesty_gap_reason
     if _BARE_IDENTIFIER_RE.fullmatch(normalized):
         return None
     if _QUALIFIED_REFERENCE_RE.fullmatch(normalized):
@@ -151,6 +163,19 @@ def expression_partial_reason(expression: str) -> str | None:
     if function_reason is not None:
         return function_reason
     return _DERIVED_EXPRESSION_REASON
+
+
+def expression_honesty_gap_reason(expression: str) -> str | None:
+    """Return explicit reasons for unresolved templating or macro expressions."""
+
+    normalized = _strip_wrapping_parentheses(expression.strip())
+    if not normalized:
+        return None
+    if any(marker in normalized for marker in ("{{", "}}", "{%", "%}")):
+        return _TEMPLATED_EXPRESSION_REASON
+    if _QUALIFIED_MACRO_CALL_RE.fullmatch(normalized):
+        return _MACRO_EXPRESSION_REASON
+    return None
 
 
 def expression_ignored_identifiers(expression: str) -> set[str]:
@@ -462,6 +487,7 @@ def _split_cast_arguments(arguments: str) -> tuple[str | None, str | None]:
 
 __all__ = [
     "derived_expression_gap",
+    "expression_honesty_gap_reason",
     "expression_ignored_identifiers",
     "expression_partial_reason",
     "expression_transform_metadata",
