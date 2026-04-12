@@ -87,3 +87,48 @@ def test_warehouse_replay_repo_story_mentions_observed_queries(
         if section["id"] == "data_intelligence"
     )
     assert "2 warehouse queries" in data_section["summary"]
+
+
+def test_reconciliation_repo_context_surfaces_declared_vs_observed_mismatch(
+    indexed_ecosystems,
+) -> None:
+    """Repo context should distinguish shared, declared-only, and observed-only assets."""
+
+    result = get_repository_context(
+        indexed_ecosystems,
+        repo_id="analytics_observed_reconciliation",
+    )
+
+    assert result["data_intelligence"]["reconciliation"] == {
+        "status": "partial_overlap",
+        "shared_asset_count": 2,
+        "declared_only_asset_count": 1,
+        "observed_only_asset_count": 1,
+        "shared_assets": [
+            "raw.public.customers",
+            "raw.public.orders",
+        ],
+        "declared_only_assets": ["raw.public.payments"],
+        "observed_only_assets": ["raw.public.refunds"],
+    }
+
+
+def test_reconciliation_repo_story_summarizes_declared_vs_observed_mismatch(
+    indexed_ecosystems,
+) -> None:
+    """Repo story should summarize reconciliation gaps explicitly."""
+
+    result = get_repository_story(
+        indexed_ecosystems,
+        repo_id="analytics_observed_reconciliation",
+    )
+
+    data_section = next(
+        section
+        for section in result["story_sections"]
+        if section["id"] == "data_intelligence"
+    )
+    assert (
+        "declared and observed lineage overlap on 2 assets, with 1 declared-only and 1 observed-only asset"
+        in data_section["summary"]
+    )

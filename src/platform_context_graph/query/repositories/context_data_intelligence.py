@@ -26,6 +26,7 @@ def build_repository_data_intelligence_summary(
         "data_column_count": _count_label(session, repo, "DataColumn"),
         "query_execution_count": _count_label(session, repo, "QueryExecution"),
         "relationship_counts": _relationship_counts(session, repo),
+        "reconciliation": _reconciliation_summary(session, repo),
         "parse_states": _parse_state_counts(session, repo),
         "sample_models": _sample_models(session, repo),
         "sample_queries": _sample_queries(session, repo),
@@ -158,6 +159,74 @@ def _sample_queries(session: Any, repo: dict[str, Any]) -> list[dict[str, Any]]:
         """,
         **repository_scope(repo),
     ).data()
+
+
+def _reconciliation_summary(session: Any, repo: dict[str, Any]) -> dict[str, Any] | None:
+    """Return declared-versus-observed asset overlap for one repository."""
+
+    declared_assets = _relationship_target_names(
+        session,
+        repo,
+        source_label="DataAsset",
+        relationship_type="ASSET_DERIVES_FROM",
+    )
+    observed_assets = _relationship_target_names(
+        session,
+        repo,
+        source_label="QueryExecution",
+        relationship_type="RUNS_QUERY_AGAINST",
+    )
+    if not declared_assets and not observed_assets:
+        return None
+
+    shared_assets = sorted(declared_assets & observed_assets)
+    declared_only_assets = sorted(declared_assets - observed_assets)
+    observed_only_assets = sorted(observed_assets - declared_assets)
+
+    if shared_assets and not declared_only_assets and not observed_only_assets:
+        status = "aligned"
+    elif shared_assets:
+        status = "partial_overlap"
+    elif declared_only_assets:
+        status = "declared_only"
+    else:
+        status = "observed_only"
+
+    return {
+        "status": status,
+        "shared_asset_count": len(shared_assets),
+        "declared_only_asset_count": len(declared_only_assets),
+        "observed_only_asset_count": len(observed_only_assets),
+        "shared_assets": shared_assets,
+        "declared_only_assets": declared_only_assets,
+        "observed_only_assets": observed_only_assets,
+    }
+
+
+def _relationship_target_names(
+    session: Any,
+    repo: dict[str, Any],
+    *,
+    source_label: str,
+    relationship_type: str,
+) -> set[str]:
+    """Return distinct target asset names for one repo-scoped relationship type."""
+
+    rows = session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(source:{source_label})
+        WHERE {repository_scope_predicate()}
+        MATCH (source)-[:{relationship_type}]->(target:DataAsset)
+        RETURN DISTINCT target.name AS name
+        ORDER BY name
+        """,
+        **repository_scope(repo),
+    ).data()
+    return {
+        str(row.get("name") or "").strip()
+        for row in rows
+        if str(row.get("name") or "").strip()
+    }
 
 
 __all__ = ["build_repository_data_intelligence_summary"]

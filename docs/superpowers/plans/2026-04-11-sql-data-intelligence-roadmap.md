@@ -88,6 +88,16 @@ Acceptance:
 - PCG can explain both static and observed lineage for one warehouse replay
   corpus
 
+Status on this branch:
+
+- combined `analytics_observed_reconciliation` fixture with one shared, one
+  declared-only, and one observed-only asset dependency
+- repo context reconciliation summary for declared `ASSET_DERIVES_FROM` versus
+  observed `RUNS_QUERY_AGAINST` asset names
+- repository story wording for aligned and mismatched declared-versus-observed
+  lineage
+- graph-backed integration coverage for reconciliation mismatch cases
+
 ### Milestone 5: BI and Semantic Adapters
 
 Deliver:
@@ -171,6 +181,31 @@ export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_cont
 export PYTHONPATH=src
 
 uv run pytest \
+  tests/integration/test_warehouse_replay_graph.py \
+  tests/integration/test_mcp_data_intelligence_queries.py -q
+```
+
+### Reconciliation gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/query/test_repository_context_data_intelligence.py \
+  tests/unit/query/test_story_data_intelligence.py \
+  tests/unit/query/test_entity_context.py \
+  tests/unit/query/test_entity_resolution.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_sql_graph.py \
   tests/integration/test_warehouse_replay_graph.py \
   tests/integration/test_mcp_data_intelligence_queries.py -q
 ```

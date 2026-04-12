@@ -200,3 +200,9 @@ This branch starts the roadmap with the generic foundation slice:
 - exact observed `RUNS_QUERY_AGAINST` relationships from replayed query history
 - graph/content bucket registration for `QueryExecution`
 - repository context and story surfacing for replayed warehouse query counts
+- combined `analytics_observed_reconciliation` replay fixture to validate
+  declared-versus-observed mismatch cases locally
+- repository context reconciliation summary for shared, declared-only, and
+  observed-only asset dependencies
+- repository story wording that explains declared-versus-observed lineage
+  overlap and mismatch honestly

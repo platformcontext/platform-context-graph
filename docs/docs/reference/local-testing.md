@@ -226,6 +226,31 @@ uv run pytest \
   tests/integration/test_mcp_data_intelligence_queries.py -q
 ```
 
+### Declared vs observed reconciliation gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/query/test_repository_context_data_intelligence.py \
+  tests/unit/query/test_story_data_intelligence.py \
+  tests/unit/query/test_entity_context.py \
+  tests/unit/query/test_entity_resolution.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_sql_graph.py \
+  tests/integration/test_warehouse_replay_graph.py \
+  tests/integration/test_mcp_data_intelligence_queries.py -q
+```
+
 Future replay-backed fixture groups for compiled analytics, warehouse history,
 and BI downstreams belong in this section once those adapters are implemented.
 

@@ -101,6 +101,18 @@ def test_build_repository_context_adds_data_intelligence_summary(
                 "column_derives_from": 4,
                 "runs_query_against": 4,
             },
+            "reconciliation": {
+                "status": "partial_overlap",
+                "shared_asset_count": 2,
+                "declared_only_asset_count": 1,
+                "observed_only_asset_count": 1,
+                "shared_assets": [
+                    "raw.public.customers",
+                    "raw.public.orders",
+                ],
+                "declared_only_assets": ["raw.public.payments"],
+                "observed_only_assets": ["raw.public.refunds"],
+            },
             "parse_states": {"complete": 1, "partial": 1},
             "sample_models": [
                 {
@@ -134,6 +146,18 @@ def test_build_repository_context_adds_data_intelligence_summary(
         "runs_query_against": 4,
     }
     assert result["data_intelligence"]["query_execution_count"] == 2
+    assert result["data_intelligence"]["reconciliation"] == {
+        "status": "partial_overlap",
+        "shared_asset_count": 2,
+        "declared_only_asset_count": 1,
+        "observed_only_asset_count": 1,
+        "shared_assets": [
+            "raw.public.customers",
+            "raw.public.orders",
+        ],
+        "declared_only_assets": ["raw.public.payments"],
+        "observed_only_assets": ["raw.public.refunds"],
+    }
     assert result["data_intelligence"]["parse_states"] == {
         "complete": 1,
         "partial": 1,
