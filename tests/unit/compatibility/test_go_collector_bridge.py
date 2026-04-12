@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
 from platform_context_graph.collectors.git.types import RepositoryParseSnapshot
+from platform_context_graph.content.identity import canonical_content_entity_id
 from platform_context_graph.repository_identity import repository_metadata
 from platform_context_graph.runtime.ingester.config import RepoSyncConfig, RepoSyncResult
 from platform_context_graph.runtime.ingester.go_collector_bridge import collect_batch
@@ -15,12 +17,19 @@ from platform_context_graph.runtime.ingester.go_collector_bridge import collect_
 def test_collect_batch_emits_repository_file_content_and_reducer_facts(
     tmp_path: Path,
 ) -> None:
-    """The bridge should emit one collected generation per selected repository."""
+    """The bridge should emit rich file and content-entity facts."""
 
     repo_path = tmp_path / "service"
     repo_path.mkdir()
-    sql_file = repo_path / "schema.sql"
-    sql_file.write_text("create table users(id bigint primary key);\n", encoding="utf-8")
+    source_file = repo_path / "app.py"
+    source_file.write_text(
+        "def handler():\n"
+        "    return 1\n"
+        "\n"
+        "class Worker:\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
 
     observed_at = datetime(2026, 4, 12, 15, 30, tzinfo=timezone.utc)
     config = RepoSyncConfig(
@@ -59,7 +68,7 @@ def test_collect_batch_emits_repository_file_content_and_reducer_facts(
     ) -> dict[Path, list[Path]]:
         del pathspec_module
         assert [path.resolve() for path in selected_repositories] == [repo_path.resolve()]
-        return {repo_path.resolve(): [sql_file]}
+        return {repo_path.resolve(): [source_file]}
 
     async def fake_parse_repository_snapshot_async(
         _builder: object,
@@ -106,15 +115,29 @@ def test_collect_batch_emits_repository_file_content_and_reducer_facts(
             time_monotonic_fn,
         )
         assert repo_root == repo_path.resolve()
-        assert repo_files == [sql_file]
+        assert repo_files == [source_file]
         return RepositoryParseSnapshot(
             repo_path=str(repo_root),
             file_count=1,
             imports_map={},
             file_data=[
                 {
-                    "path": str(sql_file.resolve()),
-                    "language": "sql",
+                    "path": str(source_file.resolve()),
+                    "lang": "python",
+                    "functions": [
+                        {
+                            "name": "handler",
+                            "line_number": 1,
+                            "end_line": 2,
+                        }
+                    ],
+                    "classes": [
+                        {
+                            "name": "Worker",
+                            "line_number": 4,
+                            "end_line": 5,
+                        }
+                    ],
                 }
             ],
         )
@@ -133,9 +156,15 @@ def test_collect_batch_emits_repository_file_content_and_reducer_facts(
 
     assert list(batch) == ["collected"]
     assert len(batch["collected"]) == 1
+    json.dumps(batch)
 
     collected = batch["collected"][0]
     repo_id = collected["scope"]["metadata"]["repo_id"]
+    content_repo_id = repository_metadata(
+        name="service",
+        local_path=repo_path,
+        remote_url="https://github.com/example/service",
+    )["id"]
     assert collected["scope"]["scope_kind"] == "repository"
     assert collected["scope"]["collector_kind"] == "git"
     assert collected["scope"]["partition_key"] == repo_id
@@ -149,6 +178,8 @@ def test_collect_batch_emits_repository_file_content_and_reducer_facts(
         "repository",
         "file",
         "content",
+        "content_entity",
+        "content_entity",
         "shared_followup",
     ]
 
@@ -160,22 +191,62 @@ def test_collect_batch_emits_repository_file_content_and_reducer_facts(
 
     file_fact = facts[1]
     assert file_fact["payload"]["graph_kind"] == "file"
-    assert file_fact["payload"]["relative_path"] == "schema.sql"
+    assert file_fact["payload"]["relative_path"] == "app.py"
     assert file_fact["payload"]["repo_id"] == repo_id
+    parsed_file_data = file_fact["payload"]["parsed_file_data"]
+    assert parsed_file_data["functions"][0]["uid"] == canonical_content_entity_id(
+        repo_id=content_repo_id,
+        relative_path="app.py",
+        entity_type="Function",
+        entity_name="handler",
+        line_number=1,
+    )
+    assert parsed_file_data["classes"][0]["uid"] == canonical_content_entity_id(
+        repo_id=content_repo_id,
+        relative_path="app.py",
+        entity_type="Class",
+        entity_name="Worker",
+        line_number=4,
+    )
 
     content_fact = facts[2]
-    assert content_fact["payload"]["content_path"] == "schema.sql"
+    assert content_fact["payload"]["content_path"] == "app.py"
     assert (
         content_fact["payload"]["content_body"]
-        == "create table users(id bigint primary key);\n"
+        == "def handler():\n    return 1\n\nclass Worker:\n    pass\n"
     )
     assert content_fact["payload"]["content_digest"] == hashlib.sha1(
-        sql_file.read_bytes()
+        source_file.read_bytes()
     ).hexdigest()
-    assert content_fact["payload"]["language"] == "sql"
+    assert content_fact["payload"]["language"] == "python"
     assert content_fact["payload"]["repo_id"] == repo_id
 
-    reducer_fact = facts[3]
+    function_fact = facts[3]
+    assert function_fact["payload"]["graph_kind"] == "content_entity"
+    assert function_fact["payload"]["entity_id"] == canonical_content_entity_id(
+        repo_id=content_repo_id,
+        relative_path="app.py",
+        entity_type="Function",
+        entity_name="handler",
+        line_number=1,
+    )
+    assert function_fact["payload"]["entity_name"] == "handler"
+    assert function_fact["payload"]["source_cache"] == "def handler():\n    return 1\n"
+    assert function_fact["payload"]["repo_id"] == content_repo_id
+
+    class_fact = facts[4]
+    assert class_fact["payload"]["entity_id"] == canonical_content_entity_id(
+        repo_id=content_repo_id,
+        relative_path="app.py",
+        entity_type="Class",
+        entity_name="Worker",
+        line_number=4,
+    )
+    assert class_fact["payload"]["entity_type"] == "Class"
+    assert class_fact["payload"]["source_cache"] == "class Worker:\n    pass\n"
+    assert class_fact["payload"]["repo_id"] == content_repo_id
+
+    reducer_fact = facts[5]
     assert reducer_fact["payload"]["reducer_domain"] == "workload_identity"
     assert reducer_fact["payload"]["entity_key"] == "workload:service"
     assert "shared workload identity" in reducer_fact["payload"]["reason"]

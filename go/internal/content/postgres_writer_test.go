@@ -11,7 +11,7 @@ import (
 	pg "github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
-func TestPostgresContentWriterUpsertsFileRowsAndDeletesTombstones(t *testing.T) {
+func TestPostgresContentWriterUpsertsFileAndEntityRowsAndDeletesTombstones(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC)
@@ -42,6 +42,32 @@ func TestPostgresContentWriterUpsertsFileRowsAndDeletesTombstones(t *testing.T) 
 				Deleted: true,
 			},
 		},
+		Entities: []content.EntityRecord{
+			{
+				EntityID:        "content-entity:e_ab12cd34ef56",
+				Path:            "schema.sql",
+				EntityType:      "SqlTable",
+				EntityName:      "public.users",
+				StartLine:       10,
+				EndLine:         20,
+				StartByte:       intPtr(128),
+				EndByte:         intPtr(256),
+				Language:        "sql",
+				ArtifactType:    "schema",
+				TemplateDialect: "ansi",
+				IACRelevant:     boolPtr(true),
+				SourceCache:     "create table public.users",
+			},
+			{
+				EntityID:   "content-entity:e_old",
+				Path:       "old.sql",
+				EntityType: "SqlTable",
+				EntityName: "public.old_users",
+				StartLine:  1,
+				EndLine:    1,
+				Deleted:    true,
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Write() error = %v, want nil", err)
@@ -49,17 +75,29 @@ func TestPostgresContentWriterUpsertsFileRowsAndDeletesTombstones(t *testing.T) 
 	if got, want := result.RecordCount, 2; got != want {
 		t.Fatalf("Write().RecordCount = %d, want %d", got, want)
 	}
-	if got, want := result.DeletedCount, 1; got != want {
+	if got, want := result.EntityCount, 2; got != want {
+		t.Fatalf("Write().EntityCount = %d, want %d", got, want)
+	}
+	if got, want := result.DeletedCount, 2; got != want {
 		t.Fatalf("Write().DeletedCount = %d, want %d", got, want)
 	}
-	if got, want := len(db.execs), 3; got != want {
+	if got, want := len(db.execs), 5; got != want {
 		t.Fatalf("exec count = %d, want %d", got, want)
 	}
 	if !strings.Contains(db.execs[0].query, "INSERT INTO content_files") {
 		t.Fatalf("upsert query = %q, want content_files insert", db.execs[0].query)
 	}
-	if strings.Contains(db.execs[0].query, "content_entities") {
-		t.Fatalf("upsert query = %q, want no entity insert", db.execs[0].query)
+	if !strings.Contains(db.execs[1].query, "DELETE FROM content_entities") {
+		t.Fatalf("file tombstone entity cleanup query = %q, want content_entities delete", db.execs[1].query)
+	}
+	if !strings.Contains(db.execs[2].query, "DELETE FROM content_files") {
+		t.Fatalf("file delete query = %q, want content_files delete", db.execs[2].query)
+	}
+	if !strings.Contains(db.execs[3].query, "INSERT INTO content_entities") {
+		t.Fatalf("entity query = %q, want content_entities insert", db.execs[3].query)
+	}
+	if !strings.Contains(db.execs[4].query, "DELETE FROM content_entities") {
+		t.Fatalf("entity delete query = %q, want content_entities delete", db.execs[4].query)
 	}
 
 	args := db.execs[0].args
@@ -97,17 +135,70 @@ func TestPostgresContentWriterUpsertsFileRowsAndDeletesTombstones(t *testing.T) 
 		t.Fatalf("indexed_at arg = %v, want %v", got, want)
 	}
 
-	if !strings.Contains(db.execs[1].query, "DELETE FROM content_entities") {
-		t.Fatalf("cleanup query = %q, want content_entities delete", db.execs[1].query)
+	entityArgs := db.execs[3].args
+	if got, want := entityArgs[0], "content-entity:e_ab12cd34ef56"; got != want {
+		t.Fatalf("entity_id arg = %v, want %v", got, want)
 	}
-	if !strings.Contains(db.execs[2].query, "DELETE FROM content_files") {
-		t.Fatalf("delete query = %q, want content_files delete", db.execs[2].query)
+	if got, want := entityArgs[1], "repository:r_test"; got != want {
+		t.Fatalf("repo_id arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[2], "schema.sql"; got != want {
+		t.Fatalf("relative_path arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[3], "SqlTable"; got != want {
+		t.Fatalf("entity_type arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[4], "public.users"; got != want {
+		t.Fatalf("entity_name arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[5], 10; got != want {
+		t.Fatalf("start_line arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[6], 20; got != want {
+		t.Fatalf("end_line arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[7], 128; got != want {
+		t.Fatalf("start_byte arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[8], 256; got != want {
+		t.Fatalf("end_byte arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[9], "sql"; got != want {
+		t.Fatalf("language arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[10], "schema"; got != want {
+		t.Fatalf("artifact_type arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[11], "ansi"; got != want {
+		t.Fatalf("template_dialect arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[12], true; got != want {
+		t.Fatalf("iac_relevant arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[13], "create table public.users"; got != want {
+		t.Fatalf("source_cache arg = %v, want %v", got, want)
+	}
+	if got, want := entityArgs[14], now; got != want {
+		t.Fatalf("indexed_at arg = %v, want %v", got, want)
+	}
+
+	if got, want := db.execs[1].args[0], "repository:r_test"; got != want {
+		t.Fatalf("delete repo_id arg = %v, want %v", got, want)
+	}
+	if got, want := db.execs[1].args[1], "old.sql"; got != want {
+		t.Fatalf("delete relative_path arg = %v, want %v", got, want)
 	}
 	if got, want := db.execs[2].args[0], "repository:r_test"; got != want {
 		t.Fatalf("delete repo_id arg = %v, want %v", got, want)
 	}
 	if got, want := db.execs[2].args[1], "old.sql"; got != want {
 		t.Fatalf("delete relative_path arg = %v, want %v", got, want)
+	}
+	if got, want := db.execs[4].args[0], "repository:r_test"; got != want {
+		t.Fatalf("entity delete repo_id arg = %v, want %v", got, want)
+	}
+	if got, want := db.execs[4].args[1], "content-entity:e_old"; got != want {
+		t.Fatalf("entity delete entity_id arg = %v, want %v", got, want)
 	}
 }
 
@@ -162,3 +253,11 @@ type recordingResult struct{}
 func (recordingResult) LastInsertId() (int64, error) { return 0, nil }
 
 func (recordingResult) RowsAffected() (int64, error) { return 0, nil }
+
+func intPtr(value int) *int {
+	return &value
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}

@@ -44,10 +44,42 @@ WHERE repo_id = $1
   AND relative_path = $2
 `
 
+const upsertContentEntityQuery = `
+INSERT INTO content_entities (
+    entity_id, repo_id, relative_path, entity_type, entity_name,
+    start_line, end_line, start_byte, end_byte, language,
+    artifact_type, template_dialect, iac_relevant,
+    source_cache, indexed_at
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10,
+    $11, $12, $13,
+    $14, $15
+)
+ON CONFLICT (entity_id) DO UPDATE
+SET repo_id = EXCLUDED.repo_id,
+    relative_path = EXCLUDED.relative_path,
+    entity_type = EXCLUDED.entity_type,
+    entity_name = EXCLUDED.entity_name,
+    start_line = EXCLUDED.start_line,
+    end_line = EXCLUDED.end_line,
+    start_byte = EXCLUDED.start_byte,
+    end_byte = EXCLUDED.end_byte,
+    language = EXCLUDED.language,
+    artifact_type = EXCLUDED.artifact_type,
+    template_dialect = EXCLUDED.template_dialect,
+    iac_relevant = EXCLUDED.iac_relevant,
+    source_cache = EXCLUDED.source_cache,
+    indexed_at = EXCLUDED.indexed_at
+`
+
+const deleteContentEntityByIDQuery = `
+DELETE FROM content_entities
+WHERE repo_id = $1
+  AND entity_id = $2
+`
+
 // ContentWriter persists repo-local content rows into the canonical content store.
-//
-// It only writes file rows because content.Record does not yet carry the entity
-// identity and span data required to synthesize content_entities safely.
 type ContentWriter struct {
 	db  ExecQueryer
 	Now func() time.Time
@@ -58,7 +90,7 @@ func NewContentWriter(db ExecQueryer) ContentWriter {
 	return ContentWriter{db: db}
 }
 
-// Write persists canonical file rows and removes tombstoned rows.
+// Write persists canonical file and entity rows and removes tombstoned rows.
 func (w ContentWriter) Write(ctx context.Context, materialization content.Materialization) (content.Result, error) {
 	if w.db == nil {
 		return content.Result{}, fmt.Errorf("content writer database is required")
@@ -74,6 +106,7 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 		ScopeID:      cloned.ScopeID,
 		GenerationID: cloned.GenerationID,
 		RecordCount:  len(cloned.Records),
+		EntityCount:  len(cloned.Entities),
 	}
 
 	for _, record := range cloned.Records {
@@ -134,6 +167,65 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 			indexedAt,
 		); err != nil {
 			return content.Result{}, fmt.Errorf("upsert content_files for %q: %w", record.Path, err)
+		}
+	}
+
+	for _, entity := range cloned.Entities {
+		if strings.TrimSpace(entity.EntityID) == "" {
+			return content.Result{}, fmt.Errorf("content entity id is required")
+		}
+		if strings.TrimSpace(entity.Path) == "" {
+			return content.Result{}, fmt.Errorf("content entity path is required")
+		}
+		if strings.TrimSpace(entity.EntityType) == "" {
+			return content.Result{}, fmt.Errorf("content entity type is required for %q", entity.EntityID)
+		}
+		if strings.TrimSpace(entity.EntityName) == "" {
+			return content.Result{}, fmt.Errorf("content entity name is required for %q", entity.EntityID)
+		}
+		if entity.StartLine <= 0 {
+			return content.Result{}, fmt.Errorf("content entity start line is required for %q", entity.EntityID)
+		}
+
+		endLine := entity.EndLine
+		if endLine < entity.StartLine {
+			endLine = entity.StartLine
+		}
+		sourceCache := strings.TrimSpace(entity.SourceCache)
+
+		if entity.Deleted {
+			if _, err := w.db.ExecContext(
+				ctx,
+				deleteContentEntityByIDQuery,
+				cloned.RepoID,
+				entity.EntityID,
+			); err != nil {
+				return content.Result{}, fmt.Errorf("delete content_entities by entity_id for %q: %w", entity.EntityID, err)
+			}
+			result.DeletedCount++
+			continue
+		}
+
+		if _, err := w.db.ExecContext(
+			ctx,
+			upsertContentEntityQuery,
+			entity.EntityID,
+			cloned.RepoID,
+			entity.Path,
+			entity.EntityType,
+			entity.EntityName,
+			entity.StartLine,
+			endLine,
+			optionalInt(entity.StartByte),
+			optionalInt(entity.EndByte),
+			optionalString(entity.Language),
+			optionalString(entity.ArtifactType),
+			optionalString(entity.TemplateDialect),
+			optionalBool(entity.IACRelevant),
+			sourceCache,
+			indexedAt,
+		); err != nil {
+			return content.Result{}, fmt.Errorf("upsert content_entities for %q: %w", entity.EntityID, err)
 		}
 	}
 
@@ -208,4 +300,29 @@ func optionalMetadataBool(metadata map[string]string, key string) (any, error) {
 	}
 
 	return parsed, nil
+}
+
+func optionalString(value string) any {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+
+	return trimmed
+}
+
+func optionalInt(value *int) any {
+	if value == nil {
+		return nil
+	}
+
+	return *value
+}
+
+func optionalBool(value *bool) any {
+	if value == nil {
+		return nil
+	}
+
+	return *value
 }

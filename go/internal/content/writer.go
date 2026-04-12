@@ -2,7 +2,11 @@ package content
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"strings"
+
+	"golang.org/x/crypto/blake2s"
 )
 
 // Record captures one source-local content write candidate.
@@ -24,6 +28,40 @@ func (r Record) Clone() Record {
 	return cloned
 }
 
+// EntityRecord captures one source-local content entity write candidate.
+type EntityRecord struct {
+	EntityID        string
+	Path            string
+	EntityType      string
+	EntityName      string
+	StartLine       int
+	EndLine         int
+	StartByte       *int
+	EndByte         *int
+	Language        string
+	ArtifactType    string
+	TemplateDialect string
+	IACRelevant     *bool
+	SourceCache     string
+	Deleted         bool
+}
+
+// Clone returns a copy-safe entity record value.
+func (r EntityRecord) Clone() EntityRecord {
+	cloned := r
+	if r.StartByte != nil {
+		cloned.StartByte = cloneIntPtr(r.StartByte)
+	}
+	if r.EndByte != nil {
+		cloned.EndByte = cloneIntPtr(r.EndByte)
+	}
+	if r.IACRelevant != nil {
+		cloned.IACRelevant = cloneBoolPtr(r.IACRelevant)
+	}
+
+	return cloned
+}
+
 // Materialization is the source-local content payload for one scope generation.
 type Materialization struct {
 	RepoID       string
@@ -31,6 +69,7 @@ type Materialization struct {
 	GenerationID string
 	SourceSystem string
 	Records      []Record
+	Entities     []EntityRecord
 }
 
 // ScopeGenerationKey returns the durable scope-generation boundary.
@@ -47,6 +86,12 @@ func (m Materialization) Clone() Materialization {
 			cloned.Records[i] = m.Records[i].Clone()
 		}
 	}
+	if len(m.Entities) > 0 {
+		cloned.Entities = make([]EntityRecord, len(m.Entities))
+		for i := range m.Entities {
+			cloned.Entities[i] = m.Entities[i].Clone()
+		}
+	}
 
 	return cloned
 }
@@ -56,6 +101,7 @@ type Result struct {
 	ScopeID      string
 	GenerationID string
 	RecordCount  int
+	EntityCount  int
 	DeletedCount int
 }
 
@@ -82,9 +128,15 @@ func (w *MemoryWriter) Write(_ context.Context, materialization Materialization)
 		ScopeID:      cloned.ScopeID,
 		GenerationID: cloned.GenerationID,
 		RecordCount:  len(cloned.Records),
+		EntityCount:  len(cloned.Entities),
 	}
 	for _, record := range cloned.Records {
 		if record.Deleted {
+			result.DeletedCount++
+		}
+	}
+	for _, entity := range cloned.Entities {
+		if entity.Deleted {
 			result.DeletedCount++
 		}
 	}
@@ -103,4 +155,42 @@ func cloneStringMap(input map[string]string) map[string]string {
 	}
 
 	return cloned
+}
+
+// CanonicalEntityID returns a stable content-entity identifier.
+func CanonicalEntityID(
+	repoID string,
+	relativePath string,
+	entityType string,
+	entityName string,
+	lineNumber int,
+) string {
+	identity := fmt.Sprintf(
+		"%s\n%s\n%s\n%s\n%d",
+		strings.TrimSpace(repoID),
+		strings.TrimSpace(relativePath),
+		strings.ToLower(strings.TrimSpace(entityType)),
+		strings.TrimSpace(entityName),
+		lineNumber,
+	)
+	sum := blake2s.Sum256([]byte(identity))
+	return fmt.Sprintf("content-entity:e_%s", hex.EncodeToString(sum[:])[:12])
+}
+
+func cloneIntPtr(value *int) *int {
+	if value == nil {
+		return nil
+	}
+
+	cloned := *value
+	return &cloned
+}
+
+func cloneBoolPtr(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+
+	cloned := *value
+	return &cloned
 }

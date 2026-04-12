@@ -14,15 +14,12 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
-// Runtime projects one scope generation at a time into source-local graph and
-// content materializations, then emits durable reducer intents for follow-up.
 type Runtime struct {
 	GraphWriter   graph.Writer
 	ContentWriter content.Writer
 	IntentWriter  ReducerIntentWriter
 }
 
-// ReducerIntent captures one durable shared follow-up request.
 type ReducerIntent struct {
 	ScopeID      string
 	GenerationID string
@@ -33,22 +30,18 @@ type ReducerIntent struct {
 	SourceSystem string
 }
 
-// ScopeGenerationKey returns the durable scope-generation boundary.
 func (i ReducerIntent) ScopeGenerationKey() string {
 	return fmt.Sprintf("%s:%s", i.ScopeID, i.GenerationID)
 }
 
-// IntentResult summarizes the durable reducer-intent enqueue step.
 type IntentResult struct {
 	Count int
 }
 
-// ReducerIntentWriter is the narrow durable queue contract for reducer follow-up.
 type ReducerIntentWriter interface {
 	Enqueue(context.Context, []ReducerIntent) (IntentResult, error)
 }
 
-// Result captures the source-local projection outcome for one generation.
 type Result struct {
 	ScopeID      string
 	GenerationID string
@@ -57,17 +50,14 @@ type Result struct {
 	Intents      IntentResult
 }
 
-// ScopeGenerationKey returns the durable scope-generation boundary.
 func (r Result) ScopeGenerationKey() string {
 	return fmt.Sprintf("%s:%s", r.ScopeID, r.GenerationID)
 }
 
-// TraceSpanName returns the primary stable projector span name.
 func (Runtime) TraceSpanName() string {
 	return telemetry.SpanProjectorRun
 }
 
-// TraceSpanNames returns the stable span set used by the projector runtime path.
 func (Runtime) TraceSpanNames() []string {
 	return []string{
 		telemetry.SpanProjectorRun,
@@ -76,7 +66,6 @@ func (Runtime) TraceSpanNames() []string {
 	}
 }
 
-// Project materializes local truth for one validated scope generation.
 func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, generation scope.ScopeGeneration, inputFacts []facts.Envelope) (Result, error) {
 	if err := generation.ValidateForScope(scopeValue); err != nil {
 		return Result{}, err
@@ -103,9 +92,9 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 		result.Graph = graphResult
 	}
 
-	if len(projection.contentMaterialization.Records) > 0 {
+	if len(projection.contentMaterialization.Records) > 0 || len(projection.contentMaterialization.Entities) > 0 {
 		if r.ContentWriter == nil {
-			return Result{}, errors.New("content writer is required when content records are present")
+			return Result{}, errors.New("content writer is required when content rows are present")
 		}
 		contentResult, err := r.ContentWriter.Write(ctx, projection.contentMaterialization)
 		if err != nil {
@@ -159,6 +148,9 @@ func buildProjection(scopeValue scope.IngestionScope, generation scope.ScopeGene
 		}
 		if record, ok := buildContentRecord(fact); ok {
 			contentMaterialization.Records = append(contentMaterialization.Records, record)
+		}
+		if entity, ok := buildContentEntityRecord(contentMaterialization.RepoID, fact); ok {
+			contentMaterialization.Entities = append(contentMaterialization.Entities, entity)
 		}
 		if intent, ok := buildReducerIntent(fact); ok {
 			intents = append(intents, intent)
@@ -227,6 +219,9 @@ func buildContentRecord(fact facts.Envelope) (content.Record, bool) {
 	if !ok {
 		return content.Record{}, false
 	}
+	if !payloadHasKey(fact.Payload, "content_body") && !payloadHasKey(fact.Payload, "content_digest") {
+		return content.Record{}, false
+	}
 
 	body, _ := payloadString(fact.Payload, "content_body")
 	digest, _ := payloadString(fact.Payload, "content_digest")
@@ -237,6 +232,86 @@ func buildContentRecord(fact facts.Envelope) (content.Record, bool) {
 		Digest:   digest,
 		Deleted:  fact.IsTombstone,
 		Metadata: payloadAttributes(fact.Payload, "content_path", "content_body", "content_digest"),
+	}, true
+}
+
+func buildContentEntityRecord(repoID string, fact facts.Envelope) (content.EntityRecord, bool) {
+	relativePath, ok := payloadString(fact.Payload, "content_path")
+	if !ok {
+		relativePath, ok = payloadString(fact.Payload, "relative_path")
+	}
+	if !ok {
+		relativePath, ok = payloadString(fact.Payload, "path")
+	}
+	if !ok {
+		return content.EntityRecord{}, false
+	}
+
+	entityType, ok := payloadString(fact.Payload, "entity_kind")
+	if !ok {
+		entityType, ok = payloadString(fact.Payload, "entity_type")
+	}
+	if !ok {
+		entityType, ok = payloadString(fact.Payload, "sql_entity_type")
+	}
+	if !ok {
+		entityType = fact.FactKind
+	}
+	if strings.TrimSpace(entityType) == "" {
+		return content.EntityRecord{}, false
+	}
+
+	entityName, ok := payloadString(fact.Payload, "entity_name")
+	if !ok {
+		entityName, ok = payloadString(fact.Payload, "name")
+	}
+	if !ok {
+		return content.EntityRecord{}, false
+	}
+
+	startLine, ok := payloadInt(fact.Payload, "start_line")
+	if !ok {
+		startLine, ok = payloadInt(fact.Payload, "line_number")
+	}
+	if !ok || startLine <= 0 {
+		startLine = 1
+	}
+
+	endLine, ok := payloadInt(fact.Payload, "end_line")
+	if !ok || endLine < startLine {
+		endLine = startLine
+	}
+
+	startByte := payloadIntPtr(fact.Payload, "start_byte")
+	endByte := payloadIntPtr(fact.Payload, "end_byte")
+	language, _ := payloadString(fact.Payload, "language")
+	if language == "" {
+		language, _ = payloadString(fact.Payload, "lang")
+	}
+	artifactType, _ := payloadString(fact.Payload, "artifact_type")
+	templateDialect, _ := payloadString(fact.Payload, "template_dialect")
+	iacRelevant := payloadBoolPtr(fact.Payload, "iac_relevant")
+	entityID, ok := payloadString(fact.Payload, "entity_id")
+	if !ok {
+		entityID = content.CanonicalEntityID(repoID, relativePath, entityType, entityName, startLine)
+	}
+	sourceCache, _ := payloadString(fact.Payload, "source_cache")
+
+	return content.EntityRecord{
+		EntityID:        entityID,
+		Path:            relativePath,
+		EntityType:      entityType,
+		EntityName:      entityName,
+		StartLine:       startLine,
+		EndLine:         endLine,
+		StartByte:       startByte,
+		EndByte:         endByte,
+		Language:        language,
+		ArtifactType:    artifactType,
+		TemplateDialect: templateDialect,
+		IACRelevant:     iacRelevant,
+		SourceCache:     sourceCache,
+		Deleted:         fact.IsTombstone,
 	}, true
 }
 
@@ -261,65 +336,4 @@ func buildReducerIntent(fact facts.Envelope) (ReducerIntent, bool) {
 		FactID:       fact.FactID,
 		SourceSystem: fact.SourceRef.SourceSystem,
 	}, true
-}
-
-func payloadAttributes(payload map[string]any, excluded ...string) map[string]string {
-	if len(payload) == 0 {
-		return nil
-	}
-
-	skip := make(map[string]struct{}, len(excluded))
-	for _, key := range excluded {
-		skip[key] = struct{}{}
-	}
-
-	attributes := make(map[string]string, len(payload))
-	for key, value := range payload {
-		if _, ok := skip[key]; ok {
-			continue
-		}
-		if text, ok := asString(value); ok {
-			attributes[key] = text
-		}
-	}
-
-	if len(attributes) == 0 {
-		return nil
-	}
-
-	return attributes
-}
-
-func payloadString(payload map[string]any, key string) (string, bool) {
-	if len(payload) == 0 {
-		return "", false
-	}
-
-	value, ok := payload[key]
-	if !ok {
-		return "", false
-	}
-
-	text, ok := asString(value)
-	if !ok {
-		return "", false
-	}
-
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return "", false
-	}
-
-	return text, true
-}
-
-func asString(value any) (string, bool) {
-	switch typed := value.(type) {
-	case string:
-		return typed, true
-	case fmt.Stringer:
-		return typed.String(), true
-	default:
-		return "", false
-	}
 }

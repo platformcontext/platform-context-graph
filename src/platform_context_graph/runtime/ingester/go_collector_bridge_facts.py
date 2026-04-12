@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from platform_context_graph.content.models import ContentEntityEntry, ContentFileEntry
 from platform_context_graph.facts.models.base import stable_fact_id
 
 
@@ -113,6 +114,7 @@ def file_fact(
     repo_id: str,
     file_path: Path,
     language: str | None,
+    parsed_file_data: dict[str, Any] | None,
     scope_id: str,
     generation_id: str,
     observed_at: datetime,
@@ -128,6 +130,8 @@ def file_fact(
     }
     if language:
         payload["language"] = language
+    if parsed_file_data is not None:
+        payload["parsed_file_data"] = _sanitize_for_json(parsed_file_data)
 
     return _fact_record(
         fact_kind="file",
@@ -146,21 +150,43 @@ def content_fact(
     repo_id: str,
     file_path: Path,
     language: str | None,
+    file_entry: ContentFileEntry | None,
     scope_id: str,
     generation_id: str,
     observed_at: datetime,
 ) -> dict[str, Any]:
     """Build the file-content fact."""
 
-    relative_path = _relative_path(repo_path, file_path)
+    relative_path = (
+        file_entry.relative_path
+        if file_entry is not None
+        else _relative_path(repo_path, file_path)
+    )
     payload = {
         "content_path": relative_path,
-        "content_body": file_path.read_text(encoding="utf-8"),
-        "content_digest": _content_digest(file_path),
+        "content_body": (
+            file_entry.content
+            if file_entry is not None
+            else file_path.read_text(encoding="utf-8")
+        ),
+        "content_digest": (
+            file_entry.content_hash
+            if file_entry is not None
+            else _content_digest(file_path)
+        ),
         "repo_id": repo_id,
     }
-    if language:
-        payload["language"] = language
+    resolved_language = file_entry.language if file_entry is not None else language
+    if resolved_language:
+        payload["language"] = resolved_language
+    if file_entry is not None and file_entry.commit_sha:
+        payload["commit_sha"] = file_entry.commit_sha
+    if file_entry is not None and file_entry.artifact_type:
+        payload["artifact_type"] = file_entry.artifact_type
+    if file_entry is not None and file_entry.template_dialect:
+        payload["template_dialect"] = file_entry.template_dialect
+    if file_entry is not None:
+        payload["iac_relevant"] = str(file_entry.iac_relevant).lower()
 
     return _fact_record(
         fact_kind="content",
@@ -168,6 +194,50 @@ def content_fact(
         generation_id=generation_id,
         observed_at=observed_at,
         fact_key=f"content:{repo_id}:{relative_path}",
+        payload=payload,
+        source_uri=str(file_path.resolve()),
+    )
+
+
+def content_entity_fact(
+    *,
+    repo_path: Path,
+    repo_id: str,
+    file_path: Path,
+    entity: ContentEntityEntry,
+    scope_id: str,
+    generation_id: str,
+    observed_at: datetime,
+) -> dict[str, Any]:
+    """Build the content-entity fact for one parsed entity."""
+
+    del repo_path
+    payload = {
+        "graph_id": entity.entity_id,
+        "graph_kind": "content_entity",
+        "entity_id": entity.entity_id,
+        "repo_id": repo_id,
+        "relative_path": entity.relative_path,
+        "entity_type": entity.entity_type,
+        "entity_name": entity.entity_name,
+        "start_line": entity.start_line,
+        "end_line": entity.end_line,
+        "start_byte": entity.start_byte,
+        "end_byte": entity.end_byte,
+        "language": entity.language,
+        "artifact_type": entity.artifact_type,
+        "template_dialect": entity.template_dialect,
+        "iac_relevant": entity.iac_relevant,
+        "source_cache": entity.source_cache,
+        "indexed_at": entity.indexed_at.isoformat(),
+    }
+
+    return _fact_record(
+        fact_kind="content_entity",
+        scope_id=scope_id,
+        generation_id=generation_id,
+        observed_at=observed_at,
+        fact_key=f"content_entity:{entity.entity_id}",
         payload=payload,
         source_uri=str(file_path.resolve()),
     )
@@ -220,7 +290,7 @@ def _fact_record(
     generation_id: str,
     observed_at: datetime,
     fact_key: str,
-    payload: dict[str, str],
+    payload: dict[str, Any],
     source_uri: str,
 ) -> dict[str, Any]:
     """Build one Go-shaped fact envelope JSON record."""
@@ -251,3 +321,18 @@ def _fact_record(
             "source_record_id": fact_key,
         },
     }
+
+
+def _sanitize_for_json(value: Any) -> Any:
+    """Recursively convert snapshot payloads into JSON-safe values."""
+
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {
+            key: _sanitize_for_json(nested_value)
+            for key, nested_value in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_for_json(item) for item in value]
+    return value

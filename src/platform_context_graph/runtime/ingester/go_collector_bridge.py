@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from typing import Any, Callable
 
 from platform_context_graph.collectors.git.types import RepositoryParseSnapshot
+from platform_context_graph.content.ingest import prepare_content_entries
 from platform_context_graph.facts.models.base import stable_fact_id, utc_now
 from platform_context_graph.indexing.coordinator_facts_support import (
     repository_id_for_path,
@@ -24,6 +25,7 @@ from .go_collector_bridge_facts import (
     bridge_generation,
     bridge_scope,
     content_fact,
+    content_entity_fact,
     file_fact,
     repository_fact,
     workload_identity_fact,
@@ -212,6 +214,7 @@ def _repository_facts(
 ) -> list[dict[str, Any]]:
     """Build all facts for one parsed repository snapshot."""
 
+    content_repo_id = str(repo_metadata["id"])
     facts = [
         repository_fact(
             repo_path=repo_path,
@@ -226,13 +229,18 @@ def _repository_facts(
 
     for file_data in snapshot.file_data:
         file_path = Path(str(file_data["path"])).resolve()
-        language = str(file_data.get("language") or "").strip() or None
+        language = str(file_data.get("language") or file_data.get("lang") or "").strip() or None
+        file_entry, entity_entries = prepare_content_entries(
+            file_data=file_data,
+            repository=repo_metadata,
+        )
         facts.append(
             file_fact(
                 repo_path=repo_path,
                 repo_id=repo_id,
                 file_path=file_path,
-                language=language,
+                language=file_entry.language if file_entry is not None else language,
+                parsed_file_data=file_data,
                 scope_id=scope_id,
                 generation_id=generation_id,
                 observed_at=observed_at,
@@ -243,12 +251,25 @@ def _repository_facts(
                 repo_path=repo_path,
                 repo_id=repo_id,
                 file_path=file_path,
-                language=language,
+                language=file_entry.language if file_entry is not None else language,
+                file_entry=file_entry,
                 scope_id=scope_id,
                 generation_id=generation_id,
                 observed_at=observed_at,
             )
         )
+        for entity in entity_entries:
+            facts.append(
+                content_entity_fact(
+                    repo_path=repo_path,
+                    repo_id=content_repo_id,
+                    file_path=file_path,
+                    entity=entity,
+                    scope_id=scope_id,
+                    generation_id=generation_id,
+                    observed_at=observed_at,
+                )
+            )
 
     facts.append(
         workload_identity_fact(
