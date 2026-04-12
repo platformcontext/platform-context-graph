@@ -1,0 +1,186 @@
+package reducer
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+)
+
+// OwnershipShape records whether a reducer domain owns cross-source and
+// cross-scope reconciliation.
+type OwnershipShape struct {
+	CrossSource    bool
+	CrossScope     bool
+	CanonicalWrite bool
+}
+
+// Validate checks that the ownership shape matches the reducer boundary.
+func (o OwnershipShape) Validate() error {
+	if !o.CrossSource {
+		return errors.New("reducers must be cross-source")
+	}
+	if !o.CrossScope {
+		return errors.New("reducers must be cross-scope")
+	}
+	if !o.CanonicalWrite {
+		return errors.New("reducers must target canonical shared truth")
+	}
+
+	return nil
+}
+
+// DomainDefinition describes one reducer domain and its ownership shape.
+type DomainDefinition struct {
+	Domain    Domain
+	Summary   string
+	Ownership OwnershipShape
+	Handler   Handler
+}
+
+// Validate checks the domain definition for registration.
+func (d DomainDefinition) Validate() error {
+	if strings.TrimSpace(string(d.Domain)) == "" {
+		return errors.New("domain must not be blank")
+	}
+	if strings.TrimSpace(d.Summary) == "" {
+		return errors.New("summary must not be blank")
+	}
+	if err := d.Ownership.Validate(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Registry owns the explicit reducer domain catalog and handlers.
+type Registry struct {
+	ordered []Domain
+	defs    map[Domain]DomainDefinition
+}
+
+// Handler executes one reducer intent for a registered domain.
+type Handler interface {
+	Handle(context.Context, Intent) (Result, error)
+}
+
+// HandlerFunc adapts a function into a Handler.
+type HandlerFunc func(context.Context, Intent) (Result, error)
+
+// Handle executes the wrapped function.
+func (f HandlerFunc) Handle(ctx context.Context, intent Intent) (Result, error) {
+	return f(ctx, intent)
+}
+
+// NewRegistry constructs an empty reducer registry.
+func NewRegistry() Registry {
+	return Registry{
+		defs: make(map[Domain]DomainDefinition),
+	}
+}
+
+// Register adds a reducer domain definition to the registry.
+func (r *Registry) Register(def DomainDefinition) error {
+	if err := def.Validate(); err != nil {
+		return err
+	}
+	if _, exists := r.defs[def.Domain]; exists {
+		return fmt.Errorf("domain %q already registered", def.Domain)
+	}
+
+	if r.defs == nil {
+		r.defs = make(map[Domain]DomainDefinition)
+	}
+	r.defs[def.Domain] = def
+	r.ordered = append(r.ordered, def.Domain)
+
+	return nil
+}
+
+// Definition returns the registered domain definition.
+func (r Registry) Definition(domain Domain) (DomainDefinition, bool) {
+	def, ok := r.defs[domain]
+	return def, ok
+}
+
+// Definitions returns the registered domain definitions in registration order.
+func (r Registry) Definitions() []DomainDefinition {
+	definitions := make([]DomainDefinition, 0, len(r.ordered))
+	for _, domain := range r.ordered {
+		definitions = append(definitions, r.defs[domain])
+	}
+
+	return definitions
+}
+
+// SortedDomains returns the registered domains in deterministic order.
+func (r Registry) SortedDomains() []Domain {
+	domains := make([]Domain, 0, len(r.ordered))
+	domains = append(domains, r.ordered...)
+	sort.SliceStable(domains, func(i, j int) bool {
+		return domains[i] < domains[j]
+	})
+
+	return domains
+}
+
+// DefaultDomainDefinitions returns the canonical reducer domain catalog.
+func DefaultDomainDefinitions() []DomainDefinition {
+	return []DomainDefinition{
+		{
+			Domain:  DomainWorkloadIdentity,
+			Summary: "resolve canonical workload identity across sources",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+		},
+		{
+			Domain:  DomainCloudAssetResolution,
+			Summary: "resolve canonical cloud asset identity across sources",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+		},
+		{
+			Domain:  DomainDeploymentMapping,
+			Summary: "resolve deployment mapping across sources",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+		},
+		{
+			Domain:  DomainDataLineage,
+			Summary: "resolve lineage across source-local and canonical truth",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+		},
+		{
+			Domain:  DomainOwnership,
+			Summary: "resolve ownership and responsibility across sources",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+		},
+		{
+			Domain:  DomainGovernance,
+			Summary: "resolve governance and policy attribution across sources",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+		},
+	}
+}

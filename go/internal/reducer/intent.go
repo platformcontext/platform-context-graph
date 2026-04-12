@@ -1,0 +1,189 @@
+// Package reducer defines the durable cross-source and cross-scope reducer
+// substrate used by the Go data plane.
+package reducer
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+)
+
+// Domain identifies a canonical shared-truth reducer domain.
+type Domain string
+
+const (
+	// DomainWorkloadIdentity resolves canonical workload identity.
+	DomainWorkloadIdentity Domain = "workload_identity"
+	// DomainCloudAssetResolution resolves canonical cloud asset identity.
+	DomainCloudAssetResolution Domain = "cloud_asset_resolution"
+	// DomainDeploymentMapping resolves deployment relationships.
+	DomainDeploymentMapping Domain = "deployment_mapping"
+	// DomainDataLineage resolves lineage across sources and scopes.
+	DomainDataLineage Domain = "data_lineage"
+	// DomainOwnership resolves ownership and responsibility records.
+	DomainOwnership Domain = "ownership"
+	// DomainGovernance resolves governance and policy attribution.
+	DomainGovernance Domain = "governance"
+)
+
+// IntentStatus captures the durable reducer intent lifecycle state.
+type IntentStatus string
+
+const (
+	// IntentStatusPending means the intent is ready to be claimed.
+	IntentStatusPending IntentStatus = "pending"
+	// IntentStatusClaimed means the intent has been leased for execution.
+	IntentStatusClaimed IntentStatus = "claimed"
+	// IntentStatusRunning means the reducer is actively processing the intent.
+	IntentStatusRunning IntentStatus = "running"
+	// IntentStatusSucceeded means the intent finished successfully.
+	IntentStatusSucceeded IntentStatus = "succeeded"
+	// IntentStatusFailed means the intent is terminally failed.
+	IntentStatusFailed IntentStatus = "failed"
+)
+
+// ResultStatus captures the terminal outcome of one reducer execution.
+type ResultStatus string
+
+const (
+	// ResultStatusSucceeded means the execution completed successfully.
+	ResultStatusSucceeded ResultStatus = "succeeded"
+	// ResultStatusFailed means the execution failed.
+	ResultStatusFailed ResultStatus = "failed"
+)
+
+// FailureRecord captures the durable reducer failure classification.
+type FailureRecord struct {
+	FailureClass string
+	Message      string
+	Details      string
+}
+
+// Intent describes one durable reducer follow-up action keyed by scope
+// generation.
+type Intent struct {
+	IntentID        string
+	ScopeID         string
+	GenerationID    string
+	SourceSystem    string
+	Domain          Domain
+	Cause           string
+	Priority        int
+	EntityKeys      []string
+	RelatedScopeIDs []string
+	Status          IntentStatus
+	EnqueuedAt      time.Time
+	AvailableAt     time.Time
+	ClaimedAt       *time.Time
+	CompletedAt     *time.Time
+	Failure         *FailureRecord
+}
+
+// ScopeGenerationKey returns the durable scope-generation boundary for the intent.
+func (i Intent) ScopeGenerationKey() string {
+	return fmt.Sprintf("%s:%s", i.ScopeID, i.GenerationID)
+}
+
+// Validate checks the durable intent contract.
+func (i Intent) Validate() error {
+	if strings.TrimSpace(i.IntentID) == "" {
+		return errors.New("intent_id must not be blank")
+	}
+	if strings.TrimSpace(i.ScopeID) == "" {
+		return errors.New("scope_id must not be blank")
+	}
+	if strings.TrimSpace(i.GenerationID) == "" {
+		return errors.New("generation_id must not be blank")
+	}
+	if strings.TrimSpace(i.SourceSystem) == "" {
+		return errors.New("source_system must not be blank")
+	}
+	if strings.TrimSpace(string(i.Domain)) == "" {
+		return errors.New("domain must not be blank")
+	}
+	if strings.TrimSpace(i.Cause) == "" {
+		return errors.New("cause must not be blank")
+	}
+	if i.EnqueuedAt.IsZero() {
+		return errors.New("enqueued_at must not be zero")
+	}
+	if i.AvailableAt.IsZero() {
+		return errors.New("available_at must not be zero")
+	}
+	if len(i.RelatedScopeIDs) == 0 {
+		return errors.New("related_scope_ids must not be empty")
+	}
+	if err := i.Status.Validate(); err != nil {
+		return err
+	}
+
+	for _, key := range i.EntityKeys {
+		if strings.TrimSpace(key) == "" {
+			return errors.New("entity_keys must not contain blank values")
+		}
+	}
+	for _, scopeID := range i.RelatedScopeIDs {
+		if strings.TrimSpace(scopeID) == "" {
+			return errors.New("related_scope_ids must not contain blank values")
+		}
+	}
+
+	return nil
+}
+
+// Clone returns a replay-safe copy of the intent.
+func (i Intent) Clone() Intent {
+	cloned := i
+	cloned.EntityKeys = slices.Clone(i.EntityKeys)
+	cloned.RelatedScopeIDs = slices.Clone(i.RelatedScopeIDs)
+	if i.ClaimedAt != nil {
+		claimedAt := *i.ClaimedAt
+		cloned.ClaimedAt = &claimedAt
+	}
+	if i.CompletedAt != nil {
+		completedAt := *i.CompletedAt
+		cloned.CompletedAt = &completedAt
+	}
+	if i.Failure != nil {
+		failure := *i.Failure
+		cloned.Failure = &failure
+	}
+
+	return cloned
+}
+
+// Validate checks that the lifecycle state is one of the known durable values.
+func (status IntentStatus) Validate() error {
+	switch status {
+	case IntentStatusPending, IntentStatusClaimed, IntentStatusRunning, IntentStatusSucceeded, IntentStatusFailed:
+		return nil
+	default:
+		return fmt.Errorf("unknown intent status %q", status)
+	}
+}
+
+func (status IntentStatus) terminal() bool {
+	switch status {
+	case IntentStatusSucceeded, IntentStatusFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+func (i Intent) withStatus(status IntentStatus, at time.Time) Intent {
+	cloned := i.Clone()
+	cloned.Status = status
+	switch status {
+	case IntentStatusClaimed:
+		cloned.ClaimedAt = &at
+	case IntentStatusRunning:
+		cloned.ClaimedAt = &at
+	case IntentStatusSucceeded, IntentStatusFailed:
+		cloned.CompletedAt = &at
+	}
+
+	return cloned
+}
