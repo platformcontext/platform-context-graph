@@ -25,11 +25,13 @@ def test_repository_story_exposes_data_intelligence_section() -> None:
                 "data_asset_count": 5,
                 "data_column_count": 10,
                 "query_execution_count": 2,
+                "dashboard_asset_count": 1,
                 "relationship_counts": {
                     "compiles_to": 2,
                     "asset_derives_from": 5,
                     "column_derives_from": 4,
                     "runs_query_against": 4,
+                    "powers": 3,
                 },
                 "reconciliation": {
                     "status": "partial_overlap",
@@ -60,6 +62,13 @@ def test_repository_story_exposes_data_intelligence_section() -> None:
                         "parse_state": "partial",
                     },
                 ],
+                "sample_dashboards": [
+                    {
+                        "name": "Revenue Overview",
+                        "path": "dashboards/revenue_overview.json",
+                        "workspace": "finance",
+                    }
+                ],
                 "sample_assets": [
                     {"name": "analytics.public.order_metrics", "kind": "model"},
                     {"name": "raw.public.orders", "kind": "source"},
@@ -75,7 +84,7 @@ def test_repository_story_exposes_data_intelligence_section() -> None:
         if section["id"] == "data_intelligence"
     )
     assert data_section["summary"] == (
-        "Compiled analytics covers 2 models, 5 data assets, 10 data columns, and 2 warehouse queries; "
+        "Compiled analytics covers 2 models, 5 data assets, 10 data columns, 2 warehouse queries, and 1 dashboard; "
         "declared and observed lineage overlap on 2 assets, with 1 declared-only and 1 observed-only asset; "
         "lineage is partial for 1 model."
     )

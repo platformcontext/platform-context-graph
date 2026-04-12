@@ -322,6 +322,45 @@ def test_prepare_content_entries_assigns_uids_to_query_executions(
     assert file_data["query_executions"][0]["uid"].startswith("content-entity:")
 
 
+def test_prepare_content_entries_assigns_uids_to_dashboard_assets(
+    tmp_path: Path,
+) -> None:
+    """BI replay dashboards should dual-write through content entities."""
+
+    repo_path = tmp_path / "bi-replay"
+    repo_path.mkdir()
+    file_path = repo_path / "bi_replay.json"
+    file_path.write_text('{"metadata":{"bi_vendor":"generic"}}\n', encoding="utf-8")
+
+    repository = repository_metadata(
+        name="bi-replay",
+        local_path=repo_path,
+        remote_url="https://github.com/platformcontext/bi-replay.git",
+    )
+    file_data = {
+        "path": str(file_path),
+        "repo_path": str(repo_path),
+        "lang": "json",
+        "dashboard_assets": [
+            {
+                "id": "dashboard-asset:finance:revenue-overview",
+                "name": "Revenue Overview",
+                "line_number": 1,
+                "path": "dashboards/revenue_overview.json",
+            }
+        ],
+    }
+
+    _file_entry, entity_entries = prepare_content_entries(
+        file_data=file_data,
+        repository=repository,
+    )
+
+    assert {entry.entity_type for entry in entity_entries} == {"DashboardAsset"}
+    assert all(is_content_entity_id(entry.entity_id) for entry in entity_entries)
+    assert file_data["dashboard_assets"][0]["uid"].startswith("content-entity:")
+
+
 def test_prepare_content_entries_strips_nul_bytes_for_content_store(
     tmp_path: Path,
 ) -> None:

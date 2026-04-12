@@ -7,8 +7,10 @@ from typing import Any
 
 from .cloudformation import is_cloudformation_template, parse_cloudformation_template
 from .json_data_intelligence_support import (
+    apply_bi_replay_document,
     apply_dbt_manifest_document,
     apply_warehouse_replay_document,
+    is_bi_replay_document,
     is_dbt_manifest_document,
     is_warehouse_replay_document,
 )
@@ -53,6 +55,7 @@ def build_empty_result(
         "data_assets": [],
         "data_columns": [],
         "query_executions": [],
+        "dashboard_assets": [],
         "data_relationships": [],
         "data_intelligence_coverage": {
             "confidence": 0.0,
@@ -118,6 +121,9 @@ def apply_json_document(
         return
     if is_warehouse_replay_document(document, filename=filename):
         apply_warehouse_replay_document(result, document)
+        return
+    if is_bi_replay_document(document, filename=filename):
+        apply_bi_replay_document(result, document)
         return
 
     if should_skip_json_entities(filename):

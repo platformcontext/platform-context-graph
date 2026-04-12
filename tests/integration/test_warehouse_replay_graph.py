@@ -38,6 +38,7 @@ def test_warehouse_replay_nodes_are_created(indexed_ecosystems) -> None:
         _count(
             indexed_ecosystems,
             "MATCH (a:DataAsset {name: 'analytics.finance.daily_revenue'}) "
+            "WHERE a.path CONTAINS 'warehouse_replay_comprehensive' "
             "RETURN count(a) as cnt",
         )
         == 1
@@ -53,6 +54,41 @@ def test_warehouse_replay_relationships_are_created(indexed_ecosystems) -> None:
             "MATCH (:QueryExecution {name: 'daily_revenue_build'})"
             "-[:RUNS_QUERY_AGAINST]->"
             "(:DataAsset {name: 'analytics.finance.revenue'}) "
+            "RETURN count(*) as cnt",
+        )
+        == 1
+    )
+
+
+def test_bi_replay_nodes_and_dashboard_relationships_are_created(
+    indexed_ecosystems,
+) -> None:
+    """BI replay fixtures should persist dashboards and POWERS edges."""
+
+    assert (
+        _count(
+            indexed_ecosystems,
+            "MATCH (d:DashboardAsset {name: 'Revenue Overview'}) "
+            "RETURN count(d) as cnt",
+        )
+        == 1
+    )
+    assert (
+        _count(
+            indexed_ecosystems,
+            "MATCH (:DataAsset {name: 'analytics.finance.daily_revenue'})"
+            "-[:POWERS]->"
+            "(:DashboardAsset {name: 'Revenue Overview'}) "
+            "RETURN count(*) as cnt",
+        )
+        == 1
+    )
+    assert (
+        _count(
+            indexed_ecosystems,
+            "MATCH (:DataColumn {name: 'analytics.finance.daily_revenue.gross_amount'})"
+            "-[:POWERS]->"
+            "(:DashboardAsset {name: 'Revenue Overview'}) "
             "RETURN count(*) as cnt",
         )
         == 1

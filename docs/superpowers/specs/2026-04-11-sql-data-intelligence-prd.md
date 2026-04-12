@@ -208,3 +208,10 @@ This branch starts the roadmap with the generic foundation slice:
   overlap and mismatch honestly
 - generic impact responses and content-entity context summaries that label
   declared, observed, or combined lineage evidence
+- checked-in `bi_replay_comprehensive` replay fixture for local dashboard
+  downstream validation
+- `BIReplayPlugin` normalization into `DashboardAsset` plus downstream
+  `POWERS` relationships from assets and columns
+- graph/content bucket registration for `DashboardAsset`
+- repository context and story surfacing for dashboard counts and BI consumer
+  relationships

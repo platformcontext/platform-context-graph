@@ -98,3 +98,7 @@ def test_schema_statements_include_sql_content_entity_constraints() -> None:
         "FOR (n:QueryExecution) REQUIRE n.uid IS UNIQUE" in statement
         for statement in statements
     )
+    assert any(
+        "FOR (n:DashboardAsset) REQUIRE n.uid IS UNIQUE" in statement
+        for statement in statements
+    )

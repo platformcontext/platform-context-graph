@@ -395,3 +395,38 @@ class TestJSONConfigParser:
             for item in result["data_relationships"]
         )
         assert result["data_intelligence_coverage"]["state"] == "complete"
+
+    def test_parse_bi_replay_json_into_data_intelligence_payload(
+        self, temp_test_dir: Path
+    ) -> None:
+        """BI replay JSON should emit dashboards and downstream lineage hints."""
+
+        fixture_path = (
+            Path(__file__).resolve().parents[2]
+            / "fixtures"
+            / "ecosystems"
+            / "bi_replay_comprehensive"
+            / "bi_replay.json"
+        )
+        file_path = temp_test_dir / "bi_replay.json"
+        file_path.write_text(fixture_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+        parser = JSONConfigTreeSitterParser("json")
+        result = parser.parse(file_path)
+
+        assert [item["name"] for item in result["dashboard_assets"]] == [
+            "Revenue Overview"
+        ]
+        assert any(
+            item["type"] == "POWERS"
+            and item["source_name"] == "analytics.finance.daily_revenue"
+            and item["target_name"] == "Revenue Overview"
+            for item in result["data_relationships"]
+        )
+        assert any(
+            item["type"] == "POWERS"
+            and item["source_name"] == "analytics.finance.daily_revenue.gross_amount"
+            and item["target_name"] == "Revenue Overview"
+            for item in result["data_relationships"]
+        )
+        assert result["data_intelligence_coverage"]["state"] == "complete"

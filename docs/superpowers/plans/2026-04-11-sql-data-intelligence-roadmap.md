@@ -112,6 +112,20 @@ Acceptance:
 
 - PCG can answer which dashboards break when a data asset or column changes
 
+Status on this branch:
+
+- checked-in `bi_replay_comprehensive` replay fixture with one dashboard and
+  both asset-level and column-level downstream mappings
+- `BIReplayPlugin` as the first BI-category replay adapter
+- `bi_replay.json` parsing through the JSON config lane
+- graph/content registration for `DashboardAsset`
+- post-commit materialization for `POWERS` edges from `DataAsset` and
+  `DataColumn` to `DashboardAsset`
+- repository context and story summaries include dashboard counts and downstream
+  `POWERS` coverage
+- graph-backed integration coverage for persisted dashboard nodes and consumer
+  relationships
+
 ### Milestone 6: Governance and Quality
 
 Deliver:
@@ -167,6 +181,32 @@ PYTHONPATH=src uv run pytest \
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_plugins.py \
   tests/unit/data_intelligence/test_warehouse_replay.py \
+  tests/unit/parsers/test_json_parser.py \
+  tests/unit/content/test_ingest.py \
+  tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/query/test_repository_context_data_intelligence.py \
+  tests/unit/query/test_story_data_intelligence.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_warehouse_replay_graph.py \
+  tests/integration/test_mcp_data_intelligence_queries.py -q
+```
+
+### BI replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_bi_replay.py \
   tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \

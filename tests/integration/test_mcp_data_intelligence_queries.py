@@ -32,6 +32,7 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
         "asset_derives_from": 5,
         "column_derives_from": 6,
         "runs_query_against": 0,
+        "powers": 0,
     }
 
 
@@ -68,6 +69,7 @@ def test_warehouse_replay_repo_context_surfaces_observed_queries(
         "asset_derives_from": 0,
         "column_derives_from": 0,
         "runs_query_against": 4,
+        "powers": 0,
     }
 
 
@@ -132,3 +134,39 @@ def test_reconciliation_repo_story_summarizes_declared_vs_observed_mismatch(
         "declared and observed lineage overlap on 2 assets, with 1 declared-only and 1 observed-only asset"
         in data_section["summary"]
     )
+
+
+def test_bi_replay_repo_context_surfaces_dashboard_downstreams(
+    indexed_ecosystems,
+) -> None:
+    """Repo context should expose dashboard counts and POWERS edges."""
+
+    result = get_repository_context(
+        indexed_ecosystems,
+        repo_id="bi_replay_comprehensive",
+    )
+
+    assert result["data_intelligence"]["dashboard_asset_count"] == 1
+    assert result["data_intelligence"]["relationship_counts"] == {
+        "compiles_to": 0,
+        "asset_derives_from": 0,
+        "column_derives_from": 0,
+        "runs_query_against": 1,
+        "powers": 3,
+    }
+
+
+def test_bi_replay_repo_story_mentions_dashboard_consumers(indexed_ecosystems) -> None:
+    """Repo story should summarize dashboard downstream coverage."""
+
+    result = get_repository_story(
+        indexed_ecosystems,
+        repo_id="bi_replay_comprehensive",
+    )
+
+    data_section = next(
+        section
+        for section in result["story_sections"]
+        if section["id"] == "data_intelligence"
+    )
+    assert "1 dashboard" in data_section["summary"]

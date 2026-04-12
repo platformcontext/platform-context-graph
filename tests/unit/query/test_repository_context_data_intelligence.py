@@ -95,11 +95,13 @@ def test_build_repository_context_adds_data_intelligence_summary(
             "data_asset_count": 5,
             "data_column_count": 10,
             "query_execution_count": 2,
+            "dashboard_asset_count": 1,
             "relationship_counts": {
                 "compiles_to": 2,
                 "asset_derives_from": 5,
                 "column_derives_from": 4,
                 "runs_query_against": 4,
+                "powers": 3,
             },
             "reconciliation": {
                 "status": "partial_overlap",
@@ -128,6 +130,13 @@ def test_build_repository_context_adds_data_intelligence_summary(
                     "parse_state": "partial",
                 },
             ],
+            "sample_dashboards": [
+                {
+                    "name": "Revenue Overview",
+                    "path": "dashboards/revenue_overview.json",
+                    "workspace": "finance",
+                }
+            ],
             "sample_assets": [
                 {"name": "analytics.public.order_metrics", "kind": "model"},
                 {"name": "raw.public.orders", "kind": "source"},
@@ -144,8 +153,10 @@ def test_build_repository_context_adds_data_intelligence_summary(
         "asset_derives_from": 5,
         "column_derives_from": 4,
         "runs_query_against": 4,
+        "powers": 3,
     }
     assert result["data_intelligence"]["query_execution_count"] == 2
+    assert result["data_intelligence"]["dashboard_asset_count"] == 1
     assert result["data_intelligence"]["reconciliation"] == {
         "status": "partial_overlap",
         "shared_asset_count": 2,

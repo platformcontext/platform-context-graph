@@ -35,6 +35,30 @@ def test_registry_registers_and_lists_plugins() -> None:
     assert plugins[0].replay_fixture_groups == ("warehouse_replay_comprehensive",)
 
 
+class _BIReplayPlugin:
+    """Minimal BI replay plugin implementing the public plugin protocol."""
+
+    name = "bi-replay"
+    category = "bi"
+    replay_fixture_groups = ("bi_replay_comprehensive",)
+
+    def normalize(self, payload):
+        return payload
+
+
+def test_registry_supports_bi_category_plugins() -> None:
+    """The registry should keep BI adapters alongside warehouse adapters."""
+
+    registry = DataIntelligenceRegistry()
+    registry.register(_ReplayPlugin())
+    registry.register(_BIReplayPlugin())
+
+    plugins = registry.list_plugins()
+
+    assert [plugin.name for plugin in plugins] == ["warehouse-replay", "bi-replay"]
+    assert plugins[1].category == "bi"
+
+
 def test_registry_rejects_duplicate_plugin_names() -> None:
     """The registry should fail fast when names collide."""
 

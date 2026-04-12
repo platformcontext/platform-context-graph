@@ -11,6 +11,7 @@ _DATA_RELATIONSHIP_FIELDS = {
     "ASSET_DERIVES_FROM": "asset_derives_from",
     "COLUMN_DERIVES_FROM": "column_derives_from",
     "RUNS_QUERY_AGAINST": "runs_query_against",
+    "POWERS": "powers",
 }
 
 
@@ -25,11 +26,13 @@ def build_repository_data_intelligence_summary(
         "data_asset_count": _count_label(session, repo, "DataAsset"),
         "data_column_count": _count_label(session, repo, "DataColumn"),
         "query_execution_count": _count_label(session, repo, "QueryExecution"),
+        "dashboard_asset_count": _count_label(session, repo, "DashboardAsset"),
         "relationship_counts": _relationship_counts(session, repo),
         "reconciliation": _reconciliation_summary(session, repo),
         "parse_states": _parse_state_counts(session, repo),
         "sample_models": _sample_models(session, repo),
         "sample_queries": _sample_queries(session, repo),
+        "sample_dashboards": _sample_dashboards(session, repo),
         "sample_assets": _sample_assets(session, repo),
     }
     if not any(
@@ -38,6 +41,7 @@ def build_repository_data_intelligence_summary(
             summary["data_asset_count"],
             summary["data_column_count"],
             summary["query_execution_count"],
+            summary["dashboard_asset_count"],
         )
     ):
         return None
@@ -73,6 +77,7 @@ def _relationship_counts(session: Any, repo: dict[str, Any]) -> dict[str, int]:
             OR source:DataAsset
             OR source:DataColumn
             OR source:QueryExecution
+            OR source:DashboardAsset
           )
         MATCH (source)-[rel]->()
         WHERE type(rel) IN {list(_DATA_RELATIONSHIP_FIELDS)}
@@ -155,6 +160,23 @@ def _sample_queries(session: Any, repo: dict[str, Any]) -> list[dict[str, Any]]:
                coalesce(q.status, 'unknown') AS status,
                coalesce(q.executed_by, '') AS executed_by
         ORDER BY q.name
+        LIMIT 5
+        """,
+        **repository_scope(repo),
+    ).data()
+
+
+def _sample_dashboards(session: Any, repo: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return a compact ordered sample of repository dashboard assets."""
+
+    return session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(d:DashboardAsset)
+        WHERE {repository_scope_predicate()}
+        RETURN d.name AS name,
+               coalesce(d.path, '') AS path,
+               coalesce(d.workspace, '') AS workspace
+        ORDER BY d.name
         LIMIT 5
         """,
         **repository_scope(repo),

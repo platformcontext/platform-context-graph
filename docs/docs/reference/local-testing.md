@@ -166,6 +166,9 @@ The current foundation slice proves:
 - post-commit compiled-analytics lineage materialization
 - content-entity context and generic impact responses can label declared versus
   observed lineage evidence for data-native entities
+- replay-backed dashboard normalization through `bi_replay.json`
+- graph/content persistence registration for `DashboardAsset`
+- post-commit BI downstream materialization for `POWERS`
 
 ### Fast foundation gate
 
@@ -228,6 +231,32 @@ uv run pytest \
   tests/integration/test_mcp_data_intelligence_queries.py -q
 ```
 
+### BI replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_bi_replay.py \
+  tests/unit/parsers/test_json_parser.py \
+  tests/unit/content/test_ingest.py \
+  tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/query/test_repository_context_data_intelligence.py \
+  tests/unit/query/test_story_data_intelligence.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_warehouse_replay_graph.py \
+  tests/integration/test_mcp_data_intelligence_queries.py -q
+```
+
 ### Declared vs observed reconciliation gate
 
 ```bash
@@ -254,8 +283,8 @@ uv run pytest \
   tests/integration/test_mcp_data_intelligence_queries.py -q
 ```
 
-Future replay-backed fixture groups for compiled analytics, warehouse history,
-and BI downstreams belong in this section once those adapters are implemented.
+Future replay-backed fixture groups for semantic layers and richer BI
+downstreams belong in this section once those adapters are implemented.
 
 ## Recommended Test Order
 

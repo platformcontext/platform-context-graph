@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...data_intelligence.bi_replay import BIReplayPlugin
 from ...data_intelligence.dbt import DbtCompiledSqlPlugin
 from ...data_intelligence.warehouse_replay import WarehouseReplayPlugin
 
@@ -38,6 +39,16 @@ def is_warehouse_replay_document(document: Any, *, filename: str) -> bool:
     )
 
 
+def is_bi_replay_document(document: Any, *, filename: str) -> bool:
+    """Return whether one JSON document looks like a BI replay artifact."""
+
+    lowered = filename.lower()
+    if lowered != "bi_replay.json" or not isinstance(document, dict):
+        return False
+    metadata = document.get("metadata")
+    return isinstance(metadata, dict) and isinstance(document.get("dashboards"), list)
+
+
 def apply_dbt_manifest_document(result: dict[str, Any], document: dict[str, Any]) -> None:
     """Populate one parse result from a dbt manifest replay artifact."""
 
@@ -62,9 +73,20 @@ def apply_warehouse_replay_document(
     result["data_intelligence_coverage"] = dict(normalized["coverage"])
 
 
+def apply_bi_replay_document(result: dict[str, Any], document: dict[str, Any]) -> None:
+    """Populate one parse result from a BI replay fixture."""
+
+    normalized = BIReplayPlugin().normalize(document)
+    result["dashboard_assets"] = list(normalized["dashboard_assets"])
+    result["data_relationships"] = list(normalized["relationships"])
+    result["data_intelligence_coverage"] = dict(normalized["coverage"])
+
+
 __all__ = [
+    "apply_bi_replay_document",
     "apply_dbt_manifest_document",
     "apply_warehouse_replay_document",
+    "is_bi_replay_document",
     "is_dbt_manifest_document",
     "is_warehouse_replay_document",
 ]

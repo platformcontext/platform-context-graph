@@ -54,6 +54,13 @@ def test_create_all_data_intelligence_links_materializes_compiled_lineage() -> N
                     "line_number": 1,
                 }
             ],
+            "dashboard_assets": [
+                {
+                    "name": "Revenue Overview",
+                    "uid": "content-entity:e_dashboard_revenue_overview",
+                    "line_number": 1,
+                }
+            ],
             "data_relationships": [
                 {
                     "type": "COMPILES_TO",
@@ -79,6 +86,12 @@ def test_create_all_data_intelligence_links_materializes_compiled_lineage() -> N
                     "target_name": "raw.public.orders",
                     "line_number": 1,
                 },
+                {
+                    "type": "POWERS",
+                    "source_name": "analytics.public.order_metrics",
+                    "target_name": "Revenue Overview",
+                    "line_number": 1,
+                },
             ],
         }
     ]
@@ -89,6 +102,7 @@ def test_create_all_data_intelligence_links_materializes_compiled_lineage() -> N
         "asset_derives_from_edges": 1,
         "column_derives_from_edges": 1,
         "compiles_to_edges": 1,
+        "powers_edges": 1,
         "runs_query_against_edges": 1,
     }
-    assert session.run.call_count == 4
+    assert session.run.call_count == 5
