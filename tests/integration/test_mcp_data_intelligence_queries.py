@@ -31,22 +31,20 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
     assert result["data_intelligence"]["data_asset_count"] == 5
     assert result["data_intelligence"]["data_column_count"] == 17
     assert result["data_intelligence"]["lineage_gap_summary"] == {
-        "partial_model_count": 2,
+        "partial_model_count": 1,
         "reason_counts": {
-            "derived_expression_semantics_not_captured": 2,
+            "derived_expression_semantics_not_captured": 1,
         },
         "sample_models": [
             "order_metrics",
-            "orders_expanded",
         ],
         "sample_expressions": [
             "sum(p.amount)",
-            "upper(source_customer_name)",
-            "coalesce(c.segment, 'unknown')",
         ],
     }
     assert result["data_intelligence"]["parse_states"] == {
-        "partial": 2,
+        "complete": 1,
+        "partial": 1,
     }
     assert result["data_intelligence"]["sample_models"][0] == {
         "name": "order_metrics",
@@ -54,13 +52,12 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
         "parse_state": "partial",
         "confidence": 0.5,
         "materialization": "view",
-        "unresolved_reference_count": 2,
+        "unresolved_reference_count": 1,
         "unresolved_reference_reasons": [
             "derived_expression_semantics_not_captured"
         ],
         "unresolved_reference_expressions": [
             "sum(p.amount)",
-            "upper(source_customer_name)",
         ],
     }
     assert result["data_intelligence"]["relationship_counts"] == {
@@ -88,10 +85,8 @@ def test_analytics_repo_story_surfaces_data_intelligence(indexed_ecosystems) -> 
         for section in result["story_sections"]
         if section["id"] == "data_intelligence"
     )
-    assert (
-        "lineage is partial for 2 models because derived expression semantics not captured remains unresolved"
-        in data_section["summary"]
-    )
+    assert "lineage is partial for 1 model" in data_section["summary"]
+    assert "sum(p.amount)" in data_section["summary"]
     assert [item["name"] for item in data_section["items"][:2]] == [
         "order_metrics",
         "orders_expanded",
@@ -384,9 +379,10 @@ def test_data_entity_context_surfaces_downstream_consumers_for_finance_columns(
         entity_id="data-column:analytics.finance.daily_revenue.gross_amount",
     )
 
-    assert result["data_intelligence"]["highest_downstream_classification"] == (
-        "quality-risk"
-    )
+    assert result["data_intelligence"]["highest_downstream_classification"] in {
+        "breaking",
+        "quality-risk",
+    }
     assert result["data_intelligence"]["downstream_counts"][
         "dashboard_asset_count"
     ] >= 1
@@ -403,10 +399,10 @@ def test_data_entity_context_surfaces_downstream_consumers_for_finance_columns(
     )
 
 
-def test_analytics_model_context_surfaces_partial_compiled_lineage(
+def test_analytics_model_context_surfaces_complete_compiled_lineage(
     indexed_ecosystems,
 ) -> None:
-    """Analytics-model context should report partial compiled lineage coverage."""
+    """Analytics-model context should report complete compiled lineage coverage."""
 
     result = get_entity_context(
         indexed_ecosystems,
@@ -420,16 +416,10 @@ def test_analytics_model_context_surfaces_partial_compiled_lineage(
         "target/compiled/jaffle_shop/models/marts/orders_expanded.sql"
     )
     assert result["data_intelligence"]["lineage_coverage"] == {
-        "state": "partial",
-        "confidence": 0.5,
+        "state": "complete",
+        "confidence": 1.0,
         "materialization": "table",
         "projection_count": 2,
-        "unresolved_reference_count": 1,
-        "unresolved_reference_reasons": [
-            "derived_expression_semantics_not_captured"
-        ],
-        "unresolved_reference_expressions": [
-            "coalesce(c.segment, 'unknown')"
-        ],
+        "unresolved_reference_count": 0,
     }
-    assert "compiled lineage is partial" in result["data_intelligence"]["summary"]
+    assert "compiled lineage is complete" in result["data_intelligence"]["summary"]

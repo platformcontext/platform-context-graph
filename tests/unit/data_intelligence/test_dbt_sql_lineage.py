@@ -14,9 +14,9 @@ _RELATION_COLUMNS = {
 }
 
 
-def test_extract_compiled_model_lineage_marks_derived_projection_partial(
+def test_extract_compiled_model_lineage_supports_single_column_upper_wrapper(
 ) -> None:
-    """Derived projections should keep lineage but report partial semantics."""
+    """Simple one-column scalar wrappers should count as supported lineage."""
 
     lineage = extract_compiled_model_lineage(
         """
@@ -36,19 +36,36 @@ def test_extract_compiled_model_lineage_marks_derived_projection_partial(
         relation_column_names=_RELATION_COLUMNS,
     )
 
-    assert lineage.unresolved_references == (
-        {
-            "expression": "upper(source_customer_name)",
-            "model_name": "order_metrics",
-            "reason": "derived_expression_semantics_not_captured",
-        },
-    )
+    assert lineage.unresolved_references == ()
     assert [
         (item.output_column, item.source_columns) for item in lineage.column_lineage
     ] == [
         ("order_id", ("raw.public.orders.id",)),
         ("customer_name", ("raw.public.customers.full_name",)),
     ]
+
+
+def test_extract_compiled_model_lineage_supports_coalesce_with_literal_default(
+) -> None:
+    """Coalesce should stay supported when one source column feeds a literal fallback."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        select
+          coalesce(c.segment, 'unknown') as customer_segment
+        from raw.public.customers c
+        """,
+        model_name="customer_segments",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == (
+        ColumnLineage(
+            output_column="customer_segment",
+            source_columns=("raw.public.customers.segment",),
+        ),
+    )
+    assert lineage.unresolved_references == ()
 
 
 def test_extract_compiled_model_lineage_marks_aggregate_projection_partial() -> None:
@@ -74,6 +91,37 @@ def test_extract_compiled_model_lineage_marks_aggregate_projection_partial() -> 
         {
             "expression": "sum(p.amount)",
             "model_name": "payment_metrics",
+            "reason": "derived_expression_semantics_not_captured",
+        },
+    )
+
+
+def test_extract_compiled_model_lineage_keeps_multi_input_expressions_partial() -> None:
+    """Multi-input transforms should remain partial until semantics are modeled."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        select
+          concat(c.full_name, '-', c.segment) as customer_label
+        from raw.public.customers c
+        """,
+        model_name="customer_labels",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == (
+        ColumnLineage(
+            output_column="customer_label",
+            source_columns=(
+                "raw.public.customers.full_name",
+                "raw.public.customers.segment",
+            ),
+        ),
+    )
+    assert lineage.unresolved_references == (
+        {
+            "expression": "concat(c.full_name, '-', c.segment)",
+            "model_name": "customer_labels",
             "reason": "derived_expression_semantics_not_captured",
         },
     )

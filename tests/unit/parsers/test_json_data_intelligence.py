@@ -149,14 +149,4 @@ def test_parse_dbt_replay_manifest_filename_variant(
             "model_name": "order_metrics",
             "reason": "derived_expression_semantics_not_captured",
         },
-        {
-            "expression": "upper(source_customer_name)",
-            "model_name": "order_metrics",
-            "reason": "derived_expression_semantics_not_captured",
-        },
-        {
-            "expression": "coalesce(c.segment, 'unknown')",
-            "model_name": "orders_expanded",
-            "reason": "derived_expression_semantics_not_captured",
-        },
     ]

@@ -150,30 +150,20 @@ def test_normalize_dbt_manifest_propagates_cte_lineage_to_model_columns() -> Non
     )
 
 
-def test_normalize_dbt_manifest_reports_derived_expression_gaps_honestly() -> None:
-    """Derived projections should stay linked while surfacing partial coverage."""
+def test_normalize_dbt_manifest_supports_simple_scalar_wrappers() -> None:
+    """Simple scalar wrappers should stop inflating partial coverage noise."""
 
     plugin = DbtCompiledSqlPlugin()
 
     report = plugin.normalize(_load_fixture())
 
     assert report["coverage"] == {
-        "confidence": 0.5,
+        "confidence": 0.75,
         "state": "partial",
         "unresolved_references": [
             {
                 "expression": "sum(p.amount)",
                 "model_name": "order_metrics",
-                "reason": "derived_expression_semantics_not_captured",
-            },
-            {
-                "expression": "upper(source_customer_name)",
-                "model_name": "order_metrics",
-                "reason": "derived_expression_semantics_not_captured",
-            },
-            {
-                "expression": "coalesce(c.segment, 'unknown')",
-                "model_name": "orders_expanded",
                 "reason": "derived_expression_semantics_not_captured",
             },
         ],
@@ -195,25 +185,20 @@ def test_normalize_dbt_manifest_reports_derived_expression_gaps_honestly() -> No
             "name": "order_metrics",
             "parse_state": "partial",
             "confidence": 0.5,
-            "unresolved_reference_count": 2,
-            "unresolved_reference_reasons": [
-                "derived_expression_semantics_not_captured"
-            ],
-            "unresolved_reference_expressions": [
-                "sum(p.amount)",
-                "upper(source_customer_name)",
-            ],
-        },
-        {
-            "name": "orders_expanded",
-            "parse_state": "partial",
-            "confidence": 0.5,
             "unresolved_reference_count": 1,
             "unresolved_reference_reasons": [
                 "derived_expression_semantics_not_captured"
             ],
             "unresolved_reference_expressions": [
-                "coalesce(c.segment, 'unknown')"
+                "sum(p.amount)",
             ],
+        },
+        {
+            "name": "orders_expanded",
+            "parse_state": "complete",
+            "confidence": 1.0,
+            "unresolved_reference_count": 0,
+            "unresolved_reference_reasons": [],
+            "unresolved_reference_expressions": [],
         },
     ]
