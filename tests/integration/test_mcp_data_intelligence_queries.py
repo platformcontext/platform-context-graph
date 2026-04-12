@@ -116,6 +116,18 @@ def test_warehouse_replay_repo_context_surfaces_observed_queries(
         "owns": 0,
         "declares_contract_for": 0,
     }
+    assert result["data_intelligence"]["observed_usage_summary"] == {
+        "hot_asset_count": 1,
+        "low_use_asset_count": 2,
+        "max_query_count": 2,
+        "hot_assets": [
+            {"name": "analytics.finance.daily_revenue", "query_count": 2},
+        ],
+        "low_use_assets": [
+            {"name": "analytics.crm.customers", "query_count": 1},
+            {"name": "analytics.finance.revenue", "query_count": 1},
+        ],
+    }
 
 
 def test_warehouse_replay_repo_story_mentions_observed_queries(
@@ -134,6 +146,9 @@ def test_warehouse_replay_repo_story_mentions_observed_queries(
         if section["id"] == "data_intelligence"
     )
     assert "2 warehouse queries" in data_section["summary"]
+    assert "observed hot assets include analytics.finance.daily_revenue (2 queries)" in (
+        data_section["summary"]
+    )
 
 
 def test_reconciliation_repo_context_surfaces_declared_vs_observed_mismatch(

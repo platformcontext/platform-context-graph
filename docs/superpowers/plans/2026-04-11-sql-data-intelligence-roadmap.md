@@ -74,6 +74,15 @@ Status on this branch:
   operands now stay on the supported lineage path as transform-aware derived
   columns, which reduces avoidable partial coverage for common analytics
   bucketing and scaling patterns
+- row-level multi-source transforms now stay on the supported lineage path as
+  well, including `concat(...)`, multi-source `CASE`, and arithmetic
+  expressions across multiple source columns, which closes a larger remaining
+  subset of compiled-model partial noise without overstating aggregate or
+  templated semantics
+- aggregate and window-style compiled expressions now preserve exact referenced
+  source columns plus transform metadata on `COLUMN_DERIVES_FROM` edges, while
+  still surfacing explicit partial-gap reasons for aggregate and window
+  semantics that PCG does not yet model completely
 - unresolved Jinja-style templating delimiters and package-qualified macro
   calls now short-circuit to explicit partial-gap reasons instead of producing
   misleading source-alias misses or weak generic derived-expression noise
@@ -138,6 +147,10 @@ Status on this branch:
   declared-only, and one observed-only asset dependency
 - repo context reconciliation summary for declared `ASSET_DERIVES_FROM` versus
   observed `RUNS_QUERY_AGAINST` asset names
+- repo context and story summaries now classify replay-observed hot assets
+  (touched by multiple warehouse queries) and low-use assets (seen only once),
+  which turns replay history into a more operational signal for DBAs and ETL
+  owners instead of leaving it as raw query counts alone
 - repository story wording for aligned and mismatched declared-versus-observed
   lineage
 - generic impact responses and content-entity context now expose

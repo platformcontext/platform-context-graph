@@ -36,6 +36,7 @@ def build_repository_data_intelligence_summary(
         "protected_column_count": _count_protected_columns(session, repo),
         "relationship_counts": _relationship_counts(session, repo),
         "reconciliation": _reconciliation_summary(session, repo),
+        "observed_usage_summary": _observed_usage_summary(session, repo),
         "lineage_gap_summary": _lineage_gap_summary(session, repo),
         "parse_states": _parse_state_counts(session, repo),
         "sample_models": _sample_models(session, repo),
@@ -388,6 +389,42 @@ def _reconciliation_summary(session: Any, repo: dict[str, Any]) -> dict[str, Any
         "shared_assets": shared_assets,
         "declared_only_assets": declared_only_assets,
         "observed_only_assets": observed_only_assets,
+    }
+
+
+def _observed_usage_summary(session: Any, repo: dict[str, Any]) -> dict[str, Any] | None:
+    """Return replay-derived hot and low-use asset signals for one repository."""
+
+    rows = session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(q:QueryExecution)
+        WHERE {repository_scope_predicate()}
+        MATCH (q)-[:RUNS_QUERY_AGAINST]->(asset:DataAsset)
+        RETURN asset.name AS name,
+               count(DISTINCT q) AS query_count
+        ORDER BY query_count DESC, name
+        """,
+        **repository_scope(repo),
+    ).data()
+    usage_rows = [
+        {
+            "name": str(row.get("name") or "").strip(),
+            "query_count": int(row.get("query_count") or 0),
+        }
+        for row in rows
+        if str(row.get("name") or "").strip() and int(row.get("query_count") or 0) > 0
+    ]
+    if not usage_rows:
+        return None
+
+    hot_assets = [row for row in usage_rows if row["query_count"] >= 2]
+    low_use_assets = [row for row in usage_rows if row["query_count"] == 1]
+    return {
+        "hot_asset_count": len(hot_assets),
+        "low_use_asset_count": len(low_use_assets),
+        "max_query_count": max(row["query_count"] for row in usage_rows),
+        "hot_assets": hot_assets[:5],
+        "low_use_assets": low_use_assets[:5],
     }
 
 

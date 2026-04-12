@@ -18,6 +18,7 @@ def summarize_data_intelligence_overview(overview: dict[str, Any]) -> str:
     contract_count = int(overview.get("data_contract_count") or 0)
     protected_column_count = int(overview.get("protected_column_count") or 0)
     reconciliation = dict(overview.get("reconciliation") or {})
+    observed_usage_summary = dict(overview.get("observed_usage_summary") or {})
     lineage_gap_summary = dict(overview.get("lineage_gap_summary") or {})
     parse_states = dict(overview.get("parse_states") or {})
     partial_count = int(parse_states.get("partial") or 0)
@@ -43,6 +44,9 @@ def summarize_data_intelligence_overview(overview: dict[str, Any]) -> str:
             f", and {protected_column_count} protected column"
             f"{'' if protected_column_count == 1 else 's'}"
         )
+    usage_summary = _observed_usage_summary_text(observed_usage_summary)
+    if usage_summary:
+        summary += f"; {usage_summary}"
     reconciliation_summary = _reconciliation_summary_text(reconciliation)
     if reconciliation_summary:
         summary += f"; {reconciliation_summary}"
@@ -99,6 +103,34 @@ def _reconciliation_summary_text(reconciliation: dict[str, Any]) -> str:
         f"{observed_only_asset_count} observed-only asset"
         f"{'' if observed_only_asset_count == 1 and declared_only_asset_count == 1 else 's'}"
     )
+
+
+def _observed_usage_summary_text(observed_usage_summary: dict[str, Any]) -> str:
+    """Return a short warehouse replay usage summary when counts are available."""
+
+    if not observed_usage_summary:
+        return ""
+    parts: list[str] = []
+    hot_assets = list(observed_usage_summary.get("hot_assets") or [])
+    low_use_assets = list(observed_usage_summary.get("low_use_assets") or [])
+    if hot_assets:
+        first = hot_assets[0]
+        hot_name = str(first.get("name") or "").strip()
+        hot_count = int(first.get("query_count") or 0)
+        if hot_name and hot_count > 0:
+            parts.append(
+                f"observed hot assets include {hot_name} ({hot_count} quer{'y' if hot_count == 1 else 'ies'})"
+            )
+    low_use_names = [
+        str(item.get("name") or "").strip()
+        for item in low_use_assets
+        if str(item.get("name") or "").strip()
+    ]
+    if low_use_names:
+        parts.append(
+            f"observed low-use assets include {', '.join(low_use_names[:3])}"
+        )
+    return "; ".join(parts)
 
 
 def _partial_lineage_summary_text(

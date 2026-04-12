@@ -194,6 +194,96 @@ def test_repository_story_uses_dashboards_when_semantic_repo_has_no_models() -> 
     ]
 
 
+def test_repository_story_mentions_observed_hot_and_low_use_assets() -> None:
+    """Repository stories should summarize replay hot spots and low-use assets."""
+
+    result = build_repository_story_response(
+        {
+            "repository": {
+                "id": "repository:r_warehouse_demo",
+                "name": "warehouse-replay-comprehensive",
+                "repo_slug": "platformcontext/warehouse-replay-comprehensive",
+                "remote_url": (
+                    "https://github.com/platformcontext/warehouse-replay-comprehensive"
+                ),
+                "has_remote": True,
+            },
+            "code": {"functions": 0, "classes": 0, "class_methods": 0},
+            "data_intelligence": {
+                "analytics_model_count": 0,
+                "data_asset_count": 3,
+                "data_column_count": 7,
+                "query_execution_count": 2,
+                "dashboard_asset_count": 0,
+                "data_quality_check_count": 0,
+                "relationship_counts": {
+                    "compiles_to": 0,
+                    "asset_derives_from": 0,
+                    "column_derives_from": 0,
+                    "runs_query_against": 4,
+                    "powers": 0,
+                    "asserts_quality_on": 0,
+                },
+                "reconciliation": None,
+                "observed_usage_summary": {
+                    "hot_asset_count": 1,
+                    "low_use_asset_count": 2,
+                    "max_query_count": 2,
+                    "hot_assets": [
+                        {
+                            "name": "analytics.finance.daily_revenue",
+                            "query_count": 2,
+                        }
+                    ],
+                    "low_use_assets": [
+                        {
+                            "name": "analytics.crm.customers",
+                            "query_count": 1,
+                        },
+                        {
+                            "name": "analytics.finance.revenue",
+                            "query_count": 1,
+                        },
+                    ],
+                },
+                "parse_states": {},
+                "sample_models": [],
+                "sample_queries": [
+                    {
+                        "name": "daily_revenue_build",
+                        "status": "success",
+                        "executed_by": "etl_runner",
+                    },
+                    {
+                        "name": "revenue_dashboard_lookup",
+                        "status": "success",
+                        "executed_by": "bi_reader",
+                    },
+                ],
+                "sample_dashboards": [],
+                "sample_assets": [
+                    {"name": "analytics.finance.daily_revenue", "kind": "table"},
+                    {"name": "analytics.crm.customers", "kind": "table"},
+                ],
+                "sample_quality_checks": [],
+            },
+            "limitations": [],
+        }
+    )
+
+    data_section = next(
+        section
+        for section in result["story_sections"]
+        if section["id"] == "data_intelligence"
+    )
+    assert "observed hot assets include analytics.finance.daily_revenue (2 queries)" in (
+        data_section["summary"]
+    )
+    assert "observed low-use assets include analytics.crm.customers, analytics.finance.revenue" in (
+        data_section["summary"]
+    )
+
+
 def test_repository_story_uses_quality_checks_when_no_models_or_dashboards() -> None:
     """Repository stories should fall back to quality checks for quality fixtures."""
 

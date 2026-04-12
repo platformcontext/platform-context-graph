@@ -7,20 +7,13 @@ import re
 from .dbt_sql_identifiers import unqualified_identifiers
 
 _BARE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_QUALIFIED_REFERENCE_RE = re.compile(
-    r"^[A-Za-z_][A-Za-z0-9_]*\.(?:\*|[A-Za-z_][A-Za-z0-9_]*)$"
-)
+_QUALIFIED_REFERENCE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\.(?:\*|[A-Za-z_][A-Za-z0-9_]*)$")
 _QUALIFIED_REFERENCE_SCAN_RE = re.compile(
-    r"\b(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\."
-    r"(?P<column>[A-Za-z_][A-Za-z0-9_]*)(?=[^A-Za-z0-9_]|$)"
+    r"\b(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\.(?P<column>[A-Za-z_][A-Za-z0-9_]*)(?=[^A-Za-z0-9_]|$)"
 )
-_FUNCTION_CALL_RE = re.compile(
-    r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<arguments>.*)\)$",
-    re.DOTALL,
-)
-_FUNCTION_CALL_SCAN_RE = re.compile(
-    r"\b(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
-)
+_FUNCTION_CALL_RE = re.compile(r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<arguments>.*)\)$", re.DOTALL)
+_FUNCTION_CALL_SCAN_RE = re.compile(r"\b(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(")
+_WINDOW_FUNCTION_RE = re.compile(r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<arguments>.*)\)\s+over\s*\((?P<window>.*)\)$", re.IGNORECASE | re.DOTALL)
 _SINGLE_QUOTED_LITERAL_RE = re.compile(r"^'(?:[^'\\\\]|\\\\.)*'$", re.DOTALL)
 _SINGLE_QUOTED_LITERAL_SCAN_RE = re.compile(r"'(?:[^'\\\\]|\\\\.)*'", re.DOTALL)
 _NUMERIC_LITERAL_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$")
@@ -29,36 +22,18 @@ _NUMERIC_LITERAL_SCAN_RE = re.compile(
 )
 _TYPE_IDENTIFIER_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
 _CASE_EXPRESSION_RE = re.compile(r"^case\b.*\bend$", re.IGNORECASE | re.DOTALL)
-_CASE_KEYWORD_RE = re.compile(
-    r"\b(?:case|when|then|else|end|is|null|and|or|not|in|like|between|true|false)\b",
-    re.IGNORECASE,
-)
-_QUALIFIED_MACRO_CALL_RE = re.compile(
-    r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)\((?P<arguments>.*)\)$",
-    re.DOTALL,
-)
+_CASE_KEYWORD_RE = re.compile(r"\b(?:case|when|then|else|end|is|null|and|or|not|in|like|between|true|false)\b", re.IGNORECASE)
+_QUALIFIED_MACRO_CALL_RE = re.compile(r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)\((?P<arguments>.*)\)$", re.DOTALL)
 _AGGREGATE_EXPRESSION_REASON = "aggregate_expression_semantics_not_captured"
 _DERIVED_EXPRESSION_REASON = "derived_expression_semantics_not_captured"
 _MULTI_INPUT_EXPRESSION_REASON = "multi_input_expression_semantics_not_captured"
 _MACRO_EXPRESSION_REASON = "macro_expression_not_resolved"
 _TEMPLATED_EXPRESSION_REASON = "templated_expression_not_resolved"
-_AGGREGATE_FUNCTIONS = {
-    "avg",
-    "count",
-    "max",
-    "min",
-    "sum",
-}
-_SIMPLE_SCALAR_FUNCTIONS = {
-    "upper",
-    "lower",
-    "trim",
-    "ltrim",
-    "rtrim",
-}
-_LITERAL_PARAMETER_SCALAR_FUNCTIONS = {
-    "date_trunc",
-}
+_WINDOW_EXPRESSION_REASON = "window_expression_semantics_not_captured"
+_AGGREGATE_FUNCTIONS = {"avg", "count", "max", "min", "sum"}
+_SIMPLE_SCALAR_FUNCTIONS = {"upper", "lower", "trim", "ltrim", "rtrim"}
+_LITERAL_PARAMETER_SCALAR_FUNCTIONS = {"date_trunc"}
+_MULTI_INPUT_ROW_LEVEL_FUNCTIONS = {"concat"}
 
 
 def expression_requires_partial_reporting(expression: str) -> bool:
@@ -83,61 +58,16 @@ def expression_transform_metadata(expression: str) -> dict[str, str] | None:
 
     cast_expression = _supported_cast_expression(normalized)
     if cast_expression is not None:
-        return {
-            "transform_kind": "cast",
-            "transform_expression": normalized,
-        }
+        return {"transform_kind": "cast", "transform_expression": normalized}
     if _is_supported_case_expression(normalized):
-        return {
-            "transform_kind": "case",
-            "transform_expression": normalized,
-        }
+        return {"transform_kind": "case", "transform_expression": normalized}
     if _is_supported_arithmetic_expression(normalized):
-        return {
-            "transform_kind": "arithmetic",
-            "transform_expression": normalized,
-        }
+        return {"transform_kind": "arithmetic", "transform_expression": normalized}
 
-    match = _FUNCTION_CALL_RE.fullmatch(normalized)
-    if match is None:
-        return None
-
-    function_name = match.group("name").strip().lower()
-    arguments = _split_top_level_arguments(match.group("arguments"))
-    if function_name in _SIMPLE_SCALAR_FUNCTIONS and len(arguments) == 1:
-        if _is_simple_reference_expression(arguments[0]):
-            return {
-                "transform_kind": function_name,
-                "transform_expression": normalized,
-            }
-        return None
-    if function_name == "coalesce" and len(arguments) >= 2:
-        if _is_simple_reference_expression(arguments[0]) and all(
-            _is_literal_expression(argument) for argument in arguments[1:]
-        ):
-            return {
-                "transform_kind": "coalesce",
-                "transform_expression": normalized,
-            }
-        return None
-    if function_name in _LITERAL_PARAMETER_SCALAR_FUNCTIONS and len(arguments) >= 2:
-        reference_arguments = [
-            argument
-            for argument in arguments
-            if _is_simple_reference_expression(argument)
-        ]
-        if len(reference_arguments) != 1:
-            return None
-        if all(
-            _is_simple_reference_expression(argument)
-            or _is_literal_expression(argument)
-            for argument in arguments
-        ):
-            return {
-                "transform_kind": function_name,
-                "transform_expression": normalized,
-            }
-    return None
+    partial_metadata = _partial_transform_metadata(normalized)
+    if partial_metadata is not None:
+        return partial_metadata
+    return _supported_function_metadata(normalized)
 
 
 def expression_partial_reason(expression: str) -> str | None:
@@ -198,11 +128,7 @@ def derived_expression_gap(
 ) -> dict[str, str]:
     """Return the standardized unresolved-gap record for one derived expression."""
 
-    return {
-        "expression": expression.strip(),
-        "model_name": model_name,
-        "reason": reason,
-    }
+    return {"expression": expression.strip(), "model_name": model_name, "reason": reason}
 
 
 def _strip_wrapping_parentheses(expression: str) -> str:
@@ -229,33 +155,10 @@ def _strip_wrapping_parentheses(expression: str) -> str:
 def _is_supported_scalar_wrapper(expression: str) -> bool:
     """Return whether the expression is a supported one-column scalar wrapper."""
 
-    if _supported_cast_expression(expression) is not None:
-        return True
-
-    match = _FUNCTION_CALL_RE.fullmatch(expression)
-    if match is None:
-        return False
-
-    function_name = match.group("name").strip().lower()
-    arguments = _split_top_level_arguments(match.group("arguments"))
-    if function_name in _SIMPLE_SCALAR_FUNCTIONS and len(arguments) == 1:
-        return _is_simple_reference_expression(arguments[0])
-    if function_name == "coalesce" and len(arguments) >= 2:
-        return _is_simple_reference_expression(arguments[0]) and all(
-            _is_literal_expression(argument) for argument in arguments[1:]
-        )
-    if function_name in _LITERAL_PARAMETER_SCALAR_FUNCTIONS and len(arguments) >= 2:
-        reference_arguments = [
-            argument for argument in arguments if _is_simple_reference_expression(argument)
-        ]
-        if len(reference_arguments) != 1:
-            return False
-        return all(
-            _is_simple_reference_expression(argument)
-            or _is_literal_expression(argument)
-            for argument in arguments
-        )
-    return False
+    return (
+        _supported_cast_expression(expression) is not None
+        or _supported_function_metadata(expression) is not None
+    )
 
 
 def _is_supported_case_expression(expression: str) -> bool:
@@ -266,7 +169,7 @@ def _is_supported_case_expression(expression: str) -> bool:
     if _has_unsupported_function_call(expression):
         return False
     references = _simple_reference_tokens(expression)
-    if len(references) != 1:
+    if not references:
         return False
 
     collapsed = _collapsed_shape(
@@ -285,7 +188,7 @@ def _is_supported_arithmetic_expression(expression: str) -> bool:
     if _has_unsupported_function_call(expression):
         return False
     references = _simple_reference_tokens(expression)
-    if len(references) != 1:
+    if not references:
         return False
 
     collapsed = _collapsed_shape(expression, references=references)
@@ -312,8 +215,14 @@ def _supported_cast_expression(expression: str) -> tuple[str, str] | None:
 def _unsupported_function_reason(expression: str) -> str | None:
     """Return a more specific unsupported-function reason when possible."""
 
+    window_match = _WINDOW_FUNCTION_RE.fullmatch(expression)
+    if window_match is not None:
+        return _WINDOW_EXPRESSION_REASON
+
     match = _FUNCTION_CALL_RE.fullmatch(expression)
     if match is None:
+        return None
+    if _supported_function_metadata(expression) is not None:
         return None
 
     function_name = match.group("name").strip().lower()
@@ -327,6 +236,95 @@ def _unsupported_function_reason(expression: str) -> str | None:
     if reference_count > 1:
         return _MULTI_INPUT_EXPRESSION_REASON
     return None
+
+
+def _partial_transform_metadata(expression: str) -> dict[str, str] | None:
+    """Return metadata for partially modeled aggregate or window expressions."""
+
+    window_match = _WINDOW_FUNCTION_RE.fullmatch(expression)
+    if window_match is not None and _simple_reference_tokens(expression):
+        return {
+            "transform_kind": f"window_{window_match.group('name').strip().lower()}",
+            "transform_expression": expression,
+        }
+
+    match = _FUNCTION_CALL_RE.fullmatch(expression)
+    if match is None:
+        return None
+    function_name = match.group("name").strip().lower()
+    if function_name in _AGGREGATE_FUNCTIONS and _supports_row_level_arguments(
+        _split_top_level_arguments(match.group("arguments"))
+    ):
+        return {
+            "transform_kind": function_name,
+            "transform_expression": expression,
+        }
+    return None
+
+
+def _supported_function_metadata(expression: str) -> dict[str, str] | None:
+    """Return transform metadata when a function expression is safely modeled."""
+
+    match = _FUNCTION_CALL_RE.fullmatch(expression)
+    if match is None:
+        return None
+
+    function_name = match.group("name").strip().lower()
+    arguments = _split_top_level_arguments(match.group("arguments"))
+    if function_name in _SIMPLE_SCALAR_FUNCTIONS and len(arguments) == 1:
+        if _is_simple_reference_expression(arguments[0]):
+            return {
+                "transform_kind": function_name,
+                "transform_expression": expression,
+            }
+        return None
+    if function_name == "coalesce" and len(arguments) >= 2:
+        if _supports_row_level_arguments(arguments):
+            return {
+                "transform_kind": "coalesce",
+                "transform_expression": expression,
+            }
+        return None
+    if function_name in _LITERAL_PARAMETER_SCALAR_FUNCTIONS and len(arguments) >= 2:
+        reference_arguments = [
+            argument
+            for argument in arguments
+            if _is_simple_reference_expression(argument)
+        ]
+        if len(reference_arguments) != 1:
+            return None
+        if all(
+            _is_simple_reference_expression(argument)
+            or _is_literal_expression(argument)
+            for argument in arguments
+        ):
+            return {
+                "transform_kind": function_name,
+                "transform_expression": expression,
+            }
+        return None
+    if function_name in _MULTI_INPUT_ROW_LEVEL_FUNCTIONS and len(arguments) >= 2:
+        if _supports_row_level_arguments(arguments):
+            return {
+                "transform_kind": function_name,
+                "transform_expression": expression,
+            }
+    return None
+
+
+def _supports_row_level_arguments(arguments: list[str]) -> bool:
+    """Return whether the argument list is row-level and fully attributable."""
+
+    reference_count = sum(
+        1 for argument in arguments if _is_simple_reference_expression(argument)
+    )
+    if reference_count < 1:
+        return False
+    return all(
+        _is_simple_reference_expression(argument)
+        or _is_literal_expression(argument)
+        for argument in arguments
+    )
 
 
 def _simple_reference_tokens(expression: str) -> tuple[str, ...]:

@@ -217,7 +217,7 @@ def test_extract_compiled_model_lineage_propagates_cte_transform_metadata() -> N
 
 
 def test_extract_compiled_model_lineage_marks_aggregate_projection_partial() -> None:
-    """Aggregate projections should retain source lineage and surface a gap."""
+    """Aggregate projections should retain lineage, metadata, and an honest gap."""
 
     lineage = extract_compiled_model_lineage(
         """
@@ -233,6 +233,8 @@ def test_extract_compiled_model_lineage_marks_aggregate_projection_partial() -> 
         ColumnLineage(
             output_column="total_amount",
             source_columns=("raw.public.payments.amount",),
+            transform_kind="sum",
+            transform_expression="sum(p.amount)",
         ),
     )
     assert lineage.unresolved_references == (
@@ -244,8 +246,42 @@ def test_extract_compiled_model_lineage_marks_aggregate_projection_partial() -> 
     )
 
 
-def test_extract_compiled_model_lineage_keeps_multi_input_expressions_partial() -> None:
-    """Multi-input transforms should remain partial until semantics are modeled."""
+def test_extract_compiled_model_lineage_marks_window_projection_partial() -> None:
+    """Window projections should retain lineage and surface a window-specific gap."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        select
+          sum(p.amount) over (partition by p.order_id) as running_amount
+        from raw.public.payments p
+        """,
+        model_name="payment_metrics",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == (
+        ColumnLineage(
+            output_column="running_amount",
+            source_columns=(
+                "raw.public.payments.amount",
+                "raw.public.payments.order_id",
+            ),
+            transform_kind="window_sum",
+            transform_expression="sum(p.amount) over (partition by p.order_id)",
+        ),
+    )
+    assert lineage.unresolved_references == (
+        {
+            "expression": "sum(p.amount) over (partition by p.order_id)",
+            "model_name": "payment_metrics",
+            "reason": "window_expression_semantics_not_captured",
+        },
+    )
+
+
+def test_extract_compiled_model_lineage_supports_multi_input_concat_expression(
+) -> None:
+    """Row-level concat expressions should keep exact multi-source lineage."""
 
     lineage = extract_compiled_model_lineage(
         """
@@ -264,19 +300,16 @@ def test_extract_compiled_model_lineage_keeps_multi_input_expressions_partial() 
                 "raw.public.customers.full_name",
                 "raw.public.customers.segment",
             ),
+            transform_kind="concat",
+            transform_expression="concat(c.full_name, '-', c.segment)",
         ),
     )
-    assert lineage.unresolved_references == (
-        {
-            "expression": "concat(c.full_name, '-', c.segment)",
-            "model_name": "customer_labels",
-            "reason": "multi_input_expression_semantics_not_captured",
-        },
-    )
+    assert lineage.unresolved_references == ()
 
 
-def test_extract_compiled_model_lineage_keeps_multi_source_case_partial() -> None:
-    """CASE expressions with multiple source columns should remain partial."""
+def test_extract_compiled_model_lineage_supports_multi_source_case_expression(
+) -> None:
+    """Row-level CASE expressions should keep exact multi-source lineage."""
 
     lineage = extract_compiled_model_lineage(
         """
@@ -300,20 +333,45 @@ def test_extract_compiled_model_lineage_keeps_multi_source_case_partial() -> Non
                 "raw.public.customers.id",
                 "raw.public.customers.full_name",
             ),
-        ),
-    )
-    assert lineage.unresolved_references == (
-        {
-            "expression": (
+            transform_kind="case",
+            transform_expression=(
                 "case\n"
                 "            when o.customer_id = c.id then c.full_name\n"
                 "            else 'guest'\n"
                 "          end"
             ),
-            "model_name": "customer_labels",
-            "reason": "derived_expression_semantics_not_captured",
-        },
+        ),
     )
+    assert lineage.unresolved_references == ()
+
+
+def test_extract_compiled_model_lineage_supports_multi_source_arithmetic(
+) -> None:
+    """Row-level arithmetic across multiple columns should keep exact lineage."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        select
+          p.amount + o.customer_id as blended_score
+        from raw.public.payments p
+        join raw.public.orders o on o.id = p.order_id
+        """,
+        model_name="payment_metrics",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == (
+        ColumnLineage(
+            output_column="blended_score",
+            source_columns=(
+                "raw.public.payments.amount",
+                "raw.public.orders.customer_id",
+            ),
+            transform_kind="arithmetic",
+            transform_expression="p.amount + o.customer_id",
+        ),
+    )
+    assert lineage.unresolved_references == ()
 
 
 def test_extract_compiled_model_lineage_reports_unresolved_template_expression(
