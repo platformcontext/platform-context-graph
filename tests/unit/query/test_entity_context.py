@@ -193,6 +193,99 @@ def test_get_entity_context_supports_content_entities(monkeypatch):
     assert result["relative_path"] == "src/payments.py"
 
 
+def test_content_entity_context_summarizes_declared_and_observed_lineage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Content-entity context should expose a compact lineage evidence summary."""
+
+    db = make_mock_db(
+        {
+            "WHERE r.id = $id": MockResult(
+                single_record=MockRecord(
+                    {
+                        "id": "repository:r_ab12cd34",
+                        "name": "analytics-warehouse",
+                        "path": "/srv/repos/analytics-warehouse",
+                        "local_path": "/srv/repos/analytics-warehouse",
+                        "repo_slug": "platformcontext/analytics-warehouse",
+                        "remote_url": "https://github.com/platformcontext/analytics-warehouse",
+                        "has_remote": True,
+                    }
+                )
+            ),
+            "WHERE coalesce(source.id, source.uid) = $id": MockResult(
+                records=[
+                    {
+                        "source_id": "content-entity:e_ab12cd34ef56",
+                        "source_uid": "content-entity:e_ab12cd34ef56",
+                        "source_path": "/srv/repos/analytics-warehouse/models/order_metrics.sql",
+                        "source_labels": ["DataAsset"],
+                        "target_id": "data-asset:warehouse:raw.orders",
+                        "target_uid": None,
+                        "target_path": "/warehouse/raw/orders.sql",
+                        "target_labels": ["DataAsset"],
+                        "type": "ASSET_DERIVES_FROM",
+                        "confidence": 0.93,
+                        "reason": "Model derives from raw.orders",
+                        "evidence": [
+                            {
+                                "source": "compiled-sql",
+                                "detail": "select * from raw.orders",
+                                "weight": 0.93,
+                            }
+                        ],
+                    },
+                    {
+                        "source_id": "query-execution:warehouse:query-123",
+                        "source_uid": None,
+                        "source_path": "/warehouse/query-history/query-123.json",
+                        "source_labels": ["QueryExecution"],
+                        "target_id": "content-entity:e_ab12cd34ef56",
+                        "target_uid": "content-entity:e_ab12cd34ef56",
+                        "target_path": "/srv/repos/analytics-warehouse/models/order_metrics.sql",
+                        "target_labels": ["DataAsset"],
+                        "type": "RUNS_QUERY_AGAINST",
+                        "confidence": 0.91,
+                        "reason": "Warehouse replay observed a query against order_metrics",
+                        "evidence": [
+                            {
+                                "source": "warehouse-replay",
+                                "detail": "query-123 touched order_metrics",
+                                "weight": 0.91,
+                            }
+                        ],
+                    },
+                ]
+            ),
+        }
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.context.content_entity.get_content_service",
+        lambda _database: MagicMock(
+            get_entity_content=lambda *, entity_id: {
+                "available": True,
+                "entity_id": entity_id,
+                "repo_id": "repository:r_ab12cd34",
+                "relative_path": "models/order_metrics.sql",
+                "entity_type": "DataAsset",
+                "entity_name": "analytics.order_metrics",
+                "start_line": 1,
+                "end_line": 12,
+                "content": "select * from raw.orders\n",
+                "language": "sql",
+                "source_backend": "postgres",
+            }
+        ),
+    )
+
+    result = get_entity_context(db, entity_id="content-entity:e_ab12cd34ef56")
+
+    assert result["lineage_evidence"] == {
+        "status": "combined",
+        "evidence_sources": ["declared_lineage", "observed_lineage"],
+    }
+
+
 def test_get_entity_context_supports_data_assets() -> None:
     """Entity context should support generic data-intelligence entities."""
 

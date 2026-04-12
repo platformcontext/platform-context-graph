@@ -96,6 +96,9 @@ Status on this branch:
   observed `RUNS_QUERY_AGAINST` asset names
 - repository story wording for aligned and mismatched declared-versus-observed
   lineage
+- generic impact responses and content-entity context now expose
+  `lineage_evidence` summaries that distinguish declared, observed, and
+  combined lineage signals
 - graph-backed integration coverage for reconciliation mismatch cases
 
 ### Milestone 5: BI and Semantic Adapters
@@ -191,6 +194,7 @@ uv run pytest \
 PYTHONPATH=src uv run pytest \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py \
+  tests/unit/query/test_change_surface.py \
   tests/unit/query/test_entity_context.py \
   tests/unit/query/test_entity_resolution.py -q
 ```

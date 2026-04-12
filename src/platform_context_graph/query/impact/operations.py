@@ -6,6 +6,7 @@ from typing import Any
 
 from ...domain import EntityType
 from .common import dedupe_evidence
+from ..data_lineage_evidence import merge_lineage_summaries, summarize_lineage_hops
 from .store import _GraphStore
 
 
@@ -22,6 +23,7 @@ def path_summary(hops: list[dict[str, Any]]) -> dict[str, Any]:
     evidence = dedupe_evidence(item for hop in hops for item in hop.get("evidence", []))
     confidences = [float(hop.get("confidence") or 0.0) for hop in hops] or [0.0]
     reason = hops[-1].get("reason") if hops else None
+    lineage_evidence = summarize_lineage_hops(hops)
     return {
         "source": hops[0]["from"] if hops else None,
         "target": hops[-1]["to"] if hops else None,
@@ -29,6 +31,11 @@ def path_summary(hops: list[dict[str, Any]]) -> dict[str, Any]:
         "confidence": round(min(confidences), 2),
         "reason": reason,
         "evidence": evidence,
+        **(
+            {"lineage_evidence": lineage_evidence}
+            if lineage_evidence is not None
+            else {}
+        ),
     }
 
 
@@ -94,6 +101,9 @@ def trace_resource_to_code_store(
     summaries = [path_summary(hops) for hops in paths]
     summaries.sort(key=lambda item: path_sort_key(item, environment))
     top = summaries[0] if summaries else None
+    lineage_evidence = merge_lineage_summaries(
+        summary.get("lineage_evidence") for summary in summaries
+    )
     return {
         "start": store.snapshot(start_id),
         "environment": environment,
@@ -101,6 +111,11 @@ def trace_resource_to_code_store(
         "confidence": top["confidence"] if top else 0.0,
         "reason": top["reason"] if top else f"No repository path found for {start_id}",
         "evidence": top["evidence"] if top else [],
+        **(
+            {"lineage_evidence": lineage_evidence}
+            if lineage_evidence is not None
+            else {}
+        ),
     }
 
 
@@ -150,6 +165,11 @@ def explain_dependency_path_store(
         "confidence": summary["confidence"],
         "reason": summary["reason"],
         "evidence": summary["evidence"],
+        **(
+            {"lineage_evidence": summary.get("lineage_evidence")}
+            if summary.get("lineage_evidence") is not None
+            else {}
+        ),
     }
 
 
@@ -186,6 +206,7 @@ def change_surface_store(
             EntityType.data_asset.value,
             EntityType.data_column.value,
             EntityType.analytics_model.value,
+            EntityType.query_execution.value,
             EntityType.dashboard_asset.value,
             EntityType.data_quality_check.value,
         },
@@ -208,6 +229,11 @@ def change_surface_store(
             "confidence": summary["confidence"],
             "reason": summary["reason"],
             "evidence": summary["evidence"],
+            **(
+                {"lineage_evidence": summary.get("lineage_evidence")}
+                if summary.get("lineage_evidence") is not None
+                else {}
+            ),
         }
         if existing is None or item["confidence"] > existing["confidence"]:
             impacted_ids[target["id"]] = item
@@ -217,6 +243,9 @@ def change_surface_store(
         key=lambda item: (-item["confidence"], item["entity"]["id"]),
     )
     top = impacted[0] if impacted else None
+    lineage_evidence = merge_lineage_summaries(
+        item.get("lineage_evidence") for item in impacted
+    )
     return {
         "target": store.snapshot(target_id),
         "environment": environment,
@@ -226,4 +255,9 @@ def change_surface_store(
             top["reason"] if top else f"No impacted entities found for {target_id}"
         ),
         "evidence": top["evidence"] if top else [],
+        **(
+            {"lineage_evidence": lineage_evidence}
+            if lineage_evidence is not None
+            else {}
+        ),
     }

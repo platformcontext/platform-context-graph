@@ -470,6 +470,98 @@ def test_data_asset_ids_work_with_generic_impact_queries():
     )
 
 
+def test_change_surface_reports_declared_and_observed_lineage_evidence_sources():
+    """Change surface should label declared and observed lineage evidence."""
+
+    def entity_lookup(_query, **kwargs):
+        entity_id = kwargs["id"]
+        names = {
+            "data-asset:warehouse:analytics.order_metrics": "analytics.order_metrics",
+            "data-asset:warehouse:raw.orders": "raw.orders",
+            "query-execution:warehouse:query-123": "daily_order_metrics_refresh",
+        }
+        types = {
+            "data-asset:warehouse:analytics.order_metrics": "data_asset",
+            "data-asset:warehouse:raw.orders": "data_asset",
+            "query-execution:warehouse:query-123": "query_execution",
+        }
+        return MockResult(
+            single_record=MockRecord(
+                {
+                    "id": entity_id,
+                    "name": names[entity_id],
+                    "type": types[entity_id],
+                    "path": f"/tmp/{entity_id.replace(':', '_')}.sql",
+                }
+            )
+        )
+
+    db = make_mock_db(
+        {
+            "WHERE n.id = $id": entity_lookup,
+            "WHERE source.id = $id OR target.id = $id": MockResult(
+                records=[
+                    {
+                        "source": "data-asset:warehouse:analytics.order_metrics",
+                        "source_type": "data_asset",
+                        "target": "data-asset:warehouse:raw.orders",
+                        "target_type": "data_asset",
+                        "type": "ASSET_DERIVES_FROM",
+                        "confidence": 0.94,
+                        "reason": "Compiled model selects from raw.orders",
+                        "evidence": [
+                            {
+                                "source": "compiled-sql",
+                                "detail": "select * from raw.orders",
+                                "weight": 0.94,
+                            }
+                        ],
+                    },
+                    {
+                        "source": "query-execution:warehouse:query-123",
+                        "source_type": "query_execution",
+                        "target": "data-asset:warehouse:analytics.order_metrics",
+                        "target_type": "data_asset",
+                        "type": "RUNS_QUERY_AGAINST",
+                        "confidence": 0.91,
+                        "reason": "Warehouse replay observed a query against analytics.order_metrics",
+                        "evidence": [
+                            {
+                                "source": "warehouse-replay",
+                                "detail": "query-123 touched analytics.order_metrics",
+                                "weight": 0.91,
+                            }
+                        ],
+                    },
+                ]
+            ),
+        }
+    )
+
+    result = find_change_surface(
+        db,
+        target="data-asset:warehouse:analytics.order_metrics",
+    )
+
+    assert result["lineage_evidence"] == {
+        "status": "combined",
+        "evidence_sources": ["declared_lineage", "observed_lineage"],
+    }
+    impacted_by_id = {item["entity"]["id"]: item for item in result["impacted"]}
+    assert impacted_by_id["data-asset:warehouse:raw.orders"]["path"][
+        "lineage_evidence"
+    ] == {
+        "status": "declared_only",
+        "evidence_sources": ["declared_lineage"],
+    }
+    assert impacted_by_id["query-execution:warehouse:query-123"]["path"][
+        "lineage_evidence"
+    ] == {
+        "status": "observed_only",
+        "evidence_sources": ["observed_lineage"],
+    }
+
+
 def test_find_change_surface_ignores_db_edges_without_canonical_endpoints():
     db = make_mock_db(
         {

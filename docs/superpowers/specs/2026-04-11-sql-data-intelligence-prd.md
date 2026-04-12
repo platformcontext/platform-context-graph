@@ -206,3 +206,5 @@ This branch starts the roadmap with the generic foundation slice:
   observed-only asset dependencies
 - repository story wording that explains declared-versus-observed lineage
   overlap and mismatch honestly
+- generic impact responses and content-entity context summaries that label
+  declared, observed, or combined lineage evidence

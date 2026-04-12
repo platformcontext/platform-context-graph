@@ -164,6 +164,8 @@ The current foundation slice proves:
 - graph/content persistence registration for `AnalyticsModel`, `DataAsset`, and
   `DataColumn`
 - post-commit compiled-analytics lineage materialization
+- content-entity context and generic impact responses can label declared versus
+  observed lineage evidence for data-native entities
 
 ### Fast foundation gate
 
@@ -232,6 +234,7 @@ uv run pytest \
 PYTHONPATH=src uv run pytest \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py \
+  tests/unit/query/test_change_surface.py \
   tests/unit/query/test_entity_context.py \
   tests/unit/query/test_entity_resolution.py -q
 ```
