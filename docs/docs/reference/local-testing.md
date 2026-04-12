@@ -159,7 +159,10 @@ The current foundation slice proves:
 - plugin registration foundations for future warehouse and BI replay adapters
 - dbt-style compiled manifest normalization through a checked-in replay fixture
 - supported-subset compiled SQL column lineage extraction
-- explicit partial coverage reporting for unsupported wildcard projections
+- explicit partial coverage reporting for remaining unsupported derived
+  expressions
+- safe scalar wrapper coverage for `upper(column)`, `coalesce(column, 'literal')`,
+  `cast(column as type)`, and `date_trunc('day', column)`
 - `manifest.json` parsing through the targeted JSON lane
 - graph/content persistence registration for `AnalyticsModel`, `DataAsset`, and
   `DataColumn`

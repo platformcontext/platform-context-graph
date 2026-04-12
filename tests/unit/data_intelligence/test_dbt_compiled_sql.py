@@ -202,3 +202,99 @@ def test_normalize_dbt_manifest_supports_simple_scalar_wrappers() -> None:
             "unresolved_reference_expressions": [],
         },
     ]
+
+
+def test_normalize_dbt_manifest_supports_typed_scalar_transforms() -> None:
+    """Typed row-preserving transforms should remain complete lineage."""
+
+    plugin = DbtCompiledSqlPlugin()
+
+    report = plugin.normalize(
+        {
+            "metadata": {
+                "adapter_type": "postgres",
+                "project_name": "jaffle_shop",
+            },
+            "nodes": {
+                "model.jaffle_shop.typed_orders": {
+                    "unique_id": "model.jaffle_shop.typed_orders",
+                    "resource_type": "model",
+                    "name": "typed_orders",
+                    "database": "analytics",
+                    "schema": "public",
+                    "alias": "typed_orders",
+                    "path": "models/marts/typed_orders.sql",
+                    "compiled_path": (
+                        "target/compiled/jaffle_shop/models/marts/typed_orders.sql"
+                    ),
+                    "relation_name": "analytics.public.typed_orders",
+                    "config": {"materialized": "view"},
+                    "depends_on": {
+                        "nodes": [
+                            "source.jaffle_shop.raw.orders",
+                        ]
+                    },
+                    "compiled_code": (
+                        "select "
+                        "cast(o.id as bigint) as order_id_bigint, "
+                        "date_trunc('day', o.created_at) as created_day "
+                        "from raw.public.orders o"
+                    ),
+                    "columns": {
+                        "order_id_bigint": {"name": "order_id_bigint"},
+                        "created_day": {"name": "created_day"},
+                    },
+                }
+            },
+            "sources": {
+                "source.jaffle_shop.raw.orders": {
+                    "unique_id": "source.jaffle_shop.raw.orders",
+                    "resource_type": "source",
+                    "source_name": "raw",
+                    "name": "orders",
+                    "database": "raw",
+                    "schema": "public",
+                    "identifier": "orders",
+                    "columns": {
+                        "id": {"name": "id"},
+                        "created_at": {"name": "created_at"},
+                    },
+                }
+            },
+        }
+    )
+
+    assert report["coverage"] == {
+        "confidence": 1.0,
+        "state": "complete",
+        "unresolved_references": [],
+    }
+    assert report["analytics_models"] == [
+        {
+            "id": "analytics-model:model.jaffle_shop.typed_orders",
+            "name": "typed_orders",
+            "asset_name": "analytics.public.typed_orders",
+            "line_number": 1,
+            "path": "target/compiled/jaffle_shop/models/marts/typed_orders.sql",
+            "compiled_path": "target/compiled/jaffle_shop/models/marts/typed_orders.sql",
+            "materialization": "view",
+            "parse_state": "complete",
+            "confidence": 1.0,
+            "projection_count": 2,
+            "unresolved_reference_count": 0,
+            "unresolved_reference_reasons": [],
+            "unresolved_reference_expressions": [],
+        }
+    ]
+    assert any(
+        item["type"] == "COLUMN_DERIVES_FROM"
+        and item["source_name"] == "analytics.public.typed_orders.order_id_bigint"
+        and item["target_name"] == "raw.public.orders.id"
+        for item in report["relationships"]
+    )
+    assert any(
+        item["type"] == "COLUMN_DERIVES_FROM"
+        and item["source_name"] == "analytics.public.typed_orders.created_day"
+        and item["target_name"] == "raw.public.orders.created_at"
+        for item in report["relationships"]
+    )

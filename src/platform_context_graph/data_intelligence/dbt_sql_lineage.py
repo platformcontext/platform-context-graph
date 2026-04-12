@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from .dbt_sql_expressions import (
     derived_expression_gap,
+    expression_ignored_identifiers,
     expression_requires_partial_reporting,
 )
 from .dbt_sql_identifiers import unqualified_identifiers
@@ -300,6 +301,7 @@ def _lineage_for_projection(
     unresolved_references: list[dict[str, str]] = []
     seen_columns: set[str] = set()
     matched_unqualified_identifiers: set[str] = set()
+    matched_unqualified_identifiers.update(expression_ignored_identifiers(expression))
 
     for reference in _QUALIFIED_REFERENCE_RE.finditer(expression):
         alias = reference.group("alias")

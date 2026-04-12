@@ -68,6 +68,50 @@ def test_extract_compiled_model_lineage_supports_coalesce_with_literal_default(
     assert lineage.unresolved_references == ()
 
 
+def test_extract_compiled_model_lineage_supports_cast_wrapper() -> None:
+    """CAST of one source column should stay on the supported lineage path."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        select
+          cast(o.id as bigint) as order_id_bigint
+        from raw.public.orders o
+        """,
+        model_name="typed_orders",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == (
+        ColumnLineage(
+            output_column="order_id_bigint",
+            source_columns=("raw.public.orders.id",),
+        ),
+    )
+    assert lineage.unresolved_references == ()
+
+
+def test_extract_compiled_model_lineage_supports_literal_parameter_wrappers() -> None:
+    """Literal-parameter wrappers should stay supported with one source column."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        select
+          date_trunc('day', o.created_at) as created_day
+        from raw.public.orders o
+        """,
+        model_name="typed_orders",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == (
+        ColumnLineage(
+            output_column="created_day",
+            source_columns=("raw.public.orders.created_at",),
+        ),
+    )
+    assert lineage.unresolved_references == ()
+
+
 def test_extract_compiled_model_lineage_marks_aggregate_projection_partial() -> None:
     """Aggregate projections should retain source lineage and surface a gap."""
 

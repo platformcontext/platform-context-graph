@@ -60,6 +60,10 @@ Status on this branch:
   `coalesce(column, 'literal')` now stay on the supported lineage path, which
   reduces partial-coverage noise to the remaining aggregate and multi-input
   expression cases
+- typed scalar transforms such as `cast(column as type)` and
+  `date_trunc('day', column)` now stay on the supported lineage path as well,
+  which broadens safe analytics-model coverage without treating aggregates as
+  fully understood
 - analytics-model entity context now exposes compiled-lineage coverage state,
   confidence, materialization, projection count, and unresolved reasons and
   expressions

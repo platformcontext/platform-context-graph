@@ -14,6 +14,7 @@ _FUNCTION_CALL_RE = re.compile(
 )
 _SINGLE_QUOTED_LITERAL_RE = re.compile(r"^'(?:[^'\\\\]|\\\\.)*'$", re.DOTALL)
 _NUMERIC_LITERAL_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$")
+_TYPE_IDENTIFIER_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
 _DERIVED_EXPRESSION_REASON = "derived_expression_semantics_not_captured"
 _SIMPLE_SCALAR_FUNCTIONS = {
     "upper",
@@ -21,6 +22,9 @@ _SIMPLE_SCALAR_FUNCTIONS = {
     "trim",
     "ltrim",
     "rtrim",
+}
+_LITERAL_PARAMETER_SCALAR_FUNCTIONS = {
+    "date_trunc",
 }
 
 
@@ -37,6 +41,18 @@ def expression_requires_partial_reporting(expression: str) -> bool:
     if _is_supported_scalar_wrapper(normalized):
         return False
     return True
+
+
+def expression_ignored_identifiers(expression: str) -> set[str]:
+    """Return extra bare identifiers that should be ignored for this expression."""
+
+    cast_expression = _supported_cast_expression(expression)
+    if cast_expression is None:
+        return set()
+    return {
+        match.group(0)
+        for match in _TYPE_IDENTIFIER_RE.finditer(cast_expression[1])
+    }
 
 
 def derived_expression_gap(*, expression: str, model_name: str) -> dict[str, str]:
@@ -73,6 +89,9 @@ def _strip_wrapping_parentheses(expression: str) -> str:
 def _is_supported_scalar_wrapper(expression: str) -> bool:
     """Return whether the expression is a supported one-column scalar wrapper."""
 
+    if _supported_cast_expression(expression) is not None:
+        return True
+
     match = _FUNCTION_CALL_RE.fullmatch(expression)
     if match is None:
         return False
@@ -85,7 +104,35 @@ def _is_supported_scalar_wrapper(expression: str) -> bool:
         return _is_simple_reference_expression(arguments[0]) and all(
             _is_literal_expression(argument) for argument in arguments[1:]
         )
+    if function_name in _LITERAL_PARAMETER_SCALAR_FUNCTIONS and len(arguments) >= 2:
+        reference_arguments = [
+            argument for argument in arguments if _is_simple_reference_expression(argument)
+        ]
+        if len(reference_arguments) != 1:
+            return False
+        return all(
+            _is_simple_reference_expression(argument)
+            or _is_literal_expression(argument)
+            for argument in arguments
+        )
     return False
+
+
+def _supported_cast_expression(expression: str) -> tuple[str, str] | None:
+    """Return the cast value/type when the CAST expression is supported."""
+
+    match = _FUNCTION_CALL_RE.fullmatch(expression)
+    if match is None or match.group("name").strip().lower() != "cast":
+        return None
+
+    value_expression, type_expression = _split_cast_arguments(match.group("arguments"))
+    if value_expression is None or type_expression is None:
+        return None
+    if not _is_simple_reference_expression(value_expression):
+        return None
+    if not type_expression.strip():
+        return None
+    return value_expression, type_expression
 
 
 def _is_simple_reference_expression(expression: str) -> bool:
@@ -144,4 +191,37 @@ def _split_top_level_arguments(arguments: str) -> list[str]:
     return items
 
 
-__all__ = ["derived_expression_gap", "expression_requires_partial_reporting"]
+def _split_cast_arguments(arguments: str) -> tuple[str | None, str | None]:
+    """Split one CAST body into value and type expressions."""
+
+    depth = 0
+    in_single_quote = False
+    lower_arguments = arguments.lower()
+
+    for index, character in enumerate(arguments):
+        if character == "'" and (index == 0 or arguments[index - 1] != "\\"):
+            in_single_quote = not in_single_quote
+            continue
+        if in_single_quote:
+            continue
+        if character == "(":
+            depth += 1
+            continue
+        if character == ")" and depth > 0:
+            depth -= 1
+            continue
+        if depth != 0:
+            continue
+        if lower_arguments[index : index + 4] != " as ":
+            continue
+        value_expression = arguments[:index].strip()
+        type_expression = arguments[index + 4 :].strip()
+        return value_expression, type_expression
+    return None, None
+
+
+__all__ = [
+    "derived_expression_gap",
+    "expression_ignored_identifiers",
+    "expression_requires_partial_reporting",
+]
