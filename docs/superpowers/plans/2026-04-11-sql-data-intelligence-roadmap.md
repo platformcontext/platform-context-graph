@@ -334,6 +334,241 @@ overhead.
 6. Governance and contract depth.
 7. MCP persona polish.
 
+## Runtime Ownership
+
+This branch spans all three long-running PCG runtimes, but not equally. The
+important architectural rule is:
+
+- the ingester owns parse-time extraction and indexing-time materialization
+- the API owns read/query/MCP packaging
+- the resolution engine owns fact projection, but it does not yet own the
+  SQL/data-intelligence relationship builders added on this branch
+
+### Ingester responsibilities on this branch
+
+- SQL and data-intelligence extraction runs during repository parsing through
+  `parsers/`, including:
+  - `.sql` parser output
+  - ORM table-mapping extraction
+  - embedded SQL extraction
+  - replay-backed JSON normalization for compiled analytics, warehouse, BI,
+    semantic, quality, and governance fixtures
+- In direct graph-build mode, the ingester runs post-parse materialization
+  inline through `GraphBuilder._create_all_sql_relationships`, which delegates
+  to both SQL link creation and data-intelligence link creation.
+- In the facts-first coordinator path, the ingester still triggers the final
+  SQL/data-intelligence materialization stage after inline projection through
+  `indexing/coordinator_facts_finalize.py`.
+- Practical meaning: the branch's parser and relationship logic currently lives
+  in the indexing/finalization boundary, not in the request-serving path.
+
+### API and MCP responsibilities on this branch
+
+- The API does not parse repositories or create lineage edges.
+- The API reads already-materialized graph and content state and exposes it
+  through:
+  - `resolve_entity`
+  - `get_entity_context`
+  - `get_repository_context`
+  - `get_repository_story`
+  - `find_change_surface`
+- MCP uses the same query layer as the HTTP API, so this branch helps MCP only
+  after the ingester has indexed and materialized the new graph state.
+- Practical meaning: if answers are missing in MCP, the first suspicion should
+  usually be indexing/materialization coverage, not API runtime behavior.
+
+### Resolution-engine responsibilities on this branch
+
+- The resolution engine still owns fact work-item projection into canonical
+  graph state.
+- It is adjacent to this roadmap because the ingester can project the same
+  facts-first path inline during indexing cutover.
+- However, the branch's new SQL/data-intelligence relationship builders are
+  not currently hosted inside `resolution/`.
+- Practical meaning: the resolution engine matters for the facts-first
+  projection foundation, but it is not yet the runtime that creates the new
+  SQL/data-intelligence relationship families after projection.
+
+### Architecture concern to keep in view
+
+The current placement is good enough for feature delivery, but it is also the
+main architectural risk left on this branch:
+
+- parser extraction belongs on the ingester
+- query shaping belongs on the API
+- relationship materialization is currently split between resolution-owned
+  projection foundations and ingester-owned post-commit finalization
+
+That split is acceptable for the milestone, but we should treat it as a
+follow-up design pressure point if we want a cleaner long-term story.
+
+## Chunked Delivery Plan
+
+The remaining work should be executed as full, reviewable chunks on this
+branch, not as isolated micro-slices. Each chunk ends only after code, tests,
+and local validation are green.
+
+### Chunk 1: Templated SQL and macro resolution
+
+Primary runtime surface:
+- Ingester
+
+Why this chunk exists:
+- This is the biggest trust gap for analytics engineers using dbt-style or
+  templated SQL because unresolved macros currently force partial lineage.
+
+Done means:
+- unresolved Jinja and package-qualified macro cases are classified more
+  precisely
+- supported macro-expansion or templated-resolution paths produce better
+  lineage instead of generic partial gaps
+- analytics-model context explains exactly what was resolved and what remains
+  unresolved
+
+Blocking validation:
+- compiled analytics unit suites
+- `tests/integration/test_mcp_data_intelligence_queries.py`
+- checked-in compiled analytics replay fixture coverage
+
+Estimated effort:
+- Large, about 2-3 weeks
+
+### Chunk 2: Deeper compiled SQL semantics
+
+Primary runtime surfaces:
+- Ingester
+- API
+
+Why this chunk exists:
+- The current lineage is strong for supported projections, but deeper SQL
+  semantics are required before DBAs and analytics engineers can trust complex
+  model answers.
+
+Done means:
+- richer support for unions, nested subqueries, more window cases, and broader
+  aggregate-awareness
+- exact column-lineage assertions expand beyond the current supported subset
+- API/MCP summaries expose the richer transform evidence clearly
+
+Blocking validation:
+- compiled analytics unit suites
+- exact graph integration assertions for column lineage
+- targeted entity-context and change-surface tests
+
+Estimated effort:
+- Large, about 2-4 weeks
+
+### Chunk 3: Real-repo validation corpus and local gate
+
+Primary runtime surface:
+- Ingester
+
+Why this chunk exists:
+- We need stronger confidence that parser extraction and relationship building
+  hold up on real repos before the next image or broader release claims.
+
+Done means:
+- the checked-in fixtures stay the exact regression source of truth
+- local real-repo validation profiles run cleanly against the required repos
+- scratch-cloned external repos cover ORM and Go relationship lanes
+- failures identify missing entities or missing edge families directly
+
+Blocking validation:
+- new SQL/data validator profiles
+- local Neo4j/Postgres graph-backed validation runs
+- existing SQL unit and integration suites
+
+Estimated effort:
+- Medium, about 1-1.5 weeks
+
+### Chunk 4: Warehouse adapter realism beyond replay
+
+Primary runtime surfaces:
+- Ingester
+- API
+
+Why this chunk exists:
+- Replay fixtures prove the model, but DBAs need stronger answers around
+  observed usage, hot assets, and declared-versus-observed mismatches.
+
+Done means:
+- warehouse replay normalization grows to cover more realistic metadata and
+  query-history shapes
+- observed lineage and usage signals are queryable and easy to explain
+- entity and repository context present confidence and evidence-source
+  breakdowns cleanly
+
+Blocking validation:
+- warehouse replay unit and graph integration suites
+- repository context/story tests
+- change-surface regression coverage for observed dependencies
+
+Estimated effort:
+- Extra large, about 3-5 weeks
+
+### Chunk 5: BI and semantic downstream breadth
+
+Primary runtime surfaces:
+- Ingester
+- API
+
+Why this chunk exists:
+- The story is incomplete if we cannot reliably show which dashboards and
+  semantic fields break when an upstream asset or column changes.
+
+Done means:
+- broader downstream consumer coverage beyond the first replay fixtures
+- stronger column-level mappings from warehouse and semantic layers into BI
+  consumers
+- MCP examples can walk from source asset to semantic field to dashboard
+
+Blocking validation:
+- BI and semantic unit suites
+- graph-backed downstream-impact assertions
+- entity-context and change-surface regression tests
+
+Estimated effort:
+- Large, about 2-3 weeks
+
+### Chunk 6: Governance, contracts, and persona polish
+
+Primary runtime surfaces:
+- Ingester
+- API
+
+Why this chunk exists:
+- This is the layer that turns good lineage into operationally useful answers
+  for DBAs, ETL owners, and platform teams.
+
+Done means:
+- richer policy and contract overlays beyond the first protected-column slice
+- persona-facing MCP answers explain ownership, protection, risk class, and
+  downstream impact clearly
+- examples and docs show how this work is meant to be used day to day
+
+Blocking validation:
+- governance and change-classification suites
+- entity-context and repository-story suites
+- strict docs build
+
+Estimated effort:
+- Medium, about 1-2 weeks for governance depth, plus about 1 week for MCP
+  persona polish
+
+## Sequence And Stop Points
+
+To keep this branch healthy, each chunk should stop at these review points:
+
+1. Design confirmation for the chunk boundary and runtime placement.
+2. TDD-first implementation with the smallest useful vertical slice.
+3. Local graph-backed verification, not only unit tests.
+4. Roadmap and PR update summarizing what changed, what runtime owns it, and
+   what remains.
+
+We should not blend multiple chunks into one “big push.” The right rhythm is:
+finish a whole chunk, verify it locally, report the result, then begin the next
+chunk.
+
 ## Local Validation
 
 ### Foundation gate
