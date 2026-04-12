@@ -6,6 +6,10 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from .dbt_sql_expressions import (
+    derived_expression_gap,
+    expression_requires_partial_reporting,
+)
 from .dbt_sql_identifiers import unqualified_identifiers
 
 _SELECT_CLAUSE_RE = re.compile(
@@ -348,6 +352,10 @@ def _lineage_for_projection(
 
     if output_column is None and source_columns:
         output_column = source_columns[0].rsplit(".", maxsplit=1)[-1]
+    if source_columns and expression_requires_partial_reporting(expression):
+        unresolved_references.append(
+            derived_expression_gap(expression=expression, model_name=model_name)
+        )
     if output_column is not None and source_columns:
         column_lineage.append(
             ColumnLineage(

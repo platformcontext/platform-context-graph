@@ -150,25 +150,39 @@ def test_normalize_dbt_manifest_propagates_cte_lineage_to_model_columns() -> Non
     )
 
 
-def test_normalize_dbt_manifest_expands_known_wildcard_projections() -> None:
-    """Wildcard projections should expand when the source schema is known."""
+def test_normalize_dbt_manifest_reports_derived_expression_gaps_honestly() -> None:
+    """Derived projections should stay linked while surfacing partial coverage."""
 
     plugin = DbtCompiledSqlPlugin()
 
     report = plugin.normalize(_load_fixture())
 
     assert report["coverage"] == {
-        "confidence": 1.0,
-        "state": "complete",
-        "unresolved_references": [],
+        "confidence": 0.5,
+        "state": "partial",
+        "unresolved_references": [
+            {
+                "expression": "sum(p.amount)",
+                "model_name": "order_metrics",
+                "reason": "derived_expression_semantics_not_captured",
+            },
+            {
+                "expression": "upper(source_customer_name)",
+                "model_name": "order_metrics",
+                "reason": "derived_expression_semantics_not_captured",
+            },
+            {
+                "expression": "coalesce(c.segment, 'unknown')",
+                "model_name": "orders_expanded",
+                "reason": "derived_expression_semantics_not_captured",
+            },
+        ],
     }
     assert [
-        item["parse_state"]
-        for item in report["analytics_models"]
-        if item["name"] == "orders_expanded"
-    ] == ["complete"]
-    assert [
         {
+            "name": item["name"],
+            "parse_state": item["parse_state"],
+            "confidence": item["confidence"],
             "unresolved_reference_count": item["unresolved_reference_count"],
             "unresolved_reference_reasons": item["unresolved_reference_reasons"],
             "unresolved_reference_expressions": item[
@@ -176,11 +190,30 @@ def test_normalize_dbt_manifest_expands_known_wildcard_projections() -> None:
             ],
         }
         for item in report["analytics_models"]
-        if item["name"] == "orders_expanded"
     ] == [
         {
-            "unresolved_reference_count": 0,
-            "unresolved_reference_reasons": [],
-            "unresolved_reference_expressions": [],
-        }
+            "name": "order_metrics",
+            "parse_state": "partial",
+            "confidence": 0.5,
+            "unresolved_reference_count": 2,
+            "unresolved_reference_reasons": [
+                "derived_expression_semantics_not_captured"
+            ],
+            "unresolved_reference_expressions": [
+                "sum(p.amount)",
+                "upper(source_customer_name)",
+            ],
+        },
+        {
+            "name": "orders_expanded",
+            "parse_state": "partial",
+            "confidence": 0.5,
+            "unresolved_reference_count": 1,
+            "unresolved_reference_reasons": [
+                "derived_expression_semantics_not_captured"
+            ],
+            "unresolved_reference_expressions": [
+                "coalesce(c.segment, 'unknown')"
+            ],
+        },
     ]

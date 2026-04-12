@@ -30,19 +30,38 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
     assert result["data_intelligence"]["analytics_model_count"] == 2
     assert result["data_intelligence"]["data_asset_count"] == 5
     assert result["data_intelligence"]["data_column_count"] == 17
-    assert result["data_intelligence"]["lineage_gap_summary"] is None
+    assert result["data_intelligence"]["lineage_gap_summary"] == {
+        "partial_model_count": 2,
+        "reason_counts": {
+            "derived_expression_semantics_not_captured": 2,
+        },
+        "sample_models": [
+            "order_metrics",
+            "orders_expanded",
+        ],
+        "sample_expressions": [
+            "sum(p.amount)",
+            "upper(source_customer_name)",
+            "coalesce(c.segment, 'unknown')",
+        ],
+    }
     assert result["data_intelligence"]["parse_states"] == {
-        "complete": 2,
+        "partial": 2,
     }
     assert result["data_intelligence"]["sample_models"][0] == {
         "name": "order_metrics",
         "path": "target/compiled/jaffle_shop/models/marts/order_metrics.sql",
-        "parse_state": "complete",
-        "confidence": 1.0,
+        "parse_state": "partial",
+        "confidence": 0.5,
         "materialization": "view",
-        "unresolved_reference_count": 0,
-        "unresolved_reference_reasons": [],
-        "unresolved_reference_expressions": [],
+        "unresolved_reference_count": 2,
+        "unresolved_reference_reasons": [
+            "derived_expression_semantics_not_captured"
+        ],
+        "unresolved_reference_expressions": [
+            "sum(p.amount)",
+            "upper(source_customer_name)",
+        ],
     }
     assert result["data_intelligence"]["relationship_counts"] == {
         "compiles_to": 2,
@@ -69,7 +88,10 @@ def test_analytics_repo_story_surfaces_data_intelligence(indexed_ecosystems) -> 
         for section in result["story_sections"]
         if section["id"] == "data_intelligence"
     )
-    assert "lineage is complete for all indexed models" in data_section["summary"]
+    assert (
+        "lineage is partial for 2 models because derived expression semantics not captured remains unresolved"
+        in data_section["summary"]
+    )
     assert [item["name"] for item in data_section["items"][:2]] == [
         "order_metrics",
         "orders_expanded",
@@ -381,10 +403,10 @@ def test_data_entity_context_surfaces_downstream_consumers_for_finance_columns(
     )
 
 
-def test_analytics_model_context_surfaces_complete_compiled_lineage(
+def test_analytics_model_context_surfaces_partial_compiled_lineage(
     indexed_ecosystems,
 ) -> None:
-    """Analytics-model context should report complete compiled lineage coverage."""
+    """Analytics-model context should report partial compiled lineage coverage."""
 
     result = get_entity_context(
         indexed_ecosystems,
@@ -398,10 +420,16 @@ def test_analytics_model_context_surfaces_complete_compiled_lineage(
         "target/compiled/jaffle_shop/models/marts/orders_expanded.sql"
     )
     assert result["data_intelligence"]["lineage_coverage"] == {
-        "state": "complete",
-        "confidence": 1.0,
+        "state": "partial",
+        "confidence": 0.5,
         "materialization": "table",
         "projection_count": 2,
-        "unresolved_reference_count": 0,
+        "unresolved_reference_count": 1,
+        "unresolved_reference_reasons": [
+            "derived_expression_semantics_not_captured"
+        ],
+        "unresolved_reference_expressions": [
+            "coalesce(c.segment, 'unknown')"
+        ],
     }
-    assert "compiled lineage is complete" in result["data_intelligence"]["summary"]
+    assert "compiled lineage is partial" in result["data_intelligence"]["summary"]
