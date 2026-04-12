@@ -165,6 +165,7 @@ Fixture groups:
 - `analytics_compiled_comprehensive`
 - `warehouse_replay_comprehensive`
 - `bi_replay_comprehensive`
+- `semantic_replay_comprehensive`
 
 Rules:
 
@@ -215,3 +216,13 @@ This branch starts the roadmap with the generic foundation slice:
 - graph/content bucket registration for `DashboardAsset`
 - repository context and story surfacing for dashboard counts and BI consumer
   relationships
+- checked-in `semantic_replay_comprehensive` replay fixture for local semantic
+  downstream validation
+- `SemanticReplayPlugin` normalization into semantic-layer `DataAsset` and
+  `DataColumn` nodes using the existing generic model
+- exact semantic `ASSET_DERIVES_FROM` and `COLUMN_DERIVES_FROM` lineage from
+  semantic datasets and fields back to warehouse assets and columns
+- semantic dashboards reusing `POWERS` edges from semantic assets and fields to
+  downstream `DashboardAsset` nodes
+- graph-backed change-surface coverage proving warehouse columns reach semantic
+  fields and downstream dashboards locally

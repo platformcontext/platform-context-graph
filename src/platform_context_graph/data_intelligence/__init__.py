@@ -3,6 +3,7 @@
 from .bi_replay import BIReplayPlugin
 from .dbt import DbtCompiledSqlPlugin
 from .plugins import DataIntelligencePlugin, DataIntelligenceRegistry
+from .semantic_replay import SemanticReplayPlugin
 from .warehouse_replay import WarehouseReplayPlugin
 
 __all__ = [
@@ -10,5 +11,6 @@ __all__ = [
     "DataIntelligencePlugin",
     "DataIntelligenceRegistry",
     "DbtCompiledSqlPlugin",
+    "SemanticReplayPlugin",
     "WarehouseReplayPlugin",
 ]

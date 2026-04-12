@@ -99,3 +99,76 @@ def test_repository_story_exposes_data_intelligence_section() -> None:
     assert result["data_intelligence_overview"]["reconciliation"]["status"] == (
         "partial_overlap"
     )
+
+
+def test_repository_story_uses_dashboards_when_semantic_repo_has_no_models() -> None:
+    """Repository stories should fall back to dashboard examples for semantic repos."""
+
+    result = build_repository_story_response(
+        {
+            "repository": {
+                "id": "repository:r_semantic_demo",
+                "name": "semantic-replay-comprehensive",
+                "repo_slug": "platformcontext/semantic-replay-comprehensive",
+                "remote_url": (
+                    "https://github.com/platformcontext/semantic-replay-comprehensive"
+                ),
+                "has_remote": True,
+            },
+            "code": {"functions": 0, "classes": 0, "class_methods": 0},
+            "data_intelligence": {
+                "analytics_model_count": 0,
+                "data_asset_count": 3,
+                "data_column_count": 5,
+                "query_execution_count": 1,
+                "dashboard_asset_count": 1,
+                "relationship_counts": {
+                    "compiles_to": 0,
+                    "asset_derives_from": 1,
+                    "column_derives_from": 2,
+                    "runs_query_against": 1,
+                    "powers": 2,
+                },
+                "reconciliation": {
+                    "status": "aligned",
+                    "shared_asset_count": 1,
+                    "declared_only_asset_count": 0,
+                    "observed_only_asset_count": 0,
+                    "shared_assets": ["analytics.finance.daily_revenue"],
+                    "declared_only_assets": [],
+                    "observed_only_assets": [],
+                },
+                "parse_states": {},
+                "sample_models": [],
+                "sample_queries": [
+                    {
+                        "name": "semantic_revenue_lookup",
+                        "status": "success",
+                        "executed_by": "semantic_cache_refresh",
+                    }
+                ],
+                "sample_dashboards": [
+                    {
+                        "name": "Semantic Revenue Overview",
+                        "path": "dashboards/semantic_revenue_overview.json",
+                        "workspace": "finance",
+                    }
+                ],
+                "sample_assets": [
+                    {"name": "semantic.finance.revenue_semantic", "kind": "semantic_model"},
+                    {"name": "analytics.finance.daily_revenue", "kind": "table"},
+                ],
+            },
+            "limitations": [],
+        }
+    )
+
+    data_section = next(
+        section
+        for section in result["story_sections"]
+        if section["id"] == "data_intelligence"
+    )
+    assert "1 dashboard" in data_section["summary"]
+    assert [item["name"] for item in data_section["items"]] == [
+        "Semantic Revenue Overview"
+    ]

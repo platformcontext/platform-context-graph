@@ -10,6 +10,7 @@ from platform_context_graph.query.repositories import (
     get_repository_context,
     get_repository_story,
 )
+from platform_context_graph.query.impact import find_change_surface
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("NEO4J_URI"),
@@ -170,3 +171,64 @@ def test_bi_replay_repo_story_mentions_dashboard_consumers(indexed_ecosystems) -
         if section["id"] == "data_intelligence"
     )
     assert "1 dashboard" in data_section["summary"]
+
+
+def test_semantic_replay_repo_context_surfaces_semantic_lineage(
+    indexed_ecosystems,
+) -> None:
+    """Repo context should expose semantic-layer lineage and dashboards."""
+
+    result = get_repository_context(
+        indexed_ecosystems,
+        repo_id="semantic_replay_comprehensive",
+    )
+
+    assert result["data_intelligence"]["analytics_model_count"] == 0
+    assert result["data_intelligence"]["data_asset_count"] == 3
+    assert result["data_intelligence"]["data_column_count"] == 5
+    assert result["data_intelligence"]["query_execution_count"] == 1
+    assert result["data_intelligence"]["dashboard_asset_count"] == 1
+    assert result["data_intelligence"]["relationship_counts"] == {
+        "compiles_to": 0,
+        "asset_derives_from": 1,
+        "column_derives_from": 2,
+        "runs_query_against": 1,
+        "powers": 2,
+    }
+
+
+def test_semantic_replay_repo_story_mentions_semantic_dashboard_consumers(
+    indexed_ecosystems,
+) -> None:
+    """Repo story should summarize semantic downstream coverage."""
+
+    result = get_repository_story(
+        indexed_ecosystems,
+        repo_id="semantic_replay_comprehensive",
+    )
+
+    data_section = next(
+        section
+        for section in result["story_sections"]
+        if section["id"] == "data_intelligence"
+    )
+    assert "1 dashboard" in data_section["summary"]
+    assert [item["name"] for item in data_section["items"]] == [
+        "Semantic Revenue Overview"
+    ]
+
+
+def test_semantic_replay_change_surface_reaches_semantic_field_and_dashboard(
+    indexed_ecosystems,
+) -> None:
+    """Change surface should traverse warehouse columns into semantic consumers."""
+
+    result = find_change_surface(
+        indexed_ecosystems,
+        target="data-column:analytics.finance.daily_revenue.gross_amount",
+    )
+
+    impacted_ids = [item["entity"]["id"] for item in result["impacted"]]
+
+    assert "data-column:semantic.finance.revenue_semantic.gross_amount" in impacted_ids
+    assert "dashboard-asset:finance:semantic-revenue-overview" in impacted_ids

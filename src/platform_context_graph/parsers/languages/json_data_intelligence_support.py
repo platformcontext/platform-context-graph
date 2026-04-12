@@ -6,6 +6,7 @@ from typing import Any
 
 from ...data_intelligence.bi_replay import BIReplayPlugin
 from ...data_intelligence.dbt import DbtCompiledSqlPlugin
+from ...data_intelligence.semantic_replay import SemanticReplayPlugin
 from ...data_intelligence.warehouse_replay import WarehouseReplayPlugin
 
 
@@ -49,6 +50,16 @@ def is_bi_replay_document(document: Any, *, filename: str) -> bool:
     return isinstance(metadata, dict) and isinstance(document.get("dashboards"), list)
 
 
+def is_semantic_replay_document(document: Any, *, filename: str) -> bool:
+    """Return whether one JSON document looks like a semantic replay artifact."""
+
+    lowered = filename.lower()
+    if lowered != "semantic_replay.json" or not isinstance(document, dict):
+        return False
+    metadata = document.get("metadata")
+    return isinstance(metadata, dict) and isinstance(document.get("models"), list)
+
+
 def apply_dbt_manifest_document(result: dict[str, Any], document: dict[str, Any]) -> None:
     """Populate one parse result from a dbt manifest replay artifact."""
 
@@ -82,11 +93,25 @@ def apply_bi_replay_document(result: dict[str, Any], document: dict[str, Any]) -
     result["data_intelligence_coverage"] = dict(normalized["coverage"])
 
 
+def apply_semantic_replay_document(
+    result: dict[str, Any], document: dict[str, Any]
+) -> None:
+    """Populate one parse result from a semantic replay fixture."""
+
+    normalized = SemanticReplayPlugin().normalize(document)
+    result["data_assets"] = list(normalized["data_assets"])
+    result["data_columns"] = list(normalized["data_columns"])
+    result["data_relationships"] = list(normalized["relationships"])
+    result["data_intelligence_coverage"] = dict(normalized["coverage"])
+
+
 __all__ = [
     "apply_bi_replay_document",
     "apply_dbt_manifest_document",
+    "apply_semantic_replay_document",
     "apply_warehouse_replay_document",
     "is_bi_replay_document",
     "is_dbt_manifest_document",
+    "is_semantic_replay_document",
     "is_warehouse_replay_document",
 ]

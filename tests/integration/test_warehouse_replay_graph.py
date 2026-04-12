@@ -73,6 +73,51 @@ def test_bi_replay_nodes_and_dashboard_relationships_are_created(
         )
         == 1
     )
+
+
+def test_semantic_replay_nodes_and_lineage_relationships_are_created(
+    indexed_ecosystems,
+) -> None:
+    """Semantic replay fixtures should persist semantic assets and fields."""
+
+    assert (
+        _count(
+            indexed_ecosystems,
+            "MATCH (a:DataAsset {name: 'semantic.finance.revenue_semantic'}) "
+            "RETURN count(a) as cnt",
+        )
+        == 1
+    )
+    assert (
+        _count(
+            indexed_ecosystems,
+            "MATCH (:DataAsset {name: 'semantic.finance.revenue_semantic'})"
+            "-[:ASSET_DERIVES_FROM]->"
+            "(:DataAsset {name: 'analytics.finance.daily_revenue'}) "
+            "RETURN count(*) as cnt",
+        )
+        == 1
+    )
+    assert (
+        _count(
+            indexed_ecosystems,
+            "MATCH (:DataColumn {name: 'semantic.finance.revenue_semantic.gross_amount'})"
+            "-[:COLUMN_DERIVES_FROM]->"
+            "(:DataColumn {name: 'analytics.finance.daily_revenue.gross_amount'}) "
+            "RETURN count(*) as cnt",
+        )
+        == 1
+    )
+    assert (
+        _count(
+            indexed_ecosystems,
+            "MATCH (:DataColumn {name: 'semantic.finance.revenue_semantic.gross_amount'})"
+            "-[:POWERS]->"
+            "(:DashboardAsset {name: 'Semantic Revenue Overview'}) "
+            "RETURN count(*) as cnt",
+        )
+        == 1
+    )
     assert (
         _count(
             indexed_ecosystems,
