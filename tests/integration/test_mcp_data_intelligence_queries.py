@@ -35,6 +35,8 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
         "runs_query_against": 0,
         "powers": 0,
         "asserts_quality_on": 0,
+        "owns": 0,
+        "declares_contract_for": 0,
     }
 
 
@@ -73,6 +75,8 @@ def test_warehouse_replay_repo_context_surfaces_observed_queries(
         "runs_query_against": 4,
         "powers": 0,
         "asserts_quality_on": 0,
+        "owns": 0,
+        "declares_contract_for": 0,
     }
 
 
@@ -157,6 +161,8 @@ def test_bi_replay_repo_context_surfaces_dashboard_downstreams(
         "runs_query_against": 1,
         "powers": 3,
         "asserts_quality_on": 0,
+        "owns": 0,
+        "declares_contract_for": 0,
     }
 
 
@@ -198,6 +204,8 @@ def test_semantic_replay_repo_context_surfaces_semantic_lineage(
         "runs_query_against": 1,
         "powers": 2,
         "asserts_quality_on": 0,
+        "owns": 0,
+        "declares_contract_for": 0,
     }
 
 
@@ -257,6 +265,8 @@ def test_quality_replay_repo_context_surfaces_quality_checks(
         "runs_query_against": 1,
         "powers": 0,
         "asserts_quality_on": 2,
+        "owns": 0,
+        "declares_contract_for": 0,
     }
 
 

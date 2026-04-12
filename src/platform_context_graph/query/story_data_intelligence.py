@@ -14,6 +14,9 @@ def summarize_data_intelligence_overview(overview: dict[str, Any]) -> str:
     query_execution_count = int(overview.get("query_execution_count") or 0)
     dashboard_asset_count = int(overview.get("dashboard_asset_count") or 0)
     quality_check_count = int(overview.get("data_quality_check_count") or 0)
+    owner_count = int(overview.get("data_owner_count") or 0)
+    contract_count = int(overview.get("data_contract_count") or 0)
+    protected_column_count = int(overview.get("protected_column_count") or 0)
     reconciliation = dict(overview.get("reconciliation") or {})
     parse_states = dict(overview.get("parse_states") or {})
     partial_count = int(parse_states.get("partial") or 0)
@@ -29,6 +32,15 @@ def summarize_data_intelligence_overview(overview: dict[str, Any]) -> str:
         summary += (
             f", and {quality_check_count} quality check"
             f"{'' if quality_check_count == 1 else 's'}"
+        )
+    if owner_count:
+        summary += f", {owner_count} owner{'' if owner_count == 1 else 's'}"
+    if contract_count:
+        summary += f", {contract_count} contract{'' if contract_count == 1 else 's'}"
+    if protected_column_count:
+        summary += (
+            f", and {protected_column_count} protected column"
+            f"{'' if protected_column_count == 1 else 's'}"
         )
     reconciliation_summary = _reconciliation_summary_text(reconciliation)
     if reconciliation_summary:
@@ -50,8 +62,11 @@ def build_data_intelligence_story_items(
         overview.get("sample_models")
         or overview.get("sample_dashboards")
         or overview.get("sample_quality_checks")
+        or overview.get("sample_contracts")
+        or overview.get("sample_owners")
         or overview.get("sample_queries")
         or overview.get("sample_assets")
+        or overview.get("sample_protected_columns")
         or []
     )
 

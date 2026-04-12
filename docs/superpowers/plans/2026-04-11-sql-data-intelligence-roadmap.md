@@ -163,6 +163,19 @@ Status on this branch:
   sample checks
 - graph-backed integration coverage for persisted quality checks and
   change-surface traversal from changed columns to downstream checks
+- checked-in `governance_replay_comprehensive` replay fixture with one owner,
+  one contract, and one protected column overlay
+- `GovernanceReplayPlugin` as the first governance-category replay adapter
+- `governance_replay.json` parsing through the JSON config lane
+- graph/content registration for `DataOwner` and `DataContract`
+- post-commit materialization for `OWNS` and `DECLARES_CONTRACT_FOR` edges
+- governance metadata overlays applied onto `DataAsset` and `DataColumn`
+  targets, including owner teams, contract levels, change policies, and
+  protected-field metadata
+- repository context and story summaries include owner counts, contract counts,
+  and protected-column coverage
+- graph-backed integration coverage for persisted governance nodes, exact
+  overlay relationships, and protected-column metadata on target columns
 
 ## Local Validation
 
@@ -278,6 +291,33 @@ export PYTHONPATH=src
 uv run pytest \
   tests/integration/test_warehouse_replay_graph.py \
   tests/integration/test_mcp_data_intelligence_queries.py -q
+```
+
+### Governance replay gate
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/data_intelligence/test_governance_replay.py \
+  tests/unit/parsers/test_json_governance_replay.py \
+  tests/unit/content/test_data_intelligence_ingest.py \
+  tests/unit/relationships/test_data_intelligence_governance_links.py \
+  tests/unit/query/test_repository_context_data_governance.py \
+  tests/unit/query/test_story_data_governance.py \
+  tests/unit/tools/test_graph_builder_schema.py -q
+```
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USERNAME=neo4j
+export NEO4J_PASSWORD=change-me
+export DEFAULT_DATABASE=neo4j
+export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
+export PYTHONPATH=src
+
+uv run pytest \
+  tests/integration/test_governance_replay_graph.py \
+  tests/integration/test_mcp_data_governance_queries.py -q
 ```
 
 ### Quality replay gate

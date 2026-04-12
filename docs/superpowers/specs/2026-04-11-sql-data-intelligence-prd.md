@@ -236,3 +236,14 @@ This branch starts the roadmap with the generic foundation slice:
   failing checks
 - graph-backed change-surface coverage proving changed columns reach downstream
   quality checks locally
+- checked-in `governance_replay_comprehensive` replay fixture for local
+  ownership, contract, and protected-field validation
+- `GovernanceReplayPlugin` normalization into `DataOwner` and `DataContract`
+  plus exact `OWNS` and `DECLARES_CONTRACT_FOR` relationships to assets and
+  columns
+- graph/content bucket registration for `DataOwner` and `DataContract`
+- governance overlays copied onto `DataAsset` and `DataColumn` nodes so owner
+  teams, contract levels, change policies, sensitivities, and protected-column
+  metadata are queryable without a second lookup
+- repository context and story surfacing for owner counts, contract counts, and
+  protected-column coverage

@@ -6,6 +6,7 @@ from typing import Any
 
 from ...data_intelligence.bi_replay import BIReplayPlugin
 from ...data_intelligence.dbt import DbtCompiledSqlPlugin
+from ...data_intelligence.governance_replay import GovernanceReplayPlugin
 from ...data_intelligence.quality_replay import QualityReplayPlugin
 from ...data_intelligence.semantic_replay import SemanticReplayPlugin
 from ...data_intelligence.warehouse_replay import WarehouseReplayPlugin
@@ -71,6 +72,20 @@ def is_quality_replay_document(document: Any, *, filename: str) -> bool:
     return isinstance(metadata, dict) and isinstance(document.get("checks"), list)
 
 
+def is_governance_replay_document(document: Any, *, filename: str) -> bool:
+    """Return whether one JSON document looks like a governance replay artifact."""
+
+    lowered = filename.lower()
+    if lowered != "governance_replay.json" or not isinstance(document, dict):
+        return False
+    metadata = document.get("metadata")
+    return (
+        isinstance(metadata, dict)
+        and isinstance(document.get("owners"), list)
+        and isinstance(document.get("contracts"), list)
+    )
+
+
 def apply_dbt_manifest_document(result: dict[str, Any], document: dict[str, Any]) -> None:
     """Populate one parse result from a dbt manifest replay artifact."""
 
@@ -127,14 +142,31 @@ def apply_quality_replay_document(
     result["data_intelligence_coverage"] = dict(normalized["coverage"])
 
 
+def apply_governance_replay_document(
+    result: dict[str, Any], document: dict[str, Any]
+) -> None:
+    """Populate one parse result from a governance replay fixture."""
+
+    normalized = GovernanceReplayPlugin().normalize(document)
+    result["data_owners"] = list(normalized["data_owners"])
+    result["data_contracts"] = list(normalized["data_contracts"])
+    result["data_relationships"] = list(normalized["relationships"])
+    result["data_governance_annotations"] = list(
+        normalized["governance_annotations"]
+    )
+    result["data_intelligence_coverage"] = dict(normalized["coverage"])
+
+
 __all__ = [
     "apply_bi_replay_document",
     "apply_dbt_manifest_document",
+    "apply_governance_replay_document",
     "apply_quality_replay_document",
     "apply_semantic_replay_document",
     "apply_warehouse_replay_document",
     "is_bi_replay_document",
     "is_dbt_manifest_document",
+    "is_governance_replay_document",
     "is_quality_replay_document",
     "is_semantic_replay_document",
     "is_warehouse_replay_document",

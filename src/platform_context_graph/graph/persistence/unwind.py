@@ -57,6 +57,8 @@ ITEM_MAPPINGS_KEYS: list[tuple[str, str]] = [
     ("query_executions", "QueryExecution"),
     ("dashboard_assets", "DashboardAsset"),
     ("data_quality_checks", "DataQualityCheck"),
+    ("data_owners", "DataOwner"),
+    ("data_contracts", "DataContract"),
 ]
 
 VALUE_TRUNCATION_MARKER = " [truncated]"

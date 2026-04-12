@@ -119,6 +119,39 @@ def test_registry_supports_quality_category_plugins() -> None:
     assert plugins[3].category == "quality"
 
 
+class _GovernanceReplayPlugin:
+    """Minimal governance replay plugin implementing the public protocol."""
+
+    name = "governance-replay"
+    category = "governance"
+    replay_fixture_groups = ("governance_replay_comprehensive",)
+
+    def normalize(self, payload):
+        return payload
+
+
+def test_registry_supports_governance_category_plugins() -> None:
+    """The registry should keep governance adapters alongside other plugin types."""
+
+    registry = DataIntelligenceRegistry()
+    registry.register(_ReplayPlugin())
+    registry.register(_BIReplayPlugin())
+    registry.register(_SemanticReplayPlugin())
+    registry.register(_QualityReplayPlugin())
+    registry.register(_GovernanceReplayPlugin())
+
+    plugins = registry.list_plugins()
+
+    assert [plugin.name for plugin in plugins] == [
+        "warehouse-replay",
+        "bi-replay",
+        "semantic-replay",
+        "quality-replay",
+        "governance-replay",
+    ]
+    assert plugins[4].category == "governance"
+
+
 def test_registry_rejects_duplicate_plugin_names() -> None:
     """The registry should fail fast when names collide."""
 

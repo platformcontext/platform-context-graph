@@ -13,6 +13,8 @@ _DATA_RELATIONSHIP_FIELDS = {
     "RUNS_QUERY_AGAINST": "runs_query_against",
     "POWERS": "powers",
     "ASSERTS_QUALITY_ON": "asserts_quality_on",
+    "OWNS": "owns",
+    "DECLARES_CONTRACT_FOR": "declares_contract_for",
 }
 
 
@@ -29,6 +31,9 @@ def build_repository_data_intelligence_summary(
         "query_execution_count": _count_label(session, repo, "QueryExecution"),
         "dashboard_asset_count": _count_label(session, repo, "DashboardAsset"),
         "data_quality_check_count": _count_label(session, repo, "DataQualityCheck"),
+        "data_owner_count": _count_label(session, repo, "DataOwner"),
+        "data_contract_count": _count_label(session, repo, "DataContract"),
+        "protected_column_count": _count_protected_columns(session, repo),
         "relationship_counts": _relationship_counts(session, repo),
         "reconciliation": _reconciliation_summary(session, repo),
         "parse_states": _parse_state_counts(session, repo),
@@ -37,6 +42,9 @@ def build_repository_data_intelligence_summary(
         "sample_dashboards": _sample_dashboards(session, repo),
         "sample_assets": _sample_assets(session, repo),
         "sample_quality_checks": _sample_quality_checks(session, repo),
+        "sample_owners": _sample_owners(session, repo),
+        "sample_contracts": _sample_contracts(session, repo),
+        "sample_protected_columns": _sample_protected_columns(session, repo),
     }
     if not any(
         (
@@ -46,6 +54,9 @@ def build_repository_data_intelligence_summary(
             summary["query_execution_count"],
             summary["dashboard_asset_count"],
             summary["data_quality_check_count"],
+            summary["data_owner_count"],
+            summary["data_contract_count"],
+            summary["protected_column_count"],
         )
     ):
         return None
@@ -83,6 +94,8 @@ def _relationship_counts(session: Any, repo: dict[str, Any]) -> dict[str, int]:
             OR source:QueryExecution
             OR source:DashboardAsset
             OR source:DataQualityCheck
+            OR source:DataOwner
+            OR source:DataContract
           )
         MATCH (source)-[rel]->()
         WHERE type(rel) IN {list(_DATA_RELATIONSHIP_FIELDS)}
@@ -199,6 +212,74 @@ def _sample_quality_checks(session: Any, repo: dict[str, Any]) -> list[dict[str,
                coalesce(q.status, 'unknown') AS status,
                coalesce(q.severity, 'medium') AS severity
         ORDER BY q.name
+        LIMIT 5
+        """,
+        **repository_scope(repo),
+    ).data()
+
+
+def _count_protected_columns(session: Any, repo: dict[str, Any]) -> int:
+    """Count repository-scoped protected data columns."""
+
+    row = session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(c:DataColumn)
+        WHERE {repository_scope_predicate()}
+          AND c.is_protected = true
+        RETURN count(DISTINCT c) AS count
+        """,
+        **repository_scope(repo),
+    ).single()
+    if row is None:
+        return 0
+    return int(row.get("count") or 0)
+
+
+def _sample_owners(session: Any, repo: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return a compact ordered sample of repository data owners."""
+
+    return session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(o:DataOwner)
+        WHERE {repository_scope_predicate()}
+        RETURN o.name AS name,
+               coalesce(o.team, '') AS team
+        ORDER BY o.name
+        LIMIT 5
+        """,
+        **repository_scope(repo),
+    ).data()
+
+
+def _sample_contracts(session: Any, repo: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return a compact ordered sample of repository data contracts."""
+
+    return session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(c:DataContract)
+        WHERE {repository_scope_predicate()}
+        RETURN c.name AS name,
+               coalesce(c.contract_level, 'unspecified') AS contract_level,
+               coalesce(c.change_policy, 'unknown') AS change_policy
+        ORDER BY c.name
+        LIMIT 5
+        """,
+        **repository_scope(repo),
+    ).data()
+
+
+def _sample_protected_columns(session: Any, repo: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return a compact ordered sample of protected repository data columns."""
+
+    return session.run(
+        f"""
+        MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(c:DataColumn)
+        WHERE {repository_scope_predicate()}
+          AND c.is_protected = true
+        RETURN c.name AS name,
+               coalesce(c.sensitivity, '') AS sensitivity,
+               coalesce(c.protection_kind, '') AS protection_kind
+        ORDER BY c.name
         LIMIT 5
         """,
         **repository_scope(repo),
