@@ -236,3 +236,108 @@ class TestJSONConfigParser:
         assert result["functions"] == []
         assert result["variables"] == []
         assert result["json_metadata"]["top_level_keys"] == ["api-node-boats"]
+
+    def test_parse_dbt_manifest_into_data_intelligence_payload(
+        self, temp_test_dir: Path
+    ) -> None:
+        """dbt manifest JSON should emit analytics entities and lineage hints."""
+
+        file_path = temp_test_dir / "manifest.json"
+        file_path.write_text(
+            json.dumps(
+                {
+                    "metadata": {
+                        "adapter_type": "postgres",
+                        "project_name": "jaffle_shop",
+                    },
+                    "nodes": {
+                        "model.jaffle_shop.order_metrics": {
+                            "unique_id": "model.jaffle_shop.order_metrics",
+                            "resource_type": "model",
+                            "name": "order_metrics",
+                            "database": "analytics",
+                            "schema": "public",
+                            "alias": "order_metrics",
+                            "path": "models/marts/order_metrics.sql",
+                            "compiled_path": (
+                                "target/compiled/jaffle_shop/"
+                                "models/marts/order_metrics.sql"
+                            ),
+                            "relation_name": "analytics.public.order_metrics",
+                            "config": {"materialized": "view"},
+                            "depends_on": {
+                                "nodes": [
+                                    "source.jaffle_shop.raw.orders",
+                                    "source.jaffle_shop.raw.customers",
+                                ]
+                            },
+                            "compiled_code": (
+                                "select o.id as order_id, "
+                                "c.full_name as customer_name "
+                                "from raw.public.orders o "
+                                "join raw.public.customers c on c.id = o.customer_id"
+                            ),
+                            "columns": {
+                                "order_id": {"name": "order_id"},
+                                "customer_name": {"name": "customer_name"},
+                            },
+                        }
+                    },
+                    "sources": {
+                        "source.jaffle_shop.raw.orders": {
+                            "unique_id": "source.jaffle_shop.raw.orders",
+                            "resource_type": "source",
+                            "source_name": "raw",
+                            "name": "orders",
+                            "database": "raw",
+                            "schema": "public",
+                            "identifier": "orders",
+                            "columns": {
+                                "id": {"name": "id"},
+                                "customer_id": {"name": "customer_id"},
+                            },
+                        },
+                        "source.jaffle_shop.raw.customers": {
+                            "unique_id": "source.jaffle_shop.raw.customers",
+                            "resource_type": "source",
+                            "source_name": "raw",
+                            "name": "customers",
+                            "database": "raw",
+                            "schema": "public",
+                            "identifier": "customers",
+                            "columns": {
+                                "id": {"name": "id"},
+                                "full_name": {"name": "full_name"},
+                            },
+                        },
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        parser = JSONConfigTreeSitterParser("json")
+        result = parser.parse(file_path)
+
+        assert [item["name"] for item in result["analytics_models"]] == [
+            "order_metrics"
+        ]
+        assert [item["name"] for item in result["data_assets"]] == [
+            "analytics.public.order_metrics",
+            "raw.public.customers",
+            "raw.public.orders",
+        ]
+        assert any(
+            item["type"] == "COMPILES_TO"
+            and item["source_name"] == "order_metrics"
+            and item["target_name"] == "analytics.public.order_metrics"
+            for item in result["data_relationships"]
+        )
+        assert any(
+            item["type"] == "COLUMN_DERIVES_FROM"
+            and item["source_name"] == "analytics.public.order_metrics.customer_name"
+            and item["target_name"] == "raw.public.customers.full_name"
+            for item in result["data_relationships"]
+        )
+        assert result["data_intelligence_coverage"]["state"] == "complete"

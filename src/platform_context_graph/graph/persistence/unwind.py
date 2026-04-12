@@ -51,6 +51,9 @@ ITEM_MAPPINGS_KEYS: list[tuple[str, str]] = [
     ("sql_functions", "SqlFunction"),
     ("sql_triggers", "SqlTrigger"),
     ("sql_indexes", "SqlIndex"),
+    ("analytics_models", "AnalyticsModel"),
+    ("data_assets", "DataAsset"),
+    ("data_columns", "DataColumn"),
 ]
 
 VALUE_TRUNCATION_MARKER = " [truncated]"

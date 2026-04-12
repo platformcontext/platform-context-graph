@@ -63,6 +63,9 @@ CONTENT_ENTITY_BUCKETS: tuple[tuple[str, str], ...] = (
     ("sql_functions", "SqlFunction"),
     ("sql_triggers", "SqlTrigger"),
     ("sql_indexes", "SqlIndex"),
+    ("analytics_models", "AnalyticsModel"),
+    ("data_assets", "DataAsset"),
+    ("data_columns", "DataColumn"),
 )
 CONTENT_ENTITY_LABELS = frozenset(label for _, label in CONTENT_ENTITY_BUCKETS)
 

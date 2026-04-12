@@ -126,6 +126,7 @@ class DbtCompiledSqlPlugin:
                         "id": f"data-column:{output_column_name}",
                         "asset_name": model_asset["name"],
                         "name": output_column_name,
+                        "line_number": int(node.get("line_number") or 1),
                     },
                 )
                 for source_column_name in projection.source_columns:
@@ -146,6 +147,7 @@ class DbtCompiledSqlPlugin:
                     "id": f"analytics-model:{unique_id}",
                     "name": str(node.get("name", unique_id)),
                     "asset_name": model_asset["name"],
+                    "line_number": int(node.get("line_number") or 1),
                     "path": str(node.get("compiled_path") or node.get("path") or ""),
                     "materialization": str(
                         node.get("config", {}).get("materialized", "unknown")
@@ -181,6 +183,7 @@ def _asset_record(node: Mapping[str, Any]) -> dict[str, str]:
     return {
         "id": f"data-asset:{asset_name}",
         "name": asset_name,
+        "line_number": int(node.get("line_number") or 1),
         "database": str(node.get("database") or ""),
         "schema": str(node.get("schema") or ""),
         "kind": str(node.get("resource_type") or "asset"),
@@ -216,6 +219,7 @@ def _column_records_for_asset(
             "id": f"data-column:{qualified_name}",
             "asset_name": asset_name,
             "name": qualified_name,
+            "line_number": int(node.get("line_number") or 1),
         }
     return records
 

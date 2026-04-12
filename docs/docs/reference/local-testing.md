@@ -160,6 +160,10 @@ The current foundation slice proves:
 - dbt-style compiled manifest normalization through a checked-in replay fixture
 - supported-subset compiled SQL column lineage extraction
 - explicit partial coverage reporting for unsupported wildcard projections
+- `manifest.json` parsing through the targeted JSON lane
+- graph/content persistence registration for `AnalyticsModel`, `DataAsset`, and
+  `DataColumn`
+- post-commit compiled-analytics lineage materialization
 
 ### Fast foundation gate
 
@@ -188,7 +192,11 @@ PYTHONPATH=src uv run pytest \
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_plugins.py \
-  tests/unit/data_intelligence/test_dbt_compiled_sql.py -q
+  tests/unit/data_intelligence/test_dbt_compiled_sql.py \
+  tests/unit/parsers/test_json_parser.py \
+  tests/unit/content/test_ingest.py \
+  tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/tools/test_graph_builder_schema.py -q
 ```
 
 Future replay-backed fixture groups for compiled analytics, warehouse history,

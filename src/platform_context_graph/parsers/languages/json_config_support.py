@@ -6,6 +6,10 @@ import re
 from typing import Any
 
 from .cloudformation import is_cloudformation_template, parse_cloudformation_template
+from .json_data_intelligence_support import (
+    apply_dbt_manifest_document,
+    is_dbt_manifest_document,
+)
 
 _NOISY_JSON_FILENAMES = frozenset(
     {
@@ -43,6 +47,15 @@ def build_empty_result(
         "cloudformation_resources": [],
         "cloudformation_parameters": [],
         "cloudformation_outputs": [],
+        "analytics_models": [],
+        "data_assets": [],
+        "data_columns": [],
+        "data_relationships": [],
+        "data_intelligence_coverage": {
+            "confidence": 0.0,
+            "state": "unavailable",
+            "unresolved_references": [],
+        },
         "json_metadata": {"top_level_keys": []},
     }
 
@@ -96,6 +109,9 @@ def apply_json_document(
         result.update(
             parse_cloudformation_template(document, result["path"], 1, language_name)
         )
+        return
+    if is_dbt_manifest_document(document, filename=filename):
+        apply_dbt_manifest_document(result, document)
         return
 
     if should_skip_json_entities(filename):

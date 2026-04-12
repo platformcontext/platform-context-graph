@@ -47,6 +47,10 @@ Status on this branch:
 - dbt-style compiled manifest normalization
 - supported-subset column lineage from compiled SQL projections
 - explicit unresolved-reference reporting for wildcard projections
+- `manifest.json` parsing through the JSON config lane
+- graph/content registration for `AnalyticsModel`, `DataAsset`, and `DataColumn`
+- post-commit materialization for `COMPILES_TO`, `ASSET_DERIVES_FROM`, and
+  `COLUMN_DERIVES_FROM`
 
 ### Milestone 3: Warehouse Adapter Framework
 
@@ -128,7 +132,11 @@ PYTHONPATH=src uv run pytest \
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_plugins.py \
-  tests/unit/data_intelligence/test_dbt_compiled_sql.py -q
+  tests/unit/data_intelligence/test_dbt_compiled_sql.py \
+  tests/unit/parsers/test_json_parser.py \
+  tests/unit/content/test_ingest.py \
+  tests/unit/relationships/test_data_intelligence_links.py \
+  tests/unit/tools/test_graph_builder_schema.py -q
 ```
 
 ### Docs and quality gate

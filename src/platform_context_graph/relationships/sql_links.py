@@ -89,7 +89,8 @@ def _has_sql_relationship_work(file_data_list: list[dict[str, Any]]) -> bool:
 
 def _build_entity_lookup(
     session: Any,
-    file_data_list: list[dict[str, Any]]
+    file_data_list: list[dict[str, Any]],
+    content_entity_buckets: tuple[tuple[str, tuple[str, ...]], ...] = _CONTENT_ENTITY_BUCKETS,
 ) -> dict[str, dict[str, Any]]:
     """Return entity-name lookup tables grouped by graph kind."""
 
@@ -98,7 +99,7 @@ def _build_entity_lookup(
     seen_keys: set[tuple[str, str, str, int]] = set()
     for file_data in file_data_list:
         file_path = str(Path(file_data["path"]).resolve())
-        for bucket_name, kinds in _CONTENT_ENTITY_BUCKETS:
+        for bucket_name, kinds in content_entity_buckets:
             for item in file_data.get(bucket_name, []):
                 name = item.get("name")
                 line_number = item.get("line_number")

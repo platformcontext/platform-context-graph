@@ -188,3 +188,8 @@ This branch starts the roadmap with the generic foundation slice:
 - exact `COMPILES_TO`, `ASSET_DERIVES_FROM`, and supported-subset
   `COLUMN_DERIVES_FROM` relationships from compiled SQL
 - explicit partial coverage reporting for unsupported wildcard projections
+- `manifest.json` parsing through the existing JSON parser lane
+- graph/content bucket registration for `AnalyticsModel`, `DataAsset`, and
+  `DataColumn`
+- post-commit compiled-analytics lineage materialization through the existing
+  finalization flow
