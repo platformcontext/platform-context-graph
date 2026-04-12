@@ -2,7 +2,6 @@ package reducer
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 )
@@ -57,9 +56,7 @@ func TestNewDefaultRuntimeUsesDefaultDomainHandlers(t *testing.T) {
 	if err == nil {
 		t.Fatal("runtime.Execute(governance) error = nil, want non-nil")
 	}
-
-	var blockedErr BlockedDomainError
-	if !errors.As(err, &blockedErr) {
-		t.Fatalf("runtime.Execute(governance) error = %v, want BlockedDomainError", err)
+	if got, want := err.Error(), `domain "governance" is not registered`; got != want {
+		t.Fatalf("runtime.Execute(governance) error = %q, want %q", got, want)
 	}
 }

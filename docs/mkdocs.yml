@@ -62,6 +62,7 @@ nav:
     - CLI Analysis: reference/cli-analysis.md
     - CLI System: reference/cli-system.md
     - Configuration: reference/configuration.md
+    - Runtime Admin API: reference/runtime-admin-api.md
     - How It Works: concepts/how-it-works.md
     - Graph Model: concepts/graph-model.md
     - Modes: concepts/modes.md
