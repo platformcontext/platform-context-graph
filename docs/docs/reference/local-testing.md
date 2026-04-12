@@ -44,6 +44,22 @@ export PYTHONPATH=src
 | Admin replay flow | `PYTHONPATH=src uv run pytest tests/integration/api/test_admin_facts_replay.py tests/integration/cli/test_admin_facts_replay_cli.py -q` |
 | Python file layout/quality gates | `python3 scripts/check_python_file_lengths.py --max-lines 500` and `git diff --check` |
 
+## Go Data Plane Proof Domain Gate
+
+Use this when validating the currently selected repo-backed Go proof domain
+before broader collector wiring lands.
+
+Current proof domain: `workload_identity`
+
+```bash
+cd go
+uv run go test ./internal/storage/postgres -run TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent -count=1
+```
+
+This proves the deterministic path from a repo snapshot into facts, source-local
+projection, and reducer-intent enqueue/drain. It is intentionally narrow and
+does not depend on the future live collector entrypoint or cloud runtime wiring.
+
 ## Local Full Stack
 
 Start the full stack:

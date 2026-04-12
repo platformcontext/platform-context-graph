@@ -141,6 +141,7 @@ func buildProjection(scopeValue scope.IngestionScope, generation scope.ScopeGene
 		SourceSystem: scopeValue.SourceSystem,
 	}
 	contentMaterialization := content.Materialization{
+		RepoID:       scopeRepoID(scopeValue),
 		ScopeID:      scopeValue.ScopeID,
 		GenerationID: generation.GenerationID,
 		SourceSystem: scopeValue.SourceSystem,
@@ -181,6 +182,14 @@ func buildProjection(scopeValue scope.IngestionScope, generation scope.ScopeGene
 		contentMaterialization: contentMaterialization,
 		reducerIntents:         intents,
 	}, nil
+}
+
+func scopeRepoID(scopeValue scope.IngestionScope) string {
+	if len(scopeValue.Metadata) == 0 {
+		return ""
+	}
+
+	return strings.TrimSpace(scopeValue.Metadata["repo_id"])
 }
 
 func validateFactBoundary(scopeValue scope.IngestionScope, generation scope.ScopeGeneration, fact facts.Envelope) error {

@@ -141,6 +141,58 @@ func TestRuntimeProjectRejectsCrossGenerationFacts(t *testing.T) {
 	}
 }
 
+func TestRuntimeProjectCopiesRepoIDIntoContentMaterialization(t *testing.T) {
+	t.Parallel()
+
+	contentWriter := &recordingContentWriter{result: content.Result{RecordCount: 1}}
+	runtime := Runtime{
+		ContentWriter: contentWriter,
+	}
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+		Metadata: map[string]string{
+			"repo_id": "repository:r_12345678",
+		},
+	}
+	generationValue := scope.ScopeGeneration{
+		GenerationID: "generation-456",
+		ScopeID:      "scope-123",
+		ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+		IngestedAt:   time.Date(2026, time.April, 12, 11, 35, 0, 0, time.UTC),
+		Status:       scope.GenerationStatusPending,
+		TriggerKind:  scope.TriggerKindSnapshot,
+	}
+
+	_, err := runtime.Project(context.Background(), scopeValue, generationValue, []facts.Envelope{
+		{
+			FactID:       "fact-1",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "source_content",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 32, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"content_path":   "README.md",
+				"content_body":   "# PCG",
+				"content_digest": "digest-1",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Project() error = %v, want nil", err)
+	}
+	if got, want := len(contentWriter.calls), 1; got != want {
+		t.Fatalf("content writer call count = %d, want %d", got, want)
+	}
+	if got, want := contentWriter.calls[0].RepoID, "repository:r_12345678"; got != want {
+		t.Fatalf("content materialization repo id = %q, want %q", got, want)
+	}
+}
+
 type recordingGraphWriter struct {
 	calls  []graph.Materialization
 	result graph.Result

@@ -103,6 +103,23 @@ These areas should stay stable during early implementation:
   reader/report seam before any future API/admin transport is added, not create
   a second transport-specific status path.
 
+## Collector Authoring Contract
+
+Every new ingestor should follow the same bounded framework:
+
+1. define the collector-owned `scope` and `generation` boundary
+2. emit durable `facts` keyed to that boundary
+3. let the source-local `projector` materialize only source-owned truth for the
+   same boundary
+4. let `reducers` own cross-source and canonical correlation asynchronously
+
+This contract is intentionally the same for Git, AWS, Kubernetes, ETL, and
+future collectors. A new ingestor should not need a custom finalize stage, a
+second queue shape, or a special-case storage path just to join the platform.
+
+If a collector cannot be explained in those four steps, its design should be
+challenged before implementation begins.
+
 ## Handoff Requirement
 
 Every slice must leave behind:

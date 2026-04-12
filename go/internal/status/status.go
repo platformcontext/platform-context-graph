@@ -96,6 +96,7 @@ type StageSummary struct {
 type Report struct {
 	AsOf             time.Time
 	Health           HealthSummary
+	FlowSummaries    []FlowSummary
 	Queue            QueueSnapshot
 	ScopeTotals      map[string]int
 	GenerationTotals map[string]int
@@ -141,10 +142,12 @@ func BuildReport(raw RawSnapshot, opts Options) Report {
 	generationTotals := toCountMap(raw.GenerationCounts)
 	stageSummaries := summarizeStages(raw.StageCounts)
 	domainBacklogs := topDomainBacklogs(raw.DomainBacklogs, opts.DomainLimit)
+	flowSummaries := buildFlowSummaries(scopeTotals, generationTotals, stageSummaries, raw.Queue, domainBacklogs)
 
 	return Report{
 		AsOf:             raw.AsOf,
 		Health:           evaluateHealth(raw.Queue, generationTotals, opts),
+		FlowSummaries:    flowSummaries,
 		Queue:            raw.Queue,
 		ScopeTotals:      scopeTotals,
 		GenerationTotals: generationTotals,
@@ -173,6 +176,21 @@ func RenderText(report Report) string {
 	if len(report.Health.Reasons) > 0 {
 		lines = append(lines, fmt.Sprintf("Reasons: %s", strings.Join(report.Health.Reasons, "; ")))
 	}
+	lines = append(lines, renderFlowLines(report.FlowSummaries)...)
+	lines = append(
+		lines,
+		fmt.Sprintf(
+			"Queue: outstanding=%d in_flight=%d retrying=%d failed=%d oldest=%s overdue_claims=%d",
+			report.Queue.Outstanding,
+			report.Queue.InFlight,
+			report.Queue.Retrying,
+			report.Queue.Failed,
+			report.Queue.OldestOutstandingAge,
+			report.Queue.OverdueClaims,
+		),
+	)
+	lines = append(lines, fmt.Sprintf("Scopes: %s", formatNamedTotals(report.ScopeTotals)))
+	lines = append(lines, fmt.Sprintf("Generations: %s", formatNamedTotals(report.GenerationTotals)))
 	if len(report.StageSummaries) > 0 {
 		lines = append(lines, "Stages:")
 		for _, row := range report.StageSummaries {
@@ -216,6 +234,7 @@ func RenderJSON(report Report) ([]byte, error) {
 	payload := struct {
 		AsOf        string              `json:"as_of"`
 		Health      HealthSummary       `json:"health"`
+		Flow        []flowSummaryJSON   `json:"flow"`
 		Queue       queueJSON           `json:"queue"`
 		Scopes      map[string]int      `json:"scopes"`
 		Generations map[string]int      `json:"generations"`
@@ -224,6 +243,7 @@ func RenderJSON(report Report) ([]byte, error) {
 	}{
 		AsOf:        report.AsOf.UTC().Format(time.RFC3339),
 		Health:      report.Health,
+		Flow:        flowSummariesJSON(report.FlowSummaries),
 		Queue:       queueJSONFromReport(report.Queue),
 		Scopes:      cloneCounts(report.ScopeTotals),
 		Generations: cloneCounts(report.GenerationTotals),

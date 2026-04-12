@@ -10,6 +10,32 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 )
 
+const enqueueProjectorWorkQuery = `
+INSERT INTO fact_work_items (
+    work_item_id,
+    scope_id,
+    generation_id,
+    stage,
+    domain,
+    status,
+    attempt_count,
+    lease_owner,
+    claim_until,
+    visible_at,
+    last_attempt_at,
+    next_attempt_at,
+    failure_class,
+    failure_message,
+    failure_details,
+    payload,
+    created_at,
+    updated_at
+) VALUES (
+    $1, $2, $3, 'projector', $4, 'pending', 0, NULL, NULL, $5, NULL, NULL, NULL, NULL, NULL, '{}'::jsonb, $5, $5
+)
+ON CONFLICT (work_item_id) DO NOTHING
+`
+
 const claimProjectorWorkQuery = `
 WITH candidate AS (
     SELECT work_item_id
@@ -107,6 +133,39 @@ func NewProjectorQueue(
 		LeaseOwner:    leaseOwner,
 		LeaseDuration: leaseDuration,
 	}
+}
+
+// Enqueue inserts one durable source-local projection work item.
+func (q ProjectorQueue) Enqueue(
+	ctx context.Context,
+	scopeID string,
+	generationID string,
+) error {
+	if q.db == nil {
+		return errors.New("projector queue database is required")
+	}
+	if scopeID == "" {
+		return errors.New("projector queue scope_id is required")
+	}
+	if generationID == "" {
+		return errors.New("projector queue generation_id is required")
+	}
+
+	now := q.now()
+	_, err := q.db.ExecContext(
+		ctx,
+		enqueueProjectorWorkQuery,
+		projectorWorkItemID(scopeID, generationID),
+		scopeID,
+		generationID,
+		"source_local",
+		now,
+	)
+	if err != nil {
+		return fmt.Errorf("enqueue projector work: %w", err)
+	}
+
+	return nil
 }
 
 // Claim implements projector.ProjectorWorkSource over fact_work_items.
@@ -248,4 +307,8 @@ func scanProjectorWork(rows Rows) (projector.ScopeGenerationWork, error) {
 	work.Generation.IngestedAt = work.Generation.IngestedAt.UTC()
 
 	return work, nil
+}
+
+func projectorWorkItemID(scopeID string, generationID string) string {
+	return fmt.Sprintf("projector_%s_%s", scopeID, generationID)
 }

@@ -2,7 +2,10 @@ module github.com/platformcontext/platform-context-graph/go
 
 go 1.26.0
 
-require github.com/jackc/pgx/v5 v5.9.1
+require (
+	github.com/jackc/pgx/v5 v5.9.1
+	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect

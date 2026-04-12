@@ -9,6 +9,15 @@ Use this page when you need the operator view of PlatformContextGraph:
 - where metrics are exposed
 - where `ServiceMonitor` applies
 
+Every long-running runtime should also follow one operator principle:
+
+- the service should expose a familiar admin/status story through the shared
+  report seam
+- the same service should be inspectable through CLI now and API/admin
+  transport once mounted
+- the exact counters may differ by runtime, but the operator experience should
+  not
+
 ## Runtime Contract
 
 | Runtime | Owns | Default command | Storage access | Metrics exposure | Kubernetes shape |
@@ -17,6 +26,21 @@ Use this page when you need the operator view of PlatformContextGraph:
 | Ingester | repo sync, parsing, fact emission, workspace ownership | `pcg internal repo-sync-loop` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `pcg internal resolution-engine` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Bootstrap Index | one-shot initial indexing | `pcg internal bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
+
+## Admin Contract
+
+For the Go rewrite path, every long-running service should converge on the same
+operator/admin contract:
+
+- one shared status/report seam
+- one CLI surface for local and on-host inspection
+- one API/admin surface when the transport is mounted
+- explicit live-versus-inferred labeling
+- stage, backlog, success, and failure summaries in a familiar shape
+
+This is intentionally a platform rule, not a one-off `admin-status` feature.
+Operators should not need a different mental model for collector, projector,
+reducer, or future background services.
 
 ## Naming Note
 

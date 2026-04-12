@@ -26,6 +26,7 @@ func (r Record) Clone() Record {
 
 // Materialization is the source-local content payload for one scope generation.
 type Materialization struct {
+	RepoID       string
 	ScopeID      string
 	GenerationID string
 	SourceSystem string

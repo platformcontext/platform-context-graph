@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"flag"
 	"fmt"
 	"io"
@@ -13,6 +12,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
@@ -32,26 +32,14 @@ func run(
 	stderr io.Writer,
 	getenv func(string) string,
 ) error {
-	dsn := factStoreDSN(getenv)
-	if dsn == "" {
-		return fmt.Errorf("set PCG_FACT_STORE_DSN, PCG_CONTENT_STORE_DSN, or PCG_POSTGRES_DSN")
-	}
-
-	db, err := sql.Open("pgx", dsn)
+	db, err := runtimecfg.OpenPostgres(parent, getenv)
 	if err != nil {
-		return fmt.Errorf("open postgres connection: %w", err)
+		return err
 	}
 	defer db.Close()
 
-	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
-	defer cancel()
-
-	if err := db.PingContext(ctx); err != nil {
-		return fmt.Errorf("ping postgres: %w", err)
-	}
-
 	return renderStatus(
-		ctx,
+		parent,
 		args,
 		stdout,
 		stderr,
@@ -95,18 +83,4 @@ func renderStatus(
 	default:
 		return fmt.Errorf("unsupported format %q", *format)
 	}
-}
-
-func factStoreDSN(getenv func(string) string) string {
-	for _, key := range []string{
-		"PCG_FACT_STORE_DSN",
-		"PCG_CONTENT_STORE_DSN",
-		"PCG_POSTGRES_DSN",
-	} {
-		if value := strings.TrimSpace(getenv(key)); value != "" {
-			return value
-		}
-	}
-
-	return ""
 }

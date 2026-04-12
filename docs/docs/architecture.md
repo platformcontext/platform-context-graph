@@ -99,6 +99,49 @@ flowchart LR
   D --> API
 ```
 
+## Target Traversal Map
+
+This is the required end-to-end view for one bounded work unit in the rewrite
+architecture.
+
+| Stage | Owner | Work unit | Boundary type | Retry owner | Primary health signals |
+| --- | --- | --- | --- | --- | --- |
+| Source observation | collector service | scope candidate or source shard | in-process | collector | collector latency, discovery backlog, source error rate |
+| Scope assignment | collector service | `ingestion_scope` + `scope_generation` | durable write | collector | scope create/update rate, generation status, duplicate suppression |
+| Fact emission | collector service | facts for one scope generation | durable write | collector | fact emit latency, fact count, Postgres pool saturation |
+| Source-local projection | projector | one claimed scope generation | durable queue claim | projector | queue depth, oldest age, claim latency, projector duration |
+| Reducer-intent emission | projector | reducer intents for one generation | durable write | projector | intent count, enqueue latency, pending intents by domain |
+| Canonical reduction | reducer | one reducer intent | durable queue claim | reducer | reducer queue age, reducer duration, retry and dead-letter counts |
+| Canonical persistence | reducer | one canonical write batch | durable write | reducer | canonical write latency, Neo4j/Postgres pool pressure, idempotent replay counts |
+| Query and MCP reads | API / MCP | canonical graph or content read | request/response | API | request latency, query latency, error rate |
+
+## Resiliency And Concurrency Model
+
+The rewrite uses concurrency in two different ways.
+
+### In-Process
+
+Inside one service:
+
+- use bounded worker pools for parser and normalization work
+- use channels when they make producer, worker, cancellation, and result flow
+  clearer
+- separate CPU-bound and I/O-bound concurrency controls
+- keep worker counts and queue capacities configurable
+
+### Cross-Service
+
+Across service boundaries:
+
+- use durable queues and leases, not channels
+- keep work units replayable and idempotent
+- surface backlog, oldest age, retries, and failures in the operator view
+- let backpressure slow producers before correctness degrades
+
+This distinction is what lets PCG leverage multiple processors while still
+remaining resilient under retries, partial failure, and large cloud or
+Kubernetes inventories.
+
 ## Deployed Control Plane
 
 ```mermaid

@@ -1,0 +1,106 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"time"
+
+	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/graph"
+	"github.com/platformcontext/platform-context-graph/go/internal/projector"
+	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
+	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
+	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
+)
+
+const (
+	projectorConnectionTimeout = 10 * time.Second
+)
+
+func buildProjectorService(database postgres.SQLDB, graphWriter graph.Writer) projector.Service {
+	projectorQueue := postgres.NewProjectorQueue(database, "projector", time.Minute)
+	reducerQueue := postgres.NewReducerQueue(database, "projector", time.Minute)
+
+	return projector.Service{
+		PollInterval: time.Second,
+		WorkSource:   projectorQueue,
+		FactStore:    postgres.NewFactStore(database),
+		Runner:       buildProjectorRuntime(database, graphWriter, reducerQueue),
+		WorkSink:     projectorQueue,
+	}
+}
+
+func buildProjectorRuntime(
+	database postgres.SQLDB,
+	graphWriter graph.Writer,
+	intentWriter projector.ReducerIntentWriter,
+) projector.Runtime {
+	return projector.Runtime{
+		GraphWriter:   graphWriter,
+		ContentWriter: postgres.NewContentWriter(database),
+		IntentWriter:  intentWriter,
+	}
+}
+
+func openProjectorGraphWriter(
+	parent context.Context,
+	getenv func(string) string,
+) (graph.Writer, io.Closer, error) {
+	driver, cfg, err := runtimecfg.OpenNeo4jDriver(parent, getenv)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return sourceneo4j.Adapter{
+			Executor: projectorNeo4jExecutor{
+				Driver:       driver,
+				DatabaseName: cfg.DatabaseName,
+			},
+		},
+		projectorNeo4jDriverCloser{Driver: driver},
+		nil
+}
+
+type projectorNeo4jExecutor struct {
+	Driver       neo4jdriver.DriverWithContext
+	DatabaseName string
+}
+
+func (e projectorNeo4jExecutor) Execute(ctx context.Context, statement sourceneo4j.Statement) error {
+	if e.Driver == nil {
+		return fmt.Errorf("neo4j driver is required")
+	}
+
+	session := e.Driver.NewSession(ctx, neo4jdriver.SessionConfig{
+		AccessMode:   neo4jdriver.AccessModeWrite,
+		DatabaseName: e.DatabaseName,
+	})
+	defer session.Close(ctx)
+
+	result, err := session.Run(ctx, statement.Cypher, statement.Parameters)
+	if err != nil {
+		return err
+	}
+	_, err = result.Consume(ctx)
+	return err
+}
+
+type projectorNeo4jDriverCloser struct {
+	Driver neo4jdriver.DriverWithContext
+}
+
+func (c projectorNeo4jDriverCloser) Close() error {
+	return closeProjectorNeo4jDriver(c.Driver)
+}
+
+func closeProjectorNeo4jDriver(driver neo4jdriver.DriverWithContext) error {
+	if driver == nil {
+		return nil
+	}
+
+	closeCtx, cancel := context.WithTimeout(context.Background(), projectorConnectionTimeout)
+	defer cancel()
+	return driver.Close(closeCtx)
+}

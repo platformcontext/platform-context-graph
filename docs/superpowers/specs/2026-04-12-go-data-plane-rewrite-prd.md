@@ -76,10 +76,13 @@ The rewrite must deliver all of the following:
 - a source projector plus reducer-intent plus reducer model
 - canonical-first query and MCP outputs
 - operator-facing live status surfaces through CLI and API admin endpoints
+- a consistent operator/admin status contract for every long-running Go service
 - logical-first workloads with ETL/job subtypes
 - a layered truth model that distinguishes source declaration, applied declaration, observed resource, and canonical cloud asset
 - provider-native identity whenever the provider gives us a stable identifier
 - strong priorities on accuracy, performance, stability, scalability, telemetry, tracing, and logging
+- a documented resiliency and concurrency contract that distinguishes service-local channels and worker pools from durable cross-service queue boundaries
+- end-to-end traversal maps that show how a bounded unit of data moves through collector, projector, reducer, and canonical write stages
 
 For the current rewrite slice, the operator-status work is intentionally split
 into two stages:
@@ -87,6 +90,17 @@ into two stages:
 - implement `go/internal/status` as the storage-agnostic reader/report seam
   that both the CLI now and future HTTP/admin handlers can share
 - defer the actual HTTP/admin transport mount to a later slice
+
+This split applies to every long-running Go service, not only one shared admin
+tool. The platform rule is:
+
+- every long-running service must expose the same operator story
+- every service should be inspectable through a shared status/report contract
+- every service should have a local CLI view and an API/admin view once the
+  transport layer is mounted
+- service-specific metrics are allowed, but the operator shape must stay
+  consistent enough that an engineer can move from collector to projector to
+  reducer without learning a different debugging model each time
 
 ## Non-Goals
 
@@ -146,6 +160,48 @@ PCG must be able to refresh a single scope, a shard, a collector, or a reducer d
 
 Tracing, structured logs, and metrics are not optional debug tools. They are part of the platform contract.
 
+### Resiliency And Performance Are Architecture Concerns
+
+The rewrite should not "add performance later." Resiliency and performance must
+be part of the design contract for every long-running service.
+
+That means:
+
+- bounded worker pools instead of unbounded goroutines
+- channels used where they improve in-process coordination and backpressure
+- durable queues used where replay, leasing, retries, and cross-service
+  ownership matter
+- explicit database pool tuning and service concurrency tuning
+- multi-processor execution for CPU-bound work such as parsing and
+  normalization
+- no design that requires a full platform rebuild to recover one failed work
+  unit
+
+### Data Traversal Must Be Documented
+
+Every major data-plane slice must leave behind an end-to-end traversal map that
+shows:
+
+- the bounded work unit
+- the owning service at each stage
+- the durable or in-memory boundary between stages
+- the retry and backpressure semantics
+- the telemetry and status signals that prove that stage is healthy
+
+### Operator Surfaces Must Be First-Class
+
+Every long-running Go service must have a clear operator surface that answers:
+
+- is the service healthy
+- what stage it is in
+- how much work is queued, running, succeeded, and failed
+- whether the reported state is live or inferred
+- what an operator should inspect next when the service is unhealthy
+
+The exact transport may vary by phase, but the contract must stay shared. The
+CLI and future API/admin endpoints should render the same underlying service
+report, not separate ad hoc views.
+
 ### Canonical Truth Comes First
 
 The MCP and query plane should answer with canonical resolved truth by default. Source-local and raw evidence views are opt-in, not the default.
@@ -195,6 +251,38 @@ The operator-status report should not live behind a separate admin service or a
 new transport surface. Instead, `go/internal/status` should remain the shared
 reader/report seam that the CLI renders now and the existing API runtime can
 mount later.
+
+The same principle should apply to every long-running Go runtime:
+
+- collector services
+- source projector services
+- reducer services
+- future background runtimes
+
+Each should present the same style of operator/admin status view even when the
+exact counters differ by service role.
+
+## Resiliency And Concurrency Model
+
+The target platform uses two layers of concurrency on purpose.
+
+Inside a service:
+
+- use bounded worker pools
+- use channels when they improve producer/worker/result flow
+- size CPU-heavy work for available processors and service tuning
+- keep I/O-heavy work bounded separately from CPU-heavy work
+
+Across services or ownership boundaries:
+
+- use durable queue records, leases, and idempotent writes
+- never rely on channels for replayable platform behavior
+- keep backlog age, retry state, and failure classification visible to
+  operators
+
+This is especially important as AWS, Kubernetes, and ETL collectors arrive. A
+large inventory should increase bounded queue depth and worker activity, not
+force one giant in-memory job.
 
 ## Scope-First Ingestion
 

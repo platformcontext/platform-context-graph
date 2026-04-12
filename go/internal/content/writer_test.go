@@ -22,6 +22,7 @@ func TestMaterializationCloneCopiesRecords(t *testing.T) {
 	t.Parallel()
 
 	original := Materialization{
+		RepoID:       "repository:r_12345678",
 		ScopeID:      "scope-123",
 		GenerationID: "generation-456",
 		Records: []Record{
@@ -36,6 +37,9 @@ func TestMaterializationCloneCopiesRecords(t *testing.T) {
 	}
 
 	cloned := original.Clone()
+	if got, want := cloned.RepoID, "repository:r_12345678"; got != want {
+		t.Fatalf("cloned RepoID = %q, want %q", got, want)
+	}
 	cloned.Records[0].Metadata["language"] = "mutated"
 
 	if got, want := original.Records[0].Metadata["language"], "markdown"; got != want {
@@ -48,6 +52,7 @@ func TestMemoryWriterStoresClone(t *testing.T) {
 
 	writer := &MemoryWriter{}
 	got, err := writer.Write(context.Background(), Materialization{
+		RepoID:       "repository:r_12345678",
 		ScopeID:      "scope-123",
 		GenerationID: "generation-456",
 		Records: []Record{{
@@ -61,5 +66,8 @@ func TestMemoryWriterStoresClone(t *testing.T) {
 	}
 	if got.RecordCount != 1 {
 		t.Fatalf("Write().RecordCount = %d, want 1", got.RecordCount)
+	}
+	if got, want := writer.Writes[0].RepoID, "repository:r_12345678"; got != want {
+		t.Fatalf("stored RepoID = %q, want %q", got, want)
 	}
 }

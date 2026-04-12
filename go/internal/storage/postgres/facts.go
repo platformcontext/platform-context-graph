@@ -73,43 +73,7 @@ func NewFactStore(db ExecQueryer) FactStore {
 
 // UpsertFacts persists fact envelopes into fact_records.
 func (s FactStore) UpsertFacts(ctx context.Context, envelopes []facts.Envelope) error {
-	if s.db == nil {
-		return fmt.Errorf("fact store database is required")
-	}
-
-	for _, envelope := range envelopes {
-		payloadJSON, err := marshalPayload(envelope.Payload)
-		if err != nil {
-			return fmt.Errorf("marshal payload for fact %q: %w", envelope.FactID, err)
-		}
-
-		observedAt := envelope.ObservedAt.UTC()
-		if observedAt.IsZero() {
-			return fmt.Errorf("fact %q observed_at must not be zero", envelope.FactID)
-		}
-
-		if _, err := s.db.ExecContext(
-			ctx,
-			upsertFactQuery,
-			envelope.FactID,
-			envelope.ScopeID,
-			envelope.GenerationID,
-			envelope.FactKind,
-			envelope.StableFactKey,
-			envelope.SourceRef.SourceSystem,
-			envelope.SourceRef.FactKey,
-			emptyToNil(envelope.SourceRef.SourceURI),
-			emptyToNil(envelope.SourceRef.SourceRecordID),
-			observedAt,
-			observedAt,
-			envelope.IsTombstone,
-			payloadJSON,
-		); err != nil {
-			return fmt.Errorf("upsert fact %q: %w", envelope.FactID, err)
-		}
-	}
-
-	return nil
+	return upsertFacts(ctx, s.db, envelopes)
 }
 
 // LoadFacts satisfies the projector fact-store contract.
@@ -205,6 +169,55 @@ func scanFactEnvelope(rows Rows) (facts.Envelope, error) {
 			SourceRecordID: sourceRecordID,
 		},
 	}, nil
+}
+
+func upsertFacts(ctx context.Context, db ExecQueryer, envelopes []facts.Envelope) error {
+	if db == nil {
+		return fmt.Errorf("fact store database is required")
+	}
+
+	for _, envelope := range envelopes {
+		if err := validateFactEnvelope(envelope); err != nil {
+			return err
+		}
+
+		payloadJSON, err := marshalPayload(envelope.Payload)
+		if err != nil {
+			return fmt.Errorf("marshal payload for fact %q: %w", envelope.FactID, err)
+		}
+
+		observedAt := envelope.ObservedAt.UTC()
+		if _, err := db.ExecContext(
+			ctx,
+			upsertFactQuery,
+			envelope.FactID,
+			envelope.ScopeID,
+			envelope.GenerationID,
+			envelope.FactKind,
+			envelope.StableFactKey,
+			envelope.SourceRef.SourceSystem,
+			envelope.SourceRef.FactKey,
+			emptyToNil(envelope.SourceRef.SourceURI),
+			emptyToNil(envelope.SourceRef.SourceRecordID),
+			observedAt,
+			observedAt,
+			envelope.IsTombstone,
+			payloadJSON,
+		); err != nil {
+			return fmt.Errorf("upsert fact %q: %w", envelope.FactID, err)
+		}
+	}
+
+	return nil
+}
+
+func validateFactEnvelope(envelope facts.Envelope) error {
+	observedAt := envelope.ObservedAt.UTC()
+	if observedAt.IsZero() {
+		return fmt.Errorf("fact %q observed_at must not be zero", envelope.FactID)
+	}
+
+	return nil
 }
 
 func marshalPayload(payload map[string]any) ([]byte, error) {

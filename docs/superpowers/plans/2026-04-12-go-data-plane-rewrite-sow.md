@@ -10,6 +10,10 @@
 
 **Primary design constraint:** accuracy first, then performance, then stability, then scalability. Telemetry, tracing, and logging are not add-ons; they are acceptance criteria.
 
+**Concurrency rule:** use channels and goroutines where they improve bounded
+in-process work, but keep cross-service handoffs durable, replayable, and
+operator-visible.
+
 ## Companion Execution Documents
 
 Use these documents together with this SOW before parallel implementation
@@ -50,6 +54,10 @@ The intended service boundaries are:
 - the API and MCP plane read canonical resolved truth by default
 
 The rewrite is successful only when the system can support separate collector services without requiring a full re-index for every repo or cloud resource change.
+
+Every material architecture change must also update a repo-hosted end-to-end
+traversal map that shows how a bounded work unit crosses collector, projector,
+reducer, and canonical write stages.
 
 ---
 
@@ -122,6 +130,10 @@ The data plane must not depend on Python runtime behavior for core write-path co
 - explicit nullable field handling and validation at the edges
 - deterministic local test harnesses for contract and flow verification
 - instrumentation for queue depth, backlog age, claim latency, projection latency, reducer latency, failure classification, and retry behavior
+- configurable worker-pool, channel-capacity, lease, and database-pool tuning
+  for each long-running service
+- documented end-to-end traversal maps for the bounded work units used by the
+  first proof domains
 
 ### Exit criteria
 
@@ -129,6 +141,8 @@ The data plane must not depend on Python runtime behavior for core write-path co
 - the new write path is typed end to end
 - every write-path mutation is observable through metrics, traces, and structured logs
 - the data plane can be reasoned about as a service, not as a set of procedural callbacks
+- the concurrency and backpressure behavior is documented, bounded, and
+  configurable
 
 ### Proof required before progressing
 
@@ -252,6 +266,7 @@ The rewrite branch must maintain documentation as a first-class artifact. At min
 - this SOW
 - service boundary documentation
 - data plane flow diagrams
+- end-to-end traversal maps with retry and boundary notes
 - contract definitions
 - migration notes
 - local validation runbooks
@@ -265,6 +280,7 @@ The rewrite branch must maintain documentation as a first-class artifact. At min
 - every contract freeze point must be documented in the repo
 - every proof step must have reproducible commands
 - every new service boundary must be described in operational language, not only code terms
+- every flow change must update the traversal map for that work unit
 
 Exit criteria:
 

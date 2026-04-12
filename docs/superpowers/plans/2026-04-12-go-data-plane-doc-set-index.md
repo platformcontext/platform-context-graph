@@ -35,6 +35,8 @@ Read these documents in order before implementation work begins:
 - New architectural decisions require an ADR update or a new ADR.
 - New execution sequencing, ownership, or validation rules require a plan
   update.
+- New data-plane flow changes require the end-to-end traversal map to be
+  updated in the repo docs.
 - No durable design decision lives only in chat, comments, or PR review.
 - The draft PR description should summarize these docs, not replace them.
 - If two docs disagree, the ADR wins for design intent and the SOW wins for

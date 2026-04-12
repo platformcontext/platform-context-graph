@@ -7,7 +7,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
+
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
+	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
+	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
 func main() {
@@ -17,7 +21,17 @@ func main() {
 }
 
 func run(parent context.Context) error {
-	service, err := app.New("collector-git")
+	db, err := runtimecfg.OpenPostgres(parent, os.Getenv)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	runner, err := buildCollectorService(postgres.SQLDB{DB: db}, os.Getenv, os.Getwd, os.Environ)
+	if err != nil {
+		return err
+	}
+	service, err := app.NewHosted("collector-git", runner)
 	if err != nil {
 		return err
 	}

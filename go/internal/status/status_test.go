@@ -256,3 +256,78 @@ func TestRenderTextIncludesOperatorSummary(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildReportAddsFlowSummaries(t *testing.T) {
+	t.Parallel()
+
+	report := status.BuildReport(
+		status.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeCounts: []status.NamedCount{
+				{Name: "active", Count: 3},
+				{Name: "pending", Count: 1},
+			},
+			GenerationCounts: []status.NamedCount{
+				{Name: "active", Count: 1},
+				{Name: "completed", Count: 4},
+			},
+			StageCounts: []status.StageStatusCount{
+				{Stage: "projector", Status: "running", Count: 2},
+				{Stage: "reducer", Status: "retrying", Count: 1},
+			},
+			DomainBacklogs: []status.DomainBacklog{
+				{
+					Domain:      "repository",
+					Outstanding: 3,
+					Retrying:    1,
+					OldestAge:   2 * time.Minute,
+				},
+			},
+		},
+		status.DefaultOptions(),
+	)
+
+	if got := len(report.FlowSummaries); got != 3 {
+		t.Fatalf("BuildReport().FlowSummaries len = %d, want 3", got)
+	}
+	if got := report.FlowSummaries[0]; got.Lane != "collector" || got.Source != "inferred" {
+		t.Fatalf("BuildReport().FlowSummaries[0] = %+v, want collector/inferred", got)
+	}
+	if got := report.FlowSummaries[1]; got.Lane != "projector" || got.Source != "live" {
+		t.Fatalf("BuildReport().FlowSummaries[1] = %+v, want projector/live", got)
+	}
+	if got := report.FlowSummaries[2]; got.Lane != "reducer" || got.Source != "live" {
+		t.Fatalf("BuildReport().FlowSummaries[2] = %+v, want reducer/live", got)
+	}
+	if !strings.Contains(report.FlowSummaries[0].Progress, "scopes active=3 pending=1") {
+		t.Fatalf("collector progress = %q, want scope totals", report.FlowSummaries[0].Progress)
+	}
+	if !strings.Contains(report.FlowSummaries[1].Backlog, "queue") {
+		t.Fatalf("projector backlog = %q, want queue pressure", report.FlowSummaries[1].Backlog)
+	}
+	if !strings.Contains(report.FlowSummaries[2].Backlog, "repository") {
+		t.Fatalf("reducer backlog = %q, want top domain backlog", report.FlowSummaries[2].Backlog)
+	}
+}
+
+func TestRenderJSONIncludesFlowSummaries(t *testing.T) {
+	t.Parallel()
+
+	report := status.BuildReport(
+		status.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			Queue: status.QueueSnapshot{
+				Outstanding: 1,
+			},
+		},
+		status.DefaultOptions(),
+	)
+
+	payload, err := status.RenderJSON(report)
+	if err != nil {
+		t.Fatalf("RenderJSON() error = %v, want nil", err)
+	}
+	if !strings.Contains(string(payload), "\"flow\"") {
+		t.Fatalf("RenderJSON() = %s, want flow summaries", payload)
+	}
+}

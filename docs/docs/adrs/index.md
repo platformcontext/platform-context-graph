@@ -27,6 +27,10 @@ The current accepted ADR set establishes the rewrite baseline:
 - [Observability Contract](2026-04-12-observability-contract.md) defines the
   required telemetry, tracing, and structured logging contract for the new data
   plane.
+- [Resiliency And Concurrency Contract](2026-04-12-resiliency-and-concurrency-contract.md)
+  defines where PCG should use bounded channels and worker pools, where it must
+  keep durable queue boundaries, and how resiliency and backpressure are
+  treated as first-class platform rules.
 - [Cutover And Legacy Bridge](2026-04-12-cutover-and-legacy-bridge.md) defines
   the transition model away from the current Python-heavy procedural write path
   without keeping two long-lived architectures alive.

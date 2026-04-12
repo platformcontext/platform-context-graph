@@ -22,6 +22,8 @@ Required before any cloud proof:
 - operator status surfaces can summarize queue and runtime state locally
 - `go/internal/status` is exercised as the shared operator-status reader/report
   seam through the CLI without depending on an HTTP transport
+- every long-running service exposes the same operator/status shape through that
+  shared seam, even when some counters are service-specific
 - scope lifecycle tests pass
 - queue and retry semantics pass
 - projector and reducer integration tests pass
@@ -36,6 +38,18 @@ Required before broader cutover:
 - the end-to-end path is observable with metrics, traces, and logs
 - canonical outputs match the accepted truth for that domain
 
+The current proof-domain slice is `workload_identity`, validated through the
+deterministic Go harness in
+`go/internal/storage/postgres/proof_domain_test.go`. That harness proves the
+collector-emitted fact envelope, source-local projector, and reducer-intent
+queue can drain end to end without relying on the future runtime wiring.
+
+Known pending integration points for this slice:
+
+- live collector process wiring into the Go ingestion store
+- future cloud queue/drain plumbing for the projector and reducer services
+- production canonical-write adapters for the proof-domain runtime path
+
 ### Layer 4: Cloud test-instance validation
 
 Required before authority flip:
@@ -44,6 +58,8 @@ Required before authority flip:
 - no full re-index is required for ordinary source updates
 - backlog, retry, and reducer behavior remain understandable under load
 - CLI and API admin/status views report live progress and health meaningfully
+- CLI and API admin/status views stay consistent across collector, projector,
+  reducer, and future long-running services
 - API and MCP reads continue to use canonical truth correctly
 
 ## Cutover Phases
@@ -60,6 +76,14 @@ The new Go data plane is locally healthy for one bounded path.
 For the operator-status slice, "green" means the storage-agnostic report seam
 exists and the CLI uses it successfully. It does not yet require the future
 HTTP/admin mount.
+
+For later slices, "green" also means each long-running service follows the same
+operator contract:
+
+- one shared report seam
+- one familiar CLI/admin shape
+- live versus inferred status called out explicitly
+- stage and backlog visibility that is comparable across services
 
 ### Phase 2: Proof bridge
 

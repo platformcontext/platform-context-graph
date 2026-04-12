@@ -2,12 +2,9 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -15,6 +12,7 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
+	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
@@ -25,7 +23,7 @@ func main() {
 }
 
 func run(parent context.Context) error {
-	db, err := openReducerDB()
+	db, err := runtimecfg.OpenPostgres(parent, os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -47,20 +45,7 @@ func run(parent context.Context) error {
 }
 
 func buildReducerService(database postgres.SQLDB) (reducer.Service, error) {
-	registry := reducer.NewRegistry()
-	for _, def := range reducer.DefaultDomainDefinitions() {
-		def.Handler = reducer.HandlerFunc(func(context.Context, reducer.Intent) (reducer.Result, error) {
-			return reducer.Result{
-				Status:          reducer.ResultStatusSucceeded,
-				EvidenceSummary: "placeholder reducer handler",
-			}, nil
-		})
-		if err := registry.Register(def); err != nil {
-			return reducer.Service{}, err
-		}
-	}
-
-	executor, err := reducer.NewRuntime(registry)
+	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{})
 	if err != nil {
 		return reducer.Service{}, err
 	}
@@ -72,34 +57,4 @@ func buildReducerService(database postgres.SQLDB) (reducer.Service, error) {
 		Executor:     executor,
 		WorkSink:     workQueue,
 	}, nil
-}
-
-func openReducerDB() (*sql.DB, error) {
-	dsn := strings.TrimSpace(
-		firstEnvValue("PCG_FACT_STORE_DSN", "PCG_CONTENT_STORE_DSN", "PCG_POSTGRES_DSN"),
-	)
-	if dsn == "" {
-		return nil, fmt.Errorf("set PCG_FACT_STORE_DSN, PCG_CONTENT_STORE_DSN, or PCG_POSTGRES_DSN")
-	}
-
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("open postgres connection: %w", err)
-	}
-	if err := db.PingContext(context.Background()); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("ping postgres: %w", err)
-	}
-
-	return db, nil
-}
-
-func firstEnvValue(keys ...string) string {
-	for _, key := range keys {
-		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-			return value
-		}
-	}
-
-	return ""
 }

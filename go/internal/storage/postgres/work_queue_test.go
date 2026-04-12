@@ -63,6 +63,35 @@ func TestProjectorQueueClaimReturnsScopeGenerationWork(t *testing.T) {
 	}
 }
 
+func TestProjectorQueueEnqueueInsertsProjectorStageWork(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 11, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{}
+	queue := ProjectorQueue{
+		db:  db,
+		Now: func() time.Time { return now },
+	}
+
+	err := queue.Enqueue(
+		context.Background(),
+		"scope-123",
+		"generation-456",
+	)
+	if err != nil {
+		t.Fatalf("Enqueue() error = %v, want nil", err)
+	}
+	if got, want := len(db.execs), 1; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+	if !strings.Contains(db.execs[0].query, "INSERT INTO fact_work_items") {
+		t.Fatalf("enqueue query = %q, want fact_work_items insert", db.execs[0].query)
+	}
+	if got, want := db.execs[0].args[3], "source_local"; got != want {
+		t.Fatalf("domain arg = %v, want %v", got, want)
+	}
+}
+
 func TestReducerQueueEnqueueAndClaimRoundTrip(t *testing.T) {
 	t.Parallel()
 

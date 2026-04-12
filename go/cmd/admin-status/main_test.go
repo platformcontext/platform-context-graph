@@ -46,6 +46,9 @@ func TestRenderStatusOutputsTextFromSharedStatusReport(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "Health: progressing") {
 		t.Fatalf("renderStatus() stdout = %q, want health summary", got)
 	}
+	if got := stdout.String(); !strings.Contains(got, "Flow:") {
+		t.Fatalf("renderStatus() stdout = %q, want flow summary", got)
+	}
 }
 
 func TestRenderStatusOutputsJSONFromSharedStatusReport(t *testing.T) {
@@ -75,6 +78,9 @@ func TestRenderStatusOutputsJSONFromSharedStatusReport(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "\"health\"") {
 		t.Fatalf("renderStatus() stdout = %q, want json payload", got)
 	}
+	if got := stdout.String(); !strings.Contains(got, "\"flow\"") {
+		t.Fatalf("renderStatus() stdout = %q, want flow payload", got)
+	}
 }
 
 func TestRenderStatusPropagatesReaderErrors(t *testing.T) {
@@ -96,6 +102,21 @@ func TestRenderStatusPropagatesReaderErrors(t *testing.T) {
 	)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("renderStatus() error = %v, want wrapped %v", err, wantErr)
+	}
+}
+
+func TestRunReturnsPostgresConfigErrorWhenDSNMissing(t *testing.T) {
+	t.Parallel()
+
+	err := run(
+		context.Background(),
+		nil,
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		func(string) string { return "" },
+	)
+	if err == nil {
+		t.Fatal("run() error = nil, want non-nil")
 	}
 }
 
