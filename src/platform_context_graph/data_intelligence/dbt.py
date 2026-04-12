@@ -150,6 +150,9 @@ class DbtCompiledSqlPlugin:
                     "asset_name": model_asset["name"],
                     "line_number": int(node.get("line_number") or 1),
                     "path": str(node.get("compiled_path") or node.get("path") or ""),
+                    "compiled_path": str(
+                        node.get("compiled_path") or node.get("path") or ""
+                    ),
                     "materialization": str(
                         node.get("config", {}).get("materialized", "unknown")
                     ),

@@ -58,8 +58,13 @@ def data_entity_context(database: Any, *, entity_id: str) -> dict[str, Any]:
             WITH entity, file, coalesce(repo_from_file, repo_from_id) as repo
             RETURN entity.id as id,
                    entity.name as name,
-                   entity.path as path,
-                   coalesce(entity.relative_path, file.relative_path) as relative_path,
+                   coalesce(entity.compiled_path, entity.path) as path,
+                   CASE
+                       WHEN entity.compiled_path IS NOT NULL
+                            AND entity.compiled_path <> ''
+                       THEN entity.compiled_path
+                       ELSE coalesce(entity.relative_path, file.relative_path)
+                   END as relative_path,
                    coalesce(entity.repo_id, repo.id) as repo_id,
                    head([
                        label IN labels(entity)

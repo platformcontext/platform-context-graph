@@ -35,6 +35,10 @@ def test_normalize_dbt_manifest_emits_models_assets_and_dependencies() -> None:
         "order_metrics",
         "orders_expanded",
     ]
+    assert [item["compiled_path"] for item in report["analytics_models"]] == [
+        "target/compiled/jaffle_shop/models/marts/order_metrics.sql",
+        "target/compiled/jaffle_shop/models/marts/orders_expanded.sql",
+    ]
     assert [item["name"] for item in report["data_assets"]] == [
         "analytics.public.order_metrics",
         "analytics.public.orders_expanded",

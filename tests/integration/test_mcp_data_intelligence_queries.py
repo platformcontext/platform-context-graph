@@ -37,6 +37,16 @@ def test_analytics_repo_context_surfaces_data_intelligence(indexed_ecosystems) -
         "sample_models": ["orders_expanded"],
         "sample_expressions": ["o.*"],
     }
+    assert result["data_intelligence"]["sample_models"][0] == {
+        "name": "orders_expanded",
+        "path": "target/compiled/jaffle_shop/models/marts/orders_expanded.sql",
+        "parse_state": "partial",
+        "confidence": 0.5,
+        "materialization": "table",
+        "unresolved_reference_count": 1,
+        "unresolved_reference_reasons": ["wildcard_projection_not_supported"],
+        "unresolved_reference_expressions": ["o.*"],
+    }
     assert result["data_intelligence"]["relationship_counts"] == {
         "compiles_to": 2,
         "asset_derives_from": 5,
@@ -66,6 +76,10 @@ def test_analytics_repo_story_surfaces_data_intelligence(indexed_ecosystems) -> 
         "lineage is partial for 1 model because wildcard projection not supported remains unresolved"
         in data_section["summary"]
     )
+    assert [item["name"] for item in data_section["items"][:2]] == [
+        "orders_expanded",
+        "order_metrics",
+    ]
     assert result["data_intelligence_overview"]["analytics_model_count"] == 2
 
 
@@ -383,6 +397,12 @@ def test_analytics_model_context_surfaces_partial_compiled_lineage_gaps(
         entity_id="analytics-model:model.jaffle_shop.orders_expanded",
     )
 
+    assert result["entity"]["path"].endswith(
+        "target/compiled/jaffle_shop/models/marts/orders_expanded.sql"
+    )
+    assert result["relative_path"] == (
+        "target/compiled/jaffle_shop/models/marts/orders_expanded.sql"
+    )
     assert result["data_intelligence"]["lineage_coverage"] == {
         "state": "partial",
         "confidence": 0.5,

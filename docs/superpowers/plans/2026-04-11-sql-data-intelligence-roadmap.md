@@ -52,6 +52,9 @@ Status on this branch:
   expressions
 - repository context and story summaries now explain partial compiled lineage
   with aggregated unresolved-gap reasons instead of count-only wording
+- repository analytics-model samples now prioritize partial models first and
+  surface compiled artifact paths plus unresolved-gap detail on the returned
+  items
 - `manifest.json` parsing through the JSON config lane
 - graph/content registration for `AnalyticsModel`, `DataAsset`, and `DataColumn`
 - post-commit materialization for `COMPILES_TO`, `ASSET_DERIVES_FROM`, and

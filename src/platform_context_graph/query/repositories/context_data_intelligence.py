@@ -199,10 +199,15 @@ def _sample_models(session: Any, repo: dict[str, Any]) -> list[dict[str, Any]]:
         MATCH (r:Repository)-[:REPO_CONTAINS]->(:File)-[:CONTAINS]->(m:AnalyticsModel)
         WHERE {repository_scope_predicate()}
         RETURN m.name AS name,
-               m.path AS path,
+               coalesce(m.compiled_path, m.path) AS path,
                coalesce(m.parse_state, 'unknown') AS parse_state,
-               coalesce(m.confidence, 0.0) AS confidence
-        ORDER BY m.name
+               coalesce(m.confidence, 0.0) AS confidence,
+               coalesce(m.materialization, 'unknown') AS materialization,
+               coalesce(m.unresolved_reference_count, 0) AS unresolved_reference_count,
+               coalesce(m.unresolved_reference_reasons, []) AS unresolved_reference_reasons,
+               coalesce(m.unresolved_reference_expressions, []) AS unresolved_reference_expressions
+        ORDER BY CASE coalesce(m.parse_state, 'unknown') WHEN 'partial' THEN 0 ELSE 1 END,
+                 m.name
         LIMIT 5
         """,
         **repository_scope(repo),

@@ -7,6 +7,9 @@ import pytest
 from platform_context_graph.query.repositories.context_data import (
     build_repository_context,
 )
+from platform_context_graph.query.repositories.context_data_intelligence import (
+    _sample_models,
+)
 
 
 class _Result:
@@ -24,6 +27,50 @@ class _Session:
 
     def run(self, _query: str, **_kwargs: object) -> _Result:
         return _Result([])
+
+
+class _AnalyticsModelSampleSession:
+    """Minimal session stub for analytics-model sample query assertions."""
+
+    def run(self, query: str, **_kwargs: object) -> _Result:
+        assert "coalesce(m.unresolved_reference_count, 0) AS unresolved_reference_count" in query
+        assert "coalesce(m.unresolved_reference_reasons, []) AS unresolved_reference_reasons" in query
+        assert (
+            "coalesce(m.unresolved_reference_expressions, []) AS unresolved_reference_expressions"
+            in query
+        )
+        assert (
+            "ORDER BY CASE coalesce(m.parse_state, 'unknown') WHEN 'partial' THEN 0 ELSE 1 END,"
+            in query
+        )
+        return _Result(
+            [
+                {
+                    "name": "orders_expanded",
+                    "path": (
+                        "target/compiled/jaffle_shop/models/marts/orders_expanded.sql"
+                    ),
+                    "parse_state": "partial",
+                    "confidence": 0.5,
+                    "materialization": "table",
+                    "unresolved_reference_count": 1,
+                    "unresolved_reference_reasons": [
+                        "wildcard_projection_not_supported"
+                    ],
+                    "unresolved_reference_expressions": ["o.*"],
+                },
+                {
+                    "name": "order_metrics",
+                    "path": "target/compiled/jaffle_shop/models/marts/order_metrics.sql",
+                    "parse_state": "complete",
+                    "confidence": 1.0,
+                    "materialization": "view",
+                    "unresolved_reference_count": 0,
+                    "unresolved_reference_reasons": [],
+                    "unresolved_reference_expressions": [],
+                },
+            ]
+        )
 
 
 def test_build_repository_context_adds_data_intelligence_summary(
@@ -190,6 +237,26 @@ def test_build_repository_context_adds_data_intelligence_summary(
         "order_metrics",
         "orders_expanded",
     ]
+
+
+def test_sample_models_prioritizes_partial_models_and_gap_fields() -> None:
+    """Repository sample models should surface unresolved-gap details first."""
+
+    result = _sample_models(
+        _AnalyticsModelSampleSession(),
+        {"id": "repository:r_demo", "name": "analytics-warehouse"},
+    )
+
+    assert result[0] == {
+        "name": "orders_expanded",
+        "path": "target/compiled/jaffle_shop/models/marts/orders_expanded.sql",
+        "parse_state": "partial",
+        "confidence": 0.5,
+        "materialization": "table",
+        "unresolved_reference_count": 1,
+        "unresolved_reference_reasons": ["wildcard_projection_not_supported"],
+        "unresolved_reference_expressions": ["o.*"],
+    }
 
 
 def test_build_repository_context_handles_semantic_and_dashboard_only_repos(
