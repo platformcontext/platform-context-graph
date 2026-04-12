@@ -4,17 +4,35 @@ from __future__ import annotations
 
 import re
 
+from .dbt_sql_identifiers import unqualified_identifiers
+
 _BARE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _QUALIFIED_REFERENCE_RE = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_]*\.(?:\*|[A-Za-z_][A-Za-z0-9_]*)$"
+)
+_QUALIFIED_REFERENCE_SCAN_RE = re.compile(
+    r"\b(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\."
+    r"(?P<column>[A-Za-z_][A-Za-z0-9_]*)(?=[^A-Za-z0-9_]|$)"
 )
 _FUNCTION_CALL_RE = re.compile(
     r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<arguments>.*)\)$",
     re.DOTALL,
 )
+_FUNCTION_CALL_SCAN_RE = re.compile(
+    r"\b(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+)
 _SINGLE_QUOTED_LITERAL_RE = re.compile(r"^'(?:[^'\\\\]|\\\\.)*'$", re.DOTALL)
+_SINGLE_QUOTED_LITERAL_SCAN_RE = re.compile(r"'(?:[^'\\\\]|\\\\.)*'", re.DOTALL)
 _NUMERIC_LITERAL_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$")
+_NUMERIC_LITERAL_SCAN_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:[+-]?(?:\d+(?:\.\d+)?|\.\d+))(?![A-Za-z0-9_])"
+)
 _TYPE_IDENTIFIER_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+_CASE_EXPRESSION_RE = re.compile(r"^case\b.*\bend$", re.IGNORECASE | re.DOTALL)
+_CASE_KEYWORD_RE = re.compile(
+    r"\b(?:case|when|then|else|end|is|null|and|or|not|in|like|between|true|false)\b",
+    re.IGNORECASE,
+)
 _AGGREGATE_EXPRESSION_REASON = "aggregate_expression_semantics_not_captured"
 _DERIVED_EXPRESSION_REASON = "derived_expression_semantics_not_captured"
 _MULTI_INPUT_EXPRESSION_REASON = "multi_input_expression_semantics_not_captured"
@@ -58,6 +76,16 @@ def expression_transform_metadata(expression: str) -> dict[str, str] | None:
     if cast_expression is not None:
         return {
             "transform_kind": "cast",
+            "transform_expression": normalized,
+        }
+    if _is_supported_case_expression(normalized):
+        return {
+            "transform_kind": "case",
+            "transform_expression": normalized,
+        }
+    if _is_supported_arithmetic_expression(normalized):
+        return {
+            "transform_kind": "arithmetic",
             "transform_expression": normalized,
         }
 
@@ -112,6 +140,10 @@ def expression_partial_reason(expression: str) -> str | None:
     if _BARE_IDENTIFIER_RE.fullmatch(normalized):
         return None
     if _QUALIFIED_REFERENCE_RE.fullmatch(normalized):
+        return None
+    if _is_supported_case_expression(normalized):
+        return None
+    if _is_supported_arithmetic_expression(normalized):
         return None
     if _is_supported_scalar_wrapper(normalized):
         return None
@@ -201,6 +233,40 @@ def _is_supported_scalar_wrapper(expression: str) -> bool:
     return False
 
 
+def _is_supported_case_expression(expression: str) -> bool:
+    """Return whether the expression is a supported one-column CASE transform."""
+
+    if _CASE_EXPRESSION_RE.fullmatch(expression) is None:
+        return False
+    if _has_unsupported_function_call(expression):
+        return False
+    references = _simple_reference_tokens(expression)
+    if len(references) != 1:
+        return False
+
+    collapsed = _collapsed_shape(
+        expression,
+        references=references,
+        strip_case_keywords=True,
+    )
+    return re.fullmatch(r"[\s()=<>!,+\-*/%]*", collapsed) is not None
+
+
+def _is_supported_arithmetic_expression(expression: str) -> bool:
+    """Return whether the expression is a supported one-column arithmetic transform."""
+
+    if not any(operator in expression for operator in ("+", "-", "*", "/", "%")):
+        return False
+    if _has_unsupported_function_call(expression):
+        return False
+    references = _simple_reference_tokens(expression)
+    if len(references) != 1:
+        return False
+
+    collapsed = _collapsed_shape(expression, references=references)
+    return re.fullmatch(r"[\s()+\-*/%]*", collapsed) is not None
+
+
 def _supported_cast_expression(expression: str) -> tuple[str, str] | None:
     """Return the cast value/type when the CAST expression is supported."""
 
@@ -236,6 +302,77 @@ def _unsupported_function_reason(expression: str) -> str | None:
     if reference_count > 1:
         return _MULTI_INPUT_EXPRESSION_REASON
     return None
+
+
+def _simple_reference_tokens(expression: str) -> tuple[str, ...]:
+    """Return unique simple reference tokens used in one expression."""
+
+    matched_identifiers: set[str] = set()
+    tokens: list[str] = []
+    seen_tokens: set[str] = set()
+    for match in _QUALIFIED_REFERENCE_SCAN_RE.finditer(expression):
+        token = match.group(0)
+        matched_identifiers.add(match.group("alias"))
+        matched_identifiers.add(match.group("column"))
+        if token in seen_tokens:
+            continue
+        seen_tokens.add(token)
+        tokens.append(token)
+    for identifier in unqualified_identifiers(
+        expression,
+        matched_identifiers=matched_identifiers,
+    ):
+        if identifier in seen_tokens:
+            continue
+        seen_tokens.add(identifier)
+        tokens.append(identifier)
+    return tuple(tokens)
+
+
+def _has_unsupported_function_call(expression: str) -> bool:
+    """Return whether the expression contains a nested function call."""
+
+    for match in _FUNCTION_CALL_SCAN_RE.finditer(expression):
+        if match.group("name").strip().lower() in {
+            "and",
+            "case",
+            "else",
+            "end",
+            "in",
+            "is",
+            "not",
+            "or",
+            "then",
+            "when",
+        }:
+            continue
+        return True
+    return False
+
+
+def _collapsed_shape(
+    expression: str,
+    *,
+    references: tuple[str, ...],
+    strip_case_keywords: bool = False,
+) -> str:
+    """Return one expression with references and literals reduced to shape tokens."""
+
+    sanitized = _SINGLE_QUOTED_LITERAL_SCAN_RE.sub("0", expression)
+    sanitized = _NUMERIC_LITERAL_SCAN_RE.sub("0", sanitized)
+    sanitized = _replace_reference_tokens(sanitized, references)
+    if strip_case_keywords:
+        sanitized = _CASE_KEYWORD_RE.sub(" ", sanitized)
+    return sanitized.replace("REF", "").replace("0", "")
+
+
+def _replace_reference_tokens(expression: str, references: tuple[str, ...]) -> str:
+    """Replace simple reference tokens with a uniform placeholder."""
+
+    sanitized = expression
+    for token in references:
+        sanitized = re.sub(rf"\b{re.escape(token)}\b", "REF", sanitized)
+    return sanitized
 
 
 def _is_simple_reference_expression(expression: str) -> bool:

@@ -302,3 +302,102 @@ def test_normalize_dbt_manifest_supports_typed_scalar_transforms() -> None:
         and item["target_name"] == "raw.public.orders.created_at"
         for item in report["relationships"]
     )
+
+
+def test_normalize_dbt_manifest_supports_case_and_arithmetic_transforms() -> None:
+    """Common one-column derived transforms should stay on the supported path."""
+
+    plugin = DbtCompiledSqlPlugin()
+
+    report = plugin.normalize(
+        {
+            "metadata": {
+                "adapter_type": "postgres",
+                "project_name": "jaffle_shop",
+            },
+            "nodes": {
+                "model.jaffle_shop.derived_metrics": {
+                    "unique_id": "model.jaffle_shop.derived_metrics",
+                    "resource_type": "model",
+                    "name": "derived_metrics",
+                    "database": "analytics",
+                    "schema": "public",
+                    "alias": "derived_metrics",
+                    "path": "models/marts/derived_metrics.sql",
+                    "compiled_path": (
+                        "target/compiled/jaffle_shop/models/marts/derived_metrics.sql"
+                    ),
+                    "relation_name": "analytics.public.derived_metrics",
+                    "config": {"materialized": "view"},
+                    "depends_on": {
+                        "nodes": [
+                            "source.jaffle_shop.raw.customers",
+                            "source.jaffle_shop.raw.payments",
+                        ]
+                    },
+                    "compiled_code": (
+                        "select "
+                        "case when c.segment is null then 'unknown' else c.segment end "
+                        "as normalized_segment, "
+                        "p.amount * 100 as amount_cents "
+                        "from raw.public.customers c "
+                        "join raw.public.payments p on p.order_id = 1"
+                    ),
+                    "columns": {
+                        "normalized_segment": {"name": "normalized_segment"},
+                        "amount_cents": {"name": "amount_cents"},
+                    },
+                }
+            },
+            "sources": {
+                "source.jaffle_shop.raw.customers": {
+                    "unique_id": "source.jaffle_shop.raw.customers",
+                    "resource_type": "source",
+                    "source_name": "raw",
+                    "name": "customers",
+                    "database": "raw",
+                    "schema": "public",
+                    "identifier": "customers",
+                    "columns": {
+                        "id": {"name": "id"},
+                        "segment": {"name": "segment"},
+                    },
+                },
+                "source.jaffle_shop.raw.payments": {
+                    "unique_id": "source.jaffle_shop.raw.payments",
+                    "resource_type": "source",
+                    "source_name": "raw",
+                    "name": "payments",
+                    "database": "raw",
+                    "schema": "public",
+                    "identifier": "payments",
+                    "columns": {
+                        "order_id": {"name": "order_id"},
+                        "amount": {"name": "amount"},
+                    },
+                },
+            },
+        }
+    )
+
+    assert any(
+        item["type"] == "COLUMN_DERIVES_FROM"
+        and item["source_name"] == "analytics.public.derived_metrics.normalized_segment"
+        and item["target_name"] == "raw.public.customers.segment"
+        and item["transform_kind"] == "case"
+        and "case when c.segment is null" in item["transform_expression"]
+        for item in report["relationships"]
+    )
+    assert any(
+        item["type"] == "COLUMN_DERIVES_FROM"
+        and item["source_name"] == "analytics.public.derived_metrics.amount_cents"
+        and item["target_name"] == "raw.public.payments.amount"
+        and item["transform_kind"] == "arithmetic"
+        and item["transform_expression"] == "p.amount * 100"
+        for item in report["relationships"]
+    )
+    assert report["coverage"] == {
+        "confidence": 1.0,
+        "state": "complete",
+        "unresolved_references": [],
+    }

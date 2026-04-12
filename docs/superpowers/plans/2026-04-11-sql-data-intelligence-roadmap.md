@@ -70,6 +70,10 @@ Status on this branch:
 - transform metadata now propagates through simple CTE reuse, so direct final
   projections from transformed intermediate columns keep the original compiled
   SQL context instead of collapsing back to a plain rename
+- one-column `CASE` expressions and simple arithmetic expressions with literal
+  operands now stay on the supported lineage path as transform-aware derived
+  columns, which reduces avoidable partial coverage for common analytics
+  bucketing and scaling patterns
 - remaining unsupported derived cases now surface more specific partial-gap
   reasons, separating aggregate expressions from multi-input transforms so repo
   stories and model samples are more actionable

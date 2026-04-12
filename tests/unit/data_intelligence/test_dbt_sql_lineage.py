@@ -129,6 +129,64 @@ def test_extract_compiled_model_lineage_supports_literal_parameter_wrappers() ->
     assert lineage.unresolved_references == ()
 
 
+def test_extract_compiled_model_lineage_supports_single_source_case_expression(
+) -> None:
+    """One-column CASE transforms should stay on the supported lineage path."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        select
+          case
+            when c.segment is null then 'unknown'
+            else c.segment
+          end as normalized_segment
+        from raw.public.customers c
+        """,
+        model_name="customer_segments",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == (
+        ColumnLineage(
+            output_column="normalized_segment",
+            source_columns=("raw.public.customers.segment",),
+            transform_kind="case",
+            transform_expression=(
+                "case\n"
+                "            when c.segment is null then 'unknown'\n"
+                "            else c.segment\n"
+                "          end"
+            ),
+        ),
+    )
+    assert lineage.unresolved_references == ()
+
+
+def test_extract_compiled_model_lineage_supports_single_source_arithmetic(
+) -> None:
+    """One-column arithmetic with literal operands should stay supported."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        select
+          p.amount * 100 as amount_cents
+        from raw.public.payments p
+        """,
+        model_name="payment_metrics",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == (
+        ColumnLineage(
+            output_column="amount_cents",
+            source_columns=("raw.public.payments.amount",),
+            transform_kind="arithmetic",
+            transform_expression="p.amount * 100",
+        ),
+    )
+    assert lineage.unresolved_references == ()
+
+
 def test_extract_compiled_model_lineage_propagates_cte_transform_metadata() -> None:
     """Direct selects from transformed CTE columns should preserve metadata."""
 
@@ -213,6 +271,47 @@ def test_extract_compiled_model_lineage_keeps_multi_input_expressions_partial() 
             "expression": "concat(c.full_name, '-', c.segment)",
             "model_name": "customer_labels",
             "reason": "multi_input_expression_semantics_not_captured",
+        },
+    )
+
+
+def test_extract_compiled_model_lineage_keeps_multi_source_case_partial() -> None:
+    """CASE expressions with multiple source columns should remain partial."""
+
+    lineage = extract_compiled_model_lineage(
+        """
+        select
+          case
+            when o.customer_id = c.id then c.full_name
+            else 'guest'
+          end as resolved_name
+        from raw.public.orders o
+        join raw.public.customers c on c.id = o.customer_id
+        """,
+        model_name="customer_labels",
+        relation_column_names=_RELATION_COLUMNS,
+    )
+
+    assert lineage.column_lineage == (
+        ColumnLineage(
+            output_column="resolved_name",
+            source_columns=(
+                "raw.public.orders.customer_id",
+                "raw.public.customers.id",
+                "raw.public.customers.full_name",
+            ),
+        ),
+    )
+    assert lineage.unresolved_references == (
+        {
+            "expression": (
+                "case\n"
+                "            when o.customer_id = c.id then c.full_name\n"
+                "            else 'guest'\n"
+                "          end"
+            ),
+            "model_name": "customer_labels",
+            "reason": "derived_expression_semantics_not_captured",
         },
     )
 
