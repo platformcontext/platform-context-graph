@@ -50,6 +50,8 @@ Status on this branch:
 - manifest-known wildcard projections now expand into exact column lineage,
   removing the previous `orders_expanded` partial-gap case from the checked-in
   replay fixture
+- simple CTE-backed compiled models now propagate renamed final projections
+  back to base source columns in the checked-in dbt replay fixture
 - analytics-model entity context now exposes compiled-lineage coverage state,
   confidence, materialization, projection count, and unresolved reasons and
   expressions

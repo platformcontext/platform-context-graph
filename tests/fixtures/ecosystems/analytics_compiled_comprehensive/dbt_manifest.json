@@ -24,7 +24,7 @@
           "source.jaffle_shop.raw.payments"
         ]
       },
-      "compiled_code": "select\n  o.id as order_id,\n  o.customer_id,\n  c.full_name as customer_name,\n  sum(p.amount) as total_amount,\n  o.created_at\nfrom raw.public.orders o\njoin raw.public.customers c on c.id = o.customer_id\nleft join raw.public.payments p on p.order_id = o.id\ngroup by 1, 2, 3, 5\n",
+      "compiled_code": "with customer_orders as (\n  select\n    o.id as raw_order_id,\n    o.customer_id as raw_customer_id,\n    c.full_name as source_customer_name,\n    sum(p.amount) as payment_total_amount,\n    o.created_at as source_created_at\n  from raw.public.orders o\n  join raw.public.customers c on c.id = o.customer_id\n  left join raw.public.payments p on p.order_id = o.id\n  group by 1, 2, 3, 5\n)\nselect\n  co.raw_order_id as order_id,\n  co.raw_customer_id as customer_id,\n  co.source_customer_name as customer_name,\n  co.payment_total_amount as total_amount,\n  co.source_created_at as created_at\nfrom customer_orders co\n",
       "columns": {
         "order_id": {
           "name": "order_id"

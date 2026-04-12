@@ -2,44 +2,10 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from typing import Any
 
-_SELECT_CLAUSE_RE = re.compile(
-    r"\bselect\b(?P<select>.*?)\bfrom\b", re.IGNORECASE | re.DOTALL
-)
-_AS_ALIAS_RE = re.compile(
-    r"^(?P<expression>.+?)\s+as\s+(?P<alias>[A-Za-z_][A-Za-z0-9_]*)$",
-    re.IGNORECASE | re.DOTALL,
-)
-_QUALIFIED_REFERENCE_RE = re.compile(
-    r"\b(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\."
-    r"(?P<column>\*|[A-Za-z_][A-Za-z0-9_]*)(?=[^A-Za-z0-9_]|$)"
-)
-_FROM_SOURCE_RE = re.compile(
-    r"\b(?:from|join|left\s+join|right\s+join|inner\s+join|full\s+join|cross\s+join)"
-    r"\s+(?P<table>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){1,2})"
-    r"\s+(?:as\s+)?(?P<alias>[A-Za-z_][A-Za-z0-9_]*)",
-    re.IGNORECASE,
-)
-
-
-@dataclass(frozen=True, slots=True)
-class _ColumnLineage:
-    """Normalized lineage for one output column."""
-
-    output_column: str
-    source_columns: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class _ProjectionLineage:
-    """Normalized lineage extracted from one compiled SQL projection."""
-
-    column_lineage: tuple[_ColumnLineage, ...]
-    unresolved_references: tuple[dict[str, str], ...]
+from .dbt_sql_lineage import extract_compiled_model_lineage
 
 
 class DbtCompiledSqlPlugin:
@@ -76,14 +42,9 @@ class DbtCompiledSqlPlugin:
 
             model_asset = _asset_record(node)
             output_assets[unique_id] = model_asset
+            asset_columns.setdefault(model_asset["name"], _column_names_for_asset(node))
             for column in _column_records_for_asset(node, model_asset["name"]).values():
                 data_columns[column["name"]] = column
-
-            compiled_sql = str(node.get("compiled_code", ""))
-            alias_map = _extract_source_aliases(compiled_sql)
-            model_unresolved: list[dict[str, str]] = []
-            model_column_names = list(_column_names_for_asset(node))
-            projection_count = 0
 
             relationships.append(
                 {
@@ -114,45 +75,42 @@ class DbtCompiledSqlPlugin:
                     }
                 )
 
-            for select_item in _extract_select_items(compiled_sql):
-                projection_count += 1
-                projection = _lineage_for_projection(
-                    select_item=select_item,
-                    alias_map=alias_map,
-                    model_name=str(node.get("name", unique_id)),
-                    source_asset_columns=asset_columns,
-                )
-                model_unresolved.extend(projection.unresolved_references)
+            model_lineage = extract_compiled_model_lineage(
+                str(node.get("compiled_code", "")),
+                model_name=str(node.get("name", unique_id)),
+                relation_column_names=asset_columns,
+            )
+            model_column_names = list(_column_names_for_asset(node))
+            model_unresolved = list(model_lineage.unresolved_references)
 
-                for column_lineage in projection.column_lineage:
-                    if column_lineage.output_column not in model_column_names:
-                        model_column_names.append(column_lineage.output_column)
-                    output_column_name = (
-                        f"{model_asset['name']}.{column_lineage.output_column}"
-                    )
-                    data_columns.setdefault(
-                        output_column_name,
+            for column_lineage in model_lineage.column_lineage:
+                if column_lineage.output_column not in model_column_names:
+                    model_column_names.append(column_lineage.output_column)
+                output_column_name = (
+                    f"{model_asset['name']}.{column_lineage.output_column}"
+                )
+                data_columns.setdefault(
+                    output_column_name,
+                    {
+                        "id": f"data-column:{output_column_name}",
+                        "asset_name": model_asset["name"],
+                        "name": output_column_name,
+                        "line_number": int(node.get("line_number") or 1),
+                    },
+                )
+                for source_column_name in column_lineage.source_columns:
+                    relationships.append(
                         {
-                            "id": f"data-column:{output_column_name}",
-                            "asset_name": model_asset["name"],
-                            "name": output_column_name,
-                            "line_number": int(node.get("line_number") or 1),
-                        },
+                            "type": "COLUMN_DERIVES_FROM",
+                            "source_id": f"data-column:{output_column_name}",
+                            "source_name": output_column_name,
+                            "target_id": f"data-column:{source_column_name}",
+                            "target_name": source_column_name,
+                            "confidence": 0.95,
+                        }
                     )
-                    for source_column_name in column_lineage.source_columns:
-                        relationships.append(
-                            {
-                                "type": "COLUMN_DERIVES_FROM",
-                                "source_id": f"data-column:{output_column_name}",
-                                "source_name": output_column_name,
-                                "target_id": f"data-column:{source_column_name}",
-                                "target_name": source_column_name,
-                                "confidence": 0.95,
-                            }
-                        )
 
             asset_columns[model_asset["name"]] = tuple(model_column_names)
-
             unresolved_references.extend(model_unresolved)
             unresolved_summary = _unresolved_reference_summary(model_unresolved)
             analytics_models.append(
@@ -170,7 +128,7 @@ class DbtCompiledSqlPlugin:
                     ),
                     "parse_state": "partial" if model_unresolved else "complete",
                     "confidence": 0.5 if model_unresolved else 1.0,
-                    "projection_count": projection_count,
+                    "projection_count": model_lineage.projection_count,
                     "unresolved_reference_count": unresolved_summary["count"],
                     "unresolved_reference_reasons": unresolved_summary["reasons"],
                     "unresolved_reference_expressions": unresolved_summary[
@@ -180,14 +138,12 @@ class DbtCompiledSqlPlugin:
             )
 
         analytics_models.sort(key=lambda item: item["name"])
-        data_assets = sorted(output_assets.values(), key=lambda item: item["name"])
         relationships.sort(
             key=lambda item: (item["type"], item["source_name"], item["target_name"])
         )
-
         return {
             "analytics_models": analytics_models,
-            "data_assets": data_assets,
+            "data_assets": sorted(output_assets.values(), key=lambda item: item["name"]),
             "data_columns": sorted(data_columns.values(), key=lambda item: item["name"]),
             "relationships": relationships,
             "coverage": _coverage_summary(
@@ -231,9 +187,8 @@ def _column_records_for_asset(
 ) -> dict[str, dict[str, str]]:
     """Build normalized column records from one manifest node definition."""
 
-    columns = node.get("columns", {})
     records: dict[str, dict[str, str]] = {}
-    for key, value in columns.items():
+    for key, value in node.get("columns", {}).items():
         column_name = str(value.get("name") or key)
         qualified_name = f"{asset_name}.{column_name}"
         records[qualified_name] = {
@@ -248,8 +203,9 @@ def _column_records_for_asset(
 def _column_names_for_asset(node: Mapping[str, Any]) -> tuple[str, ...]:
     """Return manifest-declared column names in stable order for one asset."""
 
-    columns = node.get("columns", {})
-    return tuple(str(value.get("name") or key) for key, value in columns.items())
+    return tuple(
+        str(value.get("name") or key) for key, value in node.get("columns", {}).items()
+    )
 
 
 def _dependency_assets(
@@ -272,149 +228,6 @@ def _dependency_assets(
             asset = _asset_record(dependency_node)
         assets[asset["name"]] = asset
     return [assets[name] for name in sorted(assets)]
-
-
-def _extract_select_items(compiled_sql: str) -> list[str]:
-    """Extract top-level SELECT projections from compiled SQL text."""
-
-    match = _SELECT_CLAUSE_RE.search(compiled_sql)
-    if match is None:
-        return []
-
-    select_clause = match.group("select")
-    items: list[str] = []
-    current: list[str] = []
-    depth = 0
-    in_single_quote = False
-
-    for character in select_clause:
-        if character == "'" and (not current or current[-1] != "\\"):
-            in_single_quote = not in_single_quote
-        elif not in_single_quote:
-            if character == "(":
-                depth += 1
-            elif character == ")" and depth > 0:
-                depth -= 1
-            elif character == "," and depth == 0:
-                item = "".join(current).strip()
-                if item:
-                    items.append(item)
-                current = []
-                continue
-        current.append(character)
-
-    tail = "".join(current).strip()
-    if tail:
-        items.append(tail)
-    return items
-
-
-def _extract_source_aliases(compiled_sql: str) -> dict[str, str]:
-    """Map SQL table aliases back to normalized asset names."""
-
-    alias_map: dict[str, str] = {}
-    for match in _FROM_SOURCE_RE.finditer(compiled_sql):
-        table_name = match.group("table").strip()
-        alias_map[match.group("alias").strip()] = table_name
-    return alias_map
-
-
-def _lineage_for_projection(
-    *,
-    select_item: str,
-    alias_map: Mapping[str, str],
-    model_name: str,
-    source_asset_columns: Mapping[str, Sequence[str]],
-) -> _ProjectionLineage:
-    """Extract supported source-column lineage from one SELECT item."""
-
-    match = _AS_ALIAS_RE.match(select_item.strip())
-    if match:
-        expression = match.group("expression").strip()
-        output_column = match.group("alias").strip()
-    else:
-        expression = select_item.strip()
-        output_column = _implicit_output_column(expression)
-
-    column_lineage: list[_ColumnLineage] = []
-    source_columns: list[str] = []
-    unresolved_references: list[dict[str, str]] = []
-    seen_columns: set[str] = set()
-
-    for reference in _QUALIFIED_REFERENCE_RE.finditer(expression):
-        alias = reference.group("alias")
-        column = reference.group("column")
-        source_asset_name = alias_map.get(alias)
-        if column == "*":
-            if source_asset_name is None:
-                unresolved_references.append(
-                    {
-                        "expression": f"{alias}.*",
-                        "model_name": model_name,
-                        "reason": "source_alias_not_resolved",
-                    }
-                )
-                continue
-            expanded_columns = tuple(source_asset_columns.get(source_asset_name, ()))
-            if not expanded_columns:
-                unresolved_references.append(
-                    {
-                        "expression": f"{alias}.*",
-                        "model_name": model_name,
-                        "reason": "wildcard_projection_not_supported",
-                    }
-                )
-                continue
-            for expanded_column in expanded_columns:
-                qualified_source_column = f"{source_asset_name}.{expanded_column}"
-                column_lineage.append(
-                    _ColumnLineage(
-                        output_column=expanded_column,
-                        source_columns=(qualified_source_column,),
-                    )
-                )
-            continue
-
-        if source_asset_name is None:
-            unresolved_references.append(
-                {
-                    "expression": f"{alias}.{column}",
-                    "model_name": model_name,
-                    "reason": "source_alias_not_resolved",
-                }
-            )
-            continue
-
-        qualified_source_column = f"{source_asset_name}.{column}"
-        if qualified_source_column in seen_columns:
-            continue
-        seen_columns.add(qualified_source_column)
-        source_columns.append(qualified_source_column)
-
-    if output_column is None and source_columns:
-        output_column = source_columns[0].rsplit(".", maxsplit=1)[-1]
-    if output_column is not None:
-        output_column = output_column.strip()
-        column_lineage.append(
-            _ColumnLineage(
-                output_column=output_column,
-                source_columns=tuple(source_columns),
-            )
-        )
-
-    return _ProjectionLineage(
-        column_lineage=tuple(column_lineage),
-        unresolved_references=tuple(unresolved_references),
-    )
-
-
-def _implicit_output_column(expression: str) -> str | None:
-    """Infer an output column name when a projection omits `AS alias`."""
-
-    references = list(_QUALIFIED_REFERENCE_RE.finditer(expression))
-    if len(references) == 1 and references[0].group("column") != "*":
-        return references[0].group("column")
-    return None
 
 
 def _coverage_summary(

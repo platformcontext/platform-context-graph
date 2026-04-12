@@ -123,6 +123,33 @@ def test_normalize_dbt_manifest_extracts_static_column_lineage() -> None:
     )
 
 
+def test_normalize_dbt_manifest_propagates_cte_lineage_to_model_columns() -> None:
+    """CTE-backed final projections should resolve back to source-table columns."""
+
+    plugin = DbtCompiledSqlPlugin()
+
+    report = plugin.normalize(_load_fixture())
+
+    assert any(
+        item["type"] == "COLUMN_DERIVES_FROM"
+        and item["source_name"] == "analytics.public.order_metrics.order_id"
+        and item["target_name"] == "raw.public.orders.id"
+        for item in report["relationships"]
+    )
+    assert any(
+        item["type"] == "COLUMN_DERIVES_FROM"
+        and item["source_name"] == "analytics.public.order_metrics.customer_name"
+        and item["target_name"] == "raw.public.customers.full_name"
+        for item in report["relationships"]
+    )
+    assert any(
+        item["type"] == "COLUMN_DERIVES_FROM"
+        and item["source_name"] == "analytics.public.order_metrics.total_amount"
+        and item["target_name"] == "raw.public.payments.amount"
+        for item in report["relationships"]
+    )
+
+
 def test_normalize_dbt_manifest_expands_known_wildcard_projections() -> None:
     """Wildcard projections should expand when the source schema is known."""
 
