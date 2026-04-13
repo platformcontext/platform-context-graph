@@ -152,6 +152,13 @@ The next parser-family deletion slice removes the Python Rust facade
 points at `go/internal/parser/engine_systems_test.go` instead of the deleted
 Python parser unit suite.
 
+The next parser-family deletion slice removes the Python Scala facades
+(`parsers/languages/scala.py` and `parsers/languages/scala_support.py`). Their
+runtime behavior is already owned by `go/internal/parser/scala_language.go`,
+and the Scala capability metadata now points at
+`go/internal/parser/engine_managed_oo_test.go` instead of the deleted Python
+parser unit suite.
+
 Parser extraction ownership already moved further than the generated capability
 matrix currently shows:
 

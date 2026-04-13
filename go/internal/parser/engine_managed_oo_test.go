@@ -153,6 +153,15 @@ class Service(val name: String) extends Runner {
 
 object Bootstrap {
   val version = "1.0.0"
+
+  def main(): String = {
+    runApp()
+    version
+  }
+
+  private def runApp(): Unit = {
+    println(version)
+  }
 }
 `,
 	)
@@ -175,9 +184,13 @@ object Bootstrap {
 	assertNamedBucketContains(t, got, "classes", "Bootstrap")
 	assertNamedBucketContains(t, got, "traits", "Runner")
 	assertNamedBucketContains(t, got, "functions", "run")
+	assertNamedBucketContains(t, got, "functions", "main")
+	assertNamedBucketContains(t, got, "functions", "runApp")
 	assertNamedBucketContains(t, got, "variables", "version")
 	assertNamedBucketContains(t, got, "imports", "scala.collection.mutable")
 	assertNamedBucketContains(t, got, "function_calls", "println")
+	assertBucketContainsFieldValue(t, got, "functions", "class_context", "Service")
+	assertBucketContainsFieldValue(t, got, "functions", "class_context", "Bootstrap")
 }
 
 func TestDefaultEngineParsePathKotlinSecondaryConstructors(t *testing.T) {

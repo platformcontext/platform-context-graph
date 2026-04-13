@@ -293,6 +293,8 @@ class TestPythonParserRuntimeOwnershipRemoved:
             "parsers/languages/dockerfile_support.py",
             "parsers/languages/groovy.py",
             "parsers/languages/rust.py",
+            "parsers/languages/scala.py",
+            "parsers/languages/scala_support.py",
         ],
     )
     def test_deleted_python_parser_facades_stay_gone(self, relative_path: str) -> None:

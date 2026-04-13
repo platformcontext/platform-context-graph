@@ -31,7 +31,7 @@ yet been explicitly assessed in the parser maturity program.
 | Python | `PythonTreeSitterParser` | supported | supported | supported | `fastapi-base`, `flask-base` | supported | supported | supported |
 | Ruby | `RubyTreeSitterParser` | - | - | - | - | - | - | - |
 | Rust | `DefaultEngine (rust)` | - | - | - | - | - | - | - |
-| Scala | `ScalaTreeSitterParser` | - | - | - | - | - | - | - |
+| Scala | `DefaultEngine (scala)` | - | - | - | - | - | - | - |
 | SQL | `SQLTreeSitterParser` | supported | supported | unsupported | - | supported | partial | partial |
 | Swift | `SwiftTreeSitterParser` | - | - | - | - | - | - | - |
 | Terraform | `HCLTerraformParser` | - | - | - | - | - | - | - |
