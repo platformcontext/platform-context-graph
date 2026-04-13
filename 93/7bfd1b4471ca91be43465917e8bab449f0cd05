@@ -1,0 +1,89 @@
+go/internal/reducer/registry.go
+  1ca5ee6ce936a402 170-185
+go/internal/reducer/shared_projection_worker_test.go
+  1ca5ee6ce936a402 1-437
+go/internal/reducer/shared_projection_worker.go
+  1ca5ee6ce936a402 1-277
+go/internal/reducer/defaults.go
+  1ca5ee6ce936a402 6-8,46-47
+go/internal/reducer/workload_identity_test.go
+  1ca5ee6ce936a402 200
+go/internal/reducer/platform_materialization_test.go
+  1ca5ee6ce936a402 1-213
+go/internal/reducer/defaults_test.go
+  1ca5ee6ce936a402 25-29,75-94,120-121
+go/internal/reducer/platform_materialization.go
+  1ca5ee6ce936a402 1-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "937bfd1b4471ca91be43465917e8bab449f0cd05",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 2125,
+      "total_deletions": 4,
+      "accepted_lines": 1087,
+      "overriden_lines": 0
+    },
+    "21d0652afb873020": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-260c-7752-ba40-57ff788997eb",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "22a2a4042c410746": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84f1-43ec-7290-9623-acd2dad2ccd7",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 40,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 100,
+      "overriden_lines": 0
+    },
+    "b0d410b9f01dc4ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-2326-7162-8155-6de99ff655dd",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 35,
+      "overriden_lines": 0
+    }
+  }
+}
