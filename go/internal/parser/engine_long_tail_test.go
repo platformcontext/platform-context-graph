@@ -2,6 +2,7 @@ package parser
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -20,10 +21,11 @@ func TestDefaultEngineParsePathRubyFixtures(t *testing.T) {
 		t.Fatalf("ParsePath(%q) error = %v, want nil", basicPath, err)
 	}
 	assertNamedBucketContains(t, basicPayload, "functions", "greet")
+	assertRubyStringSliceFieldValue(t, assertFunctionByName(t, basicPayload, "greet"), "args", []string{"name"})
 	assertNamedBucketContains(t, basicPayload, "classes", "Application")
 	assertNamedBucketContains(t, basicPayload, "modules", "Comprehensive")
 	assertNamedBucketContains(t, basicPayload, "variables", "@config")
-	assertNamedBucketContains(t, basicPayload, "function_calls", "Comprehensive.greet")
+	assertBucketContainsFieldValue(t, basicPayload, "function_calls", "full_name", "Comprehensive.greet")
 
 	mixinsPath := filepath.Join(repoRoot, "modules_mixins.rb")
 	mixinsPayload, err := engine.ParsePath(repoRoot, mixinsPath, false, Options{})
@@ -32,6 +34,10 @@ func TestDefaultEngineParsePathRubyFixtures(t *testing.T) {
 	}
 	assertNamedBucketContains(t, mixinsPayload, "classes", "Service")
 	assertNamedBucketContains(t, mixinsPayload, "functions", "expensive_operation")
+	assertRubyStringSliceFieldValue(t, assertFunctionByName(t, mixinsPayload, "expensive_operation"), "args", []string{"input"})
+	assertStringFieldValue(t, assertFunctionByName(t, mixinsPayload, "expensive_operation"), "class_context", "Service")
+	assertEmptyNamedBucket(t, mixinsPayload, "imports")
+	assertBucketContainsFieldValue(t, mixinsPayload, "function_calls", "name", "require_relative")
 	assertModuleInclusion(t, mixinsPayload, "Service", "Printable")
 }
 
@@ -52,8 +58,17 @@ func TestDefaultEngineParsePathPHPFixtures(t *testing.T) {
 	assertNamedBucketContains(t, importsPayload, "functions", "run")
 	assertNamedBucketContains(t, importsPayload, "classes", "Application")
 	assertBucketContainsFieldValue(t, importsPayload, "imports", "name", "Comprehensive\\Config")
+	assertBucketContainsFieldValue(t, importsPayload, "imports", "full_import_name", "use Comprehensive\\Config;")
 	assertNamedBucketContains(t, importsPayload, "variables", "$config")
-	assertNamedBucketContains(t, importsPayload, "function_calls", "$this->service.info")
+	assertBucketContainsFieldValue(t, importsPayload, "function_calls", "full_name", "$this->service.info")
+
+	classesPath := filepath.Join(repoRoot, "classes.php")
+	classesPayload, err := engine.ParsePath(repoRoot, classesPath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", classesPath, err)
+	}
+	assertBucketItemStringSliceContains(t, classesPayload, "classes", "Circle", "Shape")
+	assertBucketItemStringSliceContains(t, classesPayload, "classes", "Rectangle", "Shape")
 
 	traitsPath := filepath.Join(repoRoot, "traits.php")
 	traitsPayload, err := engine.ParsePath(repoRoot, traitsPath, false, Options{})
@@ -255,4 +270,53 @@ func assertModuleInclusion(t *testing.T, payload map[string]any, className strin
 		moduleName,
 		items,
 	)
+}
+
+func assertRubyStringSliceFieldValue(
+	t *testing.T,
+	item map[string]any,
+	field string,
+	want []string,
+) {
+	t.Helper()
+
+	got, ok := item[field].([]string)
+	if !ok {
+		t.Fatalf("%s = %T, want []string", field, item[field])
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("%s = %#v, want %#v", field, got, want)
+	}
+}
+
+func assertBucketItemStringSliceContains(
+	t *testing.T,
+	payload map[string]any,
+	bucket string,
+	name string,
+	want string,
+) {
+	t.Helper()
+
+	items, ok := payload[bucket].([]map[string]any)
+	if !ok {
+		t.Fatalf("%s = %T, want []map[string]any", bucket, payload[bucket])
+	}
+	for _, item := range items {
+		itemName, _ := item["name"].(string)
+		if itemName != name {
+			continue
+		}
+		values, ok := item["bases"].([]string)
+		if !ok {
+			t.Fatalf("%s[%q].bases = %T, want []string", bucket, name, item["bases"])
+		}
+		for _, value := range values {
+			if value == want {
+				return
+			}
+		}
+		t.Fatalf("%s[%q].bases = %#v, want to contain %q", bucket, name, values, want)
+	}
+	t.Fatalf("%s missing name %q in %#v", bucket, name, items)
 }

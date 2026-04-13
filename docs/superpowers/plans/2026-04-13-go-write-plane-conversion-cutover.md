@@ -250,13 +250,19 @@ Progress on this step:
 - [x] Python-adjacent parser parity landed for notebook conversion,
   templated content metadata, and runtime service dependency extraction in
   `go/internal/parser/{python_language,raw_text_engine,templated_detection,runtime_dependencies}.go`
+- [x] Native long-tail language parity advanced for Ruby, PHP, Swift, and
+  Elixir in
+  `go/internal/parser/{ruby_language,php_language,swift_language,elixir_dart_language}.go`
+  plus focused TDD coverage in
+  `go/internal/parser/{engine_ruby_semantics,php_language,engine_swift_semantics,engine_elixir_semantics}_test.go`
 - [ ] Extend the native parser runtime to the remaining representative language
   family adapters still missing for truthful matrix parity: SCIP parity tie-
   break behavior now matches the Python contract, specialized JSON/data-
-  intelligence document families are covered, and this slice closed the C
-  typedef alias, Java annotation, Kotlin secondary constructor, and Rust impl
-  ownership gaps while the remaining long-tail gaps stay in the Ruby, PHP,
-  Swift, and Elixir slices
+  intelligence document families are covered, C typedef alias, Java
+  annotation, Kotlin secondary constructor, Rust impl ownership, and the first
+  Ruby/PHP/Swift/Elixir parity wave are now in Go, while the remaining parser
+  gaps are the residual heuristic edges in those same long-tail adapters plus
+  final parser/coordinator deletion work
 
 - [ ] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 
