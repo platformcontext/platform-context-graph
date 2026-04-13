@@ -32,8 +32,11 @@ func (e *Engine) parseJavaScriptLike(
 	defer tree.Close()
 
 	payload := basePayload(path, outputLanguage, isDependency)
+	payload["components"] = []map[string]any{}
 	if outputLanguage != "javascript" {
 		payload["interfaces"] = []map[string]any{}
+		payload["type_aliases"] = []map[string]any{}
+		payload["enums"] = []map[string]any{}
 	}
 	scope := options.normalizedVariableScope()
 	root := tree.RootNode()
@@ -43,6 +46,7 @@ func (e *Engine) parseJavaScriptLike(
 		case "function_declaration":
 			nameNode := node.ChildByFieldName("name")
 			appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
+			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage)
 		case "method_definition", "method_signature":
 			nameNode := node.ChildByFieldName("name")
 			appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
@@ -58,6 +62,7 @@ func (e *Engine) parseJavaScriptLike(
 				"end_line":    nodeEndLine(node),
 				"lang":        outputLanguage,
 			})
+			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage)
 		case "interface_declaration":
 			if outputLanguage == "javascript" {
 				return
@@ -73,6 +78,36 @@ func (e *Engine) parseJavaScriptLike(
 				"end_line":    nodeEndLine(node),
 				"lang":        outputLanguage,
 			})
+		case "type_alias_declaration":
+			if outputLanguage == "javascript" {
+				return
+			}
+			nameNode := node.ChildByFieldName("name")
+			name := nodeText(nameNode, source)
+			if strings.TrimSpace(name) == "" {
+				return
+			}
+			appendBucket(payload, "type_aliases", map[string]any{
+				"name":        name,
+				"line_number": nodeLine(nameNode),
+				"end_line":    nodeEndLine(node),
+				"lang":        outputLanguage,
+			})
+		case "enum_declaration":
+			if outputLanguage == "javascript" {
+				return
+			}
+			nameNode := node.ChildByFieldName("name")
+			name := nodeText(nameNode, source)
+			if strings.TrimSpace(name) == "" {
+				return
+			}
+			appendBucket(payload, "enums", map[string]any{
+				"name":        name,
+				"line_number": nodeLine(nameNode),
+				"end_line":    nodeEndLine(node),
+				"lang":        outputLanguage,
+			})
 		case "variable_declarator":
 			nameNode := node.ChildByFieldName("name")
 			name := nodeText(nameNode, source)
@@ -82,6 +117,7 @@ func (e *Engine) parseJavaScriptLike(
 			valueNode := node.ChildByFieldName("value")
 			if isJavaScriptFunctionValue(valueNode) {
 				appendFunctionDeclaration(payload, node, nameNode, source, outputLanguage, options)
+				maybeAppendJavaScriptComponent(payload, valueNode, nameNode, source, outputLanguage)
 				return
 			}
 			if scope == "module" && javaScriptInsideFunction(node) {
@@ -116,10 +152,13 @@ func (e *Engine) parseJavaScriptLike(
 	sortNamedBucket(payload, "variables")
 	sortNamedBucket(payload, "imports")
 	sortNamedBucket(payload, "function_calls")
+	sortNamedBucket(payload, "components")
 	if outputLanguage != "javascript" {
 		sortNamedBucket(payload, "interfaces")
+		sortNamedBucket(payload, "type_aliases")
+		sortNamedBucket(payload, "enums")
 	}
-	payload["framework_semantics"] = map[string]any{"frameworks": []string{}}
+	payload["framework_semantics"] = buildJavaScriptFrameworkSemantics(path, source, payload)
 
 	return payload, nil
 }

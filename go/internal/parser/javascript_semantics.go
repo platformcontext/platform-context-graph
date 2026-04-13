@@ -1,0 +1,323 @@
+package parser
+
+import (
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	tree_sitter "github.com/tree-sitter/go-tree-sitter"
+)
+
+var (
+	javaScriptHTTPVerbExportRe = regexp.MustCompile(`(?m)export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b`)
+	javaScriptMetadataConstRe  = regexp.MustCompile(`(?m)export\s+const\s+metadata\b`)
+	javaScriptExpressRouteRe   = regexp.MustCompile(`(?m)\b([A-Za-z_$][A-Za-z0-9_$]*)\.(get|post|put|patch|delete|head|options)\(\s*["']([^"']+)["']`)
+	javaScriptHapiMethodRe     = regexp.MustCompile(`(?m)\bmethod\s*:\s*["']([A-Za-z]+)["']`)
+	javaScriptHapiPathRe       = regexp.MustCompile(`(?m)\bpath\s*:\s*["']([^"']+)["']`)
+	javaScriptAWSImportRe      = regexp.MustCompile(`@aws-sdk/client-([a-z0-9-]+)`)
+	javaScriptGCPImportRe      = regexp.MustCompile(`@google-cloud/([a-z0-9-]+)`)
+	javaScriptClientSymbolRe   = regexp.MustCompile(`\b([A-Z][A-Za-z0-9]+Client)\b`)
+	javaScriptHookCallRe       = regexp.MustCompile(`\b(use[A-Z][A-Za-z0-9_]*)\s*\(`)
+	javaScriptDirectiveRe      = regexp.MustCompile(`(?m)^\s*["']use\s+(client|server)["'];?`)
+	javaScriptJSXReturnRe      = regexp.MustCompile(`(?m)(return\s*<|=>\s*<)`)
+)
+
+func maybeAppendJavaScriptComponent(
+	payload map[string]any,
+	node *tree_sitter.Node,
+	nameNode *tree_sitter.Node,
+	source []byte,
+	outputLanguage string,
+) {
+	name := strings.TrimSpace(nodeText(nameNode, source))
+	if !isPascalIdentifier(name) {
+		return
+	}
+	if !javaScriptLooksLikeComponent(node, source, outputLanguage) {
+		return
+	}
+	appendBucket(payload, "components", map[string]any{
+		"name":        name,
+		"line_number": nodeLine(nameNode),
+		"end_line":    nodeEndLine(node),
+		"lang":        outputLanguage,
+	})
+}
+
+func javaScriptLooksLikeComponent(node *tree_sitter.Node, source []byte, outputLanguage string) bool {
+	if outputLanguage == "tsx" {
+		return true
+	}
+	text := nodeText(node, source)
+	return strings.Contains(text, "React.Component") ||
+		strings.Contains(text, "React.PureComponent") ||
+		strings.Contains(text, "useState(") ||
+		strings.Contains(text, "useEffect(") ||
+		strings.Contains(text, "useMemo(") ||
+		javaScriptJSXReturnRe.MatchString(text)
+}
+
+func buildJavaScriptFrameworkSemantics(path string, source []byte, payload map[string]any) map[string]any {
+	text := string(source)
+	semantics := map[string]any{
+		"frameworks": []string{},
+	}
+	frameworks := make([]string, 0, 6)
+
+	if nextjs, ok := detectNextJSSemantics(path, text); ok {
+		frameworks = append(frameworks, "nextjs")
+		semantics["nextjs"] = nextjs
+	}
+	if express, ok := detectExpressSemantics(text); ok {
+		frameworks = append(frameworks, "express")
+		semantics["express"] = express
+	}
+	if aws, ok := detectAWSSemantics(text); ok {
+		frameworks = append(frameworks, "aws")
+		semantics["aws"] = aws
+	}
+	if gcp, ok := detectGCPSemantics(text); ok {
+		frameworks = append(frameworks, "gcp")
+		semantics["gcp"] = gcp
+	}
+	if react, ok := detectReactSemantics(path, text, payload); ok {
+		frameworks = append(frameworks, "react")
+		semantics["react"] = react
+	}
+	if hapi, ok := detectHapiSemantics(text); ok {
+		frameworks = append(frameworks, "hapi")
+		semantics["hapi"] = hapi
+	}
+
+	semantics["frameworks"] = frameworks
+	return semantics
+}
+
+func detectNextJSSemantics(path string, source string) (map[string]any, bool) {
+	moduleKind := ""
+	switch filepath.Base(path) {
+	case "route.ts", "route.tsx", "route.js", "route.jsx":
+		moduleKind = "route"
+	case "page.tsx", "page.jsx", "page.ts", "page.js":
+		moduleKind = "page"
+	case "layout.tsx", "layout.jsx", "layout.ts", "layout.js":
+		moduleKind = "layout"
+	}
+	if moduleKind == "" {
+		return nil, false
+	}
+
+	routeSegments := nextJSRouteSegments(path)
+	metadataExports := "none"
+	if strings.Contains(source, "generateMetadata") {
+		metadataExports = "dynamic"
+	} else if javaScriptMetadataConstRe.MatchString(source) {
+		metadataExports = "static"
+	}
+
+	runtimeBoundary := "server"
+	if directive := javaScriptDirectiveRe.FindStringSubmatch(source); len(directive) == 2 {
+		runtimeBoundary = directive[1]
+	}
+
+	nextjs := map[string]any{
+		"module_kind":      moduleKind,
+		"metadata_exports": metadataExports,
+		"route_segments":   routeSegments,
+		"runtime_boundary": runtimeBoundary,
+	}
+	if moduleKind == "route" {
+		nextjs["route_verbs"] = uniqueOrderedUpper(javaScriptHTTPVerbExportRe.FindAllStringSubmatch(source, -1), 1)
+		nextjs["request_response_apis"] = nextJSRequestResponseAPIs(source)
+	}
+	return nextjs, true
+}
+
+func detectExpressSemantics(source string) (map[string]any, bool) {
+	matches := javaScriptExpressRouteRe.FindAllStringSubmatch(source, -1)
+	if len(matches) == 0 {
+		return nil, false
+	}
+
+	methods := make([]string, 0, len(matches))
+	paths := make([]string, 0, len(matches))
+	serverSymbols := make([]string, 0, len(matches))
+	seenMethods := make(map[string]struct{})
+	seenPaths := make(map[string]struct{})
+	seenSymbols := make(map[string]struct{})
+	for _, match := range matches {
+		symbol := match[1]
+		method := strings.ToUpper(match[2])
+		path := match[3]
+		if _, ok := seenMethods[method]; !ok {
+			seenMethods[method] = struct{}{}
+			methods = append(methods, method)
+		}
+		if _, ok := seenPaths[path]; !ok {
+			seenPaths[path] = struct{}{}
+			paths = append(paths, path)
+		}
+		if _, ok := seenSymbols[symbol]; !ok {
+			seenSymbols[symbol] = struct{}{}
+			serverSymbols = append(serverSymbols, symbol)
+		}
+	}
+
+	return map[string]any{
+		"route_methods":  methods,
+		"route_paths":    paths,
+		"server_symbols": serverSymbols,
+	}, true
+}
+
+func detectHapiSemantics(source string) (map[string]any, bool) {
+	if strings.Contains(source, "server.inject(") {
+		return nil, false
+	}
+	methods := uniqueOrderedUpper(javaScriptHapiMethodRe.FindAllStringSubmatch(source, -1), 1)
+	paths := uniqueOrdered(javaScriptHapiPathRe.FindAllStringSubmatch(source, -1), 1)
+	if len(methods) == 0 || len(paths) == 0 {
+		return nil, false
+	}
+	return map[string]any{
+		"route_methods":  methods,
+		"route_paths":    paths,
+		"server_symbols": []string{},
+	}, true
+}
+
+func detectAWSSemantics(source string) (map[string]any, bool) {
+	services := uniqueOrdered(javaScriptAWSImportRe.FindAllStringSubmatch(source, -1), 1)
+	if len(services) == 0 {
+		return nil, false
+	}
+	for index := range services {
+		parts := strings.Split(services[index], "-")
+		services[index] = parts[len(parts)-1]
+	}
+	return map[string]any{
+		"services":       services,
+		"client_symbols": uniqueOrdered(javaScriptClientSymbolRe.FindAllStringSubmatch(source, -1), 1),
+	}, true
+}
+
+func detectGCPSemantics(source string) (map[string]any, bool) {
+	services := uniqueOrdered(javaScriptGCPImportRe.FindAllStringSubmatch(source, -1), 1)
+	if len(services) == 0 {
+		return nil, false
+	}
+	return map[string]any{
+		"services":       services,
+		"client_symbols": uniqueOrdered(javaScriptClientSymbolRe.FindAllStringSubmatch(source, -1), 1),
+	}, true
+}
+
+func detectReactSemantics(path string, source string, payload map[string]any) (map[string]any, bool) {
+	componentExports := componentNames(payload)
+	hooksUsed := uniqueOrdered(javaScriptHookCallRe.FindAllStringSubmatch(source, -1), 1)
+	hasDirective := javaScriptDirectiveRe.MatchString(source)
+	hasReactImport := strings.Contains(source, "from \"react\"") || strings.Contains(source, "from 'react'") ||
+		strings.Contains(source, "require(\"react\")") || strings.Contains(source, "require('react')")
+	if len(componentExports) == 0 && len(hooksUsed) == 0 && !hasDirective && !hasReactImport && !strings.HasSuffix(path, ".tsx") {
+		return nil, false
+	}
+
+	boundary := "shared"
+	if directive := javaScriptDirectiveRe.FindStringSubmatch(source); len(directive) == 2 {
+		boundary = directive[1]
+	}
+	return map[string]any{
+		"boundary":          boundary,
+		"component_exports": componentExports,
+		"hooks_used":        hooksUsed,
+	}, true
+}
+
+func componentNames(payload map[string]any) []string {
+	items, _ := payload["components"].([]map[string]any)
+	names := make([]string, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		name, _ := item["name"].(string)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	return names
+}
+
+func nextJSRouteSegments(path string) []string {
+	slashPath := filepath.ToSlash(path)
+	appIndex := strings.Index(slashPath, "/app/")
+	if appIndex < 0 {
+		return []string{}
+	}
+	relative := slashPath[appIndex+len("/app/"):]
+	dir := filepath.ToSlash(filepath.Dir(relative))
+	if dir == "." || dir == "" {
+		return []string{}
+	}
+	segments := strings.Split(dir, "/")
+	filtered := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		if segment == "" {
+			continue
+		}
+		filtered = append(filtered, segment)
+	}
+	return filtered
+}
+
+func nextJSRequestResponseAPIs(source string) []string {
+	if !strings.Contains(source, "next/server") {
+		return []string{}
+	}
+	apis := make([]string, 0, 2)
+	for _, name := range []string{"NextRequest", "NextResponse"} {
+		if strings.Contains(source, name) {
+			apis = append(apis, name)
+		}
+	}
+	return apis
+}
+
+func uniqueOrdered(matches [][]string, group int) []string {
+	seen := make(map[string]struct{}, len(matches))
+	values := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) <= group {
+			continue
+		}
+		value := strings.TrimSpace(match[group])
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		values = append(values, value)
+	}
+	return values
+}
+
+func uniqueOrderedUpper(matches [][]string, group int) []string {
+	values := uniqueOrdered(matches, group)
+	for index := range values {
+		values[index] = strings.ToUpper(values[index])
+	}
+	return values
+}
+
+func isPascalIdentifier(name string) bool {
+	if strings.TrimSpace(name) == "" {
+		return false
+	}
+	runes := []rune(name)
+	return len(runes) > 0 && strings.ToUpper(string(runes[0])) == string(runes[0])
+}

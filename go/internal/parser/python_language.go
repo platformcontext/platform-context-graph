@@ -124,7 +124,8 @@ func (e *Engine) parsePython(
 	sortNamedBucket(payload, "variables")
 	sortNamedBucket(payload, "imports")
 	sortNamedBucket(payload, "function_calls")
-	payload["framework_semantics"] = map[string]any{"frameworks": []string{}}
+	payload["framework_semantics"] = buildPythonFrameworkSemantics(string(source))
+	payload["orm_table_mappings"] = buildPythonORMTableMappings(string(source))
 
 	return payload, nil
 }

@@ -50,10 +50,15 @@ cutover draft assumed:
 - `go/internal/parser/runtime.go` owns the native tree-sitter runtime and
   language-handle cache for the initial Go-owned parser slice
 - `go/internal/parser/engine.go` owns native parse dispatch and prescan fanout
-- `go/internal/parser/python_language.go` owns the first native Python adapter
+- `go/internal/parser/python_language.go` and
+  `go/internal/parser/python_semantics.go` now own the native Python adapter
+  slice, including FastAPI/Flask `framework_semantics` and bounded ORM table
+  mapping extraction
 - `go/internal/parser/go_language.go` owns the first native Go adapter
 - `go/internal/parser/javascript_language.go` now owns the representative
-  JavaScript and TypeScript/TSX adapter slice
+  JavaScript and TypeScript/TSX adapter slice, including native
+  `framework_semantics`, `type_aliases`, `enums`, and `components` coverage for
+  the supported JS/TS/TSX runtime paths
 - `go/internal/parser/json_language.go` now owns the first native JSON config
   slice, including package/composer/tsconfig metadata plus CloudFormation JSON
 - `go/internal/parser/hcl_language.go` now owns the first native Terraform and
@@ -200,6 +205,18 @@ Progress on this step:
 - [x] Native parse runtime/dispatch landed for Python, Go, JavaScript,
   TypeScript/TSX, and raw-text in
   `go/internal/parser/{runtime,engine,python_language,go_language,javascript_language,raw_text_engine}.go`
+- [x] Native Python parser semantics now land in Go for the current
+  representative runtime paths, including FastAPI and Flask route semantics
+  plus bounded SQLAlchemy and Django ORM table mapping extraction in
+  `go/internal/parser/{python_language,python_semantics}.go`
+- [x] Native JavaScript/TypeScript/TSX framework semantics now land in Go for
+  the current representative runtime paths, including Next.js route/page/layout
+  classification, React boundary/component/hook detection, Express route
+  surfaces, Hapi route-module detection, and bounded AWS/GCP SDK semantics in
+  `go/internal/parser/{javascript_language,javascript_semantics}.go`
+- [x] Native JavaScript-like type/entity parity now includes TypeScript/TSX
+  `type_aliases`, TypeScript `enums`, and TSX `components` in
+  `go/internal/parser/javascript_language.go`
 - [x] Native config/IaC adapters landed for JSON, Terraform/Terragrunt, YAML
   infrastructure, and Dockerfile in
   `go/internal/parser/{json_language,hcl_language,yaml_language,yaml_semantics,yaml_helm,dockerfile_language}.go`
