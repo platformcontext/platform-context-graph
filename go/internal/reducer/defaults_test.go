@@ -22,6 +22,11 @@ func TestNewDefaultRuntimeUsesDefaultDomainHandlers(t *testing.T) {
 				CanonicalWrites: 1,
 			},
 		},
+		PlatformMaterializationWriter: &recordingPlatformMaterializationWriter{
+			result: PlatformMaterializationWriteResult{
+				CanonicalWrites: 1,
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("NewDefaultRuntime() error = %v, want nil", err)
@@ -67,6 +72,26 @@ func TestNewDefaultRuntimeUsesDefaultDomainHandlers(t *testing.T) {
 		t.Fatalf("runtime.Execute(cloud_asset).Status = %q, want %q", got, want)
 	}
 
+	deploymentResult, err := runtime.Execute(context.Background(), Intent{
+		IntentID:        "intent-pm-1",
+		ScopeID:         "scope-123",
+		GenerationID:    "generation-456",
+		SourceSystem:    "git",
+		Domain:          DomainDeploymentMapping,
+		Cause:           "platform binding discovered",
+		EntityKeys:      []string{"platform:kubernetes:aws:prod-cluster"},
+		RelatedScopeIDs: []string{"scope-123"},
+		EnqueuedAt:      time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC),
+		AvailableAt:     time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC),
+		Status:          IntentStatusClaimed,
+	})
+	if err != nil {
+		t.Fatalf("runtime.Execute(deployment_mapping) error = %v, want nil", err)
+	}
+	if got, want := deploymentResult.Status, ResultStatusSucceeded; got != want {
+		t.Fatalf("runtime.Execute(deployment_mapping).Status = %q, want %q", got, want)
+	}
+
 	_, err = runtime.Execute(context.Background(), Intent{
 		IntentID:        "intent-2",
 		ScopeID:         "scope-123",
@@ -92,8 +117,8 @@ func TestDefaultDomainDefinitionsMatchImplementedRuntimeCatalog(t *testing.T) {
 	t.Parallel()
 
 	got := DefaultDomainDefinitions()
-	if len(got) != 2 {
-		t.Fatalf("len(DefaultDomainDefinitions()) = %d, want 2", len(got))
+	if len(got) != 3 {
+		t.Fatalf("len(DefaultDomainDefinitions()) = %d, want 3", len(got))
 	}
 	if got[0].Domain != DomainWorkloadIdentity {
 		t.Fatalf("DefaultDomainDefinitions()[0].Domain = %q, want %q", got[0].Domain, DomainWorkloadIdentity)

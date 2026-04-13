@@ -167,5 +167,21 @@ func DefaultDomainDefinitions() []DomainDefinition {
 				},
 			},
 		},
+		{
+			Domain:  DomainDeploymentMapping,
+			Summary: "materialize platform bindings across sources",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+			TruthContract: truth.Contract{
+				CanonicalKind: "deployment_mapping",
+				SourceLayers: []truth.Layer{
+					truth.LayerSourceDeclaration,
+					truth.LayerAppliedDeclaration,
+				},
+			},
+		},
 	}
 }
