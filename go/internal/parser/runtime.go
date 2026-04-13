@@ -8,7 +8,9 @@ import (
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 	tree_sitter_go "github.com/tree-sitter/tree-sitter-go/bindings/go"
+	tree_sitter_javascript "github.com/tree-sitter/tree-sitter-javascript/bindings/go"
 	tree_sitter_python "github.com/tree-sitter/tree-sitter-python/bindings/go"
+	tree_sitter_typescript "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 )
 
 type languageLoader func() unsafe.Pointer
@@ -66,16 +68,25 @@ func (r *Runtime) Parser(name string) (*tree_sitter.Parser, error) {
 }
 
 var builtinLanguageLoaders = map[string]languageLoader{
-	"go":     tree_sitter_go.Language,
-	"python": tree_sitter_python.Language,
+	"go":         tree_sitter_go.Language,
+	"javascript": tree_sitter_javascript.Language,
+	"python":     tree_sitter_python.Language,
+	"tsx":        tree_sitter_typescript.LanguageTSX,
+	"typescript": tree_sitter_typescript.LanguageTypescript,
 }
 
 func normalizeLanguageName(name string) (string, error) {
 	switch strings.TrimSpace(strings.ToLower(name)) {
 	case "go":
 		return "go", nil
+	case "javascript", "js":
+		return "javascript", nil
 	case "py", "python":
 		return "python", nil
+	case "tsx":
+		return "tsx", nil
+	case "ts", "typescript":
+		return "typescript", nil
 	default:
 		return "", fmt.Errorf("unsupported language %q", name)
 	}

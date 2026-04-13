@@ -107,6 +107,102 @@ func Greet(name string) string {
 	assertNamedBucketContains(t, got, "function_calls", "Println")
 }
 
+func TestDefaultEngineParsePathJavaScript(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "sample.js")
+	writeTestFile(
+		t,
+		filePath,
+		`import fs from "node:fs";
+
+class Greeter {
+  greet(name) {
+    return name;
+  }
+}
+
+const version = "1.0.0";
+
+function hello(value) {
+  return fs.readFileSync(value);
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	if got["lang"] != "javascript" {
+		t.Fatalf("lang = %#v, want %#v", got["lang"], "javascript")
+	}
+
+	assertNamedBucketContains(t, got, "functions", "hello")
+	assertNamedBucketContains(t, got, "classes", "Greeter")
+	assertNamedBucketContains(t, got, "variables", "version")
+	assertBucketContainsFieldValue(t, got, "imports", "source", "node:fs")
+	assertNamedBucketContains(t, got, "function_calls", "readFileSync")
+}
+
+func TestDefaultEngineParsePathTypeScript(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "sample.ts")
+	writeTestFile(
+		t,
+		filePath,
+		`import { readFileSync } from "fs";
+
+interface Reader {
+  read(path: string): string;
+}
+
+class ConfigReader implements Reader {
+  read(path: string): string {
+    return readFileSync(path, "utf-8");
+  }
+}
+
+const version = "1.0.0";
+
+function hello(value: string): string {
+  return value;
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	if got["lang"] != "typescript" {
+		t.Fatalf("lang = %#v, want %#v", got["lang"], "typescript")
+	}
+
+	assertNamedBucketContains(t, got, "functions", "hello")
+	assertNamedBucketContains(t, got, "classes", "ConfigReader")
+	assertNamedBucketContains(t, got, "variables", "version")
+	assertBucketContainsFieldValue(t, got, "imports", "name", "readFileSync")
+	assertBucketContainsFieldValue(t, got, "imports", "source", "fs")
+	assertNamedBucketContains(t, got, "function_calls", "readFileSync")
+	assertNamedBucketContains(t, got, "interfaces", "Reader")
+}
+
 func TestDefaultEngineParsePathRawText(t *testing.T) {
 	t.Parallel()
 
@@ -185,6 +281,46 @@ func Greet() {}
 	assertPrescanContains(t, got, "Greet", goPath)
 }
 
+func TestDefaultEnginePreScanPathsJavaScriptAndTypeScript(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	jsPath := filepath.Join(repoRoot, "sample.js")
+	tsPath := filepath.Join(repoRoot, "sample.ts")
+	writeTestFile(
+		t,
+		jsPath,
+		`class Greeter {}
+function hello() {}
+const world = () => world;
+`,
+	)
+	writeTestFile(
+		t,
+		tsPath,
+		`interface Reader {}
+class ConfigReader implements Reader {}
+function loadConfig() {}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.PreScanPaths([]string{jsPath, tsPath})
+	if err != nil {
+		t.Fatalf("PreScanPaths() error = %v, want nil", err)
+	}
+
+	assertPrescanContains(t, got, "Greeter", jsPath)
+	assertPrescanContains(t, got, "hello", jsPath)
+	assertPrescanContains(t, got, "Reader", tsPath)
+	assertPrescanContains(t, got, "ConfigReader", tsPath)
+	assertPrescanContains(t, got, "loadConfig", tsPath)
+}
+
 func writeTestFile(t *testing.T, path string, body string) {
 	t.Helper()
 
@@ -222,6 +358,28 @@ func assertEmptyNamedBucket(t *testing.T, payload map[string]any, key string) {
 	if len(items) != 0 {
 		t.Fatalf("%s = %#v, want empty bucket", key, items)
 	}
+}
+
+func assertBucketContainsFieldValue(
+	t *testing.T,
+	payload map[string]any,
+	key string,
+	field string,
+	wantValue string,
+) {
+	t.Helper()
+
+	items, ok := payload[key].([]map[string]any)
+	if !ok {
+		t.Fatalf("%s = %T, want []map[string]any", key, payload[key])
+	}
+	for _, item := range items {
+		value, _ := item[field].(string)
+		if value == wantValue {
+			return
+		}
+	}
+	t.Fatalf("%s missing %s=%q in %#v", key, field, wantValue, items)
 }
 
 func assertPrescanContains(t *testing.T, importsMap map[string][]string, name string, wantPath string) {

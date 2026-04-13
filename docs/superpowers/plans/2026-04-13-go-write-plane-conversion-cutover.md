@@ -46,11 +46,13 @@ cutover draft assumed:
 - `go/internal/parser/engine.go` owns native parse dispatch and prescan fanout
 - `go/internal/parser/python_language.go` owns the first native Python adapter
 - `go/internal/parser/go_language.go` owns the first native Go adapter
+- `go/internal/parser/javascript_language.go` now owns the representative
+  JavaScript and TypeScript/TSX adapter slice
 - `go/internal/parser/raw_text_engine.go` owns the raw-text fallback path
 
-That slice is still parser-matrix-incomplete. JavaScript, TypeScript/TSX,
-infra/data slices, SCIP parity, and the remaining long-tail language adapters
-are still in scope before the collector hot path can truthfully drop Python.
+That slice is still parser-matrix-incomplete. Infra/data slices, SCIP parity,
+and the remaining long-tail language adapters are still in scope before the
+collector hot path can truthfully drop Python.
 
 No new ingestors should start until the milestones in this plan are complete.
 Treat this plan as the active cutover path until the merge bar below is fully
@@ -174,11 +176,12 @@ Progress on this step:
 - [x] Registry metadata and selection landed in `go/internal/parser/registry.go`
 - [x] Discovery landed in `go/internal/collector/discovery/*`
 - [x] Content shaping landed in `go/internal/content/shape/materialize.go`
-- [x] Native parse runtime/dispatch landed for Python, Go, and raw-text in
-  `go/internal/parser/{runtime,engine,python_language,go_language,raw_text_engine}.go`
+- [x] Native parse runtime/dispatch landed for Python, Go, JavaScript,
+  TypeScript/TSX, and raw-text in
+  `go/internal/parser/{runtime,engine,python_language,go_language,javascript_language,raw_text_engine}.go`
 - [ ] Extend the native parser runtime to the remaining representative language
-  family adapters and long-tail language slices required for truthful matrix
-  parity
+  family adapters for infra/data plus the long-tail language slices required
+  for truthful matrix parity
 
 - [ ] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 

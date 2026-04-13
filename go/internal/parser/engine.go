@@ -74,10 +74,16 @@ func (e *Engine) PreScanPaths(paths []string) (map[string][]string, error) {
 
 		var names []string
 		switch definition.Language {
+		case "javascript":
+			names, err = e.preScanJavaScriptLike(resolvedPath, "javascript", "javascript")
 		case "python":
 			names, err = e.preScanPython(resolvedPath)
 		case "go":
 			names, err = e.preScanGo(resolvedPath)
+		case "tsx":
+			names, err = e.preScanJavaScriptLike(resolvedPath, "tsx", "tsx")
+		case "typescript":
+			names, err = e.preScanJavaScriptLike(resolvedPath, "typescript", "typescript")
 		default:
 			continue
 		}
@@ -102,10 +108,16 @@ func (e *Engine) parseDefinition(
 	options Options,
 ) (map[string]any, error) {
 	switch definition.Language {
+	case "javascript":
+		return e.parseJavaScriptLike(resolvedPath, "javascript", "javascript", isDependency, options)
 	case "python":
 		return e.parsePython(resolvedPath, isDependency, options)
 	case "go":
 		return e.parseGo(resolvedPath, isDependency, options)
+	case "tsx":
+		return e.parseJavaScriptLike(resolvedPath, "tsx", "tsx", isDependency, options)
+	case "typescript":
+		return e.parseJavaScriptLike(resolvedPath, "typescript", "typescript", isDependency, options)
 	case "raw_text":
 		return parseRawText(resolvedPath, isDependency), nil
 	default:
