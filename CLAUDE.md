@@ -33,23 +33,56 @@ Shared backing stores:
 
 ## Source Layout
 
+### Go Data Plane (write path — owns ingestion, projection, reduction, recovery)
+
+```text
+go/
+  cmd/
+    bootstrap-index/  # one-shot initial sync/index seed
+    collector-git/    # local proof: Git collection cycle
+    ingester/         # deployed: composite collector + projector
+    projector/        # local proof: fact-to-graph projection
+    reducer/          # deployed: intent-to-graph reduction
+    admin-status/     # local proof: admin/status surface
+  internal/
+    collector/        # Git source, discovery, snapshot, content shaping
+    content/          # content store writer and shape transforms
+    facts/            # fact envelope model and helpers
+    graph/            # canonical graph record writer (Neo4j)
+    parser/           # native Go parser platform (registry, languages, SCIP)
+    projector/        # projection stages, decisions, failure classification
+    queue/            # generic work queue abstractions
+    recovery/         # replay and refinalize domain model
+    reducer/          # domain handlers, shared projection, platform materialization
+    runtime/          # status server, admin mux, status requests
+    scope/            # ingestion scope and generation model
+    status/           # pipeline status reader with retry policies
+    storage/
+      neo4j/          # Neo4j executor and edge writer adapters
+      postgres/       # all Postgres stores (facts, queues, intents, decisions, recovery, status)
+    telemetry/        # OTEL metrics and tracing setup
+    truth/            # layered truth and asset identity model
+```
+
+### Python (read path — API, MCP, CLI, query; write modules pending deletion)
+
 ```text
 src/platform_context_graph/
   api/            # FastAPI routers
   app/            # service-role metadata and entrypoint contract
   cli/            # CLI wiring and config catalog
-  collectors/     # Git collector implementation
+  collectors/     # Git collector implementation (pending Chunk 2 migration)
   content/        # Postgres content store
-  facts/          # durable facts and fact queue
+  facts/          # durable facts and fact queue (Go owns — pending deletion)
   graph/          # canonical graph persistence and schema
-  indexing/       # coordinator and indexing orchestration
+  indexing/       # coordinator and indexing orchestration (pending Chunk 2)
   mcp/            # MCP server and transport
   observability/  # OTEL metrics, traces, and structured logs
   parsers/        # parser registry, languages, SCIP
   query/          # read/query layer
   relationships/  # relationship helpers and linking
-  resolution/     # fact projection and workload/platform materialization
-  runtime/        # long-running runtime loops
+  resolution/     # fact projection (Go owns — pending deletion)
+  runtime/        # long-running runtime loops (Go owns — pending deletion)
   tools/          # GraphBuilder facade + remaining tool-facing query/linking surfaces
 ```
 

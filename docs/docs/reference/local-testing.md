@@ -54,13 +54,20 @@ and the first native Go parser-platform slice now lives under
 `go/internal/content/shape`. The collector path now also owns the optional
 SCIP branch in Go when `SCIP_INDEXER=true` is enabled.
 
-Current bounded proof path:
+Current ownership (Go data plane):
 
 - `collector-git` owns cycle orchestration and durable fact commit
-- `projector` owns source-local graph and content materialization
-- `reducer` owns workload-identity follow-up drain
-- all three runtimes expose `/healthz`, `/readyz`, `/metrics`, and
-  `/admin/status`
+- `projector` owns source-local graph and content materialization with 4
+  stages (entities, files, relationships, workloads), decision recording,
+  and failure classification
+- `reducer` owns 4 active domain handlers (workload identity, cloud asset
+  resolution, deployment mapping, workload materialization), infrastructure
+  platform extraction/materialization, and shared projection intent
+  processing across 3 domains (platform_infra, repo_dependency,
+  workload_dependency)
+- `recovery` owns replay and refinalize operations via the ingester admin mux
+- `status` owns scan/reindex request lifecycle via the status request store
+- all runtimes expose `/healthz`, `/readyz`, `/metrics`, and `/admin/status`
 
 Focused Go package gate:
 
@@ -71,6 +78,15 @@ go test ./internal/parser ./internal/collector/discovery ./internal/content/shap
   ./internal/runtime ./internal/app ./internal/telemetry \
   ./internal/storage/neo4j ./internal/storage/postgres \
   ./internal/reducer ./cmd/reducer -count=1
+```
+
+Full Go validation gate (covers all write-plane ownership):
+
+```bash
+cd go
+go test ./internal/projector/... ./internal/reducer/... \
+  ./internal/runtime/... ./internal/storage/postgres/... \
+  ./internal/recovery/... -count=1
 ```
 
 Focused SCIP gate:

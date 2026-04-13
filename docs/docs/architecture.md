@@ -299,6 +299,28 @@ Target-state ownership after the rewrite:
 | API | HTTP and MCP serving, graph reads, content reads, admin surface |
 | Bootstrap Index | One-shot initial indexing and replay orchestration |
 
+### Current Implementation Status
+
+The Go data plane owns the full write path for the following domains:
+
+| Component | Go Status | Python Status |
+| --- | --- | --- |
+| Projector stages (entities, files, relationships, workloads) | Implemented | Pending deletion |
+| Projection decision recording | Implemented | Pending deletion |
+| Failure classification | Implemented | Pending deletion |
+| Reducer: workload identity | Implemented | Pending deletion |
+| Reducer: cloud asset resolution | Implemented | Pending deletion |
+| Reducer: deployment mapping / platform materialization | Implemented | Pending deletion |
+| Reducer: workload materialization | Implemented | Pending deletion |
+| Shared projection (platform_infra, repo_dependency, workload_dependency) | Implemented | Pending deletion |
+| Recovery (replay, refinalize) | Implemented | Deleted |
+| Status request lifecycle (scan, reindex) | Implemented | Pending deletion |
+| Native parser platform | Implemented (~85%) | Still active (collector bridge) |
+| Native collector selection and snapshot | Pending (Chunk 2) | Still active |
+
+The remaining migration work is native collector integration (Chunk 2) and
+deletion of the 85+ Python write-plane modules that Go now owns.
+
 The content store is owned by the projection path, not by the raw parser.
 Source-specific collectors emit facts; the resolution-engine turns those facts
 into canonical graph and content state.
