@@ -26,6 +26,8 @@ const (
 	DomainOwnership Domain = "ownership"
 	// DomainGovernance resolves governance and policy attribution.
 	DomainGovernance Domain = "governance"
+	// DomainWorkloadMaterialization materializes canonical workload graph nodes.
+	DomainWorkloadMaterialization Domain = "workload_materialization"
 )
 
 // IntentStatus captures the durable reducer intent lifecycle state.

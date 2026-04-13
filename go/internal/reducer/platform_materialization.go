@@ -34,9 +34,13 @@ type PlatformMaterializationWriter interface {
 }
 
 // PlatformMaterializationHandler reduces one platform materialization intent
-// into a bounded canonical write request.
+// into a bounded canonical write request. When FactLoader and
+// InfrastructureMaterializer are set, the handler also writes
+// PROVISIONS_PLATFORM edges to the canonical graph.
 type PlatformMaterializationHandler struct {
-	Writer PlatformMaterializationWriter
+	Writer                     PlatformMaterializationWriter
+	FactLoader                 FactLoader
+	InfrastructureMaterializer *InfrastructurePlatformMaterializer
 }
 
 // Handle executes the platform materialization reduction path.
@@ -64,6 +68,25 @@ func (h PlatformMaterializationHandler) Handle(
 		return Result{}, err
 	}
 
+	canonicalWrites := writeResult.CanonicalWrites
+
+	// When both FactLoader and InfrastructureMaterializer are provided,
+	// also write PROVISIONS_PLATFORM edges to the canonical graph.
+	if h.FactLoader != nil && h.InfrastructureMaterializer != nil {
+		facts, err := h.FactLoader.ListFacts(ctx, intent.ScopeID, intent.GenerationID)
+		if err != nil {
+			return Result{}, fmt.Errorf("load facts for infrastructure platform materialization: %w", err)
+		}
+		rows := ExtractInfrastructurePlatformRows(facts)
+		if len(rows) > 0 {
+			infraResult, err := h.InfrastructureMaterializer.Materialize(ctx, rows)
+			if err != nil {
+				return Result{}, fmt.Errorf("materialize infrastructure platforms: %w", err)
+			}
+			canonicalWrites += infraResult.PlatformEdgesWritten
+		}
+	}
+
 	evidenceSummary := strings.TrimSpace(writeResult.EvidenceSummary)
 	if evidenceSummary == "" {
 		evidenceSummary = fmt.Sprintf(
@@ -78,7 +101,7 @@ func (h PlatformMaterializationHandler) Handle(
 		Domain:          DomainDeploymentMapping,
 		Status:          ResultStatusSucceeded,
 		EvidenceSummary: evidenceSummary,
-		CanonicalWrites: writeResult.CanonicalWrites,
+		CanonicalWrites: canonicalWrites,
 	}, nil
 }
 

@@ -89,6 +89,28 @@ SET completed_at = $1
 WHERE intent_id = $2
 `
 
+const listPendingRepoRunIntentsSQL = `
+SELECT intent_id, projection_domain, partition_key, repository_id,
+       source_run_id, generation_id, payload, created_at, completed_at
+FROM shared_projection_intents
+WHERE repository_id = $1
+  AND source_run_id = $2
+  AND projection_domain = $3
+  AND completed_at IS NULL
+ORDER BY created_at ASC, intent_id ASC
+LIMIT $4
+`
+
+const countPendingGenerationIntentsSQL = `
+SELECT COUNT(*) AS pending_count
+FROM shared_projection_intents
+WHERE repository_id = $1
+  AND source_run_id = $2
+  AND generation_id = $3
+  AND projection_domain = $4
+  AND completed_at IS NULL
+`
+
 const claimPartitionLeaseSQL = `
 INSERT INTO shared_projection_partition_leases (
     projection_domain, partition_id, partition_count,
@@ -276,6 +298,49 @@ func (s *SharedIntentStore) ReleasePartitionLease(ctx context.Context, domain st
 	}
 
 	return nil
+}
+
+// ListPendingRepoRunIntents lists uncompleted intents for a specific repository,
+// source run, and projection domain.
+func (s *SharedIntentStore) ListPendingRepoRunIntents(ctx context.Context, repositoryID, sourceRunID, domain string, limit int) ([]reducer.SharedProjectionIntentRow, error) {
+	l := max(limit, 1)
+
+	sqlRows, err := s.db.QueryContext(ctx, listPendingRepoRunIntentsSQL,
+		repositoryID,
+		sourceRunID,
+		domain,
+		l,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer sqlRows.Close()
+
+	return scanSharedIntentRows(sqlRows)
+}
+
+// CountPendingGenerationIntents counts uncompleted intents for a specific
+// repository, source run, generation, and projection domain.
+func (s *SharedIntentStore) CountPendingGenerationIntents(ctx context.Context, repositoryID, sourceRunID, generationID, domain string) (int, error) {
+	rows, err := s.db.QueryContext(ctx, countPendingGenerationIntentsSQL,
+		repositoryID,
+		sourceRunID,
+		generationID,
+		domain,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("query pending generation intents: %w", err)
+	}
+	defer rows.Close()
+
+	var count int
+	if rows.Next() {
+		if err := rows.Scan(&count); err != nil {
+			return 0, fmt.Errorf("scan count: %w", err)
+		}
+	}
+
+	return count, rows.Err()
 }
 
 func scanSharedIntentRows(rows Rows) ([]reducer.SharedProjectionIntentRow, error) {

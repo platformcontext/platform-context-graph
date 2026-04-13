@@ -183,5 +183,20 @@ func DefaultDomainDefinitions() []DomainDefinition {
 				},
 			},
 		},
+		{
+			Domain:  DomainWorkloadMaterialization,
+			Summary: "materialize canonical workload graph from content store facts",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+			TruthContract: truth.Contract{
+				CanonicalKind: "workload_materialization",
+				SourceLayers: []truth.Layer{
+					truth.LayerSourceDeclaration,
+				},
+			},
+		},
 	}
 }

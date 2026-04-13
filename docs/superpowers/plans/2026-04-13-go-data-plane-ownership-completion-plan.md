@@ -219,7 +219,7 @@ Created `go/internal/reducer/platform_families.go` (8 families, 7 inference
 functions) and `go/internal/reducer/platforms.go` (CanonicalPlatformID,
 InferRuntimePlatformKind, InferInfrastructurePlatformDescriptor). 18 tests.
 
-- [ ] **Step 3: Write failing tests for platform materialization**
+- [x] **Step 3: Write failing tests for platform materialization**
 
 Cover:
 - runtime platform edge creation (RUNS_ON)
@@ -227,11 +227,26 @@ Cover:
 - platform node creation with canonical identity
 - idempotent materialization (re-running produces same graph state)
 
-- [ ] **Step 4: Implement platform materialization reducer domain**
+Created `go/internal/reducer/infrastructure_platform_materializer_test.go` (8
+tests: writes edges, multiple rows, idempotent, retract stale, empty, nil
+executor, propagates error) and
+`go/internal/reducer/infrastructure_platform_extractor_test.go` (6 tests: EKS
+facts, ECS cluster, skips non-terraform, empty, aggregates across files, no
+descriptor for S3-only).
+
+- [x] **Step 4: Implement platform materialization reducer domain**
 
 Port `materialize_runtime_platform()` and
 `materialize_infrastructure_platforms()` from `resolution/platforms.py`.
 Register as a reducer domain handler.
+
+Created `go/internal/reducer/infrastructure_platform_materializer.go`
+(InfrastructurePlatformMaterializer with Materialize and RetractStale) and
+`go/internal/reducer/infrastructure_platform_extractor.go` (3-pass
+ExtractInfrastructurePlatformRows: repo identity → terraform signals →
+platform descriptors). Enhanced PlatformMaterializationHandler with optional
+FactLoader and InfrastructureMaterializer fields. Wired into DefaultHandlers
+and reducer main.
 
 - [x] **Step 5: Run platform verification**
 
@@ -243,7 +258,7 @@ cd go && go test ./internal/reducer/... -count=1
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add go/internal/reducer/
@@ -340,7 +355,7 @@ ListPendingDomainIntents, MarkIntentsCompleted), and
 `schema/data-plane/postgres/008_shared_projection_intents.sql`. 11 tests
 across model and store layers.
 
-- [ ] **Step 5: Write failing tests for shared projection workers**
+- [x] **Step 5: Write failing tests for shared projection workers**
 
 Cover:
 - platform partition processing (infrastructure-platform edges)
@@ -348,10 +363,24 @@ Cover:
 - lease claiming and release
 - stale intent cleanup during processing
 
-- [ ] **Step 6: Implement shared projection domain handlers**
+Created `go/internal/reducer/shared_projection_worker_test.go` (12 tests:
+deduplication, triple supersede, empty, generation filtering, unknown repos,
+action filtering, batch selection with accepted/stale, full cycle, lease not
+acquired, empty batch, delete action filtering) and
+`go/internal/reducer/shared_projection_runner_test.go` (5 tests: config
+defaults, cancellation, pending processing, all-domain iteration, validation).
+
+- [x] **Step 6: Implement shared projection domain handlers**
 
 Port `resolution/shared_projection/runtime.py` platform and dependency
 partition processors. Register as reducer domain handlers.
+
+Created `go/internal/reducer/shared_projection_worker.go`
+(ProcessPartitionOnce, SelectPartitionBatch, LatestIntentsByRepoAndPartition,
+FilterAuthoritativeIntents, filterUpsertRows) and
+`go/internal/reducer/shared_projection_runner.go` (SharedProjectionRunner
+iterating platform_infra, repo_dependency, workload_dependency domains).
+Wired into reducer Service as concurrent goroutine and main.go.
 
 - [x] **Step 7: Run shared projection verification**
 
@@ -363,7 +392,7 @@ cd go && go test ./internal/reducer/... ./internal/storage/postgres/... -count=1
 
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add go/internal/reducer/shared_projection.go go/internal/reducer/shared_projection_test.go \
@@ -500,13 +529,16 @@ git commit -m "feat(projector): add Go-owned fact projection stages"
 - Create: `go/internal/storage/postgres/recovery_test.go`
 - Potentially modify other `*_test.go` files for build tag consistency
 
-- [ ] **Step 1: Add build tag to isolate recovery tests**
+- [x] **Step 1: Add build tag to isolate recovery tests**
 
 Add `//go:build !collector_integration` or similar tags so recovery and
 resolution store tests can run independently when the collector package has
 compilation errors from in-progress work.
 
-- [ ] **Step 2: Verify isolated test execution**
+Landed in the Phase C operational surface wave. Storage postgres tests run
+independently without collector package dependencies.
+
+- [x] **Step 2: Verify isolated test execution**
 
 Run:
 
@@ -535,7 +567,7 @@ git commit -m "test(storage): add build tag isolation for recovery tests"
 - Create: `go/internal/storage/postgres/status_requests_test.go`
 - Modify: `go/internal/runtime/status_server.go`
 
-- [ ] **Step 1: Write failing tests for status request lifecycle**
+- [x] **Step 1: Write failing tests for status request lifecycle**
 
 Cover:
 - scan request creation and claim
@@ -543,19 +575,31 @@ Cover:
 - request completion and status reporting
 - repository coverage metrics retrieval
 
-- [ ] **Step 2: Implement status request domain model**
+Created `go/internal/runtime/status_requests_test.go` and
+`go/internal/storage/postgres/status_requests_test.go` covering full
+scan/reindex lifecycle transitions.
+
+- [x] **Step 2: Implement status request domain model**
 
 Port the request lifecycle from `runtime/status_store_runtime.py`.
 
-- [ ] **Step 3: Implement Postgres status request store**
+Created `go/internal/runtime/status_requests.go` with RequestState enum,
+ScanRequest/ReindexRequest types, StatusRequestStore interface, and
+StatusRequestHandler with lifecycle methods.
+
+- [x] **Step 3: Implement Postgres status request store**
 
 Port the status request persistence from `runtime/status_store_db.py`.
 
-- [ ] **Step 4: Wire into status server**
+Created `go/internal/storage/postgres/status_requests.go` with full
+scan/reindex lifecycle queries (request, claim, complete, get state) backed
+by `runtime_ingester_control` table.
+
+- [x] **Step 4: Wire into status server**
 
 Add request lifecycle routes to the admin mux via the status server.
 
-- [ ] **Step 5: Run status verification**
+- [x] **Step 5: Run status verification**
 
 Run:
 
@@ -587,7 +631,7 @@ git commit -m "feat(runtime): add Go-owned status request lifecycle"
 **Files:**
 - Modify: `tests/integration/deployment/test_python_runtime_ownership.py`
 
-- [ ] **Step 1: Add resolution ownership gate tests**
+- [x] **Step 1: Add resolution ownership gate tests**
 
 Add test classes:
 - `TestPythonResolutionOrchestrationRemoved`: verify
@@ -600,7 +644,11 @@ Add test classes:
 - `TestPythonPlatformMaterializationRemoved`: verify
   `resolution/platforms.py` and `platform_families.py` are deleted
 
-- [ ] **Step 2: Add facts and status store gate tests**
+Created `TestPythonResolutionOwnershipRemoved` with parametrized tests
+covering 22 resolution files across orchestration, projection, shared
+projection, platforms, and maintenance.
+
+- [x] **Step 2: Add facts and status store gate tests**
 
 Add test classes:
 - `TestPythonFactsWorkQueueRemoved`: verify
@@ -608,7 +656,11 @@ Add test classes:
 - `TestPythonStatusStoreRemoved`: verify `runtime/status_store_runtime.py` and
   `runtime/status_store_db.py` are deleted
 
-- [ ] **Step 3: Run gate tests (expect failures)**
+Created `TestPythonFactsOwnershipRemoved` (17 facts files) and
+`TestPythonStatusStoreOwnershipRemoved` (4 status-store files) with
+parametrized gate tests.
+
+- [x] **Step 3: Run gate tests (expect failures)**
 
 Run:
 
@@ -634,7 +686,7 @@ git commit -m "test(cutover): extend ownership gate tests for resolution and fac
 - Modify: `scripts/verify_collector_git_runtime_compose.sh` (if needed)
 - Create: `tests/integration/deployment/test_go_write_plane_parity.py`
 
-- [ ] **Step 1: Write Go write-plane parity integration tests**
+- [x] **Step 1: Write Go write-plane parity integration tests**
 
 Cover:
 - Go ingester -> projector -> reducer -> graph write flow
@@ -642,12 +694,14 @@ Cover:
 - refinalize re-enqueues active scope generations
 - platform materialization produces expected graph edges
 
-- [ ] **Step 2: Update compose scripts if needed**
+Created `tests/integration/deployment/test_go_write_plane_parity.py`.
+
+- [x] **Step 2: Update compose scripts if needed**
 
 Ensure compose verification scripts exercise the Go write-plane services and
 report failures clearly.
 
-- [ ] **Step 3: Run integration verification**
+- [x] **Step 3: Run integration verification**
 
 Run:
 
@@ -674,10 +728,10 @@ git commit -m "test(parity): add Go write-plane integration tests"
 | Phase | Chunks | Effort | Blocked on |
 | --- | --- | --- | --- |
 | A | ~~A1~~, ~~A2~~, ~~A3~~ | **Done** | — |
-| B | B1, B2, B3, B4, B5 | Large | Nothing |
-| C | C1, C2, C3, C4 | Medium | Phase B for gate test coverage |
+| B | ~~B1~~, ~~B2~~, ~~B3~~, ~~B4~~, ~~B5~~ | **Done** | — |
+| C | ~~C1~~, ~~C2~~, ~~C3~~, ~~C4~~ | **Done** | — |
 
-Phases A and B can run in parallel. Phase C depends on Phase B.
+All phases complete. Validation gate passes.
 
 The indexing coordinator (`src/platform_context_graph/indexing/`, 23 files)
 remains out of scope for this plan because it is tightly coupled to the

@@ -8,7 +8,12 @@ type DefaultHandlers struct {
 	PlatformMaterializationWriter PlatformMaterializationWriter
 
 	// Neo4j-backed adapters for canonical graph writes.
-	WorkloadMaterializer *WorkloadMaterializer
+	WorkloadMaterializer               *WorkloadMaterializer
+	InfrastructurePlatformMaterializer *InfrastructurePlatformMaterializer
+
+	// FactLoader loads fact envelopes for workload and infrastructure
+	// platform materialization.
+	FactLoader FactLoader
 }
 
 // NewDefaultRegistry constructs the canonical reducer catalog for the domains
@@ -47,7 +52,16 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 		case DomainCloudAssetResolution:
 			def.Handler = CloudAssetResolutionHandler{Writer: handlers.CloudAssetResolutionWriter}
 		case DomainDeploymentMapping:
-			def.Handler = PlatformMaterializationHandler{Writer: handlers.PlatformMaterializationWriter}
+			def.Handler = PlatformMaterializationHandler{
+				Writer:                     handlers.PlatformMaterializationWriter,
+				FactLoader:                 handlers.FactLoader,
+				InfrastructureMaterializer: handlers.InfrastructurePlatformMaterializer,
+			}
+		case DomainWorkloadMaterialization:
+			def.Handler = WorkloadMaterializationHandler{
+				FactLoader:   handlers.FactLoader,
+				Materializer: handlers.WorkloadMaterializer,
+			}
 		default:
 			continue
 		}

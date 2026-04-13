@@ -80,10 +80,12 @@ func buildReducerService(
 	getenv func(string) string,
 ) (reducer.Service, error) {
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
-		WorkloadIdentityWriter:        reducer.PostgresWorkloadIdentityWriter{DB: database},
-		CloudAssetResolutionWriter:    reducer.PostgresCloudAssetResolutionWriter{DB: database},
-		PlatformMaterializationWriter: reducer.PostgresPlatformMaterializationWriter{DB: database},
-		WorkloadMaterializer:          reducer.NewWorkloadMaterializer(cypherExec),
+		WorkloadIdentityWriter:             reducer.PostgresWorkloadIdentityWriter{DB: database},
+		CloudAssetResolutionWriter:         reducer.PostgresCloudAssetResolutionWriter{DB: database},
+		PlatformMaterializationWriter:      reducer.PostgresPlatformMaterializationWriter{DB: database},
+		WorkloadMaterializer:               reducer.NewWorkloadMaterializer(cypherExec),
+		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
+		FactLoader:                         postgres.NewFactStore(database),
 	})
 	if err != nil {
 		return reducer.Service{}, err

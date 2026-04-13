@@ -199,6 +199,7 @@ func TestNewDefaultRegistryRegistersImplementedDomainsOnly(t *testing.T) {
 		DomainCloudAssetResolution,
 		DomainDeploymentMapping,
 		DomainWorkloadIdentity,
+		DomainWorkloadMaterialization,
 	}; !slices.Equal(got, want) {
 		t.Fatalf("SortedDomains() = %v, want %v", got, want)
 	}

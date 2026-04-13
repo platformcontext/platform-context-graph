@@ -240,6 +240,215 @@ func TestSharedIntentSchemaSQL(t *testing.T) {
 	}
 }
 
+func TestSharedIntentStoreListPendingRepoRunIntents(t *testing.T) {
+	t.Parallel()
+
+	db := newSharedIntentTestDB()
+	store := NewSharedIntentStore(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	completed := now.Add(-time.Hour)
+
+	// Create multiple intents with different states
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:         "si-pending-1",
+			ProjectionDomain: reducer.DomainPlatformInfra,
+			PartitionKey:     "pk-1",
+			RepositoryID:     "repository:r_test",
+			SourceRunID:      "run-001",
+			GenerationID:     "gen-001",
+			Payload:          map[string]any{"fact_count": 5},
+			CreatedAt:        now,
+			CompletedAt:      nil,
+		},
+		{
+			IntentID:         "si-pending-2",
+			ProjectionDomain: reducer.DomainPlatformInfra,
+			PartitionKey:     "pk-2",
+			RepositoryID:     "repository:r_test",
+			SourceRunID:      "run-001",
+			GenerationID:     "gen-001",
+			Payload:          map[string]any{"fact_count": 3},
+			CreatedAt:        now.Add(time.Second),
+			CompletedAt:      nil,
+		},
+		{
+			IntentID:         "si-completed",
+			ProjectionDomain: reducer.DomainPlatformInfra,
+			PartitionKey:     "pk-3",
+			RepositoryID:     "repository:r_test",
+			SourceRunID:      "run-001",
+			GenerationID:     "gen-001",
+			Payload:          map[string]any{"fact_count": 2},
+			CreatedAt:        now,
+			CompletedAt:      &completed,
+		},
+		{
+			IntentID:         "si-different-run",
+			ProjectionDomain: reducer.DomainPlatformInfra,
+			PartitionKey:     "pk-4",
+			RepositoryID:     "repository:r_test",
+			SourceRunID:      "run-002",
+			GenerationID:     "gen-002",
+			Payload:          map[string]any{"fact_count": 1},
+			CreatedAt:        now,
+			CompletedAt:      nil,
+		},
+		{
+			IntentID:         "si-different-domain",
+			ProjectionDomain: "dependency-map",
+			PartitionKey:     "pk-5",
+			RepositoryID:     "repository:r_test",
+			SourceRunID:      "run-001",
+			GenerationID:     "gen-001",
+			Payload:          map[string]any{"fact_count": 1},
+			CreatedAt:        now,
+			CompletedAt:      nil,
+		},
+	}
+
+	if err := store.UpsertIntents(ctx, rows); err != nil {
+		t.Fatalf("UpsertIntents: %v", err)
+	}
+
+	// Test 1: Returns matching pending intents
+	got, err := store.ListPendingRepoRunIntents(ctx, "repository:r_test", "run-001", reducer.DomainPlatformInfra, 100)
+	if err != nil {
+		t.Fatalf("ListPendingRepoRunIntents: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2 (only pending intents for repo/run/domain)", len(got))
+	}
+	foundIDs := map[string]bool{}
+	for _, intent := range got {
+		foundIDs[intent.IntentID] = true
+	}
+	if !foundIDs["si-pending-1"] || !foundIDs["si-pending-2"] {
+		t.Errorf("expected to find si-pending-1 and si-pending-2, got %v", foundIDs)
+	}
+
+	// Test 2: Returns empty for non-matching repo/run
+	got, err = store.ListPendingRepoRunIntents(ctx, "repository:r_different", "run-001", reducer.DomainPlatformInfra, 100)
+	if err != nil {
+		t.Fatalf("ListPendingRepoRunIntents (non-matching): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected 0 results for non-matching repo, got %d", len(got))
+	}
+
+	// Test 3: Returns empty for non-matching domain
+	got, err = store.ListPendingRepoRunIntents(ctx, "repository:r_test", "run-001", "non-existent-domain", 100)
+	if err != nil {
+		t.Fatalf("ListPendingRepoRunIntents (non-matching domain): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected 0 results for non-matching domain, got %d", len(got))
+	}
+}
+
+func TestSharedIntentStoreCountPendingGenerationIntents(t *testing.T) {
+	t.Parallel()
+
+	db := newSharedIntentTestDB()
+	store := NewSharedIntentStore(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	completed := now.Add(-time.Hour)
+
+	// Create multiple intents with different states
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:         "si-gen-pending-1",
+			ProjectionDomain: reducer.DomainPlatformInfra,
+			PartitionKey:     "pk-1",
+			RepositoryID:     "repository:r_count",
+			SourceRunID:      "run-001",
+			GenerationID:     "gen-001",
+			Payload:          map[string]any{},
+			CreatedAt:        now,
+			CompletedAt:      nil,
+		},
+		{
+			IntentID:         "si-gen-pending-2",
+			ProjectionDomain: reducer.DomainPlatformInfra,
+			PartitionKey:     "pk-2",
+			RepositoryID:     "repository:r_count",
+			SourceRunID:      "run-001",
+			GenerationID:     "gen-001",
+			Payload:          map[string]any{},
+			CreatedAt:        now,
+			CompletedAt:      nil,
+		},
+		{
+			IntentID:         "si-gen-pending-3",
+			ProjectionDomain: reducer.DomainPlatformInfra,
+			PartitionKey:     "pk-3",
+			RepositoryID:     "repository:r_count",
+			SourceRunID:      "run-001",
+			GenerationID:     "gen-001",
+			Payload:          map[string]any{},
+			CreatedAt:        now,
+			CompletedAt:      nil,
+		},
+		{
+			IntentID:         "si-gen-completed",
+			ProjectionDomain: reducer.DomainPlatformInfra,
+			PartitionKey:     "pk-4",
+			RepositoryID:     "repository:r_count",
+			SourceRunID:      "run-001",
+			GenerationID:     "gen-001",
+			Payload:          map[string]any{},
+			CreatedAt:        now,
+			CompletedAt:      &completed,
+		},
+		{
+			IntentID:         "si-gen-different-gen",
+			ProjectionDomain: reducer.DomainPlatformInfra,
+			PartitionKey:     "pk-5",
+			RepositoryID:     "repository:r_count",
+			SourceRunID:      "run-001",
+			GenerationID:     "gen-002",
+			Payload:          map[string]any{},
+			CreatedAt:        now,
+			CompletedAt:      nil,
+		},
+	}
+
+	if err := store.UpsertIntents(ctx, rows); err != nil {
+		t.Fatalf("UpsertIntents: %v", err)
+	}
+
+	// Test 1: Returns correct count when pending intents exist
+	count, err := store.CountPendingGenerationIntents(ctx, "repository:r_count", "run-001", "gen-001", reducer.DomainPlatformInfra)
+	if err != nil {
+		t.Fatalf("CountPendingGenerationIntents: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("count = %d, want 3 (pending intents for gen-001)", count)
+	}
+
+	// Test 2: Returns 0 when no pending intents
+	count, err = store.CountPendingGenerationIntents(ctx, "repository:r_different", "run-001", "gen-001", reducer.DomainPlatformInfra)
+	if err != nil {
+		t.Fatalf("CountPendingGenerationIntents (non-matching): %v", err)
+	}
+	if count != 0 {
+		t.Errorf("count = %d, want 0 for non-matching repo", count)
+	}
+
+	// Test 3: Returns 0 for non-matching generation
+	count, err = store.CountPendingGenerationIntents(ctx, "repository:r_count", "run-001", "gen-999", reducer.DomainPlatformInfra)
+	if err != nil {
+		t.Fatalf("CountPendingGenerationIntents (non-matching gen): %v", err)
+	}
+	if count != 0 {
+		t.Errorf("count = %d, want 0 for non-matching generation", count)
+	}
+}
+
 // -- test helpers --
 
 // sharedIntentTestDB is an in-memory mock of ExecQueryer that stores shared
@@ -300,6 +509,67 @@ func (db *sharedIntentTestDB) ExecContext(_ context.Context, query string, args 
 
 func (db *sharedIntentTestDB) QueryContext(_ context.Context, query string, args ...any) (Rows, error) {
 	switch {
+	case strings.Contains(query, "SELECT COUNT(*)"):
+		// CountPendingGenerationIntents
+		repoID := args[0].(string)
+		runID := args[1].(string)
+		genID := args[2].(string)
+		domain := args[3].(string)
+
+		count := 0
+		for _, intent := range db.intents {
+			if intent.RepositoryID == repoID &&
+				intent.SourceRunID == runID &&
+				intent.GenerationID == genID &&
+				intent.ProjectionDomain == domain &&
+				intent.CompletedAt == nil {
+				count++
+			}
+		}
+		return &countResultRows{count: count}, nil
+
+	case strings.Contains(query, "projection_domain = $3") && strings.Contains(query, "completed_at IS NULL"):
+		// ListPendingRepoRunIntents
+		repoID := args[0].(string)
+		runID := args[1].(string)
+		domain := args[2].(string)
+		limit := args[3].(int)
+		if limit < 1 {
+			limit = 1
+		}
+
+		var rows [][]any
+		for _, intent := range db.intents {
+			if intent.RepositoryID != repoID {
+				continue
+			}
+			if intent.SourceRunID != runID {
+				continue
+			}
+			if intent.ProjectionDomain != domain {
+				continue
+			}
+			if intent.CompletedAt != nil {
+				continue
+			}
+			payloadBytes, _ := json.Marshal(intent.Payload)
+			rows = append(rows, []any{
+				intent.IntentID,
+				intent.ProjectionDomain,
+				intent.PartitionKey,
+				intent.RepositoryID,
+				intent.SourceRunID,
+				intent.GenerationID,
+				payloadBytes,
+				intent.CreatedAt,
+				nil,
+			})
+			if len(rows) >= limit {
+				break
+			}
+		}
+		return newSharedIntentRows(rows), nil
+
 	case strings.Contains(query, "completed_at IS NULL"):
 		// ListPendingDomainIntents
 		domain := args[0].(string)
@@ -440,6 +710,34 @@ func (r *sharedIntentRows) Scan(dest ...any) error {
 
 func (r *sharedIntentRows) Err() error  { return nil }
 func (r *sharedIntentRows) Close() error { return nil }
+
+// countResultRows implements the Rows interface for COUNT queries.
+type countResultRows struct {
+	count   int
+	scanned bool
+}
+
+func (r *countResultRows) Next() bool {
+	if r.scanned {
+		return false
+	}
+	r.scanned = true
+	return true
+}
+
+func (r *countResultRows) Scan(dest ...any) error {
+	if len(dest) != 1 {
+		return fmt.Errorf("scan: expected 1 dest for COUNT, got %d", len(dest))
+	}
+	if intDest, ok := dest[0].(*int); ok {
+		*intDest = r.count
+		return nil
+	}
+	return fmt.Errorf("unsupported scan dest type %T for COUNT", dest[0])
+}
+
+func (r *countResultRows) Err() error  { return nil }
+func (r *countResultRows) Close() error { return nil }
 
 // -- partition lease tests --
 

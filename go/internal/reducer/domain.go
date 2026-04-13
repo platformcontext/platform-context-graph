@@ -6,12 +6,13 @@ import (
 )
 
 var knownDomains = map[Domain]struct{}{
-	DomainWorkloadIdentity:     {},
-	DomainCloudAssetResolution: {},
-	DomainDeploymentMapping:    {},
-	DomainDataLineage:          {},
-	DomainOwnership:            {},
-	DomainGovernance:           {},
+	DomainWorkloadIdentity:        {},
+	DomainCloudAssetResolution:    {},
+	DomainDeploymentMapping:       {},
+	DomainDataLineage:             {},
+	DomainOwnership:               {},
+	DomainGovernance:              {},
+	DomainWorkloadMaterialization: {},
 }
 
 // ParseDomain converts one raw string into a known reducer domain.

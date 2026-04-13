@@ -117,8 +117,8 @@ func TestDefaultDomainDefinitionsMatchImplementedRuntimeCatalog(t *testing.T) {
 	t.Parallel()
 
 	got := DefaultDomainDefinitions()
-	if len(got) != 3 {
-		t.Fatalf("len(DefaultDomainDefinitions()) = %d, want 3", len(got))
+	if len(got) != 4 {
+		t.Fatalf("len(DefaultDomainDefinitions()) = %d, want 4", len(got))
 	}
 	if got[0].Domain != DomainWorkloadIdentity {
 		t.Fatalf("DefaultDomainDefinitions()[0].Domain = %q, want %q", got[0].Domain, DomainWorkloadIdentity)
@@ -140,5 +140,14 @@ func TestDefaultDomainDefinitionsMatchImplementedRuntimeCatalog(t *testing.T) {
 	}
 	if !got[1].TruthContract.Supports(truth.LayerObservedResource) {
 		t.Fatal("DefaultDomainDefinitions()[1].TruthContract.Supports(observed_resource) = false, want true")
+	}
+	if got[3].Domain != DomainWorkloadMaterialization {
+		t.Fatalf("DefaultDomainDefinitions()[3].Domain = %q, want %q", got[3].Domain, DomainWorkloadMaterialization)
+	}
+	if got[3].TruthContract.CanonicalKind != "workload_materialization" {
+		t.Fatalf("DefaultDomainDefinitions()[3].TruthContract.CanonicalKind = %q, want %q", got[3].TruthContract.CanonicalKind, "workload_materialization")
+	}
+	if !got[3].TruthContract.Supports(truth.LayerSourceDeclaration) {
+		t.Fatal("DefaultDomainDefinitions()[3].TruthContract.Supports(source_declaration) = false, want true")
 	}
 }
