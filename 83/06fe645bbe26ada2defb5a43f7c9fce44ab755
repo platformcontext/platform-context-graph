@@ -1,0 +1,35 @@
+schema/data-plane/postgres/007_projection_decisions.sql
+  1ca5ee6ce936a402 1-28
+go/internal/projector/decisions.go
+  1ca5ee6ce936a402 1-133
+docs/superpowers/plans/2026-04-13-go-data-plane-ownership-completion-plan.md
+  1ca5ee6ce936a402 254,262,267,271,275,285
+go/internal/projector/decisions_test.go
+  1ca5ee6ce936a402 1-270
+go/internal/storage/postgres/decisions.go
+  1ca5ee6ce936a402 1-283
+go/internal/storage/postgres/schema_test.go
+  1ca5ee6ce936a402 16-17,27
+go/internal/storage/postgres/decisions_test.go
+  1ca5ee6ce936a402 1-469
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "8306fe645bbe26ada2defb5a43f7c9fce44ab755",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 6387,
+      "total_deletions": 4714,
+      "accepted_lines": 9017,
+      "overriden_lines": 0
+    }
+  }
+}
