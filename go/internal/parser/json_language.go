@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -41,12 +40,10 @@ func (e *Engine) parseJSON(
 		return payload, nil
 	}
 
-	keys := make([]string, 0, len(object))
-	for key := range object {
-		keys = append(keys, key)
+	topLevelEntries, err := unmarshalOrderedJSONObject([]byte(normalized))
+	if err == nil {
+		payload["json_metadata"] = map[string]any{"top_level_keys": orderedJSONKeys(topLevelEntries)}
 	}
-	sort.Strings(keys)
-	payload["json_metadata"] = map[string]any{"top_level_keys": keys}
 
 	languageName := "json"
 	if isCloudFormationTemplate(object) {
@@ -63,24 +60,29 @@ func (e *Engine) parseJSON(
 	}
 
 	filename := strings.ToLower(filepath.Base(path))
+	if applyJSONReplayDocument(payload, object, filename) {
+		if options.IndexSource {
+			payload["source"] = string(source)
+		}
+		return payload, nil
+	}
+
 	if !shouldSkipJSONEntities(filename) {
 		switch {
 		case filename == "package.json":
-			payload["variables"] = dependencyVariables(object, languageName, "dependencies", "npm")
-			devVariables := dependencyVariables(object, languageName, "devDependencies", "npm")
+			payload["variables"] = dependencyVariables(object, languageName, "dependencies", "npm", topLevelEntries)
+			devVariables := dependencyVariables(object, languageName, "devDependencies", "npm", topLevelEntries)
 			payload["variables"] = append(payload["variables"].([]map[string]any), devVariables...)
-			payload["functions"] = jsonScriptFunctions(object, languageName)
+			payload["functions"] = jsonScriptFunctions(object, languageName, topLevelEntries)
 		case filename == "composer.json":
-			payload["variables"] = dependencyVariables(object, languageName, "require", "composer")
-			devVariables := dependencyVariables(object, languageName, "require-dev", "composer")
+			payload["variables"] = dependencyVariables(object, languageName, "require", "composer", topLevelEntries)
+			devVariables := dependencyVariables(object, languageName, "require-dev", "composer", topLevelEntries)
 			payload["variables"] = append(payload["variables"].([]map[string]any), devVariables...)
 		case isTypeScriptConfigFilename(filename):
-			payload["variables"] = tsconfigVariables(object, languageName)
+			payload["variables"] = tsconfigVariables(object, languageName, topLevelEntries)
 		}
 	}
 
-	sortNamedBucket(payload, "functions")
-	sortNamedBucket(payload, "variables")
 	if options.IndexSource {
 		payload["source"] = string(source)
 	}
@@ -158,6 +160,7 @@ func dependencyVariables(
 	lang string,
 	section string,
 	packageManager string,
+	topLevelEntries []orderedJSONEntry,
 ) []map[string]any {
 	raw, ok := document[section].(map[string]any)
 	if !ok {
@@ -166,7 +169,7 @@ func dependencyVariables(
 
 	rows := make([]map[string]any, 0, len(raw))
 	lineNumber := 1
-	for _, name := range sortedMapKeys(raw) {
+	for _, name := range orderedJSONSectionKeys(topLevelEntries, section, raw) {
 		rows = append(rows, map[string]any{
 			"name":            name,
 			"line_number":     lineNumber,
@@ -181,7 +184,7 @@ func dependencyVariables(
 	return rows
 }
 
-func jsonScriptFunctions(document map[string]any, lang string) []map[string]any {
+func jsonScriptFunctions(document map[string]any, lang string, topLevelEntries []orderedJSONEntry) []map[string]any {
 	raw, ok := document["scripts"].(map[string]any)
 	if !ok {
 		return []map[string]any{}
@@ -189,7 +192,7 @@ func jsonScriptFunctions(document map[string]any, lang string) []map[string]any 
 
 	rows := make([]map[string]any, 0, len(raw))
 	lineNumber := 1
-	for _, name := range sortedMapKeys(raw) {
+	for _, name := range orderedJSONSectionKeys(topLevelEntries, "scripts", raw) {
 		rows = append(rows, map[string]any{
 			"name":                  name,
 			"line_number":           lineNumber,
@@ -207,7 +210,7 @@ func jsonScriptFunctions(document map[string]any, lang string) []map[string]any 
 	return rows
 }
 
-func tsconfigVariables(document map[string]any, lang string) []map[string]any {
+func tsconfigVariables(document map[string]any, lang string, topLevelEntries []orderedJSONEntry) []map[string]any {
 	rows := make([]map[string]any, 0)
 	lineNumber := 1
 
@@ -253,7 +256,11 @@ func tsconfigVariables(document map[string]any, lang string) []map[string]any {
 	if !ok {
 		return rows
 	}
-	for _, alias := range sortedMapKeys(paths) {
+	compilerOptionsEntries, ok, err := orderedJSONNestedObject(topLevelEntries, "compilerOptions")
+	if err != nil || !ok {
+		compilerOptionsEntries = nil
+	}
+	for _, alias := range orderedJSONSectionKeys(compilerOptionsEntries, "paths", paths) {
 		rows = append(rows, map[string]any{
 			"name":        "path:" + alias,
 			"line_number": lineNumber,
@@ -265,6 +272,16 @@ func tsconfigVariables(document map[string]any, lang string) []map[string]any {
 		lineNumber++
 	}
 	return rows
+}
+
+func orderedJSONSectionKeys(entries []orderedJSONEntry, key string, fallback map[string]any) []string {
+	if len(entries) > 0 {
+		nested, ok, err := orderedJSONNestedObject(entries, key)
+		if err == nil && ok {
+			return orderedJSONKeys(nested)
+		}
+	}
+	return sortedMapKeys(fallback)
 }
 
 func normalizeJSONArrayValue(value any) string {

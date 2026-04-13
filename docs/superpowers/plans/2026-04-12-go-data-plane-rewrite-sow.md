@@ -84,7 +84,10 @@ The rewrite is successful only when the system can support separate collector se
 
 Every material architecture change must also update a repo-hosted end-to-end traversal map that shows how a bounded work unit crosses collector, projector, reducer, and canonical write stages.
 
-Collectors may still use a transitional bridge during cutover, but the bridge is not a long-term owner. The docs must say when the bridge can be removed.
+Collectors must converge on Go ownership during cutover. If a same-branch
+adapter is unavoidable for sequencing, it must stay out of the normal runtime
+path, carry explicit removal conditions, and never become a maintained dual
+path.
 
 ---
 
@@ -295,13 +298,14 @@ This means:
 
 ### Deliverables
 
-- a clean transition path away from the current Python-heavy finalize chain
-- migration notes for anything still temporarily bridged
+- a direct cutover path that deletes the current Python-heavy finalize chain
+- migration notes only for same-branch removal seams that still exist
 - tests proving that new behavior uses the new contracts rather than expanding the old procedural chain
 
 ### Exit criteria
 
-- the remaining legacy path is narrow, documented, and intentionally transitional
+- the remaining legacy path, if any, is a same-branch deletion seam rather than
+  an accepted long-lived runtime path
 - new work no longer requires guessing which finalize stage owns a behavior
 - the codebase has one obvious path for new collector and reducer work
 
@@ -315,9 +319,10 @@ This milestone is complete when all of the following remain green together:
   `GraphBuilder` side-channel metrics to populate run-state details
 - admin re-finalization uses the same explicit post-commit writer contract and
   surfaces structured timing data from the returned result
-- the remaining Python finalization path is documented as a compatibility
-  bridge, not a landing zone for new collector or reducer behavior
-- the bridge has explicit removal conditions in repo-hosted documentation
+- any remaining Python finalization path is documented as a same-branch removal
+  seam only, not a compatibility landing zone for new collector or reducer
+  behavior
+- the removal conditions are explicit, repo-hosted, and required before merge
 
 ---
 
@@ -457,7 +462,8 @@ Rules:
 - no hidden parallel path that keeps the old procedural model alive as the default
 - no direct commits to `main`
 - no PRs that mix rewrite substrate work with unrelated cleanup
-- no code changes that are not tied to a milestone, proof step, or necessary bridge
+- no code changes that are not tied to a milestone, proof step, or necessary
+  same-branch removal seam
 If a change is not part of the rewrite contract, it waits. The branch must remain understandable after long pauses, and workers must be able to resume without re-litigating scope.
 
 ---

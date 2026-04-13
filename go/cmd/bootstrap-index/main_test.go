@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
+	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
 func TestRunAppliesSchemaAndDrainsCollectorAndProjector(t *testing.T) {
@@ -135,6 +137,30 @@ func TestRunReturnsCollectorError(t *testing.T) {
 	}
 }
 
+func TestBuildBootstrapCollectorUsesNativeSnapshotter(t *testing.T) {
+	t.Parallel()
+
+	deps, err := buildBootstrapCollector(
+		context.Background(),
+		&fakeBootstrapSQLDB{},
+		func(string) string { return "" },
+	)
+	if err != nil {
+		t.Fatalf("buildBootstrapCollector() error = %v, want nil", err)
+	}
+
+	source, ok := deps.source.(*collector.GitSource)
+	if !ok {
+		t.Fatalf("buildBootstrapCollector() source type = %T, want *collector.GitSource", deps.source)
+	}
+	if _, ok := source.Selector.(collector.NativeRepositorySelector); !ok {
+		t.Fatalf("buildBootstrapCollector() selector type = %T, want collector.NativeRepositorySelector", source.Selector)
+	}
+	if _, ok := source.Snapshotter.(collector.NativeRepositorySnapshotter); !ok {
+		t.Fatalf("buildBootstrapCollector() snapshotter type = %T, want collector.NativeRepositorySnapshotter", source.Snapshotter)
+	}
+}
+
 // --- fakes ---
 
 type fakeBootstrapDB struct {
@@ -144,6 +170,18 @@ type fakeBootstrapDB struct {
 func (f *fakeBootstrapDB) Close() error {
 	f.closed = true
 	return nil
+}
+
+type fakeBootstrapSQLDB struct {
+	fakeBootstrapDB
+}
+
+func (f *fakeBootstrapSQLDB) ExecContext(context.Context, string, ...any) (sql.Result, error) {
+	return nil, nil
+}
+
+func (f *fakeBootstrapSQLDB) QueryContext(context.Context, string, ...any) (postgres.Rows, error) {
+	return nil, nil
 }
 
 type fakeSource struct {

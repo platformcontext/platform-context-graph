@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -65,8 +66,8 @@ func TestNewWiresObservabilityContract(t *testing.T) {
 		t.Fatalf("Observability.SpanNames[3] = %q, want %q", got.Observability.SpanNames[3], telemetry.SpanProjectorRun)
 	}
 
-	if got.Observability.LogKeys[len(got.Observability.LogKeys)-1] != telemetry.LogKeyFailureClass {
-		t.Fatalf("Observability.LogKeys[last] = %q, want %q", got.Observability.LogKeys[len(got.Observability.LogKeys)-1], telemetry.LogKeyFailureClass)
+	if !slices.Equal(got.Observability.LogKeys, telemetry.LogKeys()) {
+		t.Fatalf("Observability.LogKeys = %v, want %v", got.Observability.LogKeys, telemetry.LogKeys())
 	}
 
 	got.Observability.MetricDimensions[0] = "mutated"

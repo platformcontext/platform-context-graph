@@ -40,6 +40,7 @@ type RepositorySnapshot struct {
 	RepoPath        string                  `json:"repo_path"`
 	RemoteURL       string                  `json:"remote_url"`
 	FileCount       int                     `json:"file_count"`
+	ImportsMap      map[string][]string     `json:"imports_map"`
 	FileData        []map[string]any        `json:"file_data"`
 	ContentFiles    []ContentFileSnapshot   `json:"content_files"`
 	ContentEntities []ContentEntitySnapshot `json:"content_entities"`

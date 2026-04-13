@@ -45,7 +45,7 @@ Read these documents in order before implementation work begins:
 | Architecture and traversal references | Canonical end-to-end flow, ownership boundaries, and repair-path limits |
 | Relationship-mapping observability appendix | The traversal appendix and observability examples for the relationship map |
 | Write-plane conversion cutover | Chunk-by-chunk Python-to-Go deployment surface cutover |
-| Ownership completion plan | Resolution domain, operational surface, and recovery proxy Go ownership |
+| Ownership completion plan | Resolution domain, operational surface, and recovery endpoint migration to Go |
 
 ## Documentation Rules
 

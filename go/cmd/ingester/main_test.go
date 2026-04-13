@@ -10,14 +10,17 @@ import (
 func TestBuildIngesterServiceRejectsMissingBridgeRepoRoot(t *testing.T) {
 	t.Parallel()
 
-	_, err := buildIngesterService(
+	runner, err := buildIngesterService(
 		postgres.SQLDB{},
 		&graph.MemoryWriter{},
 		func(string) string { return "" },
 		func() (string, error) { return "/tmp/does-not-exist", nil },
 		func() []string { return nil },
 	)
-	if err == nil {
-		t.Fatal("buildIngesterService() error = nil, want non-nil")
+	if err != nil {
+		t.Fatalf("buildIngesterService() error = %v, want nil", err)
+	}
+	if got, want := len(runner.runners), 2; got != want {
+		t.Fatalf("len(buildIngesterService().runners) = %d, want %d", got, want)
 	}
 }

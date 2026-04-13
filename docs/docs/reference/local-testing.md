@@ -66,18 +66,16 @@ Focused Go package gate:
 ```bash
 cd go
 go test ./internal/parser ./internal/collector/discovery ./internal/content/shape \
-  ./internal/collector ./internal/compatibility/pythonbridge ./cmd/collector-git \
+  ./internal/collector ./cmd/collector-git ./cmd/ingester ./cmd/bootstrap-index \
   ./internal/runtime ./internal/app ./internal/telemetry \
   ./internal/storage/neo4j ./internal/storage/postgres \
   ./internal/reducer ./cmd/reducer -count=1
 ```
 
-Legacy Python bridge retirement gate:
+Python runtime ownership removal gate:
 
 ```bash
-PYTHONPATH=src uv run pytest \
-  tests/unit/compatibility/test_go_collector_selection_bridge.py \
-  tests/unit/compatibility/test_go_collector_snapshot_bridge.py -q
+PYTHONPATH=src uv run pytest tests/integration/deployment/test_python_runtime_ownership.py -q
 ```
 
 Live runtime proof gate:
@@ -92,6 +90,11 @@ Live runtime proof gate:
 These proof scripts allocate their own local ports, start only the required
 compose-backed infrastructure, and tear the stack down automatically unless
 `PCG_KEEP_COMPOSE_STACK=true` is set.
+
+The collector/native-selector cutover now deletes the temporary bridge modules
+instead of proving them in isolation. If the Python ownership gate still fails,
+the remaining debt is in Python runtime commands or recovery/finalization, not
+in the collector selection/snapshot path.
 
 ## Go Data Plane Proof Domain Gate
 

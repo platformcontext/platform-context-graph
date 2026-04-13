@@ -37,9 +37,9 @@ Rules:
 
 Current branch status:
 
-- the Go runtime, admin/status, and projection surfaces are in place
+- the Go runtime, admin/status, projection, and recovery surfaces are in place
 - the Git write plane still has temporary Python bridge ownership for
-  selection, snapshot collection, and recovery seams
+  selection and snapshot collection seams
 - the parser, discovery, and content-shaping path still has Python ownership on
   the normal runtime path
 - no new ingestor family should start until the Python runtime ownership is
@@ -76,28 +76,32 @@ Tradeoffs:
 
 ## Git Write-Plane Bridge Inventory
 
-The active legacy post-commit bridge is intentionally narrow, but it still
-exists and therefore the cutover is not complete:
+The legacy post-commit bridge is being systematically deleted as Go takes
+ownership. Current status:
+
+**Go-owned (Python endpoints deleted):**
+
+- Recovery operations (refinalize, replay) are owned by the Go ingester at
+  `/admin/refinalize` and `/admin/replay`. The Python admin endpoints in
+  `api/routers/admin.py` and `api/routers/admin_facts.py` have been deleted.
+- `src/platform_context_graph/cli/helpers/finalize.py` has been deleted. The
+  `pcg finalize` CLI command prints a deprecation message directing operators
+  to the Go ingester admin surface.
+
+**Still Python-owned (pending deletion):**
 
 - `src/platform_context_graph/indexing/post_commit_writer.py` is the explicit
   compatibility contract for the remaining Python-owned post-commit stages.
 - `src/platform_context_graph/collectors/git/finalize.py` is the compatibility
   adapter that maps legacy `GraphBuilder` stage runners onto that contract.
-- `src/platform_context_graph/indexing/coordinator_finalize.py`,
-  `src/platform_context_graph/api/routers/admin.py`, and
-  `src/platform_context_graph/cli/helpers/finalize.py` may invoke the bridge,
-  but they must not infer stage details from `GraphBuilder` side channels.
-- `/admin/refinalize` is intentionally graph-safe only; file-dependent bridge
-  stages such as `inheritance`, `function_calls`, `sql_relationships`, and
-  `infra_links` remain CLI-only until a snapshot-backed replacement exists.
+- `src/platform_context_graph/indexing/coordinator_finalize.py` may invoke the
+  bridge, but must not infer stage details from `GraphBuilder` side channels.
 
-Removal conditions:
+Removal conditions for remaining Python surfaces:
 
 - delete `indexing/coordinator_finalize.py` when checkpointed repo-batch runs no
   longer persist `finalization_*` fields or call the legacy post-commit writer
   path
 - delete `collectors/git/finalize.py` when all remaining graph-safe recovery
   flows have moved onto Go-owned projector or reducer contracts
-- delete admin and CLI refinalize bridge callers when restored-backup or
-  failed-finalization repair no longer requires a legacy graph-only rerun
 - do not start any new ingestor family until these removal conditions are met

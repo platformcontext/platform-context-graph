@@ -3,12 +3,11 @@ package main
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
+	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
@@ -23,17 +22,11 @@ var _ app.Runner = runnerFunc(nil)
 func TestBuildIngesterServiceProducesCompositeRunner(t *testing.T) {
 	t.Parallel()
 
-	repoRoot := t.TempDir()
-	srcDir := filepath.Join(repoRoot, "src", "platform_context_graph")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%q) error = %v", srcDir, err)
-	}
-
 	runner, err := buildIngesterService(
 		postgres.SQLDB{},
 		&graph.MemoryWriter{},
 		func(string) string { return "" },
-		func() (string, error) { return repoRoot, nil },
+		func() (string, error) { return t.TempDir(), nil },
 		func() []string { return []string{"PATH=/usr/bin"} },
 	)
 	if err != nil {
@@ -41,6 +34,31 @@ func TestBuildIngesterServiceProducesCompositeRunner(t *testing.T) {
 	}
 	if len(runner.runners) != 2 {
 		t.Fatalf("buildIngesterService() runner count = %d, want 2", len(runner.runners))
+	}
+}
+
+func TestBuildIngesterCollectorServiceUsesNativeSnapshotter(t *testing.T) {
+	t.Parallel()
+
+	service, err := buildIngesterCollectorService(
+		postgres.SQLDB{},
+		func(string) string { return "" },
+		func() (string, error) { return t.TempDir(), nil },
+		func() []string { return []string{"PATH=/usr/bin"} },
+	)
+	if err != nil {
+		t.Fatalf("buildIngesterCollectorService() error = %v, want nil", err)
+	}
+
+	source, ok := service.Source.(*collector.GitSource)
+	if !ok {
+		t.Fatalf("buildIngesterCollectorService() source type = %T, want *collector.GitSource", service.Source)
+	}
+	if _, ok := source.Selector.(collector.NativeRepositorySelector); !ok {
+		t.Fatalf("buildIngesterCollectorService() selector type = %T, want collector.NativeRepositorySelector", source.Selector)
+	}
+	if _, ok := source.Snapshotter.(collector.NativeRepositorySnapshotter); !ok {
+		t.Fatalf("buildIngesterCollectorService() snapshotter type = %T, want collector.NativeRepositorySnapshotter", source.Snapshotter)
 	}
 }
 

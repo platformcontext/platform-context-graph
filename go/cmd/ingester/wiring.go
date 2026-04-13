@@ -10,7 +10,6 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
-	pythonbridge "github.com/platformcontext/platform-context-graph/go/internal/compatibility/pythonbridge"
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
@@ -19,8 +18,8 @@ import (
 )
 
 const (
-	ingesterCollectorPollInterval  = time.Second
-	ingesterConnectionTimeout      = 10 * time.Second
+	ingesterCollectorPollInterval = time.Second
+	ingesterConnectionTimeout     = 10 * time.Second
 )
 
 // compositeRunner runs multiple Runner implementations concurrently.
@@ -75,24 +74,16 @@ func buildIngesterCollectorService(
 	getwd func() (string, error),
 	environ func() []string,
 ) (collector.Service, error) {
-	repoRoot, err := resolveIngesterRepoRoot(getenv, getwd)
+	config, err := collector.LoadRepoSyncConfig("ingester", getenv)
 	if err != nil {
 		return collector.Service{}, err
 	}
 
 	return collector.Service{
 		Source: &collector.GitSource{
-			Component: "ingester",
-			Selector: pythonbridge.GitSelectionRunner{
-				PythonExecutable: getenv("PCG_PYTHON_EXECUTABLE"),
-				RepoRoot:         repoRoot,
-				Env:              environ(),
-			},
-			Snapshotter: pythonbridge.GitRepositorySnapshotRunner{
-				PythonExecutable: getenv("PCG_PYTHON_EXECUTABLE"),
-				RepoRoot:         repoRoot,
-				Env:              environ(),
-			},
+			Component:   "ingester",
+			Selector:    collector.NativeRepositorySelector{Config: config},
+			Snapshotter: collector.NativeRepositorySnapshotter{},
 		},
 		Committer:    postgres.NewIngestionStore(database),
 		PollInterval: ingesterCollectorPollInterval,

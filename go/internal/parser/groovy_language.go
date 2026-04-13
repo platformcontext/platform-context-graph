@@ -1,0 +1,106 @@
+package parser
+
+import (
+	"regexp"
+	"strings"
+)
+
+var (
+	groovyLibraryPattern      = regexp.MustCompile(`@Library\(['"]([^'"]+)['"]\)`)
+	groovyPipelineCallPattern = regexp.MustCompile(`\b(pipeline[A-Za-z0-9_]*)\s*\(`)
+	groovyShellCommandPattern = regexp.MustCompile(`\bsh\s+['"]([^'"]+)['"]`)
+	groovyAnsiblePattern      = regexp.MustCompile(`ansible-playbook\s+([^\s]+)(?:.*?-i\s+([^\s]+))?`)
+	groovyEntryPointPattern   = regexp.MustCompile(`entry_point\s*:\s*['"]([^'"]+)['"]`)
+	groovyUseConfigdPattern   = regexp.MustCompile(`use_configd\s*:\s*(true|false)`)
+	groovyPreDeployPattern    = regexp.MustCompile(`pre_deploy\s*:`)
+)
+
+func (e *Engine) parseGroovy(path string, isDependency bool, options Options) (map[string]any, error) {
+	sourceBytes, err := readSource(path)
+	if err != nil {
+		return nil, err
+	}
+
+	sourceText := string(sourceBytes)
+	payload := basePayload(path, "groovy", isDependency)
+	payload["modules"] = []map[string]any{}
+	payload["module_inclusions"] = []map[string]any{}
+
+	metadata := extractGroovyPipelineMetadata(sourceText)
+	for key, value := range metadata {
+		payload[key] = value
+	}
+	if options.IndexSource {
+		payload["source"] = sourceText
+	}
+	return payload, nil
+}
+
+func (e *Engine) preScanGroovy(path string) ([]string, error) {
+	_, err := readSource(path)
+	if err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func extractGroovyPipelineMetadata(sourceText string) map[string]any {
+	sharedLibraries := orderedUniqueStrings(groovyLibraryPattern.FindAllStringSubmatch(sourceText, -1), 1)
+	pipelineCalls := orderedUniqueStrings(groovyPipelineCallPattern.FindAllStringSubmatch(sourceText, -1), 1)
+	shellCommands := orderedUniqueStrings(groovyShellCommandPattern.FindAllStringSubmatch(sourceText, -1), 1)
+
+	ansibleHints := make([]map[string]any, 0)
+	for _, command := range shellCommands {
+		matches := groovyAnsiblePattern.FindStringSubmatch(command)
+		if matches == nil {
+			continue
+		}
+
+		hint := map[string]any{
+			"playbook": matches[1],
+			"command":  command,
+		}
+		if strings.TrimSpace(matches[2]) != "" {
+			hint["inventory"] = matches[2]
+		} else {
+			hint["inventory"] = nil
+		}
+		ansibleHints = append(ansibleHints, hint)
+	}
+
+	entryPoints := orderedUniqueStrings(groovyEntryPointPattern.FindAllStringSubmatch(sourceText, -1), 1)
+	var useConfigd any
+	if matches := groovyUseConfigdPattern.FindStringSubmatch(sourceText); matches != nil {
+		useConfigd = matches[1] == "true"
+	}
+
+	return map[string]any{
+		"shared_libraries":       sharedLibraries,
+		"pipeline_calls":         pipelineCalls,
+		"shell_commands":         shellCommands,
+		"ansible_playbook_hints": ansibleHints,
+		"entry_points":           entryPoints,
+		"use_configd":            useConfigd,
+		"has_pre_deploy":         groovyPreDeployPattern.MatchString(sourceText),
+	}
+}
+
+func orderedUniqueStrings(matches [][]string, group int) []string {
+	seen := make(map[string]struct{})
+	ordered := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if group >= len(match) {
+			continue
+		}
+		value := strings.TrimSpace(match[group])
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		ordered = append(ordered, value)
+	}
+	return ordered
+}

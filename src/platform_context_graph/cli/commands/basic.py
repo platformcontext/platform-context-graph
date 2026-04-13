@@ -86,38 +86,29 @@ def register_basic_commands(main_module: Any, app: typer.Typer) -> None:
             return
         main_module.index_status_helper(target)
 
-    @app.command()
-    def finalize(
-        stages: list[str] | None = typer.Option(
-            None,
-            "--stage",
-            "-s",
-            help="Specific stages to run (can repeat). Defaults to graph-only stages.",
-        ),
-        run_id: str | None = typer.Option(
-            None,
-            "--run-id",
-            help="Run ID to load snapshots from (enables file-dependent stages).",
-        ),
-        dry_run: bool = typer.Option(
-            False,
-            "--dry-run",
-            help="Show what would run without executing.",
-        ),
-    ) -> None:
-        """Re-run finalization stages against an existing graph.
+    @app.command(deprecated=True)
+    def finalize() -> None:
+        """Deprecated: recovery is now owned by the Go ingester.
 
-        Use after a failed finalization or on a restored database backup.
-        Without --run-id, runs graph-only stages (workloads, relationship_resolution).
-        With --run-id, also runs file-dependent stages if NDJSON snapshots exist.
+        Use the Go ingester admin surface instead:
+
+            POST http://<ingester>:8080/admin/refinalize
+            POST http://<ingester>:8080/admin/replay
         """
 
-        main_module._load_credentials()
-        main_module.finalize_helper(
-            stages=stages,
-            run_id=run_id,
-            dry_run=dry_run,
+        import sys
+
+        print(
+            "ERROR: 'pcg finalize' has been removed.\n"
+            "\n"
+            "Recovery operations are now owned by the Go ingester.\n"
+            "Use the ingester admin endpoints:\n"
+            "\n"
+            "  POST http://<ingester>:8080/admin/refinalize\n"
+            "  POST http://<ingester>:8080/admin/replay\n",
+            file=sys.stderr,
         )
+        raise typer.Exit(code=1)
 
     @app.command()
     def clean() -> None:

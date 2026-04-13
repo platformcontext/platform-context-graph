@@ -10,6 +10,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
+	"github.com/platformcontext/platform-context-graph/go/internal/recovery"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
@@ -60,7 +61,21 @@ func run(parent context.Context) error {
 			},
 		)...,
 	)
-	service, err := app.NewHostedWithStatusServer("ingester", runner, statusReader)
+
+	recoveryStore := postgres.NewRecoveryStore(postgres.SQLDB{DB: db})
+	recoveryHandler, err := recovery.NewHandler(recoveryStore)
+	if err != nil {
+		return err
+	}
+	httpRecovery, err := runtimecfg.NewRecoveryHandler(recoveryHandler)
+	if err != nil {
+		return err
+	}
+
+	service, err := app.NewHostedWithStatusServer(
+		"ingester", runner, statusReader,
+		runtimecfg.WithRecoveryHandler(httpRecovery),
+	)
 	if err != nil {
 		return err
 	}

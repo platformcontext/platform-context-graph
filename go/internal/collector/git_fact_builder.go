@@ -32,7 +32,15 @@ func buildCollectedGeneration(
 	factEnvelopes := make([]facts.Envelope, 0, 1+len(snapshot.FileData)+len(snapshot.ContentFiles)+len(snapshot.ContentEntities)+1)
 	factEnvelopes = append(
 		factEnvelopes,
-		repositoryFactEnvelope(repoPath, repo, scopeValue.ScopeID, generation.GenerationID, observedAt, snapshot.FileCount),
+		repositoryFactEnvelope(
+			repoPath,
+			repo,
+			scopeValue.ScopeID,
+			generation.GenerationID,
+			observedAt,
+			snapshot.FileCount,
+			snapshot.ImportsMap,
+		),
 	)
 	for _, fileData := range snapshot.FileData {
 		factEnvelopes = append(
@@ -67,6 +75,7 @@ func buildCollectedGeneration(
 func snapshotFreshnessHint(snapshot RepositorySnapshot) string {
 	canonicalSnapshot := map[string]any{
 		"file_count":       snapshot.FileCount,
+		"imports_map":      normalizeFingerprintValue(snapshot.ImportsMap),
 		"file_data":        normalizeFingerprintValue(snapshot.FileData),
 		"content_files":    normalizeFingerprintValue(snapshot.ContentFiles),
 		"content_entities": normalizeFingerprintValue(snapshot.ContentEntities),
@@ -174,6 +183,7 @@ func repositoryFactEnvelope(
 	generationID string,
 	observedAt time.Time,
 	parsedFileCount int,
+	importsMap map[string][]string,
 ) facts.Envelope {
 	payload := map[string]any{
 		"graph_id":          repo.ID,
@@ -190,6 +200,9 @@ func repositoryFactEnvelope(
 	}
 	if repo.LocalPath != "" {
 		payload["local_path"] = repo.LocalPath
+	}
+	if len(importsMap) > 0 {
+		payload["imports_map"] = importsMap
 	}
 
 	return factEnvelope("repository", scopeID, generationID, observedAt, "repository:"+repo.ID, payload, repoPath)

@@ -48,8 +48,8 @@ The current accepted ADR set establishes the rewrite baseline:
   without keeping two long-lived architectures alive.
 - [Go Data Plane Ownership Completion](2026-04-13-go-data-plane-ownership-completion.md)
   extends the write-plane conversion beyond deployment surfaces to cover full Go
-  ownership of resolution domain logic, operational surfaces, and recovery proxy
-  wiring.
+  ownership of resolution domain logic, operational surfaces, and recovery
+  endpoint migration.
 
 Read these records together. They are meant to remove ambiguity before new
 collector or runtime work begins.

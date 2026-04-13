@@ -692,7 +692,12 @@ def test_compose_stack_includes_service_and_external_test_database() -> None:
     assert "exec /usr/local/bin/pcg-ingester" in "\n".join(
         ingester_service["entrypoint"]
     )
-    assert services["ingester"]["healthcheck"] == {"disable": True}
+    assert services["ingester"]["healthcheck"] == {
+        "test": ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 10,
+    }
     assert services["resolution-engine"]["command"] == ["/usr/local/bin/pcg-reducer"]
     assert services["resolution-engine"]["healthcheck"] == {"disable": True}
 

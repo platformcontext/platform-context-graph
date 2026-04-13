@@ -13,7 +13,9 @@ finishes.
 
 However, the cutover plan only tracks the **deployment surface** of the
 conversion. It does not cover the deeper Python write-plane modules that still
-own critical resolution, projection, and operational behavior:
+own critical resolution, projection, and operational behavior. This ADR exists
+to finish the migration, not to legitimize a long-lived mixed Python/Go
+runtime:
 
 - `src/platform_context_graph/resolution/` (38 files) owns projection
   orchestration, platform materialization, shared projection intent processing,
@@ -42,16 +44,19 @@ just the service loops.
 
 PCG will extend the write-plane conversion beyond the deployment cutover to
 cover full Go ownership of resolution, projection, and operational surfaces.
+Python ownership remains a deletion target across the branch; it is not an
+acceptable steady-state runtime dependency after merge.
 
 The work is organized into three phases that can proceed independently of the
 parser/collector cutover (Chunk 2):
 
-### Phase A: Recovery and operational proxy
+### Phase A: Recovery endpoint migration
 
-Wire the existing Go recovery handlers into the Python admin and CLI surfaces
-so that recovery operations flow through Go immediately, even while the Python
-finalization files still exist. Update documentation to reflect Go-owned
-recovery.
+Delete the Python admin and CLI recovery endpoints (refinalize, replay) and let
+the Go ingester own them directly at `/admin/replay` and `/admin/refinalize`.
+The Go recovery handlers already exist and are wired into the ingester admin
+mux. This is a full migration: Python recovery code is deleted, not wrapped.
+Update documentation to reflect Go-owned recovery.
 
 ### Phase B: Resolution domain ownership
 
@@ -119,14 +124,18 @@ Tradeoffs:
 - This extends the scope of the conversion beyond the original cutover plan.
 - Resolution domain logic is complex; the platform materialization and shared
   projection intent workers in particular require careful parity validation.
-- Some Python resolution surfaces are consumed by read-plane queries and will
-  need narrow compatibility during transition.
+- Some Python resolution surfaces are consumed by read-plane queries today, so
+  the branch may need narrow same-branch sequencing adapters while those
+  consumers are ported. Those adapters must stay out of the normal runtime path
+  and must be removed or explicitly quarantined before merge.
 
 ## Implementation Guidance
 
 - Follow TDD for every Go resolution domain port.
-- Keep Python surfaces functional during transition; proxy or feature-gate
-  rather than delete.
+- Do not preserve Python ownership as a resting state. Delete Python endpoints
+  when Go owns the behavior. If a Python surface must exist briefly for
+  sequencing, it must stay out of the normal runtime path and carry an explicit
+  deletion condition before merge.
 - Use the existing Go projector/reducer service loops as the integration points
   for new domain logic.
 - Do not expand the Python resolution surface. New domain logic lands in Go.
@@ -137,7 +146,7 @@ Tradeoffs:
 ## Dependency Map
 
 ```text
-Phase A (recovery proxy) ─────────────────────────── unblocked
+Phase A (recovery migration) ────────────────────────── unblocked
 Phase B (resolution domains) ─────────────────────── unblocked
 Phase C (operational/validation) ──── depends on B ── unblocked after B
 

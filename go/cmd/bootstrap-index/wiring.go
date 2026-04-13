@@ -12,7 +12,6 @@ import (
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
-	pythonbridge "github.com/platformcontext/platform-context-graph/go/internal/compatibility/pythonbridge"
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
@@ -32,24 +31,15 @@ func buildBootstrapCollector(
 		return collectorDeps{}, fmt.Errorf("bootstrap collector requires a SQL database")
 	}
 
-	repoRoot, err := resolveBootstrapRepoRoot(getenv, os.Getwd)
+	config, err := collector.LoadRepoSyncConfig("bootstrap-index", getenv)
 	if err != nil {
 		return collectorDeps{}, err
 	}
 
-	environ := os.Environ()
 	source := &collector.GitSource{
-		Component: "bootstrap-index",
-		Selector: pythonbridge.GitSelectionRunner{
-			PythonExecutable: getenv("PCG_PYTHON_EXECUTABLE"),
-			RepoRoot:         repoRoot,
-			Env:              environ,
-		},
-		Snapshotter: pythonbridge.GitRepositorySnapshotRunner{
-			PythonExecutable: getenv("PCG_PYTHON_EXECUTABLE"),
-			RepoRoot:         repoRoot,
-			Env:              environ,
-		},
+		Component:   "bootstrap-index",
+		Selector:    collector.NativeRepositorySelector{Config: config},
+		Snapshotter: collector.NativeRepositorySnapshotter{},
 	}
 
 	return collectorDeps{

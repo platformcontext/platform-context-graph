@@ -72,13 +72,9 @@ func TestApplyBootstrapExecutesDefinitionsInOrder(t *testing.T) {
 	}
 
 	got := exec.statements
-	want := []string{
-		bootstrapDefinitions[0].SQL,
-		bootstrapDefinitions[1].SQL,
-		bootstrapDefinitions[2].SQL,
-		bootstrapDefinitions[3].SQL,
-		bootstrapDefinitions[4].SQL,
-		bootstrapDefinitions[5].SQL,
+	want := make([]string, 0, len(bootstrapDefinitions))
+	for _, def := range bootstrapDefinitions {
+		want = append(want, def.SQL)
 	}
 	if len(got) != len(want) {
 		t.Fatalf("ApplyBootstrap() executed %d statements, want %d", len(got), len(want))

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/recovery"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 )
 
@@ -143,6 +145,202 @@ func TestNewStatusAdminServerSurfacesReaderFailureThroughReadyz(t *testing.T) {
 		t.Fatal("GET /readyz body = empty, want readiness error details")
 	}
 }
+
+func TestNewStatusAdminServerWithRecoveryMountsRecoveryRoutes(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeRecoveryStoreForStatus{
+		replayResult: recovery.ReplayResult{
+			Stage:       recovery.StageProjector,
+			Replayed:    1,
+			WorkItemIDs: []string{"item-1"},
+		},
+	}
+	recoveryHandler := mustBuildRecoveryHandlerForStatus(t, store)
+
+	server, err := NewStatusAdminServer(
+		Config{
+			ServiceName: "ingester",
+			ListenAddr:  "127.0.0.1:0",
+		},
+		&fakeStatusReader{
+			snapshot: statuspkg.RawSnapshot{
+				AsOf: time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC),
+			},
+		},
+		WithRecoveryHandler(recoveryHandler),
+	)
+	if err != nil {
+		t.Fatalf("NewStatusAdminServer() error = %v, want nil", err)
+	}
+	if err := server.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	defer server.Stop(context.Background())
+
+	body, _ := json.Marshal(map[string]any{"stage": "projector"})
+	resp, err := http.Post(
+		"http://"+server.Addr()+"/admin/replay",
+		"application/json",
+		strings.NewReader(string(body)),
+	)
+	if err != nil {
+		t.Fatalf("POST /admin/replay error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got, want := resp.StatusCode, http.StatusOK; got != want {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /admin/replay status = %d, want %d; body = %s", got, want, respBody)
+	}
+
+	var result replayResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("json.Decode() error = %v", err)
+	}
+	if result.Status != "replayed" {
+		t.Fatalf("response status = %q, want %q", result.Status, "replayed")
+	}
+	if result.Replayed != 1 {
+		t.Fatalf("response replayed = %d, want 1", result.Replayed)
+	}
+}
+
+func TestNewStatusAdminServerWithRecoveryMountsRefinalizeRoute(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeRecoveryStoreForStatus{
+		refinalizeResult: recovery.RefinalizeResult{
+			Enqueued: 2,
+			ScopeIDs: []string{"s1", "s2"},
+		},
+	}
+	recoveryHandler := mustBuildRecoveryHandlerForStatus(t, store)
+
+	server, err := NewStatusAdminServer(
+		Config{
+			ServiceName: "ingester",
+			ListenAddr:  "127.0.0.1:0",
+		},
+		&fakeStatusReader{
+			snapshot: statuspkg.RawSnapshot{
+				AsOf: time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC),
+			},
+		},
+		WithRecoveryHandler(recoveryHandler),
+	)
+	if err != nil {
+		t.Fatalf("NewStatusAdminServer() error = %v, want nil", err)
+	}
+	if err := server.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	defer server.Stop(context.Background())
+
+	body, _ := json.Marshal(map[string]any{"scope_ids": []string{"s1", "s2"}})
+	resp, err := http.Post(
+		"http://"+server.Addr()+"/admin/refinalize",
+		"application/json",
+		strings.NewReader(string(body)),
+	)
+	if err != nil {
+		t.Fatalf("POST /admin/refinalize error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got, want := resp.StatusCode, http.StatusOK; got != want {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /admin/refinalize status = %d, want %d; body = %s", got, want, respBody)
+	}
+
+	var result refinalizeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("json.Decode() error = %v", err)
+	}
+	if result.Enqueued != 2 {
+		t.Fatalf("response enqueued = %d, want 2", result.Enqueued)
+	}
+}
+
+func TestNewStatusAdminServerWithoutRecoveryReturns404ForRecoveryRoutes(t *testing.T) {
+	t.Parallel()
+
+	server, err := NewStatusAdminServer(
+		Config{
+			ServiceName: "ingester",
+			ListenAddr:  "127.0.0.1:0",
+		},
+		&fakeStatusReader{
+			snapshot: statuspkg.RawSnapshot{
+				AsOf: time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC),
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewStatusAdminServer() error = %v, want nil", err)
+	}
+	if err := server.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	defer server.Stop(context.Background())
+
+	resp, err := http.Post(
+		"http://"+server.Addr()+"/admin/replay",
+		"application/json",
+		strings.NewReader(`{"stage":"projector"}`),
+	)
+	if err != nil {
+		t.Fatalf("POST /admin/replay error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got, want := resp.StatusCode, http.StatusNotFound; got != want {
+		t.Fatalf("POST /admin/replay without recovery status = %d, want %d", got, want)
+	}
+}
+
+// --- recovery test helpers ---
+
+func mustBuildRecoveryHandlerForStatus(t *testing.T, store recovery.ReplayStore) *RecoveryHandler {
+	t.Helper()
+
+	handler, err := recovery.NewHandler(store)
+	if err != nil {
+		t.Fatalf("recovery.NewHandler() error = %v", err)
+	}
+
+	rh, err := NewRecoveryHandler(handler)
+	if err != nil {
+		t.Fatalf("NewRecoveryHandler() error = %v", err)
+	}
+
+	return rh
+}
+
+type fakeRecoveryStoreForStatus struct {
+	replayResult     recovery.ReplayResult
+	replayErr        error
+	refinalizeResult recovery.RefinalizeResult
+	refinalizeErr    error
+}
+
+func (s *fakeRecoveryStoreForStatus) ReplayFailedWorkItems(
+	_ context.Context,
+	_ recovery.ReplayFilter,
+	_ time.Time,
+) (recovery.ReplayResult, error) {
+	return s.replayResult, s.replayErr
+}
+
+func (s *fakeRecoveryStoreForStatus) RefinalizeScopeProjections(
+	_ context.Context,
+	_ recovery.RefinalizeFilter,
+	_ time.Time,
+) (recovery.RefinalizeResult, error) {
+	return s.refinalizeResult, s.refinalizeErr
+}
+
+// --- existing stubs ---
 
 type fakeStatusReader struct {
 	snapshot statuspkg.RawSnapshot

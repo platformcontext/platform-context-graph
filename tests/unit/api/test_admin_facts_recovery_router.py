@@ -140,63 +140,6 @@ async def test_skip_repository_work_items_requires_repository_id() -> None:
 
 
 @pytest.mark.asyncio
-async def test_replay_failed_facts_returns_replayed_items(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Admin replay should return the replayed work-item ids."""
-
-    class _FakeQueue:
-        enabled = True
-
-        def replay_failed_work_items(self, **kwargs):
-            assert kwargs == {
-                "work_item_ids": ["work-1"],
-                "repository_id": None,
-                "source_run_id": None,
-                "work_type": None,
-                "failure_class": "timeout",
-                "operator_note": "operator replay",
-                "limit": 100,
-            }
-            return [
-                SimpleNamespace(
-                    work_item_id="work-1",
-                    work_type="project-git-facts",
-                    repository_id="repository:r_payments",
-                    source_run_id="run-123",
-                    attempt_count=0,
-                    failure_class="timeout",
-                )
-            ]
-
-    monkeypatch.setattr(admin_facts, "get_fact_work_queue", lambda: _FakeQueue())
-
-    response = await admin_facts.replay_failed_facts(
-        admin_facts.ReplayFailedFactsRequest(
-            work_item_ids=["work-1"],
-            failure_class="timeout",
-            operator_note="operator replay",
-        ),
-    )
-
-    assert response["status"] == "replayed"
-    assert response["replayed_count"] == 1
-    assert response["work_item_ids"] == ["work-1"]
-    assert response["replayed"][0]["failure_class"] == "timeout"
-
-
-@pytest.mark.asyncio
-async def test_replay_failed_facts_requires_a_selector() -> None:
-    """Admin replay should reject unbounded replay requests."""
-
-    with pytest.raises(HTTPException) as exc_info:
-        await admin_facts.replay_failed_facts(admin_facts.ReplayFailedFactsRequest())
-
-    assert exc_info.value.status_code == 400
-    assert "selector" in str(exc_info.value.detail)
-
-
-@pytest.mark.asyncio
 async def test_request_fact_backfill_returns_durable_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

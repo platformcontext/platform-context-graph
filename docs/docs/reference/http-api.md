@@ -21,8 +21,7 @@ The public HTTP API exposes three operator-relevant surfaces:
 
 - a read/query surface for context, code, infra, and content retrieval
 - a small ingester control surface for runtime status and manual scan requests
-- a checkpoint and recovery surface for index completeness and admin
-  refinalization
+- a checkpoint surface for index completeness and admin reindex requests
 
 Use it to resolve entities, fetch context, search code, trace infra, compare environments, and inspect the deployed ingester state.
 
@@ -45,14 +44,12 @@ whether a repository or run is finished.
   hunting the remaining gaps.
 - `GET /api/v0/ingesters/{ingester}` and `GET /api/v0/ingesters` report the
   hosted ingester's live status and progress, not graph completeness.
-- `GET /api/v0/admin/refinalize/status` reports the live state of the
-  in-process admin refinalize worker.
-- `POST /api/v0/admin/refinalize` is graph-safe only. It supports
-  `workloads` and `relationship_resolution`, and it rejects `repo_ids` when
-  `relationship_resolution` is requested because that stage remains
-  full-generation.
-- File-dependent bridge stages remain CLI-only until a Go-owned replacement is
-  proven.
+- Recovery operations (refinalize, replay) are owned by the Go ingester admin
+  surface, not the Python API. See:
+    - `POST http://<ingester>:8080/admin/refinalize` — re-enqueue active scope
+      generations for re-projection.
+    - `POST http://<ingester>:8080/admin/replay` — replay failed work items
+      back to pending.
 - `POST /api/v0/admin/reindex` persists an asynchronous ingester reindex
   request; the API process does not run the full reindex inline.
 - `GET /api/v0/admin/shared-projection/tuning-report` returns the operator

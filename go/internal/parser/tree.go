@@ -57,6 +57,14 @@ func nodeEndByte(node *tree_sitter.Node) *int {
 	return &value
 }
 
+func cloneNode(node *tree_sitter.Node) *tree_sitter.Node {
+	if node == nil {
+		return nil
+	}
+	cloned := *node
+	return &cloned
+}
+
 func appendBucket(payload map[string]any, key string, item map[string]any) {
 	items, _ := payload[key].([]map[string]any)
 	payload[key] = append(items, item)

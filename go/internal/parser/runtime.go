@@ -7,9 +7,15 @@ import (
 	"unsafe"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
+	tree_sitter_c_sharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"
+	tree_sitter_c "github.com/tree-sitter/tree-sitter-c/bindings/go"
+	tree_sitter_cpp "github.com/tree-sitter/tree-sitter-cpp/bindings/go"
 	tree_sitter_go "github.com/tree-sitter/tree-sitter-go/bindings/go"
+	tree_sitter_java "github.com/tree-sitter/tree-sitter-java/bindings/go"
 	tree_sitter_javascript "github.com/tree-sitter/tree-sitter-javascript/bindings/go"
 	tree_sitter_python "github.com/tree-sitter/tree-sitter-python/bindings/go"
+	tree_sitter_rust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
+	tree_sitter_scala "github.com/tree-sitter/tree-sitter-scala/bindings/go"
 	tree_sitter_typescript "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 )
 
@@ -68,21 +74,39 @@ func (r *Runtime) Parser(name string) (*tree_sitter.Parser, error) {
 }
 
 var builtinLanguageLoaders = map[string]languageLoader{
+	"c":          tree_sitter_c.Language,
+	"c_sharp":    tree_sitter_c_sharp.Language,
+	"cpp":        tree_sitter_cpp.Language,
 	"go":         tree_sitter_go.Language,
+	"java":       tree_sitter_java.Language,
 	"javascript": tree_sitter_javascript.Language,
 	"python":     tree_sitter_python.Language,
+	"rust":       tree_sitter_rust.Language,
+	"scala":      tree_sitter_scala.Language,
 	"tsx":        tree_sitter_typescript.LanguageTSX,
 	"typescript": tree_sitter_typescript.LanguageTypescript,
 }
 
 func normalizeLanguageName(name string) (string, error) {
 	switch strings.TrimSpace(strings.ToLower(name)) {
+	case "c":
+		return "c", nil
+	case "c#", "c_sharp", "csharp", "cs":
+		return "c_sharp", nil
+	case "c++", "cpp", "cxx":
+		return "cpp", nil
 	case "go":
 		return "go", nil
+	case "java":
+		return "java", nil
 	case "javascript", "js":
 		return "javascript", nil
 	case "py", "python":
 		return "python", nil
+	case "rs", "rust":
+		return "rust", nil
+	case "scala":
+		return "scala", nil
 	case "tsx":
 		return "tsx", nil
 	case "ts", "typescript":

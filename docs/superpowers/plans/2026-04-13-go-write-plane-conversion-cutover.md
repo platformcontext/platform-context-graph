@@ -6,7 +6,9 @@
 
 **Architecture:** move all collector, parser, projection, reducer, recovery, and deployed runtime ownership to Go. The branch is complete only when the Git parser and write path no longer depend on Python bridges, deployed runtime services no longer start from Python runtime entrypoints, and the legacy post-commit/finalization seam is deleted instead of documented forever.
 
-**Tech Stack:** Go, PostgreSQL, Neo4j, Docker Compose, Helm, OpenTelemetry, Python only as a shrinking compatibility surface until deletion.
+**Tech Stack:** Go, PostgreSQL, Neo4j, Docker Compose, Helm, OpenTelemetry.
+Python remains in scope only where the branch still has deletion work to do; it
+is not a valid long-term runtime or bridge layer for the merged platform.
 
 ---
 
@@ -361,12 +363,14 @@ Implemented:
 
 Committed as `5eab84b` — `feat(recovery): add Go-owned replay and refinalize handlers`
 
-- [ ] **Step 3: Rewire admin and CLI surfaces**
+- [x] **Step 3: Delete Python admin recovery endpoints**
 
-Make Python admin and CLI surfaces either proxy to Go-owned recovery behavior
-or remove the write-plane operation entirely.
+Deleted Python refinalize endpoint from `admin.py` and replay endpoint from
+`admin_facts.py`. Deleted the proxy module `admin_go_proxy.py`. The Go
+ingester owns recovery directly at `/admin/replay` and `/admin/refinalize`.
+This is a full migration, not a proxy.
 
-Tracked in ownership completion plan Phase A (Chunks A1 and A2).
+CLI finalize deletion tracked in ownership completion plan Phase A (Chunk A2).
 
 - [ ] **Step 4: Delete the Python finalization bridge** (BLOCKED on Chunk 2)
 
@@ -379,11 +383,10 @@ Run:
 
 ```bash
 cd go && go test ./internal/projector ./internal/reducer ./internal/runtime ./internal/storage/postgres -count=1
-PYTHONPATH=src uv run pytest tests/unit/api/test_admin_router.py tests/integration/api/test_admin_facts_replay.py tests/integration/cli/test_admin_facts_replay_cli.py -q
+PYTHONPATH=src uv run pytest tests/unit/api/test_admin_router.py tests/unit/api/test_admin_facts_recovery_router.py -q
 ```
 
-Expected: PASS with no Python finalization bridge remaining in the normal
-recovery path
+Expected: PASS with no Python recovery endpoints remaining
 
 - [ ] **Step 6: Commit**
 
@@ -433,7 +436,8 @@ normal deployed write-plane commands.
 
 Anything left under `src/platform_context_graph/runtime/ingester/` and
 `src/platform_context_graph/indexing/` should either be deleted or moved out of
-the normal write path with explicit compatibility labeling.
+the normal write path with explicit quarantine labeling and a tracked removal
+condition on this branch.
 
 - [ ] **Step 4: Run repo-wide cutover checks**
 

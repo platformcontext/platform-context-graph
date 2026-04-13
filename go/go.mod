@@ -7,9 +7,15 @@ require (
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/tree-sitter/go-tree-sitter v0.25.0
+	github.com/tree-sitter/tree-sitter-c v0.24.1
+	github.com/tree-sitter/tree-sitter-c-sharp v0.23.1
+	github.com/tree-sitter/tree-sitter-cpp v0.23.4
 	github.com/tree-sitter/tree-sitter-go v0.25.0
+	github.com/tree-sitter/tree-sitter-java v0.23.5
 	github.com/tree-sitter/tree-sitter-javascript v0.25.0
 	github.com/tree-sitter/tree-sitter-python v0.25.0
+	github.com/tree-sitter/tree-sitter-rust v0.24.2
+	github.com/tree-sitter/tree-sitter-scala v0.25.0
 	github.com/tree-sitter/tree-sitter-typescript v0.23.2
 	github.com/zclconf/go-cty v1.18.0
 	golang.org/x/crypto v0.43.0
@@ -19,6 +25,7 @@ require (
 require (
 	github.com/agext/levenshtein v1.2.1 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect

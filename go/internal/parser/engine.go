@@ -74,12 +74,42 @@ func (e *Engine) PreScanPaths(paths []string) (map[string][]string, error) {
 
 		var names []string
 		switch definition.Language {
+		case "c":
+			names, err = e.preScanC(resolvedPath)
+		case "c_sharp":
+			names, err = e.preScanCSharp(resolvedPath)
+		case "cpp":
+			names, err = e.preScanCPP(resolvedPath)
+		case "dart":
+			names, err = e.preScanDart(resolvedPath)
+		case "elixir":
+			names, err = e.preScanElixir(resolvedPath)
+		case "haskell":
+			names, err = e.preScanHaskell(resolvedPath)
 		case "javascript":
 			names, err = e.preScanJavaScriptLike(resolvedPath, "javascript", "javascript")
+		case "java":
+			names, err = e.preScanJava(resolvedPath)
+		case "kotlin":
+			names, err = e.preScanKotlin(resolvedPath)
+		case "perl":
+			names, err = e.preScanPerl(resolvedPath)
+		case "php":
+			names, err = e.preScanPHP(resolvedPath)
 		case "python":
 			names, err = e.preScanPython(resolvedPath)
+		case "ruby":
+			names, err = e.preScanRuby(resolvedPath)
 		case "go":
 			names, err = e.preScanGo(resolvedPath)
+		case "groovy":
+			names, err = e.preScanGroovy(resolvedPath)
+		case "rust":
+			names, err = e.preScanRust(resolvedPath)
+		case "scala":
+			names, err = e.preScanScala(resolvedPath)
+		case "swift":
+			names, err = e.preScanSwift(resolvedPath)
 		case "tsx":
 			names, err = e.preScanJavaScriptLike(resolvedPath, "tsx", "tsx")
 		case "typescript":
@@ -108,20 +138,50 @@ func (e *Engine) parseDefinition(
 	options Options,
 ) (map[string]any, error) {
 	switch definition.Language {
+	case "c":
+		return e.parseC(resolvedPath, isDependency, options)
+	case "c_sharp":
+		return e.parseCSharp(resolvedPath, isDependency, options)
+	case "cpp":
+		return e.parseCPP(resolvedPath, isDependency, options)
+	case "dart":
+		return e.parseDart(resolvedPath, isDependency, options)
 	case "dockerfile":
 		return e.parseDockerfile(resolvedPath, isDependency, options)
+	case "elixir":
+		return e.parseElixir(resolvedPath, isDependency, options)
+	case "haskell":
+		return e.parseHaskell(resolvedPath, isDependency, options)
 	case "javascript":
 		return e.parseJavaScriptLike(resolvedPath, "javascript", "javascript", isDependency, options)
 	case "json":
 		return e.parseJSON(resolvedPath, isDependency, options)
+	case "java":
+		return e.parseJava(resolvedPath, isDependency, options)
+	case "kotlin":
+		return e.parseKotlin(resolvedPath, isDependency, options)
+	case "perl":
+		return e.parsePerl(resolvedPath, isDependency, options)
+	case "php":
+		return e.parsePHP(resolvedPath, isDependency, options)
 	case "python":
 		return e.parsePython(resolvedPath, isDependency, options)
+	case "ruby":
+		return e.parseRuby(resolvedPath, isDependency, options)
+	case "rust":
+		return e.parseRust(resolvedPath, isDependency, options)
 	case "go":
 		return e.parseGo(resolvedPath, isDependency, options)
 	case "hcl":
 		return e.parseHCL(resolvedPath, isDependency, options)
+	case "groovy":
+		return e.parseGroovy(resolvedPath, isDependency, options)
+	case "scala":
+		return e.parseScala(resolvedPath, isDependency, options)
 	case "sql":
 		return e.parseSQL(resolvedPath, isDependency, options)
+	case "swift":
+		return e.parseSwift(resolvedPath, isDependency, options)
 	case "tsx":
 		return e.parseJavaScriptLike(resolvedPath, "tsx", "tsx", isDependency, options)
 	case "typescript":

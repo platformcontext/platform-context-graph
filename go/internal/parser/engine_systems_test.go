@@ -1,0 +1,287 @@
+package parser
+
+import (
+	"path/filepath"
+	"testing"
+)
+
+func TestDefaultEngineParsePathC(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "main.c")
+	writeTestFile(
+		t,
+		filePath,
+		`#include <stdio.h>
+#define MAX_SIZE 1024
+
+struct Point {
+    double x;
+    double y;
+};
+
+enum StatusCode {
+    STATUS_OK = 0,
+    STATUS_ERROR = 1
+};
+
+int add(int a, int b) {
+    int total = a + b;
+    printf("hello\n");
+    return total;
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{VariableScope: "all"})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	if got["lang"] != "c" {
+		t.Fatalf("lang = %#v, want %#v", got["lang"], "c")
+	}
+
+	assertNamedBucketContains(t, got, "functions", "add")
+	assertNamedBucketContains(t, got, "structs", "Point")
+	assertNamedBucketContains(t, got, "enums", "StatusCode")
+	assertNamedBucketContains(t, got, "imports", "stdio.h")
+	assertNamedBucketContains(t, got, "function_calls", "printf")
+	assertNamedBucketContains(t, got, "variables", "total")
+	assertNamedBucketContains(t, got, "macros", "MAX_SIZE")
+}
+
+func TestDefaultEngineParsePathCPP(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "main.cpp")
+	writeTestFile(
+		t,
+		filePath,
+		`#include <iostream>
+#define VERSION "1.0.0"
+
+template<typename T>
+T max_value(T a, T b) {
+    return (a > b) ? a : b;
+}
+
+struct Point {
+    double x;
+    double y;
+};
+
+enum class Direction {
+    North,
+    South
+};
+
+class Circle {
+public:
+    double area() const {
+        notify();
+        return 3.14;
+    }
+};
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	if got["lang"] != "cpp" {
+		t.Fatalf("lang = %#v, want %#v", got["lang"], "cpp")
+	}
+
+	assertNamedBucketContains(t, got, "functions", "max_value")
+	assertNamedBucketContains(t, got, "functions", "area")
+	assertNamedBucketContains(t, got, "classes", "Circle")
+	assertNamedBucketContains(t, got, "structs", "Point")
+	assertNamedBucketContains(t, got, "enums", "Direction")
+	assertNamedBucketContains(t, got, "imports", "iostream")
+	assertNamedBucketContains(t, got, "function_calls", "notify")
+	assertNamedBucketContains(t, got, "macros", "VERSION")
+}
+
+func TestDefaultEngineParsePathRust(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "main.rs")
+	writeTestFile(
+		t,
+		filePath,
+		`use std::fmt;
+
+pub trait Describable {
+    fn describe(&self) -> String;
+}
+
+pub struct Point {
+    pub x: f64,
+}
+
+pub enum Shape {
+    Circle,
+    Square,
+}
+
+impl Point {
+    fn new(x: f64) -> Self {
+        Point { x }
+    }
+}
+
+fn main() {
+    println!("{}", Point::new(1.0).x);
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	if got["lang"] != "rust" {
+		t.Fatalf("lang = %#v, want %#v", got["lang"], "rust")
+	}
+
+	assertNamedBucketContains(t, got, "functions", "new")
+	assertNamedBucketContains(t, got, "functions", "main")
+	assertNamedBucketContains(t, got, "classes", "Point")
+	assertNamedBucketContains(t, got, "classes", "Shape")
+	assertNamedBucketContains(t, got, "traits", "Describable")
+	assertNamedBucketContains(t, got, "imports", "std::fmt")
+	assertNamedBucketContains(t, got, "function_calls", "println")
+}
+
+func TestDefaultEnginePreScanPathsSystems(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	cPath := filepath.Join(repoRoot, "main.c")
+	cppPath := filepath.Join(repoRoot, "main.cpp")
+	rustPath := filepath.Join(repoRoot, "main.rs")
+
+	writeTestFile(
+		t,
+		cPath,
+		`struct Point {};
+int add(int a, int b) { return a + b; }
+`,
+	)
+	writeTestFile(
+		t,
+		cppPath,
+		`class Circle {};
+double area() { return 3.14; }
+`,
+	)
+	writeTestFile(
+		t,
+		rustPath,
+		`trait Describable {}
+struct Point {}
+fn main() {}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.PreScanPaths([]string{cPath, cppPath, rustPath})
+	if err != nil {
+		t.Fatalf("PreScanPaths() error = %v, want nil", err)
+	}
+
+	assertPrescanContains(t, got, "Point", cPath)
+	assertPrescanContains(t, got, "add", cPath)
+	assertPrescanContains(t, got, "Circle", cppPath)
+	assertPrescanContains(t, got, "area", cppPath)
+	assertPrescanContains(t, got, "Describable", rustPath)
+	assertPrescanContains(t, got, "Point", rustPath)
+	assertPrescanContains(t, got, "main", rustPath)
+}
+
+func TestDefaultEngineParsePathCTypedefAliasDoesNotEmitDedicatedEntities(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "types.c")
+	writeTestFile(
+		t,
+		filePath,
+		`typedef int my_int;
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertEmptyNamedBucket(t, got, "classes")
+	assertEmptyNamedBucket(t, got, "variables")
+}
+
+func TestDefaultEngineParsePathSystemsEmptyFiles(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	cPath := filepath.Join(repoRoot, "empty.c")
+	cppPath := filepath.Join(repoRoot, "empty.cpp")
+	rustPath := filepath.Join(repoRoot, "empty.rs")
+
+	writeTestFile(t, cPath, "")
+	writeTestFile(t, cppPath, "")
+	writeTestFile(t, rustPath, "")
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	cResult, err := engine.ParsePath(repoRoot, cPath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(c) error = %v, want nil", err)
+	}
+	cppResult, err := engine.ParsePath(repoRoot, cppPath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(cpp) error = %v, want nil", err)
+	}
+	rustResult, err := engine.ParsePath(repoRoot, rustPath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(rust) error = %v, want nil", err)
+	}
+
+	assertEmptyNamedBucket(t, cResult, "functions")
+	assertEmptyNamedBucket(t, cppResult, "functions")
+	assertEmptyNamedBucket(t, rustResult, "functions")
+}

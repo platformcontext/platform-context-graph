@@ -34,6 +34,9 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 				RepoPath:  firstRepoPath,
 				RemoteURL: "https://github.com/example/service",
 				FileCount: 1,
+				ImportsMap: map[string][]string{
+					"Worker": {firstRepoPath + "/app.py"},
+				},
 				FileData: []map[string]any{{
 					"path": firstRepoPath + "/app.py",
 					"lang": "python",
@@ -108,6 +111,15 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		if got := firstCollected.Facts[i].FactKind; got != want {
 			t.Fatalf("Facts[%d].FactKind = %q, want %q", i, got, want)
 		}
+	}
+
+	repositoryFact := firstCollected.Facts[0]
+	importsMap, ok := repositoryFact.Payload["imports_map"].(map[string][]string)
+	if !ok {
+		t.Fatalf("repository fact imports_map = %#v, want map[string][]string", repositoryFact.Payload["imports_map"])
+	}
+	if got, want := importsMap["Worker"][0], firstRepoPath+"/app.py"; got != want {
+		t.Fatalf("repository fact imports_map Worker path = %q, want %q", got, want)
 	}
 
 	fileFact := firstCollected.Facts[1]

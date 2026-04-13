@@ -192,7 +192,10 @@ services:
       context: .
       dockerfile: Dockerfile
     healthcheck:
-      disable: true
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     ports:
       - "${PCG_INGESTER_METRICS_PORT:-19465}:9464"
     environment:

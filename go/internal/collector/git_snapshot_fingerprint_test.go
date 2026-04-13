@@ -50,6 +50,30 @@ func TestBuildCollectedGenerationChangesFreshnessHintForMateriallyDifferentSnaps
 	}
 }
 
+func TestBuildCollectedGenerationChangesFreshnessHintWhenImportsMapChanges(t *testing.T) {
+	t.Parallel()
+
+	repoPath := t.TempDir()
+	observedAt := time.Date(2026, time.April, 12, 15, 30, 0, 0, time.UTC)
+	sourceRunID := "source-run-123"
+	repo := testCollectorRepositoryMetadata(repoPath)
+	snapshotA := testCollectorSnapshot(repoPath, "def handler():\n    return 1\n", "digest-1")
+	snapshotB := testCollectorSnapshot(repoPath, "def handler():\n    return 1\n", "digest-1")
+	snapshotA.ImportsMap = map[string][]string{
+		"Helper": {repoPath + "/helpers.py"},
+	}
+	snapshotB.ImportsMap = map[string][]string{
+		"Handler": {repoPath + "/handlers.py"},
+	}
+
+	collectedA := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA)
+	collectedB := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB)
+
+	if got, want := collectedA.Generation.FreshnessHint, collectedB.Generation.FreshnessHint; got == want {
+		t.Fatalf("FreshnessHint = %q for changed imports_map, want different values", got)
+	}
+}
+
 func TestGitSourceNextKeepsGenerationAndFactsStableAcrossSnapshotChanges(t *testing.T) {
 	t.Parallel()
 

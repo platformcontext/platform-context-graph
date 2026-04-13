@@ -74,18 +74,6 @@ class ListFactReplayEventsRequest(BaseModel):
     limit: int = 100
 
 
-class ReplayFailedFactsRequest(BaseModel):
-    """Request body for replaying terminal fact work items."""
-
-    work_item_ids: list[str] | None = None
-    repository_id: str | None = None
-    source_run_id: str | None = None
-    work_type: str | None = None
-    failure_class: str | None = None
-    operator_note: str | None = None
-    limit: int = 100
-
-
 def _require_fact_queue() -> Any:
     """Return the configured fact queue or raise an HTTP 503."""
 
@@ -331,75 +319,6 @@ async def skip_repository_fact_work_items(
     return {
         "count": len(rows),
         "items": [_serialize_work_item(row) for row in rows],
-    }
-
-
-@router.post("/replay")
-async def replay_failed_facts(
-    payload: ReplayFailedFactsRequest,
-) -> dict[str, Any]:
-    """Replay terminally failed fact-projection work items."""
-
-    if not any(
-        (
-            payload.work_item_ids,
-            payload.repository_id,
-            payload.source_run_id,
-            payload.work_type,
-            payload.failure_class,
-        )
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "admin facts replay requires at least one selector: "
-                "work_item_ids, repository_id, source_run_id, work_type, "
-                "or failure_class"
-            ),
-        )
-    queue = _require_fact_queue()
-    replayed = queue.replay_failed_work_items(
-        work_item_ids=payload.work_item_ids,
-        repository_id=payload.repository_id,
-        source_run_id=payload.source_run_id,
-        work_type=payload.work_type,
-        failure_class=payload.failure_class,
-        operator_note=payload.operator_note,
-        limit=max(payload.limit, 1),
-    )
-    info_logger(
-        "Replayed terminal fact work items",
-        event_name="admin.facts.replayed",
-        extra_keys={
-            "replayed_count": len(replayed),
-            "work_item_ids": [row.work_item_id for row in replayed],
-            "repository_id": payload.repository_id,
-            "source_run_id": payload.source_run_id,
-            "work_type": payload.work_type,
-            "failure_class": payload.failure_class,
-            "operator_note": payload.operator_note,
-            "limit": payload.limit,
-        },
-    )
-    get_observability().record_admin_fact_action(
-        component="api",
-        action="replay_failed_work_items",
-        outcome="success",
-    )
-    return {
-        "status": "replayed",
-        "replayed_count": len(replayed),
-        "work_item_ids": [row.work_item_id for row in replayed],
-        "replayed": [
-            {
-                "work_item_id": row.work_item_id,
-                "repository_id": row.repository_id,
-                "source_run_id": row.source_run_id,
-                "work_type": row.work_type,
-                "failure_class": row.failure_class,
-            }
-            for row in replayed
-        ],
     }
 
 
