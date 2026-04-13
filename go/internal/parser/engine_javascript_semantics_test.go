@@ -199,6 +199,117 @@ func TestDefaultEngineParsePathJSXStatelessComponentSemantics(t *testing.T) {
 	assertNestedStringSliceEqual(t, got, "react", "hooks_used", []string{})
 }
 
+func TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "src", "decorators.ts")
+	writeTestFile(
+		t,
+		filePath,
+		`@sealed
+class Demo<T> {}
+
+function identity<T>(value: T): T {
+  return value;
+}
+
+type Box<T> = { value: T };
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "classes", "Demo")
+	assertNamedBucketContains(t, got, "functions", "identity")
+	assertNamedBucketContains(t, got, "type_aliases", "Box")
+
+	demoClass := findNamedBucketItem(t, got, "classes", "Demo")
+	classDecorators, ok := demoClass["decorators"].([]string)
+	if !ok {
+		t.Fatalf("classes.Demo.decorators = %T, want []string", demoClass["decorators"])
+	}
+	if len(classDecorators) != 0 {
+		t.Fatalf("classes.Demo.decorators = %#v, want []", classDecorators)
+	}
+
+	identityFn := findNamedBucketItem(t, got, "functions", "identity")
+	functionDecorators, ok := identityFn["decorators"].([]string)
+	if !ok {
+		t.Fatalf("functions.identity.decorators = %T, want []string", identityFn["decorators"])
+	}
+	if len(functionDecorators) != 0 {
+		t.Fatalf("functions.identity.decorators = %#v, want []", functionDecorators)
+	}
+	if _, hasTypeParameters := identityFn["type_parameters"]; hasTypeParameters {
+		t.Fatalf("functions.identity should not emit type_parameters metadata")
+	}
+	if _, hasTypeParameters := demoClass["type_parameters"]; hasTypeParameters {
+		t.Fatalf("classes.Demo should not emit type_parameters metadata")
+	}
+}
+
+func TestDefaultEngineParsePathTSXJSXComponentUsageParity(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "src", "Widget.tsx")
+	writeTestFile(
+		t,
+		filePath,
+		`type WidgetProps = {
+  label: string;
+};
+
+function ToolbarButton({ label }: WidgetProps) {
+  return <button>{label}</button>;
+}
+
+export function WidgetPage() {
+  return <ToolbarButton label="hello" />;
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "type_aliases", "WidgetProps")
+	assertNamedBucketContains(t, got, "function_calls", "ToolbarButton")
+}
+
+func findNamedBucketItem(t *testing.T, payload map[string]any, key string, name string) map[string]any {
+	t.Helper()
+
+	items, ok := payload[key].([]map[string]any)
+	if !ok {
+		t.Fatalf("%s = %T, want []map[string]any", key, payload[key])
+	}
+	for _, item := range items {
+		itemName, _ := item["name"].(string)
+		if itemName == name {
+			return item
+		}
+	}
+	t.Fatalf("%s missing item with name %q", key, name)
+	return nil
+}
+
 func assertFrameworksEqual(t *testing.T, payload map[string]any, want ...string) {
 	t.Helper()
 

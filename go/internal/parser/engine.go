@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 // Engine owns native parser dispatch.
@@ -53,6 +54,16 @@ func (e *Engine) ParsePath(
 	payload, err := e.parseDefinition(definition, resolvedPath, isDependency, options)
 	if err != nil {
 		return nil, err
+	}
+	if source, readErr := readSource(resolvedPath); readErr == nil {
+		metadata := inferContentMetadata(resolvedPath, string(source))
+		if strings.TrimSpace(metadata.ArtifactType) != "" {
+			payload["artifact_type"] = metadata.ArtifactType
+		}
+		if strings.TrimSpace(metadata.TemplateDialect) != "" {
+			payload["template_dialect"] = metadata.TemplateDialect
+		}
+		payload["iac_relevant"] = metadata.IACRelevant
 	}
 	payload["repo_path"] = resolvedRepoRoot
 	return payload, nil

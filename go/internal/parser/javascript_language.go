@@ -56,12 +56,16 @@ func (e *Engine) parseJavaScriptLike(
 			if strings.TrimSpace(name) == "" {
 				return
 			}
-			appendBucket(payload, "classes", map[string]any{
+			classItem := map[string]any{
 				"name":        name,
 				"line_number": nodeLine(nameNode),
 				"end_line":    nodeEndLine(node),
 				"lang":        outputLanguage,
-			})
+			}
+			if outputLanguage != "javascript" {
+				classItem["decorators"] = []string{}
+			}
+			appendBucket(payload, "classes", classItem)
 			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage)
 		case "interface_declaration":
 			if outputLanguage == "javascript" {
@@ -137,6 +141,19 @@ func (e *Engine) parseJavaScriptLike(
 			functionNode := node.ChildByFieldName("function")
 			name := javaScriptCallName(functionNode, source)
 			if strings.TrimSpace(name) == "" {
+				return
+			}
+			appendBucket(payload, "function_calls", map[string]any{
+				"name":        name,
+				"line_number": nodeLine(node),
+				"lang":        outputLanguage,
+			})
+		case "jsx_opening_element", "jsx_self_closing_element":
+			if outputLanguage != "tsx" {
+				return
+			}
+			name := javaScriptJSXComponentName(node, source)
+			if !isPascalIdentifier(name) {
 				return
 			}
 			appendBucket(payload, "function_calls", map[string]any{
@@ -355,6 +372,34 @@ func javaScriptCallName(node *tree_sitter.Node, source []byte) string {
 	case "member_expression":
 		property := node.ChildByFieldName("property")
 		return nodeText(property, source)
+	default:
+		return ""
+	}
+}
+
+func javaScriptJSXComponentName(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	nameNode := node.ChildByFieldName("name")
+	if nameNode == nil {
+		return ""
+	}
+
+	switch nameNode.Kind() {
+	case "identifier", "property_identifier", "jsx_identifier", "type_identifier":
+		return strings.TrimSpace(nodeText(nameNode, source))
+	case "member_expression", "nested_identifier":
+		propertyNode := nameNode.ChildByFieldName("property")
+		if propertyNode != nil {
+			return strings.TrimSpace(nodeText(propertyNode, source))
+		}
+		text := strings.TrimSpace(nodeText(nameNode, source))
+		if text == "" {
+			return ""
+		}
+		parts := strings.Split(text, ".")
+		return strings.TrimSpace(parts[len(parts)-1])
 	default:
 		return ""
 	}

@@ -25,9 +25,17 @@ func isCloudFormationTemplate(document map[string]any) bool {
 		return true
 	}
 
-	transform := fmt.Sprint(document["Transform"])
-	if transform == "AWS::Serverless-2016-10-31" {
-		return true
+	switch transform := document["Transform"].(type) {
+	case string:
+		if transform == "AWS::Serverless-2016-10-31" {
+			return true
+		}
+	case []any:
+		for _, item := range transform {
+			if fmt.Sprint(item) == "AWS::Serverless-2016-10-31" {
+				return true
+			}
+		}
 	}
 
 	resources, ok := document["Resources"].(map[string]any)
@@ -65,6 +73,7 @@ func parseCloudFormationTemplate(
 				"line_number": lineNumber,
 				"path":        path,
 				"lang":        lang,
+				"param_type":  "String",
 			}
 			setOptionalString(row, "param_type", body["Type"])
 			setOptionalString(row, "default", body["Default"])

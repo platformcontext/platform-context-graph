@@ -9,6 +9,16 @@ func parseRawText(path string, isDependency bool) map[string]any {
 	payload := basePayload(path, rawTextLanguageForPath(path), isDependency)
 	payload["modules"] = []map[string]any{}
 	payload["module_inclusions"] = []map[string]any{}
+	if source, err := readSource(path); err == nil {
+		metadata := inferContentMetadata(filepath.Clean(path), string(source))
+		if metadata.ArtifactType != "" {
+			payload["artifact_type"] = metadata.ArtifactType
+		}
+		if metadata.TemplateDialect != "" {
+			payload["template_dialect"] = metadata.TemplateDialect
+		}
+		payload["iac_relevant"] = metadata.IACRelevant
+	}
 	return payload
 }
 

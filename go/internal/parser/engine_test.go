@@ -56,6 +56,67 @@ hello("world")
 	assertNamedBucketContains(t, got, "function_calls", "join")
 }
 
+func TestDefaultEngineParsePathPythonNotebook(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "analysis.ipynb")
+	writeTestFile(
+		t,
+		filePath,
+		`{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "# Notebook title"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 1,
+      "metadata": {},
+      "outputs": [],
+      "source": [
+        "import os\n",
+        "\n",
+        "class NotebookGreeter:\n",
+        "    pass\n",
+        "\n",
+        "def hello(name):\n",
+        "    return os.path.join(name, \"child\")\n",
+        "\n",
+        "hello(\"world\")\n"
+      ]
+    }
+  ],
+  "metadata": {},
+  "nbformat": 4,
+  "nbformat_minor": 5
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{VariableScope: "all"})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	if got["lang"] != "python" {
+		t.Fatalf("lang = %#v, want %#v", got["lang"], "python")
+	}
+	assertNamedBucketContains(t, got, "functions", "hello")
+	assertNamedBucketContains(t, got, "classes", "NotebookGreeter")
+	assertNamedBucketContains(t, got, "imports", "os")
+	assertNamedBucketContains(t, got, "function_calls", "join")
+}
+
 func TestDefaultEngineParsePathGo(t *testing.T) {
 	t.Parallel()
 
@@ -236,6 +297,19 @@ metadata:
 	assertEmptyNamedBucket(t, got, "variables")
 	assertEmptyNamedBucket(t, got, "imports")
 	assertEmptyNamedBucket(t, got, "function_calls")
+	if got["artifact_type"] != "generic_config_template" {
+		t.Fatalf("artifact_type = %#v, want %#v", got["artifact_type"], "generic_config_template")
+	}
+	if got["template_dialect"] != "jinja" {
+		t.Fatalf("template_dialect = %#v, want %#v", got["template_dialect"], "jinja")
+	}
+	iacRelevant, ok := got["iac_relevant"].(bool)
+	if !ok {
+		t.Fatalf("iac_relevant = %T, want bool", got["iac_relevant"])
+	}
+	if !iacRelevant {
+		t.Fatalf("iac_relevant = %#v, want true", got["iac_relevant"])
+	}
 }
 
 func TestDefaultEnginePreScanPaths(t *testing.T) {

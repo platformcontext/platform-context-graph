@@ -215,15 +215,9 @@ func parseTerragruntConfig(body *hclsyntax.Body, source []byte, path string) map
 	}
 	sort.Strings(includeNames)
 	sort.Strings(localNames)
-	if len(includeNames) > 0 {
-		row["includes"] = strings.Join(includeNames, ",")
-	}
-	if len(localNames) > 0 {
-		row["locals"] = strings.Join(localNames, ",")
-	}
-	if inputs := objectAttributeKeys(body.Attributes["inputs"], source); len(inputs) > 0 {
-		row["inputs"] = strings.Join(inputs, ",")
-	}
+	row["includes"] = strings.Join(includeNames, ",")
+	row["locals"] = strings.Join(localNames, ",")
+	row["inputs"] = strings.Join(objectAttributeKeys(body.Attributes["inputs"], source), ",")
 	return row
 }
 

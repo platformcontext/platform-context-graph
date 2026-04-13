@@ -188,6 +188,117 @@ def health():
 	assertFrameworksEqual(t, got)
 }
 
+func TestDefaultEngineParsePathPythonDecoratedFunctionsDoNotEmitDecoratorMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "decorated.py")
+	writeTestFile(
+		t,
+		filePath,
+		`def traced(func):
+    return func
+
+@traced
+def greet(name):
+    return name
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	greet := assertFunctionByName(t, got, "greet")
+	decorators, ok := greet["decorators"].([]string)
+	if !ok {
+		t.Fatalf(`functions["greet"]["decorators"] = %T, want []string`, greet["decorators"])
+	}
+	if len(decorators) != 0 {
+		t.Fatalf(`functions["greet"]["decorators"] = %#v, want []`, decorators)
+	}
+}
+
+func TestDefaultEngineParsePathPythonAsyncFunctionsDoNotEmitAsyncFlag(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "async_fn.py")
+	writeTestFile(
+		t,
+		filePath,
+		`async def fetch_remote():
+    return "ok"
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	fetchRemote := assertFunctionByName(t, got, "fetch_remote")
+	if _, ok := fetchRemote["async"]; ok {
+		t.Fatalf(`functions["fetch_remote"] unexpectedly included "async" key: %#v`, fetchRemote)
+	}
+}
+
+func TestDefaultEngineParsePathPythonDoesNotEmitTypeAnnotationsBucket(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "annotations.py")
+	writeTestFile(
+		t,
+		filePath,
+		`def greet(name: str) -> str:
+    return name
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	if _, ok := got["type_annotations"]; ok {
+		t.Fatalf(`payload unexpectedly included "type_annotations": %#v`, got["type_annotations"])
+	}
+}
+
+func assertFunctionByName(t *testing.T, payload map[string]any, name string) map[string]any {
+	t.Helper()
+
+	functions, ok := payload["functions"].([]map[string]any)
+	if !ok {
+		t.Fatalf("functions = %T, want []map[string]any", payload["functions"])
+	}
+	for _, function := range functions {
+		functionName, _ := function["name"].(string)
+		if functionName == name {
+			return function
+		}
+	}
+	t.Fatalf("functions missing name %q in %#v", name, functions)
+	return nil
+}
+
 func assertORMMappingsEqual(t *testing.T, payload map[string]any, want []map[string]any) {
 	t.Helper()
 

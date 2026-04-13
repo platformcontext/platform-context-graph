@@ -52,8 +52,8 @@ cutover draft assumed:
 - `go/internal/parser/engine.go` owns native parse dispatch and prescan fanout
 - `go/internal/parser/python_language.go` and
   `go/internal/parser/python_semantics.go` now own the native Python adapter
-  slice, including FastAPI/Flask `framework_semantics` and bounded ORM table
-  mapping extraction
+  slice, including notebook conversion, FastAPI/Flask
+  `framework_semantics`, and bounded ORM table mapping extraction
 - `go/internal/parser/go_language.go` owns the first native Go adapter
 - `go/internal/parser/javascript_language.go` now owns the representative
   JavaScript and TypeScript/TSX adapter slice, including native
@@ -73,6 +73,10 @@ cutover draft assumed:
 - `go/internal/parser/sql_language.go` now owns the native SQL schema,
   relationship, migration, and partial-recovery adapter slice
 - `go/internal/parser/raw_text_engine.go` owns the raw-text fallback path
+- `go/internal/parser/templated_detection.go` now owns native templated
+  content metadata inference for file and entity materialization parity
+- `go/internal/parser/runtime_dependencies.go` now owns native runtime service
+  dependency extraction helpers for the parser/reducer cutover path
 - `go/internal/parser/scip_*.go` now owns native SCIP binary detection,
   command execution, protobuf reduction, and the Go collector-facing payload
   contract
@@ -95,8 +99,12 @@ cutover draft assumed:
 
 The known parser-matrix blockers are no longer in the collector bridge path.
 The normal Go collector path now owns both the standard tree-sitter route and
-the optional SCIP route. The remaining branch blockers are parser-matrix
-completion plus the separate Python-owned finalization/recovery seams.
+the optional SCIP route. The remaining parser blockers are SCIP parity,
+specialized JSON/data-intelligence document coverage, the richer Python/Go/
+Groovy semantics the Python runtime still carries, and the remaining long-tail
+language partials called out by the capability specs. The branch blockers after
+that are the separate Python-owned finalization/recovery seams and the final
+parser/coordinator deletions.
 
 No new ingestors should start until the milestones in this plan are complete.
 Treat this plan as the active cutover path until the merge bar below is fully
@@ -232,10 +240,13 @@ Progress on this step:
   `go/internal/parser/{json_language,hcl_language,yaml_language,yaml_semantics,yaml_helm,dockerfile_language}.go`
 - [x] Native SQL adapter landed in
   `go/internal/parser/{sql_language,sql_shared,sql_migrations}.go`
+- [x] Python-adjacent parser parity landed for notebook conversion,
+  templated content metadata, and runtime service dependency extraction in
+  `go/internal/parser/{python_language,raw_text_engine,templated_detection,runtime_dependencies}.go`
 - [ ] Extend the native parser runtime to the remaining representative language
   family adapters still missing for truthful matrix parity: SCIP parity,
-  specialized JSON data-intelligence documents, and the remaining long-tail
-  language slices
+  specialized JSON/data-intelligence documents, richer Python/Go/Groovy
+  semantics, and the remaining long-tail language slices
 
 - [ ] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 

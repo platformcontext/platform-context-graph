@@ -96,6 +96,60 @@ func TestDefaultEngineParsePathJSONCloudFormation(t *testing.T) {
 	assertBucketContainsFieldValue(t, got, "cloudformation_resources", "resource_type", "AWS::Lambda::Function")
 }
 
+func TestDefaultEngineParsePathJSONCloudFormationSAMTransformList(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "serverless.json")
+	writeTestFile(
+		t,
+		filePath,
+		`{
+  "Transform": ["AWS::Serverless-2016-10-31"],
+  "Parameters": {
+    "Environment": {
+      "Default": "dev"
+    }
+  },
+  "Resources": {
+    "ApiFunction": {
+      "Type": "Custom::Function",
+      "Properties": {
+        "VpcId": {
+          "Fn::ImportValue": "SharedVpcId"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "VpcId": {
+      "Value": "vpc-12345",
+      "Export": {
+        "Name": "ServiceVpcId"
+      }
+    }
+  }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "cloudformation_resources", "ApiFunction")
+	assertNamedBucketContains(t, got, "cloudformation_parameters", "Environment")
+	assertNamedBucketContains(t, got, "cloudformation_outputs", "VpcId")
+	assertNamedBucketContains(t, got, "cloudformation_cross_stack_imports", "SharedVpcId")
+	assertNamedBucketContains(t, got, "cloudformation_cross_stack_exports", "ServiceVpcId")
+}
+
 func TestDefaultEngineParsePathHCLTerraform(t *testing.T) {
 	t.Parallel()
 
@@ -164,6 +218,19 @@ output "bucket_name" {
 	assertNamedBucketContains(t, got, "terraform_locals", "environment")
 	assertBucketContainsFieldValue(t, got, "terraform_providers", "source", "hashicorp/aws")
 	assertBucketContainsFieldValue(t, got, "terraform_modules", "source", "./modules/service")
+	if got["artifact_type"] != "terraform_hcl" {
+		t.Fatalf("artifact_type = %#v, want %#v", got["artifact_type"], "terraform_hcl")
+	}
+	if _, ok := got["template_dialect"]; ok {
+		t.Fatalf("template_dialect = %#v, want field omitted", got["template_dialect"])
+	}
+	iacRelevant, ok := got["iac_relevant"].(bool)
+	if !ok {
+		t.Fatalf("iac_relevant = %T, want bool", got["iac_relevant"])
+	}
+	if !iacRelevant {
+		t.Fatalf("iac_relevant = %#v, want true", got["iac_relevant"])
+	}
 }
 
 func TestDefaultEngineParsePathHCLTerragrunt(t *testing.T) {
@@ -206,6 +273,63 @@ inputs = {
 	assertBucketContainsFieldValue(t, got, "terragrunt_configs", "terraform_source", "../modules/app")
 	assertBucketContainsFieldValue(t, got, "terragrunt_configs", "includes", "root")
 	assertBucketContainsFieldValue(t, got, "terragrunt_configs", "inputs", "image_tag")
+	assertBucketContainsFieldValue(t, got, "terragrunt_configs", "locals", "env")
+}
+
+func TestDefaultEngineParsePathHCLTerragruntIncludesEmptyLocalsAndInputs(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "terragrunt.hcl")
+	writeTestFile(
+		t,
+		filePath,
+		`terraform {
+  source = "../modules/app"
+}
+
+include "root" {
+  path = find_in_parent_folders()
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "terragrunt_configs", "terragrunt")
+	assertBucketContainsFieldValue(t, got, "terragrunt_configs", "includes", "root")
+
+	configs, ok := got["terragrunt_configs"].([]map[string]any)
+	if !ok {
+		t.Fatalf("terragrunt_configs = %T, want []map[string]any", got["terragrunt_configs"])
+	}
+	if len(configs) != 1 {
+		t.Fatalf("len(terragrunt_configs) = %d, want 1", len(configs))
+	}
+
+	localsValue, hasLocals := configs[0]["locals"]
+	if !hasLocals {
+		t.Fatalf("terragrunt config missing \"locals\" field: %#v", configs[0])
+	}
+	if gotLocals, wantLocals := localsValue, any(""); gotLocals != wantLocals {
+		t.Fatalf("terragrunt locals = %#v, want %#v", gotLocals, wantLocals)
+	}
+
+	inputsValue, hasInputs := configs[0]["inputs"]
+	if !hasInputs {
+		t.Fatalf("terragrunt config missing \"inputs\" field: %#v", configs[0])
+	}
+	if gotInputs, wantInputs := inputsValue, any(""); gotInputs != wantInputs {
+		t.Fatalf("terragrunt inputs = %#v, want %#v", gotInputs, wantInputs)
+	}
 }
 
 func TestDefaultEngineParsePathDockerfile(t *testing.T) {
