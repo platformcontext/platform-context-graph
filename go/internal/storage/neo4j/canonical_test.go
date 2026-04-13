@@ -1,0 +1,252 @@
+package neo4j
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestBuildCanonicalWorkloadUpsertStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildCanonicalWorkloadUpsert(CanonicalWorkloadParams{
+		RepoID:       "repo-1",
+		WorkloadID:   "workload-1",
+		WorkloadName: "my-service",
+		WorkloadKind: "service",
+	}, "finalization/workloads")
+
+	if stmt.Operation != OperationCanonicalUpsert {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (w:Workload {id: $workload_id})") {
+		t.Fatalf("Cypher missing Workload MERGE: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (repo)-[rel:DEFINES]->(w)") {
+		t.Fatalf("Cypher missing DEFINES edge: %s", stmt.Cypher)
+	}
+	if stmt.Parameters["repo_id"] != "repo-1" {
+		t.Fatalf("repo_id = %v, want repo-1", stmt.Parameters["repo_id"])
+	}
+	if stmt.Parameters["evidence_source"] != "finalization/workloads" {
+		t.Fatalf("evidence_source = %v", stmt.Parameters["evidence_source"])
+	}
+}
+
+func TestBuildCanonicalWorkloadInstanceUpsertStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildCanonicalWorkloadInstanceUpsert(CanonicalWorkloadInstanceParams{
+		WorkloadID:   "workload-1",
+		InstanceID:   "instance-1",
+		WorkloadName: "my-service",
+		WorkloadKind: "service",
+		Environment:  "production",
+		RepoID:       "repo-1",
+	}, "finalization/workloads")
+
+	if stmt.Operation != OperationCanonicalUpsert {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (i:WorkloadInstance {id: $instance_id})") {
+		t.Fatalf("Cypher missing WorkloadInstance MERGE: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (i)-[rel:INSTANCE_OF]->(w)") {
+		t.Fatalf("Cypher missing INSTANCE_OF edge: %s", stmt.Cypher)
+	}
+	if stmt.Parameters["instance_id"] != "instance-1" {
+		t.Fatalf("instance_id = %v", stmt.Parameters["instance_id"])
+	}
+	if stmt.Parameters["environment"] != "production" {
+		t.Fatalf("environment = %v", stmt.Parameters["environment"])
+	}
+}
+
+func TestBuildCanonicalRuntimePlatformUpsertStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildCanonicalRuntimePlatformUpsert(CanonicalRuntimePlatformParams{
+		InstanceID:       "instance-1",
+		PlatformID:       "platform:eks:aws:my-cluster:production:us-east-1",
+		PlatformName:     "my-cluster",
+		PlatformKind:     "eks",
+		PlatformProvider: "aws",
+		Environment:      "production",
+		PlatformRegion:   "us-east-1",
+		PlatformLocator:  "arn:aws:eks:us-east-1:123:cluster/my-cluster",
+	}, "finalization/workloads")
+
+	if stmt.Operation != OperationCanonicalUpsert {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (p:Platform {id: $platform_id})") {
+		t.Fatalf("Cypher missing Platform MERGE: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (i)-[rel:RUNS_ON]->(p)") {
+		t.Fatalf("Cypher missing RUNS_ON edge: %s", stmt.Cypher)
+	}
+	if stmt.Parameters["platform_id"] != "platform:eks:aws:my-cluster:production:us-east-1" {
+		t.Fatalf("platform_id = %v", stmt.Parameters["platform_id"])
+	}
+	if stmt.Parameters["platform_kind"] != "eks" {
+		t.Fatalf("platform_kind = %v", stmt.Parameters["platform_kind"])
+	}
+}
+
+func TestBuildCanonicalInfrastructurePlatformUpsertStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildCanonicalInfrastructurePlatformUpsert(CanonicalInfrastructurePlatformParams{
+		RepoID:              "repo-1",
+		PlatformID:          "platform:eks:aws:infra-cluster:staging:us-west-2",
+		PlatformName:        "infra-cluster",
+		PlatformKind:        "eks",
+		PlatformProvider:    "aws",
+		PlatformEnvironment: "staging",
+		PlatformRegion:      "us-west-2",
+		PlatformLocator:     "arn:aws:eks:us-west-2:123:cluster/infra-cluster",
+	}, "finalization/workloads")
+
+	if stmt.Operation != OperationCanonicalUpsert {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (p:Platform {id: $platform_id})") {
+		t.Fatalf("Cypher missing Platform MERGE: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (repo)-[rel:PROVISIONS_PLATFORM]->(p)") {
+		t.Fatalf("Cypher missing PROVISIONS_PLATFORM edge: %s", stmt.Cypher)
+	}
+	if stmt.Parameters["platform_environment"] != "staging" {
+		t.Fatalf("platform_environment = %v", stmt.Parameters["platform_environment"])
+	}
+}
+
+func TestBuildCanonicalDeploymentSourceUpsertStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildCanonicalDeploymentSourceUpsert(CanonicalDeploymentSourceParams{
+		InstanceID:       "instance-1",
+		DeploymentRepoID: "deploy-repo-1",
+	}, "finalization/workloads")
+
+	if stmt.Operation != OperationCanonicalUpsert {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (i)-[rel:DEPLOYMENT_SOURCE]->(deployment_repo)") {
+		t.Fatalf("Cypher missing DEPLOYMENT_SOURCE edge: %s", stmt.Cypher)
+	}
+	if stmt.Parameters["deployment_repo_id"] != "deploy-repo-1" {
+		t.Fatalf("deployment_repo_id = %v", stmt.Parameters["deployment_repo_id"])
+	}
+}
+
+func TestBuildCanonicalRepoDependencyUpsertStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildCanonicalRepoDependencyUpsert(CanonicalRepoDependencyParams{
+		RepoID:       "repo-a",
+		TargetRepoID: "repo-b",
+	}, "finalization/workloads")
+
+	if stmt.Operation != OperationCanonicalUpsert {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (source_repo)-[rel:DEPENDS_ON]->(target_repo)") {
+		t.Fatalf("Cypher missing DEPENDS_ON edge: %s", stmt.Cypher)
+	}
+	if stmt.Parameters["repo_id"] != "repo-a" {
+		t.Fatalf("repo_id = %v", stmt.Parameters["repo_id"])
+	}
+	if stmt.Parameters["target_repo_id"] != "repo-b" {
+		t.Fatalf("target_repo_id = %v", stmt.Parameters["target_repo_id"])
+	}
+}
+
+func TestBuildCanonicalWorkloadDependencyUpsertStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildCanonicalWorkloadDependencyUpsert(CanonicalWorkloadDependencyParams{
+		WorkloadID:       "wl-a",
+		TargetWorkloadID: "wl-b",
+	}, "finalization/workloads")
+
+	if stmt.Operation != OperationCanonicalUpsert {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (source)-[rel:DEPENDS_ON]->(target)") {
+		t.Fatalf("Cypher missing workload DEPENDS_ON edge: %s", stmt.Cypher)
+	}
+	if stmt.Parameters["workload_id"] != "wl-a" {
+		t.Fatalf("workload_id = %v", stmt.Parameters["workload_id"])
+	}
+}
+
+func TestBuildRetractInfrastructurePlatformEdgesStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildRetractInfrastructurePlatformEdges([]string{"repo-1", "repo-2"}, "finalization/workloads")
+
+	if stmt.Operation != OperationCanonicalRetract {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalRetract)
+	}
+	if !strings.Contains(stmt.Cypher, "PROVISIONS_PLATFORM") {
+		t.Fatalf("Cypher missing PROVISIONS_PLATFORM: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "DELETE rel") {
+		t.Fatalf("Cypher missing DELETE: %s", stmt.Cypher)
+	}
+	repoIDs, ok := stmt.Parameters["repo_ids"].([]string)
+	if !ok {
+		t.Fatalf("repo_ids type = %T, want []string", stmt.Parameters["repo_ids"])
+	}
+	if len(repoIDs) != 2 {
+		t.Fatalf("repo_ids len = %d, want 2", len(repoIDs))
+	}
+}
+
+func TestBuildRetractRepoDependencyEdgesStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildRetractRepoDependencyEdges([]string{"repo-1"}, "finalization/workloads")
+
+	if stmt.Operation != OperationCanonicalRetract {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalRetract)
+	}
+	if !strings.Contains(stmt.Cypher, "DEPENDS_ON") {
+		t.Fatalf("Cypher missing DEPENDS_ON: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "source_repo:Repository") {
+		t.Fatalf("Cypher missing Repository match: %s", stmt.Cypher)
+	}
+}
+
+func TestBuildRetractWorkloadDependencyEdgesStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildRetractWorkloadDependencyEdges([]string{"repo-1"}, "finalization/workloads")
+
+	if stmt.Operation != OperationCanonicalRetract {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalRetract)
+	}
+	if !strings.Contains(stmt.Cypher, "DEPENDS_ON") {
+		t.Fatalf("Cypher missing DEPENDS_ON: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "source:Workload") {
+		t.Fatalf("Cypher missing Workload match: %s", stmt.Cypher)
+	}
+}
+
+func TestBuildDeleteOrphanPlatformNodesStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildDeleteOrphanPlatformNodes("finalization/workloads")
+
+	if stmt.Operation != OperationCanonicalRetract {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalRetract)
+	}
+	if !strings.Contains(stmt.Cypher, "NOT (p)--()") {
+		t.Fatalf("Cypher missing orphan check: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "DELETE p") {
+		t.Fatalf("Cypher missing DELETE p: %s", stmt.Cypher)
+	}
+}
