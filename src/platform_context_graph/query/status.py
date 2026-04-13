@@ -209,7 +209,7 @@ def resolve_index_status_target(
 def _describe_index_run(target: str | Path) -> dict[str, Any] | None:
     """Lazily import the coordinator status helper to avoid circular imports."""
 
-    from ..indexing.coordinator import describe_index_run
+    from ..indexing.run_status import describe_index_run
 
     return describe_index_run(target)
 

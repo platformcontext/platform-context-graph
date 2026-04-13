@@ -36,6 +36,16 @@ LOCK_METADATA_FILENAME = "lock.json"
 DEFAULT_LOCK_HEARTBEAT_SECONDS = 30
 DEFAULT_LOCK_STALE_SECONDS = 300
 
+__all__ = [
+    "DEFAULT_BRANCHLESS_RETRY_CACHE_FILENAME",
+    "DEFAULT_BRANCHLESS_RETRY_SECONDS",
+    "branchless_retry_key",
+    "default_branch_retry_cache_path",
+    "default_branch_retry_seconds",
+    "load_default_branch_retry_cache",
+    "save_default_branch_retry_cache",
+]
+
 # Unique identifier for this process lifetime.  In Kubernetes, PID 1 and
 # hostname are reused across container restarts so they cannot distinguish
 # a new incarnation from the previous one.  A random boot ID lets
@@ -111,8 +121,8 @@ def invoke_index_workspace(
 def resumable_repository_paths(workspace: Path) -> list[Path]:
     """Return repositories from the latest workspace run that still need work."""
 
-    from platform_context_graph.indexing import describe_latest_index_run
     from platform_context_graph.indexing.coordinator_models import ACTIVE_REPO_STATES
+    from platform_context_graph.indexing.run_status import describe_latest_index_run
 
     summary = describe_latest_index_run(workspace.resolve())
     if summary is None:

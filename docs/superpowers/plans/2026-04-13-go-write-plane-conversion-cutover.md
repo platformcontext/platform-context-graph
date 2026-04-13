@@ -255,6 +255,11 @@ Progress on this step:
   `go/internal/parser/{ruby_language,php_language,swift_language,elixir_dart_language}.go`
   plus focused TDD coverage in
   `go/internal/parser/{engine_ruby_semantics,php_language,engine_swift_semantics,engine_elixir_semantics}_test.go`
+- [x] Normal runtime status surfaces now read from
+  `src/platform_context_graph/indexing/run_status.py` instead of importing the
+  legacy Python coordinator execution stack, and `GraphBuilder` startup now
+  lazily initializes the Python parser registry so Go-owned runtime startup no
+  longer bootstraps Python parsers by default
 - [ ] Extend the native parser runtime to the remaining representative language
   family adapters still missing for truthful matrix parity: SCIP parity tie-
   break behavior now matches the Python contract, specialized JSON/data-
@@ -262,7 +267,9 @@ Progress on this step:
   annotation, Kotlin secondary constructor, Rust impl ownership, and the first
   Ruby/PHP/Swift/Elixir parity wave are now in Go, while the remaining parser
   gaps are the residual heuristic edges in those same long-tail adapters plus
-  final parser/coordinator deletion work
+  the remaining Python runtime ownership seams in SCIP fallback, dependency
+  indexing, single-file fallback, and the final coordinator/worker deletion
+  work
 
 - [ ] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 

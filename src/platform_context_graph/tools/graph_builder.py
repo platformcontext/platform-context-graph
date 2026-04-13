@@ -8,8 +8,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pathspec
-
 from ..cli.config_manager import get_config_value
 from ..cli.helpers.go_index_runtime import run_go_bootstrap_index
 from ..core.database import DatabaseManager
@@ -22,7 +20,6 @@ from ..repository_identity import git_remote_for_path, repository_metadata
 from ..utils.debug_log import debug_log, error_logger, info_logger, warning_logger
 from ..utils.debug_log import debug_logger
 from ..collectors.git.indexing import (
-    build_graph_from_path_async as _build_graph_from_path_async,
     collect_supported_files as _collect_supported_files,
     estimate_processing_time as _estimate_processing_time,
     get_ignored_dir_names as _get_ignored_dir_names,
@@ -89,7 +86,7 @@ class GraphBuilder:
         self.job_manager = job_manager
         self.loop = loop
         self.driver = self.db_manager.get_driver()
-        self.parsers = build_parser_registry(get_config_value)
+        self.parsers: dict[str, Any] | None = None
         self.create_schema()
 
     def create_schema(self) -> None:
@@ -100,7 +97,15 @@ class GraphBuilder:
 
     def _pre_scan_for_imports(self, files: list[Path]) -> dict[str, Any]:
         """Collect import resolution hints before indexing files."""
+        self._ensure_parsers()
         return _pre_scan_for_imports(self, files)
+
+    def _ensure_parsers(self) -> dict[str, Any]:
+        """Lazily initialize the Python parser registry when a legacy path needs it."""
+
+        if self.parsers is None:
+            self.parsers = build_parser_registry(get_config_value)
+        return self.parsers
 
     def add_repository_to_graph(
         self, repo_path: Path, is_dependency: bool = False
@@ -351,6 +356,7 @@ class GraphBuilder:
         self, repo_path: Path, path: Path, is_dependency: bool = False
     ) -> dict[str, Any]:
         """Parse one file with the registered language parser."""
+        self._ensure_parsers()
         return _parse_file(
             self,
             repo_path,
@@ -372,6 +378,7 @@ class GraphBuilder:
 
     def _collect_supported_files(self, path: Path) -> list[Path]:
         """Collect files whose extensions are supported by the parser registry."""
+        self._ensure_parsers()
         return _collect_supported_files(
             self,
             path,

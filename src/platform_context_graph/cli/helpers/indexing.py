@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from ...indexing.coordinator import describe_index_run
+from ...indexing.run_status import describe_index_run
 from ...core import get_database_manager
 from ...tools.code_finder import CodeFinder
 from ...platform.package_resolver import get_local_package_path

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from ..indexing.coordinator import describe_index_run
+from ..indexing.run_status import describe_index_run
 from ..query import status as status_queries
 
 __all__ = ["RuntimeStatusToolMixin"]

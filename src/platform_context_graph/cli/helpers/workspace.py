@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ...indexing.coordinator import describe_index_run
+from ...indexing.run_status import describe_index_run
 from ...runtime.ingester import RepoSyncConfig, build_workspace_plan, run_workspace_sync
 from .indexing import index_helper
 from .watch import watch_helper
