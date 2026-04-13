@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
-from platform_context_graph.parsers.registry import TreeSitterParser
 from platform_context_graph.parsers.languages.groovy import GroovyTreeSitterParser
+from platform_context_graph.utils.tree_sitter_manager import get_tree_sitter_manager
 
 
 def _parser() -> GroovyTreeSitterParser:
-    """Create the Groovy parser through the shared tree-sitter wrapper."""
+    """Create the Groovy parser through a direct tree-sitter wrapper."""
 
-    return GroovyTreeSitterParser(TreeSitterParser("groovy"))
+    manager = get_tree_sitter_manager()
+    wrapper = SimpleNamespace(
+        language_name="groovy",
+        language=manager.get_language_safe("groovy"),
+        parser=manager.create_parser("groovy"),
+    )
+    return GroovyTreeSitterParser(wrapper)
 
 
 def test_parse_jenkinsfile_extracts_pipeline_metadata(tmp_path: Path) -> None:

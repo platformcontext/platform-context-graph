@@ -267,3 +267,21 @@ class TestPythonParserRuntimeOwnershipRemoved:
             "import the Python parser package:\n"
             + "\n".join(f"  - {path}" for path in sorted(set(violations)))
         )
+
+    def test_no_python_parser_registry_module(self) -> None:
+        """The legacy Python parser registry should be deleted."""
+
+        target = SRC_ROOT / "parsers" / "registry.py"
+        assert not target.exists(), (
+            f"{target.relative_to(REPO_ROOT)} still exists; "
+            "Go parser registry ownership replaces this Python scaffold"
+        )
+
+    def test_no_python_parser_raw_text_module(self) -> None:
+        """The legacy Python raw-text parser registry helper should be deleted."""
+
+        target = SRC_ROOT / "parsers" / "raw_text.py"
+        assert not target.exists(), (
+            f"{target.relative_to(REPO_ROOT)} still exists; "
+            "Go parser registry ownership replaces this Python scaffold"
+        )

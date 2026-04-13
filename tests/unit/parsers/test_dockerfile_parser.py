@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from platform_context_graph.parsers.languages.dockerfile import DockerfileTreeSitterParser
-from platform_context_graph.parsers.registry import TreeSitterParser
+from platform_context_graph.utils.tree_sitter_manager import get_tree_sitter_manager
 
 
 def _parser() -> DockerfileTreeSitterParser:
-    """Create the Dockerfile parser through the shared tree-sitter wrapper."""
+    """Create the Dockerfile parser through a direct tree-sitter wrapper."""
 
-    return DockerfileTreeSitterParser(TreeSitterParser("dockerfile"))
+    manager = get_tree_sitter_manager()
+    wrapper = SimpleNamespace(
+        language_name="dockerfile",
+        language=manager.get_language_safe("dockerfile"),
+        parser=manager.create_parser("dockerfile"),
+    )
+    return DockerfileTreeSitterParser(wrapper)
 
 
 def test_parse_dockerfile_extracts_stage_metadata(tmp_path: Path) -> None:

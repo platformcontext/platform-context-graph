@@ -126,6 +126,12 @@ concentrated in parser-package modules, capability metadata, and offline/test
 helpers that must be deleted only after Go feature-parity coverage is fully
 proven.
 
+The next parser-package deletion wave removes the dead Python parser registry
+and raw-text registry helpers (`src/platform_context_graph/parsers/registry.py`
+and `src/platform_context_graph/parsers/raw_text.py`) plus the stale parser
+smoke script that still referenced them. Remaining parser-package work after
+that is feature-parity deletion, not normal runtime ownership.
+
 Parser extraction ownership already moved further than the generated capability
 matrix currently shows:
 
