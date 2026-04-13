@@ -55,8 +55,9 @@ The root cause is the interaction of three current behaviors:
 
 ### 1. The Ingester Is A Real Graph Writer In Facts-First Mode
 
-In deployed split-service mode, the ingester runs `pcg internal repo-sync-loop`
-and still performs inline facts-first projection for repository snapshots.
+In deployed split-service mode, the ingester runs as the Go binary
+`/usr/local/bin/pcg-ingester` and still performs inline facts-first
+projection for repository snapshots.
 
 That means the ingester is not merely:
 

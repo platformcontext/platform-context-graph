@@ -9,8 +9,6 @@ from typing import Any
 import typer
 from rich.table import Table
 
-from platform_context_graph.observability import initialize_observability
-
 from ..remote import remote_mode_requested
 from ..remote_commands import render_remote_workspace_status
 from .runtime_admin import register_admin_commands
@@ -268,76 +266,12 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
             rediscover_interval_seconds=sync_interval_seconds,
         )
 
-    @internal_app.command("bootstrap-index", hidden=True)
-    def internal_bootstrap_index() -> None:
-        """Run bootstrap clone and indexing once."""
-        main_module.run_bootstrap_index(
-            main_module.RepoSyncConfig.from_env(component="bootstrap-index")
-        )
-
     @internal_app.command("repo-sync", hidden=True)
     def internal_repo_sync() -> None:
         """Run one repo sync cycle and re-index if needed."""
         main_module.run_repo_sync_cycle(
             main_module.RepoSyncConfig.from_env(component="repo-sync")
         )
-
-    @internal_app.command("repo-sync-loop", hidden=True)
-    def internal_repo_sync_loop(
-        interval_seconds: int = typer.Option(
-            None,
-            "--interval-seconds",
-            help="Seconds between repo sync cycles. Defaults to PCG_REPO_SYNC_INTERVAL_SECONDS or 900.",
-        ),
-    ) -> None:
-        """Run the repo sync loop used by the sidecar container."""
-        effective_interval = interval_seconds
-        if effective_interval is None:
-            effective_interval = int(os.getenv("PCG_REPO_SYNC_INTERVAL_SECONDS", "900"))
-        main_module.run_repo_sync_loop(interval_seconds=effective_interval)
-
-    @internal_app.command("resolution-engine", hidden=True)
-    def internal_resolution_engine() -> None:
-        """Run the standalone facts projection engine."""
-        import asyncio
-        from functools import partial
-
-        from platform_context_graph.core import get_database_manager
-        from platform_context_graph.core.jobs import JobManager
-        from platform_context_graph.facts.state import (
-            get_fact_store,
-            get_fact_work_queue,
-            get_projection_decision_store,
-        )
-        from platform_context_graph.resolution.orchestration import (
-            project_work_item,
-            start_resolution_engine,
-        )
-        from platform_context_graph.tools.graph_builder import GraphBuilder
-
-        os.environ.setdefault("PCG_RUNTIME_ROLE", "resolution-engine")
-        initialize_observability(component="resolution-engine")
-        queue = get_fact_work_queue()
-        if queue is None:
-            raise typer.Exit(
-                "Resolution engine requires PCG_POSTGRES_DSN or PCG_FACT_STORE_DSN"
-            )
-        fact_store = get_fact_store()
-        decision_store = get_projection_decision_store()
-        db_manager = get_database_manager()
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        builder = GraphBuilder(db_manager, JobManager(), loop)
-        projector = partial(
-            project_work_item,
-            builder=builder,
-            fact_store=fact_store,
-            decision_store=decision_store,
-        )
-        start_resolution_engine(queue=queue, projector=projector)
 
     @app.command("m", rich_help_panel="Shortcuts")
     def mcp_setup_alias() -> None:

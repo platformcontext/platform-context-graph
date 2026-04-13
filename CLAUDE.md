@@ -22,9 +22,9 @@ read these pages in this order:
 | Runtime | Responsibility | Command | K8s shape |
 | --- | --- | --- | --- |
 | API | HTTP API, MCP, admin endpoints, canonical graph reads | `pcg serve start --host 0.0.0.0 --port 8080` | `Deployment` |
-| Ingester | Repo sync, Git collector, parse, fact emission | `pcg internal repo-sync-loop` | `StatefulSet` + PVC |
-| Resolution Engine | Claim fact work items and project graph state | `pcg internal resolution-engine` | `Deployment` |
-| Bootstrap Index | One-shot initial sync/index seed | `pcg internal bootstrap-index` | one-shot runtime |
+| Ingester | Repo sync, Git collector, parse, fact emission | `/usr/local/bin/pcg-ingester` | `StatefulSet` + PVC |
+| Resolution Engine | Claim fact work items and project graph state | `/usr/local/bin/pcg-reducer` | `Deployment` |
+| Bootstrap Index | One-shot initial sync/index seed | `/usr/local/bin/pcg-bootstrap-index` | one-shot runtime |
 
 Shared backing stores:
 
@@ -69,7 +69,7 @@ This starts:
 - Jaeger
 - `bootstrap-index`
 - `platform-context-graph`
-- `repo-sync`
+- `ingester`
 - `resolution-engine`
 
 Useful checks:
@@ -77,7 +77,7 @@ Useful checks:
 ```bash
 docker compose ps
 docker compose logs bootstrap-index | tail -50
-docker compose logs repo-sync | tail -50
+docker compose logs ingester | tail -50
 docker compose logs resolution-engine | tail -50
 curl -s http://localhost:8080/health
 ```

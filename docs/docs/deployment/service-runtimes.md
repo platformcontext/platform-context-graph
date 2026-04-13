@@ -36,19 +36,19 @@ Current branch caveat:
   external `scip-*` indexer execution, protobuf reduction, and Go tree-sitter
   supplementation on the collector path instead of bouncing through Python
 - the remaining cutover debt is now outside the normal collector hot path:
-  Python runtime command removal and Python finalization/recovery ownership
-  removal
-- no new ingestor family should start until the Python runtime ownership is
-  gone and the parser cutover is proven end to end
+  parser-matrix completion plus Python finalization/recovery/admin repair
+  ownership removal
+- no new ingestor family should start until the Python finalization/recovery
+  ownership is gone and the parser cutover is proven end to end
 
 ## Runtime Contract
 
 | Runtime | Owns | Default command | Storage access | Metrics exposure | Kubernetes shape |
 | --- | --- | --- | --- | --- | --- |
 | API | HTTP API, MCP, query reads, admin endpoints | `pcg serve start --host 0.0.0.0 --port 8080` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
-| Ingester | repo sync, parsing, fact emission, workspace ownership | `pcg internal repo-sync-loop` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
-| Resolution Engine | queue draining, projection, retries, replay, recovery | `pcg internal resolution-engine` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
-| Bootstrap Index | one-shot initial indexing | `pcg internal bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
+| Ingester | repo sync, parsing, fact emission, workspace ownership | `/usr/local/bin/pcg-ingester` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
+| Resolution Engine | queue draining, projection, retries, replay, recovery | `/usr/local/bin/pcg-reducer` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
+| Bootstrap Index | one-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
 
 ## Health, Status, And Completeness
 
@@ -137,20 +137,11 @@ normal freshness path.
 
 ## Naming Note
 
-The public runtime name is `ingester`.
+The public runtime name remains `ingester`.
 
-The internal process that runs inside that runtime is still
-`pcg internal repo-sync-loop`.
-
-That distinction is intentional:
-
-- operators scale, monitor, and troubleshoot the `ingester` runtime
-- the process entrypoint remains `repo-sync-loop` because it names the internal
-  long-running sync loop, not the deployable service boundary
-
-Keep the public runtime, Kubernetes workload, service labels, dashboards, and
-documentation on `ingester`. Keep `repo-sync-loop` for the internal command and
-implementation details.
+Operators should still scale, monitor, and troubleshoot the `ingester`
+runtime, but the deployed process is now the dedicated Go binary
+`/usr/local/bin/pcg-ingester` instead of a Python CLI shim.
 
 ## Deployed Flow
 
@@ -170,10 +161,10 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  A["bootstrap-index"] --> B["Initial one-shot indexing"]
+  A["pcg-bootstrap-index"] --> B["Initial one-shot indexing"]
   C["ingester"] --> D["Ongoing sync and fact emission"]
   D --> E["Fact work queue"]
-  E --> F["resolution-engine"]
+  E --> F["pcg-reducer"]
   G["platform-context-graph API"] --> H["Graph + content reads"]
 ```
 

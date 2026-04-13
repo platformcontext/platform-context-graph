@@ -234,70 +234,31 @@ class TestCLICommands:
             with pytest.raises(ValueError, match="PCG_API_KEY"):
                 start_service(host="127.0.0.1", port=9000, reload=False)
 
-    @patch("platform_context_graph.cli.main.run_bootstrap_index")
-    def test_internal_bootstrap_index_command_uses_python_runtime(
-        self, mock_run_bootstrap
-    ):
+    def test_internal_bootstrap_index_command_is_not_exposed_in_python_cli(self):
         result = runner.invoke(app, ["internal", "bootstrap-index"])
 
-        assert result.exit_code == 0
-        mock_run_bootstrap.assert_called_once()
+        assert result.exit_code == 2
 
     @patch("platform_context_graph.cli.main.run_repo_sync_cycle")
-    def test_internal_repo_sync_command_uses_python_runtime(self, mock_run_repo_sync):
+    def test_internal_repo_sync_command_remains_available_for_local_helpers(
+        self, mock_run_repo_sync
+    ):
         result = runner.invoke(app, ["internal", "repo-sync"])
 
         assert result.exit_code == 0
         mock_run_repo_sync.assert_called_once()
 
-    @patch("platform_context_graph.cli.main.run_repo_sync_loop")
-    def test_internal_repo_sync_loop_command_uses_python_runtime(
-        self, mock_run_repo_sync_loop
-    ):
+    def test_internal_repo_sync_loop_command_is_not_exposed_in_python_cli(self):
         result = runner.invoke(
             app, ["internal", "repo-sync-loop", "--interval-seconds", "42"]
         )
 
-        assert result.exit_code == 0
-        mock_run_repo_sync_loop.assert_called_once_with(interval_seconds=42)
+        assert result.exit_code == 2
 
-    @patch(
-        "platform_context_graph.resolution.orchestration.start_resolution_engine"
-    )
-    @patch("platform_context_graph.facts.state.get_projection_decision_store")
-    @patch("platform_context_graph.facts.state.get_fact_work_queue")
-    @patch("platform_context_graph.facts.state.get_fact_store")
-    @patch("platform_context_graph.core.get_database_manager")
-    @patch("platform_context_graph.tools.graph_builder.GraphBuilder")
-    @patch("platform_context_graph.core.jobs.JobManager")
-    def test_internal_resolution_engine_command_uses_python_runtime(
-        self,
-        mock_job_manager,
-        mock_graph_builder,
-        mock_get_database_manager,
-        mock_get_fact_store,
-        mock_get_fact_work_queue,
-        mock_get_projection_decision_store,
-        mock_start_resolution_engine,
-    ):
-        mock_get_fact_work_queue.return_value = object()
-        mock_get_fact_store.return_value = object()
-        mock_get_projection_decision_store.return_value = object()
-        mock_get_database_manager.return_value = object()
-        mock_job_manager.return_value = object()
-        mock_graph_builder.return_value = object()
-
+    def test_internal_resolution_engine_command_is_not_exposed_in_python_cli(self):
         result = runner.invoke(app, ["internal", "resolution-engine"])
 
-        assert result.exit_code == 0
-        mock_start_resolution_engine.assert_called_once()
-        _, kwargs = mock_start_resolution_engine.call_args
-        assert kwargs["queue"] is mock_get_fact_work_queue.return_value
-        assert kwargs["projector"].keywords == {
-            "builder": mock_graph_builder.return_value,
-            "fact_store": mock_get_fact_store.return_value,
-            "decision_store": mock_get_projection_decision_store.return_value,
-        }
+        assert result.exit_code == 2
 
     @patch("platform_context_graph.cli.main.workspace_plan_helper")
     def test_workspace_plan_command_uses_workspace_helper(

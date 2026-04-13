@@ -19,8 +19,6 @@ to-Go platform conversion is not.
 
 The branch still has active Python-owned runtime seams:
 
-- Python runtime entrypoints still own deployed runtime roles in
-  `src/platform_context_graph/cli/commands/runtime.py`.
 - parser, discovery, snapshot, and content-shaping behavior still depend on
   Python-owned runtime code in
   `src/platform_context_graph/collectors/git/parse_execution.py`,
@@ -75,11 +73,15 @@ cutover draft assumed:
   contract
 - `go/internal/collector/git_snapshot_scip.go` now owns the optional
   SCIP-enabled collector snapshot path in Go
+- `src/platform_context_graph/cli/commands/runtime.py` no longer exposes the
+  deployed runtime service commands `bootstrap-index`, `repo-sync-loop`, or
+  `resolution-engine`; Compose and Helm now start the Go-owned write plane
+  through dedicated binaries
 
 The known parser-matrix blockers are no longer in the collector bridge path.
 The normal Go collector path now owns both the standard tree-sitter route and
-the optional SCIP route. The remaining branch blockers are the separate
-Python-owned runtime command and finalization/recovery seams.
+the optional SCIP route. The remaining branch blockers are parser-matrix
+completion plus the separate Python-owned finalization/recovery seams.
 
 No new ingestors should start until the milestones in this plan are complete.
 Treat this plan as the active cutover path until the merge bar below is fully
@@ -432,7 +434,7 @@ All 13 tests fail as expected. Committed as `9bb6d02`.
 Additional gate tests for resolution, facts, and status store ownership tracked
 in ownership completion plan Phase C (Chunk C3).
 
-- [ ] **Step 2: Remove Python write-runtime command ownership**
+- [x] **Step 2: Remove Python write-runtime command ownership**
 
 Make `bootstrap-index`, `repo-sync-loop`, and `resolution-engine` no longer the
 normal deployed write-plane commands.
@@ -444,7 +446,7 @@ Anything left under `src/platform_context_graph/runtime/ingester/` and
 the normal write path with explicit quarantine labeling and a tracked removal
 condition on this branch.
 
-- [ ] **Step 4: Run repo-wide cutover checks**
+- [x] **Step 4: Run repo-wide cutover checks**
 
 Run:
 
@@ -459,6 +461,13 @@ Expected:
 - no normal write-plane dependency on `pythonbridge`
 - no live Go collector bridge modules left
 - no Python runtime entrypoints still presented as deployed runtime owners
+
+Verified with:
+
+- targeted runtime ownership gate in `tests/integration/deployment/test_python_runtime_ownership.py`
+- CLI regression coverage in `tests/integration/cli/test_cli_commands.py` and
+  `tests/integration/cli/test_resolution_engine_runtime_identity.py`
+- `rg` scan over `src/platform_context_graph/cli/commands/runtime.py`
 
 - [ ] **Step 5: Run final parity gates**
 

@@ -152,13 +152,13 @@ The deployed platform has three long-running runtimes plus one one-shot helper:
 | Runtime | What it owns | Default command |
 | --- | --- | --- |
 | API | HTTP API, MCP surface, graph and content reads, admin endpoints | `pcg serve start --host 0.0.0.0 --port 8080` |
-| Ingester | repo sync, workspace ownership, parsing, fact emission | `pcg internal repo-sync-loop` |
-| Resolution Engine | queue draining, fact loading, projection, retries, recovery | `pcg internal resolution-engine` |
-| Bootstrap Index | initial one-shot indexing before steady-state sync | `pcg internal bootstrap-index` |
+| Ingester | repo sync, workspace ownership, parsing, fact emission | `/usr/local/bin/pcg-ingester` |
+| Resolution Engine | queue draining, fact loading, projection, retries, recovery | `/usr/local/bin/pcg-reducer` |
+| Bootstrap Index | initial one-shot indexing before steady-state sync | `/usr/local/bin/pcg-bootstrap-index` |
 
-The public runtime name is `ingester`. The internal command remains
-`pcg internal repo-sync-loop`. This keeps operator-facing naming stable while
-preserving a specific name for the long-running repository sync process.
+The public runtime name is `ingester`. Compose and Helm now start the
+long-running write plane through dedicated Go binaries rather than Python CLI
+runtime entrypoints.
 
 See [Service Runtimes](docs/docs/deployment/service-runtimes.md) for the
 complete runtime contract.
