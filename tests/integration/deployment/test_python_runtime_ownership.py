@@ -106,14 +106,25 @@ class TestPythonResolutionOwnershipRemoved:
         "resolution/platform_families.py",
         "resolution/decisions/postgres.py",
         "resolution/orchestration/runtime.py",
+        "resolution/orchestration/engine.py",
         "resolution/orchestration/failure_classification.py",
         "resolution/shared_projection/runtime.py",
         "resolution/shared_projection/emission.py",
         "resolution/shared_projection/partitioning.py",
+        "resolution/shared_projection/postgres.py",
+        "resolution/shared_projection/platform_domain.py",
+        "resolution/shared_projection/dependency_domain.py",
+        "resolution/shared_projection/dependency_runtime_support.py",
+        "resolution/shared_projection/followup.py",
+        "resolution/shared_projection/models.py",
+        "resolution/shared_projection/schema.py",
         "resolution/projection/entities.py",
         "resolution/projection/files.py",
         "resolution/projection/relationships.py",
         "resolution/projection/workloads.py",
+        "resolution/projection/repositories.py",
+        "resolution/projection/common.py",
+        "resolution/maintenance/platform_cleanup.py",
     ]
 
     @pytest.mark.parametrize("relative_path", RESOLUTION_FILES)
@@ -133,9 +144,20 @@ class TestPythonFactsOwnershipRemoved:
         "facts/state.py",
         "facts/emission/git_snapshot.py",
         "facts/storage/postgres.py",
+        "facts/storage/queries.py",
+        "facts/storage/schema.py",
+        "facts/storage/sql.py",
         "facts/work_queue/postgres.py",
         "facts/work_queue/recovery.py",
         "facts/work_queue/replay.py",
+        "facts/work_queue/claims.py",
+        "facts/work_queue/models.py",
+        "facts/work_queue/schema.py",
+        "facts/work_queue/stages.py",
+        "facts/work_queue/failure_types.py",
+        "facts/work_queue/inspection.py",
+        "facts/work_queue/support.py",
+        "facts/work_queue/shared_completion.py",
     ]
 
     @pytest.mark.parametrize("relative_path", FACTS_FILES)
@@ -155,6 +177,7 @@ class TestPythonStatusStoreOwnershipRemoved:
         "runtime/status_store.py",
         "runtime/status_store_db.py",
         "runtime/status_store_runtime.py",
+        "runtime/status_store_support.py",
     ]
 
     @pytest.mark.parametrize("relative_path", STATUS_STORE_FILES)
