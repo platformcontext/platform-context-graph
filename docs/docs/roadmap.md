@@ -48,6 +48,10 @@ The rewrite contract for this phase is captured in:
 - [Architecture](architecture.md)
 - [Architecture Decision Records](adrs/index.md)
 
+The rewrite proof and documentation package is complete, but the Git
+write-plane conversion is still in progress. No new ingestors start until the
+Git cutover finishes.
+
 ## Rewrite Milestones
 
 | Milestone | Outcome | Effort | Validation focus |
@@ -69,6 +73,20 @@ Milestone 1 on the rewrite branch is now defined by a truthful bounded outcome:
   transitional Python adapters
 - full parser-bridge retirement is deferred to later rewrite milestones instead
   of being implied by Milestone 1
+
+The branch is not done yet. The hard merge bar is still the Git write-plane
+cutover:
+
+- no deployed write service starts from Python runtime entrypoints
+- no Go write-plane service imports `go/internal/compatibility/pythonbridge`
+- no Python bridge modules under `src/platform_context_graph/runtime/ingester/`
+  are required for normal Git ingestion
+- no normal recovery or refinalize path depends on Python finalization bridge
+  code
+- Docker Compose and Helm run the Go-owned write plane
+- local and cloud validation prove parity for the Git write path
+
+No new ingestors before Git cutover completes.
 
 ## After That
 

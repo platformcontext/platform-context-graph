@@ -26,6 +26,14 @@ For the Go rewrite, that contract is the same for every long-running service:
 - the CLI and HTTP/admin views should render the same underlying report
 - live-versus-inferred state must be explicit in both views
 
+Current branch caveat:
+
+- the Git write plane is still not fully Go-owned end to end
+- `collector-git` still uses temporary Python adapters for repository selection
+  and per-repo parser snapshot collection
+- those adapters are transitional and must be removed before the cutover is
+  called complete
+
 ## Runtime Contract
 
 | Runtime | Owns | Default command | Storage access | Metrics exposure | Kubernetes shape |
@@ -48,7 +56,7 @@ For the Go rewrite, that contract is the same for every long-running service:
 - `bootstrap-index` remains a one-shot helper for empty or recovered
   environments, not a steady-state health target.
 
-## Milestone 1 Proof Runtimes
+## Git Cutover Runtime Status
 
 The rewrite branch also has three local proof runtimes that exercise the Go
 data plane directly.
@@ -60,11 +68,11 @@ but they do follow the same shared admin contract:
 - `projector`: `go run ./cmd/projector`
 - `reducer`: `go run ./cmd/reducer`
 
-For Milestone 1, `collector-git` owns cycle orchestration, durable fact commit,
-and the shared admin surface in Go. Repository selection and per-repo parser
-snapshot collection still use narrowed transitional Python adapters. That
-transitional parser seam is intentional for this milestone and is tracked
-forward work, not hidden completion debt.
+`collector-git` owns cycle orchestration, durable fact commit, and the shared
+admin surface in Go. Repository selection and per-repo parser snapshot
+collection still use narrowed transitional Python adapters. That bridge is
+intentional only until the Git write-plane cutover lands, and it is tracked as
+removal debt rather than a final architecture.
 
 ## Admin Contract
 

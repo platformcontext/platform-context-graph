@@ -21,9 +21,22 @@
 - Milestone 4: complete
 - Milestone 5: complete
 
-The rewrite SOW is now complete on this branch. Future work should start from
-the locked collector, traversal, and operator docs instead of reopening the
-core service-boundary decisions.
+The rewrite proof and documentation package is complete on this branch, but
+the Git write-plane conversion is not complete yet. Future work must finish
+the cutover before any new ingestor work starts.
+
+Hard merge bar for the branch:
+
+- no deployed write service starts from Python runtime entrypoints
+- no Go write-plane service imports `go/internal/compatibility/pythonbridge`
+- no Python bridge modules under `src/platform_context_graph/runtime/ingester/`
+  are required for normal Git ingestion
+- no normal recovery or refinalize path depends on Python finalization bridge
+  code
+- Docker Compose and Helm run the Go-owned write plane
+- local and cloud validation prove parity for the Git write path
+
+No new ingestors before Git cutover completes.
 
 ## Companion Execution Documents
 
@@ -157,6 +170,12 @@ The data plane must not depend on Python runtime behavior for core write-path co
 - the data plane can be reasoned about as a service, not as a set of procedural callbacks
 - the concurrency and backpressure behavior is documented, bounded, and
   configurable
+
+### Hard merge bar reminder
+
+The branch cannot be treated as done until the Git write plane is fully Go-owned
+and the Python write-path bridges are removed. No new ingestors start before
+that cutover is complete.
 
 ### Proof required before progressing
 

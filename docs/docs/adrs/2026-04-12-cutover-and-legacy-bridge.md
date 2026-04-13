@@ -6,7 +6,8 @@
 
 PCG currently has a Python-heavy write path with procedural finalization seams.
 The rewrite must replace that path without allowing two long-lived architectures
-to grow in parallel.
+to grow in parallel. The architecture proof package is in place, but the actual
+Git write-plane cutover is still incomplete on this branch.
 
 At the same time, the rewrite still needs a practical migration path so one
 existing domain can prove the new substrate before the entire platform flips at
@@ -31,6 +32,14 @@ Rules:
 - no second long-lived queue or orchestration model is introduced as a peer to
   the new data plane
 - once a domain flips, the legacy path stops owning that domain
+
+Current branch status:
+
+- the Go runtime, admin/status, and projection surfaces are in place
+- the Git write plane still has temporary Python bridge ownership for selection,
+  snapshot collection, and recovery seams
+- no new ingestor family should start until the Git write-plane bridge is fully
+  removed and the cutover is proven end to end
 
 ## Why This Choice
 
@@ -61,9 +70,10 @@ Tradeoffs:
   exception that must be justified in writing.
 - Remove bridge code as soon as the new domain proof is complete and stable.
 
-## Milestone 4 Bridge Inventory
+## Git Write-Plane Bridge Inventory
 
-The active legacy post-commit bridge is now intentionally narrow:
+The active legacy post-commit bridge is intentionally narrow, but it still
+exists and therefore the cutover is not complete:
 
 - `src/platform_context_graph/indexing/post_commit_writer.py` is the explicit
   compatibility contract for the remaining Python-owned post-commit stages.
@@ -86,3 +96,4 @@ Removal conditions:
   flows have moved onto Go-owned projector or reducer contracts
 - delete admin and CLI refinalize bridge callers when restored-backup or
   failed-finalization repair no longer requires a legacy graph-only rerun
+- do not start any new ingestor family until these removal conditions are met

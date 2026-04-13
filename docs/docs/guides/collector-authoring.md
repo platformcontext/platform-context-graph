@@ -2,6 +2,8 @@
 
 Use this guide when adding a new collector family such as AWS, Kubernetes,
 SQL/data systems, or another source that should feed the shared PCG data plane.
+On the current branch, do not start a new collector family until the Git
+write-plane cutover is fully complete.
 
 The goal is not to teach one collector how to fit the current Git path. The
 goal is to make every new ingestor follow the same platform contract so the
@@ -18,6 +20,8 @@ system can grow without core rewrites.
 - New collectors must reuse the shared admin, telemetry, logging, and
   configurability contract.
 - Do not add new runtime logic to the legacy post-commit finalization bridge.
+- Do not start a new ingestor family until the Git cutover removes the legacy
+  Python bridge and the deployed write plane is Go-owned end to end.
 
 If a design needs bespoke behavior in `collectors/git/finalize.py` or another
 repair surface, it is almost certainly landing in the wrong place.

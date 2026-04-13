@@ -106,9 +106,11 @@ boundaries:
 
 - `collectors/git/`: repository discovery, `.gitignore`, parse workers, path indexing, parse execution, and facts-first Git collection support
 - `collectors/git/finalize.py`: legacy post-commit compatibility adapter for
-  graph-safe recovery and re-finalization
+  graph-safe recovery and re-finalization; this is temporary until the Git
+  write-plane cutover is complete
 - future `collectors/<source>/` families: source-specific adapters for AWS,
-  Kubernetes, ETL, and other product domains
+  Kubernetes, ETL, and other product domains, but only after the Git cutover
+  finishes
 - `facts/models/`: typed fact contracts for repository/file/entity observations
 - `facts/storage/`: Postgres-backed fact storage
 - `facts/work_queue/`: Postgres-backed work item queue used by the Resolution Engine
@@ -139,6 +141,8 @@ directly on ad hoc finalize helpers.
 For the current Git cutover, the coordinator also reuses the same facts-first
 projection contracts in-process. That keeps one indexing run end-to-end
 complete while still moving graph-write ownership out of the collector logic.
+Until the bridge is removed, the Git write plane is still transitional and
+operator docs should say so plainly.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.
@@ -174,6 +178,9 @@ acquisition and indexing grouped under its own subpackage:
 - `runtime/ingester/sync.py`: steady-state sync loop
 - `runtime/ingester/git.py`: git sync helpers
 - `runtime/ingester/support.py`: shared runtime support functions
+- `runtime/ingester/*bridge.py`: temporary Git cutover adapters for repository
+  selection, parser snapshot collection, and recovery; these are removal debt,
+  not the target runtime architecture
 
 The ingester increasingly depends on canonical packages rather than `tools/`:
 
@@ -182,6 +189,9 @@ The ingester increasingly depends on canonical packages rather than `tools/`:
 - `parsers/` for parser-platform code
 - `graph/` for canonical graph writes
 - `resolution/` for Resolution Engine orchestration and workload/platform materialization
+
+Do not start new ingestor families until the Git write-plane cutover and
+bridge removal are complete.
 
 ## Platform Package Layout
 
