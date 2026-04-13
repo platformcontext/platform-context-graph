@@ -90,6 +90,11 @@ func renderStatusMetrics(serviceName string, report statuspkg.Report) string {
 	writeGauge("pcg_runtime_info", baseLabels, "1")
 	writeGauge("pcg_runtime_scope_active", map[string]string{"service_name": serviceName}, strconv.Itoa(report.ScopeActivity.Active))
 	writeGauge("pcg_runtime_scope_changed", map[string]string{"service_name": serviceName}, strconv.Itoa(report.ScopeActivity.Changed))
+	writeGauge(
+		"pcg_runtime_refresh_skipped_total",
+		map[string]string{"service_name": serviceName},
+		strconv.FormatUint(telemetry.SkippedRefreshCount(), 10),
+	)
 	for _, state := range []string{"healthy", "progressing", "degraded", "stalled"} {
 		value := "0"
 		if report.Health.State == state {

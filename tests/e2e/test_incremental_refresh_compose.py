@@ -54,8 +54,6 @@ def connection() -> psycopg.Connection[Any]:
 
 
 def _get_json(client: httpx.Client, path: str) -> dict[str, Any]:
-    """Return one decoded JSON response."""
-
     response = client.get(path)
     response.raise_for_status()
     return response.json()
@@ -66,8 +64,6 @@ def _count(
     query: str,
     params: tuple[Any, ...] = (),
 ) -> int:
-    """Return one integer count from Postgres."""
-
     with connection.cursor() as cursor:
         cursor.execute(query, params)
         row = cursor.fetchone()
@@ -84,16 +80,13 @@ def _seed_scope_generation(
     include_fact_record: bool,
     include_work_item: bool,
     work_item_id: str | None,
+    work_item_status: str = "pending",
+    work_item_visible_at: dt.datetime | None = None,
+    work_item_failure_class: str | None = None,
+    work_item_failure_message: str | None = None,
 ) -> None:
-    """Seed one scope generation snapshot and optional projector work."""
-
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
     observed = now - dt.timedelta(minutes=1)
-    graph_fact_payload = {
-        "graph_id": _GRAPH_RECORD_ID,
-        "graph_kind": "repository",
-        "name": "incremental-refresh-proof-repo",
-    }
 
     with connection.cursor() as cursor:
         cursor.execute(
@@ -199,21 +192,21 @@ def _seed_scope_generation(
                     observed,
                     now,
                     False,
-                    json.dumps(graph_fact_payload),
+                    json.dumps(
+                        {
+                            "graph_id": _GRAPH_RECORD_ID,
+                            "graph_kind": "repository",
+                            "name": "incremental-refresh-proof-repo",
+                        }
+                    ),
                 ),
             )
         if include_work_item and work_item_id is not None:
+            work_item_visible_at = work_item_visible_at or now
             cursor.execute(
                 """
-                INSERT INTO fact_work_items (
-                    work_item_id, scope_id, generation_id, stage, domain, status,
-                    attempt_count, lease_owner, claim_until, visible_at,
-                    last_attempt_at, next_attempt_at, failure_class, failure_message,
-                    failure_details, payload, created_at, updated_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                    NULL, '{}'::jsonb, %s, %s
-                )
+                INSERT INTO fact_work_items (work_item_id, scope_id, generation_id, stage, domain, status, attempt_count, lease_owner, claim_until, visible_at, last_attempt_at, next_attempt_at, failure_class, failure_message, failure_details, payload, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 1, NULL, NULL, %s, %s, %s, %s, %s, NULL, '{}'::jsonb, %s, %s)
                 ON CONFLICT (work_item_id) DO UPDATE SET
                     scope_id = EXCLUDED.scope_id,
                     generation_id = EXCLUDED.generation_id,
@@ -239,7 +232,12 @@ def _seed_scope_generation(
                     generation_id,
                     "projector",
                     "source_local",
-                    "pending",
+                    work_item_status,
+                    work_item_visible_at,
+                    work_item_visible_at,
+                    work_item_visible_at,
+                    work_item_failure_class,
+                    work_item_failure_message,
                     now,
                     now,
                 ),
@@ -247,38 +245,15 @@ def _seed_scope_generation(
 
 
 def _seed_initial_active_generation(connection: psycopg.Connection[Any]) -> None:
-    """Seed the initial active generation without projector work."""
-
-    _seed_scope_generation(
-        connection,
-        generation_id=_GENERATION_A_ID,
-        generation_label="A",
-        freshness_hint="initial active generation",
-        generation_status="active",
-        include_fact_record=True,
-        include_work_item=False,
-        work_item_id=None,
-    )
+    _seed_scope_generation(connection, generation_id=_GENERATION_A_ID, generation_label="A", freshness_hint="initial active generation", generation_status="active", include_fact_record=True, include_work_item=False, work_item_id=None)
 
 
 def _seed_unchanged_rerun_generation(connection: psycopg.Connection[Any]) -> None:
-    """Seed an unchanged rerun candidate with the same freshness signature."""
-
-    _seed_scope_generation(
-        connection,
-        generation_id="generation-incremental-refresh-unchanged",
-        generation_label="unchanged",
-        freshness_hint="unchanged rerun snapshot",
-        generation_status="pending",
-        include_fact_record=False,
-        include_work_item=False,
-        work_item_id=None,
-    )
+    _seed_scope_generation(connection, generation_id="generation-incremental-refresh-unchanged", generation_label="unchanged", freshness_hint="unchanged rerun snapshot", generation_status="pending", include_fact_record=False, include_work_item=False, work_item_id=None)
 
 
-def _seed_changed_rerun_generation(connection: psycopg.Connection[Any]) -> None:
-    """Seed the changed rerun candidate and its projector work item."""
-
+def _seed_retryable_changed_rerun_generation(connection: psycopg.Connection[Any]) -> None:
+    now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
     _seed_scope_generation(
         connection,
         generation_id=_GENERATION_B_ID,
@@ -288,6 +263,10 @@ def _seed_changed_rerun_generation(connection: psycopg.Connection[Any]) -> None:
         include_fact_record=True,
         include_work_item=True,
         work_item_id=_WORK_ITEM_ID,
+        work_item_status="retrying",
+        work_item_visible_at=now + dt.timedelta(seconds=2),
+        work_item_failure_class="projection_failed",
+        work_item_failure_message="projection failed once",
     )
 
 
@@ -297,8 +276,6 @@ def _wait_for_refresh(
     *,
     timeout_seconds: int,
 ) -> dict[str, Any]:
-    """Poll until generation B becomes active and generation A is superseded."""
-
     deadline = time.monotonic() + timeout_seconds
     latest_status: dict[str, Any] = {}
     while time.monotonic() < deadline:
@@ -359,8 +336,6 @@ def test_incremental_refresh_compose(
     client: httpx.Client,
     connection: psycopg.Connection[Any],
 ) -> None:
-    """Exercise unchanged and changed reruns against compose-backed infrastructure."""
-
     _seed_initial_active_generation(connection)
 
     health_response = client.get("/healthz")
@@ -435,7 +410,30 @@ def test_incremental_refresh_compose(
         (_SCOPE_ID,),
     ) == 0
 
-    _seed_changed_rerun_generation(connection)
+    _seed_retryable_changed_rerun_generation(connection)
+
+    assert _count(
+        connection,
+        """
+        SELECT COUNT(*)
+        FROM fact_work_items
+        WHERE work_item_id = %s
+          AND status = 'retrying'
+          AND failure_class = 'projection_failed'
+        """,
+        (_WORK_ITEM_ID,),
+    ) == 1
+    assert _count(
+        connection,
+        """
+        SELECT COUNT(*)
+        FROM fact_work_items
+        WHERE scope_id = %s
+          AND stage = 'projector'
+          AND status IN ('pending', 'retrying')
+        """,
+        (_SCOPE_ID,),
+    ) == 1
 
     status_payload = _wait_for_refresh(
         client,

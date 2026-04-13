@@ -3,11 +3,13 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 const upsertIngestionScopeQuery = `
@@ -120,6 +122,21 @@ func (s IngestionStore) CommitScopeGeneration(
 		return fmt.Errorf("check active generation freshness: %w", err)
 	}
 	if skip {
+		telemetry.RecordSkippedRefresh()
+		log.Printf(
+			"%s=true %s=%q %s=%q %s=%q %s=%q %s=%q",
+			telemetry.LogKeyRefreshSkipped,
+			telemetry.LogKeyScopeID,
+			scopeValue.ScopeID,
+			telemetry.LogKeyScopeKind,
+			string(scopeValue.ScopeKind),
+			telemetry.LogKeySourceSystem,
+			scopeValue.SourceSystem,
+			telemetry.LogKeyCollectorKind,
+			string(scopeValue.CollectorKind),
+			telemetry.LogKeyGenerationID,
+			generation.GenerationID,
+		)
 		return nil
 	}
 	if s.beginner == nil {

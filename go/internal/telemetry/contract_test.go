@@ -61,6 +61,7 @@ func TestLogKeys(t *testing.T) {
 		"partition_key",
 		"request_id",
 		"failure_class",
+		"refresh_skipped",
 	}
 
 	got := LogKeys()

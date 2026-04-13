@@ -8,6 +8,7 @@ import (
 	"time"
 
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func TestNewStatusMetricsHandlerRequiresInputs(t *testing.T) {
@@ -23,8 +24,6 @@ func TestNewStatusMetricsHandlerRequiresInputs(t *testing.T) {
 }
 
 func TestStatusMetricsHandlerServesRuntimeMetrics(t *testing.T) {
-	t.Parallel()
-
 	handler, err := NewStatusMetricsHandler("collector-git", &fakeStatusReader{
 		snapshot: statuspkg.RawSnapshot{
 			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
@@ -64,6 +63,7 @@ func TestStatusMetricsHandlerServesRuntimeMetrics(t *testing.T) {
 		`pcg_runtime_info{service_name="collector-git",service_namespace="platform-context-graph"} 1`,
 		`pcg_runtime_scope_active{service_name="collector-git"} 7`,
 		`pcg_runtime_scope_changed{service_name="collector-git"} 3`,
+		`pcg_runtime_refresh_skipped_total{service_name="collector-git"} 0`,
 		`pcg_runtime_queue_outstanding{service_name="collector-git"} 2`,
 		`pcg_runtime_queue_oldest_outstanding_age_seconds{service_name="collector-git"} 45`,
 		`pcg_runtime_health_state{service_name="collector-git",state="progressing"} 1`,
@@ -73,6 +73,34 @@ func TestStatusMetricsHandlerServesRuntimeMetrics(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("GET /metrics body missing %q\nbody:\n%s", want, body)
 		}
+	}
+}
+
+func TestStatusMetricsHandlerReportsSkippedRefreshes(t *testing.T) {
+	telemetry.ResetSkippedRefreshCountForTesting()
+	t.Cleanup(telemetry.ResetSkippedRefreshCountForTesting)
+
+	telemetry.RecordSkippedRefresh()
+	telemetry.RecordSkippedRefresh()
+
+	handler, err := NewStatusMetricsHandler("collector-git", &fakeStatusReader{
+		snapshot: statuspkg.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewStatusMetricsHandler() error = %v, want nil", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	handler.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("GET /metrics status = %d, want %d", got, want)
+	}
+	if body := recorder.Body.String(); !strings.Contains(body, `pcg_runtime_refresh_skipped_total{service_name="collector-git"} 2`) {
+		t.Fatalf("GET /metrics body missing skipped refresh metric\nbody:\n%s", body)
 	}
 }
 

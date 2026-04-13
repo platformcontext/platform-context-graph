@@ -28,6 +28,7 @@ func TestProjectorQueueClaimReturnsScopeGenerationWork(t *testing.T) {
 					"git",
 					"repo-123",
 					"generation-456",
+					1,
 					time.Date(2026, time.April, 12, 10, 0, 0, 0, time.UTC),
 					time.Date(2026, time.April, 12, 10, 5, 0, 0, time.UTC),
 					"pending",
@@ -59,6 +60,9 @@ func TestProjectorQueueClaimReturnsScopeGenerationWork(t *testing.T) {
 	if got, want := work.Generation.GenerationID, "generation-456"; got != want {
 		t.Fatalf("Claim().Generation.GenerationID = %q, want %q", got, want)
 	}
+	if got, want := work.AttemptCount, 1; got != want {
+		t.Fatalf("Claim().AttemptCount = %d, want %d", got, want)
+	}
 	if !strings.Contains(db.queries[0].query, "stage = 'projector'") {
 		t.Fatalf("claim query = %q, want projector stage filter", db.queries[0].query)
 	}
@@ -79,6 +83,7 @@ func TestProjectorQueueClaimPopulatesScopeMetadataFromPayload(t *testing.T) {
 					"git",
 					"repo-123",
 					"generation-456",
+					2,
 					time.Date(2026, time.April, 12, 10, 0, 0, 0, time.UTC),
 					time.Date(2026, time.April, 12, 10, 5, 0, 0, time.UTC),
 					"pending",
@@ -336,6 +341,12 @@ func (r *queueFakeRows) Scan(dest ...any) error {
 			value, ok := row[i].(time.Time)
 			if !ok {
 				return fmt.Errorf("row[%d] type = %T, want time.Time", i, row[i])
+			}
+			*target = value
+		case *int:
+			value, ok := row[i].(int)
+			if !ok {
+				return fmt.Errorf("row[%d] type = %T, want int", i, row[i])
 			}
 			*target = value
 		default:

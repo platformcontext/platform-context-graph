@@ -49,15 +49,16 @@ const (
 // Log keys define the structured logging contract for terminal failures and
 // retryable failure classification.
 const (
-	LogKeyScopeID       = "scope_id"
-	LogKeyScopeKind     = "scope_kind"
-	LogKeySourceSystem  = "source_system"
-	LogKeyGenerationID  = "generation_id"
-	LogKeyCollectorKind = "collector_kind"
-	LogKeyDomain        = "domain"
-	LogKeyPartitionKey  = "partition_key"
-	LogKeyRequestID     = "request_id"
-	LogKeyFailureClass  = "failure_class"
+	LogKeyScopeID        = "scope_id"
+	LogKeyScopeKind      = "scope_kind"
+	LogKeySourceSystem   = "source_system"
+	LogKeyGenerationID   = "generation_id"
+	LogKeyCollectorKind  = "collector_kind"
+	LogKeyDomain         = "domain"
+	LogKeyPartitionKey   = "partition_key"
+	LogKeyRequestID      = "request_id"
+	LogKeyFailureClass   = "failure_class"
+	LogKeyRefreshSkipped = "refresh_skipped"
 )
 
 var metricDimensionKeys = []string{
@@ -90,6 +91,7 @@ var logKeys = []string{
 	LogKeyPartitionKey,
 	LogKeyRequestID,
 	LogKeyFailureClass,
+	LogKeyRefreshSkipped,
 }
 
 // MetricDimensionKeys returns the frozen ordered metric dimensions.

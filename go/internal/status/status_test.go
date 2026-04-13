@@ -211,6 +211,54 @@ func TestBuildReportClassifiesDegradedFailures(t *testing.T) {
 	}
 }
 
+func TestBuildReportIncludesGenerationHistorySummary(t *testing.T) {
+	t.Parallel()
+
+	report := status.BuildReport(
+		status.RawSnapshot{
+			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeActivity: status.ScopeActivitySnapshot{
+				Active:  5,
+				Changed: 2,
+			},
+			ScopeCounts: []status.NamedCount{
+				{Name: "active", Count: 5},
+			},
+			GenerationCounts: []status.NamedCount{
+				{Name: "active", Count: 2},
+				{Name: "pending", Count: 1},
+				{Name: "completed", Count: 4},
+				{Name: "superseded", Count: 3},
+				{Name: "failed", Count: 1},
+				{Name: "inactive", Count: 2},
+			},
+		},
+		status.DefaultOptions(),
+	)
+
+	if got, want := report.ScopeActivity.Unchanged, 3; got != want {
+		t.Fatalf("BuildReport().ScopeActivity.Unchanged = %d, want %d", got, want)
+	}
+	if got, want := report.GenerationHistory.Active, 2; got != want {
+		t.Fatalf("BuildReport().GenerationHistory.Active = %d, want %d", got, want)
+	}
+	if got, want := report.GenerationHistory.Pending, 1; got != want {
+		t.Fatalf("BuildReport().GenerationHistory.Pending = %d, want %d", got, want)
+	}
+	if got, want := report.GenerationHistory.Completed, 4; got != want {
+		t.Fatalf("BuildReport().GenerationHistory.Completed = %d, want %d", got, want)
+	}
+	if got, want := report.GenerationHistory.Superseded, 3; got != want {
+		t.Fatalf("BuildReport().GenerationHistory.Superseded = %d, want %d", got, want)
+	}
+	if got, want := report.GenerationHistory.Failed, 1; got != want {
+		t.Fatalf("BuildReport().GenerationHistory.Failed = %d, want %d", got, want)
+	}
+	if got, want := report.GenerationHistory.Other, 2; got != want {
+		t.Fatalf("BuildReport().GenerationHistory.Other = %d, want %d", got, want)
+	}
+}
+
 func TestRenderTextIncludesOperatorSummary(t *testing.T) {
 	t.Parallel()
 
@@ -256,9 +304,9 @@ func TestRenderTextIncludesOperatorSummary(t *testing.T) {
 	for _, want := range []string{
 		"Health: progressing",
 		"Queue: outstanding=3 in_flight=1 retrying=1 failed=0 oldest=1m30s",
-		"Scope activity: active=2 changed=1",
+		"Scope activity: active=2 changed=1 unchanged=1",
 		"Scope statuses: active=3",
-		"Generations: active=1 completed=2 superseded=1",
+		"Generation history: active=1 pending=0 completed=2 superseded=1 failed=0 other=0",
 		"projector pending=0 claimed=0 running=1 retrying=1 succeeded=0 failed=0",
 		"repository outstanding=2 retrying=1 failed=0 oldest=1m30s",
 	} {
@@ -297,9 +345,9 @@ func TestRenderTextDoesNotRepeatTopLevelSummaries(t *testing.T) {
 	rendered := status.RenderText(report)
 	for _, want := range []string{
 		"Queue: outstanding=1 in_flight=1 retrying=0 failed=0 oldest=30s overdue_claims=0",
-		"Scope activity: active=4 changed=2",
+		"Scope activity: active=4 changed=2 unchanged=2",
 		"Scope statuses: active=2",
-		"Generations: completed=3 superseded=1",
+		"Generation history: active=0 pending=0 completed=3 superseded=1 failed=0 other=0",
 	} {
 		if got := strings.Count(rendered, want); got != 1 {
 			t.Fatalf("RenderText() occurrences of %q = %d, want 1\n%s", want, got, rendered)
@@ -377,6 +425,18 @@ func TestRenderJSONIncludesFlowSummaries(t *testing.T) {
 	report := status.BuildReport(
 		status.RawSnapshot{
 			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeActivity: status.ScopeActivitySnapshot{
+				Active:  3,
+				Changed: 1,
+			},
+			ScopeCounts: []status.NamedCount{
+				{Name: "active", Count: 3},
+			},
+			GenerationCounts: []status.NamedCount{
+				{Name: "active", Count: 1},
+				{Name: "completed", Count: 2},
+				{Name: "superseded", Count: 1},
+			},
 			Queue: status.QueueSnapshot{
 				Outstanding: 1,
 			},
@@ -393,6 +453,12 @@ func TestRenderJSONIncludesFlowSummaries(t *testing.T) {
 	}
 	if !strings.Contains(string(payload), "\"flow\"") {
 		t.Fatalf("RenderJSON() = %s, want flow summaries", payload)
+	}
+	if !strings.Contains(string(payload), "\"generation_history\"") {
+		t.Fatalf("RenderJSON() = %s, want generation history", payload)
+	}
+	if !strings.Contains(string(payload), "\"unchanged\": 2") {
+		t.Fatalf("RenderJSON() = %s, want unchanged scope activity", payload)
 	}
 	if !strings.Contains(string(payload), "\"state\": \"progressing\"") {
 		t.Fatalf("RenderJSON() = %s, want lower-case health state", payload)

@@ -10,25 +10,27 @@ import (
 // RenderJSON returns a stable machine-readable projection of the report.
 func RenderJSON(report Report) ([]byte, error) {
 	payload := struct {
-		AsOf          string              `json:"as_of"`
-		Health        HealthSummary       `json:"health"`
-		Flow          []flowSummaryJSON   `json:"flow"`
-		Queue         queueJSON           `json:"queue"`
-		ScopeActivity scopeActivityJSON   `json:"scope_activity"`
-		Scopes        map[string]int      `json:"scopes"`
-		Generations   map[string]int      `json:"generations"`
-		Stages        []StageSummary      `json:"stages"`
-		Domains       []domainBacklogJSON `json:"domains"`
+		AsOf              string                `json:"as_of"`
+		Health            HealthSummary         `json:"health"`
+		Flow              []flowSummaryJSON     `json:"flow"`
+		Queue             queueJSON             `json:"queue"`
+		ScopeActivity     scopeActivityJSON     `json:"scope_activity"`
+		GenerationHistory generationHistoryJSON `json:"generation_history"`
+		Scopes            map[string]int        `json:"scopes"`
+		Generations       map[string]int        `json:"generations"`
+		Stages            []StageSummary        `json:"stages"`
+		Domains           []domainBacklogJSON   `json:"domains"`
 	}{
-		AsOf:          report.AsOf.UTC().Format(time.RFC3339),
-		Health:        report.Health,
-		Flow:          flowSummariesJSON(report.FlowSummaries),
-		Queue:         queueJSONFromReport(report.Queue),
-		ScopeActivity: scopeActivityJSONFromReport(report.ScopeActivity),
-		Scopes:        cloneCounts(report.ScopeTotals),
-		Generations:   cloneCounts(report.GenerationTotals),
-		Stages:        slices.Clone(report.StageSummaries),
-		Domains:       domainBacklogsJSON(report.DomainBacklogs),
+		AsOf:              report.AsOf.UTC().Format(time.RFC3339),
+		Health:            report.Health,
+		Flow:              flowSummariesJSON(report.FlowSummaries),
+		Queue:             queueJSONFromReport(report.Queue),
+		ScopeActivity:     scopeActivityJSONFromReport(report.ScopeActivity),
+		GenerationHistory: generationHistoryJSONFromReport(report.GenerationHistory),
+		Scopes:            cloneCounts(report.ScopeTotals),
+		Generations:       cloneCounts(report.GenerationTotals),
+		Stages:            slices.Clone(report.StageSummaries),
+		Domains:           domainBacklogsJSON(report.DomainBacklogs),
 	}
 
 	return json.MarshalIndent(payload, "", "  ")
@@ -48,8 +50,18 @@ type queueJSON struct {
 }
 
 type scopeActivityJSON struct {
-	Active  int `json:"active"`
-	Changed int `json:"changed"`
+	Active    int `json:"active"`
+	Changed   int `json:"changed"`
+	Unchanged int `json:"unchanged"`
+}
+
+type generationHistoryJSON struct {
+	Active     int `json:"active"`
+	Pending    int `json:"pending"`
+	Completed  int `json:"completed"`
+	Superseded int `json:"superseded"`
+	Failed     int `json:"failed"`
+	Other      int `json:"other"`
 }
 
 type domainBacklogJSON struct {
@@ -78,8 +90,9 @@ func queueJSONFromReport(queue QueueSnapshot) queueJSON {
 
 func scopeActivityJSONFromReport(scopeActivity ScopeActivitySnapshot) scopeActivityJSON {
 	return scopeActivityJSON{
-		Active:  scopeActivity.Active,
-		Changed: scopeActivity.Changed,
+		Active:    scopeActivity.Active,
+		Changed:   scopeActivity.Changed,
+		Unchanged: scopeActivity.Unchanged,
 	}
 }
 

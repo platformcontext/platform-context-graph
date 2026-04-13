@@ -58,7 +58,7 @@ claimed AS (
         updated_at = $1
     FROM candidate
     WHERE work.work_item_id = candidate.work_item_id
-    RETURNING work.scope_id, work.generation_id
+    RETURNING work.scope_id, work.generation_id, work.attempt_count
 )
 SELECT
     scope.scope_id,
@@ -68,6 +68,7 @@ SELECT
     scope.collector_kind,
     scope.partition_key,
     generation.generation_id,
+    claimed.attempt_count,
     generation.observed_at,
     generation.ingested_at,
     generation.status,
@@ -124,6 +125,24 @@ WHERE stage = 'projector'
   AND status IN ('claimed', 'running')
 `
 
+const retryProjectorWorkQuery = `
+UPDATE fact_work_items
+SET status = 'retrying',
+    lease_owner = NULL,
+    claim_until = NULL,
+    visible_at = $5,
+    next_attempt_at = $5,
+    updated_at = $1,
+    failure_class = $2,
+    failure_message = $3,
+    failure_details = $4
+WHERE stage = 'projector'
+  AND scope_id = $6
+  AND generation_id = $7
+  AND lease_owner = $8
+  AND status IN ('claimed', 'running')
+`
+
 const failProjectorWorkQuery = `
 WITH failed_generation AS (
     UPDATE scope_generations
@@ -168,6 +187,8 @@ type ProjectorQueue struct {
 	db            ExecQueryer
 	LeaseOwner    string
 	LeaseDuration time.Duration
+	RetryDelay    time.Duration
+	MaxAttempts   int
 	Now           func() time.Time
 }
 
@@ -282,18 +303,38 @@ func (q ProjectorQueue) Fail(
 	if err := q.validate(); err != nil {
 		return err
 	}
+	if cause == nil {
+		return errors.New("projector failure cause is required")
+	}
 
-	_, err := q.db.ExecContext(
-		ctx,
-		failProjectorWorkQuery,
+	query := failProjectorWorkQuery
+	failureClass := "projection_failed"
+	args := []any{
 		q.now(),
-		"projection_failed",
+		failureClass,
 		cause.Error(),
 		cause.Error(),
 		work.Scope.ScopeID,
 		work.Generation.GenerationID,
 		q.LeaseOwner,
-	)
+	}
+
+	if projector.IsRetryable(cause) && work.AttemptCount < q.maxAttempts() {
+		query = retryProjectorWorkQuery
+		failureClass = "projection_retryable"
+		args = []any{
+			q.now(),
+			failureClass,
+			cause.Error(),
+			cause.Error(),
+			q.now().Add(q.retryDelay()),
+			work.Scope.ScopeID,
+			work.Generation.GenerationID,
+			q.LeaseOwner,
+		}
+	}
+
+	_, err := q.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("fail projector work: %w", err)
 	}
@@ -323,6 +364,22 @@ func (q ProjectorQueue) now() time.Time {
 	return time.Now().UTC()
 }
 
+func (q ProjectorQueue) retryDelay() time.Duration {
+	if q.RetryDelay > 0 {
+		return q.RetryDelay
+	}
+
+	return 30 * time.Second
+}
+
+func (q ProjectorQueue) maxAttempts() int {
+	if q.MaxAttempts > 0 {
+		return q.MaxAttempts
+	}
+
+	return 3
+}
+
 func scanProjectorWork(rows Rows) (projector.ScopeGenerationWork, error) {
 	var work projector.ScopeGenerationWork
 	var scopeKind string
@@ -339,6 +396,7 @@ func scanProjectorWork(rows Rows) (projector.ScopeGenerationWork, error) {
 		&collectorKind,
 		&work.Scope.PartitionKey,
 		&work.Generation.GenerationID,
+		&work.AttemptCount,
 		&work.Generation.ObservedAt,
 		&work.Generation.IngestedAt,
 		&generationStatus,

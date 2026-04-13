@@ -59,6 +59,7 @@ type proofWorkItem struct {
 	stage        string
 	domain       string
 	status       string
+	attemptCount int
 	scopeID      string
 	generationID string
 	leaseOwner   string
@@ -111,6 +112,11 @@ func (db *proofDomainDB) ExecContext(_ context.Context, query string, args ...an
 			return nil, fmt.Errorf("projector fail args = %d, want 7", len(args))
 		}
 		return db.updateWorkItemStatus("projector", args[4].(string), args[5].(string), args[6].(string), "failed")
+	case strings.Contains(query, "WHERE stage = 'projector'") && strings.Contains(query, "status = 'retrying'"):
+		if len(args) != 8 {
+			return nil, fmt.Errorf("projector retry args = %d, want 8", len(args))
+		}
+		return db.retryProjectorWork(args[5].(string), args[6].(string), args[7].(string), args[4].(time.Time))
 	case strings.Contains(query, "stage = 'reducer'") && strings.Contains(query, "SET status = 'succeeded'"):
 		if len(args) != 3 {
 			return nil, fmt.Errorf("reducer ack args = %d, want 3", len(args))
@@ -213,54 +219,16 @@ func (db *proofDomainDB) QueryContext(_ context.Context, query string, args ...a
 	}
 }
 
-func (db *proofDomainDB) updateWorkItemStatus(stage string, scopeID string, generationID string, leaseOwner string, status string) (sql.Result, error) {
-	for key, item := range db.state.workItems {
-		if item.stage == stage && item.scopeID == scopeID && item.generationID == generationID && item.leaseOwner == leaseOwner {
-			item.status = status
-			item.updatedAt = db.now
-			item.leaseOwner = ""
-			item.claimUntil = time.Time{}
-			db.state.workItems[key] = item
-			if stage == "projector" && status == "succeeded" {
-				db.promoteGeneration(scopeID, generationID)
-			}
-			if stage == "projector" && status == "failed" {
-				db.failGeneration(scopeID, generationID)
-			}
-			return proofResult{}, nil
-		}
-	}
-	return nil, fmt.Errorf("work item not found for stage=%s scope=%s generation=%s", stage, scopeID, generationID)
-}
-
-func (db *proofDomainDB) updateWorkItemStatusByID(workItemID string, leaseOwner string, status string) (sql.Result, error) {
-	item, ok := db.state.workItems[workItemID]
-	if !ok {
-		return nil, fmt.Errorf("work item %q not found", workItemID)
-	}
-	if item.leaseOwner != leaseOwner {
-		return nil, fmt.Errorf("work item %q lease owner = %q, want %q", workItemID, item.leaseOwner, leaseOwner)
-	}
-	item.status = status
-	item.updatedAt = db.now
-	item.leaseOwner = ""
-	item.claimUntil = time.Time{}
-	db.state.workItems[workItemID] = item
-	if status == "succeeded" {
-		db.reducerAcked++
-	}
-	return proofResult{}, nil
-}
-
 func (db *proofDomainDB) claimProjectorWork(now time.Time, leaseOwner string, claimUntil time.Time) (Rows, error) {
 	for key, item := range db.state.workItems {
-		if item.stage != "projector" || item.status != "pending" {
+		if item.stage != "projector" || (item.status != "pending" && item.status != "retrying") {
 			continue
 		}
 		if !item.visibleAt.IsZero() && item.visibleAt.After(now) {
 			continue
 		}
 		item.status = "claimed"
+		item.attemptCount++
 		item.leaseOwner = leaseOwner
 		item.claimUntil = claimUntil
 		item.updatedAt = now
@@ -283,6 +251,7 @@ func (db *proofDomainDB) claimProjectorWork(now time.Time, leaseOwner string, cl
 			string(scopeRow.CollectorKind),
 			scopeRow.PartitionKey,
 			generationRow.GenerationID,
+			item.attemptCount,
 			generationRow.ObservedAt,
 			generationRow.IngestedAt,
 			string(generationRow.Status),
@@ -409,6 +378,7 @@ func (tx *proofDomainTx) ExecContext(ctx context.Context, query string, args ...
 			stage:        "projector",
 			domain:       args[3].(string),
 			status:       "pending",
+			attemptCount: 0,
 			scopeID:      args[1].(string),
 			generationID: args[2].(string),
 			visibleAt:    args[4].(time.Time).UTC(),
@@ -436,57 +406,4 @@ func (tx *proofDomainTx) Rollback() error { return nil }
 type proofDomainTx struct {
 	db    *proofDomainDB
 	state proofState
-}
-
-func (db *proofDomainDB) activeGenerationID(scopeID string) string {
-	return db.state.activeGenerations[scopeID]
-}
-
-func (db *proofDomainDB) generationStatus(generationID string) scope.GenerationStatus {
-	generation, ok := db.state.generations[generationID]
-	if !ok {
-		return ""
-	}
-	return generation.Status
-}
-
-func (db *proofDomainDB) projectorWorkItemCount() int {
-	count := 0
-	for _, item := range db.state.workItems {
-		if item.stage == "projector" {
-			count++
-		}
-	}
-	return count
-}
-
-func (db *proofDomainDB) promoteGeneration(scopeID string, generationID string) {
-	for key, generation := range db.state.generations {
-		if generation.ScopeID != scopeID {
-			continue
-		}
-		if key == generationID {
-			generation.Status = scope.GenerationStatusActive
-			db.state.generations[key] = generation
-			continue
-		}
-		if generation.Status == scope.GenerationStatusActive {
-			generation.Status = scope.GenerationStatusSuperseded
-			db.state.generations[key] = generation
-		}
-	}
-	db.state.activeGenerations[scopeID] = generationID
-	db.state.scopeStatuses[scopeID] = string(scope.GenerationStatusActive)
-}
-
-func (db *proofDomainDB) failGeneration(scopeID string, generationID string) {
-	generation, ok := db.state.generations[generationID]
-	if ok {
-		generation.Status = scope.GenerationStatusFailed
-		db.state.generations[generationID] = generation
-	}
-	if db.state.activeGenerations[scopeID] == generationID {
-		delete(db.state.activeGenerations, scopeID)
-		db.state.scopeStatuses[scopeID] = string(scope.GenerationStatusFailed)
-	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
@@ -132,6 +133,7 @@ func (s StatusStore) ReadStatusSnapshot(ctx context.Context, asOf time.Time) (st
 		return statuspkg.RawSnapshot{}, err
 	}
 	scopeActivity := scopeActivityFromCounts(scopeCounts, generationCounts)
+	generationHistory := generationHistoryFromCounts(generationCounts)
 	stageCounts, err := listStageCounts(ctx, s.queryer)
 	if err != nil {
 		return statuspkg.RawSnapshot{}, err
@@ -146,13 +148,14 @@ func (s StatusStore) ReadStatusSnapshot(ctx context.Context, asOf time.Time) (st
 	}
 
 	return statuspkg.RawSnapshot{
-		AsOf:             asOf.UTC(),
-		ScopeCounts:      scopeCounts,
-		ScopeActivity:    scopeActivity,
-		GenerationCounts: generationCounts,
-		StageCounts:      stageCounts,
-		DomainBacklogs:   domainBacklogs,
-		Queue:            queueSnapshot,
+		AsOf:              asOf.UTC(),
+		ScopeCounts:       scopeCounts,
+		ScopeActivity:     scopeActivity,
+		GenerationCounts:  generationCounts,
+		GenerationHistory: generationHistory,
+		StageCounts:       stageCounts,
+		DomainBacklogs:    domainBacklogs,
+		Queue:             queueSnapshot,
 	}, nil
 }
 
@@ -164,9 +167,46 @@ func scopeActivityFromCounts(scopeCounts []statuspkg.NamedCount, generationCount
 	}
 
 	return statuspkg.ScopeActivitySnapshot{
-		Active:  activeScopes,
-		Changed: pendingGenerations,
+		Active:    activeScopes,
+		Changed:   pendingGenerations,
+		Unchanged: scopeUnchangedCount(activeScopes, pendingGenerations),
 	}
+}
+
+func scopeUnchangedCount(activeScopes int, changedScopes int) int {
+	if activeScopes <= changedScopes {
+		return 0
+	}
+	return activeScopes - changedScopes
+}
+
+func generationHistoryFromCounts(rows []statuspkg.NamedCount) statuspkg.GenerationHistorySnapshot {
+	history := statuspkg.GenerationHistorySnapshot{
+		Active:     namedCount(rows, "active"),
+		Pending:    namedCount(rows, "pending"),
+		Completed:  namedCount(rows, "completed"),
+		Superseded: namedCount(rows, "superseded"),
+		Failed:     namedCount(rows, "failed"),
+	}
+	known := map[string]struct{}{
+		"active":     {},
+		"pending":    {},
+		"completed":  {},
+		"superseded": {},
+		"failed":     {},
+	}
+	for _, row := range rows {
+		name := strings.TrimSpace(row.Name)
+		if name == "" {
+			continue
+		}
+		if _, ok := known[name]; ok {
+			continue
+		}
+		history.Other += row.Count
+	}
+
+	return history
 }
 
 func namedCount(rows []statuspkg.NamedCount, name string) int {

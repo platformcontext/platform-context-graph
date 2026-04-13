@@ -23,6 +23,11 @@ func TestRenderStatusOutputsTextFromSharedStatusReport(t *testing.T) {
 				Active:  4,
 				Changed: 2,
 			},
+			GenerationCounts: []statuspkg.NamedCount{
+				{Name: "active", Count: 1},
+				{Name: "completed", Count: 2},
+				{Name: "superseded", Count: 1},
+			},
 			Queue: statuspkg.QueueSnapshot{
 				Outstanding:          2,
 				InFlight:             1,
@@ -53,6 +58,12 @@ func TestRenderStatusOutputsTextFromSharedStatusReport(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "Scope activity: active=4 changed=2") {
 		t.Fatalf("renderStatus() stdout = %q, want scope activity summary", got)
 	}
+	if got := stdout.String(); !strings.Contains(got, "Scope activity: active=4 changed=2 unchanged=2") {
+		t.Fatalf("renderStatus() stdout = %q, want unchanged scope summary", got)
+	}
+	if got := stdout.String(); !strings.Contains(got, "Generation history: active=1 pending=0 completed=2 superseded=1 failed=0 other=0") {
+		t.Fatalf("renderStatus() stdout = %q, want generation history summary", got)
+	}
 	if got := stdout.String(); !strings.Contains(got, "Flow:") {
 		t.Fatalf("renderStatus() stdout = %q, want flow summary", got)
 	}
@@ -69,6 +80,13 @@ func TestRenderStatusOutputsJSONFromSharedStatusReport(t *testing.T) {
 			ScopeActivity: statuspkg.ScopeActivitySnapshot{
 				Active:  4,
 				Changed: 1,
+			},
+			GenerationCounts: []statuspkg.NamedCount{
+				{Name: "active", Count: 2},
+				{Name: "pending", Count: 1},
+				{Name: "completed", Count: 3},
+				{Name: "superseded", Count: 1},
+				{Name: "failed", Count: 1},
 			},
 		},
 	}
@@ -91,6 +109,9 @@ func TestRenderStatusOutputsJSONFromSharedStatusReport(t *testing.T) {
 	}
 	if got := stdout.String(); !strings.Contains(got, "\"scope_activity\"") {
 		t.Fatalf("renderStatus() stdout = %q, want scope activity payload", got)
+	}
+	if got := stdout.String(); !strings.Contains(got, "\"generation_history\"") {
+		t.Fatalf("renderStatus() stdout = %q, want generation history payload", got)
 	}
 	if got := stdout.String(); !strings.Contains(got, "\"flow\"") {
 		t.Fatalf("renderStatus() stdout = %q, want flow payload", got)

@@ -16,6 +16,9 @@ const defaultPollInterval = time.Second
 type ScopeGenerationWork struct {
 	Scope      scope.IngestionScope
 	Generation scope.ScopeGeneration
+	// AttemptCount is the durable number of claims already consumed for this
+	// scope generation work item.
+	AttemptCount int
 }
 
 // ProjectorWorkSource claims one scope generation at a time.

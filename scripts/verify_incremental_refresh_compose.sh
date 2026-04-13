@@ -174,7 +174,7 @@ start_projector() {
 }
 
 run_pytest() {
-    echo "Running incremental refresh compose pytest..."
+    echo "Running incremental refresh compose pytest (unchanged + retryable changed-generation proof)..."
     PCG_E2E_INCREMENTAL_REFRESH_BASE_URL="http://127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}" \
     PCG_E2E_POSTGRES_DSN="$POSTGRES_DSN" \
     PCG_E2E_TIMEOUT_SECONDS="$TIMEOUT_SECONDS" \

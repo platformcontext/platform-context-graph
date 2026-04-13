@@ -33,8 +33,9 @@ type StageStatusCount struct {
 // ScopeActivitySnapshot captures the incremental-refresh operator counters
 // that distinguish active scopes from scopes with a newer pending generation.
 type ScopeActivitySnapshot struct {
-	Active  int
-	Changed int
+	Active    int
+	Changed   int
+	Unchanged int
 }
 
 // QueueSnapshot captures aggregate queue pressure and progress signals.
@@ -61,13 +62,14 @@ type DomainBacklog struct {
 
 // RawSnapshot is the read-only substrate snapshot gathered from Postgres.
 type RawSnapshot struct {
-	AsOf             time.Time
-	ScopeCounts      []NamedCount
-	GenerationCounts []NamedCount
-	ScopeActivity    ScopeActivitySnapshot
-	StageCounts      []StageStatusCount
-	DomainBacklogs   []DomainBacklog
-	Queue            QueueSnapshot
+	AsOf              time.Time
+	ScopeCounts       []NamedCount
+	GenerationCounts  []NamedCount
+	ScopeActivity     ScopeActivitySnapshot
+	GenerationHistory GenerationHistorySnapshot
+	StageCounts       []StageStatusCount
+	DomainBacklogs    []DomainBacklog
+	Queue             QueueSnapshot
 }
 
 // Reader loads the raw status snapshot from an underlying storage backend.
@@ -100,15 +102,16 @@ type StageSummary struct {
 
 // Report is the operator-facing summary rendered by CLI and future admin APIs.
 type Report struct {
-	AsOf             time.Time
-	Health           HealthSummary
-	FlowSummaries    []FlowSummary
-	Queue            QueueSnapshot
-	ScopeActivity    ScopeActivitySnapshot
-	ScopeTotals      map[string]int
-	GenerationTotals map[string]int
-	StageSummaries   []StageSummary
-	DomainBacklogs   []DomainBacklog
+	AsOf              time.Time
+	Health            HealthSummary
+	FlowSummaries     []FlowSummary
+	Queue             QueueSnapshot
+	ScopeActivity     ScopeActivitySnapshot
+	GenerationHistory GenerationHistorySnapshot
+	ScopeTotals       map[string]int
+	GenerationTotals  map[string]int
+	StageSummaries    []StageSummary
+	DomainBacklogs    []DomainBacklog
 }
 
 // DefaultOptions returns the baseline operator heuristics for this first live
@@ -150,21 +153,28 @@ func BuildReport(raw RawSnapshot, opts Options) Report {
 	scopeActivity := raw.ScopeActivity
 	if scopeActivity == (ScopeActivitySnapshot{}) {
 		scopeActivity = deriveScopeActivity(scopeTotals, generationTotals)
+	} else if scopeActivity.Unchanged == 0 {
+		scopeActivity.Unchanged = scopeUnchangedCount(scopeActivity.Active, scopeActivity.Changed)
+	}
+	generationHistory := raw.GenerationHistory
+	if generationHistoryIsZero(generationHistory) {
+		generationHistory = deriveGenerationHistory(generationTotals)
 	}
 	stageSummaries := summarizeStages(raw.StageCounts)
 	domainBacklogs := topDomainBacklogs(raw.DomainBacklogs, opts.DomainLimit)
 	flowSummaries := buildFlowSummaries(scopeTotals, generationTotals, stageSummaries, raw.Queue, domainBacklogs)
 
 	return Report{
-		AsOf:             raw.AsOf,
-		Health:           evaluateHealth(raw.Queue, generationTotals, opts),
-		FlowSummaries:    flowSummaries,
-		Queue:            raw.Queue,
-		ScopeActivity:    scopeActivity,
-		ScopeTotals:      scopeTotals,
-		GenerationTotals: generationTotals,
-		StageSummaries:   stageSummaries,
-		DomainBacklogs:   domainBacklogs,
+		AsOf:              raw.AsOf,
+		Health:            evaluateHealth(raw.Queue, generationTotals, opts),
+		FlowSummaries:     flowSummaries,
+		Queue:             raw.Queue,
+		ScopeActivity:     scopeActivity,
+		GenerationHistory: generationHistory,
+		ScopeTotals:       scopeTotals,
+		GenerationTotals:  generationTotals,
+		StageSummaries:    stageSummaries,
+		DomainBacklogs:    domainBacklogs,
 	}
 }
 
@@ -176,8 +186,9 @@ func deriveScopeActivity(scopeTotals map[string]int, generationTotals map[string
 	}
 
 	return ScopeActivitySnapshot{
-		Active:  activeScopes,
-		Changed: pendingGenerations,
+		Active:    activeScopes,
+		Changed:   pendingGenerations,
+		Unchanged: scopeUnchangedCount(activeScopes, pendingGenerations),
 	}
 }
 
@@ -195,12 +206,11 @@ func RenderText(report Report) string {
 			report.Queue.OverdueClaims,
 		),
 		fmt.Sprintf(
-			"Scope activity: active=%d changed=%d",
-			report.ScopeActivity.Active,
-			report.ScopeActivity.Changed,
+			"Scope activity: %s",
+			scopeActivityText(report.ScopeActivity),
 		),
 		fmt.Sprintf("Scope statuses: %s", formatNamedTotals(report.ScopeTotals)),
-		fmt.Sprintf("Generations: %s", formatNamedTotals(report.GenerationTotals)),
+		fmt.Sprintf("Generation history: %s", generationHistoryText(report.GenerationHistory)),
 	}
 
 	if len(report.Health.Reasons) > 0 {

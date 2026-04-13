@@ -10,6 +10,7 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func TestIngestionStoreCommitScopeGenerationPersistsProjectionInput(t *testing.T) {
@@ -142,7 +143,8 @@ func TestUpsertIngestionScopeQueryPreservesActiveStatusDuringPendingRefresh(t *t
 }
 
 func TestIngestionStoreCommitScopeGenerationSkipsUnchangedActiveGeneration(t *testing.T) {
-	t.Parallel()
+	telemetry.ResetSkippedRefreshCountForTesting()
+	t.Cleanup(telemetry.ResetSkippedRefreshCountForTesting)
 
 	now := time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC)
 	db := &fakeTransactionalDB{
@@ -184,10 +186,14 @@ func TestIngestionStoreCommitScopeGenerationSkipsUnchangedActiveGeneration(t *te
 	if got, want := len(db.tx.execs), 0; got != want {
 		t.Fatalf("exec count = %d, want %d", got, want)
 	}
+	if got, want := telemetry.SkippedRefreshCount(), uint64(1); got != want {
+		t.Fatalf("SkippedRefreshCount() = %d, want %d", got, want)
+	}
 }
 
 func TestIngestionStoreCommitScopeGenerationContinuesWhenActiveFingerprintDiffers(t *testing.T) {
-	t.Parallel()
+	telemetry.ResetSkippedRefreshCountForTesting()
+	t.Cleanup(telemetry.ResetSkippedRefreshCountForTesting)
 
 	now := time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC)
 	db := &fakeTransactionalDB{
@@ -229,12 +235,15 @@ func TestIngestionStoreCommitScopeGenerationContinuesWhenActiveFingerprintDiffer
 	if got, want := len(db.tx.execs), 3; got != want {
 		t.Fatalf("exec count = %d, want %d", got, want)
 	}
+	if got, want := telemetry.SkippedRefreshCount(), uint64(0); got != want {
+		t.Fatalf("SkippedRefreshCount() = %d, want %d", got, want)
+	}
 }
 
 type fakeTransactionalDB struct {
-	tx         *fakeTx
-	beginCalls int
-	beginErr   error
+	tx             *fakeTx
+	beginCalls     int
+	beginErr       error
 	queries        []fakeQueryCall
 	queryResponses []queueFakeRows
 }

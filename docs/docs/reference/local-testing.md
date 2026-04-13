@@ -111,7 +111,8 @@ proof. It keeps the same compose shape but now expects three phases:
 - one active generation at the start
 - an unchanged rerun that leaves the authoritative generation and projector
   queue unchanged
-- a changed rerun that still drives the active/superseded swap
+- a changed rerun that reappears as `retrying` before the active/superseded
+  swap completes
 
 ```bash
 ./scripts/verify_incremental_refresh_compose.sh
@@ -120,7 +121,9 @@ proof. It keeps the same compose shape but now expects three phases:
 The current live blocker is the projector handoff ordering around the
 `scope_generations_active_scope_idx` uniqueness check; if the changed rerun
 cannot promote cleanly, the proof should fail and the proof log will show the
-exact SQL error.
+exact SQL error. If the runtime does not emit a retrying projector work item
+for the changed rerun, keep that gap explicit in the proof output instead of
+pretending the retry transition already exists.
 
 ## Local Full Stack
 

@@ -19,13 +19,21 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 			{
 				rows: [][]any{
 					{"active", int64(5)},
+					{"pending", int64(1)},
+					{"completed", int64(4)},
+					{"superseded", int64(3)},
 					{"failed", int64(1)},
+					{"inactive", int64(2)},
 				},
 			},
 			{
 				rows: [][]any{
+					{"active", int64(5)},
 					{"pending", int64(2)},
 					{"completed", int64(4)},
+					{"superseded", int64(3)},
+					{"failed", int64(1)},
+					{"inactive", int64(2)},
 				},
 			},
 			{
@@ -69,14 +77,35 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 	if got.Queue != wantQueue {
 		t.Fatalf("ReadRawSnapshot().Queue = %#v, want %#v", got.Queue, wantQueue)
 	}
-	if len(got.ScopeCounts) != 2 {
-		t.Fatalf("ReadRawSnapshot().ScopeCounts len = %d, want 2", len(got.ScopeCounts))
+	if len(got.ScopeCounts) != 6 {
+		t.Fatalf("ReadRawSnapshot().ScopeCounts len = %d, want 6", len(got.ScopeCounts))
 	}
 	if got.ScopeActivity.Active != 5 {
 		t.Fatalf("ReadRawSnapshot().ScopeActivity.Active = %d, want 5", got.ScopeActivity.Active)
 	}
 	if got.ScopeActivity.Changed != 2 {
 		t.Fatalf("ReadRawSnapshot().ScopeActivity.Changed = %d, want 2", got.ScopeActivity.Changed)
+	}
+	if got.ScopeActivity.Unchanged != 3 {
+		t.Fatalf("ReadRawSnapshot().ScopeActivity.Unchanged = %d, want 3", got.ScopeActivity.Unchanged)
+	}
+	if got.GenerationHistory.Active != 5 {
+		t.Fatalf("ReadRawSnapshot().GenerationHistory.Active = %d, want 5", got.GenerationHistory.Active)
+	}
+	if got.GenerationHistory.Pending != 2 {
+		t.Fatalf("ReadRawSnapshot().GenerationHistory.Pending = %d, want 2", got.GenerationHistory.Pending)
+	}
+	if got.GenerationHistory.Completed != 4 {
+		t.Fatalf("ReadRawSnapshot().GenerationHistory.Completed = %d, want 4", got.GenerationHistory.Completed)
+	}
+	if got.GenerationHistory.Superseded != 3 {
+		t.Fatalf("ReadRawSnapshot().GenerationHistory.Superseded = %d, want 3", got.GenerationHistory.Superseded)
+	}
+	if got.GenerationHistory.Failed != 1 {
+		t.Fatalf("ReadRawSnapshot().GenerationHistory.Failed = %d, want 1", got.GenerationHistory.Failed)
+	}
+	if got.GenerationHistory.Other != 2 {
+		t.Fatalf("ReadRawSnapshot().GenerationHistory.Other = %d, want 2", got.GenerationHistory.Other)
 	}
 	if len(got.StageCounts) != 3 {
 		t.Fatalf("ReadRawSnapshot().StageCounts len = %d, want 3", len(got.StageCounts))
