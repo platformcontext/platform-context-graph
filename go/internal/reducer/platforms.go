@@ -91,7 +91,7 @@ func CanonicalPlatformID(input CanonicalPlatformInput) string {
 	if discriminator == "" {
 		discriminator = name
 	}
-	if discriminator == "" && !(environment != "" && region != "") {
+	if discriminator == "" && (environment == "" || region == "") {
 		return ""
 	}
 

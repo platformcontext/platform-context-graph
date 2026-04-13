@@ -183,7 +183,8 @@ func (status IntentStatus) Validate() error {
 	}
 }
 
-func (status IntentStatus) terminal() bool {
+// Terminal reports whether the status represents a final state.
+func (status IntentStatus) Terminal() bool {
 	switch status {
 	case IntentStatusSucceeded, IntentStatusFailed:
 		return true
@@ -192,7 +193,8 @@ func (status IntentStatus) terminal() bool {
 	}
 }
 
-func (i Intent) withStatus(status IntentStatus, at time.Time) Intent {
+// WithStatus returns a clone of the intent with the given status and timestamp.
+func (i Intent) WithStatus(status IntentStatus, at time.Time) Intent {
 	cloned := i.Clone()
 	cloned.Status = status
 	switch status {
