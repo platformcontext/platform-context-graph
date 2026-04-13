@@ -1,0 +1,35 @@
+.planning/codebase/CONCERNS.md
+  1ca5ee6ce936a402 1-421
+.planning/codebase/CONVENTIONS.md
+  1ca5ee6ce936a402 1-210
+.planning/codebase/STACK.md
+  1ca5ee6ce936a402 1-152
+.planning/codebase/STRUCTURE.md
+  1ca5ee6ce936a402 1-314
+.planning/codebase/TESTING.md
+  1ca5ee6ce936a402 1-368
+.planning/codebase/ARCHITECTURE.md
+  1ca5ee6ce936a402 1-230
+.planning/codebase/INTEGRATIONS.md
+  1ca5ee6ce936a402 1-209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "98c05e7c2b216c194ae63591a1da93d836c812fc",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 2420,
+      "total_deletions": 0,
+      "accepted_lines": 2420,
+      "overriden_lines": 0
+    }
+  }
+}
