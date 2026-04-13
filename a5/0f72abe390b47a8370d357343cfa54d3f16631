@@ -1,0 +1,31 @@
+docs/superpowers/plans/2026-04-13-go-data-plane-ownership-completion-plan.md
+  1ca5ee6ce936a402 1-693
+docs/superpowers/plans/2026-04-13-go-write-plane-conversion-cutover.md
+  1ca5ee6ce936a402 33-41,109,115,120,124,135,137,292,297,299-300,302,304-305,307,309-311,313,315-316,318,320,322,324,326,349,351-352,354,356-360,362,369,371,374,414,416-422,424-425
+docs/superpowers/plans/2026-04-12-go-data-plane-doc-set-index.md
+  1ca5ee6ce936a402 27-28,47-48
+docs/docs/adrs/index.md
+  1ca5ee6ce936a402 49-52
+docs/docs/adrs/2026-04-13-go-data-plane-ownership-completion.md
+  1ca5ee6ce936a402 1-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "a50f72abe390b47a8370d357343cfa54d3f16631",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1760,
+      "total_deletions": 88,
+      "accepted_lines": 2122,
+      "overriden_lines": 0
+    }
+  }
+}
