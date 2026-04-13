@@ -141,7 +141,7 @@ func (s StatusRequestStore) ClaimScanRequest(ctx context.Context, ingester strin
 	if err != nil {
 		return runtime.ScanRequest{}, fmt.Errorf("claim scan request: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
@@ -192,7 +192,7 @@ func (s StatusRequestStore) ClaimReindexRequest(ctx context.Context, ingester st
 	if err != nil {
 		return runtime.ReindexRequest{}, fmt.Errorf("claim reindex request: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
@@ -231,7 +231,7 @@ func (s StatusRequestStore) GetScanState(ctx context.Context, ingester string) (
 	if err != nil {
 		return runtime.ScanRequest{}, fmt.Errorf("get scan state: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
@@ -258,7 +258,7 @@ func (s StatusRequestStore) GetReindexState(ctx context.Context, ingester string
 	if err != nil {
 		return runtime.ReindexRequest{}, fmt.Errorf("get reindex state: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {

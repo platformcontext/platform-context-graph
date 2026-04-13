@@ -8,6 +8,7 @@ from typing import Any
 from ...cli.config_manager import get_config_value
 from ...utils.debug_log import info_logger
 from ...platform.dependency_catalog import dependency_ignore_enabled, is_dependency_path
+from .parser_support import supports_path
 from .gitignore import (
     filter_repo_gitignore_files,
     summarize_gitignored_paths,
@@ -87,8 +88,7 @@ def collect_supported_files(
     Returns:
         Supported file paths rooted at ``path``.
     """
-    from ...parsers.raw_text import parser_key_for_path
-
+    del builder
     dependency_exclusion_enabled = dependency_ignore_enabled(
         get_config_value_fn=get_config_value_fn
     )
@@ -99,7 +99,7 @@ def collect_supported_files(
             path, root=path.parent
         ):
             return []
-        return [path] if parser_key_for_path(path, builder.parsers) else []
+        return [path] if supports_path(path) else []
 
     ignore_dirs = get_ignored_dir_names(get_config_value_fn=get_config_value_fn)
     telemetry = get_observability_fn()
@@ -128,7 +128,7 @@ def collect_supported_files(
                 file_path, root=path
             ):
                 continue
-            if parser_key_for_path(file_path, builder.parsers):
+            if supports_path(file_path):
                 files.append(file_path)
     return files
 

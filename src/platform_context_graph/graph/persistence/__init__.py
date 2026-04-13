@@ -92,7 +92,6 @@ _EXPORTS = {
     "safe_run_create": (".calls", "safe_run_create"),
     "should_flush_batches": (".batching", "should_flush_batches"),
     "summarize_entity_source_files": (".batching", "summarize_entity_source_files"),
-    "update_file_in_graph": (".mutations", "update_file_in_graph"),
     "validate_cypher_label": (".unwind", "validate_cypher_label"),
     "validate_cypher_property_keys": (
         ".unwind",

@@ -98,7 +98,7 @@ func (s FactStore) ListFacts(
 	if err != nil {
 		return nil, fmt.Errorf("list facts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var loaded []facts.Envelope
 	for rows.Next() {

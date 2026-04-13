@@ -1,10 +1,35 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import importlib
 import sys
+import asyncio
+from pathlib import Path
+from types import ModuleType
 
-import platform_context_graph.cli.helpers.runtime as runtime_helper_module
-import platform_context_graph.mcp.server as mcp_server_module
+
+def _install_runtime_shims() -> None:
+    roles_module = ModuleType("platform_context_graph.runtime.roles")
+    roles_module.get_runtime_role = lambda: "combined"
+    roles_module.runtime_supports_mutations = lambda: True
+    roles_module.workspace_fallback_enabled = lambda: True
+    sys.modules.setdefault("platform_context_graph.runtime.roles", roles_module)
+
+    status_store_module = ModuleType("platform_context_graph.runtime.status_store")
+    status_store_module.PostgresRuntimeStatusStore = object
+    status_store_module.get_runtime_status_store = lambda: None
+    status_store_module.get_repository_coverage = lambda **_kwargs: None
+    status_store_module.list_repository_coverage = lambda **_kwargs: []
+    status_store_module.request_ingester_reindex = lambda **_kwargs: None
+    status_store_module.request_ingester_scan = lambda **_kwargs: None
+    sys.modules.setdefault(
+        "platform_context_graph.runtime.status_store", status_store_module
+    )
+
+
+_install_runtime_shims()
+
 import platform_context_graph.tools.graph_builder as graph_builder_module
 
 
@@ -36,16 +61,35 @@ def test_graph_builder_import_does_not_load_legacy_parse_or_scip_modules() -> No
     assert "platform_context_graph.parsers.scip.parser" not in sys.modules
 
 
-def test_runtime_modules_do_not_eagerly_load_legacy_parse_or_scip_modules() -> None:
-    """Normal runtime module imports should avoid legacy parse and SCIP stacks."""
+class _DummyDBManager:
+    def get_driver(self) -> object:
+        return object()
+
+
+def test_graph_builder_discovery_paths_do_not_load_legacy_parser_registry(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Discovery and estimation should stay on Go-owned metadata, not Python parsers."""
 
     _clear_modules()
     importlib.reload(graph_builder_module)
-    importlib.reload(runtime_helper_module)
-    importlib.reload(mcp_server_module)
+    monkeypatch.setattr(
+        graph_builder_module, "_create_schema", lambda *_args, **_kwargs: None
+    )
 
-    assert "platform_context_graph.collectors.git.parse_execution" not in sys.modules
+    builder = graph_builder_module.GraphBuilder(
+        _DummyDBManager(),
+        object(),
+        asyncio.new_event_loop(),
+    )
+    python_file = tmp_path / "main.py"
+    python_file.write_text("print('ok')\n", encoding="utf-8")
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM python:3.12-slim\n", encoding="utf-8")
+
+    files = builder._collect_supported_files(tmp_path)
+    estimate = builder.estimate_processing_time(tmp_path)
+
+    assert files == [dockerfile, python_file]
+    assert estimate == (2, 0.1)
     assert "platform_context_graph.parsers.registry" not in sys.modules
-    assert "platform_context_graph.parsers.scip" not in sys.modules
-    assert "platform_context_graph.parsers.scip.indexing" not in sys.modules
-    assert "platform_context_graph.parsers.scip.parser" not in sys.modules

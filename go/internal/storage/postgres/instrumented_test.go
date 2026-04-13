@@ -202,7 +202,9 @@ func TestInstrumentedDB_QueryContext_RecordsSpanAndMetric(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryContext failed: %v", err)
 	}
-	rows.Close()
+	if err := rows.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
 
 	if !fake.queryCalled {
 		t.Error("QueryContext was not called on inner ExecQueryer")
@@ -312,7 +314,9 @@ func TestInstrumentedDB_NilTracerAndInstruments_PassesThrough(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryContext with nil tracer/instruments failed: %v", err)
 	}
-	rows.Close()
+	if err := rows.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
 	if !fake.queryCalled {
 		t.Error("QueryContext was not called on inner ExecQueryer")
 	}

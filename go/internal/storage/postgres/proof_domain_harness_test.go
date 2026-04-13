@@ -49,11 +49,6 @@ type proofState struct {
 	workItems         map[string]proofWorkItem
 }
 
-type proofScopeRow struct {
-	scope      scope.IngestionScope
-	generation scope.ScopeGeneration
-}
-
 type proofWorkItem struct {
 	workItemID   string
 	stage        string

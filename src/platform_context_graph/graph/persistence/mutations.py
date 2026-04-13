@@ -228,49 +228,8 @@ def reset_repository_subtree_in_graph(
         return True
 
 
-def update_file_in_graph(
-    builder: Any,
-    path: Path,
-    repo_path: Path,
-    imports_map: dict[str, Any],
-    *,
-    error_logger_fn: Any,
-) -> dict[str, Any] | None:
-    """Replace graph state for one file with freshly parsed contents.
-
-    Args:
-        builder: ``GraphBuilder`` facade instance.
-        path: File path to refresh.
-        repo_path: Repository root containing the file.
-        imports_map: Import resolution map used for relationship creation.
-        error_logger_fn: Error logger callable.
-
-    Returns:
-        Parsed file data, a deletion marker, or ``None`` when parsing failed.
-    """
-
-    file_path_str = str(path.resolve())
-    repo_name = repo_path.name
-
-    builder.delete_file_from_graph(file_path_str)
-
-    if path.exists():
-        file_data = builder.parse_file(repo_path, path)
-        if "error" not in file_data:
-            builder.add_file_to_graph(file_data, repo_name, imports_map)
-            return file_data
-
-        error_logger_fn(
-            f"Skipping graph add for {file_path_str} due to parsing error: {file_data['error']}"
-        )
-        return None
-
-    return {"deleted": True, "path": file_path_str}
-
-
 __all__ = [
     "delete_file_from_graph",
     "delete_repository_from_graph",
     "reset_repository_subtree_in_graph",
-    "update_file_in_graph",
 ]

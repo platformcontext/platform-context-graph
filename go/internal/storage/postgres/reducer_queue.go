@@ -130,13 +130,6 @@ WHERE work_item_id = $6
   AND status IN ('claimed', 'running')
 `
 
-type reducerPayload struct {
-	EntityKey    string `json:"entity_key,omitempty"`
-	Reason       string `json:"reason,omitempty"`
-	FactID       string `json:"fact_id,omitempty"`
-	SourceSystem string `json:"source_system,omitempty"`
-}
-
 // ReducerQueue provides reducer-stage queue behavior over fact_work_items.
 type ReducerQueue struct {
 	db            ExecQueryer
@@ -221,7 +214,7 @@ func (q ReducerQueue) Claim(ctx context.Context) (reducer.Intent, bool, error) {
 	if err != nil {
 		return reducer.Intent{}, false, fmt.Errorf("claim reducer work: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {

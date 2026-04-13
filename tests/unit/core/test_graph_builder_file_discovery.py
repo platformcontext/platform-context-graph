@@ -1,10 +1,36 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import asyncio
 from pathlib import Path
+import sys
+from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
+
+
+def _install_runtime_shims() -> None:
+    roles_module = ModuleType("platform_context_graph.runtime.roles")
+    roles_module.get_runtime_role = lambda: "combined"
+    roles_module.runtime_supports_mutations = lambda: True
+    roles_module.workspace_fallback_enabled = lambda: True
+    sys.modules.setdefault("platform_context_graph.runtime.roles", roles_module)
+
+    status_store_module = ModuleType("platform_context_graph.runtime.status_store")
+    status_store_module.PostgresRuntimeStatusStore = object
+    status_store_module.get_runtime_status_store = lambda: None
+    status_store_module.get_repository_coverage = lambda **_kwargs: None
+    status_store_module.list_repository_coverage = lambda **_kwargs: []
+    status_store_module.request_ingester_reindex = lambda **_kwargs: None
+    status_store_module.request_ingester_scan = lambda **_kwargs: None
+    sys.modules.setdefault(
+        "platform_context_graph.runtime.status_store", status_store_module
+    )
+
+
+_install_runtime_shims()
 
 from platform_context_graph.tools.graph_builder import GraphBuilder
 from platform_context_graph.collectors.git.discovery import (
@@ -14,26 +40,8 @@ from platform_context_graph.collectors.git.discovery import (
 
 def _make_builder() -> GraphBuilder:
     builder = GraphBuilder.__new__(GraphBuilder)
-    builder.parsers = {
-        ".py": object(),
-        ".js": object(),
-        ".php": object(),
-        ".tf": object(),
-        ".yaml": object(),
-    }
     builder.add_repository_to_graph = MagicMock()
     builder.add_file_to_graph = MagicMock()
-    builder.parse_file = MagicMock(
-        side_effect=lambda repo_path, file_path, is_dependency: {
-            "path": str(file_path),
-            "repo_path": str(repo_path),
-            "functions": [],
-            "classes": [],
-            "imports": [],
-            "variables": [],
-        }
-    )
-    builder._pre_scan_for_imports = MagicMock(return_value={})
     builder._create_all_inheritance_links = MagicMock()
     builder._create_all_function_calls = MagicMock()
     builder._create_all_infra_links = MagicMock()
@@ -344,13 +352,15 @@ def test_build_graph_from_path_async_explicit_file_bypasses_gitignore(
     recorded: dict[str, object] = {}
     monkeypatch.setattr(
         "platform_context_graph.tools.graph_builder.run_go_bootstrap_index",
-        lambda path, *, selected_repositories=None, force=False, is_dependency=False: recorded.update(
-            {
-                "path": path,
-                "selected_repositories": selected_repositories,
-                "force": force,
-                "is_dependency": is_dependency,
-            }
+        lambda path, *, selected_repositories=None, force=False, is_dependency=False: (
+            recorded.update(
+                {
+                    "path": path,
+                    "selected_repositories": selected_repositories,
+                    "force": force,
+                    "is_dependency": is_dependency,
+                }
+            )
         ),
     )
 
@@ -385,13 +395,15 @@ def test_build_graph_from_path_async_uses_go_bootstrap_runtime_for_directories(
 
     monkeypatch.setattr(
         "platform_context_graph.tools.graph_builder.run_go_bootstrap_index",
-        lambda path, *, selected_repositories=None, force=False, is_dependency=False: recorded.update(
-            {
-                "path": path,
-                "selected_repositories": selected_repositories,
-                "force": force,
-                "is_dependency": is_dependency,
-            }
+        lambda path, *, selected_repositories=None, force=False, is_dependency=False: (
+            recorded.update(
+                {
+                    "path": path,
+                    "selected_repositories": selected_repositories,
+                    "force": force,
+                    "is_dependency": is_dependency,
+                }
+            )
         ),
     )
 
@@ -418,13 +430,15 @@ def test_build_graph_from_path_async_routes_dependency_directories_to_go_bootstr
     recorded: dict[str, object] = {}
     monkeypatch.setattr(
         "platform_context_graph.tools.graph_builder.run_go_bootstrap_index",
-        lambda path, *, selected_repositories=None, force=False, is_dependency=False: recorded.update(
-            {
-                "path": path,
-                "selected_repositories": selected_repositories,
-                "force": force,
-                "is_dependency": is_dependency,
-            }
+        lambda path, *, selected_repositories=None, force=False, is_dependency=False: (
+            recorded.update(
+                {
+                    "path": path,
+                    "selected_repositories": selected_repositories,
+                    "force": force,
+                    "is_dependency": is_dependency,
+                }
+            )
         ),
     )
 
@@ -558,14 +572,6 @@ def test_collect_supported_files_includes_raw_text_iac_candidates(
     """Discovery should include searchable raw-text IaC files, not just parser suffixes."""
 
     builder = _make_builder()
-    builder.parsers.update(
-        {
-            ".j2": object(),
-            ".tpl": object(),
-            ".conf": object(),
-            "__dockerfile__": object(),
-        }
-    )
     monkeypatch.setattr(
         "platform_context_graph.tools.graph_builder.get_config_value", _config_value
     )

@@ -202,7 +202,7 @@ func (s IngestionStore) shouldSkipUnchangedGeneration(
 	if err != nil {
 		return false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {

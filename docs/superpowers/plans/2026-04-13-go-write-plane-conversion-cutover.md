@@ -285,11 +285,13 @@ Progress on this step:
   `go/internal/parser/{engine_ruby_semantics,php_language,engine_swift_semantics,engine_elixir_semantics}_test.go`
 - [x] Normal runtime status surfaces now read from
   `src/platform_context_graph/indexing/run_status.py` instead of importing the
-  legacy Python coordinator execution stack, and `GraphBuilder` startup now
-  lazily initializes the Python parser registry so Go-owned runtime startup no
-  longer bootstraps Python parsers by default; `GraphBuilder`, the CLI runtime
-  helper, and MCP server imports now avoid eager imports of
-  `platform_context_graph.parsers.registry` and `platform_context_graph.parsers.scip*`
+  legacy Python coordinator execution stack. `GraphBuilder` no longer owns any
+  Python parser-registry bootstrap, single-file parse entrypoint, or
+  file-refresh mutation path; parser-aware file discovery now uses Go-aligned
+  support metadata in `src/platform_context_graph/collectors/git/parser_support.py`,
+  and `GraphBuilder`, the CLI runtime helper, and MCP server imports avoid
+  eager imports of `platform_context_graph.parsers.registry` and
+  `platform_context_graph.parsers.scip*`
 - [x] The obsolete Python path-level execution helper
   `src/platform_context_graph/collectors/git/execution.py` has been deleted;
   normal file and directory path indexing now enters through the Go-owned

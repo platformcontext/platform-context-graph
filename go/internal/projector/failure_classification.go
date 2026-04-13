@@ -104,7 +104,7 @@ func NewResourceExhaustedError(msg string) *ResourceExhaustedError {
 
 // ClassifyFailure maps one projection error into durable failure metadata.
 func ClassifyFailure(err error, failureStage string) FailureClassification {
-	underlying, resolvedStage := unwrapStageError(err, failureStage)
+	resolvedStage, underlying := unwrapStageError(err, failureStage)
 
 	// Neo4j transient errors are retryable with a backoff.
 	if code := neo4jErrorCode(underlying); code != "" && strings.HasPrefix(code, neo4jTransientCodePrefix) {
@@ -191,12 +191,12 @@ func (fc FailureClassification) ToFailureRecord(message string) queue.FailureRec
 
 // unwrapStageError returns the underlying error and the best-known failure
 // stage. If the error is a StageError, the stage from the wrapper is used.
-func unwrapStageError(err error, fallbackStage string) (error, string) {
+func unwrapStageError(err error, fallbackStage string) (string, error) {
 	var stageErr *StageError
 	if errors.As(err, &stageErr) {
-		return stageErr.Cause, stageErr.Stage
+		return stageErr.Stage, stageErr.Cause
 	}
-	return err, fallbackStage
+	return fallbackStage, err
 }
 
 // neo4jErrorCode returns the Neo4j server error code if the error (or any

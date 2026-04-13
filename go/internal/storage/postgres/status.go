@@ -256,7 +256,7 @@ func listNamedCounts(
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	counts := []statuspkg.NamedCount{}
 	for rows.Next() {
@@ -282,7 +282,7 @@ func listStageCounts(ctx context.Context, queryer Queryer) ([]statuspkg.StageSta
 	if err != nil {
 		return nil, fmt.Errorf("list stage counts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	counts := []statuspkg.StageStatusCount{}
 	for rows.Next() {
@@ -313,7 +313,7 @@ func listGenerationTransitions(
 	if err != nil {
 		return nil, fmt.Errorf("list generation transitions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	transitions := []statuspkg.GenerationTransitionSnapshot{}
 	for rows.Next() {
@@ -362,7 +362,7 @@ func listDomainBacklogs(
 	if err != nil {
 		return nil, fmt.Errorf("list domain backlogs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	backlogs := []statuspkg.DomainBacklog{}
 	for rows.Next() {
@@ -404,7 +404,7 @@ func readQueueSnapshot(
 	if err != nil {
 		return statuspkg.QueueSnapshot{}, fmt.Errorf("read queue snapshot: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {

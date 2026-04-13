@@ -197,7 +197,7 @@ func (s RecoveryStore) ReplayFailedWorkItems(
 	if err != nil {
 		return recovery.ReplayResult{}, fmt.Errorf("replay failed work items: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var workItemIDs []string
 	for rows.Next() {
@@ -236,7 +236,7 @@ func (s RecoveryStore) RefinalizeScopeProjections(
 	if err != nil {
 		return recovery.RefinalizeResult{}, fmt.Errorf("refinalize scope projections: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var scopeIDs []string
 	for rows.Next() {

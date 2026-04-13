@@ -6,7 +6,7 @@ import asyncio
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ..cli.config_manager import get_config_value
 from ..cli.helpers.go_index_runtime import run_go_bootstrap_index
@@ -28,7 +28,6 @@ from ..graph.persistence import (
     delete_file_from_graph as _delete_file_from_graph,
     delete_repository_from_graph as _delete_repository_from_graph,
     reset_repository_subtree_in_graph as _reset_repository_subtree_in_graph,
-    update_file_in_graph as _update_file_in_graph,
 )
 from ..graph.persistence import (
     add_file_to_graph as _add_file_to_graph,
@@ -55,52 +54,6 @@ from ..relationships.data_intelligence_links import (
 from ..relationships.sql_links import create_all_sql_links as _create_all_sql_links
 from ..graph.schema import create_schema as _create_schema
 
-if TYPE_CHECKING:
-    from ..parsers.registry import TreeSitterParser
-
-
-def _build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
-    """Load the legacy Python parser registry on demand."""
-
-    from ..parsers.registry import build_parser_registry
-
-    return build_parser_registry(get_config_value_fn)
-
-
-def _parse_file_impl(
-    builder: Any,
-    repo_path: Path,
-    path: Path,
-    is_dependency: bool,
-    *,
-    get_config_value_fn: Any,
-    debug_log_fn: Any,
-    error_logger_fn: Any,
-    warning_logger_fn: Any,
-) -> dict[str, Any]:
-    """Load and invoke the legacy Python single-file parser on demand."""
-
-    from ..parsers.registry import parse_file
-
-    return parse_file(
-        builder,
-        repo_path,
-        path,
-        is_dependency,
-        get_config_value_fn=get_config_value_fn,
-        debug_log_fn=debug_log_fn,
-        error_logger_fn=error_logger_fn,
-        warning_logger_fn=warning_logger_fn,
-    )
-
-
-def _pre_scan_for_imports_impl(builder: Any, files: list[Path]) -> dict[str, Any]:
-    """Load and invoke the legacy Python import prescan helper on demand."""
-
-    from ..parsers.registry import pre_scan_for_imports
-
-    return pre_scan_for_imports(builder, files)
-
 
 class GraphBuilder:
     """Build and maintain the repository code graph."""
@@ -122,7 +75,6 @@ class GraphBuilder:
         self.job_manager = job_manager
         self.loop = loop
         self.driver = self.db_manager.get_driver()
-        self.parsers: dict[str, Any] | None = None
         self.create_schema()
 
     def create_schema(self) -> None:
@@ -130,18 +82,6 @@ class GraphBuilder:
         _create_schema(
             self, info_logger_fn=info_logger, warning_logger_fn=warning_logger
         )
-
-    def _pre_scan_for_imports(self, files: list[Path]) -> dict[str, Any]:
-        """Collect import resolution hints before indexing files."""
-        self._ensure_parsers()
-        return _pre_scan_for_imports_impl(self, files)
-
-    def _ensure_parsers(self) -> dict[str, Any]:
-        """Lazily initialize the Python parser registry when a legacy path needs it."""
-
-        if self.parsers is None:
-            self.parsers = _build_parser_registry(get_config_value)
-        return self.parsers
 
     def add_repository_to_graph(
         self, repo_path: Path, is_dependency: bool = False
@@ -277,7 +217,6 @@ class GraphBuilder:
             **data_metrics,
         }
 
-
     def _resolve_repository_relationships(
         self,
         committed_repo_paths: list[Path],
@@ -354,43 +293,6 @@ class GraphBuilder:
             warning_logger_fn=warning_logger,
         )
 
-    def update_file_in_graph(
-        self, path: Path, repo_path: Path, imports_map: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        """Refresh graph state for one file.
-
-        Args:
-            path: File path to refresh.
-            repo_path: Repository root containing the file.
-            imports_map: Import resolution map used for follow-up relationships.
-
-        Returns:
-            Parsed file data, a deletion marker, or ``None`` if parsing failed.
-        """
-        return _update_file_in_graph(
-            self,
-            path,
-            repo_path,
-            imports_map,
-            error_logger_fn=error_logger,
-        )
-
-    def parse_file(
-        self, repo_path: Path, path: Path, is_dependency: bool = False
-    ) -> dict[str, Any]:
-        """Parse one file with the registered language parser."""
-        self._ensure_parsers()
-        return _parse_file_impl(
-            self,
-            repo_path,
-            path,
-            is_dependency,
-            get_config_value_fn=get_config_value,
-            debug_log_fn=debug_log,
-            error_logger_fn=error_logger,
-            warning_logger_fn=warning_logger,
-        )
-
     def estimate_processing_time(self, path: Path) -> tuple[int, float] | None:
         """Estimate indexing duration for a file or directory."""
         return _estimate_processing_time(self, path, error_logger_fn=error_logger)
@@ -400,8 +302,7 @@ class GraphBuilder:
         return _get_ignored_dir_names(get_config_value_fn=get_config_value)
 
     def _collect_supported_files(self, path: Path) -> list[Path]:
-        """Collect files whose extensions are supported by the parser registry."""
-        self._ensure_parsers()
+        """Collect files whose names/extensions match the Go parser matrix."""
         return _collect_supported_files(
             self,
             path,
@@ -477,14 +378,5 @@ class GraphBuilder:
                 )
             return
 
-def __getattr__(name: str) -> Any:
-    """Resolve optional legacy parser symbols on demand."""
 
-    if name != "TreeSitterParser":
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    from ..parsers.registry import TreeSitterParser
-
-    return TreeSitterParser
-
-
-__all__ = ["GraphBuilder", "TreeSitterParser"]
+__all__ = ["GraphBuilder"]

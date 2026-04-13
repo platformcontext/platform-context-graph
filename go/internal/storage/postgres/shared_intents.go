@@ -216,7 +216,7 @@ func (s *SharedIntentStore) ListIntents(ctx context.Context, f SharedIntentFilte
 	if err != nil {
 		return nil, err
 	}
-	defer sqlRows.Close()
+	defer func() { _ = sqlRows.Close() }()
 
 	return scanSharedIntentRows(sqlRows)
 }
@@ -230,7 +230,7 @@ func (s *SharedIntentStore) ListPendingDomainIntents(ctx context.Context, domain
 	if err != nil {
 		return nil, err
 	}
-	defer sqlRows.Close()
+	defer func() { _ = sqlRows.Close() }()
 
 	return scanSharedIntentRows(sqlRows)
 }
@@ -268,7 +268,7 @@ func (s *SharedIntentStore) ClaimPartitionLease(ctx context.Context, domain stri
 	if err != nil {
 		return false, fmt.Errorf("claim partition lease: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	if !rows.Next() {
 		return false, nil
@@ -314,7 +314,7 @@ func (s *SharedIntentStore) ListPendingRepoRunIntents(ctx context.Context, repos
 	if err != nil {
 		return nil, err
 	}
-	defer sqlRows.Close()
+	defer func() { _ = sqlRows.Close() }()
 
 	return scanSharedIntentRows(sqlRows)
 }
@@ -331,7 +331,7 @@ func (s *SharedIntentStore) CountPendingGenerationIntents(ctx context.Context, r
 	if err != nil {
 		return 0, fmt.Errorf("query pending generation intents: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var count int
 	if rows.Next() {

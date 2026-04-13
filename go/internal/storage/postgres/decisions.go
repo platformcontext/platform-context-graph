@@ -191,7 +191,7 @@ func (s *DecisionStore) ListDecisions(ctx context.Context, f DecisionFilter) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer sqlRows.Close()
+	defer func() { _ = sqlRows.Close() }()
 
 	return scanDecisionRows(sqlRows)
 }
@@ -202,7 +202,7 @@ func (s *DecisionStore) ListEvidence(ctx context.Context, decisionID string) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer sqlRows.Close()
+	defer func() { _ = sqlRows.Close() }()
 
 	return scanEvidenceRows(sqlRows)
 }

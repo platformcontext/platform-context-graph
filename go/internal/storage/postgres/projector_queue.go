@@ -249,7 +249,7 @@ func (q ProjectorQueue) Claim(ctx context.Context) (projector.ScopeGenerationWor
 	if err != nil {
 		return projector.ScopeGenerationWork{}, false, fmt.Errorf("claim projector work: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
