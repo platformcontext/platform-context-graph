@@ -1,0 +1,117 @@
+go/internal/reducer/workload_identity_test.go
+  1ca5ee6ce936a402 202
+go/internal/reducer/defaults.go
+  1ca5ee6ce936a402 11-16,55-64
+go/internal/reducer/candidate_loader_test.go
+  1ca5ee6ce936a402 1-247
+go/internal/storage/postgres/shared_intents_test.go
+  1ca5ee6ce936a402 243-451,512-572,714-741
+go/internal/reducer/domain.go
+  1ca5ee6ce936a402 9-15
+go/internal/reducer/defaults_test.go
+  1ca5ee6ce936a402 120-121,144-152
+go/internal/reducer/infrastructure_platform_materializer_test.go
+  1ca5ee6ce936a402 1-243
+go/cmd/reducer/main.go
+  1ca5ee6ce936a402 83-88
+go/internal/reducer/infrastructure_platform_extractor_test.go
+  1ca5ee6ce936a402 1-248
+go/internal/reducer/platform_materialization.go
+  1ca5ee6ce936a402 37-39,41-43,71-89,104
+go/internal/reducer/candidate_loader.go
+  1ca5ee6ce936a402 1-181
+go/internal/reducer/inline_followup_test.go
+  1ca5ee6ce936a402 1-269
+go/internal/reducer/workload_materialization_handler_test.go
+  1ca5ee6ce936a402 1-252
+go/internal/reducer/infrastructure_platform_materializer.go
+  1ca5ee6ce936a402 1-114
+go/internal/storage/postgres/shared_intents.go
+  1ca5ee6ce936a402 92-113,303-345
+go/internal/reducer/intent.go
+  1ca5ee6ce936a402 29-30
+go/internal/reducer/infrastructure_platform_extractor.go
+  1ca5ee6ce936a402 1-157
+go/internal/reducer/registry.go
+  1ca5ee6ce936a402 186-200
+go/internal/reducer/inline_followup.go
+  1ca5ee6ce936a402 1-232
+go/internal/reducer/workload_materialization_handler.go
+  1ca5ee6ce936a402 1-82
+docs/superpowers/plans/2026-04-13-go-data-plane-ownership-completion-plan.md
+  1ca5ee6ce936a402 222,230-235,237,243-249,261,358,366-371,373,378-383,395,532,538-541,570,578-580,582,586-588,590,594-596,598,602,634,647-649,651,659-661,663,689,697,699,704,731-732,734
+.gitignore
+  1ca5ee6ce936a402 166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "e5876616bf70ba793219bd8c50f959ffd6c70fb5",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 77,
+      "total_deletions": 22,
+      "accepted_lines": 2596,
+      "overriden_lines": 0
+    },
+    "21d0652afb873020": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-260c-7752-ba40-57ff788997eb",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "22a2a4042c410746": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84f1-43ec-7290-9623-acd2dad2ccd7",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 40,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 100,
+      "overriden_lines": 0
+    },
+    "b0d410b9f01dc4ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-2326-7162-8155-6de99ff655dd",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 35,
+      "overriden_lines": 0
+    }
+  }
+}
