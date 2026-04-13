@@ -109,6 +109,14 @@ git commit -m "docs(cutover): mark write-plane conversion incomplete"
 ### Task 2: Replace Python parser and collector-path ownership with native Go
 
 **Files:**
+- Create: `go/internal/parser/registry.go`
+- Create: `go/internal/parser/registry_test.go`
+- Create: `go/internal/parser/raw_text.go`
+- Create: `go/internal/parser/raw_text_test.go`
+- Create: `go/internal/collector/discovery/discovery.go`
+- Create: `go/internal/collector/discovery/discovery_test.go`
+- Create: `go/internal/content/shape/materialize.go`
+- Create: `go/internal/content/shape/materialize_test.go`
 - Modify: `go/cmd/collector-git/service.go`
 - Delete: `go/cmd/collector-git/source_python_bridge.go`
 - Delete: `go/internal/compatibility/pythonbridge/collector_git.go`
@@ -126,32 +134,49 @@ git commit -m "docs(cutover): mark write-plane conversion incomplete"
 - Modify: `go/internal/collector/service_test.go`
 - Modify: `go/cmd/collector-git/service_test.go`
 
-- [ ] **Step 1: Write failing Go tests for native parser and repository selection**
+- [ ] **Step 1: Write failing Go tests for parser registry, discovery, and content shaping**
+
+Cover:
+- supported extension and parser-key lookup parity
+- raw-text special filename handling (`Dockerfile`, `Jenkinsfile`)
+- repo-local and nested `.gitignore` behavior
+- nested git repository grouping and deterministic file ordering
+- content entity bucket normalization and canonical content materialization
+
+- [ ] **Step 2: Implement the native Go parser platform foundation**
+
+Create a native Go parser metadata/registry package, a native discovery package,
+and a native content-shaping package. Keep this slice honest: the registry owns
+parser identity and selection; discovery owns file and repository selection;
+content shaping owns translation from normalized parser payloads to the Go
+content model.
+
+- [ ] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 
 Cover repo discovery, filtering, identity normalization, parser dispatch,
 and content-shaping boundaries without invoking Python.
 
-- [ ] **Step 2: Write failing Go tests for native repository snapshot and parse collection**
+- [ ] **Step 4: Write failing Go tests for native repository snapshot and parse collection**
 
 Cover per-repo snapshot capture, fingerprinting, content facts, and error
 paths without invoking Python.
 
-- [ ] **Step 3: Implement native selection**
+- [ ] **Step 5: Implement native selection**
 
 Move selection behavior into `go/internal/collector/git_selection_native.go`
 and wire `collector.GitSource.Selector` to the native implementation.
 
-- [ ] **Step 4: Implement native parser and snapshot collection**
+- [ ] **Step 6: Implement native parser and snapshot collection**
 
 Move snapshot behavior into `go/internal/collector/git_snapshot_native.go` and
 wire `collector.GitSource.Snapshotter` to the native implementation.
 
-- [ ] **Step 5: Delete Python bridge imports and code**
+- [ ] **Step 7: Delete Python bridge imports and code**
 
 Remove all imports of `go/internal/compatibility/pythonbridge` from the
 collector runtime and delete the Go bridge package.
 
-- [ ] **Step 6: Delete the Python Git bridge modules**
+- [ ] **Step 8: Delete the Python Git bridge modules**
 
 Delete:
 
@@ -163,17 +188,17 @@ src/platform_context_graph/runtime/ingester/go_collector_snapshot_bridge.py
 src/platform_context_graph/runtime/ingester/go_collector_snapshot_collection.py
 ```
 
-- [ ] **Step 7: Run focused collector verification**
+- [ ] **Step 9: Run focused collector verification**
 
 Run:
 
 ```bash
-cd go && go test ./internal/collector ./cmd/collector-git -count=1
+cd go && go test ./internal/parser ./internal/collector/discovery ./internal/content/shape ./internal/collector ./cmd/collector-git -count=1
 ```
 
 Expected: PASS
 
-- [ ] **Step 8: Run the compose collector proof**
+- [ ] **Step 10: Run the compose collector proof**
 
 Run:
 
@@ -183,7 +208,7 @@ Run:
 
 Expected: PASS with no Python bridge invocation in the normal collector path
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add go/cmd/collector-git \

@@ -48,8 +48,10 @@ export PYTHONPATH=src
 ## Go Platform Conversion Gate
 
 Use this gate when validating the bounded Go rewrite proof path for the native
-runtime and collector wiring. Parser conversion is part of the rewrite plan and
-uses the parser-specific gate above while the Go parser platform lands.
+runtime and collector wiring. Parser conversion is part of the rewrite plan,
+and the first native Go parser-platform slice now lives under
+`go/internal/parser`, `go/internal/collector/discovery`, and
+`go/internal/content/shape`.
 
 Current bounded proof path:
 
@@ -63,7 +65,8 @@ Focused Go package gate:
 
 ```bash
 cd go
-go test ./internal/collector ./internal/compatibility/pythonbridge ./cmd/collector-git \
+go test ./internal/parser ./internal/collector/discovery ./internal/content/shape \
+  ./internal/collector ./internal/compatibility/pythonbridge ./cmd/collector-git \
   ./internal/runtime ./internal/app ./internal/telemetry \
   ./internal/storage/neo4j ./internal/storage/postgres \
   ./internal/reducer ./cmd/reducer -count=1

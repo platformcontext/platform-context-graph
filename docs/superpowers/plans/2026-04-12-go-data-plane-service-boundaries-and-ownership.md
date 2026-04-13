@@ -27,14 +27,17 @@ go/
     proto/
   internal/
     app/
+    parser/
     runtime/
     scope/
     facts/
+    collector/
     queue/
     projector/
     reducer/
     graph/
     content/
+      shape/
     storage/
       postgres/
       neo4j/
@@ -50,6 +53,12 @@ schema/
 - `go/cmd/` owns service entrypoints only.
 - `go/internal/runtime/` owns shared process bootstrap, config, lifecycle, and
   dependency wiring, including the shared probe/admin route mount.
+- `go/internal/parser/` owns parser metadata, parser capability boundaries, and
+  the eventual native parse execution surface.
+- `go/internal/collector/` owns source-specific collection orchestration.
+  Narrow file-selection and repo-grouping helpers belong under
+  `go/internal/collector/discovery/`, not in runtime bootstrap or storage
+  adapters.
 - `go/internal/scope/` owns scope and generation semantics.
 - `go/internal/facts/` owns fact envelopes and normalization helpers.
 - `go/internal/queue/` owns durable work-item and reducer-intent queue
@@ -62,6 +71,9 @@ schema/
   cloud-asset-resolution reducers plus reducer-owned canonical fact writes.
 - `go/internal/graph/` and `go/internal/content/` own canonical write adapters,
   not source parsing or reducer policy.
+- `go/internal/content/shape/` owns translation from normalized parser payloads
+  into canonical content materialization inputs; it is part of the source-local
+  write path, not a read-side concern.
 - `go/internal/status/` owns the storage-agnostic operator-status reader/report
   seam shared by CLI now and HTTP/admin handlers later.
 - `go/internal/storage/postgres/` may implement the status reader against SQL,

@@ -195,6 +195,24 @@ The ingester increasingly depends on canonical packages rather than `tools/`:
 - `graph/` for canonical graph writes
 - `resolution/` for Resolution Engine orchestration and workload/platform materialization
 
+## Go Rewrite Package Layout
+
+The in-progress Go rewrite keeps the same ownership boundaries under `go/` so
+the cutover can remove Python runtime ownership instead of recreating it:
+
+- `go/internal/parser/`: parser registry metadata and future native parse
+  execution ownership
+- `go/internal/collector/discovery/`: parser-aware file discovery, nested repo
+  grouping, and repo-local `.gitignore` handling
+- `go/internal/content/shape/`: translation from normalized parser payloads
+  into the canonical Go content materialization model
+- `go/internal/collector/`: collector cycle orchestration, repository
+  selection/snapshot ownership, and fact shaping
+
+These Go packages are the target normal-path runtime ownership. Python bridge
+modules under `runtime/ingester/*bridge.py` remain removal debt until the
+collector hot path and parser platform are fully cut over.
+
 Do not start new ingestor families until the Git write-plane cutover, parser
 platform cutover, and bridge removal are complete.
 
