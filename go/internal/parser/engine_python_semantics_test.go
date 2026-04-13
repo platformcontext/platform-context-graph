@@ -282,6 +282,84 @@ func TestDefaultEngineParsePathPythonDoesNotEmitTypeAnnotationsBucket(t *testing
 	}
 }
 
+func TestDefaultEngineParsePathPythonRichSemanticMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "rich.py")
+	writeTestFile(
+		t,
+		filePath,
+		`class Greeter:
+    """Greeter docs."""
+
+    def greet(self, name):
+        """Greet a person."""
+        if name:
+            for letter in name:
+                print(letter)
+        return name
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	classItem := assertBucketItemByName(t, got, "classes", "Greeter")
+	assertStringFieldValue(t, classItem, "docstring", "Greeter docs.")
+
+	functionItem := assertFunctionByName(t, got, "greet")
+	assertStringFieldValue(t, functionItem, "docstring", "Greet a person.")
+	assertIntFieldValue(t, functionItem, "cyclomatic_complexity", 3)
+}
+
+func TestDefaultEngineParsePathGoRichSemanticMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "worker.go")
+	writeTestFile(
+		t,
+		filePath,
+		`package worker
+
+type Worker struct{}
+
+// Work handles queued jobs.
+func (w *Worker) Work(name string) int {
+	if name == "" {
+		return 0
+	}
+	for range name {
+	}
+	return len(name)
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	functionItem := assertFunctionByName(t, got, "Work")
+	assertStringFieldValue(t, functionItem, "docstring", "Work handles queued jobs.")
+	assertStringFieldValue(t, functionItem, "class_context", "Worker")
+	assertIntFieldValue(t, functionItem, "cyclomatic_complexity", 3)
+}
+
 func assertFunctionByName(t *testing.T, payload map[string]any, name string) map[string]any {
 	t.Helper()
 
@@ -297,6 +375,44 @@ func assertFunctionByName(t *testing.T, payload map[string]any, name string) map
 	}
 	t.Fatalf("functions missing name %q in %#v", name, functions)
 	return nil
+}
+
+func assertBucketItemByName(t *testing.T, payload map[string]any, bucket string, name string) map[string]any {
+	t.Helper()
+
+	items, ok := payload[bucket].([]map[string]any)
+	if !ok {
+		t.Fatalf("%s = %T, want []map[string]any", bucket, payload[bucket])
+	}
+	for _, item := range items {
+		itemName, _ := item["name"].(string)
+		if itemName == name {
+			return item
+		}
+	}
+	t.Fatalf("%s missing name %q in %#v", bucket, name, items)
+	return nil
+}
+
+func assertStringFieldValue(t *testing.T, item map[string]any, field string, want string) {
+	t.Helper()
+
+	got, _ := item[field].(string)
+	if got != want {
+		t.Fatalf("%s = %#v, want %#v", field, got, want)
+	}
+}
+
+func assertIntFieldValue(t *testing.T, item map[string]any, field string, want int) {
+	t.Helper()
+
+	got, ok := item[field].(int)
+	if !ok {
+		t.Fatalf("%s = %T, want int", field, item[field])
+	}
+	if got != want {
+		t.Fatalf("%s = %d, want %d", field, got, want)
+	}
 }
 
 func assertORMMappingsEqual(t *testing.T, payload map[string]any, want []map[string]any) {

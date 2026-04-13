@@ -34,6 +34,40 @@ var snapshotEntityBuckets = []struct {
 	{bucket: "annotations", label: "Annotation"},
 	{bucket: "records", label: "Record"},
 	{bucket: "properties", label: "Property"},
+	{bucket: "k8s_resources", label: "K8sResource"},
+	{bucket: "argocd_applications", label: "ArgoCDApplication"},
+	{bucket: "argocd_applicationsets", label: "ArgoCDApplicationSet"},
+	{bucket: "crossplane_xrds", label: "CrossplaneXRD"},
+	{bucket: "crossplane_compositions", label: "CrossplaneComposition"},
+	{bucket: "crossplane_claims", label: "CrossplaneClaim"},
+	{bucket: "kustomize_overlays", label: "KustomizeOverlay"},
+	{bucket: "helm_charts", label: "HelmChart"},
+	{bucket: "helm_values", label: "HelmValues"},
+	{bucket: "terraform_resources", label: "TerraformResource"},
+	{bucket: "terraform_variables", label: "TerraformVariable"},
+	{bucket: "terraform_outputs", label: "TerraformOutput"},
+	{bucket: "terraform_modules", label: "TerraformModule"},
+	{bucket: "terraform_data_sources", label: "TerraformDataSource"},
+	{bucket: "terraform_providers", label: "TerraformProvider"},
+	{bucket: "terraform_locals", label: "TerraformLocal"},
+	{bucket: "terragrunt_configs", label: "TerragruntConfig"},
+	{bucket: "cloudformation_resources", label: "CloudFormationResource"},
+	{bucket: "cloudformation_parameters", label: "CloudFormationParameter"},
+	{bucket: "cloudformation_outputs", label: "CloudFormationOutput"},
+	{bucket: "sql_tables", label: "SqlTable"},
+	{bucket: "sql_columns", label: "SqlColumn"},
+	{bucket: "sql_views", label: "SqlView"},
+	{bucket: "sql_functions", label: "SqlFunction"},
+	{bucket: "sql_triggers", label: "SqlTrigger"},
+	{bucket: "sql_indexes", label: "SqlIndex"},
+	{bucket: "analytics_models", label: "AnalyticsModel"},
+	{bucket: "data_assets", label: "DataAsset"},
+	{bucket: "data_columns", label: "DataColumn"},
+	{bucket: "query_executions", label: "QueryExecution"},
+	{bucket: "dashboard_assets", label: "DashboardAsset"},
+	{bucket: "data_quality_checks", label: "DataQualityCheck"},
+	{bucket: "data_owners", label: "DataOwner"},
+	{bucket: "data_contracts", label: "DataContract"},
 }
 
 // NativeRepositorySnapshotter builds repository snapshots without Python bridge code.
@@ -223,6 +257,10 @@ func resolveNativeSnapshotFileSetForTargets(
 
 func entityBucketsFromParsed(payload map[string]any) map[string][]shape.Entity {
 	buckets := make(map[string][]shape.Entity)
+	fileArtifactType := snapshotPayloadString(payload, "artifact_type")
+	fileTemplateDialect := snapshotPayloadString(payload, "template_dialect")
+	fileIACRelevant := snapshotPayloadBoolPtr(payload, "iac_relevant")
+	fileLanguage := snapshotPayloadString(payload, "lang", "language")
 	for _, mapping := range snapshotEntityBuckets {
 		items, _ := payload[mapping.bucket].([]map[string]any)
 		if len(items) == 0 {
@@ -231,16 +269,32 @@ func entityBucketsFromParsed(payload map[string]any) map[string][]shape.Entity {
 
 		entities := make([]shape.Entity, 0, len(items))
 		for _, item := range items {
+			artifactType := snapshotPayloadString(item, "artifact_type")
+			if artifactType == "" {
+				artifactType = fileArtifactType
+			}
+			templateDialect := snapshotPayloadString(item, "template_dialect")
+			if templateDialect == "" {
+				templateDialect = fileTemplateDialect
+			}
+			iacRelevant := snapshotPayloadBoolPtr(item, "iac_relevant")
+			if iacRelevant == nil {
+				iacRelevant = fileIACRelevant
+			}
+			language := snapshotPayloadString(item, "lang", "language")
+			if language == "" {
+				language = fileLanguage
+			}
 			entities = append(entities, shape.Entity{
 				Name:            snapshotPayloadString(item, "name"),
 				LineNumber:      snapshotPayloadInt(item, "line_number"),
 				EndLine:         snapshotPayloadInt(item, "end_line"),
 				StartByte:       snapshotPayloadIntPtr(item, "start_byte"),
 				EndByte:         snapshotPayloadIntPtr(item, "end_byte"),
-				Language:        snapshotPayloadString(item, "lang", "language"),
-				ArtifactType:    snapshotPayloadString(item, "artifact_type"),
-				TemplateDialect: snapshotPayloadString(item, "template_dialect"),
-				IACRelevant:     snapshotPayloadBoolPtr(item, "iac_relevant"),
+				Language:        language,
+				ArtifactType:    artifactType,
+				TemplateDialect: templateDialect,
+				IACRelevant:     iacRelevant,
 				Source:          snapshotPayloadString(item, "source"),
 			})
 		}

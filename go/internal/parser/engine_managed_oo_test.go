@@ -57,6 +57,27 @@ interface Runner {
 	assertNamedBucketContains(t, got, "function_calls", "println")
 }
 
+func TestDefaultEngineParsePathJavaAnnotationMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := repoFixturePath("ecosystems", "java_comprehensive", "annotations")
+	filePath := filepath.Join(repoRoot, "AnnotatedService.java")
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "annotations", "Logged")
+	assertNamedBucketContains(t, got, "functions", "process")
+	assertNamedBucketContains(t, got, "functions", "cleanup")
+}
+
 func TestDefaultEngineParsePathCSharp(t *testing.T) {
 	t.Parallel()
 
@@ -157,6 +178,38 @@ object Bootstrap {
 	assertNamedBucketContains(t, got, "variables", "version")
 	assertNamedBucketContains(t, got, "imports", "scala.collection.mutable")
 	assertNamedBucketContains(t, got, "function_calls", "println")
+}
+
+func TestDefaultEngineParsePathKotlinSecondaryConstructors(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "Secondary.kt")
+	writeTestFile(
+		t,
+		filePath,
+		`package comprehensive
+
+class Greeter private constructor(private val prefix: String) {
+    constructor() : this("hello")
+
+    fun greet(name: String): String = "$prefix $name"
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "functions", "constructor")
+	assertBucketContainsFieldValue(t, got, "functions", "class_context", "Greeter")
 }
 
 func TestDefaultEnginePreScanPathsManagedOO(t *testing.T) {

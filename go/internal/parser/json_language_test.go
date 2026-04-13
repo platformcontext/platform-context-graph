@@ -180,6 +180,42 @@ func TestDefaultEngineParsePathJSONGovernanceReplay(t *testing.T) {
 	assertGovernanceAnnotationPresent(t, got, "analytics.finance.daily_revenue.customer_email")
 }
 
+func TestDefaultEngineParsePathJSONStripsHelmDirectivePreamble(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "base.json")
+	writeTestFile(
+		t,
+		filePath,
+		`{{- $env := required "env is required" .Values.env | trim -}}
+{{- $accountId := required "accountId is required" .Values.accountId | trim -}}
+{
+  "api-node-boats": {
+    "client": {
+      "hostname": "api-node-boats.{{ $env }}.bgrp.io",
+      "port": 3081
+    }
+  }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	if got, want := jsonTopLevelKeys(t, got), []string{"api-node-boats"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("json top-level keys = %#v, want %#v", got, want)
+	}
+}
+
 func bucketNames(t *testing.T, payload map[string]any, key string) []string {
 	t.Helper()
 

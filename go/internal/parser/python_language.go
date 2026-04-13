@@ -57,12 +57,16 @@ func (e *Engine) parsePython(
 			if strings.TrimSpace(name) == "" {
 				return
 			}
-			appendBucket(payload, "classes", map[string]any{
+			item := map[string]any{
 				"name":        name,
 				"line_number": nodeLine(nameNode),
 				"end_line":    nodeEndLine(node),
 				"lang":        "python",
-			})
+			}
+			if docstring := pythonDocstring(node, source); docstring != "" {
+				item["docstring"] = docstring
+			}
+			appendBucket(payload, "classes", item)
 		case "function_definition":
 			nameNode := node.ChildByFieldName("name")
 			name := nodeText(nameNode, source)
@@ -70,11 +74,15 @@ func (e *Engine) parsePython(
 				return
 			}
 			item := map[string]any{
-				"name":        name,
-				"line_number": nodeLine(nameNode),
-				"end_line":    nodeEndLine(node),
-				"decorators":  []string{},
-				"lang":        "python",
+				"name":                  name,
+				"line_number":           nodeLine(nameNode),
+				"end_line":              nodeEndLine(node),
+				"decorators":            []string{},
+				"lang":                  "python",
+				"cyclomatic_complexity": cyclomaticComplexity(node),
+			}
+			if docstring := pythonDocstring(node, source); docstring != "" {
+				item["docstring"] = docstring
 			}
 			if options.IndexSource {
 				item["source"] = nodeText(node, source)

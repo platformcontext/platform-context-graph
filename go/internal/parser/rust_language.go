@@ -108,13 +108,37 @@ func appendRustFunction(payload map[string]any, node *tree_sitter.Node, source [
 		"decorators":  []string{},
 		"lang":        "rust",
 	}
-	if classContext := nearestNamedAncestor(node, source, "impl_item", "trait_item"); classContext != "" {
-		item["class_context"] = classContext
+	if implContext := rustImplContext(node, source); implContext != "" {
+		item["impl_context"] = implContext
 	}
 	if options.IndexSource {
 		item["source"] = nodeText(node, source)
 	}
 	appendBucket(payload, "functions", item)
+}
+
+func rustImplContext(node *tree_sitter.Node, source []byte) string {
+	for current := node.Parent(); current != nil; current = current.Parent() {
+		if current.Kind() != "impl_item" {
+			continue
+		}
+		typeNode := current.ChildByFieldName("type")
+		implContext := nodeText(typeNode, source)
+		implContext = strings.TrimSpace(implContext)
+		if implContext == "" {
+			return ""
+		}
+		implContext = strings.TrimSuffix(implContext, ";")
+		implContext = strings.TrimSpace(implContext)
+		if idx := strings.LastIndex(implContext, "::"); idx >= 0 {
+			implContext = implContext[idx+2:]
+		}
+		if idx := strings.Index(implContext, "<"); idx >= 0 {
+			implContext = implContext[:idx]
+		}
+		return strings.TrimSpace(implContext)
+	}
+	return ""
 }
 
 func rustCallNameNode(node *tree_sitter.Node) *tree_sitter.Node {

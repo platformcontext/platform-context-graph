@@ -49,12 +49,17 @@ func (e *Engine) parseCPP(
 			appendNamedType(payload, "enums", node, source, "cpp")
 		case "union_specifier":
 			appendNamedType(payload, "unions", node, source, "cpp")
+		case "type_definition":
+			appendCTypedefAliases(payload, node, source, "cpp")
 		case "function_definition":
 			appendCPPFunction(payload, node, source, options)
+		case "declaration":
+			appendCTypedefAliases(payload, node, source, "cpp")
 		case "call_expression":
 			appendCall(payload, cLikeCallNameNode(node.ChildByFieldName("function")), source, "cpp")
 		}
 	})
+	appendCTypedefAliasesFromSource(payload, string(source), "cpp")
 
 	sortSystemsPayload(
 		payload,

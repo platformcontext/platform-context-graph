@@ -32,6 +32,17 @@ var scipExtensionConfigs = map[string]scipLanguageConfig{
 	".tsx":   {Language: "typescript", Binary: "scip-typescript", InstallHint: "npm install -g @sourcegraph/scip-typescript"},
 }
 
+var scipLanguagePriority = []string{
+	"python",
+	"typescript",
+	"javascript",
+	"go",
+	"rust",
+	"java",
+	"cpp",
+	"c",
+}
+
 // SCIPIndexer runs an external scip-* CLI and returns the generated index path.
 type SCIPIndexer struct {
 	LookPath   func(string) (string, error)
@@ -67,11 +78,13 @@ func DetectSCIPProjectLanguage(paths []string, allowed []string) string {
 
 	bestLanguage := ""
 	bestCount := 0
-	for _, language := range allowed {
-		normalized := strings.TrimSpace(strings.ToLower(language))
-		if counts[normalized] > bestCount {
-			bestLanguage = normalized
-			bestCount = counts[normalized]
+	for _, language := range scipLanguagePriority {
+		if _, ok := allowedSet[language]; !ok {
+			continue
+		}
+		if counts[language] > bestCount {
+			bestLanguage = language
+			bestCount = counts[language]
 		}
 	}
 	return bestLanguage

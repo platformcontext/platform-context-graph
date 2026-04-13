@@ -2,6 +2,7 @@ package parser
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -37,11 +38,31 @@ func (e *Engine) parseGroovy(path string, isDependency bool, options Options) (m
 }
 
 func (e *Engine) preScanGroovy(path string) ([]string, error) {
-	_, err := readSource(path)
+	sourceBytes, err := readSource(path)
 	if err != nil {
 		return nil, err
 	}
-	return nil, nil
+
+	metadata := extractGroovyPipelineMetadata(string(sourceBytes))
+	names := make([]string, 0)
+	for _, key := range []string{"shared_libraries", "pipeline_calls", "entry_points"} {
+		values, ok := metadata[key].([]string)
+		if !ok {
+			continue
+		}
+		for _, value := range values {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if slices.Contains(names, value) {
+				continue
+			}
+			names = append(names, value)
+		}
+	}
+	slices.Sort(names)
+	return names, nil
 }
 
 func extractGroovyPipelineMetadata(sourceText string) map[string]any {

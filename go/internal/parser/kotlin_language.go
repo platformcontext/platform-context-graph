@@ -7,15 +7,16 @@ import (
 )
 
 var (
-	kotlinImportPattern    = regexp.MustCompile(`^\s*import\s+([^\s]+)`)
-	kotlinClassPattern     = regexp.MustCompile(`^\s*(?:data\s+|sealed\s+|abstract\s+|open\s+)?class\s+([A-Za-z_]\w*)`)
-	kotlinObjectPattern    = regexp.MustCompile(`^\s*object\s+([A-Za-z_]\w*)`)
-	kotlinCompanionPattern = regexp.MustCompile(`^\s*companion\s+object(?:\s+([A-Za-z_]\w*))?`)
-	kotlinInterfacePattern = regexp.MustCompile(`^\s*interface\s+([A-Za-z_]\w*)`)
-	kotlinEnumPattern      = regexp.MustCompile(`^\s*enum\s+class\s+([A-Za-z_]\w*)`)
-	kotlinFunctionPattern  = regexp.MustCompile(`\bfun\s+(?:<[^>]+>\s*)?(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)\s*\(`)
-	kotlinVariablePattern  = regexp.MustCompile(`^\s*(?:private|public|protected|internal)?\s*(?:const\s+)?(?:val|var)\s+([A-Za-z_]\w*)`)
-	kotlinCallPattern      = regexp.MustCompile(`\b([A-Za-z_]\w*)\s*\(`)
+	kotlinImportPattern      = regexp.MustCompile(`^\s*import\s+([^\s]+)`)
+	kotlinClassPattern       = regexp.MustCompile(`^\s*(?:data\s+|sealed\s+|abstract\s+|open\s+)?class\s+([A-Za-z_]\w*)`)
+	kotlinObjectPattern      = regexp.MustCompile(`^\s*object\s+([A-Za-z_]\w*)`)
+	kotlinCompanionPattern   = regexp.MustCompile(`^\s*companion\s+object(?:\s+([A-Za-z_]\w*))?`)
+	kotlinInterfacePattern   = regexp.MustCompile(`^\s*interface\s+([A-Za-z_]\w*)`)
+	kotlinEnumPattern        = regexp.MustCompile(`^\s*enum\s+class\s+([A-Za-z_]\w*)`)
+	kotlinFunctionPattern    = regexp.MustCompile(`\bfun\s+(?:<[^>]+>\s*)?(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)\s*\(`)
+	kotlinConstructorPattern = regexp.MustCompile(`^\s*(?:(?:public|private|protected|internal)\s+)?constructor\s*\(`)
+	kotlinVariablePattern    = regexp.MustCompile(`^\s*(?:private|public|protected|internal)?\s*(?:const\s+)?(?:val|var)\s+([A-Za-z_]\w*)`)
+	kotlinCallPattern        = regexp.MustCompile(`\b([A-Za-z_]\w*)\s*\(`)
 )
 
 func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (map[string]any, error) {
@@ -122,6 +123,22 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				}
 				appendBucket(payload, "functions", item)
 			}
+		}
+		if kotlinConstructorPattern.MatchString(trimmed) {
+			item := map[string]any{
+				"name":        "constructor",
+				"line_number": lineNumber,
+				"end_line":    lineNumber,
+				"lang":        "kotlin",
+				"decorators":  []string{},
+			}
+			if classContext := currentScopedName(stack, "class"); classContext != "" {
+				item["class_context"] = classContext
+			}
+			if options.IndexSource {
+				item["source"] = rawLine
+			}
+			appendBucket(payload, "functions", item)
 		}
 
 		if matches := kotlinVariablePattern.FindStringSubmatch(trimmed); len(matches) == 2 {

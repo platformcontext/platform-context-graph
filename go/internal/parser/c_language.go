@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -49,10 +50,13 @@ func (e *Engine) parseC(
 			appendNamedType(payload, "enums", node, source, "c")
 		case "union_specifier":
 			appendNamedType(payload, "unions", node, source, "c")
+		case "type_definition":
+			appendCTypedefAliases(payload, node, source, "c")
 		case "function_definition":
 			appendCFunction(payload, node, source, options)
 		case "declaration":
 			if strings.HasPrefix(strings.TrimSpace(nodeText(node, source)), "typedef ") {
+				appendCTypedefAliases(payload, node, source, "c")
 				return
 			}
 			if scope == "module" && cLikeInsideFunction(node) {
@@ -63,6 +67,7 @@ func (e *Engine) parseC(
 			appendCall(payload, cLikeCallNameNode(node.ChildByFieldName("function")), source, "c")
 		}
 	})
+	appendCTypedefAliasesFromSource(payload, string(source), "c")
 
 	sortSystemsPayload(
 		payload,
@@ -90,6 +95,16 @@ func (e *Engine) preScanC(path string) ([]string, error) {
 	return names, nil
 }
 
+var cTypedefAliasPattern = regexp.MustCompile(
+	`(?s)typedef\s+(struct|enum|union)(?:\s+[A-Za-z_]\w*)?\s*\{.*?\}\s*([A-Za-z_]\w*)\s*;?`,
+)
+
+var (
+	cTypedefEnumAliasSourcePattern   = regexp.MustCompile(`(?s)typedef\s+enum(?:\s+[A-Za-z_]\w*)?\s*\{.*?\}\s*([A-Za-z_]\w*)\s*;`)
+	cTypedefStructAliasSourcePattern = regexp.MustCompile(`(?s)typedef\s+struct(?:\s+[A-Za-z_]\w*)?\s*\{.*?\}\s*([A-Za-z_]\w*)\s*;`)
+	cTypedefUnionAliasSourcePattern  = regexp.MustCompile(`(?s)typedef\s+union(?:\s+[A-Za-z_]\w*)?\s*\{.*?\}\s*([A-Za-z_]\w*)\s*;`)
+)
+
 func appendCFunction(payload map[string]any, node *tree_sitter.Node, source []byte, options Options) {
 	nameNode := firstNamedDescendant(node, "identifier", "field_identifier")
 	name := nodeText(nameNode, source)
@@ -107,6 +122,176 @@ func appendCFunction(payload map[string]any, node *tree_sitter.Node, source []by
 		item["source"] = nodeText(node, source)
 	}
 	appendBucket(payload, "functions", item)
+}
+
+func appendCTypedefAliases(payload map[string]any, node *tree_sitter.Node, source []byte, lang string) {
+	bucket := ""
+	if typeNode := node.ChildByFieldName("type"); typeNode != nil {
+		if specifierNode := firstNamedDescendant(typeNode, "struct_specifier", "enum_specifier", "union_specifier"); specifierNode != nil {
+			switch specifierNode.Kind() {
+			case "struct_specifier":
+				bucket = "structs"
+			case "enum_specifier":
+				bucket = "enums"
+			case "union_specifier":
+				bucket = "unions"
+			}
+		}
+		if bucket == "" {
+			typeText := strings.TrimSpace(nodeText(typeNode, source))
+			switch {
+			case strings.HasPrefix(typeText, "struct"):
+				bucket = "structs"
+			case strings.HasPrefix(typeText, "enum"):
+				bucket = "enums"
+			case strings.HasPrefix(typeText, "union"):
+				bucket = "unions"
+			}
+		}
+	}
+	if bucket == "" {
+		cursor := node.Walk()
+		defer cursor.Close()
+		for _, child := range node.NamedChildren(cursor) {
+			switch child.Kind() {
+			case "struct_specifier":
+				bucket = "structs"
+			case "enum_specifier":
+				bucket = "enums"
+			case "union_specifier":
+				bucket = "unions"
+			}
+			if bucket != "" {
+				break
+			}
+		}
+	}
+	if bucket == "" {
+		text := strings.TrimSpace(nodeText(node, source))
+		matches := cTypedefAliasPattern.FindStringSubmatch(text)
+		if len(matches) == 3 {
+			bucket = map[string]string{
+				"struct": "structs",
+				"enum":   "enums",
+				"union":  "unions",
+			}[matches[1]]
+		}
+	}
+
+	name := ""
+	if declaratorNode := node.ChildByFieldName("declarator"); declaratorNode != nil {
+		if nameNode := firstNamedDescendant(declaratorNode, "identifier", "type_identifier", "field_identifier"); nameNode != nil {
+			name = strings.TrimSpace(nodeText(nameNode, source))
+		}
+		if name == "" {
+			name = cTypedefAliasName(nodeText(declaratorNode, source))
+		}
+	}
+	if name == "" {
+		text := strings.TrimSpace(nodeText(node, source))
+		matches := cTypedefAliasPattern.FindStringSubmatch(text)
+		if len(matches) == 3 {
+			name = strings.TrimSpace(matches[2])
+		}
+	}
+	if name == "" {
+		cursor := node.Walk()
+		defer cursor.Close()
+		seenBucketNode := false
+		for _, child := range node.NamedChildren(cursor) {
+			switch child.Kind() {
+			case "struct_specifier", "enum_specifier", "union_specifier":
+				seenBucketNode = true
+			case "type_identifier", "identifier":
+				if seenBucketNode {
+					name = strings.TrimSpace(nodeText(&child, source))
+				}
+			}
+		}
+	}
+	if name == "" {
+		return
+	}
+
+	appendBucket(payload, bucket, map[string]any{
+		"name":        name,
+		"line_number": nodeLine(node),
+		"end_line":    nodeEndLine(node),
+		"lang":        lang,
+	})
+}
+
+func appendCTypedefAliasesFromSource(payload map[string]any, source string, lang string) {
+	lines := strings.Split(source, "\n")
+	for lineIndex := 0; lineIndex < len(lines); lineIndex++ {
+		trimmed := strings.TrimSpace(lines[lineIndex])
+		if !strings.HasPrefix(trimmed, "typedef ") {
+			continue
+		}
+		bucket := ""
+		switch {
+		case strings.Contains(trimmed, "enum") && strings.Contains(trimmed, "{"):
+			bucket = "enums"
+		case strings.Contains(trimmed, "struct") && strings.Contains(trimmed, "{"):
+			bucket = "structs"
+		case strings.Contains(trimmed, "union") && strings.Contains(trimmed, "{"):
+			bucket = "unions"
+		}
+		if bucket == "" {
+			continue
+		}
+		block := trimmed
+		endIndex := lineIndex
+		for !strings.Contains(block, "}") && endIndex+1 < len(lines) {
+			endIndex++
+			block += " " + strings.TrimSpace(lines[endIndex])
+		}
+		if !strings.Contains(block, "}") {
+			continue
+		}
+		aliasPart := strings.TrimSpace(block[strings.LastIndex(block, "}")+1:])
+		aliasPart = strings.TrimSuffix(aliasPart, ";")
+		name := cTypedefAliasName(aliasPart)
+		if name == "" || bucketContainsName(payload, bucket, name) {
+			continue
+		}
+		appendBucket(payload, bucket, map[string]any{
+			"name":        name,
+			"line_number": lineIndex + 1,
+			"end_line":    endIndex + 1,
+			"lang":        lang,
+		})
+	}
+}
+
+func bucketContainsName(payload map[string]any, bucket string, name string) bool {
+	items, _ := payload[bucket].([]map[string]any)
+	for _, item := range items {
+		existing, _ := item["name"].(string)
+		if strings.TrimSpace(existing) == name {
+			return true
+		}
+	}
+	return false
+}
+
+func cTypedefAliasName(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	trimmed = strings.TrimSuffix(trimmed, ";")
+	trimmed = strings.TrimSpace(trimmed)
+	if idx := strings.LastIndex(trimmed, "]"); idx >= 0 {
+		trimmed = trimmed[:idx+1]
+	}
+	fields := strings.FieldsFunc(trimmed, func(r rune) bool {
+		return !(r == '_' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
+	})
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[len(fields)-1]
 }
 
 func appendCDeclarationVariables(payload map[string]any, node *tree_sitter.Node, source []byte, lang string) {

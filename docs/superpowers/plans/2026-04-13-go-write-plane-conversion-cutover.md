@@ -224,9 +224,16 @@ Progress on this step:
   TypeScript/TSX, and raw-text in
   `go/internal/parser/{runtime,engine,python_language,go_language,javascript_language,raw_text_engine}.go`
 - [x] Native Python parser semantics now land in Go for the current
-  representative runtime paths, including FastAPI and Flask route semantics
-  plus bounded SQLAlchemy and Django ORM table mapping extraction in
+  representative runtime paths, including FastAPI and Flask route semantics,
+  docstrings, cyclomatic complexity, and bounded SQLAlchemy and Django ORM
+  table mapping extraction in
   `go/internal/parser/{python_language,python_semantics}.go`
+- [x] Native Go parser semantics now land in Go for function and method
+  docstrings, cyclomatic complexity, and receiver/class context metadata in
+  `go/internal/parser/go_language.go`
+- [x] Groovy/Jenkinsfile prescan now surfaces shared-library, pipeline-call,
+  and entry-point names alongside the existing Jenkins metadata in
+  `go/internal/parser/groovy_language.go`
 - [x] Native JavaScript/TypeScript/TSX framework semantics now land in Go for
   the current representative runtime paths, including Next.js route/page/layout
   classification, React boundary/component/hook detection, Express route
@@ -244,9 +251,12 @@ Progress on this step:
   templated content metadata, and runtime service dependency extraction in
   `go/internal/parser/{python_language,raw_text_engine,templated_detection,runtime_dependencies}.go`
 - [ ] Extend the native parser runtime to the remaining representative language
-  family adapters still missing for truthful matrix parity: SCIP parity,
-  specialized JSON/data-intelligence documents, richer Python/Go/Groovy
-  semantics, and the remaining long-tail language slices
+  family adapters still missing for truthful matrix parity: SCIP parity tie-
+  break behavior now matches the Python contract, specialized JSON/data-
+  intelligence document families are covered, and this slice closed the C
+  typedef alias, Java annotation, Kotlin secondary constructor, and Rust impl
+  ownership gaps while the remaining long-tail gaps stay in the Ruby, PHP,
+  Swift, and Elixir slices
 
 - [ ] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 

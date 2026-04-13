@@ -45,11 +45,18 @@ func (e *Engine) parseGo(
 				return
 			}
 			item := map[string]any{
-				"name":        name,
-				"line_number": nodeLine(nameNode),
-				"end_line":    nodeEndLine(node),
-				"decorators":  []string{},
-				"lang":        "go",
+				"name":                  name,
+				"line_number":           nodeLine(nameNode),
+				"end_line":              nodeEndLine(node),
+				"decorators":            []string{},
+				"lang":                  "go",
+				"cyclomatic_complexity": cyclomaticComplexity(node),
+			}
+			if docstring := goDocstring(node, source); docstring != "" {
+				item["docstring"] = docstring
+			}
+			if classContext := goReceiverContext(node, source); classContext != "" {
+				item["class_context"] = classContext
 			}
 			if options.IndexSource {
 				item["source"] = nodeText(node, source)
@@ -67,6 +74,9 @@ func (e *Engine) parseGo(
 				"line_number": nodeLine(nameNode),
 				"end_line":    nodeEndLine(node),
 				"lang":        "go",
+			}
+			if docstring := goDocstring(node, source); docstring != "" {
+				item["docstring"] = docstring
 			}
 			switch typeNode.Kind() {
 			case "struct_type":
@@ -229,4 +239,69 @@ func intValue(value any) int {
 	default:
 		return 0
 	}
+}
+
+func goDocstring(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+
+	lines := strings.Split(string(source), "\n")
+	startLine := nodeLine(node) - 2
+	if startLine < 0 || startLine >= len(lines) {
+		return ""
+	}
+
+	comments := make([]string, 0)
+	for index := startLine; index >= 0; index-- {
+		trimmed := strings.TrimSpace(lines[index])
+		if trimmed == "" {
+			if len(comments) == 0 {
+				return ""
+			}
+			break
+		}
+		if strings.HasPrefix(trimmed, "//") {
+			comments = append([]string{strings.TrimSpace(strings.TrimPrefix(trimmed, "//"))}, comments...)
+			continue
+		}
+		if strings.HasPrefix(trimmed, "/*") && strings.HasSuffix(trimmed, "*/") {
+			comments = append([]string{strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(trimmed, "/*"), "*/"))}, comments...)
+			continue
+		}
+		break
+	}
+
+	return strings.TrimSpace(strings.Join(comments, "\n"))
+}
+
+func goReceiverContext(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+
+	receiver := node.ChildByFieldName("receiver")
+	if receiver == nil {
+		return ""
+	}
+
+	typeNode := firstNamedDescendant(receiver,
+		"type_identifier",
+		"qualified_type",
+		"generic_type",
+		"pointer_type",
+		"array_type",
+		"slice_type",
+	)
+	if typeNode == nil {
+		return ""
+	}
+
+	value := strings.TrimSpace(nodeText(typeNode, source))
+	value = strings.TrimSpace(strings.TrimPrefix(value, "*"))
+	value = strings.Trim(value, "[]")
+	if index := strings.LastIndex(value, "."); index >= 0 {
+		value = value[index+1:]
+	}
+	return strings.TrimSpace(value)
 }

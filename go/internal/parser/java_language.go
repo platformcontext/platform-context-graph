@@ -2,11 +2,14 @@ package parser
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
+
+var javaAppliedAnnotationPattern = regexp.MustCompile(`@([A-Za-z_]\w*)`)
 
 func (e *Engine) parseJava(
 	path string,
@@ -44,6 +47,8 @@ func (e *Engine) parseJava(
 			appendNamedType(payload, "interfaces", node, source, "java")
 		case "annotation_type_declaration":
 			appendNamedType(payload, "annotations", node, source, "java")
+		case "annotation", "marker_annotation":
+			appendJavaAnnotation(payload, node, source)
 		case "enum_declaration":
 			appendNamedType(payload, "enums", node, source, "java")
 		case "method_declaration", "constructor_declaration":
@@ -80,6 +85,24 @@ func (e *Engine) parseJava(
 			appendCall(payload, nameNode, source, "java")
 		}
 	})
+
+	for lineNumber, rawLine := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(rawLine)
+		if !strings.HasPrefix(trimmed, "@") {
+			continue
+		}
+		for _, match := range javaAppliedAnnotationPattern.FindAllStringSubmatch(trimmed, -1) {
+			if len(match) != 2 {
+				continue
+			}
+			appendBucket(payload, "annotations", map[string]any{
+				"name":        strings.TrimSpace(match[1]),
+				"line_number": lineNumber + 1,
+				"end_line":    lineNumber + 1,
+				"lang":        "java",
+			})
+		}
+	}
 
 	sortNamedBucket(payload, "functions")
 	sortNamedBucket(payload, "classes")
@@ -152,4 +175,17 @@ func javaFirstTypeIdentifier(node *tree_sitter.Node) *tree_sitter.Node {
 		}
 	})
 	return result
+}
+
+func appendJavaAnnotation(payload map[string]any, node *tree_sitter.Node, source []byte) {
+	nameNode := firstNamedDescendant(node, "identifier", "scoped_identifier", "type_identifier")
+	name := nodeText(nameNode, source)
+	if strings.TrimSpace(name) == "" {
+		return
+	}
+	appendBucket(payload, "annotations", map[string]any{
+		"name":        name,
+		"line_number": nodeLine(nameNode),
+		"lang":        "java",
+	})
 }

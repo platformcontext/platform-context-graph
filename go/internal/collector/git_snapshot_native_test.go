@@ -233,6 +233,46 @@ func TestNativeRepositorySnapshotterPreservesDependencyOwnership(t *testing.T) {
 	}
 }
 
+func TestNativeRepositorySnapshotterCarriesFileMetadataToEntitySnapshots(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(
+		t,
+		filepath.Join(repoRoot, "main.tf"),
+		`resource "aws_s3_bucket" "logs" {}
+`,
+	)
+
+	engine, err := parser.DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	snapshotter := NativeRepositorySnapshotter{Engine: engine}
+	got, err := snapshotter.SnapshotRepository(
+		context.Background(),
+		SelectedRepository{RepoPath: repoRoot},
+	)
+	if err != nil {
+		t.Fatalf("SnapshotRepository() error = %v, want nil", err)
+	}
+
+	if len(got.ContentEntities) != 1 {
+		t.Fatalf("len(ContentEntities) = %d, want 1", len(got.ContentEntities))
+	}
+	entity := got.ContentEntities[0]
+	if entity.ArtifactType != "terraform_hcl" {
+		t.Fatalf("ContentEntities[0].ArtifactType = %q, want %q", entity.ArtifactType, "terraform_hcl")
+	}
+	if entity.TemplateDialect != "" {
+		t.Fatalf("ContentEntities[0].TemplateDialect = %q, want empty string", entity.TemplateDialect)
+	}
+	if entity.IACRelevant == nil || !*entity.IACRelevant {
+		t.Fatalf("ContentEntities[0].IACRelevant = %#v, want true", entity.IACRelevant)
+	}
+}
+
 func TestNativeRepositorySnapshotterSingleFileTargetsBypassGitignore(t *testing.T) {
 	t.Parallel()
 

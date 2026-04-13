@@ -175,6 +175,26 @@ fn main() {
 	assertNamedBucketContains(t, got, "function_calls", "println")
 }
 
+func TestDefaultEngineParsePathRustImplOwnership(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := repoFixturePath("ecosystems", "rust_comprehensive")
+	filePath := filepath.Join(repoRoot, "impl_blocks.rs")
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertBucketContainsFieldValue(t, got, "functions", "impl_context", "Point")
+	assertBucketContainsFieldValue(t, got, "functions", "impl_context", "VecContainer")
+}
+
 func TestDefaultEnginePreScanPathsSystems(t *testing.T) {
 	t.Parallel()
 
@@ -249,6 +269,48 @@ func TestDefaultEngineParsePathCTypedefAliasDoesNotEmitDedicatedEntities(t *test
 
 	assertEmptyNamedBucket(t, got, "classes")
 	assertEmptyNamedBucket(t, got, "variables")
+}
+
+func TestDefaultEngineParsePathCTypedefAliases(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "types.c")
+	writeTestFile(
+		t,
+		filePath,
+		`typedef enum {
+    STATUS_OK = 0,
+    STATUS_ERROR = 1,
+    STATUS_NOT_FOUND = 2
+} StatusCode;
+
+typedef union {
+    int intVal;
+    float floatVal;
+    char strVal[64];
+} GenericValue;
+
+typedef struct {
+    int type;
+    GenericValue value;
+} TypedValue;
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "enums", "StatusCode")
+	assertNamedBucketContains(t, got, "unions", "GenericValue")
+	assertNamedBucketContains(t, got, "structs", "TypedValue")
 }
 
 func TestDefaultEngineParsePathSystemsEmptyFiles(t *testing.T) {

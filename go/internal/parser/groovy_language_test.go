@@ -106,7 +106,7 @@ func TestDefaultEnginePreScanPathsGroovyJenkinsfile(t *testing.T) {
 		t,
 		filePath,
 		`@Library('pipelines') _
-pipelineDeploy()
+pipelineDeploy(entry_point: 'deploy.sh')
 `,
 	)
 
@@ -119,9 +119,9 @@ pipelineDeploy()
 	if err != nil {
 		t.Fatalf("PreScanPaths() error = %v, want nil", err)
 	}
-	if len(got) != 0 {
-		t.Fatalf("PreScanPaths() = %#v, want empty result", got)
-	}
+	assertPrescanContains(t, got, "pipelines", filePath)
+	assertPrescanContains(t, got, "pipelineDeploy", filePath)
+	assertPrescanContains(t, got, "deploy.sh", filePath)
 }
 
 func assertStringSliceContains(t *testing.T, raw any, want string) {

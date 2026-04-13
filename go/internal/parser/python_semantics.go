@@ -3,6 +3,8 @@ package parser
 import (
 	"regexp"
 	"strings"
+
+	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 var (
@@ -210,6 +212,120 @@ func appendUniqueString(values []string, value string) []string {
 		}
 	}
 	return append(values, value)
+}
+
+func pythonDocstring(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+
+	body := node.ChildByFieldName("body")
+	if body == nil {
+		return ""
+	}
+
+	cursor := body.Walk()
+	defer cursor.Close()
+
+	for _, child := range body.NamedChildren(cursor) {
+		if child.Kind() != "expression_statement" {
+			return ""
+		}
+
+		stringNode := firstNamedDescendant(&child, "string", "concatenated_string")
+		if stringNode == nil {
+			return ""
+		}
+		return cleanPythonDocstringLiteral(nodeText(stringNode, source))
+	}
+
+	return ""
+}
+
+func cleanPythonDocstringLiteral(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	for len(trimmed) > 0 {
+		switch trimmed[0] {
+		case 'r', 'R', 'u', 'U', 'b', 'B', 'f', 'F':
+			trimmed = trimmed[1:]
+		default:
+			goto prefixDone
+		}
+	}
+prefixDone:
+	switch {
+	case strings.HasPrefix(trimmed, `"""`) && strings.HasSuffix(trimmed, `"""`) && len(trimmed) >= 6:
+		trimmed = trimmed[3 : len(trimmed)-3]
+	case strings.HasPrefix(trimmed, `'''`) && strings.HasSuffix(trimmed, `'''`) && len(trimmed) >= 6:
+		trimmed = trimmed[3 : len(trimmed)-3]
+	case strings.HasPrefix(trimmed, `"`) && strings.HasSuffix(trimmed, `"`) && len(trimmed) >= 2:
+		trimmed = trimmed[1 : len(trimmed)-1]
+	case strings.HasPrefix(trimmed, `'`) && strings.HasSuffix(trimmed, `'`) && len(trimmed) >= 2:
+		trimmed = trimmed[1 : len(trimmed)-1]
+	}
+
+	return strings.TrimSpace(trimmed)
+}
+
+func cyclomaticComplexity(node *tree_sitter.Node) int {
+	if node == nil {
+		return 0
+	}
+
+	complexity := 1
+	var walk func(*tree_sitter.Node)
+	walk = func(current *tree_sitter.Node) {
+		if current == nil {
+			return
+		}
+		if current != node && isNestedDefinition(current.Kind()) {
+			return
+		}
+		if isCyclomaticBranchKind(current.Kind()) {
+			complexity++
+		}
+
+		cursor := current.Walk()
+		defer cursor.Close()
+		for _, child := range current.NamedChildren(cursor) {
+			child := child
+			walk(&child)
+		}
+	}
+
+	walk(node)
+	return complexity
+}
+
+func isNestedDefinition(kind string) bool {
+	switch kind {
+	case "class_definition", "function_definition", "lambda":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCyclomaticBranchKind(kind string) bool {
+	switch kind {
+	case "if_statement",
+		"elif_clause",
+		"for_statement",
+		"while_statement",
+		"except_clause",
+		"case_clause",
+		"switch_statement",
+		"type_switch_statement",
+		"select_statement",
+		"conditional_expression":
+		return true
+	default:
+		return false
+	}
 }
 
 func leadingWhitespace(raw string) int {

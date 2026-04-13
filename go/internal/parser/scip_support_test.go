@@ -24,6 +24,21 @@ func TestDetectSCIPProjectLanguagePrefersDominantAllowedLanguage(t *testing.T) {
 	}
 }
 
+func TestDetectSCIPProjectLanguageBreaksTiesLikePythonContract(t *testing.T) {
+	t.Parallel()
+
+	got := DetectSCIPProjectLanguage(
+		[]string{
+			"/tmp/repo/a.py",
+			"/tmp/repo/b.ts",
+		},
+		[]string{"typescript", "python"},
+	)
+	if got != "python" {
+		t.Fatalf("DetectSCIPProjectLanguage() = %q, want %q", got, "python")
+	}
+}
+
 func TestBuildSCIPCommandMatchesRuntimeContract(t *testing.T) {
 	t.Parallel()
 
