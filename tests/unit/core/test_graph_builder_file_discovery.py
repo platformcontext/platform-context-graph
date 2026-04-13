@@ -461,7 +461,39 @@ def test_build_graph_from_path_async_explicit_file_bypasses_gitignore(
     assert indexed_files == {ignored_file.resolve()}
 
 
-def test_build_graph_from_path_async_uses_checkpointed_coordinator_for_directories(
+def test_build_graph_from_path_async_uses_go_bootstrap_runtime_for_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    builder = _make_builder()
+    recorded: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.run_go_bootstrap_index",
+        lambda path, *, selected_repositories=None, force=False: recorded.update(
+            {
+                "path": path,
+                "selected_repositories": selected_repositories,
+                "force": force,
+            }
+        ),
+    )
+
+    asyncio.run(
+        builder.build_graph_from_path_async(
+            tmp_path,
+            force=True,
+            family="bootstrap",
+            source="githubOrg",
+            component="bootstrap-index",
+        )
+    )
+
+    assert recorded["path"] == tmp_path
+    assert recorded["force"] is True
+    assert recorded["selected_repositories"] is None
+
+
+def test_build_graph_from_path_async_keeps_checkpointed_coordinator_for_dependency_directories(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     builder = _make_builder()
@@ -507,6 +539,7 @@ def test_build_graph_from_path_async_uses_checkpointed_coordinator_for_directori
     asyncio.run(
         builder.build_graph_from_path_async(
             tmp_path,
+            is_dependency=True,
             force=True,
             family="bootstrap",
             source="githubOrg",
@@ -516,6 +549,7 @@ def test_build_graph_from_path_async_uses_checkpointed_coordinator_for_directori
 
     assert recorded["builder"] is builder
     assert recorded["path"] == tmp_path
+    assert recorded["is_dependency"] is True
     assert recorded["family"] == "bootstrap"
     assert recorded["source"] == "githubOrg"
     assert recorded["force"] is True

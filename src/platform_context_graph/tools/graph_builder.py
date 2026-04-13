@@ -11,6 +11,7 @@ from typing import Any
 import pathspec
 
 from ..cli.config_manager import get_config_value
+from ..cli.helpers.go_index_runtime import run_go_bootstrap_index
 from ..core.database import DatabaseManager
 from ..core.jobs import JobManager, JobStatus
 from ..indexing import execute_index_run, raise_for_failed_index_run
@@ -426,6 +427,23 @@ class GraphBuilder:
             source: Source label used in checkpointing and telemetry.
             component: Observability component label for the indexing run.
         """
+        if (path.is_dir() or selected_repositories) and not is_dependency:
+            to_thread = getattr(asyncio, "to_thread", None)
+            if callable(to_thread):
+                await to_thread(
+                    run_go_bootstrap_index,
+                    path,
+                    selected_repositories=selected_repositories,
+                    force=force,
+                )
+            else:
+                run_go_bootstrap_index(
+                    path,
+                    selected_repositories=selected_repositories,
+                    force=force,
+                )
+            return
+
         if path.is_dir() or selected_repositories:
             result = await execute_index_run(
                 self,
