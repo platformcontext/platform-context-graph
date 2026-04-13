@@ -1,0 +1,33 @@
+go/internal/storage/postgres/recovery.go
+  1ca5ee6ce936a402 1-257
+go/internal/recovery/replay_test.go
+  1ca5ee6ce936a402 1-202
+go/internal/recovery/replay.go
+  1ca5ee6ce936a402 1-134
+go/internal/runtime/recovery_handler_test.go
+  1ca5ee6ce936a402 1-260
+go/internal/runtime/recovery_handler.go
+  1ca5ee6ce936a402 1-135
+go/internal/runtime/admin.go
+  1ca5ee6ce936a402 15-20,40-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "5eab84b98f83c02d2a89e56174719f8641efb45d",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1484,
+      "total_deletions": 3207,
+      "accepted_lines": 1549,
+      "overriden_lines": 0
+    }
+  }
+}
