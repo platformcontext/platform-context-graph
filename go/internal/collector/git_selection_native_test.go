@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -291,6 +292,86 @@ func TestNativeRepositorySelectorSelectRepositoriesMarksDependencyTargets(t *tes
 	}
 	if got, want := selected.Language, "typescript"; got != want {
 		t.Fatalf("Language = %q, want %q", got, want)
+	}
+}
+
+func TestLoadRepoSyncConfigNormalizesFilesystemFileTargets(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	targetFile := filepath.Join(repoRoot, "src", "handler.py")
+	writeSelectionTestFile(t, targetFile, "def handler():\n    return 1\n")
+
+	config, err := LoadRepoSyncConfig("bootstrap-index", func(key string) string {
+		switch key {
+		case "PCG_REPO_SOURCE_MODE":
+			return "filesystem"
+		case "PCG_FILESYSTEM_ROOT":
+			return targetFile
+		case "PCG_REPOS_DIR":
+			return t.TempDir()
+		default:
+			return ""
+		}
+	})
+	if err != nil {
+		t.Fatalf("LoadRepoSyncConfig() error = %v, want nil", err)
+	}
+
+	resolvedRoot, err := filepath.EvalSymlinks(filepath.Dir(targetFile))
+	if err != nil {
+		resolvedRoot = filepath.Dir(targetFile)
+	}
+	resolvedTarget, err := filepath.EvalSymlinks(targetFile)
+	if err != nil {
+		resolvedTarget = targetFile
+	}
+
+	if got, want := config.FilesystemRoot, resolvedRoot; got != want {
+		t.Fatalf("FilesystemRoot = %q, want %q", got, want)
+	}
+	if got, want := config.FileTargets, []string{resolvedTarget}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("FileTargets = %#v, want %#v", got, want)
+	}
+}
+
+func TestNativeRepositorySelectorSelectRepositoriesFilesystemSingleFileTarget(t *testing.T) {
+	t.Parallel()
+
+	sourceDir := t.TempDir()
+	reposDir := t.TempDir()
+	targetFile := filepath.Join(sourceDir, "ignored.py")
+	writeSelectionTestFile(t, filepath.Join(sourceDir, ".gitignore"), "ignored.py\n")
+	writeSelectionTestFile(t, targetFile, "print('override')\n")
+
+	selector := NativeRepositorySelector{
+		Config: RepoSyncConfig{
+			ReposDir:         reposDir,
+			SourceMode:       "filesystem",
+			FilesystemRoot:   sourceDir,
+			FilesystemDirect: true,
+			FileTargets:      []string{targetFile},
+			Component:        "bootstrap-index",
+			CloneDepth:       1,
+			RepoLimit:        4000,
+			GitAuthMethod:    "none",
+		},
+	}
+
+	batch, err := selector.SelectRepositories(context.Background())
+	if err != nil {
+		t.Fatalf("SelectRepositories() error = %v, want nil", err)
+	}
+	if got, want := len(batch.Repositories), 1; got != want {
+		t.Fatalf("len(Repositories) = %d, want %d", got, want)
+	}
+
+	selected := batch.Repositories[0]
+	if got, want := selected.RepoPath, sourceDir; got != want {
+		t.Fatalf("RepoPath = %q, want %q", got, want)
+	}
+	if got, want := selected.FileTargets, []string{targetFile}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("FileTargets = %#v, want %#v", got, want)
 	}
 }
 

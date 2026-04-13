@@ -233,6 +233,53 @@ func TestNativeRepositorySnapshotterPreservesDependencyOwnership(t *testing.T) {
 	}
 }
 
+func TestNativeRepositorySnapshotterSingleFileTargetsBypassGitignore(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(t, filepath.Join(repoRoot, ".gitignore"), "ignored.py\n")
+	targetFile := filepath.Join(repoRoot, "ignored.py")
+	writeCollectorTestFile(t, targetFile, "def handler():\n    return 1\n")
+	writeCollectorTestFile(t, filepath.Join(repoRoot, "other.py"), "def other():\n    return 2\n")
+
+	engine, err := parser.DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	snapshotter := NativeRepositorySnapshotter{Engine: engine}
+	got, err := snapshotter.SnapshotRepository(
+		context.Background(),
+		SelectedRepository{
+			RepoPath:    repoRoot,
+			FileTargets: []string{targetFile},
+		},
+	)
+	if err != nil {
+		t.Fatalf("SnapshotRepository() error = %v, want nil", err)
+	}
+
+	if got, want := got.FileCount, 1; got != want {
+		t.Fatalf("FileCount = %d, want %d", got, want)
+	}
+	if got, want := len(got.FileData), 1; got != want {
+		t.Fatalf("len(FileData) = %d, want %d", got, want)
+	}
+	resolvedTarget, err := filepath.EvalSymlinks(targetFile)
+	if err != nil {
+		resolvedTarget = targetFile
+	}
+	if parsedPath := got.FileData[0]["path"]; parsedPath != resolvedTarget {
+		t.Fatalf("FileData[0].path = %#v, want %q", parsedPath, resolvedTarget)
+	}
+	if got, want := len(got.ContentFiles), 1; got != want {
+		t.Fatalf("len(ContentFiles) = %d, want %d", got, want)
+	}
+	if got, want := got.ContentFiles[0].RelativePath, "ignored.py"; got != want {
+		t.Fatalf("ContentFiles[0].RelativePath = %q, want %q", got, want)
+	}
+}
+
 func writeCollectorTestFile(t *testing.T, path string, body string) {
 	t.Helper()
 

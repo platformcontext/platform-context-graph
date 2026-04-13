@@ -426,7 +426,7 @@ class GraphBuilder:
             source: Source label used in checkpointing and telemetry.
             component: Observability component label for the indexing run.
         """
-        if path.is_dir() or selected_repositories:
+        if path.is_dir() or path.is_file() or selected_repositories:
             to_thread = getattr(asyncio, "to_thread", None)
             if callable(to_thread):
                 await to_thread(
@@ -444,23 +444,6 @@ class GraphBuilder:
                     is_dependency=is_dependency,
                 )
             return
-
-        # Delegate the single-file .pcgignore-aware indexing flow to the helper module.
-        await _build_graph_from_path_async(
-            self,
-            path,
-            is_dependency,
-            job_id,
-            asyncio_module=asyncio,
-            datetime_cls=datetime,
-            debug_log_fn=debug_log,
-            error_logger_fn=error_logger,
-            get_config_value_fn=get_config_value,
-            info_logger_fn=info_logger,
-            pathspec_module=pathspec,
-            warning_logger_fn=warning_logger,
-            job_status_enum=JobStatus,
-        )
 
 
 __all__ = ["GraphBuilder", "TreeSitterParser"]

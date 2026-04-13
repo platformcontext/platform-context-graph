@@ -3,7 +3,9 @@ package collector
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -56,6 +58,7 @@ type RepoSyncConfig struct {
 	DependencyMode        bool
 	DependencyName        string
 	DependencyLanguage    string
+	FileTargets           []string
 }
 
 // LoadRepoSyncConfig parses the repo-sync environment contract for Go runtimes.
@@ -110,7 +113,40 @@ func LoadRepoSyncConfig(component string, getenv func(string) string) (RepoSyncC
 		DependencyName:        strings.TrimSpace(getenv("PCG_BOOTSTRAP_PACKAGE_NAME")),
 		DependencyLanguage:    strings.TrimSpace(getenv("PCG_BOOTSTRAP_PACKAGE_LANGUAGE")),
 	}
+	normalizeFilesystemConfig(&config)
 	return config, nil
+}
+
+func normalizeFilesystemConfig(config *RepoSyncConfig) {
+	if config == nil || strings.TrimSpace(config.SourceMode) != "filesystem" {
+		return
+	}
+
+	root := strings.TrimSpace(config.FilesystemRoot)
+	if root == "" {
+		return
+	}
+
+	absoluteRoot, err := filepath.Abs(root)
+	if err != nil {
+		return
+	}
+	if resolvedRoot, resolveErr := filepath.EvalSymlinks(absoluteRoot); resolveErr == nil {
+		absoluteRoot = resolvedRoot
+	}
+
+	info, err := os.Stat(absoluteRoot)
+	if err != nil {
+		config.FilesystemRoot = absoluteRoot
+		return
+	}
+	if info.IsDir() {
+		config.FilesystemRoot = absoluteRoot
+		return
+	}
+
+	config.FileTargets = []string{absoluteRoot}
+	config.FilesystemRoot = filepath.Dir(absoluteRoot)
 }
 
 func extractExactRepositoryIDs(

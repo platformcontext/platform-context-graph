@@ -64,6 +64,9 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 	}
 	registry := s.registry()
 	fileSet, err := resolveNativeSnapshotFileSet(repoPath, registry, s.discoveryOptions())
+	if len(repository.FileTargets) > 0 {
+		fileSet, err = resolveNativeSnapshotFileSetForTargets(repoPath, repository.FileTargets, registry)
+	}
 	if err != nil {
 		return RepositorySnapshot{}, err
 	}
@@ -180,6 +183,42 @@ func resolveNativeSnapshotFileSet(
 		}
 	}
 	return discovery.RepoFileSet{RepoRoot: repoPath}, nil
+}
+
+func resolveNativeSnapshotFileSetForTargets(
+	repoPath string,
+	fileTargets []string,
+	registry parser.Registry,
+) (discovery.RepoFileSet, error) {
+	files := make([]string, 0, len(fileTargets))
+	for _, target := range fileTargets {
+		absoluteTarget, err := filepath.Abs(target)
+		if err != nil {
+			return discovery.RepoFileSet{}, fmt.Errorf("resolve file target %q: %w", target, err)
+		}
+		if resolvedTarget, resolveErr := filepath.EvalSymlinks(absoluteTarget); resolveErr == nil {
+			absoluteTarget = resolvedTarget
+		}
+		relativePath, err := filepath.Rel(repoPath, absoluteTarget)
+		if err != nil {
+			return discovery.RepoFileSet{}, fmt.Errorf("relativize file target %q: %w", absoluteTarget, err)
+		}
+		if relativePath == "." || strings.HasPrefix(relativePath, "..") {
+			return discovery.RepoFileSet{}, fmt.Errorf(
+				"file target %q is outside repository root %q",
+				absoluteTarget,
+				repoPath,
+			)
+		}
+		if _, ok := registry.LookupByPath(absoluteTarget); !ok {
+			continue
+		}
+		files = append(files, absoluteTarget)
+	}
+	return discovery.RepoFileSet{
+		RepoRoot: repoPath,
+		Files:    files,
+	}, nil
 }
 
 func entityBucketsFromParsed(payload map[string]any) map[string][]shape.Entity {

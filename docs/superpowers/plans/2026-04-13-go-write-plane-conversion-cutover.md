@@ -88,9 +88,9 @@ cutover draft assumed:
 - `go/cmd/collector-git/source_python_bridge.go` and
   `go/cmd/ingester/source_python_bridge.go` have been deleted from the branch
 - Python `GraphBuilder.build_graph_from_path_async(...)` now delegates
-  non-dependency directory indexing to the Go `bootstrap-index` runtime; the
-  remaining Python parser ownership is concentrated in direct dependency
-  directory flows, single-file fallback paths, and any uncovered
+  both directory and explicit single-file indexing to the Go
+  `bootstrap-index` runtime; the remaining Python parser ownership is now
+  concentrated in the legacy parse/coordinator stack and any uncovered
   parser-matrix gaps
 
 The known parser-matrix blockers are no longer in the collector bridge path.

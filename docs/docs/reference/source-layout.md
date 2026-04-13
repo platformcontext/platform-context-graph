@@ -142,10 +142,10 @@ complete while still moving graph-write ownership out of the collector logic.
 The remaining transition risk is now concentrated in the Python local
 indexing and parser path, not in the deleted post-commit bridge or the deleted
 `runtime/ingester/*bridge.py` modules. Non-dependency directory indexing now
-delegates from `GraphBuilder` to the Go `bootstrap-index` runtime, so the
-remaining Python-owned parser edge is primarily direct dependency-directory
-indexing, single-file fallback flows, and any parser-matrix gaps still being
-removed.
+delegates from `GraphBuilder` to the Go `bootstrap-index` runtime, and direct
+single-file indexing now uses the same Go-owned runtime contract. The
+remaining Python-owned parser edge is primarily the legacy parse/coordinator
+stack and any parser-matrix gaps still being removed.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.

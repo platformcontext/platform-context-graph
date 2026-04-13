@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -89,6 +90,7 @@ func buildSelectedRepositories(
 			IsDependency: config.DependencyMode,
 			DisplayName:  strings.TrimSpace(config.DependencyName),
 			Language:     strings.TrimSpace(config.DependencyLanguage),
+			FileTargets:  fileTargetsForRepository(config, absolutePath),
 		}
 		if config.SourceMode != "filesystem" {
 			repoID := repoIDFromManagedPath(config.ReposDir, absolutePath)
@@ -97,6 +99,26 @@ func buildSelectedRepositories(
 		repositories = append(repositories, repository)
 	}
 	return repositories
+}
+
+func fileTargetsForRepository(config RepoSyncConfig, repositoryPath string) []string {
+	if len(config.FileTargets) == 0 || strings.TrimSpace(config.FilesystemRoot) == "" {
+		return nil
+	}
+
+	targets := make([]string, 0, len(config.FileTargets))
+	for _, fileTarget := range config.FileTargets {
+		relativePath, err := filepath.Rel(config.FilesystemRoot, fileTarget)
+		if err != nil {
+			continue
+		}
+		if relativePath == "." || strings.HasPrefix(relativePath, "..") {
+			continue
+		}
+		targets = append(targets, filepath.Join(repositoryPath, filepath.FromSlash(relativePath)))
+	}
+	sort.Strings(targets)
+	return targets
 }
 
 func (s NativeRepositorySelector) now() time.Time {

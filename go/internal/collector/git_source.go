@@ -32,11 +32,12 @@ type SelectionBatch struct {
 
 // SelectedRepository is one repository chosen for the current collector cycle.
 type SelectedRepository struct {
-	RepoPath     string `json:"repo_path"`
-	RemoteURL    string `json:"remote_url"`
-	IsDependency bool   `json:"is_dependency"`
-	DisplayName  string `json:"display_name"`
-	Language     string `json:"language"`
+	RepoPath     string   `json:"repo_path"`
+	RemoteURL    string   `json:"remote_url"`
+	IsDependency bool     `json:"is_dependency"`
+	DisplayName  string   `json:"display_name"`
+	Language     string   `json:"language"`
+	FileTargets  []string `json:"file_targets"`
 }
 
 // RepositorySnapshot captures one repository parse snapshot and content transport.
@@ -143,6 +144,7 @@ func (s *GitSource) buildCollected(
 				IsDependency: repository.IsDependency,
 				DisplayName:  repository.DisplayName,
 				Language:     repository.Language,
+				FileTargets:  append([]string(nil), repository.FileTargets...),
 			},
 		)
 		selectedRepositoryPaths = append(selectedRepositoryPaths, repoPath)

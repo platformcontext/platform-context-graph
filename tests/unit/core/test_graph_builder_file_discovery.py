@@ -410,18 +410,20 @@ def test_resolve_repository_file_sets_ignores_dependency_roots_relative_to_repo(
 def test_build_graph_from_path_async_explicit_file_bypasses_gitignore(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Direct single-file indexing should remain an explicit override."""
+    """Direct single-file indexing should stay explicit but route to Go runtime."""
 
     builder = _make_builder()
+    recorded: dict[str, object] = {}
     monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder.get_config_value", _config_value
-    )
-
-    async def immediate_sleep(*_args, **_kwargs):
-        return None
-
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder.asyncio.sleep", immediate_sleep
+        "platform_context_graph.tools.graph_builder.run_go_bootstrap_index",
+        lambda path, *, selected_repositories=None, force=False, is_dependency=False: recorded.update(
+            {
+                "path": path,
+                "selected_repositories": selected_repositories,
+                "force": force,
+                "is_dependency": is_dependency,
+            }
+        ),
     )
 
     repo = tmp_path / "repo"
@@ -431,34 +433,20 @@ def test_build_graph_from_path_async_explicit_file_bypasses_gitignore(
     ignored_file.write_text("print('override')\n", encoding="utf-8")
 
     asyncio.run(
-        build_graph_from_path_async(
-            builder,
+        builder.build_graph_from_path_async(
             ignored_file,
-            False,
-            None,
-            asyncio_module=asyncio,
-            datetime_cls=SimpleNamespace(now=lambda: None),
-            debug_log_fn=lambda *_args, **_kwargs: None,
-            error_logger_fn=lambda *_args, **_kwargs: None,
-            get_config_value_fn=_config_value,
-            info_logger_fn=lambda *_args, **_kwargs: None,
-            pathspec_module=__import__("pathspec"),
-            warning_logger_fn=lambda *_args, **_kwargs: None,
-            job_status_enum=SimpleNamespace(
-                COMPLETED="completed",
-                FAILED="failed",
-                CANCELLED="cancelled",
-                RUNNING="running",
-            ),
+            is_dependency=False,
+            force=True,
+            family="bootstrap",
+            source="githubOrg",
+            component="bootstrap-index",
         )
     )
 
-    indexed_files = {
-        Path(call.args[0]["path"]).resolve()
-        for call in builder.add_file_to_graph.call_args_list
-    }
-
-    assert indexed_files == {ignored_file.resolve()}
+    assert recorded["path"] == ignored_file
+    assert recorded["selected_repositories"] is None
+    assert recorded["force"] is True
+    assert recorded["is_dependency"] is False
 
 
 def test_build_graph_from_path_async_uses_go_bootstrap_runtime_for_directories(
@@ -469,11 +457,12 @@ def test_build_graph_from_path_async_uses_go_bootstrap_runtime_for_directories(
 
     monkeypatch.setattr(
         "platform_context_graph.tools.graph_builder.run_go_bootstrap_index",
-        lambda path, *, selected_repositories=None, force=False: recorded.update(
+        lambda path, *, selected_repositories=None, force=False, is_dependency=False: recorded.update(
             {
                 "path": path,
                 "selected_repositories": selected_repositories,
                 "force": force,
+                "is_dependency": is_dependency,
             }
         ),
     )
@@ -491,49 +480,24 @@ def test_build_graph_from_path_async_uses_go_bootstrap_runtime_for_directories(
     assert recorded["path"] == tmp_path
     assert recorded["force"] is True
     assert recorded["selected_repositories"] is None
+    assert recorded["is_dependency"] is False
 
 
-def test_build_graph_from_path_async_keeps_checkpointed_coordinator_for_dependency_directories(
+def test_build_graph_from_path_async_routes_dependency_directories_to_go_bootstrap_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     builder = _make_builder()
     recorded: dict[str, object] = {}
-
-    async def fake_execute_index_run(
-        builder_arg,
-        path,
-        *,
-        is_dependency,
-        job_id,
-        selected_repositories,
-        family,
-        source,
-        force,
-        component,
-        **_kwargs,
-    ):
-        recorded.update(
+    monkeypatch.setattr(
+        "platform_context_graph.tools.graph_builder.run_go_bootstrap_index",
+        lambda path, *, selected_repositories=None, force=False, is_dependency=False: recorded.update(
             {
-                "builder": builder_arg,
                 "path": path,
-                "is_dependency": is_dependency,
-                "job_id": job_id,
                 "selected_repositories": selected_repositories,
-                "family": family,
-                "source": source,
                 "force": force,
-                "component": component,
+                "is_dependency": is_dependency,
             }
-        )
-        return SimpleNamespace(status="completed")
-
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder.execute_index_run",
-        fake_execute_index_run,
-    )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder.raise_for_failed_index_run",
-        lambda result: recorded.setdefault("result", result),
+        ),
     )
 
     asyncio.run(
@@ -547,13 +511,10 @@ def test_build_graph_from_path_async_keeps_checkpointed_coordinator_for_dependen
         )
     )
 
-    assert recorded["builder"] is builder
     assert recorded["path"] == tmp_path
     assert recorded["is_dependency"] is True
-    assert recorded["family"] == "bootstrap"
-    assert recorded["source"] == "githubOrg"
     assert recorded["force"] is True
-    assert recorded["component"] == "bootstrap-index"
+    assert recorded["selected_repositories"] is None
 
 
 def test_graph_builder_create_all_function_calls_returns_metrics(
