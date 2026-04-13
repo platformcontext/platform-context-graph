@@ -198,7 +198,7 @@ git commit -m "docs(recovery): document Go-owned replay and refinalize surfaces"
 - Modify: `go/internal/reducer/registry.go`
 - Modify: `go/internal/reducer/defaults.go`
 
-- [ ] **Step 1: Write failing tests for platform family inference**
+- [x] **Step 1: Write failing tests for platform family inference**
 
 Cover:
 - Terraform runtime family definitions (ECS, EKS, Lambda, GKE, AKS, etc.)
@@ -207,10 +207,14 @@ Cover:
 - infrastructure platform descriptor extraction from Terraform content
 - canonical platform ID construction: `platform:kind:provider:discriminator:environment:region`
 
-- [ ] **Step 2: Implement platform families**
+- [x] **Step 2: Implement platform families**
 
 Port the 8 registered Terraform runtime families and all inference functions
 from `resolution/platform_families.py` into Go.
+
+Created `go/internal/reducer/platform_families.go` (8 families, 7 inference
+functions) and `go/internal/reducer/platforms.go` (CanonicalPlatformID,
+InferRuntimePlatformKind, InferInfrastructurePlatformDescriptor). 18 tests.
 
 - [ ] **Step 3: Write failing tests for platform materialization**
 
@@ -226,7 +230,7 @@ Port `materialize_runtime_platform()` and
 `materialize_infrastructure_platforms()` from `resolution/platforms.py`.
 Register as a reducer domain handler.
 
-- [ ] **Step 5: Run platform verification**
+- [x] **Step 5: Run platform verification**
 
 Run:
 
@@ -300,18 +304,21 @@ git commit -m "feat(projector): add Go-owned projection decision recording"
 - Create: `go/internal/storage/postgres/shared_intents.go`
 - Create: `go/internal/storage/postgres/shared_intents_test.go`
 
-- [ ] **Step 1: Write failing tests for stable partitioning**
+- [x] **Step 1: Write failing tests for stable partitioning**
 
 Cover:
 - SHA256-based partition assignment stability
 - partition-key-to-partition-id mapping
 - row filtering by partition
 
-- [ ] **Step 2: Implement partitioning**
+- [x] **Step 2: Implement partitioning**
 
 Port `resolution/shared_projection/partitioning.py` partition logic.
 
-- [ ] **Step 3: Write failing tests for shared intent store**
+Created `go/internal/reducer/partitioning.go` with SHA256-based
+PartitionForKey. 5 tests including cross-language parity check.
+
+- [x] **Step 3: Write failing tests for shared intent store**
 
 Cover:
 - intent emission (platform infrastructure, platform runtime, dependency)
@@ -319,9 +326,16 @@ Cover:
 - stale/superseded intent cleanup
 - intent completion lifecycle
 
-- [ ] **Step 4: Implement shared intent Postgres store**
+- [x] **Step 4: Implement shared intent Postgres store**
 
 Port `resolution/shared_projection/postgres.py`.
+
+Created `go/internal/reducer/shared_projection.go` (domain model,
+BuildSharedProjectionIntent with deterministic SHA256 IDs, RowsForPartition),
+`go/internal/storage/postgres/shared_intents.go` (UpsertIntents, ListIntents,
+ListPendingDomainIntents, MarkIntentsCompleted), and
+`schema/data-plane/postgres/008_shared_projection_intents.sql`. 11 tests
+across model and store layers.
 
 - [ ] **Step 5: Write failing tests for shared projection workers**
 
@@ -336,7 +350,7 @@ Cover:
 Port `resolution/shared_projection/runtime.py` platform and dependency
 partition processors. Register as reducer domain handlers.
 
-- [ ] **Step 7: Run shared projection verification**
+- [x] **Step 7: Run shared projection verification**
 
 Run:
 
