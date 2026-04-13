@@ -21,6 +21,20 @@ docker start pcg-neo4j
 
 Then verify your `NEO4J_URI`, username, and password. Run `pcg doctor` to confirm.
 
+## API is healthy but indexing is incomplete
+
+**Cause:** The process health check only proves the API can serve. It does not
+mean the latest repository or run reached a completed checkpoint.
+
+**Fix:**
+
+1. Check checkpointed completeness with `pcg index-status <path-or-run-id>`
+2. Inspect `GET /api/v0/index-status` or `GET /api/v0/index-runs/{run_id}`
+3. Inspect `GET /api/v0/admin/refinalize/status` if you are debugging a
+   graph-safe recovery flow
+4. Use `/admin/status` on the long-running runtimes to see live stage and
+   backlog state
+
 ## MCP client cannot find the server
 
 **Cause:** The client config was not updated, the command points at the wrong interpreter, or database credentials are missing.

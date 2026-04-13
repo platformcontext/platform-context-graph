@@ -25,6 +25,18 @@ the reported state is live or inferred.
 | content reads are missing or slow | API metrics and content metrics | content traces and logs |
 | replay or dead-letter behavior looks wrong | recovery metrics | recovery traces and admin/replay logs |
 
+## Health Versus Completeness
+
+- `/health` or `/healthz` proves the process is alive and initialized.
+- `GET /api/v0/index-status` and `GET /api/v0/index-runs/{run_id}` prove
+  checkpointed completeness for a repository or run.
+- `/admin/status` proves the live stage, backlog, and failure view for a
+  runtime.
+- `GET /api/v0/admin/refinalize/status` is the operator recovery companion for
+  graph-safe refinalization.
+- A service can be healthy while indexing is incomplete. Use all three views
+  when you are deciding whether to restart, reindex, or wait.
+
 ## Runtime And Control-Plane Flow
 
 ```mermaid

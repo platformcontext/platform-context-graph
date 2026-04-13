@@ -17,14 +17,46 @@ endpoints, not the public query API.
 
 ## Scope
 
-The public HTTP API exposes two surfaces:
+The public HTTP API exposes three operator-relevant surfaces:
 
 - a read/query surface for context, code, infra, and content retrieval
 - a small ingester control surface for runtime status and manual scan requests
+- a checkpoint and recovery surface for index completeness and admin
+  refinalization
 
 Use it to resolve entities, fetch context, search code, trace infra, compare environments, and inspect the deployed ingester state.
 
-Use the CLI for local indexing workflows. Use the Helm runtime for deployment-managed repository ingestion and steady-state sync.
+Use the CLI for local indexing workflows. Use the Helm runtime for
+deployment-managed repository ingestion and steady-state sync.
+
+## Health, Status, And Completeness
+
+Health checks answer whether a process can serve. Completeness checks answer
+whether a repository or run is finished.
+
+- `GET /api/v0/health` reports API process health after dependency
+  initialization. It does not prove the latest index run finished.
+- `GET /api/v0/index-status` returns checkpointed index status for a local
+  path or run ID.
+- `GET /api/v0/index-runs/{run_id}` returns the same checkpointed status shape
+  for one recorded run.
+- `GET /api/v0/index-runs/{run_id}/coverage` returns durable repository
+  coverage rows for that run and supports `only_incomplete=true` when you are
+  hunting the remaining gaps.
+- `GET /api/v0/ingesters/{ingester}` and `GET /api/v0/ingesters` report the
+  hosted ingester's live status and progress, not graph completeness.
+- `GET /api/v0/admin/refinalize/status` reports the live state of the
+  in-process admin refinalize worker.
+- `POST /api/v0/admin/refinalize` is graph-safe only. It supports
+  `workloads` and `relationship_resolution`, and it rejects `repo_ids` when
+  `relationship_resolution` is requested because that stage remains
+  full-generation.
+- File-dependent bridge stages remain CLI-only until a Go-owned replacement is
+  proven.
+- `POST /api/v0/admin/reindex` persists an asynchronous ingester reindex
+  request; the API process does not run the full reindex inline.
+- `GET /api/v0/admin/shared-projection/tuning-report` returns the operator
+  tuning report for shared-projection backlog behavior.
 
 ## Model Basics
 

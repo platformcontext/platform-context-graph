@@ -43,6 +43,9 @@ That script:
 - prints the Jaeger URL, the failing `run_id`, and the last admin status payload if the flow fails
 - auto-selects free host ports when the usual local defaults are already occupied
 
+The compose refinalize flow is graph-safe only. File-dependent bridge stages
+remain CLI-only until the Go-owned replacement removes the legacy seam.
+
 Set `PCG_KEEP_COMPOSE_STACK=true` if you want the stack left running after the verification completes.
 
 By default, the bootstrap, ingester, and resolution-engine services mount the fixture ecosystems tree from
@@ -103,6 +106,14 @@ The indexing services also honor worker-tuning controls from the environment:
 Compose passes those values through to `bootstrap-index`, `ingester`,
 `resolution-engine`, and `platform-context-graph`, so local and containerized
 runs stay aligned.
+
+Health and completeness are separate checks in Compose, too:
+
+- `curl -fsS http://localhost:8080/health` confirms the API process is alive
+- `curl -fsS http://localhost:8080/api/v0/index-status` reports checkpointed
+  indexing completeness for the latest target or run
+- `curl -fsS http://localhost:8080/api/v0/index-runs/<run_id>` reports a
+  run-specific checkpointed completeness view
 
 For a real local end-to-end run against a host directory, override the host-side
 source root with an absolute path:

@@ -116,6 +116,31 @@ Why it matters:
 - gives on-call responders the exact `work_item_id`, `source_run_id`, and error class needed to replay or investigate
 - records explainable confidence decisions so operators can inspect why a relationship, workload, or platform edge was produced
 
+### Index status and refinalize
+
+- `http.request.completed`
+- `index.finalization.started`
+- `index.finalization.partial_start`
+- `index.finalization.stage.completed`
+- `index.finalization.completed`
+- `index.finalization.deferred`
+- `admin.refinalize.started`
+- `admin.refinalize.stage`
+- `admin.refinalize.completed`
+- `admin.refinalize.failed`
+- `admin.refinalize.coverage_repair.started`
+- `admin.refinalize.coverage_repair.completed`
+- `admin.refinalize.coverage_repair.failed`
+
+Why it matters:
+
+- `GET /api/v0/index-status` and `GET /api/v0/index-runs/{run_id}` are read
+  paths, so their breadcrumbs usually come from the HTTP request log plus the
+  underlying finalization events
+- graph-safe admin refinalize should emit the admin.refinalize family only
+- file-dependent bridge stages remain CLI-only, so they should show up in the
+  legacy bridge/finalization logs instead of the admin.refinalize family
+
 ### Admin and operator workflow
 
 - `admin.facts.replayed`

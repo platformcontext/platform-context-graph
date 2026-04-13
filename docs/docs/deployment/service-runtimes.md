@@ -35,6 +35,19 @@ For the Go rewrite, that contract is the same for every long-running service:
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `pcg internal resolution-engine` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Bootstrap Index | one-shot initial indexing | `pcg internal bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
 
+## Health, Status, And Completeness
+
+- `/healthz` and `/readyz` answer process health and readiness only.
+- `/admin/status` reports the live runtime stage, backlog, and failure state.
+- `GET /api/v0/index-status` and `GET /api/v0/index-runs/{run_id}` answer
+  checkpointed indexing completeness for a path or recorded run.
+- `GET /api/v0/index-runs/{run_id}/coverage` narrows the completeness view to
+  the repository rows that still need attention.
+- A service can be healthy while indexing is incomplete. Operators should use
+  completeness routes before assuming a full run has finished.
+- `bootstrap-index` remains a one-shot helper for empty or recovered
+  environments, not a steady-state health target.
+
 ## Milestone 1 Proof Runtimes
 
 The rewrite branch also has three local proof runtimes that exercise the Go

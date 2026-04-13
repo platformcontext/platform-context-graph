@@ -24,6 +24,8 @@ Use metrics to detect a problem first, then traces to explain it.
 - `pcg.http.*` request spans from the API runtime
 - `pcg.query.*` spans around shared query operations
 - `pcg.mcp.*` request and tool spans in the MCP runtime
+- `pcg.http.*` request spans also cover `GET /api/v0/index-status`,
+  `GET /api/v0/index-runs/{run_id}`, and the admin refinalize/reindex routes
 
 Investigation-specific query spans continue to use the shared query family:
 
@@ -44,12 +46,14 @@ Why it matters:
 - `pcg.index.repository.commit`
 - `pcg.index.parse_repository`
 - `pcg.index.prescan_repository`
+- `pcg.index.finalize`
+- `pcg.index.finalization.stage`
 - `pcg.facts.emit_snapshot`
 - `pcg.facts.inline_projection`
 
 Why it matters:
 
-- separates parse time, queue wait, fact emission time, and inline projection time
+- separates parse time, queue wait, fact emission time, finalize time, and inline projection time
 - shows whether the collector is CPU-bound, queue-bound, or persistence-bound
 
 ### Fact Store and Queue

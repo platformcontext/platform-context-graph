@@ -113,12 +113,17 @@ event families:
 - `index.parse.*`
 - `index.repository.*`
 - `index.finalization.*`
+- `admin.refinalize.*`
 - `indexing.repository_coverage.published`
 
 The most useful `extra_keys` fields for Grafana and Loki correlation are
 `run_id`, `repo_id`, `repo_name`, `repo_path`, `phase`, `status`, and
 `duration_seconds`. When you need the span and metric map, use
 [Ingestion Observability](ingestion-observability.md).
+
+Status and recovery reads use the HTTP request log plus those finalization
+families. `GET /api/v0/index-status` and `GET /api/v0/index-runs/{run_id}` do
+not need a separate log family of their own.
 
 ## Example
 

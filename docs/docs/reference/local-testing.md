@@ -166,8 +166,11 @@ docker compose ps
 docker compose logs bootstrap-index | tail -50
 docker compose logs ingester | tail -50
 docker compose logs resolution-engine | tail -50
-curl -s http://localhost:8080/health
+curl -fsS http://localhost:8080/health
+curl -fsS http://localhost:8080/api/v0/index-status
 ```
+
+The API health check proves liveness only; `index-status` is the completeness view. For hosted or Kubernetes validation, see [Cloud Validation Runbook](cloud-validation.md).
 
 ## Local Observability Checks
 

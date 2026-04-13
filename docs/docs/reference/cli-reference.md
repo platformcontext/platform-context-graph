@@ -54,8 +54,8 @@ These options apply at the root command level.
 | `pcg version` | Print the installed version. | No |
 | `pcg doctor` | Run local diagnostics. | No |
 | `pcg index [path]` | Index a local path. | No |
-| `pcg index-status [target]` | Show checkpointed index status for a local path or remote run. | Yes |
-| `pcg finalize` | Re-run the legacy post-commit bridge against an existing graph for recovery or repair. | No |
+| `pcg index-status [target]` | Show checkpointed index status for a local path, local run, or remote run. This is the completeness signal, not process health. | Yes |
+| `pcg finalize` | Re-run the legacy graph-safe post-commit bridge against an existing graph for recovery or repair. File-dependent bridge stages remain CLI-only. | No |
 | `pcg clean` | Remove orphaned nodes and relationships. | No |
 | `pcg stats [path]` | Show indexing statistics. | No |
 | `pcg delete <path>` | Delete one indexed repository. | No |
@@ -264,6 +264,9 @@ Check checkpointed run status:
 ```bash
 pcg index-status f53c7855e3a12baf --profile qa
 ```
+
+Treat `pcg index-status` as the run-completeness view. Use the runtime
+health/admin/status surfaces for liveness and stage progress instead.
 
 Queue a full workspace rebuild on a deployed ingester:
 
