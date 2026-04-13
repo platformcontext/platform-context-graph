@@ -64,6 +64,7 @@ claimed AS (
         work.scope_id,
         work.generation_id,
         work.domain,
+        work.attempt_count,
         work.created_at,
         COALESCE(work.visible_at, work.created_at) AS available_at,
         work.payload
@@ -73,6 +74,7 @@ SELECT
     scope_id,
     generation_id,
     domain,
+    attempt_count,
     created_at,
     available_at,
     payload
@@ -111,6 +113,23 @@ WHERE work_item_id = $5
   AND status IN ('claimed', 'running')
 `
 
+const retryReducerWorkQuery = `
+UPDATE fact_work_items
+SET status = 'retrying',
+    lease_owner = NULL,
+    claim_until = NULL,
+    visible_at = $5,
+    next_attempt_at = $5,
+    updated_at = $1,
+    failure_class = $2,
+    failure_message = $3,
+    failure_details = $4
+WHERE work_item_id = $6
+  AND stage = 'reducer'
+  AND lease_owner = $7
+  AND status IN ('claimed', 'running')
+`
+
 type reducerPayload struct {
 	EntityKey    string `json:"entity_key,omitempty"`
 	Reason       string `json:"reason,omitempty"`
@@ -123,6 +142,8 @@ type ReducerQueue struct {
 	db            ExecQueryer
 	LeaseOwner    string
 	LeaseDuration time.Duration
+	RetryDelay    time.Duration
+	MaxAttempts   int
 	Now           func() time.Time
 }
 
@@ -236,19 +257,12 @@ func (q ReducerQueue) Fail(ctx context.Context, intent reducer.Intent, cause err
 	if err := q.validate(); err != nil {
 		return err
 	}
+	if cause == nil {
+		return errors.New("reducer failure cause is required")
+	}
 
-	_, err := q.db.ExecContext(
-		ctx,
-		failReducerWorkQuery,
-		q.now(),
-		"reducer_failed",
-		cause.Error(),
-		cause.Error(),
-		intent.IntentID,
-		q.LeaseOwner,
-	)
-	if err != nil {
-		return fmt.Errorf("fail reducer work: %w", err)
+	if err := q.failIntent(ctx, intent, cause); err != nil {
+		return err
 	}
 
 	return nil
@@ -276,11 +290,28 @@ func (q ReducerQueue) now() time.Time {
 	return time.Now().UTC()
 }
 
+func (q ReducerQueue) retryDelay() time.Duration {
+	if q.RetryDelay > 0 {
+		return q.RetryDelay
+	}
+
+	return 30 * time.Second
+}
+
+func (q ReducerQueue) maxAttempts() int {
+	if q.MaxAttempts > 0 {
+		return q.MaxAttempts
+	}
+
+	return 3
+}
+
 func scanReducerIntent(rows Rows) (reducer.Intent, error) {
 	var intentID string
 	var scopeID string
 	var generationID string
 	var domain string
+	var attemptCount int
 	var enqueuedAt time.Time
 	var availableAt time.Time
 	var rawPayload []byte
@@ -290,6 +321,7 @@ func scanReducerIntent(rows Rows) (reducer.Intent, error) {
 		&scopeID,
 		&generationID,
 		&domain,
+		&attemptCount,
 		&enqueuedAt,
 		&availableAt,
 		&rawPayload,
@@ -314,6 +346,7 @@ func scanReducerIntent(rows Rows) (reducer.Intent, error) {
 		SourceSystem:    sourceSystem,
 		Domain:          reducer.Domain(domain),
 		Cause:           reason,
+		AttemptCount:    attemptCount,
 		EntityKeys:      nil,
 		RelatedScopeIDs: []string{scopeID},
 		Status:          reducer.IntentStatusClaimed,
@@ -334,6 +367,49 @@ func scanReducerIntent(rows Rows) (reducer.Intent, error) {
 	}
 
 	return intent, nil
+}
+
+func (q ReducerQueue) retryable(cause error, attemptCount int) bool {
+	return reducer.IsRetryable(cause) && attemptCount < q.maxAttempts()
+}
+
+func (q ReducerQueue) failIntent(
+	ctx context.Context,
+	intent reducer.Intent,
+	cause error,
+) error {
+	now := q.now()
+	failureClass := "reducer_failed"
+	query := failReducerWorkQuery
+	args := []any{
+		now,
+		failureClass,
+		cause.Error(),
+		cause.Error(),
+		intent.IntentID,
+		q.LeaseOwner,
+	}
+
+	if q.retryable(cause, intent.AttemptCount) {
+		failureClass = "reducer_retryable"
+		query = retryReducerWorkQuery
+		args = []any{
+			now,
+			failureClass,
+			cause.Error(),
+			cause.Error(),
+			now.Add(q.retryDelay()),
+			intent.IntentID,
+			q.LeaseOwner,
+		}
+	}
+
+	_, err := q.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("fail reducer work: %w", err)
+	}
+
+	return nil
 }
 
 func reducerWorkItemID(intent projector.ReducerIntent, now time.Time, index int) string {

@@ -69,6 +69,7 @@ type RawSnapshot struct {
 	GenerationHistory GenerationHistorySnapshot
 	StageCounts       []StageStatusCount
 	DomainBacklogs    []DomainBacklog
+	RetryPolicies     []RetryPolicySummary
 	Queue             QueueSnapshot
 }
 
@@ -106,6 +107,7 @@ type Report struct {
 	Health            HealthSummary
 	FlowSummaries     []FlowSummary
 	Queue             QueueSnapshot
+	RetryPolicies     []RetryPolicySummary
 	ScopeActivity     ScopeActivitySnapshot
 	GenerationHistory GenerationHistorySnapshot
 	ScopeTotals       map[string]int
@@ -169,6 +171,7 @@ func BuildReport(raw RawSnapshot, opts Options) Report {
 		Health:            evaluateHealth(raw.Queue, generationTotals, opts),
 		FlowSummaries:     flowSummaries,
 		Queue:             raw.Queue,
+		RetryPolicies:     cloneRetryPolicies(raw.RetryPolicies),
 		ScopeActivity:     scopeActivity,
 		GenerationHistory: generationHistory,
 		ScopeTotals:       scopeTotals,
@@ -205,6 +208,7 @@ func RenderText(report Report) string {
 			report.Queue.OldestOutstandingAge,
 			report.Queue.OverdueClaims,
 		),
+		fmt.Sprintf("Retry policies: %s", retryPoliciesText(report.RetryPolicies)),
 		fmt.Sprintf(
 			"Scope activity: %s",
 			scopeActivityText(report.ScopeActivity),

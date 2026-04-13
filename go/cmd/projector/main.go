@@ -11,6 +11,7 @@ import (
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
+	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
@@ -37,10 +38,25 @@ func run(parent context.Context) error {
 	if err != nil {
 		return err
 	}
+	retryPolicy, err := loadProjectorRetryPolicy(os.Getenv)
+	if err != nil {
+		return err
+	}
+	statusReader := statuspkg.WithRetryPolicies(
+		postgres.NewStatusStore(postgres.SQLQueryer{DB: db}),
+		statuspkg.MergeRetryPolicies(
+			statuspkg.DefaultRetryPolicies(),
+			statuspkg.RetryPolicySummary{
+				Stage:       "projector",
+				MaxAttempts: retryPolicy.MaxAttempts,
+				RetryDelay:  retryPolicy.RetryDelay,
+			},
+		)...,
+	)
 	service, err := app.NewHostedWithStatusServer(
 		"projector",
 		runner,
-		postgres.NewStatusStore(postgres.SQLQueryer{DB: db}),
+		statusReader,
 	)
 	if err != nil {
 		return err

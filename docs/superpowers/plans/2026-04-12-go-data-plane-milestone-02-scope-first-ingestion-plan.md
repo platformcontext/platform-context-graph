@@ -100,6 +100,8 @@ Deliverables:
 
 - status views that explain changed scopes, active generations, and superseded
   generations
+- bounded retry policy visibility in `/admin/status` so operators can see the
+  configured projector and reducer retry budget without inspecting env vars
 - metrics for scope churn, generation replacement, queue age, and replay volume
 - clear operator story for “what changed” versus “what is fully healthy”
 

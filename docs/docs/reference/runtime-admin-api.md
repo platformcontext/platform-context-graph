@@ -51,6 +51,9 @@ The JSON response follows the shared status report shape from
 - `health`
 - `flow`
 - `queue`
+- `retry_policies`
+- `scope_activity`
+- `generation_history`
 - `scopes`
 - `generations`
 - `stages`
@@ -65,6 +68,13 @@ Domain entries include both a duration string and seconds value:
 
 - `oldest_age`
 - `oldest_age_seconds`
+
+Retry policy entries include:
+
+- `stage`
+- `max_attempts`
+- `retry_delay`
+- `retry_delay_seconds`
 
 ## Runtime Ownership
 

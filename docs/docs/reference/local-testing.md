@@ -115,6 +115,14 @@ proof. It keeps the same compose shape but now expects three phases:
   `PCG_PROJECTOR_RETRY_ONCE_SCOPE_GENERATION=<scope_id>:<generation_id>` before
   the active/superseded swap completes
 
+Focused retry-policy and admin-surface package gate:
+
+```bash
+cd go
+go test ./internal/runtime ./internal/status ./internal/storage/postgres \
+  ./cmd/projector ./cmd/reducer -count=1
+```
+
 ```bash
 ./scripts/verify_incremental_refresh_compose.sh
 ```

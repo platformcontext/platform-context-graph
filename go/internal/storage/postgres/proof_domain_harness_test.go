@@ -122,6 +122,11 @@ func (db *proofDomainDB) ExecContext(_ context.Context, query string, args ...an
 			return nil, fmt.Errorf("reducer ack args = %d, want 3", len(args))
 		}
 		return db.updateWorkItemStatusByID(args[1].(string), args[2].(string), "succeeded")
+	case strings.Contains(query, "stage = 'reducer'") && strings.Contains(query, "SET status = 'retrying'"):
+		if len(args) != 7 {
+			return nil, fmt.Errorf("reducer retry args = %d, want 7", len(args))
+		}
+		return db.retryReducerWork(args[5].(string), args[6].(string), args[4].(time.Time))
 	case strings.Contains(query, "stage = 'reducer'") && strings.Contains(query, "SET status = 'failed'"):
 		if len(args) != 6 {
 			return nil, fmt.Errorf("reducer fail args = %d, want 6", len(args))
@@ -266,13 +271,14 @@ func (db *proofDomainDB) claimProjectorWork(now time.Time, leaseOwner string, cl
 
 func (db *proofDomainDB) claimReducerWork(now time.Time, leaseOwner string, claimUntil time.Time) (Rows, error) {
 	for key, item := range db.state.workItems {
-		if item.stage != "reducer" || item.status != "pending" {
+		if item.stage != "reducer" || (item.status != "pending" && item.status != "retrying") {
 			continue
 		}
 		if !item.visibleAt.IsZero() && item.visibleAt.After(now) {
 			continue
 		}
 		item.status = "claimed"
+		item.attemptCount++
 		item.leaseOwner = leaseOwner
 		item.claimUntil = claimUntil
 		item.updatedAt = now
@@ -283,6 +289,7 @@ func (db *proofDomainDB) claimReducerWork(now time.Time, leaseOwner string, clai
 			item.scopeID,
 			item.generationID,
 			item.domain,
+			item.attemptCount,
 			item.createdAt,
 			item.visibleAt,
 			item.payload,

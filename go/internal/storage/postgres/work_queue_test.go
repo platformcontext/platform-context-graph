@@ -155,6 +155,7 @@ func TestReducerQueueEnqueueAndClaimRoundTrip(t *testing.T) {
 					"scope-123",
 					"generation-456",
 					"workload_identity",
+					1,
 					now,
 					now,
 					[]byte(`{"entity_key":"repo-123","reason":"shared follow-up","fact_id":"fact-1","source_system":"git"}`),
@@ -202,11 +203,103 @@ func TestReducerQueueEnqueueAndClaimRoundTrip(t *testing.T) {
 	if got, want := intent.EntityKeys[0], "repo-123"; got != want {
 		t.Fatalf("Claim().EntityKeys[0] = %q, want %q", got, want)
 	}
+	if got, want := intent.AttemptCount, 1; got != want {
+		t.Fatalf("Claim().AttemptCount = %d, want %d", got, want)
+	}
 	if got, want := len(db.execs), 1; got != want {
 		t.Fatalf("exec count = %d, want %d", got, want)
 	}
 	if !strings.Contains(db.execs[0].query, "INSERT INTO fact_work_items") {
 		t.Fatalf("enqueue query = %q, want fact_work_items insert", db.execs[0].query)
+	}
+}
+
+func TestReducerQueueFailRetriesRetryableErrorWithinAttemptBudget(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 11, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{}
+	queue := ReducerQueue{
+		db:            db,
+		LeaseOwner:    "reducer-1",
+		LeaseDuration: time.Minute,
+		RetryDelay:    2 * time.Minute,
+		MaxAttempts:   3,
+		Now:           func() time.Time { return now },
+	}
+
+	intent := reducer.Intent{
+		IntentID:     "intent-1",
+		AttemptCount: 1,
+	}
+
+	if err := queue.Fail(context.Background(), intent, retryableReducerTestError{message: "transient failure"}); err != nil {
+		t.Fatalf("Fail() error = %v, want nil", err)
+	}
+
+	if got, want := len(db.execs), 1; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+
+	query := db.execs[0].query
+	for _, want := range []string{
+		"UPDATE fact_work_items",
+		"status = 'retrying'",
+		"next_attempt_at = $5",
+		"visible_at = $5",
+		"failure_class = $2",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("retry query missing %q:\n%s", want, query)
+		}
+	}
+	if got, want := db.execs[0].args[1], "reducer_retryable"; got != want {
+		t.Fatalf("failure class = %v, want %v", got, want)
+	}
+	if got, want := db.execs[0].args[4], now.Add(2*time.Minute); got != want {
+		t.Fatalf("next attempt = %v, want %v", got, want)
+	}
+}
+
+func TestReducerQueueFailMarksRetryableErrorTerminalWhenAttemptBudgetExhausted(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 11, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{}
+	queue := ReducerQueue{
+		db:            db,
+		LeaseOwner:    "reducer-1",
+		LeaseDuration: time.Minute,
+		RetryDelay:    2 * time.Minute,
+		MaxAttempts:   2,
+		Now:           func() time.Time { return now },
+	}
+
+	intent := reducer.Intent{
+		IntentID:     "intent-1",
+		AttemptCount: 2,
+	}
+
+	if err := queue.Fail(context.Background(), intent, retryableReducerTestError{message: "still broken"}); err != nil {
+		t.Fatalf("Fail() error = %v, want nil", err)
+	}
+
+	if got, want := len(db.execs), 1; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+
+	query := db.execs[0].query
+	for _, want := range []string{
+		"UPDATE fact_work_items",
+		"status = 'failed'",
+		"failure_class = $2",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("terminal query missing %q:\n%s", want, query)
+		}
+	}
+	if got, want := db.execs[0].args[1], "reducer_failed"; got != want {
+		t.Fatalf("failure class = %v, want %v", got, want)
 	}
 }
 
@@ -367,3 +460,15 @@ type fakeResult struct{}
 func (fakeResult) LastInsertId() (int64, error) { return 0, nil }
 
 func (fakeResult) RowsAffected() (int64, error) { return 1, nil }
+
+type retryableReducerTestError struct {
+	message string
+}
+
+func (e retryableReducerTestError) Error() string {
+	return e.message
+}
+
+func (e retryableReducerTestError) Retryable() bool {
+	return true
+}

@@ -30,6 +30,12 @@ func buildProjectorService(
 	if err != nil {
 		return projector.Service{}, err
 	}
+	retryPolicy, err := loadProjectorRetryPolicy(getenv)
+	if err != nil {
+		return projector.Service{}, err
+	}
+	projectorQueue.RetryDelay = retryPolicy.RetryDelay
+	projectorQueue.MaxAttempts = retryPolicy.MaxAttempts
 
 	return projector.Service{
 		PollInterval: time.Second,

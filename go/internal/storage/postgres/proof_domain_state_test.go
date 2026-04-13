@@ -106,6 +106,24 @@ func (db *proofDomainDB) retryProjectorWork(scopeID string, generationID string,
 	return nil, fmt.Errorf("projector work item not found for scope=%s generation=%s", scopeID, generationID)
 }
 
+func (db *proofDomainDB) retryReducerWork(workItemID string, leaseOwner string, visibleAt time.Time) (sql.Result, error) {
+	item, ok := db.state.workItems[workItemID]
+	if !ok {
+		return nil, fmt.Errorf("reducer work item %q not found", workItemID)
+	}
+	if item.leaseOwner != leaseOwner {
+		return nil, fmt.Errorf("reducer work item lease owner = %q, want %q", item.leaseOwner, leaseOwner)
+	}
+
+	item.status = "retrying"
+	item.leaseOwner = ""
+	item.claimUntil = time.Time{}
+	item.visibleAt = visibleAt.UTC()
+	item.updatedAt = db.now
+	db.state.workItems[workItemID] = item
+	return proofResult{}, nil
+}
+
 func (db *proofDomainDB) promoteGeneration(scopeID string, generationID string) {
 	for key, generation := range db.state.generations {
 		if generation.ScopeID != scopeID {

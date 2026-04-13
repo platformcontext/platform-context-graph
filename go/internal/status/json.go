@@ -14,6 +14,7 @@ func RenderJSON(report Report) ([]byte, error) {
 		Health            HealthSummary         `json:"health"`
 		Flow              []flowSummaryJSON     `json:"flow"`
 		Queue             queueJSON             `json:"queue"`
+		RetryPolicies     []retryPolicyJSON     `json:"retry_policies"`
 		ScopeActivity     scopeActivityJSON     `json:"scope_activity"`
 		GenerationHistory generationHistoryJSON `json:"generation_history"`
 		Scopes            map[string]int        `json:"scopes"`
@@ -25,6 +26,7 @@ func RenderJSON(report Report) ([]byte, error) {
 		Health:            report.Health,
 		Flow:              flowSummariesJSON(report.FlowSummaries),
 		Queue:             queueJSONFromReport(report.Queue),
+		RetryPolicies:     retryPoliciesJSON(report.RetryPolicies),
 		ScopeActivity:     scopeActivityJSONFromReport(report.ScopeActivity),
 		GenerationHistory: generationHistoryJSONFromReport(report.GenerationHistory),
 		Scopes:            cloneCounts(report.ScopeTotals),

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
+	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 )
 
 const projectorRetryOnceScopeGenerationEnv = "PCG_PROJECTOR_RETRY_ONCE_SCOPE_GENERATION"
@@ -19,4 +20,8 @@ func loadProjectorRetryInjector(getenv func(string) string) (projector.RetryInje
 	}
 
 	return projector.NewRetryOnceInjector(raw)
+}
+
+func loadProjectorRetryPolicy(getenv func(string) string) (runtimecfg.RetryPolicyConfig, error) {
+	return runtimecfg.LoadRetryPolicyConfig(getenv, "PROJECTOR")
 }

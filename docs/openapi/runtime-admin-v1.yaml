@@ -118,8 +118,10 @@ paths:
               example: |
                 Health: progressing
                 Queue: outstanding=2 in_flight=1 retrying=0 failed=0 oldest=45s overdue_claims=0
-                Scopes: pending=1
-                Generations: pending=1
+                Retry policies: projector max_attempts=3 retry_delay=30s; reducer max_attempts=3 retry_delay=30s
+                Scope activity: active=2 changed=1 unchanged=1
+                Scope statuses: active=2 pending=1
+                Generation history: active=1 pending=1 completed=4 superseded=0 failed=0 other=0
             application/json:
               schema:
                 $ref: "#/components/schemas/StatusReport"
@@ -248,6 +250,60 @@ components:
           type: number
         overdue_claims:
           type: integer
+    RetryPolicySummary:
+      type: object
+      additionalProperties: false
+      required:
+        - stage
+        - max_attempts
+        - retry_delay
+        - retry_delay_seconds
+      properties:
+        stage:
+          type: string
+        max_attempts:
+          type: integer
+        retry_delay:
+          type: string
+        retry_delay_seconds:
+          type: number
+    ScopeActivitySummary:
+      type: object
+      additionalProperties: false
+      required:
+        - active
+        - changed
+        - unchanged
+      properties:
+        active:
+          type: integer
+        changed:
+          type: integer
+        unchanged:
+          type: integer
+    GenerationHistorySummary:
+      type: object
+      additionalProperties: false
+      required:
+        - active
+        - pending
+        - completed
+        - superseded
+        - failed
+        - other
+      properties:
+        active:
+          type: integer
+        pending:
+          type: integer
+        completed:
+          type: integer
+        superseded:
+          type: integer
+        failed:
+          type: integer
+        other:
+          type: integer
     StageSummary:
       type: object
       additionalProperties: false
@@ -305,6 +361,9 @@ components:
         - health
         - flow
         - queue
+        - retry_policies
+        - scope_activity
+        - generation_history
         - scopes
         - generations
         - stages
@@ -321,6 +380,14 @@ components:
             $ref: "#/components/schemas/FlowSummary"
         queue:
           $ref: "#/components/schemas/QueueSummary"
+        retry_policies:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetryPolicySummary"
+        scope_activity:
+          $ref: "#/components/schemas/ScopeActivitySummary"
+        generation_history:
+          $ref: "#/components/schemas/GenerationHistorySummary"
         scopes:
           type: object
           additionalProperties:

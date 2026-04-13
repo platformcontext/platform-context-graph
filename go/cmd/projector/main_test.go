@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
@@ -44,6 +45,39 @@ func TestBuildProjectorServiceWiresRetryInjectorFromEnv(t *testing.T) {
 	}
 	if runtime.RetryInjector == nil {
 		t.Fatal("RetryInjector = nil, want configured injector")
+	}
+}
+
+func TestBuildProjectorServiceWiresRetryPolicyFromEnv(t *testing.T) {
+	t.Parallel()
+
+	service, err := buildProjectorService(
+		postgres.SQLDB{},
+		sourceneo4j.Adapter{},
+		func(name string) string {
+			switch name {
+			case "PCG_PROJECTOR_MAX_ATTEMPTS":
+				return "5"
+			case "PCG_PROJECTOR_RETRY_DELAY":
+				return "45s"
+			default:
+				return ""
+			}
+		},
+	)
+	if err != nil {
+		t.Fatalf("buildProjectorService() error = %v, want nil", err)
+	}
+
+	workSource, ok := service.WorkSource.(postgres.ProjectorQueue)
+	if !ok {
+		t.Fatalf("WorkSource type = %T, want postgres.ProjectorQueue", service.WorkSource)
+	}
+	if got, want := workSource.MaxAttempts, 5; got != want {
+		t.Fatalf("MaxAttempts = %d, want %d", got, want)
+	}
+	if got, want := workSource.RetryDelay, 45*time.Second; got != want {
+		t.Fatalf("RetryDelay = %v, want %v", got, want)
 	}
 }
 

@@ -16,7 +16,7 @@ func TestBuildReducerServiceWiresDefaultRuntimeAndQueue(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db)
+	service, err := buildReducerService(db, func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("buildReducerService() error = %v, want nil", err)
 	}
@@ -38,7 +38,7 @@ func TestBuildReducerServiceWiresPostgresWorkloadIdentityWriter(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db)
+	service, err := buildReducerService(db, func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("buildReducerService() error = %v, want nil", err)
 	}
@@ -69,6 +69,36 @@ func TestBuildReducerServiceWiresPostgresWorkloadIdentityWriter(t *testing.T) {
 	}
 	if got := db.execs[0].query; !strings.Contains(got, "INSERT INTO fact_records") {
 		t.Fatalf("ExecContext query = %q, want fact_records insert", got)
+	}
+}
+
+func TestBuildReducerServiceWiresRetryConfigFromEnv(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeReducerDB{}
+	service, err := buildReducerService(db, func(name string) string {
+		switch name {
+		case reducerRetryDelayEnv:
+			return "2m"
+		case reducerMaxAttemptsEnv:
+			return "5"
+		default:
+			return ""
+		}
+	})
+	if err != nil {
+		t.Fatalf("buildReducerService() error = %v, want nil", err)
+	}
+
+	queue, ok := service.WorkSource.(postgres.ReducerQueue)
+	if !ok {
+		t.Fatalf("WorkSource type = %T, want postgres.ReducerQueue", service.WorkSource)
+	}
+	if got, want := queue.RetryDelay, 2*time.Minute; got != want {
+		t.Fatalf("RetryDelay = %v, want %v", got, want)
+	}
+	if got, want := queue.MaxAttempts, 5; got != want {
+		t.Fatalf("MaxAttempts = %d, want %d", got, want)
 	}
 }
 
