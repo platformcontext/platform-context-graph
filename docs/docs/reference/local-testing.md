@@ -80,6 +80,7 @@ Live runtime proof gate:
 ./scripts/verify_collector_git_runtime_compose.sh
 ./scripts/verify_projector_runtime_compose.sh
 ./scripts/verify_reducer_runtime_compose.sh
+./scripts/verify_incremental_refresh_compose.sh
 ```
 
 These proof scripts allocate their own local ports, start only the required

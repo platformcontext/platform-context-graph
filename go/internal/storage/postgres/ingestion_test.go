@@ -126,6 +126,21 @@ func TestIngestionStoreCommitScopeGenerationRollsBackOnProjectorEnqueueFailure(t
 	}
 }
 
+func TestUpsertIngestionScopeQueryPreservesActiveStatusDuringPendingRefresh(t *testing.T) {
+	t.Parallel()
+
+	for _, want := range []string{
+		"ingestion_scopes.active_generation_id IS NOT NULL",
+		"EXCLUDED.active_generation_id IS NULL",
+		"EXCLUDED.status = 'pending'",
+		"THEN ingestion_scopes.status",
+	} {
+		if !strings.Contains(upsertIngestionScopeQuery, want) {
+			t.Fatalf("upsertIngestionScopeQuery missing %q", want)
+		}
+	}
+}
+
 type fakeTransactionalDB struct {
 	tx         *fakeTx
 	beginCalls int

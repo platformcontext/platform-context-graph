@@ -28,6 +28,10 @@ func TestStatusMetricsHandlerServesRuntimeMetrics(t *testing.T) {
 	handler, err := NewStatusMetricsHandler("collector-git", &fakeStatusReader{
 		snapshot: statuspkg.RawSnapshot{
 			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeActivity: statuspkg.ScopeActivitySnapshot{
+				Active:  7,
+				Changed: 3,
+			},
 			Queue: statuspkg.QueueSnapshot{
 				Total:                4,
 				Outstanding:          2,
@@ -58,6 +62,8 @@ func TestStatusMetricsHandlerServesRuntimeMetrics(t *testing.T) {
 	body := recorder.Body.String()
 	for _, want := range []string{
 		`pcg_runtime_info{service_name="collector-git",service_namespace="platform-context-graph"} 1`,
+		`pcg_runtime_scope_active{service_name="collector-git"} 7`,
+		`pcg_runtime_scope_changed{service_name="collector-git"} 3`,
 		`pcg_runtime_queue_outstanding{service_name="collector-git"} 2`,
 		`pcg_runtime_queue_oldest_outstanding_age_seconds{service_name="collector-git"} 45`,
 		`pcg_runtime_health_state{service_name="collector-git",state="progressing"} 1`,

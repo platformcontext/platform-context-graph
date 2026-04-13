@@ -131,6 +131,7 @@ func (s StatusStore) ReadStatusSnapshot(ctx context.Context, asOf time.Time) (st
 	if err != nil {
 		return statuspkg.RawSnapshot{}, err
 	}
+	scopeActivity := scopeActivityFromCounts(scopeCounts, generationCounts)
 	stageCounts, err := listStageCounts(ctx, s.queryer)
 	if err != nil {
 		return statuspkg.RawSnapshot{}, err
@@ -147,11 +148,36 @@ func (s StatusStore) ReadStatusSnapshot(ctx context.Context, asOf time.Time) (st
 	return statuspkg.RawSnapshot{
 		AsOf:             asOf.UTC(),
 		ScopeCounts:      scopeCounts,
+		ScopeActivity:    scopeActivity,
 		GenerationCounts: generationCounts,
 		StageCounts:      stageCounts,
 		DomainBacklogs:   domainBacklogs,
 		Queue:            queueSnapshot,
 	}, nil
+}
+
+func scopeActivityFromCounts(scopeCounts []statuspkg.NamedCount, generationCounts []statuspkg.NamedCount) statuspkg.ScopeActivitySnapshot {
+	activeScopes := namedCount(scopeCounts, "active")
+	pendingGenerations := namedCount(generationCounts, "pending")
+	if pendingGenerations > activeScopes {
+		pendingGenerations = activeScopes
+	}
+
+	return statuspkg.ScopeActivitySnapshot{
+		Active:  activeScopes,
+		Changed: pendingGenerations,
+	}
+}
+
+func namedCount(rows []statuspkg.NamedCount, name string) int {
+	total := 0
+	for _, row := range rows {
+		if row.Name == name {
+			total += row.Count
+		}
+	}
+
+	return total
 }
 
 func listNamedCounts(

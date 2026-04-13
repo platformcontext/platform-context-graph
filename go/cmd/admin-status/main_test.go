@@ -19,6 +19,10 @@ func TestRenderStatusOutputsTextFromSharedStatusReport(t *testing.T) {
 	reader := &fakeReader{
 		snapshot: statuspkg.RawSnapshot{
 			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeActivity: statuspkg.ScopeActivitySnapshot{
+				Active:  4,
+				Changed: 2,
+			},
 			Queue: statuspkg.QueueSnapshot{
 				Outstanding:          2,
 				InFlight:             1,
@@ -46,6 +50,9 @@ func TestRenderStatusOutputsTextFromSharedStatusReport(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "Health: progressing") {
 		t.Fatalf("renderStatus() stdout = %q, want health summary", got)
 	}
+	if got := stdout.String(); !strings.Contains(got, "Scope activity: active=4 changed=2") {
+		t.Fatalf("renderStatus() stdout = %q, want scope activity summary", got)
+	}
 	if got := stdout.String(); !strings.Contains(got, "Flow:") {
 		t.Fatalf("renderStatus() stdout = %q, want flow summary", got)
 	}
@@ -59,6 +66,10 @@ func TestRenderStatusOutputsJSONFromSharedStatusReport(t *testing.T) {
 	reader := &fakeReader{
 		snapshot: statuspkg.RawSnapshot{
 			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeActivity: statuspkg.ScopeActivitySnapshot{
+				Active:  4,
+				Changed: 1,
+			},
 		},
 	}
 
@@ -77,6 +88,9 @@ func TestRenderStatusOutputsJSONFromSharedStatusReport(t *testing.T) {
 	}
 	if got := stdout.String(); !strings.Contains(got, "\"health\"") {
 		t.Fatalf("renderStatus() stdout = %q, want json payload", got)
+	}
+	if got := stdout.String(); !strings.Contains(got, "\"scope_activity\"") {
+		t.Fatalf("renderStatus() stdout = %q, want scope activity payload", got)
 	}
 	if got := stdout.String(); !strings.Contains(got, "\"flow\"") {
 		t.Fatalf("renderStatus() stdout = %q, want flow payload", got)

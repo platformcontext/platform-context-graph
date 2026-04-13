@@ -18,13 +18,13 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 		responses: []fakeRows{
 			{
 				rows: [][]any{
-					{"active", int64(3)},
+					{"active", int64(5)},
 					{"failed", int64(1)},
 				},
 			},
 			{
 				rows: [][]any{
-					{"active", int64(2)},
+					{"pending", int64(2)},
 					{"completed", int64(4)},
 				},
 			},
@@ -71,6 +71,12 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 	}
 	if len(got.ScopeCounts) != 2 {
 		t.Fatalf("ReadRawSnapshot().ScopeCounts len = %d, want 2", len(got.ScopeCounts))
+	}
+	if got.ScopeActivity.Active != 5 {
+		t.Fatalf("ReadRawSnapshot().ScopeActivity.Active = %d, want 5", got.ScopeActivity.Active)
+	}
+	if got.ScopeActivity.Changed != 2 {
+		t.Fatalf("ReadRawSnapshot().ScopeActivity.Changed = %d, want 2", got.ScopeActivity.Changed)
 	}
 	if len(got.StageCounts) != 3 {
 		t.Fatalf("ReadRawSnapshot().StageCounts len = %d, want 3", len(got.StageCounts))

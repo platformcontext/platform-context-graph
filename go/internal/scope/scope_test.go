@@ -158,6 +158,28 @@ func TestScopeGenerationTransitionRejectsTerminalToActive(t *testing.T) {
 	}
 }
 
+func TestScopeGenerationMarkSuperseded(t *testing.T) {
+	t.Parallel()
+
+	base := ScopeGeneration{
+		GenerationID: "generation-123",
+		ScopeID:      "scope-123",
+		ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+		IngestedAt:   time.Date(2026, time.April, 12, 11, 35, 0, 0, time.UTC),
+		Status:       GenerationStatusActive,
+		TriggerKind:  TriggerKindSnapshot,
+	}
+
+	superseded, err := base.MarkSuperseded()
+	if err != nil {
+		t.Fatalf("MarkSuperseded() error = %v, want nil", err)
+	}
+
+	if superseded.Status != GenerationStatusSuperseded {
+		t.Fatalf("Status = %q, want %q", superseded.Status, GenerationStatusSuperseded)
+	}
+}
+
 func TestScopeGenerationValidateForScope(t *testing.T) {
 	t.Parallel()
 

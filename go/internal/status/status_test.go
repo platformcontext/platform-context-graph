@@ -16,8 +16,13 @@ func TestLoadReportBuildsProjectionFromReader(t *testing.T) {
 	reader := &fakeReader{
 		snapshot: status.RawSnapshot{
 			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeActivity: status.ScopeActivitySnapshot{
+				Active:  2,
+				Changed: 1,
+			},
 			GenerationCounts: []status.NamedCount{
 				{Name: "active", Count: 2},
+				{Name: "superseded", Count: 1},
 			},
 			Queue: status.QueueSnapshot{
 				Outstanding:          2,
@@ -212,12 +217,17 @@ func TestRenderTextIncludesOperatorSummary(t *testing.T) {
 	report := status.BuildReport(
 		status.RawSnapshot{
 			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeActivity: status.ScopeActivitySnapshot{
+				Active:  2,
+				Changed: 1,
+			},
 			ScopeCounts: []status.NamedCount{
 				{Name: "active", Count: 3},
 			},
 			GenerationCounts: []status.NamedCount{
 				{Name: "active", Count: 1},
 				{Name: "completed", Count: 2},
+				{Name: "superseded", Count: 1},
 			},
 			Queue: status.QueueSnapshot{
 				Outstanding:          3,
@@ -246,8 +256,9 @@ func TestRenderTextIncludesOperatorSummary(t *testing.T) {
 	for _, want := range []string{
 		"Health: progressing",
 		"Queue: outstanding=3 in_flight=1 retrying=1 failed=0 oldest=1m30s",
-		"Scopes: active=3",
-		"Generations: active=1 completed=2",
+		"Scope activity: active=2 changed=1",
+		"Scope statuses: active=3",
+		"Generations: active=1 completed=2 superseded=1",
 		"projector pending=0 claimed=0 running=1 retrying=1 succeeded=0 failed=0",
 		"repository outstanding=2 retrying=1 failed=0 oldest=1m30s",
 	} {
@@ -263,11 +274,16 @@ func TestRenderTextDoesNotRepeatTopLevelSummaries(t *testing.T) {
 	report := status.BuildReport(
 		status.RawSnapshot{
 			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeActivity: status.ScopeActivitySnapshot{
+				Active:  4,
+				Changed: 2,
+			},
 			ScopeCounts: []status.NamedCount{
 				{Name: "active", Count: 2},
 			},
 			GenerationCounts: []status.NamedCount{
 				{Name: "completed", Count: 3},
+				{Name: "superseded", Count: 1},
 			},
 			Queue: status.QueueSnapshot{
 				Outstanding:          1,
@@ -281,8 +297,9 @@ func TestRenderTextDoesNotRepeatTopLevelSummaries(t *testing.T) {
 	rendered := status.RenderText(report)
 	for _, want := range []string{
 		"Queue: outstanding=1 in_flight=1 retrying=0 failed=0 oldest=30s overdue_claims=0",
-		"Scopes: active=2",
-		"Generations: completed=3",
+		"Scope activity: active=4 changed=2",
+		"Scope statuses: active=2",
+		"Generations: completed=3 superseded=1",
 	} {
 		if got := strings.Count(rendered, want); got != 1 {
 			t.Fatalf("RenderText() occurrences of %q = %d, want 1\n%s", want, got, rendered)
@@ -296,6 +313,10 @@ func TestBuildReportAddsFlowSummaries(t *testing.T) {
 	report := status.BuildReport(
 		status.RawSnapshot{
 			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeActivity: status.ScopeActivitySnapshot{
+				Active:  2,
+				Changed: 1,
+			},
 			ScopeCounts: []status.NamedCount{
 				{Name: "active", Count: 3},
 				{Name: "pending", Count: 1},
@@ -303,6 +324,7 @@ func TestBuildReportAddsFlowSummaries(t *testing.T) {
 			GenerationCounts: []status.NamedCount{
 				{Name: "active", Count: 1},
 				{Name: "completed", Count: 4},
+				{Name: "superseded", Count: 1},
 			},
 			StageCounts: []status.StageStatusCount{
 				{Stage: "projector", Status: "running", Count: 2},

@@ -36,7 +36,13 @@ ON CONFLICT (scope_id) DO UPDATE SET
     partition_key = EXCLUDED.partition_key,
     observed_at = EXCLUDED.observed_at,
     ingested_at = EXCLUDED.ingested_at,
-    status = EXCLUDED.status,
+    status = CASE
+        WHEN ingestion_scopes.active_generation_id IS NOT NULL
+            AND EXCLUDED.active_generation_id IS NULL
+            AND EXCLUDED.status = 'pending'
+        THEN ingestion_scopes.status
+        ELSE EXCLUDED.status
+    END,
     active_generation_id = CASE
         WHEN EXCLUDED.active_generation_id IS NOT NULL THEN EXCLUDED.active_generation_id
         ELSE ingestion_scopes.active_generation_id

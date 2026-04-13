@@ -4,9 +4,7 @@ package status
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -30,6 +28,13 @@ type StageStatusCount struct {
 	Stage  string
 	Status string
 	Count  int
+}
+
+// ScopeActivitySnapshot captures the incremental-refresh operator counters
+// that distinguish active scopes from scopes with a newer pending generation.
+type ScopeActivitySnapshot struct {
+	Active  int
+	Changed int
 }
 
 // QueueSnapshot captures aggregate queue pressure and progress signals.
@@ -59,6 +64,7 @@ type RawSnapshot struct {
 	AsOf             time.Time
 	ScopeCounts      []NamedCount
 	GenerationCounts []NamedCount
+	ScopeActivity    ScopeActivitySnapshot
 	StageCounts      []StageStatusCount
 	DomainBacklogs   []DomainBacklog
 	Queue            QueueSnapshot
@@ -98,6 +104,7 @@ type Report struct {
 	Health           HealthSummary
 	FlowSummaries    []FlowSummary
 	Queue            QueueSnapshot
+	ScopeActivity    ScopeActivitySnapshot
 	ScopeTotals      map[string]int
 	GenerationTotals map[string]int
 	StageSummaries   []StageSummary
@@ -140,6 +147,10 @@ func BuildReport(raw RawSnapshot, opts Options) Report {
 
 	scopeTotals := toCountMap(raw.ScopeCounts)
 	generationTotals := toCountMap(raw.GenerationCounts)
+	scopeActivity := raw.ScopeActivity
+	if scopeActivity == (ScopeActivitySnapshot{}) {
+		scopeActivity = deriveScopeActivity(scopeTotals, generationTotals)
+	}
 	stageSummaries := summarizeStages(raw.StageCounts)
 	domainBacklogs := topDomainBacklogs(raw.DomainBacklogs, opts.DomainLimit)
 	flowSummaries := buildFlowSummaries(scopeTotals, generationTotals, stageSummaries, raw.Queue, domainBacklogs)
@@ -149,10 +160,24 @@ func BuildReport(raw RawSnapshot, opts Options) Report {
 		Health:           evaluateHealth(raw.Queue, generationTotals, opts),
 		FlowSummaries:    flowSummaries,
 		Queue:            raw.Queue,
+		ScopeActivity:    scopeActivity,
 		ScopeTotals:      scopeTotals,
 		GenerationTotals: generationTotals,
 		StageSummaries:   stageSummaries,
 		DomainBacklogs:   domainBacklogs,
+	}
+}
+
+func deriveScopeActivity(scopeTotals map[string]int, generationTotals map[string]int) ScopeActivitySnapshot {
+	activeScopes := scopeTotals["active"]
+	pendingGenerations := generationTotals["pending"]
+	if pendingGenerations > activeScopes {
+		pendingGenerations = activeScopes
+	}
+
+	return ScopeActivitySnapshot{
+		Active:  activeScopes,
+		Changed: pendingGenerations,
 	}
 }
 
@@ -169,7 +194,12 @@ func RenderText(report Report) string {
 			report.Queue.OldestOutstandingAge,
 			report.Queue.OverdueClaims,
 		),
-		fmt.Sprintf("Scopes: %s", formatNamedTotals(report.ScopeTotals)),
+		fmt.Sprintf(
+			"Scope activity: active=%d changed=%d",
+			report.ScopeActivity.Active,
+			report.ScopeActivity.Changed,
+		),
+		fmt.Sprintf("Scope statuses: %s", formatNamedTotals(report.ScopeTotals)),
 		fmt.Sprintf("Generations: %s", formatNamedTotals(report.GenerationTotals)),
 	}
 
@@ -213,84 +243,6 @@ func RenderText(report Report) string {
 	}
 
 	return strings.Join(lines, "\n")
-}
-
-// RenderJSON returns a stable machine-readable projection of the report.
-func RenderJSON(report Report) ([]byte, error) {
-	payload := struct {
-		AsOf        string              `json:"as_of"`
-		Health      HealthSummary       `json:"health"`
-		Flow        []flowSummaryJSON   `json:"flow"`
-		Queue       queueJSON           `json:"queue"`
-		Scopes      map[string]int      `json:"scopes"`
-		Generations map[string]int      `json:"generations"`
-		Stages      []StageSummary      `json:"stages"`
-		Domains     []domainBacklogJSON `json:"domains"`
-	}{
-		AsOf:        report.AsOf.UTC().Format(time.RFC3339),
-		Health:      report.Health,
-		Flow:        flowSummariesJSON(report.FlowSummaries),
-		Queue:       queueJSONFromReport(report.Queue),
-		Scopes:      cloneCounts(report.ScopeTotals),
-		Generations: cloneCounts(report.GenerationTotals),
-		Stages:      slices.Clone(report.StageSummaries),
-		Domains:     domainBacklogsJSON(report.DomainBacklogs),
-	}
-
-	return json.MarshalIndent(payload, "", "  ")
-}
-
-type queueJSON struct {
-	Total                       int     `json:"total"`
-	Outstanding                 int     `json:"outstanding"`
-	Pending                     int     `json:"pending"`
-	InFlight                    int     `json:"in_flight"`
-	Retrying                    int     `json:"retrying"`
-	Succeeded                   int     `json:"succeeded"`
-	Failed                      int     `json:"failed"`
-	OverdueClaims               int     `json:"overdue_claims"`
-	OldestOutstandingAge        string  `json:"oldest_outstanding_age"`
-	OldestOutstandingAgeSeconds float64 `json:"oldest_outstanding_age_seconds"`
-}
-
-type domainBacklogJSON struct {
-	Domain           string  `json:"domain"`
-	Outstanding      int     `json:"outstanding"`
-	Retrying         int     `json:"retrying"`
-	Failed           int     `json:"failed"`
-	OldestAge        string  `json:"oldest_age"`
-	OldestAgeSeconds float64 `json:"oldest_age_seconds"`
-}
-
-func queueJSONFromReport(queue QueueSnapshot) queueJSON {
-	return queueJSON{
-		Total:                       queue.Total,
-		Outstanding:                 queue.Outstanding,
-		Pending:                     queue.Pending,
-		InFlight:                    queue.InFlight,
-		Retrying:                    queue.Retrying,
-		Succeeded:                   queue.Succeeded,
-		Failed:                      queue.Failed,
-		OverdueClaims:               queue.OverdueClaims,
-		OldestOutstandingAge:        queue.OldestOutstandingAge.String(),
-		OldestOutstandingAgeSeconds: queue.OldestOutstandingAge.Seconds(),
-	}
-}
-
-func domainBacklogsJSON(rows []DomainBacklog) []domainBacklogJSON {
-	projected := make([]domainBacklogJSON, 0, len(rows))
-	for _, row := range rows {
-		projected = append(projected, domainBacklogJSON{
-			Domain:           row.Domain,
-			Outstanding:      row.Outstanding,
-			Retrying:         row.Retrying,
-			Failed:           row.Failed,
-			OldestAge:        row.OldestAge.String(),
-			OldestAgeSeconds: row.OldestAge.Seconds(),
-		})
-	}
-
-	return projected
 }
 
 func evaluateHealth(queue QueueSnapshot, generationTotals map[string]int, opts Options) HealthSummary {

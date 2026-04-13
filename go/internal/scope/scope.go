@@ -38,6 +38,8 @@ const (
 	GenerationStatusPending GenerationStatus = "pending"
 	// GenerationStatusActive means the generation is currently authoritative.
 	GenerationStatusActive GenerationStatus = "active"
+	// GenerationStatusSuperseded means a newer generation replaced this one.
+	GenerationStatusSuperseded GenerationStatus = "superseded"
 	// GenerationStatusCompleted means the generation finished successfully.
 	GenerationStatusCompleted GenerationStatus = "completed"
 	// GenerationStatusFailed means the generation finished unsuccessfully.
@@ -50,9 +52,11 @@ var allowedGenerationTransitions = map[GenerationStatus]map[GenerationStatus]str
 		GenerationStatusFailed: {},
 	},
 	GenerationStatusActive: {
+		GenerationStatusSuperseded: {},
 		GenerationStatusCompleted: {},
 		GenerationStatusFailed:    {},
 	},
+	GenerationStatusSuperseded: {},
 	GenerationStatusCompleted: {},
 	GenerationStatusFailed:    {},
 }
@@ -189,6 +193,11 @@ func (g ScopeGeneration) MarkCompleted() (ScopeGeneration, error) {
 	return g.TransitionTo(GenerationStatusCompleted)
 }
 
+// MarkSuperseded marks an active generation as replaced by a newer one.
+func (g ScopeGeneration) MarkSuperseded() (ScopeGeneration, error) {
+	return g.TransitionTo(GenerationStatusSuperseded)
+}
+
 // MarkFailed marks a pending or active generation as failed.
 func (g ScopeGeneration) MarkFailed() (ScopeGeneration, error) {
 	return g.TransitionTo(GenerationStatusFailed)
@@ -197,7 +206,7 @@ func (g ScopeGeneration) MarkFailed() (ScopeGeneration, error) {
 // Validate checks that the generation status is known and stable.
 func (status GenerationStatus) Validate() error {
 	switch status {
-	case GenerationStatusPending, GenerationStatusActive, GenerationStatusCompleted, GenerationStatusFailed:
+	case GenerationStatusPending, GenerationStatusActive, GenerationStatusSuperseded, GenerationStatusCompleted, GenerationStatusFailed:
 		return nil
 	default:
 		return fmt.Errorf("unknown generation status %q", status)
@@ -207,7 +216,7 @@ func (status GenerationStatus) Validate() error {
 // IsTerminal reports whether the status cannot transition to another state.
 func (status GenerationStatus) IsTerminal() bool {
 	switch status {
-	case GenerationStatusCompleted, GenerationStatusFailed:
+	case GenerationStatusSuperseded, GenerationStatusCompleted, GenerationStatusFailed:
 		return true
 	default:
 		return false

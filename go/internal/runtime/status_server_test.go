@@ -61,6 +61,10 @@ func TestNewStatusAdminServerServesMetrics(t *testing.T) {
 	reader := &fakeStatusReader{
 		snapshot: statuspkg.RawSnapshot{
 			AsOf: time.Date(2026, 4, 12, 16, 0, 0, 0, time.UTC),
+			ScopeActivity: statuspkg.ScopeActivitySnapshot{
+				Active:  5,
+				Changed: 2,
+			},
 			Queue: statuspkg.QueueSnapshot{
 				Outstanding:          2,
 				OldestOutstandingAge: 30 * time.Second,
@@ -98,6 +102,9 @@ func TestNewStatusAdminServerServesMetrics(t *testing.T) {
 	}
 	if got := string(body); !strings.Contains(got, `pcg_runtime_queue_outstanding{service_name="collector-git"} 2`) {
 		t.Fatalf("GET /metrics body = %q, want queue metric", got)
+	}
+	if got := string(body); !strings.Contains(got, `pcg_runtime_scope_active{service_name="collector-git"} 5`) {
+		t.Fatalf("GET /metrics body = %q, want scope activity metric", got)
 	}
 }
 

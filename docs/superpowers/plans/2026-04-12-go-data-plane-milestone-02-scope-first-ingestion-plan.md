@@ -124,6 +124,8 @@ Deliverables:
 
 - deterministic tests for generation replacement and stale-generation cleanup
 - one live compose proof for incremental refresh on a repo-backed source
+- a dedicated compose gate that proves generation A becomes superseded,
+  generation B becomes active, and the scope pointer follows B
 - replay and retraction regression coverage
 
 Effort:
@@ -169,6 +171,7 @@ go test ./internal/scope ./internal/collector ./internal/projector \
 ./scripts/verify_collector_git_runtime_compose.sh
 ./scripts/verify_projector_runtime_compose.sh
 ./scripts/verify_reducer_runtime_compose.sh
+./scripts/verify_incremental_refresh_compose.sh
 ```
 
 plus one new incremental-refresh proof command specific to Milestone 2.

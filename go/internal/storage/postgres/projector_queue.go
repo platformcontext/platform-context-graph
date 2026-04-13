@@ -82,6 +82,32 @@ JOIN scope_generations AS generation
 `
 
 const ackProjectorWorkQuery = `
+WITH lifecycle_update AS (
+    UPDATE scope_generations
+    SET status = CASE
+            WHEN generation_id = $3 THEN 'active'
+            WHEN status = 'active' THEN 'superseded'
+            ELSE status
+        END,
+        activated_at = CASE
+            WHEN generation_id = $3 THEN COALESCE(activated_at, $1)
+            ELSE activated_at
+        END,
+        superseded_at = CASE
+            WHEN generation_id = $3 THEN NULL
+            WHEN status = 'active' THEN $1
+            ELSE superseded_at
+        END
+    WHERE scope_id = $2
+      AND (generation_id = $3 OR status = 'active')
+),
+scope_update AS (
+    UPDATE ingestion_scopes
+    SET status = 'active',
+        active_generation_id = $3,
+        ingested_at = $1
+    WHERE scope_id = $2
+)
 UPDATE fact_work_items
 SET status = 'succeeded',
     lease_owner = NULL,
@@ -99,6 +125,28 @@ WHERE stage = 'projector'
 `
 
 const failProjectorWorkQuery = `
+WITH failed_generation AS (
+    UPDATE scope_generations
+    SET status = 'failed'
+    WHERE generation_id = $6
+      AND status IN ('pending', 'active')
+),
+scope_update AS (
+    UPDATE ingestion_scopes
+    SET status = CASE
+            WHEN active_generation_id = $6 OR active_generation_id IS NULL THEN 'failed'
+            ELSE status
+        END,
+        active_generation_id = CASE
+            WHEN active_generation_id = $6 THEN NULL
+            ELSE active_generation_id
+        END,
+        ingested_at = CASE
+            WHEN active_generation_id = $6 OR active_generation_id IS NULL THEN $1
+            ELSE ingested_at
+        END
+    WHERE scope_id = $5
+)
 UPDATE fact_work_items
 SET status = 'failed',
     lease_owner = NULL,
