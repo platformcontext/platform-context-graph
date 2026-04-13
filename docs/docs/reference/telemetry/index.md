@@ -107,8 +107,10 @@ For shared-write debugging specifically:
 
 - Metrics answer repo queue wait, parse throughput, fact emission timing, and
   workspace pressure.
-- Traces show parse, fact emission, and inline projection timing.
-- Logs explain discovery choices, slow files, and per-repo progress.
+- Traces show parse, fact emission, inline projection timing, and parser
+  selection.
+- Logs explain discovery choices, slow files, parser snapshot collection, and
+  per-repo progress.
 
 ### Facts Layer
 
@@ -135,6 +137,8 @@ For shared-write debugging specifically:
   different mental model for collector, projector, reducer, or future Go
   services.
 - Use the report before restarting a service or forcing a broader re-index.
+- The collector proof lane still depends on transitional Python parser and
+  content-shaping seams, so it is not the final Go-owned runtime state yet.
 
 Shared-write-specific gauges:
 

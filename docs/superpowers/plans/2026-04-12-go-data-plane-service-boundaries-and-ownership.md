@@ -39,8 +39,6 @@ go/
       postgres/
       neo4j/
     telemetry/
-    compatibility/
-      pythonbridge/
 schema/
   data-plane/
     postgres/
@@ -69,13 +67,15 @@ schema/
 - `go/internal/storage/postgres/` may implement the status reader against SQL,
   but it must not absorb report projection, rendering, or future transport
   concerns.
-- `go/internal/compatibility/pythonbridge/` is the only allowed home for
-  temporary bridge code.
+- `go/internal/compatibility/pythonbridge/` is temporary removal-debt only.
+  During the remaining conversion it is the only allowed home for bridge code,
+  but the branch is not complete until that package is deleted.
 
 ## Legacy Post-Commit Bridge
 
 While the GraphBuilder family still owns a small recovery-only relationship
-surface, the Python bridge must stay explicit and narrow:
+surface, the remaining Python bridge must stay explicit and narrow until it is
+fully removed:
 
 ```mermaid
 flowchart LR
@@ -114,7 +114,7 @@ These areas should stay stable during early implementation:
 | Operator status | `go/internal/status/`, `go/cmd/admin-status/`, storage-specific readers under `go/internal/storage/` |
 | Projector | `go/internal/projector/`, `go/internal/graph/`, `go/internal/content/` |
 | Reducer | `go/internal/reducer/`, reducer-domain packages under `go/internal/reducer/` |
-| Compatibility bridge | `go/internal/compatibility/pythonbridge/` and minimal touched bridge points in Python |
+| Compatibility bridge | `go/internal/compatibility/pythonbridge/` and minimal touched bridge points in Python until deletion |
 | Validation | tests, fixtures, runbooks, and documentation updates tied to the active slice |
 
 ## Ownership Rules

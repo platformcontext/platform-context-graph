@@ -4,10 +4,11 @@
 
 ## Context
 
-PCG currently has a Python-heavy write path with procedural finalization seams.
-The rewrite must replace that path without allowing two long-lived architectures
-to grow in parallel. The architecture proof package is in place, but the actual
-Git write-plane cutover is still incomplete on this branch.
+PCG currently has Python-heavy write and parser/runtime seams with procedural
+finalization and content-shaping paths. The rewrite must replace those paths
+without allowing two long-lived architectures to grow in parallel. The
+architecture proof package is in place, but the actual Git write-plane and
+parser-platform cutovers are still incomplete on this branch.
 
 At the same time, the rewrite still needs a practical migration path so one
 existing domain can prove the new substrate before the entire platform flips at
@@ -21,14 +22,15 @@ PCG will use a narrow bridge and explicit cutover model:
 2. build the Go data-plane substrate
 3. prove one existing repo-backed domain on the new substrate
 4. flip ownership of that domain to the new path
-5. retire the equivalent legacy finalize path
+5. retire the equivalent legacy finalize and parser bridge paths
 
 The bridge is temporary and intentionally narrow.
 
 Rules:
 
 - no new product features land on the legacy write seam
-- no new collector work deepens the procedural finalize path
+- no new collector work deepens the procedural finalize path or the parser
+  bridge path
 - no second long-lived queue or orchestration model is introduced as a peer to
   the new data plane
 - once a domain flips, the legacy path stops owning that domain
@@ -36,10 +38,12 @@ Rules:
 Current branch status:
 
 - the Go runtime, admin/status, and projection surfaces are in place
-- the Git write plane still has temporary Python bridge ownership for selection,
-  snapshot collection, and recovery seams
-- no new ingestor family should start until the Git write-plane bridge is fully
-  removed and the cutover is proven end to end
+- the Git write plane still has temporary Python bridge ownership for
+  selection, snapshot collection, and recovery seams
+- the parser, discovery, and content-shaping path still has Python ownership on
+  the normal runtime path
+- no new ingestor family should start until the Python runtime ownership is
+  fully removed and the cutover is proven end to end
 
 ## Why This Choice
 

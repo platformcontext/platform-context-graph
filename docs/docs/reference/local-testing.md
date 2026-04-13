@@ -37,6 +37,7 @@ export PYTHONPATH=src
 | --- | --- |
 | Docs, `CLAUDE.md`, `AGENTS.md`, or README files | `uv run --with mkdocs --with mkdocs-material --with pymdown-extensions mkdocs build --strict --clean --config-file docs/mkdocs.yml` |
 | CLI/runtime wiring | `PYTHONPATH=src uv run pytest tests/integration/cli/test_cli_commands.py -q` |
+| Parser platform or collector snapshot flow | `PYTHONPATH=src uv run pytest tests/unit/parsers/test_sql_parser.py tests/unit/parsers/test_python_sql_mappings.py tests/unit/parsers/test_go_sql_extraction.py tests/unit/parsers/test_json_parser.py -q` |
 | Compose, Helm, or deployable runtime shape | `PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q` and `helm lint deploy/helm/platform-context-graph` |
 | Facts-first indexing, queue, or resolution flow | `PYTHONPATH=src:. uv run pytest tests/integration/indexing/test_git_facts_end_to_end.py tests/integration/indexing/test_git_facts_projection_parity.py -q` |
 | Phase 3 recovery controls | `PYTHONPATH=src:. uv run pytest tests/unit/facts/test_fact_work_queue_recovery.py tests/unit/api/test_admin_facts_recovery_router.py tests/integration/cli/test_remote_cli.py -q` |
@@ -44,9 +45,11 @@ export PYTHONPATH=src
 | Admin replay flow | `PYTHONPATH=src uv run pytest tests/integration/api/test_admin_facts_replay.py tests/integration/cli/test_admin_facts_replay_cli.py -q` |
 | Python file layout/quality gates | `python3 scripts/check_python_file_lengths.py --max-lines 500` and `git diff --check` |
 
-## Go Data Plane Milestone 1 Gate
+## Go Platform Conversion Gate
 
-Use this gate when validating the bounded Go rewrite proof path for Milestone 1.
+Use this gate when validating the bounded Go rewrite proof path for the native
+runtime and collector wiring. Parser conversion is part of the rewrite plan and
+uses the parser-specific gate above while the Go parser platform lands.
 
 Current bounded proof path:
 
@@ -66,7 +69,7 @@ go test ./internal/collector ./internal/compatibility/pythonbridge ./cmd/collect
   ./internal/reducer ./cmd/reducer -count=1
 ```
 
-Focused Python bridge gate:
+Legacy Python bridge retirement gate:
 
 ```bash
 PYTHONPATH=src uv run pytest \

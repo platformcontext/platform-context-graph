@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** fully remove Python ownership from the current PCG write plane so this branch can merge as a real Go write-plane conversion before any new ingestor work starts.
+**Goal:** fully remove Python ownership from the current PCG runtime and write plane so this branch can merge as a real Go platform conversion before any new ingestor work starts.
 
-**Architecture:** keep the Python read plane temporarily if needed, but move all collector, projection, reducer, recovery, and deployed write-runtime ownership to Go. The branch is complete only when the Git write path no longer depends on Python bridges, deployed write services no longer start from Python runtime entrypoints, and the legacy post-commit/finalization seam is deleted instead of documented forever.
+**Architecture:** move all collector, parser, projection, reducer, recovery, and deployed runtime ownership to Go. The branch is complete only when the Git parser and write path no longer depend on Python bridges, deployed runtime services no longer start from Python runtime entrypoints, and the legacy post-commit/finalization seam is deleted instead of documented forever.
 
 **Tech Stack:** Go, PostgreSQL, Neo4j, Docker Compose, Helm, OpenTelemetry, Python only as a shrinking compatibility surface until deletion.
 
@@ -12,17 +12,23 @@
 
 ## Current Truth
 
-The rewrite proof and documentation package is complete, but the Git write-plane
-conversion is not.
+The rewrite proof and documentation package is complete, but the full Python-
+to-Go platform conversion is not.
 
-The branch still has active Python-owned write-plane seams:
+The branch still has active Python-owned runtime seams:
 
-- Python runtime entrypoints still own deployed write roles in
+- Python runtime entrypoints still own deployed runtime roles in
   `src/platform_context_graph/cli/commands/runtime.py`.
 - `go/cmd/collector-git/service.go` still imports and depends on
   `go/internal/compatibility/pythonbridge/*`.
 - the Git collector still shells into Python bridge modules under
   `src/platform_context_graph/runtime/ingester/go_collector_*bridge.py`.
+- parser, discovery, snapshot, and content-shaping behavior still depend on
+  Python-owned runtime code in
+  `src/platform_context_graph/collectors/git/parse_execution.py`,
+  `src/platform_context_graph/collectors/git/parse_worker.py`,
+  `src/platform_context_graph/parsers/registry.py`, and
+  `src/platform_context_graph/content/ingest.py`.
 - recovery and refinalization still depend on Python bridge code in
   `src/platform_context_graph/collectors/git/finalize.py`,
   `src/platform_context_graph/indexing/post_commit_writer.py`, and
@@ -36,19 +42,16 @@ met.
 
 This branch is mergeable only when all of the following are true:
 
-- no deployed write service starts from Python runtime entrypoints
-- no Go write-plane service imports `go/internal/compatibility/pythonbridge`
+- no deployed runtime or write service starts from Python runtime entrypoints
+- no Go runtime service imports `go/internal/compatibility/pythonbridge`
 - no Python bridge modules under `src/platform_context_graph/runtime/ingester/`
   are required for normal Git ingestion
-- no normal recovery or refinalize path depends on Python finalization bridge
-  code
-- Docker Compose and Helm run the Go-owned write plane
-- local and cloud validation prove parity for the Git write path
+- no normal parser, discovery, snapshot, content-shaping, recovery,
+  refinalize, or admin-repair path depends on Python runtime ownership
+- Docker Compose and Helm run the Go-owned platform
+- local and cloud validation prove parity for the Git parser and write path
 
-The Python API, MCP, and query plane may remain for now. The write plane may
-not.
-
-No new ingestors before Git cutover completes.
+No new ingestors before the full Python-to-Go conversion completes.
 
 ## Chunk 1: Correct The Completion Bar
 
@@ -65,15 +68,16 @@ No new ingestors before Git cutover completes.
 
 - [ ] **Step 1: Change the branch language from "rewrite complete" to "rewrite proof complete, conversion incomplete"**
 
-Document that the proof/architecture package is done, but Git write-plane
-cutover is still in progress.
+Document that the proof/architecture package is done, but the full Python-to-
+Go platform conversion is still in progress and parser ownership remains in
+scope until the normal path is Go-owned.
 
 - [ ] **Step 2: Add the hard merge bar to the docs**
 
 Document the exact deletion and runtime-ownership conditions from the "Merge
 Bar" section above.
 
-- [ ] **Step 3: Add a visible "no new ingestors before Git cutover" rule**
+- [ ] **Step 3: Add a visible "no new ingestors before full conversion" rule**
 
 Put that rule in the rewrite SOW, roadmap, and collector authoring guide.
 
@@ -100,9 +104,9 @@ git add docs/superpowers/plans/2026-04-12-go-data-plane-rewrite-sow.md \
 git commit -m "docs(cutover): mark write-plane conversion incomplete"
 ```
 
-## Chunk 2: Remove Python From Collector-Git Hot Path
+## Chunk 2: Build Native Go Parser Platform And Collector Integration
 
-### Task 2: Replace Python repo selection and snapshotting with native Go
+### Task 2: Replace Python parser and collector-path ownership with native Go
 
 **Files:**
 - Modify: `go/cmd/collector-git/service.go`
@@ -122,12 +126,12 @@ git commit -m "docs(cutover): mark write-plane conversion incomplete"
 - Modify: `go/internal/collector/service_test.go`
 - Modify: `go/cmd/collector-git/service_test.go`
 
-- [ ] **Step 1: Write failing Go tests for native repo selection**
+- [ ] **Step 1: Write failing Go tests for native parser and repository selection**
 
-Cover repo discovery, filtering, and identity normalization without invoking
-Python.
+Cover repo discovery, filtering, identity normalization, parser dispatch,
+and content-shaping boundaries without invoking Python.
 
-- [ ] **Step 2: Write failing Go tests for native repo snapshot collection**
+- [ ] **Step 2: Write failing Go tests for native repository snapshot and parse collection**
 
 Cover per-repo snapshot capture, fingerprinting, content facts, and error
 paths without invoking Python.
@@ -137,7 +141,7 @@ paths without invoking Python.
 Move selection behavior into `go/internal/collector/git_selection_native.go`
 and wire `collector.GitSource.Selector` to the native implementation.
 
-- [ ] **Step 4: Implement native snapshot collection**
+- [ ] **Step 4: Implement native parser and snapshot collection**
 
 Move snapshot behavior into `go/internal/collector/git_snapshot_native.go` and
 wire `collector.GitSource.Snapshotter` to the native implementation.
@@ -188,9 +192,9 @@ git add go/cmd/collector-git \
 git commit -m "feat(cutover): remove python from collector-git hot path"
 ```
 
-## Chunk 3: Make Deployed Write Services Actually Go-Owned
+## Chunk 3: Make Deployed Runtime Services Actually Go-Owned
 
-### Task 3: Replace Python write-runtime entrypoints in deployable surfaces
+### Task 3: Replace Python runtime entrypoints in deployable surfaces
 
 **Files:**
 - Create: `go/cmd/ingester/main.go`
@@ -333,9 +337,9 @@ git rm src/platform_context_graph/indexing/post_commit_writer.py \
 git commit -m "feat(cutover): replace python finalization and recovery"
 ```
 
-## Chunk 5: Delete Python Write-Plane Ownership
+## Chunk 5: Delete Remaining Python Runtime Ownership
 
-### Task 5: Remove Python runtime/coordinator ownership from normal write flow
+### Task 5: Remove Python runtime/coordinator ownership from the normal platform flow
 
 **Files:**
 - Modify: `src/platform_context_graph/cli/commands/runtime.py`
@@ -377,7 +381,7 @@ Expected:
 
 - no normal write-plane dependency on `pythonbridge`
 - no live Go collector bridge modules left
-- no Python runtime entrypoints still presented as the deployed write plane
+- no Python runtime entrypoints still presented as deployed runtime owners
 
 - [ ] **Step 5: Run final parity gates**
 
@@ -423,8 +427,8 @@ Best estimate:
 - Chunk 5: Large
 
 In plain language: the hardest and most merge-critical part is still ahead,
-because it is deletion, ownership flip, and parity proof work rather than
-proof-of-concept work.
+because it is deletion, ownership flip, parser conversion, and parity proof
+work rather than proof-of-concept work.
 
 ## Stop Rule
 

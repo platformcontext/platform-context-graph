@@ -207,9 +207,9 @@ flowchart LR
 7. The same projection flow dual-writes file and entity content into Postgres.
 8. Query surfaces continue reading the canonical graph and content store.
 
-For the current Git cutover, the indexing coordinator can still drive the same
-resolution path in-process so one indexing run completes deterministically even
-without a separate runtime hop.
+For the current platform conversion, the indexing coordinator can still drive
+the same resolution path in-process so one indexing run completes
+deterministically even without a separate runtime hop.
 
 That is the current operating baseline, not the destination. In the target
 architecture:
@@ -221,9 +221,10 @@ architecture:
 - reducers own shared cross-source correlation
 - the API, MCP, and CLI stay read-only over canonical state
 
-The remaining Python post-commit path is a repair bridge only. It preserves
-safe recovery for the current branch, but it is not the architectural landing
-zone for AWS, Kubernetes, SQL/data, or any other future collector.
+The remaining Python post-commit, parser, and content-shaping paths are
+temporary conversion debt only. They preserve safe recovery and bounded Git
+parity on the current branch, but they are not the architectural landing zone
+for AWS, Kubernetes, SQL/data, or any other future collector.
 
 Status surfaces can report `awaiting_shared_projection` while authoritative
 shared follow-up remains pending for an accepted repository generation.

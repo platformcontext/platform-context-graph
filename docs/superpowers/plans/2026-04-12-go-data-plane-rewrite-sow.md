@@ -4,7 +4,7 @@
 
 **Branch policy:** one long-lived rewrite branch, one active worktree, no feature branching inside the rewrite, no direct commits to `main`, and no parallel feature work until the rewrite milestones are complete and merged.
 
-**Purpose:** replace the current Python-heavy write path with a schema-first Go data plane that can scale to Git, SQL, AWS, Kubernetes, and future collectors without turning PCG into a procedural beast.
+**Purpose:** replace the current Python-owned runtime and parser path with a schema-first Go data plane that can scale to Git, SQL, AWS, Kubernetes, and future collectors without turning PCG into a procedural beast.
 
 **Non-goals:** new user-facing features, collector feature expansion, cloud provider integrations beyond the proof gates in this document, and any redesign that bypasses the canonical scope/generation/fact/reducer flow described below.
 
@@ -22,21 +22,21 @@
 - Milestone 5: complete
 
 The rewrite proof and documentation package is complete on this branch, but
-the Git write-plane conversion is not complete yet. Future work must finish
-the cutover before any new ingestor work starts.
+the full Python-to-Go platform conversion is not complete yet. Future work
+must finish the conversion before any new ingestor work starts.
 
 Hard merge bar for the branch:
 
-- no deployed write service starts from Python runtime entrypoints
-- no Go write-plane service imports `go/internal/compatibility/pythonbridge`
+- no deployed runtime or write service starts from Python runtime entrypoints
+- no Go runtime service imports `go/internal/compatibility/pythonbridge`
 - no Python bridge modules under `src/platform_context_graph/runtime/ingester/`
   are required for normal Git ingestion
-- no normal recovery or refinalize path depends on Python finalization bridge
-  code
-- Docker Compose and Helm run the Go-owned write plane
-- local and cloud validation prove parity for the Git write path
+- no normal parser, discovery, snapshot, content-shaping, recovery, refinalize,
+  or admin-repair path depends on Python runtime ownership
+- Docker Compose and Helm run the Go-owned platform
+- local and cloud validation prove parity for the Git parser and write path
 
-No new ingestors before Git cutover completes.
+No new ingestors before the full Python-to-Go conversion completes.
 
 ## Companion Execution Documents
 
@@ -153,6 +153,7 @@ The data plane must not depend on Python runtime behavior for core write-path co
 
 - versioned Protobuf contracts, ideally generated through Buf
 - Go service entrypoints for the future collector/reducer/runtime boundaries
+- Go parser platform entrypoints for discovery, parse execution, and content shaping
 - storage adapters for facts, queues, and canonical writes
 - explicit nullable field handling and validation at the edges
 - deterministic local test harnesses for contract and flow verification
@@ -173,15 +174,15 @@ The data plane must not depend on Python runtime behavior for core write-path co
 
 ### Hard merge bar reminder
 
-The branch cannot be treated as done until the Git write plane is fully Go-owned
-and the Python write-path bridges are removed. No new ingestors start before
-that cutover is complete.
+The branch cannot be treated as done until the full Git parser and write plane
+are Go-owned and the Python runtime bridges are removed. No new ingestors start
+before that conversion is complete.
 
 ### Proof required before progressing
 
 - one existing repo-based workload or domain is moved onto the new substrate
 - the moved path is exercised locally and, when appropriate, in the cloud test instance
-- telemetry shows the complete path from ingest to canonical write
+- telemetry shows the complete path from parser through ingest to canonical write
 
 ---
 

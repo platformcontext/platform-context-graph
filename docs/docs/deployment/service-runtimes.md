@@ -28,11 +28,14 @@ For the Go rewrite, that contract is the same for every long-running service:
 
 Current branch caveat:
 
-- the Git write plane is still not fully Go-owned end to end
-- `collector-git` still uses temporary Python adapters for repository selection
-  and per-repo parser snapshot collection
+- the platform is still not fully Go-owned end to end
+- `collector-git` still uses temporary Python adapters for repository
+  selection, per-repo parser snapshot collection, and related parser/content
+  shaping seams
 - those adapters are transitional and must be removed before the cutover is
   called complete
+- no new ingestor family should start until the Python runtime ownership is
+  gone and the parser cutover is proven end to end
 
 ## Runtime Contract
 
@@ -69,10 +72,11 @@ but they do follow the same shared admin contract:
 - `reducer`: `go run ./cmd/reducer`
 
 `collector-git` owns cycle orchestration, durable fact commit, and the shared
-admin surface in Go. Repository selection and per-repo parser snapshot
-collection still use narrowed transitional Python adapters. That bridge is
-intentional only until the Git write-plane cutover lands, and it is tracked as
-removal debt rather than a final architecture.
+admin surface in Go. Repository selection, parser discovery, per-repo snapshot
+collection, and content shaping still use narrowed transitional Python
+adapters. That bridge is intentional only until the Git write-plane and parser
+cutovers land, and it is tracked as removal debt rather than a final
+architecture.
 
 ## Admin Contract
 
@@ -103,6 +107,8 @@ Current rewrite status:
   lifecycle without bespoke HTTP bootstrap code
 - `collector-git`, `projector`, and `reducer` all mount that shared admin
   surface in their local proof lanes
+- the collector proof lane still depends on transitional Python parser and
+  content-shaping seams, so it is not the final Go-owned runtime state yet
 
 ## Incremental Refresh And Reconciliation
 

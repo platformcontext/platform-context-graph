@@ -108,9 +108,12 @@ boundaries:
 - `collectors/git/finalize.py`: legacy post-commit compatibility adapter for
   graph-safe recovery and re-finalization; this is temporary until the Git
   write-plane cutover is complete
+- `collectors/git/` parser, discovery, and content-shaping modules: temporary
+  Python-owned normal-path seams that must be removed as the parser platform
+  moves to Go
 - future `collectors/<source>/` families: source-specific adapters for AWS,
   Kubernetes, ETL, and other product domains, but only after the Git cutover
-  finishes
+  and parser-platform cutovers finish
 - `facts/models/`: typed fact contracts for repository/file/entity observations
 - `facts/storage/`: Postgres-backed fact storage
 - `facts/work_queue/`: Postgres-backed work item queue used by the Resolution Engine
@@ -153,6 +156,8 @@ The important rewrite rule is simple:
 - add source-local projection under `resolution/`
 - add shared cross-domain logic under reducer-owned resolution packages
 - do not add new production behavior under the legacy finalize bridge
+- do not add new production behavior under the legacy parser bridge or
+  `runtime/ingester/*bridge.py`
 
 ## Query Package Layout
 
@@ -179,8 +184,8 @@ acquisition and indexing grouped under its own subpackage:
 - `runtime/ingester/git.py`: git sync helpers
 - `runtime/ingester/support.py`: shared runtime support functions
 - `runtime/ingester/*bridge.py`: temporary Git cutover adapters for repository
-  selection, parser snapshot collection, and recovery; these are removal debt,
-  not the target runtime architecture
+  selection, parser snapshot collection, content shaping, and recovery; these
+  are removal debt, not the target runtime architecture
 
 The ingester increasingly depends on canonical packages rather than `tools/`:
 
@@ -190,8 +195,8 @@ The ingester increasingly depends on canonical packages rather than `tools/`:
 - `graph/` for canonical graph writes
 - `resolution/` for Resolution Engine orchestration and workload/platform materialization
 
-Do not start new ingestor families until the Git write-plane cutover and
-bridge removal are complete.
+Do not start new ingestor families until the Git write-plane cutover, parser
+platform cutover, and bridge removal are complete.
 
 ## Platform Package Layout
 
