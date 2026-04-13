@@ -60,6 +60,28 @@ Use these fields to move between Grafana, Loki, and traces:
 - `trace_id`
 - `span_id`
 
+## Status Surfaces
+
+Use the operator surface that matches the question you are trying to answer:
+
+- `pcg index-status` is the fastest local or remote checkpointed completeness
+  signal.
+- `GET /api/v0/index-status` and `GET /api/v0/index-runs/{run_id}` are the
+  deployed completeness views exposed by the public API service.
+- `GET /admin/status` is the live runtime-health and backlog surface for Go
+  proof runtimes and other services that mount the shared runtime admin
+  contract.
+
+Keep the distinction explicit:
+
+- `/health`, `/healthz`, and `/readyz` answer process health and readiness, not
+  whether a scope, repository, or generation has finished indexing.
+- `index-status` answers checkpointed run completeness, not whether a runtime
+  is currently healthy.
+- `pcg finalize` and `/admin/refinalize` are repair surfaces. The mounted admin
+  refinalize path is graph-safe only; file-dependent post-commit bridge stages
+  remain CLI-only until the projector/reducer replacement path exists.
+
 ## Spans
 
 | Span name | Where it appears | Why it matters |
@@ -93,9 +115,10 @@ Useful span attributes:
 - `pcg.index.file_parse_strategy`
 
 The `pcg.index.finalize*` spans are transitional bridge signals for the
-remaining Python post-commit recovery path. New projector or reducer work
-should emit queue, projector, or reducer spans instead of extending the
-finalization family.
+remaining Python post-commit recovery path. Treat them as repair-path evidence,
+not as the canonical telemetry family for new architecture work. New
+projector or reducer behavior should emit queue, projector, or reducer spans
+instead of extending the finalization family.
 
 ## Metrics
 
@@ -165,6 +188,14 @@ Treat that as compatibility noise, not a dashboard baseline.
 Treat `index.finalization.*` the same way for new architecture work: these
 events remain important for legacy repair and bridge visibility, but they are
 not the target event family for future collector, projector, or reducer logic.
+
+When an operator needs to answer "is the service alive?" versus "did the data
+plane finish the work?", pair the log family with the matching status surface:
+
+- health or readiness questions: runtime probe endpoints and runtime logs
+- completeness questions: `index-status`, run details, and checkpoint logs
+- repair-path questions: finalization spans, `index.finalization.*`, and
+  `pcg finalize` or `/admin/refinalize` output
 
 ## Dashboard Questions
 

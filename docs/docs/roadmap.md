@@ -57,7 +57,7 @@ The rewrite contract for this phase is captured in:
 | 2 | Scope-first ingestion and incremental refresh | Large | scope/generation lifecycle, replay-safe refresh, no full re-index dependency |
 | 3 | Canonical truth layers and reducer ownership | Large | cross-source correlation, layered truth, canonical-first query behavior |
 | 4 | Legacy write-path retirement | Medium | proof bridge removal, regression coverage, no new logic on the old seam |
-| 5 | Multi-collector expansion | Large | AWS/Kubernetes proof, partitioned scale, end-to-end code-to-cloud flow |
+| 5 | Documentation and operator guidance | Medium | locked runbooks, traversal maps, collector onboarding, and truthful operator surfaces |
 
 ## Rewrite Status Notes
 
@@ -82,6 +82,10 @@ core platform contract.
 - keep Git, cloud, and data sources aligned through shared reducers
 - validate code -> IaC -> cloud -> workload -> data graph flows end to end
 
+That phase should start from the locked rewrite docs, not from fresh design
+debates. Future collector work should reuse the scope/generation/fact/reducer
+model and the shared operator/admin contract documented in this branch.
+
 ### Phase 6: Backend And Scale Validation
 
 Use the rewritten data plane and the first multi-collector workloads to measure
@@ -92,6 +96,16 @@ what actually limits scale.
 - measure reducer throughput and saturation
 - decide whether the backend mix still fits the workload
 - evaluate alternatives only with real performance evidence
+
+### Phase 7: Collector Framework Maturity
+
+After the first multi-collector proof is stable, harden the collector
+framework itself.
+
+- standardize collector onboarding and telemetry
+- keep collector families additive instead of special-case
+- remove transitional bridge paths once parity is proven
+- make new source families follow the same scope/generation/fact/reducer shape
 
 ## Longer-term
 

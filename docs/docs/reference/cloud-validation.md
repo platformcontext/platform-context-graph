@@ -11,6 +11,7 @@ questions:
 - `health` or `healthz` proves the process is alive and initialized
 - `index-status` proves a run or repository checkpoint completed
 - `/admin/status` proves the live runtime stage, backlog, and failure state
+  when the runtime mounts the shared admin surface
 
 Do not stop at pod health when the goal is operator confidence in freshness.
 

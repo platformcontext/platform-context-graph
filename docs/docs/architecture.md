@@ -33,6 +33,10 @@ re-indexing. Normal updates should touch the affected scope or shard, produce a
 new generation, and reconcile only the changed unit of truth. Full rebuilds
 remain available as explicit bootstrap or recovery operations.
 
+For new source families, use the
+[Collector Authoring Guide](guides/collector-authoring.md) as the guardrail for
+where collector logic stops and projector or reducer ownership begins.
+
 That split means steady-state health needs two different backlog views:
 
 - the fact work queue tells you whether repository projection work is arriving,
@@ -216,6 +220,10 @@ architecture:
   materialization
 - reducers own shared cross-source correlation
 - the API, MCP, and CLI stay read-only over canonical state
+
+The remaining Python post-commit path is a repair bridge only. It preserves
+safe recovery for the current branch, but it is not the architectural landing
+zone for AWS, Kubernetes, SQL/data, or any other future collector.
 
 Status surfaces can report `awaiting_shared_projection` while authoritative
 shared follow-up remains pending for an accepted repository generation.

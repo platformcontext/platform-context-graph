@@ -3,6 +3,8 @@
 PlatformContextGraph resolves repository-to-repository relationships in a dynamic, evidence-backed flow. The important part is not just what edges exist, but when each stage runs, which stage owns truth, and which results are only derived summaries for answering questions.
 
 If you want public, example-driven diagrams of the relationship shapes this produces, see the [Relationship Graph Examples guide](../guides/relationship-graphs.md).
+If you want the logging, tracing, and verification companion for this flow, see
+[Relationship Mapping Observability](relationship-mapping-observability.md).
 
 The rule of thumb is:
 
@@ -459,76 +461,13 @@ Keep canonical rules portable and open-source friendly.
 - Avoid hidden local knowledge that only works in one corpus.
 - If a heuristic is useful but narrow, keep it explainable and treat it as a heuristic, not a universal law.
 
-## Observability And Verification
+## Operational Companion
 
-Relationship mapping uses the shared observability contract.
+Keep the ownership and precedence rules in this document as the canonical
+design reference. Use
+[Relationship Mapping Observability](relationship-mapping-observability.md)
+when you need:
 
-### Logging
-
-Logs must stay JSON on stdout.
-
-- keep stable machine-readable `event_name` values
-- keep custom dimensions under `extra_keys`
-- keep trace and correlation fields intact
-- do not add ad hoc top-level log keys
-
-Current relationship events include:
-
-- `relationships.discover_file_evidence.completed`
-- `relationships.discover_gitops_evidence.completed`
-- `relationships.discover_evidence.completed`
-- `relationships.persist_generation.completed`
-- `relationships.project.completed`
-- `relationships.resolve.completed`
-- `relationships.resolve.failed`
-
-### OTEL
-
-Use OTEL spans around the extractor family and the overall resolve/project phases.
-
-Current span families include:
-
-- `pcg.relationships.discover_evidence`
-- `pcg.relationships.discover_evidence.file`
-- `pcg.relationships.discover_evidence.terraform`
-- `pcg.relationships.discover_evidence.helm`
-- `pcg.relationships.discover_evidence.kustomize`
-- `pcg.relationships.discover_evidence.gitops`
-- `pcg.relationships.discover_evidence.argocd`
-- `pcg.relationships.resolve_repository_dependencies`
-- `pcg.relationships.project`
-
-### Required Tests
-
-Every new mapping family should come with:
-
-- unit tests for the extractor
-- unit tests for resolver precedence or coexistence
-- a negative test that proves unrelated repos stay unrelated
-- a mixed-corpus validation run when the family changes answer shape
-
-For this slice, the important relationship tests are in:
-
-- `tests/unit/relationships/test_file_evidence.py`
-- `tests/unit/relationships/test_resolver.py`
-
-## Example Multi-Chain
-
-One useful pattern from the local corpus is:
-
-```text
-gitops-control-plane
-  DISCOVERS_CONFIG_IN -> platform-observability
-  DISCOVERS_CONFIG_IN -> helm-charts
-
-home-service
-  DEPLOYS_FROM -> helm-charts
-
-search-api
-  DEPLOYS_FROM -> helm-charts
-
-payments-api
-  DEPLOYS_FROM -> helm-charts
-```
-
-That is more truthful than flattening everything into a generic dependency chain. It preserves the control-plane meaning of the ArgoCD repo while keeping downstream deployment answers queryable.
+- the logging and tracing families for relationship mapping
+- the required verification expectations
+- example multi-hop relationship chains for operator debugging

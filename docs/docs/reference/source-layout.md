@@ -2,6 +2,11 @@
 
 PlatformContextGraph keeps the importable Python package under `src/platform_context_graph/` and organizes it by responsibility instead of by transport-specific duplication.
 
+For rewrite-era source families, pair this page with the
+[Collector Authoring Guide](../guides/collector-authoring.md). The guide covers
+service-boundary and traversal rules; this page explains where those decisions
+live in the repository today.
+
 ## Top-Level Package Map
 
 | Package | Responsibility |
@@ -102,6 +107,8 @@ boundaries:
 - `collectors/git/`: repository discovery, `.gitignore`, parse workers, path indexing, parse execution, and facts-first Git collection support
 - `collectors/git/finalize.py`: legacy post-commit compatibility adapter for
   graph-safe recovery and re-finalization
+- future `collectors/<source>/` families: source-specific adapters for AWS,
+  Kubernetes, ETL, and other product domains
 - `facts/models/`: typed fact contracts for repository/file/entity observations
 - `facts/storage/`: Postgres-backed fact storage
 - `facts/work_queue/`: Postgres-backed work item queue used by the Resolution Engine
@@ -135,6 +142,13 @@ complete while still moving graph-write ownership out of the collector logic.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.
+
+The important rewrite rule is simple:
+
+- add new collector logic under source-specific collection or facts packages
+- add source-local projection under `resolution/`
+- add shared cross-domain logic under reducer-owned resolution packages
+- do not add new production behavior under the legacy finalize bridge
 
 ## Query Package Layout
 

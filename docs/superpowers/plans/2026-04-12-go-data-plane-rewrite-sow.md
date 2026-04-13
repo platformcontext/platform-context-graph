@@ -19,13 +19,19 @@
 - Milestone 2: complete
 - Milestone 3: complete
 - Milestone 4: complete
-- Milestone 5: next active milestone
+- Milestone 5: complete
+
+The rewrite SOW is now complete on this branch. Future work should start from
+the locked collector, traversal, and operator docs instead of reopening the
+core service-boundary decisions.
 
 ## Companion Execution Documents
 
 Use these documents together with this SOW before parallel implementation begins:
 
 - [Rewrite Documentation Index](2026-04-12-go-data-plane-doc-set-index.md)
+- [Collector Authoring Guide](../../docs/guides/collector-authoring.md)
+- [Relationship Mapping Observability And Examples](../../docs/reference/relationship-mapping-observability.md)
 - [Service Boundaries And Ownership](2026-04-12-go-data-plane-service-boundaries-and-ownership.md)
 - [Contract Freeze Plan](2026-04-12-go-data-plane-contract-freeze-plan.md)
 - [Milestone Operating Model](2026-04-12-go-data-plane-milestone-operating-model.md)
@@ -64,6 +70,8 @@ The intended service boundaries are:
 The rewrite is successful only when the system can support separate collector services without requiring a full re-index for every repo or cloud resource change.
 
 Every material architecture change must also update a repo-hosted end-to-end traversal map that shows how a bounded work unit crosses collector, projector, reducer, and canonical write stages.
+
+Collectors may still use a transitional bridge during cutover, but the bridge is not a long-term owner. The docs must say when the bridge can be removed.
 
 ---
 
@@ -339,7 +347,7 @@ Local validation is mandatory for every milestone. Minimum expectations:
 - docs build checks for any document changes
 - file length and diff sanity checks for touched code
 
-Use the local runbook as the default starting point:
+Use the local runbooks as the default starting point:
 
 - `docs/docs/reference/local-testing.md`
 - `docs/docs/deployment/service-runtimes.md`
@@ -353,7 +361,7 @@ Cloud validation must prove:
 
 - separate collectors can run independently
 - the new data plane scales without full re-indexes on every change
-- telemetry, tracing, and logging remain coherent under real runtime conditions
+- telemetry, tracing, and logging stay coherent under real runtime conditions
 - the API and MCP plane continue to read canonical truth correctly
 
 ### Quality gates
@@ -430,84 +438,25 @@ Rules:
 - no direct commits to `main`
 - no PRs that mix rewrite substrate work with unrelated cleanup
 - no code changes that are not tied to a milestone, proof step, or necessary bridge
-
-If a change is not part of the rewrite contract, it waits.
-
-Exit criteria:
-
-- the branch remains understandable after long pauses
-- workers can pick up the same branch without re-litigating scope
-- the rewrite does not drift into unrelated feature delivery
+If a change is not part of the rewrite contract, it waits. The branch must remain understandable after long pauses, and workers must be able to resume without re-litigating scope.
 
 ---
 
 ## Risks
 
-### Risk: Dual-path drift
-
-If the old and new write paths coexist too long, the old path will continue to attract “small” fixes and the rewrite will stall.
-
-Mitigation:
-
-- freeze the legacy path as soon as the new contracts are proven
-- keep the migration scope explicit
-- do not add new features to the old seam
-
-### Risk: Contract churn
-
-If scope, generation, fact, or reducer contracts keep changing, downstream work will slow down.
-
-Mitigation:
-
-- freeze contracts early
-- version changes deliberately
-- keep the change surface visible in docs
-
-### Risk: Telemetry blind spots
-
-If the rewrite lands without strong observability, operators will not trust it.
-
-Mitigation:
-
-- make telemetry, tracing, and logging part of the acceptance criteria
-- validate observability locally and in the cloud test instance
-
-### Risk: Performance regressions
-
-If the rewrite becomes only a correctness exercise, it may not scale.
-
-Mitigation:
-
-- measure queue and reducer behavior under local load
-- prove partitioned work and bounded snapshots before adding cloud collectors
-
-### Risk: Over-modeling
-
-If scope and generation become dumping grounds, the platform will become harder to understand instead of easier.
-
-Mitigation:
-
-- keep the scope model focused on ownership, lifecycle, hierarchy, and replay
-- do not use the scope tables as a second graph database
+- Dual-path drift: if the old and new write paths coexist too long, the old path will attract “small” fixes and the rewrite will stall. Freeze the legacy path as soon as the new contracts are proven.
+- Contract churn: if scope, generation, fact, or reducer contracts keep changing, downstream work will slow down. Freeze contracts early and version changes deliberately.
+- Telemetry blind spots: if the rewrite lands without strong observability, operators will not trust it. Make telemetry, tracing, and logging part of the acceptance criteria and validate them locally and in the cloud test instance.
+- Performance regressions: if the rewrite becomes only a correctness exercise, it may not scale. Measure queue and reducer behavior under local load and prove partitioned work before adding cloud collectors.
+- Over-modeling: if scope and generation become dumping grounds, the platform will become harder to understand instead of easier. Keep the scope model focused on ownership, lifecycle, hierarchy, and replay.
 
 ---
 
 ## Dependencies
 
-The rewrite depends on:
+The rewrite depends on the current runtime and local testing guidance already documented in the repo, a stable long-running branch with no concurrent feature work, disciplined contract ownership, local and cloud validation access, strong test coverage for the data plane, and explicit agreement that the rewrite may replace the current write path instead of preserving it indefinitely.
 
-- the current runtime and local testing guidance already documented in the repo
-- a stable long-running branch with no concurrent feature work
-- disciplined contract ownership
-- local and cloud validation access
-- strong test coverage for the data plane
-- explicit agreement that the rewrite is allowed to replace the current write path instead of preserving it indefinitely
-
-Optional but valuable dependencies:
-
-- one existing repo-based domain to use as the proof migration
-- one non-trivial cross-source domain to validate reducer ownership
-- a cloud test instance for end-to-end verification after local proof
+Optional but valuable dependencies are one existing repo-based domain for the proof migration, one non-trivial cross-source domain to validate reducer ownership, and a cloud test instance for end-to-end verification after local proof.
 
 ---
 

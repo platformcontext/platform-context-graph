@@ -28,6 +28,22 @@ For a shared deployment over HTTP:
 pcg serve start --host 0.0.0.0 --port 8080
 ```
 
+## Canonical Versus Repair Surfaces
+
+Use the canonical query and status surfaces first:
+
+- story, context, trace, and content tools for graph-backed answers
+- `index-status` when you need checkpointed completeness
+- runtime health or `/admin/status` when you need live service state
+
+Treat repair surfaces as repair surfaces:
+
+- `pcg finalize` and `POST /api/v0/admin/refinalize` are for controlled
+  recovery, not for normal question answering
+- the hosted admin refinalize route is graph-safe only
+- file-dependent bridge stages remain CLI-only until the Go-owned replacement
+  exists
+
 ## Before and after
 
 **Without MCP** — you ask your AI assistant "What does the payment service depend on?"

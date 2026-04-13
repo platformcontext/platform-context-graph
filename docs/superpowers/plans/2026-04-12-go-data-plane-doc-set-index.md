@@ -19,6 +19,11 @@ Read these documents in order before implementation work begins:
 7. [Milestone 1: Native Git Cutover And Operability](2026-04-12-go-data-plane-milestone-01-native-git-cutover.md)
 8. [Parallel Execution Plan](2026-04-12-go-data-plane-parallel-execution-plan.md)
 9. [Validation And Cutover Plan](2026-04-12-go-data-plane-validation-and-cutover-plan.md)
+10. [Collector Authoring Guide](../../docs/guides/collector-authoring.md)
+11. [Cloud Validation Runbook](../../docs/reference/cloud-validation.md)
+12. [System Architecture](../../docs/architecture.md)
+13. [Relationship Mapping](../../docs/reference/relationship-mapping.md)
+14. [Relationship Mapping Observability And Examples](../../docs/reference/relationship-mapping-observability.md)
 
 ## Canonical Roles
 
@@ -33,6 +38,10 @@ Read these documents in order before implementation work begins:
 | Milestone plan | Current milestone workstreams, waves, effort, and remaining backlog |
 | Parallel execution plan | How multiple agents can work safely in parallel |
 | Validation and cutover plan | How the new substrate is proven and flipped into authority |
+| Collector authoring guide | How new ingestors fit the shared scope/generation/fact/reducer contract |
+| Cloud validation runbook | Hosted verification order and operator evidence checks |
+| Architecture and traversal references | Canonical end-to-end flow, ownership boundaries, and repair-path limits |
+| Relationship-mapping observability appendix | The traversal appendix and observability examples for the relationship map |
 
 ## Documentation Rules
 
@@ -41,6 +50,8 @@ Read these documents in order before implementation work begins:
   update.
 - New data-plane flow changes require the end-to-end traversal map to be
   updated in the repo docs.
+- New collector onboarding rules require the collector authoring guide to be
+  updated alongside the architecture page.
 - No durable design decision lives only in chat, comments, or PR review.
 - The draft PR description should summarize these docs, not replace them.
 - If two docs disagree, the ADR wins for design intent and the SOW wins for

@@ -222,3 +222,21 @@ pcg workspace watch
 Path-first commands such as `pcg index <path>` and `pcg watch <path>` still work as
 local filesystem convenience wrappers. They do not replace the canonical workspace
 source model.
+
+## Repair And Bridge Commands
+
+Some CLI and admin commands exist to preserve safe recovery during the rewrite.
+Treat them as repair surfaces, not as the default long-running ownership model.
+
+- `pcg finalize` remains the CLI repair path for post-commit recovery and
+  backup repair flows that still need file-dependent bridge stages.
+- `pcg admin refinalize` uses the same explicit post-commit writer contract,
+  but the mounted admin path is graph-safe only. It does not run
+  file-dependent bridge stages.
+- `pcg workspace index` and `pcg workspace watch` remain valuable for local
+  proof and workstation workflows, but the canonical deployed write plane is
+  still the split `ingester` plus `resolution-engine` runtime model.
+
+If you are tuning or operating a deployed environment, start with the runtime
+and queue settings for the service you are scaling. Use the repair commands
+only when you are intentionally replaying or recovering already-collected data.

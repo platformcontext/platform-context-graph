@@ -41,10 +41,12 @@ nav:
     - Minimal Manifests: deployment/manifests.md
     - Argo CD: deployment/argocd.md
     - Local Testing: reference/local-testing.md
+    - Cloud Validation: reference/cloud-validation.md
     - Baseline Performance: reference/baseline-performance.md
   - Guides:
     - Starter Prompts: guides/starter-prompts.md
     - Connect an MCP Client: guides/mcp-guide.md
+    - Collector Authoring: guides/collector-authoring.md
     - Explore Relationship Graphs: guides/relationship-graphs.md
     - Visualize Query Results: guides/visualization.md
     - Work With Bundles: guides/bundles.md
@@ -68,6 +70,7 @@ nav:
     - Modes: concepts/modes.md
     - Architecture: architecture.md
     - Relationship Mapping: reference/relationship-mapping.md
+    - Relationship Mapping Observability: reference/relationship-mapping-observability.md
     - ".pcgignore": reference/pcgignore.md
     - Troubleshooting: reference/troubleshooting.md
     - Telemetry:
