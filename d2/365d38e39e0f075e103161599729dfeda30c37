@@ -1,0 +1,99 @@
+docs/superpowers/plans/2026-04-13-go-data-plane-ownership-completion-plan.md
+  1ca5ee6ce936a402 201,210,215-218,233,307,314,318-319,321,329,333-338,353
+go/internal/reducer/platform_families_test.go
+  1ca5ee6ce936a402 1-208
+schema/data-plane/postgres/008_shared_projection_intents.sql
+  1ca5ee6ce936a402 1-25
+go/internal/reducer/shared_projection.go
+  1ca5ee6ce936a402 1-102
+go/internal/reducer/platform_families.go
+  1ca5ee6ce936a402 1-267
+go/internal/storage/postgres/schema_test.go
+  1ca5ee6ce936a402 16-17,28
+go/internal/reducer/partitioning.go
+  1ca5ee6ce936a402 1-20
+go/internal/reducer/platforms_test.go
+  1ca5ee6ce936a402 1-189
+go/internal/reducer/platforms.go
+  1ca5ee6ce936a402 1-227
+go/internal/storage/postgres/shared_intents_test.go
+  1ca5ee6ce936a402 1-442
+go/internal/reducer/partitioning_test.go
+  1ca5ee6ce936a402 1-83
+go/internal/reducer/shared_projection_test.go
+  1ca5ee6ce936a402 1-171
+go/internal/storage/postgres/shared_intents.go
+  1ca5ee6ce936a402 1-252
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "d2365d38e39e0f075e103161599729dfeda30c37",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 2694,
+      "total_deletions": 1481,
+      "accepted_lines": 2397,
+      "overriden_lines": 0
+    },
+    "21d0652afb873020": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-260c-7752-ba40-57ff788997eb",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "22a2a4042c410746": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84f1-43ec-7290-9623-acd2dad2ccd7",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 40,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 68,
+      "overriden_lines": 0
+    },
+    "b0d410b9f01dc4ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-2326-7162-8155-6de99ff655dd",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 11,
+      "overriden_lines": 0
+    }
+  }
+}
