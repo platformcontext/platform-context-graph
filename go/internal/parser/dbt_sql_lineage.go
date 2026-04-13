@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// ColumnLineage describes one output column and the source columns that feed it.
 type ColumnLineage struct {
 	OutputColumn        string
 	SourceColumns       []string
@@ -13,6 +14,7 @@ type ColumnLineage struct {
 	TransformExpression string
 }
 
+// CompiledModelLineage summarizes lineage extracted from one compiled dbt model.
 type CompiledModelLineage struct {
 	ColumnLineage        []ColumnLineage
 	UnresolvedReferences []map[string]string
