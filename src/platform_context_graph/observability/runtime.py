@@ -125,6 +125,8 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
     index_repo_content_write_duration: Any = field(init=False, default=None)
     index_fallback_resolution_total: Any = field(init=False, default=None)
     index_ambiguous_resolution_total: Any = field(init=False, default=None)
+    query_total: Any = field(init=False, default=None)
+    query_duration: Any = field(init=False, default=None)
 
     def __post_init__(self) -> None:
         """Create the tracer, meter, and metric instruments for the runtime."""
@@ -242,6 +244,10 @@ class ObservabilityRuntime(RuntimeMetricsMixin):
         )
         self.index_ambiguous_resolution_total = self.meter.create_counter(
             "pcg_index_ambiguous_resolution_total"
+        )
+        self.query_total = self.meter.create_counter("pcg_query_total")
+        self.query_duration = self.meter.create_histogram(
+            "pcg_query_duration_seconds", unit="s"
         )
 
         self.meter.create_observable_gauge(
