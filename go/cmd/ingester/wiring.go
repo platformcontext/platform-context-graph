@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
@@ -15,6 +17,7 @@ import (
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 const (
@@ -49,18 +52,21 @@ func (c compositeRunner) Run(ctx context.Context) error {
 }
 
 func buildIngesterService(
-	database postgres.SQLDB,
+	database postgres.ExecQueryer,
 	graphWriter graph.Writer,
 	getenv func(string) string,
 	getwd func() (string, error),
 	environ func() []string,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
+	logger *slog.Logger,
 ) (compositeRunner, error) {
-	collectorSvc, err := buildIngesterCollectorService(database, getenv, getwd, environ)
+	collectorSvc, err := buildIngesterCollectorService(database, getenv, getwd, environ, tracer, instruments, logger)
 	if err != nil {
 		return compositeRunner{}, fmt.Errorf("build ingester collector: %w", err)
 	}
 
-	projectorSvc, err := buildIngesterProjectorService(database, graphWriter, getenv)
+	projectorSvc, err := buildIngesterProjectorService(database, graphWriter, getenv, tracer, instruments, logger)
 	if err != nil {
 		return compositeRunner{}, fmt.Errorf("build ingester projector: %w", err)
 	}
@@ -69,10 +75,13 @@ func buildIngesterService(
 }
 
 func buildIngesterCollectorService(
-	database postgres.SQLDB,
+	database postgres.ExecQueryer,
 	getenv func(string) string,
 	getwd func() (string, error),
 	environ func() []string,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
+	logger *slog.Logger,
 ) (collector.Service, error) {
 	config, err := collector.LoadRepoSyncConfig("ingester", getenv)
 	if err != nil {
@@ -84,16 +93,25 @@ func buildIngesterCollectorService(
 			Component:   "ingester",
 			Selector:    collector.NativeRepositorySelector{Config: config},
 			Snapshotter: collector.NativeRepositorySnapshotter{},
+			Tracer:      tracer,
+			Instruments: instruments,
+			Logger:      logger,
 		},
 		Committer:    postgres.NewIngestionStore(database),
 		PollInterval: ingesterCollectorPollInterval,
+		Tracer:       tracer,
+		Instruments:  instruments,
+		Logger:       logger,
 	}, nil
 }
 
 func buildIngesterProjectorService(
-	database postgres.SQLDB,
+	database postgres.ExecQueryer,
 	graphWriter graph.Writer,
 	getenv func(string) string,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
+	logger *slog.Logger,
 ) (projector.Service, error) {
 	projectorQueue := postgres.NewProjectorQueue(database, "ingester", time.Minute)
 	reducerQueue := postgres.NewReducerQueue(database, "ingester", time.Minute)
@@ -112,22 +130,29 @@ func buildIngesterProjectorService(
 		PollInterval: time.Second,
 		WorkSource:   projectorQueue,
 		FactStore:    postgres.NewFactStore(database),
-		Runner:       buildIngesterProjectorRuntime(database, graphWriter, reducerQueue, retryInjector),
+		Runner:       buildIngesterProjectorRuntime(database, graphWriter, reducerQueue, retryInjector, tracer, instruments),
 		WorkSink:     projectorQueue,
+		Tracer:       tracer,
+		Instruments:  instruments,
+		Logger:       logger,
 	}, nil
 }
 
 func buildIngesterProjectorRuntime(
-	database postgres.SQLDB,
+	database postgres.ExecQueryer,
 	graphWriter graph.Writer,
 	intentWriter projector.ReducerIntentWriter,
 	retryInjector projector.RetryInjector,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
 ) projector.Runtime {
 	return projector.Runtime{
 		GraphWriter:   graphWriter,
 		ContentWriter: postgres.NewContentWriter(database),
 		IntentWriter:  intentWriter,
 		RetryInjector: retryInjector,
+		Tracer:        tracer,
+		Instruments:   instruments,
 	}
 }
 

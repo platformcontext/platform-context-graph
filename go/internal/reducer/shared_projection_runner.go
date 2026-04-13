@@ -4,7 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
+
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 const (
@@ -86,6 +92,11 @@ type SharedProjectionRunner struct {
 	AcceptedGen  AcceptedGenerationLookup
 	Config       SharedProjectionRunnerConfig
 	Wait         func(context.Context, time.Duration) error
+
+	// Telemetry fields (optional)
+	Tracer      trace.Tracer
+	Instruments *telemetry.Instruments
+	Logger      *slog.Logger
 }
 
 // Run processes shared projection intents until the context is cancelled.
@@ -127,22 +138,12 @@ func (r *SharedProjectionRunner) runOneCycle(ctx context.Context) bool {
 				return didWork
 			}
 
-			result, err := ProcessPartitionOnce(
+			result, err := r.processPartitionWithTelemetry(
 				ctx,
 				now,
-				PartitionProcessorConfig{
-					Domain:         domain,
-					PartitionID:    partitionID,
-					PartitionCount: partitionCount,
-					LeaseOwner:     r.Config.leaseOwner(),
-					LeaseTTL:       r.Config.leaseTTL(),
-					BatchLimit:     r.Config.batchLimit(),
-					EvidenceSource: r.Config.evidenceSource(),
-				},
-				r.LeaseManager,
-				r.IntentReader,
-				r.EdgeWriter,
-				r.AcceptedGen,
+				domain,
+				partitionID,
+				partitionCount,
 			)
 			if err != nil {
 				continue
@@ -154,6 +155,69 @@ func (r *SharedProjectionRunner) runOneCycle(ctx context.Context) bool {
 	}
 
 	return didWork
+}
+
+func (r *SharedProjectionRunner) processPartitionWithTelemetry(
+	ctx context.Context,
+	now time.Time,
+	domain string,
+	partitionID int,
+	partitionCount int,
+) (PartitionProcessResult, error) {
+	start := time.Now()
+
+	if r.Tracer != nil {
+		var span trace.Span
+		ctx, span = r.Tracer.Start(ctx, telemetry.SpanCanonicalWrite)
+		defer span.End()
+	}
+
+	result, err := ProcessPartitionOnce(
+		ctx,
+		now,
+		PartitionProcessorConfig{
+			Domain:         domain,
+			PartitionID:    partitionID,
+			PartitionCount: partitionCount,
+			LeaseOwner:     r.Config.leaseOwner(),
+			LeaseTTL:       r.Config.leaseTTL(),
+			BatchLimit:     r.Config.batchLimit(),
+			EvidenceSource: r.Config.evidenceSource(),
+		},
+		r.LeaseManager,
+		r.IntentReader,
+		r.EdgeWriter,
+		r.AcceptedGen,
+	)
+
+	duration := time.Since(start).Seconds()
+
+	if err == nil && result.ProcessedIntents > 0 {
+		r.recordSharedProjectionCycle(ctx, domain, duration)
+	}
+
+	return result, err
+}
+
+func (r *SharedProjectionRunner) recordSharedProjectionCycle(ctx context.Context, domain string, duration float64) {
+	if r.Instruments != nil {
+		attrs := metric.WithAttributes(
+			telemetry.AttrDomain(domain),
+		)
+		r.Instruments.SharedProjectionCycles.Add(ctx, 1, attrs)
+		r.Instruments.CanonicalWriteDuration.Record(ctx, duration, attrs)
+	}
+
+	if r.Logger != nil {
+		domainAttrs := telemetry.DomainAttrs(domain, "")
+		logAttrs := make([]any, 0, len(domainAttrs)+1)
+		for _, a := range domainAttrs {
+			logAttrs = append(logAttrs, a)
+		}
+		logAttrs = append(logAttrs, slog.Float64("duration_seconds", duration))
+		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseShared))
+		r.Logger.InfoContext(ctx, "shared projection cycle completed", logAttrs...)
+	}
 }
 
 func (r *SharedProjectionRunner) validate() error {

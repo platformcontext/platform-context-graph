@@ -4,16 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 type bootstrapDB interface {
@@ -40,8 +42,8 @@ type projectorDeps struct {
 type openBootstrapDBFn func(context.Context, func(string) string) (bootstrapDB, error)
 type applyBootstrapFn func(context.Context, bootstrapDB) error
 type openGraphFn func(context.Context, func(string) string) (graphDeps, error)
-type buildCollectorFn func(context.Context, bootstrapDB, func(string) string) (collectorDeps, error)
-type buildProjectorFn func(context.Context, bootstrapDB, graph.Writer, func(string) string) (projectorDeps, error)
+type buildCollectorFn func(context.Context, bootstrapDB, func(string) string, trace.Tracer, *telemetry.Instruments, *slog.Logger) (collectorDeps, error)
+type buildProjectorFn func(context.Context, bootstrapDB, graph.Writer, func(string) string, trace.Tracer, *telemetry.Instruments) (projectorDeps, error)
 
 func main() {
 	if err := run(
@@ -53,7 +55,8 @@ func main() {
 		buildBootstrapCollector,
 		buildBootstrapProjector,
 	); err != nil {
-		log.Fatal(err)
+		slog.Error("bootstrap-index failed", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -66,6 +69,27 @@ func run(
 	collectorFn buildCollectorFn,
 	projectorFn buildProjectorFn,
 ) (err error) {
+	// Initialize telemetry
+	bootstrap, err := telemetry.NewBootstrap("bootstrap-index")
+	if err != nil {
+		return fmt.Errorf("telemetry bootstrap: %w", err)
+	}
+	providers, err := telemetry.NewProviders(ctx, bootstrap)
+	if err != nil {
+		return fmt.Errorf("telemetry providers: %w", err)
+	}
+	defer providers.Shutdown(context.Background())
+
+	logger := telemetry.NewLogger(bootstrap)
+	tracer := providers.TracerProvider.Tracer(telemetry.DefaultSignalName)
+	meter := providers.MeterProvider.Meter(telemetry.DefaultSignalName)
+	instruments, err := telemetry.NewInstruments(meter)
+	if err != nil {
+		return fmt.Errorf("telemetry instruments: %w", err)
+	}
+
+	logger.Info("starting bootstrap-index")
+
 	db, err := openDBFn(ctx, getenv)
 	if err != nil {
 		return err
@@ -90,7 +114,7 @@ func run(
 		}
 	}()
 
-	cd, err := collectorFn(ctx, db, getenv)
+	cd, err := collectorFn(ctx, db, getenv, tracer, instruments, logger)
 	if err != nil {
 		return err
 	}
@@ -99,7 +123,7 @@ func run(
 		return err
 	}
 
-	pd, err := projectorFn(ctx, db, gd.writer, getenv)
+	pd, err := projectorFn(ctx, db, gd.writer, getenv, tracer, instruments)
 	if err != nil {
 		return err
 	}

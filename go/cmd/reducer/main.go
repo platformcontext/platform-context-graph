@@ -2,13 +2,15 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/app"
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
@@ -16,15 +18,38 @@ import (
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func main() {
 	if err := run(context.Background()); err != nil {
-		log.Fatal(err)
+		slog.Error("reducer failed", "error", err)
+		os.Exit(1)
 	}
 }
 
 func run(parent context.Context) error {
+	// Initialize telemetry
+	bootstrap, err := telemetry.NewBootstrap("reducer")
+	if err != nil {
+		return fmt.Errorf("telemetry bootstrap: %w", err)
+	}
+	providers, err := telemetry.NewProviders(parent, bootstrap)
+	if err != nil {
+		return fmt.Errorf("telemetry providers: %w", err)
+	}
+	defer providers.Shutdown(context.Background())
+
+	logger := telemetry.NewLogger(bootstrap)
+	tracer := providers.TracerProvider.Tracer(telemetry.DefaultSignalName)
+	meter := providers.MeterProvider.Meter(telemetry.DefaultSignalName)
+	instruments, err := telemetry.NewInstruments(meter)
+	if err != nil {
+		return fmt.Errorf("telemetry instruments: %w", err)
+	}
+
+	logger.Info("starting reducer")
+
 	db, err := runtimecfg.OpenPostgres(parent, os.Getenv)
 	if err != nil {
 		return err
@@ -37,8 +62,19 @@ func run(parent context.Context) error {
 	}
 	defer func() { _ = neo4jCloser.Close() }()
 
-	intentStore := postgres.NewSharedIntentStore(postgres.SQLDB{DB: db})
-	serviceRunner, err := buildReducerService(postgres.SQLDB{DB: db}, neo4jExecutor, cypherExecutor, intentStore, os.Getenv)
+	instrumentedDB := &postgres.InstrumentedDB{
+		Inner:       postgres.SQLDB{DB: db},
+		Tracer:      tracer,
+		Instruments: instruments,
+		StoreName:   "reducer",
+	}
+	instrumentedNeo4j := &sourceneo4j.InstrumentedExecutor{
+		Inner:       neo4jExecutor,
+		Tracer:      tracer,
+		Instruments: instruments,
+	}
+	intentStore := postgres.NewSharedIntentStore(instrumentedDB)
+	serviceRunner, err := buildReducerService(instrumentedDB, instrumentedNeo4j, cypherExecutor, intentStore, os.Getenv, tracer, instruments, logger)
 	if err != nil {
 		return err
 	}
@@ -61,6 +97,7 @@ func run(parent context.Context) error {
 		"reducer",
 		serviceRunner,
 		statusReader,
+		runtimecfg.WithPrometheusHandler(providers.PrometheusHandler),
 	)
 	if err != nil {
 		return err
@@ -78,6 +115,9 @@ func buildReducerService(
 	cypherExec reducer.CypherExecutor,
 	intentStore *postgres.SharedIntentStore,
 	getenv func(string) string,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
+	logger *slog.Logger,
 ) (reducer.Service, error) {
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
 		WorkloadIdentityWriter:             reducer.PostgresWorkloadIdentityWriter{DB: database},
@@ -112,6 +152,12 @@ func buildReducerService(
 			LeaseManager: intentStore,
 			EdgeWriter:   edgeWriter,
 			AcceptedGen:  postgres.NewAcceptedGenerationLookup(database),
+			Tracer:       tracer,
+			Instruments:  instruments,
+			Logger:       logger,
 		},
+		Tracer:      tracer,
+		Instruments: instruments,
+		Logger:      logger,
 	}, nil
 }

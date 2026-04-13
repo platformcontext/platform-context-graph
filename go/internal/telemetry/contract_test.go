@@ -40,6 +40,9 @@ func TestSpanNames(t *testing.T) {
 		"reducer_intent.enqueue",
 		"reducer.run",
 		"canonical.write",
+		"postgres.exec",
+		"postgres.query",
+		"neo4j.execute",
 	}
 
 	got := SpanNames()
@@ -62,6 +65,7 @@ func TestLogKeys(t *testing.T) {
 		"request_id",
 		"failure_class",
 		"refresh_skipped",
+		"pipeline_phase",
 	}
 
 	got := LogKeys()

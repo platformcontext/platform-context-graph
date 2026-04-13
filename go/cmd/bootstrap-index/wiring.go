@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
@@ -14,6 +16,7 @@ import (
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 const bootstrapIndexConnectionTimeout = 10 * time.Second
@@ -22,10 +25,20 @@ func buildBootstrapCollector(
 	ctx context.Context,
 	database bootstrapDB,
 	getenv func(string) string,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
+	logger *slog.Logger,
 ) (collectorDeps, error) {
 	sqlDB, ok := database.(postgres.ExecQueryer)
 	if !ok {
 		return collectorDeps{}, fmt.Errorf("bootstrap collector requires a SQL database")
+	}
+
+	instrumentedDB := &postgres.InstrumentedDB{
+		Inner:       sqlDB,
+		Tracer:      tracer,
+		Instruments: instruments,
+		StoreName:   "bootstrap-index",
 	}
 
 	config, err := collector.LoadRepoSyncConfig("bootstrap-index", getenv)
@@ -37,11 +50,14 @@ func buildBootstrapCollector(
 		Component:   "bootstrap-index",
 		Selector:    collector.NativeRepositorySelector{Config: config},
 		Snapshotter: collector.NativeRepositorySnapshotter{},
+		Tracer:      tracer,
+		Instruments: instruments,
+		Logger:      logger,
 	}
 
 	return collectorDeps{
 		source:    source,
-		committer: postgres.NewIngestionStore(sqlDB),
+		committer: postgres.NewIngestionStore(instrumentedDB),
 	}, nil
 }
 
@@ -50,23 +66,34 @@ func buildBootstrapProjector(
 	database bootstrapDB,
 	graphWriter graph.Writer,
 	getenv func(string) string,
+	tracer trace.Tracer,
+	instruments *telemetry.Instruments,
 ) (projectorDeps, error) {
 	sqlDB, ok := database.(postgres.ExecQueryer)
 	if !ok {
 		return projectorDeps{}, fmt.Errorf("bootstrap projector requires a SQL database")
 	}
 
-	projectorQueue := postgres.NewProjectorQueue(sqlDB, "bootstrap-index", time.Minute)
-	reducerQueue := postgres.NewReducerQueue(sqlDB, "bootstrap-index", time.Minute)
+	instrumentedDB := &postgres.InstrumentedDB{
+		Inner:       sqlDB,
+		Tracer:      tracer,
+		Instruments: instruments,
+		StoreName:   "bootstrap-index",
+	}
+
+	projectorQueue := postgres.NewProjectorQueue(instrumentedDB, "bootstrap-index", time.Minute)
+	reducerQueue := postgres.NewReducerQueue(instrumentedDB, "bootstrap-index", time.Minute)
 	runtime := projector.Runtime{
 		GraphWriter:   graphWriter,
-		ContentWriter: postgres.NewContentWriter(sqlDB),
+		ContentWriter: postgres.NewContentWriter(instrumentedDB),
 		IntentWriter:  reducerQueue,
+		Tracer:        tracer,
+		Instruments:   instruments,
 	}
 
 	return projectorDeps{
 		workSource: projectorQueue,
-		factStore:  postgres.NewFactStore(sqlDB),
+		factStore:  postgres.NewFactStore(instrumentedDB),
 		runner:     runtime,
 		workSink:   projectorQueue,
 	}, nil

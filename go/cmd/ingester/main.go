@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,15 +15,38 @@ import (
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 func main() {
 	if err := run(context.Background()); err != nil {
-		log.Fatal(err)
+		slog.Error("ingester failed", "error", err)
+		os.Exit(1)
 	}
 }
 
 func run(parent context.Context) error {
+	// Initialize telemetry
+	bootstrap, err := telemetry.NewBootstrap("ingester")
+	if err != nil {
+		return fmt.Errorf("telemetry bootstrap: %w", err)
+	}
+	providers, err := telemetry.NewProviders(parent, bootstrap)
+	if err != nil {
+		return fmt.Errorf("telemetry providers: %w", err)
+	}
+	defer providers.Shutdown(context.Background())
+
+	logger := telemetry.NewLogger(bootstrap)
+	tracer := providers.TracerProvider.Tracer(telemetry.DefaultSignalName)
+	meter := providers.MeterProvider.Meter(telemetry.DefaultSignalName)
+	instruments, err := telemetry.NewInstruments(meter)
+	if err != nil {
+		return fmt.Errorf("telemetry instruments: %w", err)
+	}
+
+	logger.Info("starting ingester")
+
 	db, err := runtimecfg.OpenPostgres(parent, os.Getenv)
 	if err != nil {
 		return err
@@ -35,12 +59,22 @@ func run(parent context.Context) error {
 	}
 	defer graphCloser.Close()
 
+	instrumentedDB := &postgres.InstrumentedDB{
+		Inner:       postgres.SQLDB{DB: db},
+		Tracer:      tracer,
+		Instruments: instruments,
+		StoreName:   "ingester",
+	}
+
 	runner, err := buildIngesterService(
-		postgres.SQLDB{DB: db},
+		instrumentedDB,
 		graphWriter,
 		os.Getenv,
 		os.Getwd,
 		os.Environ,
+		tracer,
+		instruments,
+		logger,
 	)
 	if err != nil {
 		return err
@@ -75,6 +109,7 @@ func run(parent context.Context) error {
 	service, err := app.NewHostedWithStatusServer(
 		"ingester", runner, statusReader,
 		runtimecfg.WithRecoveryHandler(httpRecovery),
+		runtimecfg.WithPrometheusHandler(providers.PrometheusHandler),
 	)
 	if err != nil {
 		return err

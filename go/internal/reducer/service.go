@@ -4,8 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 const defaultPollInterval = time.Second
@@ -41,6 +48,11 @@ type Service struct {
 	// SharedProjectionRunner runs the shared projection intent processing loop
 	// concurrently with the main claim/execute/ack loop. Nil disables the runner.
 	SharedProjectionRunner *SharedProjectionRunner
+
+	// Telemetry fields (optional)
+	Tracer      trace.Tracer
+	Instruments *telemetry.Instruments
+	Logger      *slog.Logger
 }
 
 // Run polls for reducer work until the context is canceled. If a
@@ -95,16 +107,8 @@ func (s Service) runMainLoop(ctx context.Context) error {
 			continue
 		}
 
-		result, err := s.Executor.Execute(ctx, intent)
-		if err != nil {
-			if failErr := s.WorkSink.Fail(ctx, intent, err); failErr != nil {
-				return errors.Join(err, fmt.Errorf("fail reducer work: %w", failErr))
-			}
-			continue
-		}
-
-		if err := s.WorkSink.Ack(ctx, intent, result); err != nil {
-			return fmt.Errorf("ack reducer work: %w", err)
+		if err := s.executeWithTelemetry(ctx, intent); err != nil {
+			return err
 		}
 	}
 }
@@ -144,5 +148,70 @@ func (s Service) wait(ctx context.Context, interval time.Duration) error {
 		return ctx.Err()
 	case <-timer.C:
 		return nil
+	}
+}
+
+func (s Service) executeWithTelemetry(ctx context.Context, intent Intent) error {
+	start := time.Now()
+
+	if s.Tracer != nil {
+		var span trace.Span
+		ctx, span = s.Tracer.Start(ctx, telemetry.SpanReducerRun)
+		defer span.End()
+	}
+
+	result, err := s.Executor.Execute(ctx, intent)
+	duration := time.Since(start).Seconds()
+	status := "succeeded"
+
+	if err != nil {
+		status = "failed"
+		s.recordReducerResult(ctx, intent, duration, status)
+		if failErr := s.WorkSink.Fail(ctx, intent, err); failErr != nil {
+			return errors.Join(err, fmt.Errorf("fail reducer work: %w", failErr))
+		}
+		return nil
+	}
+
+	if err := s.WorkSink.Ack(ctx, intent, result); err != nil {
+		return fmt.Errorf("ack reducer work: %w", err)
+	}
+
+	s.recordReducerResult(ctx, intent, duration, status)
+	return nil
+}
+
+func (s Service) recordReducerResult(ctx context.Context, intent Intent, duration float64, status string) {
+	if s.Instruments != nil {
+		attrs := metric.WithAttributes(
+			telemetry.AttrDomain(string(intent.Domain)),
+			attribute.String("status", status),
+		)
+		s.Instruments.ReducerRunDuration.Record(ctx, duration, metric.WithAttributes(
+			telemetry.AttrDomain(string(intent.Domain)),
+		))
+		s.Instruments.ReducerExecutions.Add(ctx, 1, attrs)
+	}
+
+	if s.Logger != nil {
+		partitionKey := ""
+		if len(intent.EntityKeys) > 0 {
+			partitionKey = intent.EntityKeys[0]
+		}
+		domainAttrs := telemetry.DomainAttrs(string(intent.Domain), partitionKey)
+		logAttrs := make([]any, 0, len(domainAttrs)+3)
+		for _, a := range domainAttrs {
+			logAttrs = append(logAttrs, a)
+		}
+		logAttrs = append(logAttrs, slog.String("intent_id", intent.IntentID))
+		logAttrs = append(logAttrs, slog.String("status", status))
+		logAttrs = append(logAttrs, slog.Float64("duration_seconds", duration))
+		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseReduction))
+		if status == "failed" {
+			logAttrs = append(logAttrs, telemetry.FailureClassAttr("reducer_failure"))
+			s.Logger.ErrorContext(ctx, "reducer execution failed", logAttrs...)
+		} else {
+			s.Logger.InfoContext(ctx, "reducer execution succeeded", logAttrs...)
+		}
 	}
 }

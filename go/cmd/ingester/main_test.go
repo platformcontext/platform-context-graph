@@ -16,6 +16,9 @@ func TestBuildIngesterServiceRejectsMissingBridgeRepoRoot(t *testing.T) {
 		func(string) string { return "" },
 		func() (string, error) { return "/tmp/does-not-exist", nil },
 		func() []string { return nil },
+		nil, // tracer
+		nil, // instruments
+		nil, // logger
 	)
 	if err != nil {
 		t.Fatalf("buildIngesterService() error = %v, want nil", err)

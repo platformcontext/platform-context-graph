@@ -2,9 +2,15 @@ package reducer
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
+
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/trace/noop"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 type fakeSharedIntentReader struct {
@@ -233,5 +239,62 @@ func TestSharedProjectionRunnerValidation(t *testing.T) {
 				t.Fatal("Run() error = nil, want validation error")
 			}
 		})
+	}
+}
+
+func TestSharedProjectionRunnerWithTelemetry(t *testing.T) {
+	t.Parallel()
+
+	reader := &fakeSharedIntentReader{
+		intents: []SharedProjectionIntentRow{
+			{
+				IntentID:         "intent-1",
+				ProjectionDomain: DomainPlatformInfra,
+				PartitionKey:     "platform:eks-prod",
+				RepositoryID:     "repo-a",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				Payload:          map[string]any{"action": "upsert", "repo_id": "repo-a", "platform_id": "p1"},
+				CreatedAt:        time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	leaseManager := &fakeLeaseManager{granted: true}
+	edgeWriter := &fakeEdgeWriter{}
+
+	tracer := noop.NewTracerProvider().Tracer("test")
+	meter := metricnoop.NewMeterProvider().Meter("test")
+	instruments, err := telemetry.NewInstruments(meter)
+	if err != nil {
+		t.Fatalf("NewInstruments() error = %v", err)
+	}
+	logger := slog.Default()
+
+	runner := SharedProjectionRunner{
+		IntentReader: reader,
+		LeaseManager: leaseManager,
+		EdgeWriter:   edgeWriter,
+		AcceptedGen:  func(_, _ string) (string, bool) { return "gen-1", true },
+		Config: SharedProjectionRunnerConfig{
+			PartitionCount: 1,
+			LeaseOwner:     "test-runner",
+			PollInterval:   10 * time.Millisecond,
+		},
+		Tracer:      tracer,
+		Instruments: instruments,
+		Logger:      logger,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_ = runner.Run(ctx)
+
+	reader.mu.Lock()
+	markedCount := len(reader.marked)
+	reader.mu.Unlock()
+
+	if markedCount == 0 {
+		t.Fatal("expected at least one intent to be marked completed")
 	}
 }

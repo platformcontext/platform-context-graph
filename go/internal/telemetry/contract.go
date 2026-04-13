@@ -44,6 +44,11 @@ const (
 	SpanReducerIntentEnqueue = "reducer_intent.enqueue"
 	SpanReducerRun           = "reducer.run"
 	SpanCanonicalWrite       = "canonical.write"
+
+	// Dependency service spans — track external call performance.
+	SpanPostgresExec  = "postgres.exec"
+	SpanPostgresQuery = "postgres.query"
+	SpanNeo4jExecute  = "neo4j.execute"
 )
 
 // Log keys define the structured logging contract for terminal failures and
@@ -59,6 +64,7 @@ const (
 	LogKeyRequestID      = "request_id"
 	LogKeyFailureClass   = "failure_class"
 	LogKeyRefreshSkipped = "refresh_skipped"
+	LogKeyPipelinePhase  = "pipeline_phase"
 )
 
 var metricDimensionKeys = []string{
@@ -79,6 +85,9 @@ var spanNames = []string{
 	SpanReducerIntentEnqueue,
 	SpanReducerRun,
 	SpanCanonicalWrite,
+	SpanPostgresExec,
+	SpanPostgresQuery,
+	SpanNeo4jExecute,
 }
 
 var logKeys = []string{
@@ -92,6 +101,7 @@ var logKeys = []string{
 	LogKeyRequestID,
 	LogKeyFailureClass,
 	LogKeyRefreshSkipped,
+	LogKeyPipelinePhase,
 }
 
 // MetricDimensionKeys returns the frozen ordered metric dimensions.

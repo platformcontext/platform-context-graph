@@ -28,6 +28,9 @@ func TestBuildIngesterServiceProducesCompositeRunner(t *testing.T) {
 		func(string) string { return "" },
 		func() (string, error) { return t.TempDir(), nil },
 		func() []string { return []string{"PATH=/usr/bin"} },
+		nil, // tracer
+		nil, // instruments
+		nil, // logger
 	)
 	if err != nil {
 		t.Fatalf("buildIngesterService() error = %v, want nil", err)
@@ -45,6 +48,9 @@ func TestBuildIngesterCollectorServiceUsesNativeSnapshotter(t *testing.T) {
 		func(string) string { return "" },
 		func() (string, error) { return t.TempDir(), nil },
 		func() []string { return []string{"PATH=/usr/bin"} },
+		nil, // tracer
+		nil, // instruments
+		nil, // logger
 	)
 	if err != nil {
 		t.Fatalf("buildIngesterCollectorService() error = %v, want nil", err)
