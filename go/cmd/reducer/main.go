@@ -40,7 +40,7 @@ func run(parent context.Context) error {
 	}
 	defer providers.Shutdown(context.Background())
 
-	logger := telemetry.NewLogger(bootstrap)
+	logger := telemetry.NewLogger(bootstrap, "reducer", "reducer")
 	tracer := providers.TracerProvider.Tracer(telemetry.DefaultSignalName)
 	meter := providers.MeterProvider.Meter(telemetry.DefaultSignalName)
 	instruments, err := telemetry.NewInstruments(meter)

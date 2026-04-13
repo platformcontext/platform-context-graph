@@ -80,7 +80,7 @@ func run(
 	}
 	defer providers.Shutdown(context.Background())
 
-	logger := telemetry.NewLogger(bootstrap)
+	logger := telemetry.NewLogger(bootstrap, "collector", "bootstrap-index")
 	tracer := providers.TracerProvider.Tracer(telemetry.DefaultSignalName)
 	meter := providers.MeterProvider.Meter(telemetry.DefaultSignalName)
 	instruments, err := telemetry.NewInstruments(meter)
