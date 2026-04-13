@@ -345,4 +345,5 @@ labels.
 - [Metrics](metrics.md) for exact metric names and how to use them
 - [Traces](traces.md) for span names and latency debugging
 - [Logs](logs.md) for event breadcrumbs and incident forensics
+- [Cross-Service Correlation](cross-service-correlation.md) for stitching traces across the pipeline
 - [Baseline Performance](../baseline-performance.md) for large-run tuning

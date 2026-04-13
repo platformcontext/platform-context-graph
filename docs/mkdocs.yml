@@ -78,6 +78,7 @@ nav:
       - Metrics: reference/telemetry/metrics.md
       - Traces: reference/telemetry/traces.md
       - Logs: reference/telemetry/logs.md
+      - Cross-Service Correlation: reference/telemetry/cross-service-correlation.md
     - Source Layout: reference/source-layout.md
     - Language Support: contributing-language-support.md
     - Language Feature Matrix: languages/feature-matrix.md
