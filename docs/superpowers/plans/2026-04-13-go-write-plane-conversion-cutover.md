@@ -262,6 +262,11 @@ Progress on this step:
   longer bootstraps Python parsers by default; `GraphBuilder`, the CLI runtime
   helper, and MCP server imports now avoid eager imports of
   `platform_context_graph.parsers.registry` and `platform_context_graph.parsers.scip*`
+- [x] The obsolete Python path-level execution helper
+  `src/platform_context_graph/collectors/git/execution.py` has been deleted;
+  normal file and directory path indexing now enters through the Go-owned
+  `GraphBuilder.build_graph_from_path_async(...)` bootstrap route instead of a
+  separate Python collector orchestration module
 - [ ] Finish truthful parser parity and delete the remaining Python runtime
   seams. The native Go registry now covers every currently registered parser
   key in `go/internal/parser/registry.go`, so the remaining parity work is no

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,9 +9,6 @@ import pytest
 from platform_context_graph.tools.graph_builder import GraphBuilder
 from platform_context_graph.collectors.git.discovery import (
     resolve_repository_file_sets,
-)
-from platform_context_graph.collectors.git.execution import (
-    build_graph_from_path_async,
 )
 
 
@@ -128,73 +124,6 @@ def test_collect_supported_files_includes_hidden_workflow_dirs_when_config_disab
     files = builder._collect_supported_files(tmp_path)
 
     assert set(files) == {hidden_workflow, visible_python}
-
-
-def test_build_graph_from_path_async_skips_hidden_cache_repos_but_keeps_visible_git_repos(
-    tmp_path: Path, monkeypatch
-):
-    builder = _make_builder()
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder.get_config_value", _config_value
-    )
-
-    async def immediate_sleep(*_args, **_kwargs):
-        return None
-
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder.asyncio.sleep", immediate_sleep
-    )
-
-    (tmp_path / ".git").mkdir()
-
-    root_file = tmp_path / "service.py"
-    root_file.write_text("print('root')\n")
-
-    nested_repo = tmp_path / "packages" / "nested-service"
-    (nested_repo / ".git").mkdir(parents=True)
-    nested_file = nested_repo / "worker.py"
-    nested_file.write_text("print('nested')\n")
-
-    cache_repo = tmp_path / ".generated-cache" / "abc123" / "module"
-    (cache_repo / ".git").mkdir(parents=True)
-    cached_file = cache_repo / "generated.py"
-    cached_file.write_text("print('cached')\n")
-
-    asyncio.run(
-        build_graph_from_path_async(
-            builder,
-            tmp_path,
-            False,
-            None,
-            asyncio_module=asyncio,
-            datetime_cls=SimpleNamespace(now=lambda: None),
-            debug_log_fn=lambda *_args, **_kwargs: None,
-            error_logger_fn=lambda *_args, **_kwargs: None,
-            get_config_value_fn=_config_value,
-            info_logger_fn=lambda *_args, **_kwargs: None,
-            pathspec_module=__import__("pathspec"),
-            warning_logger_fn=lambda *_args, **_kwargs: None,
-            job_status_enum=SimpleNamespace(
-                COMPLETED="completed",
-                FAILED="failed",
-                CANCELLED="cancelled",
-                RUNNING="running",
-            ),
-        )
-    )
-
-    indexed_repos = {
-        call.args[0].resolve()
-        for call in builder.add_repository_to_graph.call_args_list
-    }
-    indexed_files = {
-        Path(call.args[0]["path"]).resolve()
-        for call in builder.add_file_to_graph.call_args_list
-    }
-
-    assert indexed_repos == {tmp_path.resolve(), nested_repo.resolve()}
-    assert indexed_files == {root_file.resolve(), nested_file.resolve()}
-    assert cached_file.resolve() not in indexed_files
 
 
 def test_resolve_repository_file_sets_honors_repo_local_gitignore_only(
