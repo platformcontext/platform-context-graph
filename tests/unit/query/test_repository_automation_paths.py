@@ -1,25 +1,10 @@
 from __future__ import annotations
 
-# ruff: noqa: E402
-
 import re
-import sys
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import yaml
-
-resolution_module = ModuleType("platform_context_graph.resolution")
-platform_families_module = ModuleType(
-    "platform_context_graph.resolution.platform_families"
-)
-platform_families_module.format_platform_kind_label = lambda value: str(value)
-sys.modules.setdefault("platform_context_graph.resolution", resolution_module)
-sys.modules.setdefault(
-    "platform_context_graph.resolution.platform_families",
-    platform_families_module,
-)
 
 from platform_context_graph.query.repositories.content_enrichment_ansible import (
     extract_ansible_automation_evidence,

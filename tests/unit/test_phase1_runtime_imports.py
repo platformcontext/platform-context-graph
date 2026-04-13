@@ -1,21 +1,5 @@
 """Phase 1 guards for runtime modules importing canonical packages."""
 
-# ruff: noqa: E402
-
-import sys
-from types import ModuleType
-
-resolution_module = ModuleType("platform_context_graph.resolution")
-platform_families_module = ModuleType(
-    "platform_context_graph.resolution.platform_families"
-)
-platform_families_module.format_platform_kind_label = lambda value: str(value)
-sys.modules.setdefault("platform_context_graph.resolution", resolution_module)
-sys.modules.setdefault(
-    "platform_context_graph.resolution.platform_families",
-    platform_families_module,
-)
-
 from platform_context_graph.content import ingest as content_ingest
 from platform_context_graph.content import postgres_queries
 from platform_context_graph.query.repositories import (

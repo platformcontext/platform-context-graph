@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...resolution.platform_families import format_platform_kind_label
+from ...relationships.platform_families import format_platform_kind_label
 from .content_enrichment_infrastructure_delivery import (
     build_infrastructure_delivery_paths,
 )

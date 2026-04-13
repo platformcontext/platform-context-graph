@@ -132,6 +132,12 @@ and `src/platform_context_graph/parsers/raw_text.py`) plus the stale parser
 smoke script that still referenced them. Remaining parser-package work after
 that is feature-parity deletion, not normal runtime ownership.
 
+The Python query read surface also no longer imports the deleted
+`resolution.platform_families` module; those label-formatting helpers now come
+from `src/platform_context_graph/relationships/platform_families.py`, which
+keeps the surviving read-path Python package graph aligned with the post-
+resolution deletion layout.
+
 Parser extraction ownership already moved further than the generated capability
 matrix currently shows:
 
