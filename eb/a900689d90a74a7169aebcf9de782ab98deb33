@@ -1,0 +1,27 @@
+go/internal/projector/failure_classification_test.go
+  1ca5ee6ce936a402 1-185
+docs/superpowers/plans/2026-04-13-go-data-plane-ownership-completion-plan.md
+  1ca5ee6ce936a402 8-9,13-15,48,57,63,65,74-75,77,79,81-85,87,89-91,93,95-97,99,101-104,106,108,110,113-114,117,119,122,125,127-128,130,132-134,136,139,142,151,153-155,157,159-160,162,164-166,168,364,374,379,389,647
+go/internal/projector/failure_classification.go
+  1ca5ee6ce936a402 1-267
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "eba900689d90a74a7169aebcf9de782ab98deb33",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 3779,
+      "total_deletions": 1045,
+      "accepted_lines": 3481,
+      "overriden_lines": 2
+    }
+  }
+}
