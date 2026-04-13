@@ -246,7 +246,7 @@ def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
         },
     )
 
-    stage_timings = finalize_index_batch(
+    result = finalize_index_batch(
         builder,
         committed_repo_paths=[Path("/tmp/example")],
         iter_snapshot_file_data_fn=lambda _repo_path: iter(
@@ -257,7 +257,7 @@ def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
         stage_progress_callback=stages.append,
     )
 
-    assert stage_timings == pytest.approx(
+    assert result.stage_timings == pytest.approx(
         {
             "inheritance": 1.5,
             "function_calls": 2.5,
@@ -276,6 +276,11 @@ def test_finalize_index_batch_logs_stage_timings(monkeypatch) -> None:
         "relationship_resolution",
     ]
     assert any("Finalization timings:" in message for message in messages)
+    assert result.stage_details == {
+        "function_calls": {"total_duration_seconds": 0.0},
+        "sql_relationships": {"has_column_edges": 1},
+        "relationship_resolution": {"resolved_relationships": 3},
+    }
 
 
 def test_finalize_index_batch_raises_when_committed_repo_file_data_is_missing() -> None:

@@ -681,7 +681,7 @@ async def execute_index_run(
                 source=source,
                 info_logger_fn=info_logger_fn,
                 error_logger_fn=error_logger_fn,
-                finalize_index_batch_fn=finalize_index_batch,
+                post_commit_writer_fn=finalize_index_batch,
                 persist_run_state_fn=_persist_run_state,
                 delete_snapshots_fn=_delete_snapshots,
                 telemetry=telemetry,

@@ -27,6 +27,8 @@ from .admin_facts import ReplayFailedFactsRequest
 from .admin_facts import replay_failed_facts
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+# The admin refinalize endpoint is intentionally graph-safe only. File-dependent
+# bridge stages still require snapshot-backed CLI recovery.
 _SUPPORTED_ADMIN_STAGES = frozenset({"workloads", "relationship_resolution"})
 _DEFAULT_ADMIN_STAGES = ["workloads", "relationship_resolution"]
 
@@ -195,7 +197,7 @@ def _run_refinalization(
         builder = GraphBuilder(db_manager=database, job_manager=job_mgr, loop=loop)
 
         start = time.time()
-        timings = finalize_index_batch(
+        result = finalize_index_batch(
             builder,
             committed_repo_paths=repo_paths,
             iter_snapshot_file_data_fn=lambda p: iter([]),
@@ -219,6 +221,7 @@ def _run_refinalization(
             skip_per_repo_stages=False,
             stages=stages,
         )
+        timings = result.stage_timings
         elapsed = time.time() - start
         _repair_repository_coverage(
             repo_ids=repo_ids,

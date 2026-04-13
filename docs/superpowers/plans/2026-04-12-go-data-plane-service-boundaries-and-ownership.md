@@ -72,6 +72,29 @@ schema/
 - `go/internal/compatibility/pythonbridge/` is the only allowed home for
   temporary bridge code.
 
+## Legacy Post-Commit Bridge
+
+While the GraphBuilder family still owns a small recovery-only relationship
+surface, the Python bridge must stay explicit and narrow:
+
+```mermaid
+flowchart LR
+  A["Checkpointed coordinator or admin refinalize"] --> B["indexing.post_commit_writer"]
+  B --> C["collectors.git.finalize compatibility adapter"]
+  C --> D["Legacy GraphBuilder stage runners"]
+```
+
+Rules for this bridge:
+
+- new collector or reducer behavior must not be added to
+  `collectors/git/finalize.py`
+- `indexing/post_commit_writer.py` is the only allowed contract point for the
+  remaining Python post-commit seam
+- callers may consume structured stage timings and details from the bridge, but
+  they must not read `GraphBuilder` attributes as an implicit side channel
+- the bridge exists only for checkpointed finalization recovery and admin/CLI
+  refinalize flows until equivalent Go-owned ownership is proven
+
 ## Reserved Areas
 
 These areas should stay stable during early implementation:

@@ -35,7 +35,7 @@ def test_finalize_index_batch_filters_to_requested_stages_and_reports_progress()
         ),
     )
 
-    timings = finalize_index_batch(
+    result = finalize_index_batch(
         builder,
         committed_repo_paths=[Path("/repos/payments-api")],
         iter_snapshot_file_data_fn=lambda _path: iter([]),
@@ -52,7 +52,7 @@ def test_finalize_index_batch_filters_to_requested_stages_and_reports_progress()
         "workloads",
         "relationship_resolution:1:refinalize-run-123",
     ]
-    assert set(timings) == {"workloads", "relationship_resolution"}
+    assert set(result.stage_timings) == {"workloads", "relationship_resolution"}
     assert progress_events[0] == (
         "workloads",
         {

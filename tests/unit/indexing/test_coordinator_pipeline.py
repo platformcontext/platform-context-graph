@@ -11,6 +11,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
+from platform_context_graph.indexing.post_commit_writer import PostCommitWriteResult
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_ROOT = REPO_ROOT / "src" / "platform_context_graph"
 
@@ -976,19 +978,22 @@ def test_finalize_repository_batch_records_stage_timings(monkeypatch) -> None:
             )
         )
 
-    def finalize_index_batch_fn(*_args, stage_progress_callback, **_kwargs):
+    def post_commit_writer_fn(*_args, stage_progress_callback, **_kwargs):
         stage_progress_callback("inheritance")
         current_time["value"] += 1.5
         stage_progress_callback("function_calls")
         current_time["value"] += 3.0
-        return {"inheritance": 1.5, "function_calls": 3.0}
+        return PostCommitWriteResult(
+            stage_timings={"inheritance": 1.5, "function_calls": 3.0},
+            stage_details={
+                "function_calls": {
+                    "fallback_duration_seconds": 3.0,
+                    "exact_duration_seconds": 1.5,
+                }
+            },
+        )
 
-    builder = SimpleNamespace(
-        _last_call_relationship_metrics={
-            "fallback_duration_seconds": 3.0,
-            "exact_duration_seconds": 1.5,
-        }
-    )
+    builder = SimpleNamespace()
 
     finalize_repository_batch(
         builder=builder,
@@ -1003,7 +1008,7 @@ def test_finalize_repository_batch_records_stage_timings(monkeypatch) -> None:
         source="manual",
         info_logger_fn=lambda *_a, **_kw: None,
         error_logger_fn=lambda *_a, **_kw: None,
-        finalize_index_batch_fn=finalize_index_batch_fn,
+        post_commit_writer_fn=post_commit_writer_fn,
         persist_run_state_fn=capture_persist,
         delete_snapshots_fn=lambda *_a, **_kw: None,
         telemetry=_telemetry(),
@@ -1066,7 +1071,7 @@ def test_finalize_repository_batch_treats_commit_incomplete_as_blocking() -> Non
         source="manual",
         info_logger_fn=lambda *_a, **_kw: None,
         error_logger_fn=lambda *_a, **_kw: None,
-        finalize_index_batch_fn=lambda *_a, **_kw: (_ for _ in ()).throw(
+        post_commit_writer_fn=lambda *_a, **_kw: (_ for _ in ()).throw(
             AssertionError("finalization should not run")
         ),
         persist_run_state_fn=capture_persist,
@@ -1119,7 +1124,7 @@ def test_finalize_repository_batch_logs_structured_deferred_event() -> None:
         source="manual",
         info_logger_fn=capture_info,
         error_logger_fn=lambda *_a, **_kw: None,
-        finalize_index_batch_fn=lambda *_a, **_kw: (_ for _ in ()).throw(
+        post_commit_writer_fn=lambda *_a, **_kw: (_ for _ in ()).throw(
             AssertionError("finalization should not run")
         ),
         persist_run_state_fn=lambda _state: None,
@@ -1165,7 +1170,7 @@ def test_finalize_repository_batch_logs_structured_failure_event() -> None:
             }
         )
 
-    def finalize_index_batch_fn(*_args, **_kwargs):
+    def post_commit_writer_fn(*_args, **_kwargs):
         raise RuntimeError("boom")
 
     finalize_repository_batch(
@@ -1181,7 +1186,7 @@ def test_finalize_repository_batch_logs_structured_failure_event() -> None:
         source="manual",
         info_logger_fn=lambda *_a, **_kw: None,
         error_logger_fn=capture_error,
-        finalize_index_batch_fn=finalize_index_batch_fn,
+        post_commit_writer_fn=post_commit_writer_fn,
         persist_run_state_fn=lambda _state: None,
         delete_snapshots_fn=lambda *_a, **_kw: None,
         telemetry=_telemetry(),
@@ -1212,7 +1217,7 @@ def test_finalize_repository_batch_persists_function_call_heartbeats() -> None:
         details = dict(state.finalization_stage_details.get("function_calls", {}))
         persisted_states.append((state.finalization_current_stage, details))
 
-    def finalize_index_batch_fn(*_args, stage_progress_callback, **_kwargs):
+    def post_commit_writer_fn(*_args, stage_progress_callback, **_kwargs):
         stage_progress_callback("function_calls")
         stage_progress_callback(
             "function_calls",
@@ -1220,7 +1225,10 @@ def test_finalize_repository_batch_persists_function_call_heartbeats() -> None:
             processed_files=1,
             total_files=2,
         )
-        return {"function_calls": 3.0}
+        return PostCommitWriteResult(
+            stage_timings={"function_calls": 3.0},
+            stage_details={},
+        )
 
     finalize_repository_batch(
         builder=SimpleNamespace(),
@@ -1235,7 +1243,7 @@ def test_finalize_repository_batch_persists_function_call_heartbeats() -> None:
         source="manual",
         info_logger_fn=lambda *_a, **_kw: None,
         error_logger_fn=lambda *_a, **_kw: None,
-        finalize_index_batch_fn=finalize_index_batch_fn,
+        post_commit_writer_fn=post_commit_writer_fn,
         persist_run_state_fn=capture_persist,
         delete_snapshots_fn=lambda *_a, **_kw: None,
         telemetry=_telemetry(),
@@ -1271,7 +1279,7 @@ def test_finalize_repository_batch_publishes_lightweight_coverage_heartbeats() -
             )
         )
 
-    def finalize_index_batch_fn(*_args, stage_progress_callback, **_kwargs):
+    def post_commit_writer_fn(*_args, stage_progress_callback, **_kwargs):
         stage_progress_callback("function_calls")
         stage_progress_callback(
             "function_calls",
@@ -1279,7 +1287,10 @@ def test_finalize_repository_batch_publishes_lightweight_coverage_heartbeats() -
             processed_files=1,
             total_files=2,
         )
-        return {"function_calls": 3.0}
+        return PostCommitWriteResult(
+            stage_timings={"function_calls": 3.0},
+            stage_details={},
+        )
 
     finalize_repository_batch(
         builder=SimpleNamespace(),
@@ -1294,7 +1305,7 @@ def test_finalize_repository_batch_publishes_lightweight_coverage_heartbeats() -
         source="manual",
         info_logger_fn=lambda *_a, **_kw: None,
         error_logger_fn=lambda *_a, **_kw: None,
-        finalize_index_batch_fn=finalize_index_batch_fn,
+        post_commit_writer_fn=post_commit_writer_fn,
         persist_run_state_fn=lambda _state: None,
         delete_snapshots_fn=lambda *_a, **_kw: None,
         telemetry=_telemetry(),

@@ -100,12 +100,16 @@ facts, graph persistence, and post-index materialization into clearer
 boundaries:
 
 - `collectors/git/`: repository discovery, `.gitignore`, parse workers, path indexing, parse execution, and facts-first Git collection support
+- `collectors/git/finalize.py`: legacy post-commit compatibility adapter for
+  graph-safe recovery and re-finalization
 - `facts/models/`: typed fact contracts for repository/file/entity observations
 - `facts/storage/`: Postgres-backed fact storage
 - `facts/work_queue/`: Postgres-backed work item queue used by the Resolution Engine
 - `facts/emission/`: source-specific fact emission from parsed snapshots
 - `facts/state.py`: shared fact store and queue lifecycle for deployed runtimes
 - `indexing/coordinator_facts.py` and `indexing/coordinator_facts_support.py`: Git cutover helpers for fact emission, inline projection, and facts-first finalization
+- `indexing/post_commit_writer.py`: explicit structured post-commit contract
+  used by the remaining legacy finalization bridge
 - `parsers/registry.py`: canonical parser registry and worker-friendly parse entrypoints
 - `parsers/raw_text.py`: raw-text parser support for searchable non-code artifacts
 - `parsers/languages/`: canonical language parser entrypoints and support modules
@@ -120,7 +124,10 @@ boundaries:
 - `resolution/workloads/` and `resolution/platforms.py`: workload and platform materialization after graph writes
 
 `tools/graph_builder.py` remains the stable public facade while the underlying
-source-of-truth modules move into these canonical packages.
+source-of-truth modules move into these canonical packages. The remaining
+legacy finalization bridge is now routed through
+`indexing/post_commit_writer.py`; new collector or reducer work must not land
+directly on ad hoc finalize helpers.
 
 For the current Git cutover, the coordinator also reuses the same facts-first
 projection contracts in-process. That keeps one indexing run end-to-end

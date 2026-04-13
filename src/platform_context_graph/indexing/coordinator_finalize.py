@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .post_commit_writer import PostCommitWriteResult
 from ..utils.debug_log import emit_log_call
 
 _FINALIZATION_COVERAGE_HEARTBEAT_SECONDS = 15.0
@@ -25,7 +26,7 @@ def finalize_repository_batch(
     source: str,
     info_logger_fn: Any,
     error_logger_fn: Any,
-    finalize_index_batch_fn: Any,
+    post_commit_writer_fn: Any,
     persist_run_state_fn: Any,
     delete_snapshots_fn: Any,
     telemetry: Any,
@@ -131,7 +132,7 @@ def finalize_repository_batch(
             },
         ) as finalize_span:
             try:
-                stage_timings = finalize_index_batch_fn(
+                result = post_commit_writer_fn(
                     builder,
                     committed_repo_paths=committed_repo_paths,
                     iter_snapshot_file_data_fn=iter_snapshot_file_data_fn,
@@ -150,14 +151,25 @@ def finalize_repository_batch(
                 run_state.finalization_duration_seconds = time.perf_counter() - started
                 run_state.finalization_current_stage = None
                 run_state.finalization_stage_started_at = None
-                run_state.finalization_stage_durations = dict(stage_timings or {})
-                call_relationship_metrics = getattr(
-                    builder, "_last_call_relationship_metrics", None
-                )
-                if call_relationship_metrics is not None:
-                    run_state.finalization_stage_details = {
-                        "function_calls": dict(call_relationship_metrics)
-                    }
+                if not isinstance(result, PostCommitWriteResult):
+                    raise TypeError(
+                        "post_commit_writer_fn must return PostCommitWriteResult"
+                    )
+                run_state.finalization_stage_durations = dict(result.stage_timings)
+                for stage_name, details in result.stage_details.items():
+                    existing_details = run_state.finalization_stage_details.get(
+                        stage_name,
+                        {},
+                    )
+                    if not isinstance(existing_details, dict):
+                        existing_details = {}
+                    existing_details.update(dict(details))
+                    run_state.finalization_stage_details[stage_name] = existing_details
+                run_state.finalization_stage_details = {
+                    stage_name: details
+                    for stage_name, details in run_state.finalization_stage_details.items()
+                    if details
+                }
                 run_state.finalization_status = "completed"
                 run_state.status = "completed"
                 persist_run_state_fn(run_state)

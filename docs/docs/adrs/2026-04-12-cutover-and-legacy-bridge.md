@@ -60,3 +60,29 @@ Tradeoffs:
 - Treat any request to add new logic to the old finalize seam as a design
   exception that must be justified in writing.
 - Remove bridge code as soon as the new domain proof is complete and stable.
+
+## Milestone 4 Bridge Inventory
+
+The active legacy post-commit bridge is now intentionally narrow:
+
+- `src/platform_context_graph/indexing/post_commit_writer.py` is the explicit
+  compatibility contract for the remaining Python-owned post-commit stages.
+- `src/platform_context_graph/collectors/git/finalize.py` is the compatibility
+  adapter that maps legacy `GraphBuilder` stage runners onto that contract.
+- `src/platform_context_graph/indexing/coordinator_finalize.py`,
+  `src/platform_context_graph/api/routers/admin.py`, and
+  `src/platform_context_graph/cli/helpers/finalize.py` may invoke the bridge,
+  but they must not infer stage details from `GraphBuilder` side channels.
+- `/admin/refinalize` is intentionally graph-safe only; file-dependent bridge
+  stages such as `inheritance`, `function_calls`, `sql_relationships`, and
+  `infra_links` remain CLI-only until a snapshot-backed replacement exists.
+
+Removal conditions:
+
+- delete `indexing/coordinator_finalize.py` when checkpointed repo-batch runs no
+  longer persist `finalization_*` fields or call the legacy post-commit writer
+  path
+- delete `collectors/git/finalize.py` when all remaining graph-safe recovery
+  flows have moved onto Go-owned projector or reducer contracts
+- delete admin and CLI refinalize bridge callers when restored-backup or
+  failed-finalization repair no longer requires a legacy graph-only rerun

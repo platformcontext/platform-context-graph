@@ -7,6 +7,11 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
+from platform_context_graph.indexing.post_commit_writer import (
+    PostCommitStage,
+    PostCommitWriteResult,
+    execute_post_commit_stages,
+)
 from platform_context_graph.indexing.memory_diagnostics import log_memory_usage
 from platform_context_graph.utils.debug_log import emit_log_call
 
@@ -155,7 +160,7 @@ def finalize_index_batch(
     parse_workers: int = 1,
     skip_per_repo_stages: bool = False,
     stages: list[str] | None = None,
-) -> dict[str, float]:
+) -> PostCommitWriteResult:
     """Create cross-file and cross-repo relationships after repo commits finish.
 
     When *skip_per_repo_stages* is ``True`` the ``inheritance`` and
@@ -179,10 +184,9 @@ def finalize_index_batch(
         committed_repo_paths,
         iter_snapshot_file_data_fn,
     )
-    stage_timings: dict[str, float] = {}
 
     def _notify_stage_progress(stage_name: str, **kwargs: Any) -> None:
-        """Send stage heartbeats without breaking legacy one-arg callbacks."""
+        """Forward stage progress to the caller using the shared callback contract."""
 
         if not callable(stage_progress_callback):
             return
@@ -195,6 +199,25 @@ def finalize_index_batch(
             return
         if not kwargs or kwargs.get("status") == "started":
             stage_progress_callback(stage_name)
+
+    def _with_stage_memory(stage_name: str, stage_fn: Any) -> Any:
+        """Wrap one stage with memory diagnostics while preserving metrics."""
+
+        def _run_stage() -> Any:
+            """Execute one finalization stage with before/after memory logging."""
+
+            log_memory_usage(
+                info_logger_fn,
+                context=f"Before finalization stage {stage_name}",
+            )
+            result = stage_fn()
+            log_memory_usage(
+                info_logger_fn,
+                context=f"After finalization stage {stage_name}",
+            )
+            return result
+
+        return _run_stage
 
     def _run_function_call_stage() -> dict[str, float | int]:
         """Materialize function-call edges and aggregate stage-level metrics."""
@@ -252,36 +275,51 @@ def finalize_index_batch(
             kwargs["committed_repo_paths"] = committed_repo_paths
         return materialize_workloads(**kwargs)
 
-    all_stages: tuple[tuple[str, Any], ...] = (
-        (
-            "inheritance",
-            lambda: builder._create_all_inheritance_links(
-                committed_repo_data_iter(),
-                merged_imports_map,
+    all_stages = [
+        PostCommitStage(
+            name="inheritance",
+            runner=_with_stage_memory(
+                "inheritance",
+                lambda: builder._create_all_inheritance_links(
+                    committed_repo_data_iter(),
+                    merged_imports_map,
+                ),
             ),
         ),
-        ("function_calls", _run_function_call_stage),
-        (
-            "sql_relationships",
-            lambda: builder._create_all_sql_relationships(committed_repo_data_iter()),
+        PostCommitStage(
+            name="function_calls",
+            runner=_with_stage_memory("function_calls", _run_function_call_stage),
         ),
-        (
-            "infra_links",
-            lambda: builder._create_all_infra_links(committed_repo_data_iter()),
-        ),
-        (
-            "workloads",
-            _run_workload_stage,
-        ),
-        (
-            "relationship_resolution",
-            lambda: builder._resolve_repository_relationships(
-                committed_repo_paths,
-                run_id=run_id,
+        PostCommitStage(
+            name="sql_relationships",
+            runner=_with_stage_memory(
+                "sql_relationships",
+                lambda: builder._create_all_sql_relationships(committed_repo_data_iter()),
             ),
         ),
-    )
-    available_stage_names = {stage_name for stage_name, _stage_fn in all_stages}
+        PostCommitStage(
+            name="infra_links",
+            runner=_with_stage_memory(
+                "infra_links",
+                lambda: builder._create_all_infra_links(committed_repo_data_iter()),
+            ),
+        ),
+        PostCommitStage(
+            name="workloads",
+            runner=_with_stage_memory("workloads", _run_workload_stage),
+        ),
+        PostCommitStage(
+            name="relationship_resolution",
+            runner=_with_stage_memory(
+                "relationship_resolution",
+                lambda: builder._resolve_repository_relationships(
+                    committed_repo_paths,
+                    run_id=run_id,
+                ),
+            ),
+        ),
+    ]
+    available_stage_names = {stage.name for stage in all_stages}
     if stages is not None:
         unknown_stages = sorted(set(stages) - available_stage_names)
         if unknown_stages:
@@ -289,100 +327,27 @@ def finalize_index_batch(
                 "Unsupported finalization stages: " + ", ".join(unknown_stages)
             )
         requested_stage_names = set(stages)
-        all_stages = tuple(
-            (stage_name, stage_fn)
-            for stage_name, stage_fn in all_stages
-            if stage_name in requested_stage_names
-        )
-
-    for stage_name, stage_fn in all_stages:
-        if skip_per_repo_stages and stage_name in _PER_REPO_STAGES:
-            emit_log_call(
-                info_logger_fn,
-                f"Skipping finalization stage {stage_name} (already run per-repo)",
-                event_name="index.finalization.stage.skipped",
-                extra_keys={
-                    "stage": stage_name,
-                    "run_id": run_id,
-                },
-            )
-            stage_timings[stage_name] = 0.0
-            continue
-        _notify_stage_progress(
-            stage_name,
-            status="started",
-            repo_count=len(committed_repo_paths),
-            run_id=run_id,
-        )
-        log_memory_usage(
-            info_logger_fn,
-            context=f"Before finalization stage {stage_name}",
-        )
-        stage_start = time.monotonic()
-        stage_span = (
-            telemetry.start_span(
-                "pcg.index.finalize.stage",
-                component=component,
-                attributes={
-                    "pcg.index.run_id": run_id,
-                    "pcg.index.stage": stage_name,
-                    "pcg.index.parse_strategy": parse_strategy,
-                    "pcg.index.parse_workers": parse_workers,
-                },
-            )
-            if telemetry is not None
-            else None
-        )
-        if stage_span is None:
-            stage_metrics = stage_fn()
-        else:
-            with stage_span:
-                stage_metrics = stage_fn()
-        elapsed = time.monotonic() - stage_start
-        stage_timings[stage_name] = elapsed
-        _notify_stage_progress(
-            stage_name,
-            status="completed",
-            duration_seconds=round(elapsed, 3),
-            repo_count=len(committed_repo_paths),
-            run_id=run_id,
-            **(stage_metrics if isinstance(stage_metrics, dict) else {}),
-        )
-        if (
-            telemetry is not None
-            and component is not None
-            and mode is not None
-            and source is not None
-            and hasattr(telemetry, "record_index_stage_duration")
-        ):
-            telemetry.record_index_stage_duration(
-                component=component,
-                mode=mode,
-                source=source,
-                stage=f"finalize_{stage_name}",
-                duration_seconds=elapsed,
-                parse_strategy=parse_strategy,
-                parse_workers=parse_workers,
-            )
-        log_memory_usage(
-            info_logger_fn,
-            context=f"After finalization stage {stage_name}",
-        )
-        emit_log_call(
-            info_logger_fn,
-            f"Finalization stage {stage_name} done in {elapsed:.1f}s",
-            event_name="index.finalization.stage.completed",
-            extra_keys={
-                "stage": stage_name,
-                "duration_seconds": round(elapsed, 3),
-                "run_id": run_id,
-                **(stage_metrics if isinstance(stage_metrics, dict) else {}),
-            },
-        )
+        all_stages = [
+            stage for stage in all_stages if stage.name in requested_stage_names
+        ]
+    result = execute_post_commit_stages(
+        stages=all_stages,
+        info_logger_fn=info_logger_fn,
+        stage_progress_callback=stage_progress_callback,
+        telemetry=telemetry,
+        component=component,
+        mode=mode,
+        source=source,
+        parse_strategy=parse_strategy,
+        parse_workers=parse_workers,
+        repo_count=len(committed_repo_paths),
+        run_id=run_id,
+        skipped_stage_names=_PER_REPO_STAGES if skip_per_repo_stages else set(),
+    )
     total_elapsed = time.monotonic() - total_start
     timings_summary = ", ".join(
         f"{stage_name}={duration:.1f}s"
-        for stage_name, duration in stage_timings.items()
+        for stage_name, duration in result.stage_timings.items()
     )
     emit_log_call(
         info_logger_fn,
@@ -393,8 +358,8 @@ def finalize_index_batch(
             "total_seconds": round(total_elapsed, 3),
             **{
                 f"{stage_name}_seconds": round(duration, 3)
-                for stage_name, duration in stage_timings.items()
+                for stage_name, duration in result.stage_timings.items()
             },
         },
     )
-    return stage_timings
+    return result

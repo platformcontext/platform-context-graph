@@ -92,6 +92,11 @@ Useful span attributes:
 - `pcg.index.source`
 - `pcg.index.file_parse_strategy`
 
+The `pcg.index.finalize*` spans are transitional bridge signals for the
+remaining Python post-commit recovery path. New projector or reducer work
+should emit queue, projector, or reducer spans instead of extending the
+finalization family.
+
 ## Metrics
 
 | Metric | Labels | What it answers |
@@ -156,6 +161,10 @@ The stable ingestion log families are:
 
 During rollout you may also see `index.parse.multiprocess_skeleton.enabled`.
 Treat that as compatibility noise, not a dashboard baseline.
+
+Treat `index.finalization.*` the same way for new architecture work: these
+events remain important for legacy repair and bridge visibility, but they are
+not the target event family for future collector, projector, or reducer logic.
 
 ## Dashboard Questions
 

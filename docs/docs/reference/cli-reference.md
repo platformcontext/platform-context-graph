@@ -55,7 +55,7 @@ These options apply at the root command level.
 | `pcg doctor` | Run local diagnostics. | No |
 | `pcg index [path]` | Index a local path. | No |
 | `pcg index-status [target]` | Show checkpointed index status for a local path or remote run. | Yes |
-| `pcg finalize` | Re-run finalization stages against an existing graph. | No |
+| `pcg finalize` | Re-run the legacy post-commit bridge against an existing graph for recovery or repair. | No |
 | `pcg clean` | Remove orphaned nodes and relationships. | No |
 | `pcg stats [path]` | Show indexing statistics. | No |
 | `pcg delete <path>` | Delete one indexed repository. | No |

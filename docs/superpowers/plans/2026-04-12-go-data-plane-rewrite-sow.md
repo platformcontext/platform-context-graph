@@ -18,7 +18,8 @@
 - Milestone 1: complete
 - Milestone 2: complete
 - Milestone 3: complete
-- Milestone 4: next active milestone
+- Milestone 4: complete
+- Milestone 5: next active milestone
 
 ## Companion Execution Documents
 
@@ -275,6 +276,20 @@ This means:
 - the remaining legacy path is narrow, documented, and intentionally transitional
 - new work no longer requires guessing which finalize stage owns a behavior
 - the codebase has one obvious path for new collector and reducer work
+
+### Milestone 4 proof snapshot
+
+This milestone is complete when all of the following remain green together:
+
+- post-commit execution returns a typed `PostCommitWriteResult` instead of an
+  unstructured timings dictionary
+- checkpointed finalization consumes that structured result and no longer reads
+  `GraphBuilder` side-channel metrics to populate run-state details
+- admin re-finalization uses the same explicit post-commit writer contract and
+  surfaces structured timing data from the returned result
+- the remaining Python finalization path is documented as a compatibility
+  bridge, not a landing zone for new collector or reducer behavior
+- the bridge has explicit removal conditions in repo-hosted documentation
 
 ---
 
