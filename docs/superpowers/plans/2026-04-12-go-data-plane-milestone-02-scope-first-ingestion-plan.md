@@ -126,8 +126,9 @@ Deliverables:
 - one live compose proof for incremental refresh on a repo-backed source
 - a stronger compose gate that starts from one active generation, proves an
   unchanged rerun leaves the authoritative generation and projector queue
-  untouched, and then proves a changed rerun can reappear as `retrying` before
-  the active/superseded swap completes
+  untouched, and then proves a changed rerun can be forced into a single
+  runtime-generated `retrying` state before the active/superseded swap
+  completes
 - replay and retraction regression coverage
 
 Effort:
@@ -180,6 +181,6 @@ The incremental-refresh proof is currently blocked by the projector handoff
 ordering around `scope_generations_active_scope_idx`; keep that blocker
 visible until the changed rerun can swap generations cleanly. The new retryable
 proof shape is intentionally aligned to the runtime marking a projector work
-item `retrying` before it gets reclaimed; if the live stack cannot emit that
-state itself, call that out explicitly instead of pretending the retry loop is
-automatic.
+item `retrying` once through the live retry-once env var before it gets
+reclaimed; if the live stack cannot emit that state itself, call that out
+explicitly instead of pretending the retry loop is automatic.

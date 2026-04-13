@@ -362,11 +362,22 @@ func stringFromAny(value any) string {
 
 func runProofProjectorCycle(t *testing.T, db *proofDomainDB, now time.Time) {
 	t.Helper()
+	runProofProjectorCycleWithInjector(t, db, now, nil)
+}
+
+func runProofProjectorCycleWithInjector(
+	t *testing.T,
+	db *proofDomainDB,
+	now time.Time,
+	retryInjector projector.RetryInjector,
+) {
+	t.Helper()
 
 	projectorQueue := ProjectorQueue{
 		db:            db,
 		LeaseOwner:    "projector-1",
 		LeaseDuration: time.Minute,
+		RetryDelay:    time.Second,
 		Now:           func() time.Time { return now },
 	}
 	projectorService := projector.Service{
@@ -377,6 +388,7 @@ func runProofProjectorCycle(t *testing.T, db *proofDomainDB, now time.Time) {
 			GraphWriter:   &recordingGraphWriter{},
 			ContentWriter: &recordingContentWriter{},
 			IntentWriter:  ReducerQueue{db: db, LeaseOwner: "reducer-1", LeaseDuration: time.Minute, Now: func() time.Time { return now }},
+			RetryInjector: retryInjector,
 		},
 		WorkSink: projectorQueue,
 		Wait:     func(context.Context, time.Duration) error { return context.Canceled },

@@ -19,28 +19,38 @@ const (
 	projectorConnectionTimeout = 10 * time.Second
 )
 
-func buildProjectorService(database postgres.SQLDB, graphWriter graph.Writer) projector.Service {
+func buildProjectorService(
+	database postgres.SQLDB,
+	graphWriter graph.Writer,
+	getenv func(string) string,
+) (projector.Service, error) {
 	projectorQueue := postgres.NewProjectorQueue(database, "projector", time.Minute)
 	reducerQueue := postgres.NewReducerQueue(database, "projector", time.Minute)
+	retryInjector, err := loadProjectorRetryInjector(getenv)
+	if err != nil {
+		return projector.Service{}, err
+	}
 
 	return projector.Service{
 		PollInterval: time.Second,
 		WorkSource:   projectorQueue,
 		FactStore:    postgres.NewFactStore(database),
-		Runner:       buildProjectorRuntime(database, graphWriter, reducerQueue),
+		Runner:       buildProjectorRuntime(database, graphWriter, reducerQueue, retryInjector),
 		WorkSink:     projectorQueue,
-	}
+	}, nil
 }
 
 func buildProjectorRuntime(
 	database postgres.SQLDB,
 	graphWriter graph.Writer,
 	intentWriter projector.ReducerIntentWriter,
+	retryInjector projector.RetryInjector,
 ) projector.Runtime {
 	return projector.Runtime{
 		GraphWriter:   graphWriter,
 		ContentWriter: postgres.NewContentWriter(database),
 		IntentWriter:  intentWriter,
+		RetryInjector: retryInjector,
 	}
 }
 

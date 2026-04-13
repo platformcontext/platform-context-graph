@@ -22,6 +22,7 @@ JAEGER_UI_PORT_BASE="${JAEGER_UI_PORT:-26686}"
 OTEL_COLLECTOR_OTLP_GRPC_PORT_BASE="${OTEL_COLLECTOR_OTLP_GRPC_PORT:-24317}"
 OTEL_COLLECTOR_OTLP_HTTP_PORT_BASE="${OTEL_COLLECTOR_OTLP_HTTP_PORT:-24318}"
 OTEL_COLLECTOR_PROMETHEUS_PORT_BASE="${OTEL_COLLECTOR_PROMETHEUS_PORT:-29464}"
+PROJECTOR_RETRY_ONCE_SCOPE_GENERATION="${PCG_PROJECTOR_RETRY_ONCE_SCOPE_GENERATION:-scope-incremental-refresh:generation-incremental-refresh-b}"
 
 cleanup() {
     local exit_code=$?
@@ -158,6 +159,7 @@ start_projector() {
         PCG_METRICS_ADDR="127.0.0.1:${PCG_PROJECTOR_METRICS_PORT}" \
         PCG_POSTGRES_DSN="$POSTGRES_DSN" \
         PCG_CONTENT_STORE_DSN="$POSTGRES_DSN" \
+        PCG_PROJECTOR_RETRY_ONCE_SCOPE_GENERATION="$PROJECTOR_RETRY_ONCE_SCOPE_GENERATION" \
         DEFAULT_DATABASE="neo4j" \
         NEO4J_URI="bolt://localhost:${NEO4J_BOLT_PORT}" \
         NEO4J_USERNAME="neo4j" \
@@ -174,7 +176,7 @@ start_projector() {
 }
 
 run_pytest() {
-    echo "Running incremental refresh compose pytest (unchanged + retryable changed-generation proof)..."
+    echo "Running incremental refresh compose pytest (unchanged + live retry-once changed-generation proof)..."
     PCG_E2E_INCREMENTAL_REFRESH_BASE_URL="http://127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}" \
     PCG_E2E_POSTGRES_DSN="$POSTGRES_DSN" \
     PCG_E2E_TIMEOUT_SECONDS="$TIMEOUT_SECONDS" \

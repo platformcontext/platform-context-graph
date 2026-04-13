@@ -18,6 +18,7 @@ type Runtime struct {
 	GraphWriter   graph.Writer
 	ContentWriter content.Writer
 	IntentWriter  ReducerIntentWriter
+	RetryInjector RetryInjector
 }
 
 type ReducerIntent struct {
@@ -79,6 +80,12 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 	result := Result{
 		ScopeID:      scopeValue.ScopeID,
 		GenerationID: generation.GenerationID,
+	}
+
+	if r.RetryInjector != nil {
+		if err := r.RetryInjector.MaybeFail(scopeValue, generation); err != nil {
+			return Result{}, err
+		}
 	}
 
 	if len(projection.graphMaterialization.Records) > 0 {

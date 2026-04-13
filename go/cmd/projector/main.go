@@ -33,7 +33,10 @@ func run(parent context.Context) error {
 	}
 	defer graphCloser.Close()
 
-	runner := buildProjectorService(postgres.SQLDB{DB: db}, graphWriter)
+	runner, err := buildProjectorService(postgres.SQLDB{DB: db}, graphWriter, os.Getenv)
+	if err != nil {
+		return err
+	}
 	service, err := app.NewHostedWithStatusServer(
 		"projector",
 		runner,

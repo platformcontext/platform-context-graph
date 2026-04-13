@@ -30,6 +30,15 @@ func (db *proofDomainDB) projectorWorkItemCount() int {
 	return count
 }
 
+func (db *proofDomainDB) projectorWorkItemStatus(generationID string) string {
+	for _, item := range db.state.workItems {
+		if item.stage == "projector" && item.generationID == generationID {
+			return item.status
+		}
+	}
+	return ""
+}
+
 func (db *proofDomainDB) updateWorkItemStatus(stage string, scopeID string, generationID string, leaseOwner string, status string) (sql.Result, error) {
 	for key, item := range db.state.workItems {
 		if item.stage != stage || item.scopeID != scopeID || item.generationID != generationID || item.leaseOwner != leaseOwner {
