@@ -51,7 +51,8 @@ Use this gate when validating the bounded Go rewrite proof path for the native
 runtime and collector wiring. Parser conversion is part of the rewrite plan,
 and the first native Go parser-platform slice now lives under
 `go/internal/parser`, `go/internal/collector/discovery`, and
-`go/internal/content/shape`.
+`go/internal/content/shape`. The collector path now also owns the optional
+SCIP branch in Go when `SCIP_INDEXER=true` is enabled.
 
 Current bounded proof path:
 
@@ -70,6 +71,15 @@ go test ./internal/parser ./internal/collector/discovery ./internal/content/shap
   ./internal/runtime ./internal/app ./internal/telemetry \
   ./internal/storage/neo4j ./internal/storage/postgres \
   ./internal/reducer ./cmd/reducer -count=1
+```
+
+Focused SCIP gate:
+
+```bash
+cd go
+go test ./internal/parser -run 'TestSCIP' -count=1
+go test ./internal/collector -run 'TestNativeRepositorySnapshotterUsesSCIPWhenEnabled|TestNativeRepositorySnapshotterFallsBackWhenSCIPParserFails' -count=1
+go test ./cmd/collector-git -run 'TestBuildCollectorServiceWiresSCIPEnvironment' -count=1
 ```
 
 Python runtime ownership removal gate:

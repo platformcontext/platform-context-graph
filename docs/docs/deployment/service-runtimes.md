@@ -32,9 +32,12 @@ Current branch caveat:
 - `collector-git`, `ingester`, and `bootstrap-index` now use Go-owned
   repository selection, repo sync, per-repo snapshot collection, and content
   shaping on the normal Git runtime path
+- when `SCIP_INDEXER=true`, the Go collector now owns SCIP language detection,
+  external `scip-*` indexer execution, protobuf reduction, and Go tree-sitter
+  supplementation on the collector path instead of bouncing through Python
 - the remaining cutover debt is now outside the normal collector hot path:
-  parser-matrix completion, Python runtime command removal, and Python
-  finalization/recovery ownership removal
+  Python runtime command removal and Python finalization/recovery ownership
+  removal
 - no new ingestor family should start until the Python runtime ownership is
   gone and the parser cutover is proven end to end
 
@@ -74,7 +77,7 @@ but they do follow the same shared admin contract:
 
 `collector-git` owns cycle orchestration, source-mode repository selection,
 repo sync, durable fact commit, per-repo snapshot collection, content shaping,
-and the shared admin surface in Go.
+the optional SCIP collector path, and the shared admin surface in Go.
 
 The remaining cutover work is no longer a selector or snapshot bridge problem.
 It is now centered on parser-matrix completion plus the separate Python-owned
@@ -111,8 +114,9 @@ Current rewrite status:
 - `collector-git`, `projector`, and `reducer` all mount that shared admin
   surface in their local proof lanes
 - the collector proof lane now uses native Go selection, repo sync, snapshot
-  collection, and content shaping; the remaining non-Go ownership is in the
-  parser long tail plus Python runtime and recovery/finalization seams
+  collection, content shaping, and optional SCIP execution/parsing; the
+  remaining non-Go ownership is now centered on Python runtime and
+  recovery/finalization seams
 
 ## Incremental Refresh And Reconciliation
 

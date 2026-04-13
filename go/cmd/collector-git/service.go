@@ -22,9 +22,11 @@ func buildCollectorService(
 
 	return collector.Service{
 		Source: &collector.GitSource{
-			Component:   "collector-git",
-			Selector:    collector.NativeRepositorySelector{Config: config},
-			Snapshotter: collector.NativeRepositorySnapshotter{},
+			Component: "collector-git",
+			Selector:  collector.NativeRepositorySelector{Config: config},
+			Snapshotter: collector.NativeRepositorySnapshotter{
+				SCIP: collector.LoadSnapshotSCIPConfig(getenv),
+			},
 		},
 		Committer:    postgres.NewIngestionStore(database),
 		PollInterval: defaultCollectorPollInterval,

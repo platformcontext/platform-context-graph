@@ -70,11 +70,16 @@ cutover draft assumed:
 - `go/internal/parser/sql_language.go` now owns the native SQL schema,
   relationship, migration, and partial-recovery adapter slice
 - `go/internal/parser/raw_text_engine.go` owns the raw-text fallback path
+- `go/internal/parser/scip_*.go` now owns native SCIP binary detection,
+  command execution, protobuf reduction, and the Go collector-facing payload
+  contract
+- `go/internal/collector/git_snapshot_scip.go` now owns the optional
+  SCIP-enabled collector snapshot path in Go
 
-That slice is still parser-matrix-incomplete. The remaining honest parser
-scope now centers on SCIP parity, the specialized data-intelligence JSON
-families, and the remaining long-tail language adapters before the collector
-hot path can truthfully drop Python.
+The known parser-matrix blockers are no longer in the collector bridge path.
+The normal Go collector path now owns both the standard tree-sitter route and
+the optional SCIP route. The remaining branch blockers are the separate
+Python-owned runtime command and finalization/recovery seams.
 
 No new ingestors should start until the milestones in this plan are complete.
 Treat this plan as the active cutover path until the merge bar below is fully

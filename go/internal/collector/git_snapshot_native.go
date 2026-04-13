@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -42,6 +41,7 @@ type NativeRepositorySnapshotter struct {
 	Engine           *parser.Engine
 	Registry         parser.Registry
 	DiscoveryOptions discovery.Options
+	SCIP             SnapshotSCIPConfig
 	Now              func() time.Time
 }
 
@@ -96,45 +96,9 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 		return RepositorySnapshot{}, fmt.Errorf("repository metadata for %q: %w", repoPath, err)
 	}
 	commitSHA := gitCommitSHA(ctx, repoPath)
-	shapeFiles := make([]shape.File, 0, len(fileSet.Files))
-	parsedFiles := make([]map[string]any, 0, len(fileSet.Files))
-
-	for _, filePath := range fileSet.Files {
-		if err := ctx.Err(); err != nil {
-			return RepositorySnapshot{}, err
-		}
-
-		parsed, err := engine.ParsePath(repoPath, filePath, false, parser.Options{
-			IndexSource:   true,
-			VariableScope: "all",
-		})
-		if err != nil {
-			return RepositorySnapshot{}, fmt.Errorf("parse %q: %w", filePath, err)
-		}
-		bodyBytes, err := os.ReadFile(filePath)
-		if err != nil {
-			return RepositorySnapshot{}, fmt.Errorf("read %q: %w", filePath, err)
-		}
-
-		relativePath, err := filepath.Rel(repoPath, filePath)
-		if err != nil {
-			return RepositorySnapshot{}, fmt.Errorf("relative path for %q: %w", filePath, err)
-		}
-		relativePath = filepath.ToSlash(filepath.Clean(relativePath))
-		body := string(bodyBytes)
-
-		shapeFiles = append(shapeFiles, shape.File{
-			Path:            relativePath,
-			Body:            body,
-			Digest:          digestForBody(body),
-			Language:        snapshotPayloadString(parsed, "language", "lang"),
-			ArtifactType:    snapshotPayloadString(parsed, "artifact_type"),
-			TemplateDialect: snapshotPayloadString(parsed, "template_dialect"),
-			IACRelevant:     snapshotPayloadBoolPtr(parsed, "iac_relevant"),
-			CommitSHA:       commitSHA,
-			EntityBuckets:   entityBucketsFromParsed(parsed),
-		})
-		parsedFiles = append(parsedFiles, parsed)
+	shapeFiles, parsedFiles, err := s.buildParsedRepositoryFiles(ctx, repoPath, fileSet, engine, commitSHA)
+	if err != nil {
+		return RepositorySnapshot{}, fmt.Errorf("build parsed repository files for %q: %w", repoPath, err)
 	}
 
 	materialization, err := shape.Materialize(shape.Input{
