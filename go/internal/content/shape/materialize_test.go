@@ -37,6 +37,12 @@ func TestMaterializeBuildsFileRecordsAndOrderedEntities(t *testing.T) {
 							Name:       "alpha",
 							LineNumber: 1,
 							Source:     "def alpha():\n  return 1",
+							Metadata: map[string]any{
+								"docstring":   "Alpha docs.",
+								"decorators":  []string{"@cached"},
+								"async":       true,
+								"nested_data": map[string]any{"team": "platform"},
+							},
 						},
 						{
 							Name:       "beta",
@@ -152,6 +158,22 @@ func TestMaterializeBuildsFileRecordsAndOrderedEntities(t *testing.T) {
 		if gotEntity.Path != "src/app.py" {
 			t.Fatalf("entity[%d].Path = %q, want %q", i, gotEntity.Path, "src/app.py")
 		}
+	}
+	if got, want := got.Entities[0].Metadata["docstring"], "Alpha docs."; got != want {
+		t.Fatalf("entity[0].Metadata[docstring] = %#v, want %#v", got, want)
+	}
+	if got, want := got.Entities[0].Metadata["async"], true; got != want {
+		t.Fatalf("entity[0].Metadata[async] = %#v, want %#v", got, want)
+	}
+	if got, want := got.Entities[0].Metadata["decorators"], []string{"@cached"}; !stringSlicesEqual(toStringSlice(got), want) {
+		t.Fatalf("entity[0].Metadata[decorators] = %#v, want %#v", got, want)
+	}
+	nested, ok := got.Entities[0].Metadata["nested_data"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity[0].Metadata[nested_data] = %T, want map[string]any", got.Entities[0].Metadata["nested_data"])
+	}
+	if got, want := nested["team"], "platform"; got != want {
+		t.Fatalf("entity[0].Metadata[nested_data][team] = %#v, want %#v", got, want)
 	}
 }
 
@@ -273,4 +295,36 @@ type EntityRecordExpectation struct {
 
 func boolPtr(value bool) *bool {
 	return &value
+}
+
+func toStringSlice(value any) []string {
+	items, ok := value.([]string)
+	if ok {
+		return items
+	}
+	rawItems, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	converted := make([]string, 0, len(rawItems))
+	for _, item := range rawItems {
+		text, ok := item.(string)
+		if !ok {
+			return nil
+		}
+		converted = append(converted, text)
+	}
+	return converted
+}
+
+func stringSlicesEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }

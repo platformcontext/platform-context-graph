@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/trace/noop"
+
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
@@ -251,6 +254,10 @@ func TestRuntimeProjectMaterializesExplicitEntityRecords(t *testing.T) {
 				"end_line":     20,
 				"language":     "sql",
 				"source_cache": "create table public.users",
+				"entity_metadata": map[string]any{
+					"docstring":  "Primary table.",
+					"decorators": []string{"@tracked"},
+				},
 			},
 		},
 	})
@@ -298,6 +305,9 @@ func TestRuntimeProjectMaterializesExplicitEntityRecords(t *testing.T) {
 	if got, want := entity.SourceCache, "create table public.users"; got != want {
 		t.Fatalf("content entity source cache = %q, want %q", got, want)
 	}
+	if got, want := entity.Metadata["docstring"], "Primary table."; got != want {
+		t.Fatalf("content entity metadata docstring = %#v, want %#v", got, want)
+	}
 }
 
 type recordingGraphWriter struct {
@@ -330,4 +340,107 @@ func (w *recordingIntentWriter) Enqueue(_ context.Context, intents []ReducerInte
 	copy(cloned, intents)
 	w.calls = append(w.calls, cloned)
 	return w.result, nil
+}
+
+func TestRuntimeProjectWithTelemetry(t *testing.T) {
+	t.Parallel()
+
+	tracer := noop.NewTracerProvider().Tracer("test")
+	meter := metricnoop.NewMeterProvider().Meter("test")
+	instruments, err := telemetry.NewInstruments(meter)
+	if err != nil {
+		t.Fatalf("NewInstruments() error = %v, want nil", err)
+	}
+
+	graphWriter := &recordingGraphWriter{result: graph.Result{RecordCount: 1}}
+	contentWriter := &recordingContentWriter{result: content.Result{RecordCount: 1}}
+	intentWriter := &recordingIntentWriter{result: IntentResult{Count: 1}}
+
+	runtime := Runtime{
+		GraphWriter:   graphWriter,
+		ContentWriter: contentWriter,
+		IntentWriter:  intentWriter,
+		Tracer:        tracer,
+		Instruments:   instruments,
+	}
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+	}
+	generationValue := scope.ScopeGeneration{
+		GenerationID: "generation-456",
+		ScopeID:      "scope-123",
+		ObservedAt:   time.Date(2026, time.April, 12, 11, 30, 0, 0, time.UTC),
+		IngestedAt:   time.Date(2026, time.April, 12, 11, 35, 0, 0, time.UTC),
+		Status:       scope.GenerationStatusPending,
+		TriggerKind:  scope.TriggerKindSnapshot,
+	}
+
+	result, err := runtime.Project(context.Background(), scopeValue, generationValue, []facts.Envelope{
+		{
+			FactID:       "fact-1",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "source_node",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 31, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"graph_id":   "repo-123",
+				"graph_kind": "repository",
+				"name":       "platform-context-graph",
+			},
+		},
+		{
+			FactID:       "fact-2",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "source_content",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 32, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"content_path":   "README.md",
+				"content_body":   "# PCG",
+				"content_digest": "digest-1",
+			},
+		},
+		{
+			FactID:       "fact-3",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "source_relation",
+			ObservedAt:   time.Date(2026, time.April, 12, 11, 33, 0, 0, time.UTC),
+			Payload: map[string]any{
+				"reducer_domain": "workload_identity",
+				"entity_key":     "repo-123",
+				"reason":         "shared identity follow-up required",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Project() error = %v, want nil", err)
+	}
+
+	if got, want := result.ScopeGenerationKey(), "scope-123:generation-456"; got != want {
+		t.Fatalf("Result.ScopeGenerationKey() = %q, want %q", got, want)
+	}
+	if got, want := len(graphWriter.calls), 1; got != want {
+		t.Fatalf("graph writer call count = %d, want %d", got, want)
+	}
+	if got, want := len(contentWriter.calls), 1; got != want {
+		t.Fatalf("content writer call count = %d, want %d", got, want)
+	}
+	if got, want := len(intentWriter.calls), 1; got != want {
+		t.Fatalf("intent writer call count = %d, want %d", got, want)
+	}
+	if got, want := result.Graph.RecordCount, 1; got != want {
+		t.Fatalf("result.Graph.RecordCount = %d, want %d", got, want)
+	}
+	if got, want := result.Content.RecordCount, 1; got != want {
+		t.Fatalf("result.Content.RecordCount = %d, want %d", got, want)
+	}
+	if got, want := result.Intents.Count, 1; got != want {
+		t.Fatalf("result.Intents.Count = %d, want %d", got, want)
+	}
 }

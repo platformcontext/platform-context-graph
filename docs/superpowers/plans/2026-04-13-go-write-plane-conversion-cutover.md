@@ -340,6 +340,13 @@ wire `collector.GitSource.Snapshotter` to the native implementation.
 Implemented in `git_snapshot_native.go` with SCIP support in
 `git_snapshot_scip.go`.
 
+The native collector snapshot path now also preserves structured parser entity
+metadata end to end for normal Git ingestion. Parser-owned fields such as
+docstrings, decorators, async/type metadata, and nested parser metadata now
+survive materialization, snapshot transport, content-entity fact emission,
+projector reconstruction, and Postgres `content_entities.metadata` persistence
+instead of being truncated to the older scalar-only entity shape.
+
 - [x] **Step 7: Delete Python bridge imports and code**
 
 Remove all imports of `go/internal/compatibility/pythonbridge` from the

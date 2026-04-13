@@ -63,6 +63,9 @@ func TestBootstrapDefinitionsIncludeContentStoreTables(t *testing.T) {
 	if !strings.Contains(contentStore.SQL, "CREATE TABLE IF NOT EXISTS content_entities") {
 		t.Fatal("content_store SQL missing content_entities table")
 	}
+	if !strings.Contains(contentStore.SQL, "metadata JSONB NOT NULL DEFAULT '{}'::jsonb") {
+		t.Fatal("content_store SQL missing content_entities metadata jsonb column")
+	}
 }
 
 func TestApplyBootstrapExecutesDefinitionsInOrder(t *testing.T) {

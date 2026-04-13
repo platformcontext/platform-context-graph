@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
+
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
@@ -20,6 +24,8 @@ type Runtime struct {
 	ContentWriter content.Writer
 	IntentWriter  ReducerIntentWriter
 	RetryInjector RetryInjector
+	Tracer        trace.Tracer           // optional
+	Instruments   *telemetry.Instruments // optional
 }
 
 type ReducerIntent struct {
@@ -93,10 +99,28 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 		if r.GraphWriter == nil {
 			return Result{}, errors.New("graph writer is required when graph records are present")
 		}
+
+		writeStart := time.Now()
+		if r.Tracer != nil {
+			var writeSpan trace.Span
+			ctx, writeSpan = r.Tracer.Start(ctx, telemetry.SpanCanonicalWrite)
+			defer writeSpan.End()
+		}
+
 		graphResult, err := r.GraphWriter.Write(ctx, projection.graphMaterialization)
 		if err != nil {
 			return Result{}, fmt.Errorf("write graph materialization: %w", err)
 		}
+
+		if r.Instruments != nil {
+			r.Instruments.CanonicalWriteDuration.Record(ctx, time.Since(writeStart).Seconds(), metric.WithAttributes(
+				telemetry.AttrScopeID(scopeValue.ScopeID),
+			))
+			r.Instruments.CanonicalWrites.Add(ctx, 1, metric.WithAttributes(
+				telemetry.AttrScopeID(scopeValue.ScopeID),
+			))
+		}
+
 		result.Graph = graphResult
 	}
 
@@ -115,10 +139,29 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 		if r.IntentWriter == nil {
 			return Result{}, errors.New("reducer intent writer is required when reducer intents are present")
 		}
+
+		enqueueStart := time.Now()
+		if r.Tracer != nil {
+			var enqueueSpan trace.Span
+			ctx, enqueueSpan = r.Tracer.Start(ctx, telemetry.SpanReducerIntentEnqueue)
+			defer enqueueSpan.End()
+		}
+
 		intentResult, err := r.IntentWriter.Enqueue(ctx, projection.reducerIntents)
 		if err != nil {
 			return Result{}, fmt.Errorf("enqueue reducer intents: %w", err)
 		}
+
+		if r.Instruments != nil {
+			duration := time.Since(enqueueStart).Seconds()
+			r.Instruments.ProjectorStageDuration.Record(ctx, duration, metric.WithAttributes(
+				telemetry.AttrScopeID(scopeValue.ScopeID),
+			))
+			r.Instruments.ReducerIntentsEnqueued.Add(ctx, int64(len(projection.reducerIntents)), metric.WithAttributes(
+				telemetry.AttrScopeID(scopeValue.ScopeID),
+			))
+		}
+
 		result.Intents = intentResult
 	}
 
@@ -319,6 +362,7 @@ func buildContentEntityRecord(repoID string, fact facts.Envelope) (content.Entit
 		TemplateDialect: templateDialect,
 		IACRelevant:     iacRelevant,
 		SourceCache:     sourceCache,
+		Metadata:        entityMetadataFromPayload(fact.Payload),
 		Deleted:         fact.IsTombstone,
 	}, true
 }

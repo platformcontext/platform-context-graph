@@ -57,6 +57,10 @@ func TestPostgresContentWriterUpsertsFileAndEntityRowsAndDeletesTombstones(t *te
 				TemplateDialect: "ansi",
 				IACRelevant:     boolPtr(true),
 				SourceCache:     "create table public.users",
+				Metadata: map[string]any{
+					"docstring":  "Primary table.",
+					"decorators": []string{"@tracked"},
+				},
 			},
 			{
 				EntityID:   "content-entity:e_old",
@@ -178,7 +182,14 @@ func TestPostgresContentWriterUpsertsFileAndEntityRowsAndDeletesTombstones(t *te
 	if got, want := entityArgs[13], "create table public.users"; got != want {
 		t.Fatalf("source_cache arg = %v, want %v", got, want)
 	}
-	if got, want := entityArgs[14], now; got != want {
+	entityMetadata, ok := entityArgs[14].([]byte)
+	if !ok {
+		t.Fatalf("entity metadata arg = %T, want []byte", entityArgs[14])
+	}
+	if got, want := string(entityMetadata), `{"decorators":["@tracked"],"docstring":"Primary table."}`; got != want {
+		t.Fatalf("entity metadata arg = %s, want %s", got, want)
+	}
+	if got, want := entityArgs[15], now; got != want {
 		t.Fatalf("indexed_at arg = %v, want %v", got, want)
 	}
 

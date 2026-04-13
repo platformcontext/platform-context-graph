@@ -161,6 +161,7 @@ CREATE TABLE IF NOT EXISTS content_entities (
     end_byte INTEGER NULL,
     language TEXT NULL,
     source_cache TEXT NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     indexed_at TIMESTAMPTZ NOT NULL,
     artifact_type TEXT NULL,
     template_dialect TEXT NULL,

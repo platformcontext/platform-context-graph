@@ -64,6 +64,10 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 					Language:     "python",
 					SourceCache:  "def handler():\n    return 1\n",
 					IndexedAt:    observedAt,
+					Metadata: map[string]any{
+						"docstring":  "Handles requests.",
+						"decorators": []string{"@cached"},
+					},
 				}},
 			},
 			secondRepoPath: {
@@ -139,6 +143,13 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 	}
 	if got, want := entityFact.Payload["source_cache"], "def handler():\n    return 1\n"; got != want {
 		t.Fatalf("entity fact source_cache = %#v, want %#v", got, want)
+	}
+	entityMetadata, ok := entityFact.Payload["entity_metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("entity fact entity_metadata = %T, want map[string]any", entityFact.Payload["entity_metadata"])
+	}
+	if got, want := entityMetadata["docstring"], "Handles requests."; got != want {
+		t.Fatalf("entity fact entity_metadata[docstring] = %#v, want %#v", got, want)
 	}
 
 	secondCollected, ok, err := source.Next(context.Background())

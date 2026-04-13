@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -49,12 +50,12 @@ INSERT INTO content_entities (
     entity_id, repo_id, relative_path, entity_type, entity_name,
     start_line, end_line, start_byte, end_byte, language,
     artifact_type, template_dialect, iac_relevant,
-    source_cache, indexed_at
+    source_cache, metadata, indexed_at
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9, $10,
     $11, $12, $13,
-    $14, $15
+    $14, $15::jsonb, $16
 )
 ON CONFLICT (entity_id) DO UPDATE
 SET repo_id = EXCLUDED.repo_id,
@@ -70,6 +71,7 @@ SET repo_id = EXCLUDED.repo_id,
     template_dialect = EXCLUDED.template_dialect,
     iac_relevant = EXCLUDED.iac_relevant,
     source_cache = EXCLUDED.source_cache,
+    metadata = EXCLUDED.metadata,
     indexed_at = EXCLUDED.indexed_at
 `
 
@@ -206,6 +208,11 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 			continue
 		}
 
+		metadataJSON, err := metadataJSON(entity.Metadata)
+		if err != nil {
+			return content.Result{}, fmt.Errorf("marshal content entity metadata for %q: %w", entity.EntityID, err)
+		}
+
 		if _, err := w.db.ExecContext(
 			ctx,
 			upsertContentEntityQuery,
@@ -223,6 +230,7 @@ func (w ContentWriter) Write(ctx context.Context, materialization content.Materi
 			optionalString(entity.TemplateDialect),
 			optionalBool(entity.IACRelevant),
 			sourceCache,
+			metadataJSON,
 			indexedAt,
 		); err != nil {
 			return content.Result{}, fmt.Errorf("upsert content_entities for %q: %w", entity.EntityID, err)
@@ -300,6 +308,13 @@ func optionalMetadataBool(metadata map[string]string, key string) (any, error) {
 	}
 
 	return parsed, nil
+}
+
+func metadataJSON(metadata map[string]any) ([]byte, error) {
+	if len(metadata) == 0 {
+		return []byte("{}"), nil
+	}
+	return json.Marshal(metadata)
 }
 
 func optionalString(value string) any {

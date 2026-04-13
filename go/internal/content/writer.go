@@ -43,6 +43,7 @@ type EntityRecord struct {
 	TemplateDialect string
 	IACRelevant     *bool
 	SourceCache     string
+	Metadata        map[string]any
 	Deleted         bool
 }
 
@@ -57,6 +58,9 @@ func (r EntityRecord) Clone() EntityRecord {
 	}
 	if r.IACRelevant != nil {
 		cloned.IACRelevant = cloneBoolPtr(r.IACRelevant)
+	}
+	if r.Metadata != nil {
+		cloned.Metadata = cloneAnyMap(r.Metadata)
 	}
 
 	return cloned
@@ -193,4 +197,48 @@ func cloneBoolPtr(value *bool) *bool {
 
 	cloned := *value
 	return &cloned
+}
+
+func cloneAnyMap(input map[string]any) map[string]any {
+	if input == nil {
+		return nil
+	}
+
+	cloned := make(map[string]any, len(input))
+	for key, value := range input {
+		cloned[key] = cloneAnyValue(value)
+	}
+	return cloned
+}
+
+func cloneAnySlice(input []any) []any {
+	if input == nil {
+		return nil
+	}
+
+	cloned := make([]any, len(input))
+	for i, value := range input {
+		cloned[i] = cloneAnyValue(value)
+	}
+	return cloned
+}
+
+func cloneStringSlice(input []string) []string {
+	if input == nil {
+		return nil
+	}
+	return append([]string(nil), input...)
+}
+
+func cloneAnyValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneAnyMap(typed)
+	case []any:
+		return cloneAnySlice(typed)
+	case []string:
+		return cloneStringSlice(typed)
+	default:
+		return typed
+	}
 }

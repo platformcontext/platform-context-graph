@@ -324,6 +324,9 @@ func contentEntityFactEnvelope(
 	if entitySnapshot.IACRelevant != nil {
 		payload["iac_relevant"] = *entitySnapshot.IACRelevant
 	}
+	if len(entitySnapshot.Metadata) > 0 {
+		payload["entity_metadata"] = cloneAnyMap(entitySnapshot.Metadata)
+	}
 
 	return factEnvelope(
 		"content_entity",

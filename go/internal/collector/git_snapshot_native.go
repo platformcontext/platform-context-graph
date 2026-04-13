@@ -302,6 +302,7 @@ func entityBucketsFromParsed(payload map[string]any) map[string][]shape.Entity {
 				TemplateDialect: templateDialect,
 				IACRelevant:     iacRelevant,
 				Source:          snapshotPayloadString(item, "source"),
+				Metadata:        snapshotEntityMetadata(item),
 			})
 		}
 		buckets[mapping.bucket] = entities
@@ -380,6 +381,7 @@ func materializationEntitiesToSnapshots(
 			TemplateDialect: entity.TemplateDialect,
 			IACRelevant:     entity.IACRelevant,
 			SourceCache:     entity.SourceCache,
+			Metadata:        cloneAnyMap(entity.Metadata),
 			IndexedAt:       indexedAt,
 		})
 	}

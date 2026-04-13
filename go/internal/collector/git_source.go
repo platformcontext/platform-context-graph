@@ -3,13 +3,18 @@ package collector
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/repositoryidentity"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 // RepositorySelector selects the repositories for one collector cycle.
@@ -65,20 +70,21 @@ type ContentFileSnapshot struct {
 
 // ContentEntitySnapshot captures one portable content-entity record.
 type ContentEntitySnapshot struct {
-	EntityID        string    `json:"entity_id"`
-	RelativePath    string    `json:"relative_path"`
-	EntityType      string    `json:"entity_type"`
-	EntityName      string    `json:"entity_name"`
-	StartLine       int       `json:"start_line"`
-	EndLine         int       `json:"end_line"`
-	StartByte       *int      `json:"start_byte"`
-	EndByte         *int      `json:"end_byte"`
-	Language        string    `json:"language"`
-	ArtifactType    string    `json:"artifact_type"`
-	TemplateDialect string    `json:"template_dialect"`
-	IACRelevant     *bool     `json:"iac_relevant"`
-	SourceCache     string    `json:"source_cache"`
-	IndexedAt       time.Time `json:"indexed_at"`
+	EntityID        string         `json:"entity_id"`
+	RelativePath    string         `json:"relative_path"`
+	EntityType      string         `json:"entity_type"`
+	EntityName      string         `json:"entity_name"`
+	StartLine       int            `json:"start_line"`
+	EndLine         int            `json:"end_line"`
+	StartByte       *int           `json:"start_byte"`
+	EndByte         *int           `json:"end_byte"`
+	Language        string         `json:"language"`
+	ArtifactType    string         `json:"artifact_type"`
+	TemplateDialect string         `json:"template_dialect"`
+	IACRelevant     *bool          `json:"iac_relevant"`
+	SourceCache     string         `json:"source_cache"`
+	Metadata        map[string]any `json:"metadata"`
+	IndexedAt       time.Time      `json:"indexed_at"`
 }
 
 // GitSource converts narrowed snapshot batches into durable collector generations.
@@ -86,6 +92,9 @@ type GitSource struct {
 	Component   string
 	Selector    RepositorySelector
 	Snapshotter RepositorySnapshotter
+	Tracer      trace.Tracer
+	Instruments *telemetry.Instruments
+	Logger      *slog.Logger
 	pending     []CollectedGeneration
 }
 
@@ -96,7 +105,37 @@ func (s *GitSource) Next(ctx context.Context) (CollectedGeneration, bool, error)
 		if s.Selector == nil {
 			return CollectedGeneration{}, false, fmt.Errorf("git repository selector is required")
 		}
-		batch, err := s.Selector.SelectRepositories(ctx)
+
+		// Trace and measure scope assignment (discovery phase)
+		var batch SelectionBatch
+		var err error
+		if s.Tracer != nil {
+			ctx, span := s.Tracer.Start(ctx, telemetry.SpanScopeAssign)
+			defer span.End()
+
+			start := time.Now()
+			batch, err = s.Selector.SelectRepositories(ctx)
+			duration := time.Since(start).Seconds()
+
+			if s.Instruments != nil {
+				s.Instruments.ScopeAssignDuration.Record(ctx, duration,
+					metric.WithAttributes(
+						telemetry.AttrCollectorKind("git"),
+						telemetry.AttrSourceSystem("git"),
+					),
+				)
+			}
+
+			if s.Logger != nil && err == nil {
+				s.Logger.InfoContext(ctx, "collector discovery completed",
+					slog.String("collector_kind", "git"),
+					slog.Int("repository_count", len(batch.Repositories)),
+				)
+			}
+		} else {
+			batch, err = s.Selector.SelectRepositories(ctx)
+		}
+
 		if err != nil {
 			return CollectedGeneration{}, false, err
 		}
@@ -160,40 +199,113 @@ func (s *GitSource) buildCollected(
 
 	collected := make([]CollectedGeneration, 0, len(resolvedRepositories))
 	for _, repository := range resolvedRepositories {
-		snapshot, err := s.Snapshotter.SnapshotRepository(ctx, repository)
-		if err != nil {
-			return nil, fmt.Errorf("snapshot repository %q: %w", repository.RepoPath, err)
-		}
-		repoPath := repository.RepoPath
-		if snapshot.RepoPath == "" {
-			snapshot.RepoPath = repoPath
-		}
-		if snapshot.RemoteURL == "" {
-			snapshot.RemoteURL = repository.RemoteURL
-		}
-		repositoryName := repository.DisplayName
-		if strings.TrimSpace(repositoryName) == "" {
-			repositoryName = filepath.Base(repoPath)
-		}
-		metadata, err := repositoryidentity.MetadataFor(
-			repositoryName,
-			repoPath,
-			repository.RemoteURL,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("build repository metadata for %q: %w", repoPath, err)
-		}
-		collected = append(
-			collected,
-			buildCollectedGeneration(
+		// Trace and measure fact emission (snapshot + fact building phase)
+		var snapshot RepositorySnapshot
+		var err error
+		if s.Tracer != nil {
+			ctx, span := s.Tracer.Start(ctx, telemetry.SpanFactEmit)
+			defer span.End()
+
+			start := time.Now()
+			snapshot, err = s.Snapshotter.SnapshotRepository(ctx, repository)
+			if err != nil {
+				return nil, fmt.Errorf("snapshot repository %q: %w", repository.RepoPath, err)
+			}
+
+			repoPath := repository.RepoPath
+			if snapshot.RepoPath == "" {
+				snapshot.RepoPath = repoPath
+			}
+			if snapshot.RemoteURL == "" {
+				snapshot.RemoteURL = repository.RemoteURL
+			}
+			repositoryName := repository.DisplayName
+			if strings.TrimSpace(repositoryName) == "" {
+				repositoryName = filepath.Base(repoPath)
+			}
+			metadata, err := repositoryidentity.MetadataFor(
+				repositoryName,
+				repoPath,
+				repository.RemoteURL,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("build repository metadata for %q: %w", repoPath, err)
+			}
+
+			generation := buildCollectedGeneration(
 				repoPath,
 				metadata,
 				sourceRunID,
 				batch.ObservedAt.UTC(),
 				snapshot,
 				repository.IsDependency,
-			),
-		)
+			)
+
+			duration := time.Since(start).Seconds()
+
+			if s.Instruments != nil {
+				s.Instruments.FactEmitDuration.Record(ctx, duration,
+					metric.WithAttributes(
+						telemetry.AttrCollectorKind("git"),
+						telemetry.AttrSourceSystem("git"),
+						telemetry.AttrScopeID(generation.Scope.ScopeID),
+					),
+				)
+				s.Instruments.FactsEmitted.Add(ctx, int64(len(generation.Facts)),
+					metric.WithAttributes(
+						telemetry.AttrCollectorKind("git"),
+						telemetry.AttrSourceSystem("git"),
+						telemetry.AttrScopeID(generation.Scope.ScopeID),
+					),
+				)
+			}
+
+			if s.Logger != nil {
+				s.Logger.InfoContext(ctx, "collector snapshot completed",
+					slog.String("collector_kind", "git"),
+					slog.String("repo_path", repoPath),
+					slog.Int("file_count", snapshot.FileCount),
+					slog.Int("fact_count", len(generation.Facts)),
+				)
+			}
+
+			collected = append(collected, generation)
+		} else {
+			snapshot, err = s.Snapshotter.SnapshotRepository(ctx, repository)
+			if err != nil {
+				return nil, fmt.Errorf("snapshot repository %q: %w", repository.RepoPath, err)
+			}
+			repoPath := repository.RepoPath
+			if snapshot.RepoPath == "" {
+				snapshot.RepoPath = repoPath
+			}
+			if snapshot.RemoteURL == "" {
+				snapshot.RemoteURL = repository.RemoteURL
+			}
+			repositoryName := repository.DisplayName
+			if strings.TrimSpace(repositoryName) == "" {
+				repositoryName = filepath.Base(repoPath)
+			}
+			metadata, err := repositoryidentity.MetadataFor(
+				repositoryName,
+				repoPath,
+				repository.RemoteURL,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("build repository metadata for %q: %w", repoPath, err)
+			}
+			collected = append(
+				collected,
+				buildCollectedGeneration(
+					repoPath,
+					metadata,
+					sourceRunID,
+					batch.ObservedAt.UTC(),
+					snapshot,
+					repository.IsDependency,
+				),
+			)
+		}
 	}
 	return collected, nil
 }

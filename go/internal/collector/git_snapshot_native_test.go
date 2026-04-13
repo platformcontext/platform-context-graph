@@ -18,7 +18,7 @@ func TestNativeRepositorySnapshotterSnapshotsOneRepository(t *testing.T) {
 	writeCollectorTestFile(
 		t,
 		filePath,
-		"def handler():\n    return 1\n\nclass Worker:\n    pass\n",
+		"@cached\nasync def handler():\n    return 1\n\nclass Worker:\n    pass\n",
 	)
 
 	engine, err := parser.DefaultEngine()
@@ -79,7 +79,7 @@ func TestNativeRepositorySnapshotterSnapshotsOneRepository(t *testing.T) {
 	if contentFile.RelativePath != "app.py" {
 		t.Fatalf("ContentFiles[0].RelativePath = %q, want %q", contentFile.RelativePath, "app.py")
 	}
-	if contentFile.Body != "def handler():\n    return 1\n\nclass Worker:\n    pass\n" {
+	if contentFile.Body != "@cached\nasync def handler():\n    return 1\n\nclass Worker:\n    pass\n" {
 		t.Fatalf("ContentFiles[0].Body = %q, want source body", contentFile.Body)
 	}
 	if contentFile.Digest == "" {
@@ -97,6 +97,12 @@ func TestNativeRepositorySnapshotterSnapshotsOneRepository(t *testing.T) {
 	}
 	if got.ContentEntities[0].EntityType != "Function" {
 		t.Fatalf("ContentEntities[0].EntityType = %q, want %q", got.ContentEntities[0].EntityType, "Function")
+	}
+	if got, want := got.ContentEntities[0].Metadata["async"], true; got != want {
+		t.Fatalf("ContentEntities[0].Metadata[async] = %#v, want %#v", got, want)
+	}
+	if decorators, want := collectorToStringSlice(got.ContentEntities[0].Metadata["decorators"]), []string{"@cached"}; !collectorStringSlicesEqual(decorators, want) {
+		t.Fatalf("ContentEntities[0].Metadata[decorators] = %#v, want %#v", got.ContentEntities[0].Metadata["decorators"], want)
 	}
 	if got.ContentEntities[0].IndexedAt != now {
 		t.Fatalf("ContentEntities[0].IndexedAt = %v, want %v", got.ContentEntities[0].IndexedAt, now)
@@ -402,4 +408,36 @@ func assertSnapshotEntityTypeAndName(
 		entityName,
 		entities,
 	)
+}
+
+func collectorToStringSlice(value any) []string {
+	items, ok := value.([]string)
+	if ok {
+		return items
+	}
+	rawItems, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	converted := make([]string, 0, len(rawItems))
+	for _, item := range rawItems {
+		text, ok := item.(string)
+		if !ok {
+			return nil
+		}
+		converted = append(converted, text)
+	}
+	return converted
+}
+
+func collectorStringSlicesEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }

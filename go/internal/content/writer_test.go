@@ -65,15 +65,30 @@ func TestMaterializationCloneCopiesEntityRecords(t *testing.T) {
 				Language:        "sql",
 				SourceCache:     "create table public.users",
 				TemplateDialect: "ansi",
+				Metadata: map[string]any{
+					"docstring":   "table docs",
+					"decorators":  []string{"@tracked"},
+					"nested_data": map[string]any{"owner": "data-platform"},
+				},
 			},
 		},
 	}
 
 	cloned := original.Clone()
 	cloned.Entities[0].EntityName = "mutated"
+	cloned.Entities[0].Metadata["docstring"] = "mutated"
+	nested := cloned.Entities[0].Metadata["nested_data"].(map[string]any)
+	nested["owner"] = "mutated"
 
 	if got, want := original.Entities[0].EntityName, "public.users"; got != want {
 		t.Fatalf("original entity name = %q, want %q", got, want)
+	}
+	if got, want := original.Entities[0].Metadata["docstring"], "table docs"; got != want {
+		t.Fatalf("original entity metadata docstring = %#v, want %#v", got, want)
+	}
+	originalNested := original.Entities[0].Metadata["nested_data"].(map[string]any)
+	if got, want := originalNested["owner"], "data-platform"; got != want {
+		t.Fatalf("original entity nested metadata owner = %#v, want %#v", got, want)
 	}
 }
 
@@ -98,6 +113,9 @@ func TestMemoryWriterStoresClone(t *testing.T) {
 			StartLine:   1,
 			EndLine:     1,
 			SourceCache: "func hello() {}\n",
+			Metadata: map[string]any{
+				"docstring": "Greets callers.",
+			},
 		}},
 	})
 	if err != nil {
@@ -114,6 +132,9 @@ func TestMemoryWriterStoresClone(t *testing.T) {
 	}
 	if got, want := writer.Writes[0].Entities[0].EntityID, "content-entity:e_ab12cd34ef56"; got != want {
 		t.Fatalf("stored EntityID = %q, want %q", got, want)
+	}
+	if got, want := writer.Writes[0].Entities[0].Metadata["docstring"], "Greets callers."; got != want {
+		t.Fatalf("stored entity metadata docstring = %#v, want %#v", got, want)
 	}
 }
 
