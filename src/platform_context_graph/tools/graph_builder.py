@@ -19,7 +19,7 @@ from ..relationships import (
 from ..repository_identity import git_remote_for_path, repository_metadata
 from ..utils.debug_log import debug_log, error_logger, info_logger, warning_logger
 from ..utils.debug_log import debug_logger
-from ..collectors.git.indexing import (
+from ..collectors.git.discovery import (
     collect_supported_files as _collect_supported_files,
     estimate_processing_time as _estimate_processing_time,
     get_ignored_dir_names as _get_ignored_dir_names,
@@ -60,7 +60,6 @@ from ..relationships.data_intelligence_links import (
 )
 from ..relationships.sql_links import create_all_sql_links as _create_all_sql_links
 from ..graph.schema import create_schema as _create_schema
-from ..parsers.scip import build_graph_from_scip as _build_graph_from_scip
 from ..resolution.workloads.materialization import (
     materialize_workloads as _materialize_workloads,
 )
@@ -391,6 +390,8 @@ class GraphBuilder:
         self, path: Path, is_dependency: bool, job_id: str | None, lang: str
     ) -> None:
         """Index a path via SCIP output when the feature is enabled."""
+        from ..parsers.scip import build_graph_from_scip as _build_graph_from_scip
+
         await _build_graph_from_scip(
             self,
             path,

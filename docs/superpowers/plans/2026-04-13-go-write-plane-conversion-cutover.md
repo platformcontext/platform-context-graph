@@ -260,16 +260,14 @@ Progress on this step:
   legacy Python coordinator execution stack, and `GraphBuilder` startup now
   lazily initializes the Python parser registry so Go-owned runtime startup no
   longer bootstraps Python parsers by default
-- [ ] Extend the native parser runtime to the remaining representative language
-  family adapters still missing for truthful matrix parity: SCIP parity tie-
-  break behavior now matches the Python contract, specialized JSON/data-
-  intelligence document families are covered, C typedef alias, Java
-  annotation, Kotlin secondary constructor, Rust impl ownership, and the first
-  Ruby/PHP/Swift/Elixir parity wave are now in Go, while the remaining parser
-  gaps are the residual heuristic edges in those same long-tail adapters plus
-  the remaining Python runtime ownership seams in SCIP fallback, dependency
-  indexing, single-file fallback, and the final coordinator/worker deletion
-  work
+- [ ] Finish truthful parser parity and delete the remaining Python runtime
+  seams. The native Go registry now covers every currently registered parser
+  key in `go/internal/parser/registry.go`, so the remaining parity work is no
+  longer whole-language coverage. The blockers are the remaining semantic-depth
+  gaps in long-tail adapters and specialized JSON/data-intelligence families,
+  plus the final Python runtime ownership seams in the legacy snapshot/parser
+  coordinator path, residual single-file mutation helpers, and any remaining
+  SCIP fallback or recovery entrypoints that still execute through Python.
 
 - [ ] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 
