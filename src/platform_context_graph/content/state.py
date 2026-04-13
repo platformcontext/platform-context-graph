@@ -7,7 +7,6 @@ import threading
 
 from typing import Any
 
-from ..runtime.roles import workspace_fallback_enabled
 from .postgres import PostgresContentProvider
 from .service import ContentService
 from .workspace import WorkspaceContentProvider
@@ -18,6 +17,22 @@ __all__ = [
     "get_postgres_content_provider",
     "reset_content_store_for_tests",
 ]
+
+_FALSEY = {"0", "false", "no", "off"}
+
+
+def _workspace_fallback_enabled() -> bool:
+    """Return whether direct workspace content fallback should be enabled.
+
+    Checks ``PCG_CONTENT_WORKSPACE_FALLBACK_ENABLED`` first; when unset,
+    defaults to enabled for all roles except ``api``.
+    """
+
+    raw = os.getenv("PCG_CONTENT_WORKSPACE_FALLBACK_ENABLED")
+    if raw is not None:
+        return raw.strip().lower() not in _FALSEY
+    role = os.getenv("PCG_RUNTIME_ROLE", "combined").strip().lower()
+    return role != "api"
 
 _LOCK = threading.Lock()
 _POSTGRES_PROVIDER: PostgresContentProvider | None = None
@@ -86,7 +101,7 @@ def get_content_service(database: Any) -> ContentService:
     """
 
     workspace_provider = (
-        WorkspaceContentProvider(database) if workspace_fallback_enabled() else None
+        WorkspaceContentProvider(database) if _workspace_fallback_enabled() else None
     )
     return ContentService(
         postgres_provider=get_postgres_content_provider(),

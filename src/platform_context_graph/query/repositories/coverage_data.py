@@ -5,10 +5,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from ...runtime.status_store import (
-    get_repository_coverage as get_runtime_repository_coverage,
-    list_repository_coverage as list_runtime_repository_coverage,
-)
+# Go data plane owns runtime status store — degrade gracefully when absent.
+try:
+    from ...runtime.status_store import (
+        get_repository_coverage as get_runtime_repository_coverage,
+        list_repository_coverage as list_runtime_repository_coverage,
+    )
+except ImportError:
+    def get_runtime_repository_coverage(**kw):  # type: ignore[misc]
+        return None
+    def list_runtime_repository_coverage(**kw):  # type: ignore[misc]
+        return []
 
 __all__ = [
     "coverage_summary_from_row",

@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...runtime.status_store import (
-    get_repository_coverage as get_runtime_repository_coverage,
-)
+# Go data plane owns runtime status store — degrade gracefully when absent.
+try:
+    from ...runtime.status_store import (
+        get_repository_coverage as get_runtime_repository_coverage,
+    )
+except ImportError:
+    def get_runtime_repository_coverage(**kw):  # type: ignore[misc]
+        return None
 from .common import canonical_repository_ref, graph_relationship_types
 from .coverage_data import coverage_summary_from_row
 from .graph_counts import repository_scope, repository_scope_predicate

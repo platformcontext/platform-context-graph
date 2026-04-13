@@ -7,21 +7,42 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..facts.state import get_fact_work_queue, get_projection_decision_store
-from ..facts.state import get_shared_projection_intent_store
 from ..observability import get_observability, trace_query
-from ..runtime.status_store import (
-    get_runtime_status_store,
-    request_ingester_reindex,
-    request_ingester_scan,
-)
 from .repositories.common import get_db_manager, resolve_repository
 from .status_projection import (
     checkpoint_status_payload,
     runtime_run_summary_from_status,
 )
-from .status_shared_projection import apply_shared_projection_pending_status
-from .status_shared_projection import enrich_shared_projection_status
+
+# Go data plane owns status store, facts queue, and shared projection.
+# These imports are optional — the Python API degrades gracefully when absent.
+try:
+    from ..facts.state import get_fact_work_queue, get_projection_decision_store
+    from ..facts.state import get_shared_projection_intent_store
+except ImportError:
+    get_fact_work_queue = lambda: None  # noqa: E731
+    get_projection_decision_store = lambda: None  # noqa: E731
+    get_shared_projection_intent_store = lambda: None  # noqa: E731
+
+try:
+    from ..runtime.status_store import (
+        get_runtime_status_store,
+        request_ingester_reindex,
+        request_ingester_scan,
+    )
+except ImportError:
+    get_runtime_status_store = lambda: None  # noqa: E731
+    request_ingester_reindex = lambda **kw: None  # noqa: E731
+    request_ingester_scan = lambda **kw: None  # noqa: E731
+
+try:
+    from .status_shared_projection import apply_shared_projection_pending_status
+    from .status_shared_projection import enrich_shared_projection_status
+except ImportError:
+    def apply_shared_projection_pending_status(payload, **kw):  # type: ignore[misc]
+        return payload
+    def enrich_shared_projection_status(payload, **kw):  # type: ignore[misc]
+        return payload
 
 __all__ = [
     "KNOWN_INGESTERS",
