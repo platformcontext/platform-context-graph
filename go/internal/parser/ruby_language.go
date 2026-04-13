@@ -13,6 +13,8 @@ var (
 	rubySingletonClassPattern  = regexp.MustCompile(`^\s*class\s*<<\s*self\b`)
 	rubyFunctionPattern        = regexp.MustCompile(`^\s*def\s+(self\.)?([A-Za-z_]\w*[!?=]?)\s*(?:\((.*?)\))?`)
 	rubyRequirePattern         = regexp.MustCompile(`^\s*require\s+['"]([^'"]+)['"]`)
+	rubyRequireRelativePattern = regexp.MustCompile(`^\s*require_relative\s+['"]([^'"]+)['"]`)
+	rubyLoadPattern            = regexp.MustCompile(`^\s*load\s+['"]([^'"]+)['"]`)
 	rubyIncludePattern         = regexp.MustCompile(`^\s*include\s+([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)`)
 	rubyInstanceVarPattern     = regexp.MustCompile(`@\w+`)
 	rubyLocalAssignmentPattern = regexp.MustCompile(`^\s*([a-z_]\w*)\s*=\s*(.+)$`)
@@ -20,7 +22,7 @@ var (
 	rubyChainedCallPattern     = regexp.MustCompile(`(?:^|[^A-Za-z0-9_:@])((?:[A-Za-z_]\w*|@[A-Za-z_]\w*|self|[A-Z][A-Za-z0-9_:]*)(?:\.[A-Za-z_]\w*[!?=]?)+)\(([^()]*)\)\.([A-Za-z_]\w*[!?=]?)(?:\s*\(([^)]*)\)|\s+([^#]+))?`)
 	rubyScopedCallPattern      = regexp.MustCompile(`([A-Z][A-Za-z0-9_:]*\.[A-Za-z_]\w*[!?=]?)\(`)
 	rubyQualifiedCallPattern   = regexp.MustCompile(`(?:^|[^A-Za-z0-9_:@])((?:[A-Za-z_]\w*|@[A-Za-z_]\w*|self|[A-Z][A-Za-z0-9_:]*)(?:\.[A-Za-z_]\w*[!?=]?)+)(?:\s*\(|\b)`)
-	rubyBareCallPattern        = regexp.MustCompile(`(?:^|[^A-Za-z0-9_:@])((?:require_relative|require|include|extend|attr_accessor|attr_reader|attr_writer|define_method|define_singleton_method|instance_method|instance_eval|cache_method|puts|sleep|method|public_send|send|super|bind))(?:\s*\(([^)]*)\)|\s+([^#]+))`)
+	rubyBareCallPattern        = regexp.MustCompile(`(?:^|[^A-Za-z0-9_:@])((?:require_relative|require|load|include|extend|attr_accessor|attr_reader|attr_writer|define_method|define_singleton_method|instance_method|instance_eval|cache_method|puts|sleep|method|public_send|send|super|bind))(?:\s*\(([^)]*)\)|\s+([^#]+))`)
 )
 
 type rubyBlock struct {
@@ -131,6 +133,20 @@ func (e *Engine) parseRuby(path string, isDependency bool, options Options) (map
 		}
 
 		if matches := rubyRequirePattern.FindStringSubmatch(trimmed); len(matches) == 2 {
+			appendBucket(payload, "imports", map[string]any{
+				"name":        matches[1],
+				"line_number": lineNumber,
+				"lang":        "ruby",
+			})
+		}
+		if matches := rubyRequireRelativePattern.FindStringSubmatch(trimmed); len(matches) == 2 {
+			appendBucket(payload, "imports", map[string]any{
+				"name":        matches[1],
+				"line_number": lineNumber,
+				"lang":        "ruby",
+			})
+		}
+		if matches := rubyLoadPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			appendBucket(payload, "imports", map[string]any{
 				"name":        matches[1],
 				"line_number": lineNumber,

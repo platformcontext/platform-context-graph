@@ -36,7 +36,7 @@ func TestDefaultEngineParsePathRubyFixtures(t *testing.T) {
 	assertNamedBucketContains(t, mixinsPayload, "functions", "expensive_operation")
 	assertRubyStringSliceFieldValue(t, assertFunctionByName(t, mixinsPayload, "expensive_operation"), "args", []string{"input"})
 	assertStringFieldValue(t, assertFunctionByName(t, mixinsPayload, "expensive_operation"), "class_context", "Service")
-	assertEmptyNamedBucket(t, mixinsPayload, "imports")
+	assertNamedBucketContains(t, mixinsPayload, "imports", "basic")
 	assertBucketContainsFieldValue(t, mixinsPayload, "function_calls", "name", "require_relative")
 	assertModuleInclusion(t, mixinsPayload, "Service", "Printable")
 }

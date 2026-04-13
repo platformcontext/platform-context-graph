@@ -108,8 +108,9 @@ specialized JSON/data-intelligence document coverage, the remaining richer
 language semantics still concentrated in long-tail adapters, and the remaining
 partial capability rows called out by the language capability specs. The Go
 parser foundation now covers the earlier Python decorator/async/type-
-annotation gaps, TypeScript decorator/type-parameter metadata, and C typedef
-entities; the branch blockers after that are the separate Python-owned
+annotation gaps, TypeScript decorator/type-parameter metadata, C typedef
+entities, Swift protocol extraction, and Ruby require/load import extraction;
+the branch blockers after that are the separate Python-owned
 finalization/recovery seams and the final parser/coordinator deletions.
 
 No new ingestors should start until the milestones in this plan are complete.

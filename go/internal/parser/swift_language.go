@@ -12,6 +12,7 @@ var (
 	swiftActorPattern        = regexp.MustCompile(`^\s*actor\s+([A-Za-z_]\w*)(?:\s*:\s*([^{]+))?`)
 	swiftStructPattern       = regexp.MustCompile(`^\s*struct\s+([A-Za-z_]\w*)(?:\s*:\s*([^{]+))?`)
 	swiftEnumPattern         = regexp.MustCompile(`^\s*enum\s+([A-Za-z_]\w*)(?:\s*:\s*([^{]+))?`)
+	swiftProtocolPattern     = regexp.MustCompile(`^\s*protocol\s+([A-Za-z_]\w*)(?:\s*:\s*([^{]+))?`)
 	swiftFunctionPattern     = regexp.MustCompile(`\bfunc\s+([A-Za-z_]\w*)(?:<[^>]+>)?\s*\(`)
 	swiftVariablePattern     = regexp.MustCompile(`^\s*(?:let|var)\s+([A-Za-z_]\w*)(?:\s*:\s*([^=<{]+(?:<[^>]+>)?))?`)
 	swiftReceiverCallPattern = regexp.MustCompile(`\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*\(`)
@@ -99,6 +100,17 @@ func (e *Engine) parseSwift(path string, isDependency bool, options Options) (ma
 				"lang":        "swift",
 			})
 			stack = append(stack, scopedContext{kind: "enum", name: name, braceDepth: braceDepth + max(1, strings.Count(rawLine, "{"))})
+		}
+		if matches := swiftProtocolPattern.FindStringSubmatch(trimmed); len(matches) >= 2 {
+			name := matches[1]
+			appendBucket(payload, "protocols", map[string]any{
+				"name":        name,
+				"line_number": lineNumber,
+				"end_line":    lineNumber,
+				"bases":       parseSwiftInheritanceClause(matches, 2),
+				"lang":        "swift",
+			})
+			stack = append(stack, scopedContext{kind: "protocol", name: name, braceDepth: braceDepth + max(1, strings.Count(rawLine, "{"))})
 		}
 
 		if matches := swiftFunctionPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
@@ -190,6 +202,7 @@ func (e *Engine) parseSwift(path string, isDependency bool, options Options) (ma
 	sortNamedBucket(payload, "classes")
 	sortNamedBucket(payload, "structs")
 	sortNamedBucket(payload, "enums")
+	sortNamedBucket(payload, "protocols")
 	sortNamedBucket(payload, "variables")
 	sortNamedBucket(payload, "imports")
 	sortNamedBucket(payload, "function_calls")
@@ -202,7 +215,7 @@ func (e *Engine) preScanSwift(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	names := collectBucketNames(payload, "functions", "classes", "structs", "enums")
+	names := collectBucketNames(payload, "functions", "classes", "structs", "enums", "protocols")
 	slices.Sort(names)
 	return names, nil
 }

@@ -74,7 +74,7 @@ func TestDefaultEngineParsePathSwiftEmitsImportAndCallMetadata(t *testing.T) {
 	assertSwiftCallMetadata(t, enumsPayload, "transform", "transform")
 }
 
-func TestDefaultEngineParsePathSwiftInfersReceiverCallTypesAndProtocolsRemainEmpty(t *testing.T) {
+func TestDefaultEngineParsePathSwiftInfersReceiverCallTypesAndEmitsProtocols(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -119,7 +119,7 @@ class Worker: Runnable {
 	assertSwiftTypeBases(t, payload, "Worker", []string{"Runnable"})
 	assertSwiftVariableMetadata(t, payload, "logger", "Logger", "Worker", "Worker")
 	assertSwiftCallInferredType(t, payload, "info", "logger.info", "Logger")
-	assertSwiftProtocolsEmpty(t, payload)
+	assertSwiftNamedBucketContains(t, payload, "protocols", "Runnable")
 }
 
 func assertSwiftTypeBases(
@@ -330,14 +330,18 @@ func assertSwiftCallInferredType(
 	t.Fatalf("function_calls missing name=%q in %#v", callName, items)
 }
 
-func assertSwiftProtocolsEmpty(t *testing.T, payload map[string]any) {
+func assertSwiftNamedBucketContains(t *testing.T, payload map[string]any, key string, wantName string) {
 	t.Helper()
 
-	items, ok := payload["protocols"].([]map[string]any)
+	items, ok := payload[key].([]map[string]any)
 	if !ok {
-		t.Fatalf("protocols = %T, want []map[string]any", payload["protocols"])
+		t.Fatalf("%s = %T, want []map[string]any", key, payload[key])
 	}
-	if len(items) != 0 {
-		t.Fatalf("protocols = %#v, want empty", items)
+	for _, item := range items {
+		name, _ := item["name"].(string)
+		if name == wantName {
+			return
+		}
 	}
+	t.Fatalf("%s missing name=%q in %#v", key, wantName, items)
 }

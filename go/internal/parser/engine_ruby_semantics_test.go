@@ -92,7 +92,7 @@ end
 		t.Fatalf("ParsePath() error = %v, want nil", err)
 	}
 
-	assertEmptyNamedBucket(t, got, "imports")
+	assertNamedBucketContains(t, got, "imports", "basic")
 	assertBucketContainsFieldValue(t, got, "function_calls", "name", "require_relative")
 	assertBucketContainsFieldValue(t, got, "function_calls", "name", "attr_accessor")
 	assertBucketContainsFieldValue(t, got, "function_calls", "name", "define_method")
@@ -143,7 +143,7 @@ end
 	assertStringFieldValue(t, lastTask, "context_type", "def")
 }
 
-func TestDefaultEngineParsePathRubyRequireRelativeStaysOutOfImports(t *testing.T) {
+func TestDefaultEngineParsePathRubyEmitsRequireAndLoadImports(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -152,6 +152,7 @@ func TestDefaultEngineParsePathRubyRequireRelativeStaysOutOfImports(t *testing.T
 		t,
 		filePath,
 		`require_relative 'basic'
+load 'support/bootstrap'
 `,
 	)
 
@@ -165,8 +166,10 @@ func TestDefaultEngineParsePathRubyRequireRelativeStaysOutOfImports(t *testing.T
 		t.Fatalf("ParsePath() error = %v, want nil", err)
 	}
 
-	assertEmptyNamedBucket(t, got, "imports")
+	assertNamedBucketContains(t, got, "imports", "basic")
+	assertNamedBucketContains(t, got, "imports", "support/bootstrap")
 	assertBucketContainsFieldValue(t, got, "function_calls", "name", "require_relative")
+	assertBucketContainsFieldValue(t, got, "function_calls", "name", "load")
 }
 
 func TestDefaultEngineParsePathRubyCapturesChainedInvocationNames(t *testing.T) {
