@@ -34,6 +34,24 @@ The branch still has active Python-owned runtime seams:
   `src/platform_context_graph/indexing/post_commit_writer.py`, and
   `src/platform_context_graph/api/routers/admin.py`.
 
+The native Go parser platform now has a larger foundation than the original
+cutover draft assumed:
+
+- `go/internal/parser/registry.go` owns parser-key and extension dispatch
+- `go/internal/collector/discovery/*` owns parser-aware file discovery
+- `go/internal/content/shape/materialize.go` owns parser-payload-to-content
+  shaping
+- `go/internal/parser/runtime.go` owns the native tree-sitter runtime and
+  language-handle cache for the initial Go-owned parser slice
+- `go/internal/parser/engine.go` owns native parse dispatch and prescan fanout
+- `go/internal/parser/python_language.go` owns the first native Python adapter
+- `go/internal/parser/go_language.go` owns the first native Go adapter
+- `go/internal/parser/raw_text_engine.go` owns the raw-text fallback path
+
+That slice is still parser-matrix-incomplete. JavaScript, TypeScript/TSX,
+infra/data slices, SCIP parity, and the remaining long-tail language adapters
+are still in scope before the collector hot path can truthfully drop Python.
+
 No new ingestors should start until the milestones in this plan are complete.
 Treat this plan as the active cutover path until the merge bar below is fully
 met.
@@ -150,6 +168,17 @@ and a native content-shaping package. Keep this slice honest: the registry owns
 parser identity and selection; discovery owns file and repository selection;
 content shaping owns translation from normalized parser payloads to the Go
 content model.
+
+Progress on this step:
+
+- [x] Registry metadata and selection landed in `go/internal/parser/registry.go`
+- [x] Discovery landed in `go/internal/collector/discovery/*`
+- [x] Content shaping landed in `go/internal/content/shape/materialize.go`
+- [x] Native parse runtime/dispatch landed for Python, Go, and raw-text in
+  `go/internal/parser/{runtime,engine,python_language,go_language,raw_text_engine}.go`
+- [ ] Extend the native parser runtime to the remaining representative language
+  family adapters and long-tail language slices required for truthful matrix
+  parity
 
 - [ ] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 

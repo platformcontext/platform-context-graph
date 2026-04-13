@@ -209,6 +209,17 @@ the cutover can remove Python runtime ownership instead of recreating it:
 - `go/internal/collector/`: collector cycle orchestration, repository
   selection/snapshot ownership, and fact shaping
 
+Current native parser-runtime slice:
+
+- `go/internal/parser/registry.go`: parser-key and extension dispatch
+- `go/internal/parser/runtime.go`: native tree-sitter language bootstrap and
+  parser creation
+- `go/internal/parser/engine.go`: file parse dispatch and prescan fanout
+- `go/internal/parser/python_language.go`: first native Python adapter
+- `go/internal/parser/go_language.go`: first native Go adapter
+- `go/internal/parser/raw_text_engine.go`: raw-text fallback for searchable
+  template and config artifacts
+
 These Go packages are the target normal-path runtime ownership. Python bridge
 modules under `runtime/ingester/*bridge.py` remain removal debt until the
 collector hot path and parser platform are fully cut over.
