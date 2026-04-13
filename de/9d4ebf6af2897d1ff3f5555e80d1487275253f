@@ -1,0 +1,169 @@
+docs/docs/adrs/index.md
+  1ca5ee6ce936a402 51-52
+go/internal/parser/engine_long_tail_test.go
+  1ca5ee6ce936a402 1-258
+go/internal/parser/scala_language.go
+  1ca5ee6ce936a402 1-154
+docker-compose.yaml
+  1ca5ee6ce936a402 195-198
+go/internal/parser/json_language_test.go
+  1ca5ee6ce936a402 1-286
+src/platform_context_graph/cli/commands/basic.py
+  1ca5ee6ce936a402 89-91,93-96,99,101-109,111
+go/internal/parser/dbt_sql_expressions.go
+  1ca5ee6ce936a402 1-10,12-17,19-316,318-417
+go/internal/parser/groovy_language.go
+  1ca5ee6ce936a402 1-106
+go/internal/collector/git_selection_config.go
+  1ca5ee6ce936a402 1-334
+go/internal/parser/groovy_language_test.go
+  1ca5ee6ce936a402 1,4,8,11-16,18-25,27-28,30,32-35,37-39,41-42,44-45,47-48,50-62,64-65,67-92,94-137,139
+go/internal/parser/engine_managed_oo_test.go
+  1ca5ee6ce936a402 1-228
+tests/unit/api/test_admin_router.py
+  1ca5ee6ce936a402 1
+go/internal/collector/git_selection_native_test.go
+  1ca5ee6ce936a402 1,5-6,11,14-68,72,76-78,80-81,83-87,89-90,92-94,96-97,99-179,182,185-206
+go/internal/parser/cpp_language.go
+  1ca5ee6ce936a402 1-105
+go/internal/collector/git_selection_native.go
+  1ca5ee6ce936a402 1,6,11-17,20-21,23-25,27-30,33-35,37,39,42-70,74-92,94,97-99,101
+go/cmd/ingester/wiring_test.go
+  1ca5ee6ce936a402 10,29,40-61
+go/internal/parser/json_data_intelligence.go
+  1ca5ee6ce936a402 1-680
+go/internal/parser/kotlin_language.go
+  1ca5ee6ce936a402 1-183
+go/cmd/ingester/wiring.go
+  1ca5ee6ce936a402 21-22,77,84-86
+go/internal/parser/engine_systems_test.go
+  1ca5ee6ce936a402 1-287
+go/internal/parser/managed_oo_helpers.go
+  1ca5ee6ce936a402 1-82
+docs/docs/reference/cli-reference.md
+  1ca5ee6ce936a402 58
+go/internal/collector/git_selection_filesystem.go
+  1ca5ee6ce936a402 1-393
+go/internal/parser/swift_language.go
+  1ca5ee6ce936a402 1-181
+go/internal/parser/json_dbt_manifest.go
+  1ca5ee6ce936a402 1-226,228-235,237-310
+go/internal/parser/ruby_language.go
+  1ca5ee6ce936a402 1-188
+docs/docs/deployment/service-runtimes.md
+  1ca5ee6ce936a402 32-37,75-77,79-82,113-115
+go/internal/collector/git_snapshot_native_test.go
+  1ca5ee6ce936a402 1,5-6,10,13,16-24,26,28-30,33-38,40-49,51-53,55-56,58-59,61-62,64-72,75-76,78-80,82-83,85-86,88-89,91-93,95-96,98-99,101-102,104-105,107-108,112,115-116,118,120,122-129,131-133,135-136,138-139,141-142,146,149-163,166-172,175-183,186-194,198-205
+go/internal/runtime/status_server_test.go
+  1ca5ee6ce936a402 5,13,149-343
+docs/superpowers/plans/2026-04-13-go-write-plane-conversion-cutover.md
+  1ca5ee6ce936a402 9-11,366,368-371,373,386,389,439-440
+docs/superpowers/plans/2026-04-12-go-data-plane-rewrite-sow.md
+  1ca5ee6ce936a402 87-90,301-302,307-308,322-325,465-466
+go/cmd/collector-git/service_test.go
+  1ca5ee6ce936a402 16,32-33,35-36,52,55,61-69
+go/internal/parser/c_language.go
+  1ca5ee6ce936a402 1-129
+go/internal/parser/dbt_sql_lineage.go
+  1ca5ee6ce936a402 1-474
+docs/docs/adrs/2026-04-13-go-data-plane-ownership-completion.md
+  1ca5ee6ce936a402 16-18,47-48,53,55-59,127-130,135-138,149
+go/internal/parser/json_dbt_test.go
+  1ca5ee6ce936a402 1-168
+go/internal/collector/git_selection_discovery.go
+  1ca5ee6ce936a402 1-245
+go/internal/collector/git_selection_git.go
+  1ca5ee6ce936a402 1-282
+go/cmd/collector-git/service.go
+  1ca5ee6ce936a402 18,25-27
+go/internal/parser/elixir_dart_language.go
+  1ca5ee6ce936a402 1-251
+go/cmd/bootstrap-index/main_test.go
+  1ca5ee6ce936a402 5,14,140-163,175-184
+go/internal/runtime/status_server.go
+  1ca5ee6ce936a402 13-27,30-35,46-50
+src/platform_context_graph/api/routers/admin.py
+  1ca5ee6ce936a402 1,3-6
+go/internal/parser/java_language.go
+  1ca5ee6ce936a402 1-155
+go/internal/collector/git_source_test.go
+  1ca5ee6ce936a402 37-39,116-122
+docs/docs/reference/local-testing.md
+  1ca5ee6ce936a402 69,75,78,94-97
+go/internal/collector/git_fact_builder.go
+  1ca5ee6ce936a402 35-43,78,186,204-205
+docs/superpowers/plans/2026-04-12-go-data-plane-doc-set-index.md
+  1ca5ee6ce936a402 48
+go/internal/parser/json_ordered_object.go
+  1ca5ee6ce936a402 1,4,9-11,14-18,20-22,25-34,36-43,46,48,50-52,54-60,62,65-74,76
+go/cmd/bootstrap-index/wiring.go
+  1ca5ee6ce936a402 34,40-42
+go/go.mod
+  1ca5ee6ce936a402 10-12,14,17-18,28
+go/internal/app/status_server.go
+  1ca5ee6ce936a402 10-11,22,28
+go/internal/parser/testhelpers_test.go
+  1ca5ee6ce936a402 6,16-25
+go/internal/parser/php_language.go
+  1ca5ee6ce936a402 1-194
+docs/docs/adrs/2026-04-12-cutover-and-legacy-bridge.md
+  1ca5ee6ce936a402 40,42,79-80,82-91,97-98,100
+go/cmd/ingester/main.go
+  1ca5ee6ce936a402 13,64-78
+docs/docs/reference/telemetry/index.md
+  1ca5ee6ce936a402 140-142
+go/internal/parser/perl_haskell_language.go
+  1ca5ee6ce936a402 1-218
+go/internal/collector/git_snapshot_native.go
+  1ca5ee6ce936a402 1,5-6,8,11,15-19,22-37,40-45,48-59,61-69,71-100,102-104,106-119,121,123-137,139-146,149-153,156-160,163-165,167-168,170-175,177-181,183-185,187-188,190-201,204,206-209,211,214-218,222-235,237,239,242-250,253-255,257-271,276-288,290,293-314,316,319-325,328-330,333-342,345-354,356,359-375,378-381,383-384,387-389,392-404,406,409-410,413-424,426
+go/internal/parser/regex_parser_helpers.go
+  1ca5ee6ce936a402 1-40
+go/internal/parser/dbt_sql_identifiers.go
+  1ca5ee6ce936a402 1-55
+go/internal/parser/runtime.go
+  1ca5ee6ce936a402 10-12,14,17-18,77-79,81,84-85,92-97,100-101,106-109
+go/cmd/ingester/main_test.go
+  1ca5ee6ce936a402 13,20-24
+go/internal/collector/git_source.go
+  1ca5ee6ce936a402 43
+go/internal/parser/systems_helpers.go
+  1ca5ee6ce936a402 1-55
+go/internal/parser/engine.go
+  1ca5ee6ce936a402 77-88,91-98,101-102,105-112,141-148,151-154,159-166,169-172,177-180,183-184
+go/internal/collector/git_selection_github.go
+  1ca5ee6ce936a402 1-217
+go/internal/parser/json_language.go
+  1ca5ee6ce936a402 43-45,63-69,73-74,76,78-79,82,163,172,187,195,213,259-263,277-284
+go/internal/app/app_test.go
+  1ca5ee6ce936a402 6,69-70
+go/internal/collector/git_snapshot_fingerprint_test.go
+  1ca5ee6ce936a402 53-76
+go/internal/parser/tree.go
+  1ca5ee6ce936a402 60-67
+go/internal/parser/rust_language.go
+  1ca5ee6ce936a402 1-147
+docs/docs/reference/http-api.md
+  1ca5ee6ce936a402 24,47-52
+go/internal/parser/csharp_language.go
+  1ca5ee6ce936a402 1-155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "de9d4ebf6af2897d1ff3f5555e80d1487275253f",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 8819,
+      "total_deletions": 3830,
+      "accepted_lines": 9129,
+      "overriden_lines": 5
+    }
+  }
+}
