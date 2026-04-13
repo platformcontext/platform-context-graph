@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..parsers.languages.templated_detection import infer_content_metadata
+from .templated_detection import infer_content_metadata
 
 
 def resolve_row_metadata(

@@ -6,7 +6,6 @@ src/platform_context_graph/indexing/coordinator_storage.py
 src/platform_context_graph/tools/graph_builder_persistence.py
 src/platform_context_graph/indexing/coordinator_pipeline.py
 src/platform_context_graph/runtime/ingester/git_sync_ops.py
-src/platform_context_graph/tools/languages/templated_detection.py
 src/platform_context_graph/core/pcg_bundle_export.py
 src/platform_context_graph/tools/code_finder_analysis.py
 src/platform_context_graph/tools/graph_builder_persistence_batch.py

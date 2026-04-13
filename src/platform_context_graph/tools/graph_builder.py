@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..cli.config_manager import get_config_value
 from ..cli.helpers.go_index_runtime import run_go_bootstrap_index
 from ..core.database import DatabaseManager
-from ..core.jobs import JobManager, JobStatus
+from ..core.jobs import JobManager
 from ..observability import get_observability
 from ..relationships import (
     resolve_repository_relationships_for_committed_repositories as _resolve_repository_relationships_for_committed_repositories,
@@ -309,26 +308,6 @@ class GraphBuilder:
             get_config_value_fn=get_config_value,
             get_observability_fn=get_observability,
             os_module=os,
-        )
-
-    async def _build_graph_from_scip(
-        self, path: Path, is_dependency: bool, job_id: str | None, lang: str
-    ) -> None:
-        """Index a path via SCIP output when the feature is enabled."""
-        from ..parsers.scip import build_graph_from_scip as _build_graph_from_scip
-
-        await _build_graph_from_scip(
-            self,
-            path,
-            is_dependency,
-            job_id,
-            lang,
-            asyncio_module=asyncio,
-            datetime_cls=datetime,
-            debug_log_fn=debug_log,
-            error_logger_fn=error_logger,
-            warning_logger_fn=warning_logger,
-            job_status_enum=JobStatus,
         )
 
     def _name_from_symbol(self, symbol: str) -> str:

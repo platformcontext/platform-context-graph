@@ -1,5 +1,7 @@
 """Constants, patterns, and helpers for templated infrastructure file detection."""
 
+from __future__ import annotations
+
 from pathlib import Path
 import re
 

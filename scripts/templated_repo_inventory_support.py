@@ -9,7 +9,7 @@ from glob import glob
 from pathlib import Path
 from typing import Callable, Iterable, TextIO
 
-from platform_context_graph.parsers.languages.templated_detection import (
+from platform_context_graph.content.templated_detection import (
     classify_file,
     FileClassification,
     GENERATED_DIRS,

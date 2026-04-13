@@ -59,6 +59,7 @@ def test_graph_builder_import_does_not_load_legacy_parse_or_scip_modules() -> No
     assert "platform_context_graph.parsers.scip" not in sys.modules
     assert "platform_context_graph.parsers.scip.indexing" not in sys.modules
     assert "platform_context_graph.parsers.scip.parser" not in sys.modules
+    assert not hasattr(graph_builder_module.GraphBuilder, "_build_graph_from_scip")
 
 
 class _DummyDBManager:

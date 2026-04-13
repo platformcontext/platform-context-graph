@@ -290,8 +290,14 @@ Progress on this step:
   file-refresh mutation path; parser-aware file discovery now uses Go-aligned
   support metadata in `src/platform_context_graph/collectors/git/parser_support.py`,
   and `GraphBuilder`, the CLI runtime helper, and MCP server imports avoid
-  eager imports of `platform_context_graph.parsers.registry` and
-  `platform_context_graph.parsers.scip*`
+  eager imports of `platform_context_graph.parsers.registry`
+- [x] Runtime-owned templated content inference and Jenkins controller metadata
+  no longer import parser-owned helper modules. The canonical Python helpers
+  now live in `src/platform_context_graph/content/templated_detection.py` and
+  `src/platform_context_graph/automation/jenkins_metadata.py`, and the dead
+  Python SCIP bridge/package (`GraphBuilder._build_graph_from_scip` plus
+  `src/platform_context_graph/parsers/scip/`) has been deleted instead of
+  lingering as an undocumented fallback path
 - [x] The obsolete Python path-level execution helper
   `src/platform_context_graph/collectors/git/execution.py` has been deleted;
   normal file and directory path indexing now enters through the Go-owned

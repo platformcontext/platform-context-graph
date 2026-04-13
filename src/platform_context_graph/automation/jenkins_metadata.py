@@ -1,4 +1,4 @@
-"""Helpers for extracting Jenkins pipeline hints from Groovy files."""
+"""Helpers for extracting Jenkins pipeline hints from automation sources."""
 
 from __future__ import annotations
 

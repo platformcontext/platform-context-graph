@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 import yaml
 
-from ...parsers.languages.groovy_support import extract_jenkins_pipeline_metadata
+from ...automation.jenkins_metadata import extract_jenkins_pipeline_metadata
 from .indexed_file_discovery import (
     discover_repo_files,
     read_file_content,

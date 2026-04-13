@@ -1,4 +1,4 @@
-"""Dialect detection helpers for templated infrastructure files.
+"""Content-owned dialect detection helpers for templated infrastructure files.
 
 This module classifies authored infrastructure files by their templating
 dialect (Go-template, Jinja, Terraform interpolation, GitHub Actions
@@ -8,6 +8,8 @@ Constants, compiled regex patterns, and pure-function helpers live in the
 companion ``templated_detection_support`` module to keep this file focused
 on the public classification and metadata APIs.
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,7 +24,6 @@ from .templated_detection_support import (
     HCL_SUFFIXES,
     JINJA_STATEMENT_RE,
     JINJA_TEMPLATE_SUFFIXES,
-    RAW_CONFIG_SUFFIXES,
     TERRAFORM_TEMPLATE_SUFFIXES,
     TEXT_FILENAMES,
     TEXT_SUFFIXES,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .groovy_support import extract_jenkins_pipeline_metadata
+from ...automation.jenkins_metadata import extract_jenkins_pipeline_metadata
 
 
 class GroovyTreeSitterParser:

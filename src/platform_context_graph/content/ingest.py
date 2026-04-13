@@ -12,7 +12,7 @@ from ..repository_identity import (
     relative_path_from_local,
     repository_metadata,
 )
-from ..parsers.languages.templated_detection import infer_content_metadata
+from .templated_detection import infer_content_metadata
 from ..utils.source_text import read_source_text
 from .identity import canonical_content_entity_id
 from .models import ContentEntityEntry, ContentFileEntry

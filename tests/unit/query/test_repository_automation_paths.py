@@ -1,10 +1,25 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import re
+import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import yaml
+
+resolution_module = ModuleType("platform_context_graph.resolution")
+platform_families_module = ModuleType(
+    "platform_context_graph.resolution.platform_families"
+)
+platform_families_module.format_platform_kind_label = lambda value: str(value)
+sys.modules.setdefault("platform_context_graph.resolution", resolution_module)
+sys.modules.setdefault(
+    "platform_context_graph.resolution.platform_families",
+    platform_families_module,
+)
 
 from platform_context_graph.query.repositories.content_enrichment_ansible import (
     extract_ansible_automation_evidence,
@@ -15,7 +30,7 @@ from platform_context_graph.query.repositories.content_enrichment_automation_pat
 from platform_context_graph.query.repositories.content_enrichment_workflows import (
     extract_delivery_workflows,
 )
-from platform_context_graph.parsers.languages.groovy_support import (
+from platform_context_graph.automation.jenkins_metadata import (
     extract_jenkins_pipeline_metadata,
 )
 

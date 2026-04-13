@@ -13,7 +13,7 @@ if __package__ in {None, ""}:
         if candidate not in sys.path:
             sys.path.insert(0, candidate)
 
-from platform_context_graph.parsers.languages.templated_detection import (
+from platform_context_graph.content.templated_detection import (
     exclusion_reason,
 )
 from scripts.templated_repo_inventory_support import (
