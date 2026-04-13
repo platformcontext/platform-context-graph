@@ -1,0 +1,41 @@
+go/internal/projector/stage_relationships.go
+  1ca5ee6ce936a402 1-45
+go/internal/projector/stage_workloads.go
+  1ca5ee6ce936a402 1-55
+go/internal/projector/stage_relationships_test.go
+  1ca5ee6ce936a402 1-70
+go/internal/projector/stage_facts.go
+  1ca5ee6ce936a402 1-54
+go/internal/projector/stage_files.go
+  1ca5ee6ce936a402 1-35
+go/internal/projector/stage_workloads_test.go
+  1ca5ee6ce936a402 1-83
+go/internal/projector/stage_files_test.go
+  1ca5ee6ce936a402 1-94
+go/internal/projector/stage_entities_test.go
+  1ca5ee6ce936a402 1-89
+docs/superpowers/plans/2026-04-13-go-data-plane-ownership-completion-plan.md
+  1ca5ee6ce936a402 410,418,422,428,432,438,442,448,452,458,468
+go/internal/projector/stage_entities.go
+  1ca5ee6ce936a402 1-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "d7d385c7f004815681adbae314cd98b4ce374754",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 9530,
+      "total_deletions": 3843,
+      "accepted_lines": 9695,
+      "overriden_lines": 0
+    }
+  }
+}
