@@ -12,11 +12,12 @@ type AdminCheck func() error
 // AdminMuxConfig defines the shared admin and probe routes for a long-running
 // Go runtime.
 type AdminMuxConfig struct {
-	ServiceName    string
-	Health         AdminCheck
-	Ready          AdminCheck
-	StatusHandler  http.Handler
-	MetricsHandler http.Handler
+	ServiceName     string
+	Health          AdminCheck
+	Ready           AdminCheck
+	StatusHandler   http.Handler
+	MetricsHandler  http.Handler
+	RecoveryHandler *RecoveryHandler
 }
 
 // NewAdminMux builds the shared probe and admin route contract for a runtime.
@@ -35,6 +36,9 @@ func NewAdminMux(cfg AdminMuxConfig) (*http.ServeMux, error) {
 	}
 	if cfg.MetricsHandler != nil {
 		mux.Handle("/metrics", cfg.MetricsHandler)
+	}
+	if cfg.RecoveryHandler != nil {
+		cfg.RecoveryHandler.Mount(mux)
 	}
 
 	return mux, nil
