@@ -420,16 +420,6 @@ func currentPHPContext(stack []phpScopedContext) (string, string, int) {
 	return "", "", 0
 }
 
-func currentPHPClassContext(stack []phpScopedContext) (string, int) {
-	for index := len(stack) - 1; index >= 0; index-- {
-		switch stack[index].kind {
-		case "class_declaration", "interface_declaration", "trait_declaration":
-			return stack[index].name, stack[index].lineNumber
-		}
-	}
-	return "", 0
-}
-
 func inferPHPVariableType(rawLine string, variable string) string {
 	if matches := phpTypedVariablePattern.FindStringSubmatch(rawLine); len(matches) == 2 && strings.Contains(rawLine, variable) {
 		return normalizePHPTypeName(matches[1])

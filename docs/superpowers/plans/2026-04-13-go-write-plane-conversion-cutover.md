@@ -51,7 +51,8 @@ cutover draft assumed:
 - `go/internal/parser/python_language.go` and
   `go/internal/parser/python_semantics.go` now own the native Python adapter
   slice, including notebook conversion, FastAPI/Flask
-  `framework_semantics`, and bounded ORM table mapping extraction
+  `framework_semantics`, bounded ORM table mapping extraction, decorator
+  metadata, async-function flags, and dedicated `type_annotations` extraction
 - `go/internal/parser/go_language.go` owns the first native Go adapter
 - `go/internal/parser/javascript_language.go` now owns the representative
   JavaScript and TypeScript/TSX adapter slice, including native
@@ -103,11 +104,13 @@ cutover draft assumed:
 The known parser-matrix blockers are no longer in the collector bridge path.
 The normal Go collector path now owns both the standard tree-sitter route and
 the optional SCIP route. The remaining parser blockers are SCIP parity,
-specialized JSON/data-intelligence document coverage, the richer Python/Go/
-Groovy semantics the Python runtime still carries, and the remaining long-tail
-language partials called out by the capability specs. The branch blockers after
-that are the separate Python-owned finalization/recovery seams and the final
-parser/coordinator deletions.
+specialized JSON/data-intelligence document coverage, the remaining richer
+language semantics still concentrated in long-tail adapters, and the remaining
+partial capability rows called out by the language capability specs. The Go
+parser foundation now covers the earlier Python decorator/async/type-
+annotation gaps, TypeScript decorator/type-parameter metadata, and C typedef
+entities; the branch blockers after that are the separate Python-owned
+finalization/recovery seams and the final parser/coordinator deletions.
 
 No new ingestors should start until the milestones in this plan are complete.
 Treat this plan as the active cutover path until the merge bar below is fully

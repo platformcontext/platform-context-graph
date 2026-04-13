@@ -188,7 +188,7 @@ def health():
 	assertFrameworksEqual(t, got)
 }
 
-func TestDefaultEngineParsePathPythonDecoratedFunctionsDoNotEmitDecoratorMetadata(t *testing.T) {
+func TestDefaultEngineParsePathPythonDecoratedFunctionsEmitDecoratorMetadata(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -220,12 +220,12 @@ def greet(name):
 	if !ok {
 		t.Fatalf(`functions["greet"]["decorators"] = %T, want []string`, greet["decorators"])
 	}
-	if len(decorators) != 0 {
-		t.Fatalf(`functions["greet"]["decorators"] = %#v, want []`, decorators)
+	if !reflect.DeepEqual(decorators, []string{"@traced"}) {
+		t.Fatalf(`functions["greet"]["decorators"] = %#v, want []string{"@traced"}`, decorators)
 	}
 }
 
-func TestDefaultEngineParsePathPythonAsyncFunctionsDoNotEmitAsyncFlag(t *testing.T) {
+func TestDefaultEngineParsePathPythonAsyncFunctionsEmitAsyncFlag(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -249,12 +249,16 @@ func TestDefaultEngineParsePathPythonAsyncFunctionsDoNotEmitAsyncFlag(t *testing
 	}
 
 	fetchRemote := assertFunctionByName(t, got, "fetch_remote")
-	if _, ok := fetchRemote["async"]; ok {
-		t.Fatalf(`functions["fetch_remote"] unexpectedly included "async" key: %#v`, fetchRemote)
+	asyncFlag, ok := fetchRemote["async"].(bool)
+	if !ok {
+		t.Fatalf(`functions["fetch_remote"]["async"] = %T, want bool`, fetchRemote["async"])
+	}
+	if !asyncFlag {
+		t.Fatalf(`functions["fetch_remote"]["async"] = false, want true`)
 	}
 }
 
-func TestDefaultEngineParsePathPythonDoesNotEmitTypeAnnotationsBucket(t *testing.T) {
+func TestDefaultEngineParsePathPythonEmitsTypeAnnotationsBucket(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -262,7 +266,7 @@ func TestDefaultEngineParsePathPythonDoesNotEmitTypeAnnotationsBucket(t *testing
 	writeTestFile(
 		t,
 		filePath,
-		`def greet(name: str) -> str:
+		`def greet(name: str, excited: bool = False) -> str:
     return name
 `,
 	)
@@ -277,8 +281,38 @@ func TestDefaultEngineParsePathPythonDoesNotEmitTypeAnnotationsBucket(t *testing
 		t.Fatalf("ParsePath() error = %v, want nil", err)
 	}
 
-	if _, ok := got["type_annotations"]; ok {
-		t.Fatalf(`payload unexpectedly included "type_annotations": %#v`, got["type_annotations"])
+	annotations, ok := got["type_annotations"].([]map[string]any)
+	if !ok {
+		t.Fatalf(`type_annotations = %T, want []map[string]any`, got["type_annotations"])
+	}
+	want := []map[string]any{
+		{
+			"name":            "excited",
+			"line_number":     1,
+			"type":            "bool",
+			"annotation_kind": "parameter",
+			"context":         "greet",
+			"lang":            "python",
+		},
+		{
+			"name":            "greet",
+			"line_number":     1,
+			"type":            "str",
+			"annotation_kind": "return",
+			"context":         "greet",
+			"lang":            "python",
+		},
+		{
+			"name":            "name",
+			"line_number":     1,
+			"type":            "str",
+			"annotation_kind": "parameter",
+			"context":         "greet",
+			"lang":            "python",
+		},
+	}
+	if !reflect.DeepEqual(annotations, want) {
+		t.Fatalf("type_annotations = %#v, want %#v", annotations, want)
 	}
 }
 

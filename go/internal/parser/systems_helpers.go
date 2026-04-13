@@ -23,7 +23,7 @@ func firstNamedDescendant(node *tree_sitter.Node, kinds ...string) *tree_sitter.
 }
 
 func appendImportFromNode(payload map[string]any, node *tree_sitter.Node, source []byte, lang string) {
-	name := strings.Trim(nodeText(node, source), `<>""`)
+	name := strings.Trim(nodeText(node, source), `<>"`)
 	if strings.TrimSpace(name) == "" {
 		return
 	}

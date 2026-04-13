@@ -335,7 +335,7 @@ func stripJSONCComments(source string) string {
 			}
 			if next == '*' {
 				index += 2
-				for index+1 < len(source) && !(source[index] == '*' && source[index+1] == '/') {
+				for index+1 < len(source) && (source[index] != '*' || source[index+1] != '/') {
 					index++
 				}
 				index++

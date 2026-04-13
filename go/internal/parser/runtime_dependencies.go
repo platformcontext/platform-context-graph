@@ -77,9 +77,7 @@ func normalizeRuntimeDependencyName(value string, workloadName string) string {
 	if candidate == "" || strings.Contains(candidate, "${") {
 		return ""
 	}
-	if strings.HasPrefix(candidate, "/api/") {
-		candidate = strings.TrimPrefix(candidate, "/api/")
-	}
+	candidate = strings.TrimPrefix(candidate, "/api/")
 	if candidate == workloadName {
 		return ""
 	}

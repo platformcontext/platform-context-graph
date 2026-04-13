@@ -41,22 +41,6 @@ func nodeEndLine(node *tree_sitter.Node) int {
 	return int(node.EndPosition().Row) + 1
 }
 
-func nodeStartByte(node *tree_sitter.Node) *int {
-	if node == nil {
-		return nil
-	}
-	value := int(node.StartByte())
-	return &value
-}
-
-func nodeEndByte(node *tree_sitter.Node) *int {
-	if node == nil {
-		return nil
-	}
-	value := int(node.EndByte())
-	return &value
-}
-
 func cloneNode(node *tree_sitter.Node) *tree_sitter.Node {
 	if node == nil {
 		return nil

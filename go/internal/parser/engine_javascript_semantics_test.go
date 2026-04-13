@@ -237,9 +237,10 @@ type Box<T> = { value: T };
 	if !ok {
 		t.Fatalf("classes.Demo.decorators = %T, want []string", demoClass["decorators"])
 	}
-	if len(classDecorators) != 0 {
-		t.Fatalf("classes.Demo.decorators = %#v, want []", classDecorators)
+	if !reflect.DeepEqual(classDecorators, []string{"@sealed"}) {
+		t.Fatalf("classes.Demo.decorators = %#v, want []string{\"@sealed\"}", classDecorators)
 	}
+	assertStringSliceFieldValue(t, demoClass, "type_parameters", []string{"T"})
 
 	identityFn := findNamedBucketItem(t, got, "functions", "identity")
 	functionDecorators, ok := identityFn["decorators"].([]string)
@@ -249,12 +250,10 @@ type Box<T> = { value: T };
 	if len(functionDecorators) != 0 {
 		t.Fatalf("functions.identity.decorators = %#v, want []", functionDecorators)
 	}
-	if _, hasTypeParameters := identityFn["type_parameters"]; hasTypeParameters {
-		t.Fatalf("functions.identity should not emit type_parameters metadata")
-	}
-	if _, hasTypeParameters := demoClass["type_parameters"]; hasTypeParameters {
-		t.Fatalf("classes.Demo should not emit type_parameters metadata")
-	}
+	assertStringSliceFieldValue(t, identityFn, "type_parameters", []string{"T"})
+
+	boxAlias := findNamedBucketItem(t, got, "type_aliases", "Box")
+	assertStringSliceFieldValue(t, boxAlias, "type_parameters", []string{"T"})
 }
 
 func TestDefaultEngineParsePathTSXJSXComponentUsageParity(t *testing.T) {
@@ -357,6 +356,7 @@ func assertNestedStringSliceEqual(
 		t.Fatalf("framework_semantics.%s.%s = %#v, want %#v", section, key, got, want)
 	}
 }
+
 
 func frameworkSemanticsMap(t *testing.T, payload map[string]any) map[string]any {
 	t.Helper()

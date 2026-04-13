@@ -35,6 +35,7 @@ func (e *Engine) parseC(
 	payload["enums"] = []map[string]any{}
 	payload["unions"] = []map[string]any{}
 	payload["macros"] = []map[string]any{}
+	payload["typedefs"] = []map[string]any{}
 	root := tree.RootNode()
 	scope := options.normalizedVariableScope()
 
@@ -79,6 +80,7 @@ func (e *Engine) parseC(
 		"imports",
 		"function_calls",
 		"macros",
+		"typedefs",
 	)
 	payload["framework_semantics"] = map[string]any{"frameworks": []string{}}
 
@@ -90,19 +92,13 @@ func (e *Engine) preScanC(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	names := collectBucketNames(payload, "functions", "structs", "enums", "unions", "macros")
+	names := collectBucketNames(payload, "functions", "structs", "enums", "unions", "macros", "typedefs")
 	slices.Sort(names)
 	return names, nil
 }
 
 var cTypedefAliasPattern = regexp.MustCompile(
 	`(?s)typedef\s+(struct|enum|union)(?:\s+[A-Za-z_]\w*)?\s*\{.*?\}\s*([A-Za-z_]\w*)\s*;?`,
-)
-
-var (
-	cTypedefEnumAliasSourcePattern   = regexp.MustCompile(`(?s)typedef\s+enum(?:\s+[A-Za-z_]\w*)?\s*\{.*?\}\s*([A-Za-z_]\w*)\s*;`)
-	cTypedefStructAliasSourcePattern = regexp.MustCompile(`(?s)typedef\s+struct(?:\s+[A-Za-z_]\w*)?\s*\{.*?\}\s*([A-Za-z_]\w*)\s*;`)
-	cTypedefUnionAliasSourcePattern  = regexp.MustCompile(`(?s)typedef\s+union(?:\s+[A-Za-z_]\w*)?\s*\{.*?\}\s*([A-Za-z_]\w*)\s*;`)
 )
 
 func appendCFunction(payload map[string]any, node *tree_sitter.Node, source []byte, options Options) {
@@ -213,6 +209,19 @@ func appendCTypedefAliases(payload map[string]any, node *tree_sitter.Node, sourc
 		return
 	}
 
+	typedefItem := map[string]any{
+		"name":        name,
+		"line_number": nodeLine(node),
+		"end_line":    nodeEndLine(node),
+		"lang":        lang,
+		"type":        cTypedefUnderlyingType(node, source),
+	}
+	if !bucketContainsName(payload, "typedefs", name) {
+		appendBucket(payload, "typedefs", typedefItem)
+	}
+	if bucket == "" || bucketContainsName(payload, bucket, name) {
+		return
+	}
 	appendBucket(payload, bucket, map[string]any{
 		"name":        name,
 		"line_number": nodeLine(node),
@@ -246,13 +255,31 @@ func appendCTypedefAliasesFromSource(payload map[string]any, source string, lang
 			endIndex++
 			block += " " + strings.TrimSpace(lines[endIndex])
 		}
-		if !strings.Contains(block, "}") {
+		if !strings.Contains(block, ";") {
+			for endIndex+1 < len(lines) && !strings.Contains(block, ";") {
+				endIndex++
+				block += " " + strings.TrimSpace(lines[endIndex])
+			}
+		}
+		if !strings.Contains(block, ";") {
 			continue
 		}
 		aliasPart := strings.TrimSpace(block[strings.LastIndex(block, "}")+1:])
 		aliasPart = strings.TrimSuffix(aliasPart, ";")
 		name := cTypedefAliasName(aliasPart)
-		if name == "" || bucketContainsName(payload, bucket, name) {
+		if name == "" {
+			continue
+		}
+		if !bucketContainsName(payload, "typedefs", name) {
+			appendBucket(payload, "typedefs", map[string]any{
+				"name":        name,
+				"line_number": lineIndex + 1,
+				"end_line":    endIndex + 1,
+				"lang":        lang,
+				"type":        cTypedefUnderlyingTypeFromBlock(block),
+			})
+		}
+		if bucketContainsName(payload, bucket, name) {
 			continue
 		}
 		appendBucket(payload, bucket, map[string]any{
@@ -286,12 +313,39 @@ func cTypedefAliasName(raw string) string {
 		trimmed = trimmed[:idx+1]
 	}
 	fields := strings.FieldsFunc(trimmed, func(r rune) bool {
-		return !(r == '_' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
+		return r != '_' &&
+			(r < 'A' || r > 'Z') &&
+			(r < 'a' || r > 'z') &&
+			(r < '0' || r > '9')
 	})
 	if len(fields) == 0 {
 		return ""
 	}
 	return fields[len(fields)-1]
+}
+
+func cTypedefUnderlyingType(node *tree_sitter.Node, source []byte) string {
+	typeNode := node.ChildByFieldName("type")
+	if typeNode == nil {
+		return ""
+	}
+	return strings.TrimSpace(nodeText(typeNode, source))
+}
+
+func cTypedefUnderlyingTypeFromBlock(block string) string {
+	trimmed := strings.TrimSpace(block)
+	trimmed = strings.TrimPrefix(trimmed, "typedef")
+	if aliasIndex := strings.LastIndex(trimmed, "}"); aliasIndex >= 0 {
+		return strings.TrimSpace(trimmed[:aliasIndex+1])
+	}
+	if semicolonIndex := strings.LastIndex(trimmed, ";"); semicolonIndex >= 0 {
+		trimmed = strings.TrimSpace(trimmed[:semicolonIndex])
+	}
+	parts := strings.Fields(trimmed)
+	if len(parts) <= 1 {
+		return strings.TrimSpace(trimmed)
+	}
+	return strings.Join(parts[:len(parts)-1], " ")
 }
 
 func appendCDeclarationVariables(payload map[string]any, node *tree_sitter.Node, source []byte, lang string) {

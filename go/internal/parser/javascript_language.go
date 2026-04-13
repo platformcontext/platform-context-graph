@@ -2,11 +2,14 @@ package parser
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
+
+var javaScriptTypeParametersRe = regexp.MustCompile(`<([^<>]+)>`)
 
 func (e *Engine) parseJavaScriptLike(
 	path string,
@@ -63,7 +66,8 @@ func (e *Engine) parseJavaScriptLike(
 				"lang":        outputLanguage,
 			}
 			if outputLanguage != "javascript" {
-				classItem["decorators"] = []string{}
+				classItem["decorators"] = javaScriptDecorators(node, source)
+				classItem["type_parameters"] = javaScriptTypeParameters(node, source)
 			}
 			appendBucket(payload, "classes", classItem)
 			maybeAppendJavaScriptComponent(payload, node, nameNode, source, outputLanguage)
@@ -92,10 +96,11 @@ func (e *Engine) parseJavaScriptLike(
 				return
 			}
 			appendBucket(payload, "type_aliases", map[string]any{
-				"name":        name,
-				"line_number": nodeLine(nameNode),
-				"end_line":    nodeEndLine(node),
-				"lang":        outputLanguage,
+				"name":            name,
+				"line_number":     nodeLine(nameNode),
+				"end_line":        nodeEndLine(node),
+				"lang":            outputLanguage,
+				"type_parameters": javaScriptTypeParameters(node, source),
 			})
 		case "enum_declaration":
 			if outputLanguage == "javascript" {
@@ -212,11 +217,12 @@ func appendFunctionDeclaration(
 	}
 
 	item := map[string]any{
-		"name":        name,
-		"line_number": nodeLine(nameNode),
-		"end_line":    nodeEndLine(node),
-		"decorators":  []string{},
-		"lang":        lang,
+		"name":            name,
+		"line_number":     nodeLine(nameNode),
+		"end_line":        nodeEndLine(node),
+		"decorators":      javaScriptDecorators(node, source),
+		"type_parameters": javaScriptTypeParameters(node, source),
+		"lang":            lang,
 	}
 	if options.IndexSource {
 		item["source"] = nodeText(node, source)
@@ -244,6 +250,54 @@ func javaScriptInsideFunction(node *tree_sitter.Node) bool {
 		}
 	}
 	return false
+}
+
+func javaScriptDecorators(node *tree_sitter.Node, source []byte) []string {
+	decorators := make([]string, 0)
+	for current := node; current != nil; current = current.Parent() {
+		cursor := current.Walk()
+		for _, child := range current.NamedChildren(cursor) {
+			child := child
+			if child.Kind() != "decorator" {
+				continue
+			}
+			decorator := strings.TrimSpace(nodeText(&child, source))
+			if decorator == "" {
+				continue
+			}
+			decorators = append(decorators, decorator)
+		}
+		cursor.Close()
+		if current.Kind() == "decorated_definition" {
+			return decorators
+		}
+		if current.Parent() == nil || current.Parent().Kind() != "decorated_definition" {
+			break
+		}
+	}
+	return decorators
+}
+
+func javaScriptTypeParameters(node *tree_sitter.Node, source []byte) []string {
+	declaration := nodeText(node, source)
+	matches := javaScriptTypeParametersRe.FindStringSubmatch(declaration)
+	if len(matches) != 2 {
+		return []string{}
+	}
+	parts := strings.Split(matches[1], ",")
+	typeParameters := make([]string, 0, len(parts))
+	for _, part := range parts {
+		normalized := strings.TrimSpace(part)
+		if normalized == "" {
+			continue
+		}
+		fields := strings.Fields(normalized)
+		if len(fields) == 0 {
+			continue
+		}
+		typeParameters = append(typeParameters, fields[0])
+	}
+	return typeParameters
 }
 
 func javaScriptImportEntries(node *tree_sitter.Node, source []byte, lang string) []map[string]any {

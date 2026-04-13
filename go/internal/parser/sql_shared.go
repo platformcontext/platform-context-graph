@@ -17,18 +17,6 @@ var (
 	sqlAlterTablePattern = regexp.MustCompile(`(?i)\bALTER\s+TABLE\s+(?P<name>` + sqlNamePattern + `)`)
 )
 
-type sqlEntityRecord struct {
-	name string
-	item map[string]any
-}
-
-type sqlRelationshipRecord struct {
-	relationshipType string
-	sourceName       string
-	targetName       string
-	lineNumber       int
-}
-
 func normalizeSQLName(raw string) string {
 	parts := strings.Split(raw, ".")
 	normalized := make([]string, 0, len(parts))

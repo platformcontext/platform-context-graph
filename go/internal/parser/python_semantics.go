@@ -227,19 +227,21 @@ func pythonDocstring(node *tree_sitter.Node, source []byte) string {
 	cursor := body.Walk()
 	defer cursor.Close()
 
-	for _, child := range body.NamedChildren(cursor) {
-		if child.Kind() != "expression_statement" {
-			return ""
-		}
-
-		stringNode := firstNamedDescendant(&child, "string", "concatenated_string")
-		if stringNode == nil {
-			return ""
-		}
-		return cleanPythonDocstringLiteral(nodeText(stringNode, source))
+	children := body.NamedChildren(cursor)
+	if len(children) == 0 {
+		return ""
 	}
 
-	return ""
+	child := children[0]
+	if child.Kind() != "expression_statement" {
+		return ""
+	}
+
+	stringNode := firstNamedDescendant(&child, "string", "concatenated_string")
+	if stringNode == nil {
+		return ""
+	}
+	return cleanPythonDocstringLiteral(nodeText(stringNode, source))
 }
 
 func cleanPythonDocstringLiteral(raw string) string {

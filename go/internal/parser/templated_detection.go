@@ -100,10 +100,10 @@ func inferContentMetadata(path string, content string) contentMetadata {
 		if templateDialect == "" && (explicitJinja || hasCurlyExpressions || hasGitHubActions || tfMarkerCount > 0) {
 			bucket = "unknown_templated"
 		}
-	case hasGitHubActions && !(explicitGo || explicitJinja || hasCurlyExpressions):
+	case hasGitHubActions && !explicitGo && !explicitJinja && !hasCurlyExpressions:
 		bucket = "unknown_templated"
 		templateDialect = "github_actions"
-	case !(explicitGo || explicitJinja || hasCurlyExpressions):
+	case !explicitGo && !explicitJinja && !hasCurlyExpressions:
 		bucket = "plain_yaml"
 	case explicitGo && explicitJinja:
 		bucket = "unknown_templated"
@@ -170,7 +170,8 @@ func inferRootFamily(path string, content string) string {
 		return "terraform"
 	case hasTFMarkers &&
 		(anySuffix(suffixes, isTerraformTemplateSuffix) || anySuffix(suffixes, isJinjaSuffix)) &&
-		!(goExpressionRE.MatchString(content) || jinjaStatementRE.MatchString(content)):
+		!goExpressionRE.MatchString(content) &&
+		!jinjaStatementRE.MatchString(content):
 		return "terraform"
 	case len(suffixes) > 0 && suffixes[len(suffixes)-1] == ".tpl" &&
 		hasPart(parts, "templates") && goExpressionRE.MatchString(content) &&

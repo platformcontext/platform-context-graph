@@ -2,6 +2,7 @@ package parser
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -245,7 +246,7 @@ fn main() {}
 	assertPrescanContains(t, got, "main", rustPath)
 }
 
-func TestDefaultEngineParsePathCTypedefAliasDoesNotEmitDedicatedEntities(t *testing.T) {
+func TestDefaultEngineParsePathCTypedefAliasEmitsDedicatedEntities(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -267,8 +268,20 @@ func TestDefaultEngineParsePathCTypedefAliasDoesNotEmitDedicatedEntities(t *test
 		t.Fatalf("ParsePath() error = %v, want nil", err)
 	}
 
-	assertEmptyNamedBucket(t, got, "classes")
-	assertEmptyNamedBucket(t, got, "variables")
+	typedefs, ok := got["typedefs"].([]map[string]any)
+	if !ok {
+		t.Fatalf("typedefs = %T, want []map[string]any", got["typedefs"])
+	}
+	want := []map[string]any{{
+		"name":        "my_int",
+		"line_number": 1,
+		"end_line":    1,
+		"lang":        "c",
+		"type":        "int",
+	}}
+	if !reflect.DeepEqual(typedefs, want) {
+		t.Fatalf("typedefs = %#v, want %#v", typedefs, want)
+	}
 }
 
 func TestDefaultEngineParsePathCTypedefAliases(t *testing.T) {
@@ -311,6 +324,9 @@ typedef struct {
 	assertNamedBucketContains(t, got, "enums", "StatusCode")
 	assertNamedBucketContains(t, got, "unions", "GenericValue")
 	assertNamedBucketContains(t, got, "structs", "TypedValue")
+	assertNamedBucketContains(t, got, "typedefs", "StatusCode")
+	assertNamedBucketContains(t, got, "typedefs", "GenericValue")
+	assertNamedBucketContains(t, got, "typedefs", "TypedValue")
 }
 
 func TestDefaultEngineParsePathSystemsEmptyFiles(t *testing.T) {

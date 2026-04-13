@@ -2,7 +2,6 @@ package parser
 
 import (
 	"regexp"
-	"sort"
 	"strings"
 )
 
@@ -286,7 +285,7 @@ func lineageForProjection(selectItem string, bindings map[string]*relationBindin
 	if outputColumn == "" && len(sourceColumns) > 0 {
 		outputColumn = sourceColumns[0][strings.LastIndex(sourceColumns[0], ".")+1:]
 	}
-	if sourceColumns != nil && len(sourceColumns) > 0 {
+	if len(sourceColumns) > 0 {
 		if reason := expressionPartialReason(expression); reason != "" {
 			unresolved = append(unresolved, derivedExpressionGap(expression, modelName, reason))
 		}
@@ -468,9 +467,4 @@ func isSpace(value byte) bool {
 
 func isAlphaNumeric(value byte) bool {
 	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9')
-}
-
-func sortStrings(values []string) []string {
-	sort.Strings(values)
-	return values
 }

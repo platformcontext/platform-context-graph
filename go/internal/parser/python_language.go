@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
+
+var pythonFunctionSignatureRe = regexp.MustCompile(`(?s)^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)\s*(?:->\s*([^:]+))?:$`)
 
 func (e *Engine) parsePython(
 	path string,
@@ -46,6 +49,7 @@ func (e *Engine) parsePython(
 	defer tree.Close()
 
 	payload := basePayload(path, "python", isDependency)
+	payload["type_annotations"] = []map[string]any{}
 	root := tree.RootNode()
 	scope := options.normalizedVariableScope()
 
@@ -73,21 +77,26 @@ func (e *Engine) parsePython(
 			if strings.TrimSpace(name) == "" {
 				return
 			}
+			functionSource := nodeText(node, source)
 			item := map[string]any{
 				"name":                  name,
 				"line_number":           nodeLine(nameNode),
 				"end_line":              nodeEndLine(node),
-				"decorators":            []string{},
+				"decorators":            pythonDecorators(node, source),
 				"lang":                  "python",
+				"async":                 pythonFunctionIsAsync(functionSource),
 				"cyclomatic_complexity": cyclomaticComplexity(node),
 			}
 			if docstring := pythonDocstring(node, source); docstring != "" {
 				item["docstring"] = docstring
 			}
 			if options.IndexSource {
-				item["source"] = nodeText(node, source)
+				item["source"] = functionSource
 			}
 			appendBucket(payload, "functions", item)
+			for _, annotation := range pythonTypeAnnotations(node, functionSource, name) {
+				appendBucket(payload, "type_annotations", annotation)
+			}
 		case "assignment":
 			if scope == "module" && !pythonModuleScoped(node) {
 				return
@@ -147,6 +156,7 @@ func (e *Engine) parsePython(
 	sortNamedBucket(payload, "variables")
 	sortNamedBucket(payload, "imports")
 	sortNamedBucket(payload, "function_calls")
+	sortNamedBucket(payload, "type_annotations")
 	payload["framework_semantics"] = buildPythonFrameworkSemantics(string(source))
 	payload["orm_table_mappings"] = buildPythonORMTableMappings(string(source))
 
@@ -189,6 +199,150 @@ func pythonCallName(node *tree_sitter.Node, source []byte) string {
 	}
 }
 
+func pythonDecorators(node *tree_sitter.Node, source []byte) []string {
+	decorators := make([]string, 0)
+	for current := node; current != nil; current = current.Parent() {
+		cursor := current.Walk()
+		for _, child := range current.NamedChildren(cursor) {
+			child := child
+			if child.Kind() != "decorator" {
+				continue
+			}
+			decorator := strings.TrimSpace(nodeText(&child, source))
+			if decorator == "" {
+				continue
+			}
+			decorators = append(decorators, decorator)
+		}
+		cursor.Close()
+		if current.Kind() == "decorated_definition" {
+			return decorators
+		}
+		if current.Parent() == nil || current.Parent().Kind() != "decorated_definition" {
+			break
+		}
+	}
+	return decorators
+}
+
+func pythonFunctionIsAsync(functionSource string) bool {
+	return strings.HasPrefix(strings.TrimSpace(functionSource), "async def ")
+}
+
+func pythonTypeAnnotations(node *tree_sitter.Node, functionSource string, functionName string) []map[string]any {
+	signature := pythonFunctionSignature(functionSource)
+	if signature == "" {
+		return nil
+	}
+	matches := pythonFunctionSignatureRe.FindStringSubmatch(signature)
+	if len(matches) != 4 {
+		return nil
+	}
+
+	lineNumber := nodeLine(node)
+	annotations := make([]map[string]any, 0)
+	for _, parameter := range splitPythonParameters(matches[2]) {
+		name, annotationType, ok := parsePythonParameterAnnotation(parameter)
+		if !ok {
+			continue
+		}
+		annotations = append(annotations, map[string]any{
+			"name":            name,
+			"line_number":     lineNumber,
+			"type":            annotationType,
+			"annotation_kind": "parameter",
+			"context":         functionName,
+			"lang":            "python",
+		})
+	}
+	if returnType := strings.TrimSpace(matches[3]); returnType != "" {
+		annotations = append(annotations, map[string]any{
+			"name":            functionName,
+			"line_number":     lineNumber,
+			"type":            pythonNormalizedAnnotation(returnType),
+			"annotation_kind": "return",
+			"context":         functionName,
+			"lang":            "python",
+		})
+	}
+	return annotations
+}
+
+func pythonFunctionSignature(functionSource string) string {
+	trimmed := strings.TrimSpace(functionSource)
+	if trimmed == "" {
+		return ""
+	}
+	if bodyIndex := strings.Index(trimmed, ":\n"); bodyIndex >= 0 {
+		return trimmed[:bodyIndex+1]
+	}
+	if colonIndex := strings.Index(trimmed, ":"); colonIndex >= 0 {
+		return trimmed[:colonIndex+1]
+	}
+	return trimmed
+}
+
+func splitPythonParameters(parameters string) []string {
+	parts := make([]string, 0)
+	var current strings.Builder
+	depth := 0
+	for _, char := range parameters {
+		switch char {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+				continue
+			}
+		}
+		current.WriteRune(char)
+	}
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+	return parts
+}
+
+func parsePythonParameterAnnotation(parameter string) (string, string, bool) {
+	trimmed := strings.TrimSpace(parameter)
+	if trimmed == "" || trimmed == "/" || trimmed == "*" {
+		return "", "", false
+	}
+	colonIndex := strings.Index(trimmed, ":")
+	if colonIndex < 0 {
+		return "", "", false
+	}
+	name := strings.TrimSpace(trimmed[:colonIndex])
+	if name == "" {
+		return "", "", false
+	}
+	name = strings.TrimPrefix(name, "**")
+	name = strings.TrimPrefix(name, "*")
+	annotation := strings.TrimSpace(trimmed[colonIndex+1:])
+	if equalsIndex := strings.Index(annotation, "="); equalsIndex >= 0 {
+		annotation = strings.TrimSpace(annotation[:equalsIndex])
+	}
+	annotation = pythonNormalizedAnnotation(annotation)
+	if annotation == "" {
+		return "", "", false
+	}
+	return name, annotation, true
+}
+
+func pythonNormalizedAnnotation(annotation string) string {
+	trimmed := strings.TrimSpace(annotation)
+	if trimmed == "" {
+		return ""
+	}
+	return strings.Join(strings.Fields(trimmed), " ")
+}
+
 func pythonModuleScoped(node *tree_sitter.Node) bool {
 	for current := node.Parent(); current != nil; current = current.Parent() {
 		switch current.Kind() {
@@ -211,7 +365,9 @@ func convertNotebookToTempPython(path string, source []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create temporary python file for %q: %w", path, err)
 	}
-	defer tempFile.Close()
+	defer func() {
+		_ = tempFile.Close()
+	}()
 
 	if _, err := tempFile.WriteString(code); err != nil {
 		_ = os.Remove(tempFile.Name())
