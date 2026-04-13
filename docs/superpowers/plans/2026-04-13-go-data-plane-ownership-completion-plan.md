@@ -251,7 +251,7 @@ git commit -m "feat(reducer): add Go-owned platform materialization domain"
 - Create: `go/internal/storage/postgres/decisions.go`
 - Create: `go/internal/storage/postgres/decisions_test.go`
 
-- [ ] **Step 1: Write failing tests for decision model**
+- [x] **Step 1: Write failing tests for decision model**
 
 Cover:
 - projection decision construction with confidence (0.6-0.9)
@@ -259,20 +259,20 @@ Cover:
 - decision persistence and retrieval
 - evidence linkage integrity
 
-- [ ] **Step 2: Implement decision domain model**
+- [x] **Step 2: Implement decision domain model**
 
 Create Go types for projection decisions and evidence rows matching the Python
 `resolution/decisions/models.py` contract.
 
-- [ ] **Step 3: Implement Postgres decision store**
+- [x] **Step 3: Implement Postgres decision store**
 
 Port the decision persistence from `resolution/decisions/postgres.py`.
 
-- [ ] **Step 4: Wire into projector runtime**
+- [x] **Step 4: Wire into projector runtime**
 
 Add decision recording as a post-projection step in the projector runtime.
 
-- [ ] **Step 5: Run decision verification**
+- [x] **Step 5: Run decision verification**
 
 Run:
 
@@ -282,7 +282,7 @@ cd go && go test ./internal/projector/... ./internal/storage/postgres/... -count
 
 Expected: PASS (may require build tag isolation if collector package is broken)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add go/internal/projector/decisions.go go/internal/projector/decisions_test.go \
