@@ -124,8 +124,10 @@ Deliverables:
 
 - deterministic tests for generation replacement and stale-generation cleanup
 - one live compose proof for incremental refresh on a repo-backed source
-- a dedicated compose gate that proves generation A becomes superseded,
-  generation B becomes active, and the scope pointer follows B
+- a stronger compose gate that starts from one active generation, proves an
+  unchanged rerun leaves the authoritative generation and projector queue
+  untouched, and then proves a changed rerun still attempts the
+  active/superseded swap
 - replay and retraction regression coverage
 
 Effort:
@@ -174,4 +176,6 @@ go test ./internal/scope ./internal/collector ./internal/projector \
 ./scripts/verify_incremental_refresh_compose.sh
 ```
 
-plus one new incremental-refresh proof command specific to Milestone 2.
+The incremental-refresh proof is currently blocked by the projector handoff
+ordering around `scope_generations_active_scope_idx`; keep that blocker
+visible until the changed rerun can swap generations cleanly.
