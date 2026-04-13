@@ -1,0 +1,51 @@
+go/cmd/ingester/source_python_bridge.go
+  1ca5ee6ce936a402 1-52
+tests/integration/deployment/test_public_deployment_assets.py
+  1ca5ee6ce936a402 108-111,178-179,692,696
+go/cmd/bootstrap-index/wiring.go
+  1ca5ee6ce936a402 1-190
+go/cmd/ingester/main.go
+  1ca5ee6ce936a402 1-72
+go/cmd/ingester/wiring_test.go
+  1ca5ee6ce936a402 1-101
+go/cmd/bootstrap-index/main.go
+  1ca5ee6ce936a402 1-183
+deploy/helm/platform-context-graph/templates/deployment-resolution-engine.yaml
+  1ca5ee6ce936a402 46
+Dockerfile
+  1ca5ee6ce936a402 23-43,70-72
+go/cmd/ingester/wiring.go
+  1ca5ee6ce936a402 1-202
+go/cmd/ingester/config.go
+  1ca5ee6ce936a402 1-27
+docker-compose.yaml
+  1ca5ee6ce936a402 121,239,256
+go/cmd/bootstrap-index/main_test.go
+  1ca5ee6ce936a402 1-213
+deploy/helm/platform-context-graph/templates/statefulset.yaml
+  1ca5ee6ce936a402 69
+go/cmd/ingester/main_test.go
+  1ca5ee6ce936a402 1-23
+docker-compose.template.yml
+  1ca5ee6ce936a402 68,168,221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "7a5d644c7433a3226fb3a5b470d0b0e9fa90db61",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 2545,
+      "total_deletions": 52,
+      "accepted_lines": 1644,
+      "overriden_lines": 0
+    }
+  }
+}
