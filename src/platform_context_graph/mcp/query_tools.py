@@ -99,10 +99,17 @@ class QueryToolMixin:
     def get_repo_summary_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
         """Return a summary for one repository."""
 
+        repo_id = require_str_argument(args, "repo_id")
         repo_name = require_str_argument(args, "repo_name")
-        if repo_name is None:
-            return {"error": "The 'repo_name' argument is required."}
-        return ecosystem.get_repo_summary(self.db_manager, repo_name)
+        if repo_id is None and repo_name is None:
+            return {
+                "error": "The 'repo_id' argument is required. The 'repo_name' alias is transitional."
+            }
+        return ecosystem.get_repo_summary(
+            self.db_manager,
+            repo_id=repo_id,
+            repo_name=repo_name,
+        )
 
     def get_repo_context_tool(self: _QueryRuntime, **args: Any) -> dict[str, Any]:
         """Return repository context anchored by canonical repository ID."""

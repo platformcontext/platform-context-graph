@@ -5,8 +5,10 @@ from unittest.mock import MagicMock
 
 import platform_context_graph
 import platform_context_graph.mcp  # noqa: F401
+import platform_context_graph.mcp.query_tools  # noqa: F401
 import platform_context_graph.mcp.tools.handlers.ecosystem  # noqa: F401
 import platform_context_graph.mcp.tools.handlers.ecosystem_support  # noqa: F401
+from platform_context_graph.mcp.query_tools import QueryToolMixin
 from platform_context_graph.mcp.tools.handlers.ecosystem import (
     find_blast_radius,
     get_ecosystem_overview,
@@ -422,6 +424,43 @@ def test_find_blast_radius_filters_placeholder_null_rows() -> None:
 class TestRepoSummary:
     """Test repo summary shaping and truthfulness notes."""
 
+    def test_repo_summary_accepts_canonical_repo_id(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        def fake_get_repository_context(_db_manager, *, repo_id):
+            captured["repo_id"] = repo_id
+            return {
+                "repository": {
+                    "id": repo_id,
+                    "name": "api-node-boats",
+                    "path": "/repos/api-node-boats",
+                    "file_count": 0,
+                    "files_by_extension": {},
+                },
+                "code": {"functions": 0, "classes": 0},
+                "infrastructure": {},
+                "ecosystem": {"dependencies": [], "dependents": []},
+                "coverage": None,
+                "platforms": [],
+                "deploys_from": [],
+                "discovers_config_in": [],
+                "provisioned_by": [],
+                "provisions_dependencies_for": [],
+                "environments": [],
+                "limitations": [],
+                "relationships": [],
+            }
+
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
+            fake_get_repository_context,
+        )
+
+        result = get_repo_summary(make_mock_db({}), repo_id="repository:r_repo123")
+
+        assert captured["repo_id"] == "repository:r_repo123"
+        assert result["repo_id"] == "repository:r_repo123"
+
     def test_repo_summary_omits_tier_when_null(self, monkeypatch):
         monkeypatch.setattr(
             "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
@@ -499,6 +538,39 @@ class TestRepoSummary:
         assert result["coverage"]["graph_gap_count"] == 184
         assert "partial" in result["note"].lower()
         assert result["story"] == [result["note"]]
+
+    def test_query_tool_prefers_canonical_repo_id_at_boundary(
+        self, monkeypatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_get_repo_summary(_db_manager, *, repo_id=None, repo_name=None):
+            captured["repo_id"] = repo_id
+            captured["repo_name"] = repo_name
+            return {
+                "repo_id": repo_id,
+                "name": "api-node-boats",
+                "coverage": None,
+                "deployment_overview": {},
+                "story": [],
+                "limitations": [],
+            }
+
+        monkeypatch.setattr(
+            "platform_context_graph.mcp.tools.handlers.ecosystem.get_repo_summary",
+            fake_get_repo_summary,
+        )
+
+        class _Runtime(QueryToolMixin):
+            db_manager = object()
+
+        result = _Runtime().get_repo_summary_tool(
+            repo_id="repository:r_repo123",
+        )
+
+        assert captured["repo_id"] == "repository:r_repo123"
+        assert captured["repo_name"] is None
+        assert result["repo_id"] == "repository:r_repo123"
 
     def test_repo_summary_surfaces_runtime_context_and_limitation_codes(
         self, monkeypatch

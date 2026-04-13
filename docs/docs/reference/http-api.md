@@ -38,6 +38,7 @@ Use the CLI for local indexing workflows. Use the Helm runtime for deployment-ma
 - file-bearing query results should be interpreted using `repo_id + relative_path`, not an absolute server path.
 - `repo_access` indicates whether the caller may need to ask the user for a local checkout path or clone decision.
 - documentation-oriented clients should resolve canonical graph identity first, then use `repo_id + relative_path` or `entity_id` for exact evidence reads.
+- name-based repository lookup should be treated as transitional compatibility where it still exists; canonical `repo_id` is the preferred public boundary.
 
 ## Context API
 
@@ -202,6 +203,18 @@ The response is investigation-first rather than story-first. Key fields:
 - `coverage_summary`
 - `investigation_findings`
 - `recommended_next_calls`
+
+Coverage fields are meant to be truthful, not optimistic:
+
+- `complete` means the indexed repository coverage explicitly reported complete
+- `partial` means the indexed context or story limitations reported partial coverage
+- `unknown` means PCG cannot currently prove complete or partial coverage from indexed evidence alone
+
+This route is the HTTP inspection mode for operators:
+
+- story/context routes remain the canonical-first truth surface
+- investigation widens into evidence families and related repos on purpose
+- inspection mode should explain gaps and widening decisions, not silently act like a second canonical graph
 
 Use it for prompts like:
 

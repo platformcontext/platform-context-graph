@@ -13,6 +13,13 @@ For documentation-oriented answers, use a simple orchestration rule:
 
 Repository-bearing results may include `repo_access` metadata. If PCG is running remotely, treat repository identity as remote-first and use `repo_id`, `repo_slug`, and repo-relative paths before assuming any `local_path` exists on the user's machine.
 
+Canonical-first query behavior now has one explicit rule:
+
+- prefer canonical IDs at the tool boundary whenever the tool supports them
+- treat name-based repository lookup as a transitional compatibility alias, not the long-term contract
+- use inspection-style tools when the caller wants evidence widening and coverage reporting, not a second truth model
+- inspection results may report `complete`, `partial`, or `unknown` coverage based on indexed evidence; they should not imply certainty the graph does not have
+
 Content-oriented tools use the same rule:
 
 - file lookup uses `repo_id + relative_path`
@@ -122,6 +129,14 @@ The main output fields are:
 - `coverage_summary`
 - `investigation_findings`
 - `recommended_next_calls`
+
+Treat `investigate_service` as the inspection-mode companion to the canonical
+story and context tools:
+
+- canonical story/context answers are the default truth surface
+- `investigate_service` is evidence-first and coverage-first
+- `repo_access` tells the client when local checkout help may still be needed
+- repository summary and context tools should prefer canonical `repo_id` values whenever they are available
 
 ## Content Retrieval & Search
 

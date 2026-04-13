@@ -141,6 +141,22 @@ func TestRuntimeProjectRejectsCrossGenerationFacts(t *testing.T) {
 	}
 }
 
+func TestBuildReducerIntentRejectsUnknownDomain(t *testing.T) {
+	t.Parallel()
+
+	_, ok := buildReducerIntent(facts.Envelope{
+		FactID:       "fact-1",
+		ScopeID:      "scope-123",
+		GenerationID: "generation-456",
+		Payload: map[string]any{
+			"reducer_domain": "not_a_real_domain",
+		},
+	})
+	if ok {
+		t.Fatal("buildReducerIntent() ok = true, want false")
+	}
+}
+
 func TestRuntimeProjectCopiesRepoIDIntoContentMaterialization(t *testing.T) {
 	t.Parallel()
 

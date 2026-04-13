@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/truth"
 )
 
 func TestNewDefaultRuntimeUsesDefaultDomainHandlers(t *testing.T) {
@@ -70,5 +72,11 @@ func TestDefaultDomainDefinitionsMatchImplementedRuntimeCatalog(t *testing.T) {
 	}
 	if got[0].Domain != DomainWorkloadIdentity {
 		t.Fatalf("DefaultDomainDefinitions()[0].Domain = %q, want %q", got[0].Domain, DomainWorkloadIdentity)
+	}
+	if got[0].TruthContract.CanonicalKind != "workload_identity" {
+		t.Fatalf("DefaultDomainDefinitions()[0].TruthContract.CanonicalKind = %q, want %q", got[0].TruthContract.CanonicalKind, "workload_identity")
+	}
+	if !got[0].TruthContract.Supports(truth.LayerSourceDeclaration) {
+		t.Fatal("DefaultDomainDefinitions()[0].TruthContract.Supports(source_declaration) = false, want true")
 	}
 }

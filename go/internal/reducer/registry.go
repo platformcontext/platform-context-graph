@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/truth"
 )
 
 // OwnershipShape records whether a reducer domain owns cross-source and
@@ -33,21 +35,25 @@ func (o OwnershipShape) Validate() error {
 
 // DomainDefinition describes one reducer domain and its ownership shape.
 type DomainDefinition struct {
-	Domain    Domain
-	Summary   string
-	Ownership OwnershipShape
-	Handler   Handler
+	Domain        Domain
+	Summary       string
+	Ownership     OwnershipShape
+	TruthContract truth.Contract
+	Handler       Handler
 }
 
 // Validate checks the domain definition for registration.
 func (d DomainDefinition) Validate() error {
-	if strings.TrimSpace(string(d.Domain)) == "" {
-		return errors.New("domain must not be blank")
+	if err := d.Domain.Validate(); err != nil {
+		return err
 	}
 	if strings.TrimSpace(d.Summary) == "" {
 		return errors.New("summary must not be blank")
 	}
 	if err := d.Ownership.Validate(); err != nil {
+		return err
+	}
+	if err := d.TruthContract.Validate(); err != nil {
 		return err
 	}
 
@@ -136,6 +142,12 @@ func DefaultDomainDefinitions() []DomainDefinition {
 				CrossSource:    true,
 				CrossScope:     true,
 				CanonicalWrite: true,
+			},
+			TruthContract: truth.Contract{
+				CanonicalKind: "workload_identity",
+				SourceLayers: []truth.Layer{
+					truth.LayerSourceDeclaration,
+				},
 			},
 		},
 	}

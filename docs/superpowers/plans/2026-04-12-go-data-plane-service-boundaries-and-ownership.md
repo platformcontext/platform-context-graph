@@ -58,6 +58,8 @@ schema/
   semantics.
 - `go/internal/projector/` owns source-local projection only.
 - `go/internal/reducer/` owns cross-source and cross-scope reconciliation only.
+  Reducer domains must carry an explicit truth-layer contract for the canonical
+  kind they own; they must not rely on ad hoc string conventions.
 - `go/internal/graph/` and `go/internal/content/` own canonical write adapters,
   not source parsing or reducer policy.
 - `go/internal/status/` owns the storage-agnostic operator-status reader/report
@@ -116,6 +118,10 @@ Every new ingestor should follow the same bounded framework:
 3. let the source-local `projector` materialize only source-owned truth for the
    same boundary
 4. let `reducers` own cross-source and canonical correlation asynchronously
+
+Unknown reducer domains should fail closed at the projector or durable
+reducer-queue boundary instead of being accepted into the platform as
+best-effort shared work.
 
 This contract is intentionally the same for Git, AWS, Kubernetes, ETL, and
 future collectors. A new ingestor should not need a custom finalize stage, a

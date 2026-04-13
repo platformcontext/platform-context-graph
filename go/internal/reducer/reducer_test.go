@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
+	"github.com/platformcontext/platform-context-graph/go/internal/truth"
 )
 
 func TestIntentValidateAndScopeGenerationKey(t *testing.T) {
@@ -50,6 +51,7 @@ func TestDomainRegistryRequiresCrossSourceCrossScopeOwnership(t *testing.T) {
 			CrossScope:     true,
 			CanonicalWrite: true,
 		},
+		TruthContract: testTruthContract("workload_identity"),
 	}
 
 	if err := registry.Register(definition); err != nil {
@@ -73,6 +75,7 @@ func TestDomainRegistryRequiresCrossSourceCrossScopeOwnership(t *testing.T) {
 			CrossScope:     false,
 			CanonicalWrite: true,
 		},
+		TruthContract: testTruthContract("cloud_asset"),
 	}); err == nil {
 		t.Fatal("Register() error = nil, want non-nil for non-cross-scope ownership")
 	}
@@ -91,6 +94,7 @@ func TestRuntimeRunOnceIsBoundedAndProcessesRegisteredHandlers(t *testing.T) {
 			CrossScope:     true,
 			CanonicalWrite: true,
 		},
+		TruthContract: testTruthContract("workload_identity"),
 		Handler: HandlerFunc(func(context.Context, Intent) (Result, error) {
 			handled = append(handled, "workload-identity")
 			return Result{
@@ -215,6 +219,7 @@ func TestRuntimeStatsSummarizeDomainBacklog(t *testing.T) {
 			CrossScope:     true,
 			CanonicalWrite: true,
 		},
+		TruthContract: testTruthContract("deployment_mapping"),
 	}); err != nil {
 		t.Fatalf("Register() error = %v, want nil", err)
 	}
@@ -255,5 +260,14 @@ func TestRuntimeStatsSummarizeDomainBacklog(t *testing.T) {
 	}
 	if got, want := stats.Queued, 1; got != want {
 		t.Fatalf("Stats().Queued = %d, want %d", got, want)
+	}
+}
+
+func testTruthContract(canonicalKind string) truth.Contract {
+	return truth.Contract{
+		CanonicalKind: canonicalKind,
+		SourceLayers: []truth.Layer{
+			truth.LayerSourceDeclaration,
+		},
 	}
 }

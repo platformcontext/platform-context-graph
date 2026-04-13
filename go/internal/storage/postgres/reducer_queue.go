@@ -172,6 +172,9 @@ func (q ReducerQueue) Enqueue(
 	now := q.now()
 	count := 0
 	for index, intent := range intents {
+		if err := intent.Domain.Validate(); err != nil {
+			return projector.IntentResult{}, fmt.Errorf("enqueue reducer intent: %w", err)
+		}
 		payloadJSON, err := marshalPayload(map[string]any{
 			"entity_key":    intent.EntityKey,
 			"reason":        intent.Reason,
@@ -188,7 +191,7 @@ func (q ReducerQueue) Enqueue(
 			reducerWorkItemID(intent, now, index),
 			intent.ScopeID,
 			intent.GenerationID,
-			intent.Domain,
+			string(intent.Domain),
 			now,
 			payloadJSON,
 		); err != nil {
@@ -339,12 +342,17 @@ func scanReducerIntent(rows Rows) (reducer.Intent, error) {
 	factID, _ := payload["fact_id"].(string)
 	sourceSystem, _ := payload["source_system"].(string)
 
+	domainValue, err := reducer.ParseDomain(domain)
+	if err != nil {
+		return reducer.Intent{}, err
+	}
+
 	intent := reducer.Intent{
 		IntentID:        intentID,
 		ScopeID:         scopeID,
 		GenerationID:    generationID,
 		SourceSystem:    sourceSystem,
-		Domain:          reducer.Domain(domain),
+		Domain:          domainValue,
 		Cause:           reason,
 		AttemptCount:    attemptCount,
 		EntityKeys:      nil,
@@ -364,6 +372,9 @@ func scanReducerIntent(rows Rows) (reducer.Intent, error) {
 	}
 	if factID != "" && len(intent.EntityKeys) == 0 {
 		intent.EntityKeys = []string{factID}
+	}
+	if err := intent.Validate(); err != nil {
+		return reducer.Intent{}, err
 	}
 
 	return intent, nil
@@ -416,7 +427,7 @@ func reducerWorkItemID(intent projector.ReducerIntent, now time.Time, index int)
 	parts := []string{
 		intent.ScopeID,
 		intent.GenerationID,
-		intent.Domain,
+		string(intent.Domain),
 		intent.EntityKey,
 		intent.FactID,
 		now.UTC().Format("20060102150405.000000000"),

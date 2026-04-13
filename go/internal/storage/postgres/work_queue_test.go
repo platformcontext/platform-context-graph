@@ -214,6 +214,52 @@ func TestReducerQueueEnqueueAndClaimRoundTrip(t *testing.T) {
 	}
 }
 
+func TestReducerQueueEnqueueRejectsUnknownDomain(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 11, 0, 0, 0, time.UTC)
+	queue := ReducerQueue{
+		db:            &fakeExecQueryer{},
+		LeaseOwner:    "reducer-1",
+		LeaseDuration: time.Minute,
+		Now:           func() time.Time { return now },
+	}
+
+	_, err := queue.Enqueue(context.Background(), []projector.ReducerIntent{{
+		ScopeID:      "scope-123",
+		GenerationID: "generation-456",
+		Domain:       "not_a_real_domain",
+		EntityKey:    "repo-123",
+		Reason:       "shared follow-up",
+		FactID:       "fact-1",
+		SourceSystem: "git",
+	}})
+	if err == nil {
+		t.Fatal("Enqueue() error = nil, want non-nil")
+	}
+}
+
+func TestScanReducerIntentRejectsUnknownDomain(t *testing.T) {
+	t.Parallel()
+
+	rows := &queueFakeRows{
+		rows: [][]any{{
+			"intent-1",
+			"scope-123",
+			"generation-456",
+			"not_a_real_domain",
+			1,
+			time.Date(2026, time.April, 12, 11, 0, 0, 0, time.UTC),
+			time.Date(2026, time.April, 12, 11, 0, 0, 0, time.UTC),
+			[]byte(`{"entity_key":"repo-123","reason":"shared follow-up","fact_id":"fact-1","source_system":"git"}`),
+		}},
+	}
+
+	if _, err := scanReducerIntent(rows); err == nil {
+		t.Fatal("scanReducerIntent() error = nil, want non-nil")
+	}
+}
+
 func TestReducerQueueFailRetriesRetryableErrorWithinAttemptBudget(t *testing.T) {
 	t.Parallel()
 

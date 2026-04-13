@@ -11,6 +11,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
+	"github.com/platformcontext/platform-context-graph/go/internal/truth"
 )
 
 func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) {
@@ -168,6 +169,7 @@ func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) 
 			CrossScope:     true,
 			CanonicalWrite: true,
 		},
+		TruthContract: testReducerTruthContract("workload_identity"),
 		Handler: reducer.HandlerFunc(func(context.Context, reducer.Intent) (reducer.Result, error) {
 			return reducer.Result{
 				Status:          reducer.ResultStatusSucceeded,
@@ -237,6 +239,15 @@ func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) 
 	}
 	if got, want := len(report.FlowSummaries), 3; got != want {
 		t.Fatalf("status flow summary count = %d, want %d", got, want)
+	}
+}
+
+func testReducerTruthContract(canonicalKind string) truth.Contract {
+	return truth.Contract{
+		CanonicalKind: canonicalKind,
+		SourceLayers: []truth.Layer{
+			truth.LayerSourceDeclaration,
+		},
 	}
 }
 

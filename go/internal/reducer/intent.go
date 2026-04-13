@@ -119,8 +119,8 @@ func (i Intent) Validate() error {
 	if strings.TrimSpace(i.SourceSystem) == "" {
 		return errors.New("source_system must not be blank")
 	}
-	if strings.TrimSpace(string(i.Domain)) == "" {
-		return errors.New("domain must not be blank")
+	if err := i.Domain.Validate(); err != nil {
+		return err
 	}
 	if strings.TrimSpace(i.Cause) == "" {
 		return errors.New("cause must not be blank")

@@ -70,6 +70,11 @@ Tradeoffs:
 
 - Make reducer ownership explicit for every shared domain before implementation
   fan-out begins.
+- Treat the reducer domain catalog as a fail-closed contract. Projectors and
+  durable reducer-queue adapters should reject unknown reducer domains instead
+  of persisting ambiguous shared-work strings.
+- Keep reducer-owned truth contracts typed and versionable so future AWS,
+  Kubernetes, SQL, and ETL domains can reuse one canonical boundary.
 - Require projector outputs to be explainable without canonical correlation.
 - Require canonical query paths to reveal when source-local truth exists but
   reducer-owned truth is still pending.

@@ -209,6 +209,7 @@ Reducer ownership must be explicit. Shared correlation work belongs to reducers,
 ### Deliverables
 
 - a documented canonical identity strategy for cloud and workload entities
+- a typed truth-layer contract for reducer-owned canonical domains
 - reducer domains for workload identity, cloud asset resolution, deployment mapping, data lineage, ownership, and governance
 - a clear distinction between declared truth, applied truth, and observed truth
 - canonical-first query/MCP behavior with explicit evidence and inspection modes

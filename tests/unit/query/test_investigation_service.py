@@ -248,6 +248,88 @@ def test_investigate_service_surfaces_dual_deployment_planes(
     ]
 
 
+def test_investigate_service_uses_repository_coverage_state_when_available(
+    monkeypatch,
+) -> None:
+    """Surface real repository coverage states instead of forcing partial."""
+
+    def fake_resolve_entity(_database, **_kwargs):
+        return {
+            "matches": [
+                {
+                    "ref": {
+                        "id": "workload:api-node-boats",
+                        "type": "workload",
+                        "kind": "service",
+                        "name": "api-node-boats",
+                    },
+                    "score": 0.99,
+                },
+                {
+                    "ref": {
+                        "id": "repository:r_app12345",
+                        "type": "repository",
+                        "name": "api-node-boats",
+                    },
+                    "score": 0.97,
+                },
+            ]
+        }
+
+    def fake_get_service_story(_database, **_kwargs):
+        return {
+            "subject": {
+                "id": "workload:api-node-boats",
+                "type": "workload",
+                "kind": "service",
+                "name": "api-node-boats",
+            },
+            "limitations": [],
+        }
+
+    def fake_get_repository_context(_database, **kwargs):
+        assert kwargs["repo_id"] == "repository:r_app12345"
+        return {
+            "repository": {
+                "id": "repository:r_app12345",
+                "name": "api-node-boats",
+            },
+            "coverage": {
+                "completeness_state": "complete",
+            },
+        }
+
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.entity_resolution_queries.resolve_entity",
+        fake_resolve_entity,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.context_queries.get_service_story",
+        fake_get_service_story,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.repository_queries.get_repository_context",
+        fake_get_repository_context,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.trace_deployment_chain",
+        lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.query.investigation_service.repository_queries.get_repository_story",
+        lambda *_args, **_kwargs: {},
+    )
+
+    result = investigate_service(
+        database=object(),
+        service_name="api-node-boats",
+        intent="deployment",
+    )
+
+    assert result["coverage_summary"]["graph_completeness"] == "complete"
+    assert result["coverage_summary"]["content_completeness"] == "complete"
+
+
 def test_add_related_repo_details_resolves_canonical_repository_ids(
     monkeypatch,
 ) -> None:

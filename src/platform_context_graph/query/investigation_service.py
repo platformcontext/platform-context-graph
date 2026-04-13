@@ -32,6 +32,9 @@ from .investigation_recommendations import (
 from .investigation_repo_widening import widen_related_repositories
 
 _EXTERNAL_REPO_RE = re.compile(r"\b[\w.-]+/([\w.-]+)\b")
+_COVERAGE_PARTIAL_STATES = {"graph_partial", "content_partial", "partial"}
+_COVERAGE_COMPLETE_STATES = {"complete"}
+_COVERAGE_UNKNOWN_STATES = {"", "unknown", "failed"}
 
 
 def trace_deployment_chain(
@@ -168,6 +171,31 @@ def _evidence_families_found(
     ]
 
 
+def _coverage_state_from_context(
+    primary_repo_context: dict[str, Any],
+    *,
+    service_story: dict[str, Any],
+) -> str:
+    """Return the truthful coverage state for the current investigation."""
+
+    coverage = primary_repo_context.get("coverage")
+    if isinstance(coverage, dict):
+        completeness_state = str(coverage.get("completeness_state") or "").strip()
+        if completeness_state in _COVERAGE_COMPLETE_STATES:
+            return "complete"
+        if completeness_state in _COVERAGE_PARTIAL_STATES:
+            return "partial"
+        if completeness_state in _COVERAGE_UNKNOWN_STATES:
+            return "unknown"
+
+    story_limitations = {
+        str(limit).strip() for limit in (service_story.get("limitations") or [])
+    }
+    if story_limitations & {"graph_partial", "content_partial"}:
+        return "partial"
+    return "unknown"
+
+
 def investigate_service(
     database: Any,
     *,
@@ -253,8 +281,14 @@ def investigate_service(
         repositories_with_evidence_count=len(related_repositories),
         searched_evidence_families=searched_evidence_families,
         found_evidence_families=found_evidence_families,
-        graph_completeness="partial",
-        content_completeness="partial",
+        graph_completeness=_coverage_state_from_context(
+            primary_repo_context,
+            service_story=service_story,
+        ),
+        content_completeness=_coverage_state_from_context(
+            primary_repo_context,
+            service_story=service_story,
+        ),
     )
     recommended_next_calls = build_recommended_next_calls(
         repositories_with_evidence=related_repositories,

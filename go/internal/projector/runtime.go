@@ -10,6 +10,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/graph"
+	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
@@ -24,7 +25,7 @@ type Runtime struct {
 type ReducerIntent struct {
 	ScopeID      string
 	GenerationID string
-	Domain       string
+	Domain       reducer.Domain
 	EntityKey    string
 	Reason       string
 	FactID       string
@@ -323,12 +324,16 @@ func buildContentEntityRecord(repoID string, fact facts.Envelope) (content.Entit
 }
 
 func buildReducerIntent(fact facts.Envelope) (ReducerIntent, bool) {
-	domain, ok := payloadString(fact.Payload, "reducer_domain")
+	domainValue, ok := payloadString(fact.Payload, "reducer_domain")
 	if !ok {
-		domain, ok = payloadString(fact.Payload, "shared_domain")
+		domainValue, ok = payloadString(fact.Payload, "shared_domain")
 		if !ok {
 			return ReducerIntent{}, false
 		}
+	}
+	domain, err := reducer.ParseDomain(domainValue)
+	if err != nil {
+		return ReducerIntent{}, false
 	}
 
 	entityKey, _ := payloadString(fact.Payload, "entity_key")

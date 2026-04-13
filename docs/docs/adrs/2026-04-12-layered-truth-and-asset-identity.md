@@ -66,6 +66,9 @@ Tradeoffs:
 
 ## Implementation Guidance
 
+- Keep the layered truth contract in typed code, not only in ADR prose. The
+  Go rewrite should expose one shared truth-layer package so reducers, queue
+  adapters, and future collectors do not each invent their own string values.
 - Reducers own the promotion from declaration or observation records into
   canonical `CloudAsset` nodes.
 - Source-local projectors should write the layer-specific records only for the

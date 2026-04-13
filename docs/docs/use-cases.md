@@ -100,6 +100,12 @@ whether PCG:
 - found evidence but still has a partial story
 - needs another drill-down call
 
+This is the practical split to keep in mind:
+
+- use story/context routes when you want the canonical answer first
+- use investigation when you want widening, evidence inspection, and explicit coverage reporting
+- use `repo_id + relative_path` or `entity_id` for exact follow-up evidence, not server-local paths
+
 ## Comparing environments
 
 Staging is broken but prod works. What is different?
