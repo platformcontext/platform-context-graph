@@ -46,6 +46,10 @@ The current accepted ADR set establishes the rewrite baseline:
 - [Cutover And Legacy Bridge](2026-04-12-cutover-and-legacy-bridge.md) defines
   the transition model away from the current Python-heavy procedural write path
   without keeping two long-lived architectures alive.
+- [Go Data Plane Ownership Completion](2026-04-13-go-data-plane-ownership-completion.md)
+  extends the write-plane conversion beyond deployment surfaces to cover full Go
+  ownership of resolution domain logic, operational surfaces, and recovery proxy
+  wiring.
 
 Read these records together. They are meant to remove ambiguity before new
 collector or runtime work begins.

@@ -19,10 +19,6 @@ The branch still has active Python-owned runtime seams:
 
 - Python runtime entrypoints still own deployed runtime roles in
   `src/platform_context_graph/cli/commands/runtime.py`.
-- `go/cmd/collector-git/service.go` still imports and depends on
-  `go/internal/compatibility/pythonbridge/*`.
-- the Git collector still shells into Python bridge modules under
-  `src/platform_context_graph/runtime/ingester/go_collector_*bridge.py`.
 - parser, discovery, snapshot, and content-shaping behavior still depend on
   Python-owned runtime code in
   `src/platform_context_graph/collectors/git/parse_execution.py`,
@@ -33,6 +29,16 @@ The branch still has active Python-owned runtime seams:
   `src/platform_context_graph/collectors/git/finalize.py`,
   `src/platform_context_graph/indexing/post_commit_writer.py`, and
   `src/platform_context_graph/api/routers/admin.py`.
+
+The collector bridge inventory changed during Chunk 2:
+
+- `go/internal/compatibility/pythonbridge/*` has been removed from the normal
+  Go runtime path and deleted from the branch.
+- `src/platform_context_graph/runtime/ingester/go_collector_*bridge.py` has
+  been deleted from the branch.
+- `go/internal/collector/git_selection_native*.go` now owns source-mode
+  repository selection, filesystem sync, Git clone/update, and selected-repo
+  batch construction for `collector-git`, `ingester`, and `bootstrap-index`.
 
 The native Go parser platform now has a larger foundation than the original
 cutover draft assumed:
@@ -100,22 +106,22 @@ No new ingestors before the full Python-to-Go conversion completes.
 - Modify: `docs/docs/guides/collector-authoring.md`
 - Test: `docs/mkdocs.yml`
 
-- [ ] **Step 1: Change the branch language from "rewrite complete" to "rewrite proof complete, conversion incomplete"**
+- [x] **Step 1: Change the branch language from "rewrite complete" to "rewrite proof complete, conversion incomplete"**
 
 Document that the proof/architecture package is done, but the full Python-to-
 Go platform conversion is still in progress and parser ownership remains in
 scope until the normal path is Go-owned.
 
-- [ ] **Step 2: Add the hard merge bar to the docs**
+- [x] **Step 2: Add the hard merge bar to the docs**
 
 Document the exact deletion and runtime-ownership conditions from the "Merge
 Bar" section above.
 
-- [ ] **Step 3: Add a visible "no new ingestors before full conversion" rule**
+- [x] **Step 3: Add a visible "no new ingestors before full conversion" rule**
 
 Put that rule in the rewrite SOW, roadmap, and collector authoring guide.
 
-- [ ] **Step 4: Run docs verification**
+- [x] **Step 4: Run docs verification**
 
 Run:
 
@@ -126,17 +132,9 @@ git diff --check
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
-```bash
-git add docs/superpowers/plans/2026-04-12-go-data-plane-rewrite-sow.md \
-  docs/docs/adrs/2026-04-12-cutover-and-legacy-bridge.md \
-  docs/docs/roadmap.md \
-  docs/docs/deployment/service-runtimes.md \
-  docs/docs/reference/source-layout.md \
-  docs/docs/guides/collector-authoring.md
-git commit -m "docs(cutover): mark write-plane conversion incomplete"
-```
+Committed as `b0e87b5` — `docs(cutover): record parser foundation slice`
 
 ## Chunk 2: Build Native Go Parser Platform And Collector Integration
 
@@ -291,63 +289,41 @@ git commit -m "feat(cutover): remove python from collector-git hot path"
 - Modify: `docs/docs/reference/local-testing.md`
 - Modify: `docs/docs/reference/cloud-validation.md`
 
-- [ ] **Step 1: Write failing deployment/runtime tests**
+- [x] **Step 1: Write failing deployment/runtime tests**
 
 Add or update tests so deploy assets fail unless they point at Go-owned write
 services rather than Python `pcg internal ...` runtime commands.
 
-- [ ] **Step 2: Add a Go-owned ingester entrypoint**
+- [x] **Step 2: Add a Go-owned ingester entrypoint**
 
-Create `go/cmd/ingester/main.go` that owns the long-running repo sync loop for
-the Git write plane.
+Created `go/cmd/ingester/main.go` with compositeRunner pattern and
+`go/cmd/ingester/wiring.go` for service construction.
 
-- [ ] **Step 3: Add a Go-owned bootstrap indexing entrypoint**
+- [x] **Step 3: Add a Go-owned bootstrap indexing entrypoint**
 
-Create `go/cmd/bootstrap-index/main.go` for one-shot write-plane bootstrap,
-separate from database bootstrap.
+Created `go/cmd/bootstrap-index/main.go` with DI-based one-shot drain and
+`go/cmd/bootstrap-index/wiring.go` for collector/projector construction.
 
-- [ ] **Step 4: Update Docker and deployment assets**
+- [x] **Step 4: Update Docker and deployment assets**
 
-Make Compose and Helm run the Go write binaries for ingester, bootstrap,
-projector, and reducer.
+Dockerfile adds Go builder stage (`golang:1.26-alpine`), builds 7 binaries.
+Compose and Helm updated to use `/usr/local/bin/pcg-ingester`,
+`/usr/local/bin/pcg-bootstrap-index`, `/usr/local/bin/pcg-reducer`.
 
-- [ ] **Step 5: Keep admin/status, tracing, metrics, and pool tuning intact**
+- [x] **Step 5: Keep admin/status, tracing, metrics, and pool tuning intact**
 
-Ensure the deployed write services keep the same operator contract and tunable
-connection-pool behavior.
+Admin mux, health/readiness probes, status server, and metrics handler wired
+into all Go entrypoints.
 
-- [ ] **Step 6: Run runtime and deploy verification**
+- [x] **Step 6: Run runtime and deploy verification**
 
-Run:
+7 Go tests pass, 32 deployment tests pass, helm lint clean.
 
-```bash
-cd go && go test ./cmd/ingester ./cmd/bootstrap-index ./cmd/projector ./cmd/reducer ./internal/runtime -count=1
-PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q
-helm lint deploy/helm/platform-context-graph
-```
+- [ ] **Step 7: Run full-stack compose proof** (deferred — requires running stack)
 
-Expected: PASS
+- [x] **Step 8: Commit**
 
-- [ ] **Step 7: Run full-stack compose proof**
-
-Run:
-
-```bash
-docker compose up --build
-curl -fsS http://localhost:8080/health
-curl -fsS http://localhost:8080/api/v0/index-status
-```
-
-Expected: write-plane services are Go-owned, API remains available, and
-checkpoint completeness still works
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add go/cmd Dockerfile docker-compose.yaml deploy/helm/platform-context-graph \
-  docs/docs/deployment docs/docs/reference/local-testing.md docs/docs/reference/cloud-validation.md
-git commit -m "feat(cutover): run deployed write services from go"
-```
+Committed as `7a5d644` — `feat(runtime): add Go-owned ingester and bootstrap-index services`
 
 ## Chunk 4: Replace Python Recovery And Finalization
 
@@ -370,25 +346,32 @@ git commit -m "feat(cutover): run deployed write services from go"
 - Modify: `docs/docs/reference/http-api.md`
 - Modify: `docs/docs/reference/cli-reference.md`
 
-- [ ] **Step 1: Write failing recovery-path tests**
+- [x] **Step 1: Write failing recovery-path tests**
 
-Cover graph-safe replay, stage-specific recovery, and refinalize status without
-calling Python finalization helpers.
+20 Go tests covering recovery domain model, HTTP handlers, and admin mux
+wiring (commit `5eab84b`).
 
-- [ ] **Step 2: Add Go-owned replay and recovery handlers**
+- [x] **Step 2: Add Go-owned replay and recovery handlers**
 
-Implement Go-owned recovery entrypoints in projector/reducer/runtime admin
-surfaces.
+Implemented:
+- `go/internal/recovery/replay.go` — domain model, Handler, ReplayStore interface
+- `go/internal/storage/postgres/recovery.go` — Postgres ReplayStore with 4 query variants
+- `go/internal/runtime/recovery_handler.go` — HTTP handler for `/admin/replay` and `/admin/refinalize`
+- `go/internal/runtime/admin.go` — RecoveryHandler wired into AdminMuxConfig
+
+Committed as `5eab84b` — `feat(recovery): add Go-owned replay and refinalize handlers`
 
 - [ ] **Step 3: Rewire admin and CLI surfaces**
 
 Make Python admin and CLI surfaces either proxy to Go-owned recovery behavior
 or remove the write-plane operation entirely.
 
-- [ ] **Step 4: Delete the Python finalization bridge**
+Tracked in ownership completion plan Phase A (Chunks A1 and A2).
+
+- [ ] **Step 4: Delete the Python finalization bridge** (BLOCKED on Chunk 2)
 
 Remove the explicit post-commit writer and finalize bridge files once parity is
-proven.
+proven. Deep import chains prevent deletion until the collector bridge is removed.
 
 - [ ] **Step 5: Run focused recovery verification**
 
@@ -428,10 +411,18 @@ git commit -m "feat(cutover): replace python finalization and recovery"
 - Modify: `docs/docs/deployment/service-runtimes.md`
 - Modify: `docs/docs/roadmap.md`
 
-- [ ] **Step 1: Write failing runtime-ownership tests**
+- [x] **Step 1: Write failing runtime-ownership tests**
 
-Add tests or assertions that fail if normal write-plane deployment still routes
-through Python runtime entrypoints.
+13 gate tests in `test_python_runtime_ownership.py` covering:
+- Python CLI runtime commands (bootstrap-index, repo-sync-loop, resolution-engine)
+- Python finalization bridge files (post_commit_writer, finalize, coordinator_finalize, cli/helpers/finalize)
+- Python collector bridge modules (5 go_collector_*bridge.py files)
+- Go cmd/ pythonbridge import check
+
+All 13 tests fail as expected. Committed as `9bb6d02`.
+
+Additional gate tests for resolution, facts, and status store ownership tracked
+in ownership completion plan Phase C (Chunk C3).
 
 - [ ] **Step 2: Remove Python write-runtime command ownership**
 

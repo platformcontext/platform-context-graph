@@ -24,6 +24,8 @@ Read these documents in order before implementation work begins:
 12. [System Architecture](../../docs/architecture.md)
 13. [Relationship Mapping](../../docs/reference/relationship-mapping.md)
 14. [Relationship Mapping Observability And Examples](../../docs/reference/relationship-mapping-observability.md)
+15. [Go Write-Plane Conversion Cutover](2026-04-13-go-write-plane-conversion-cutover.md)
+16. [Go Data Plane Ownership Completion Plan](2026-04-13-go-data-plane-ownership-completion-plan.md)
 
 ## Canonical Roles
 
@@ -42,6 +44,8 @@ Read these documents in order before implementation work begins:
 | Cloud validation runbook | Hosted verification order and operator evidence checks |
 | Architecture and traversal references | Canonical end-to-end flow, ownership boundaries, and repair-path limits |
 | Relationship-mapping observability appendix | The traversal appendix and observability examples for the relationship map |
+| Write-plane conversion cutover | Chunk-by-chunk Python-to-Go deployment surface cutover |
+| Ownership completion plan | Resolution domain, operational surface, and recovery proxy Go ownership |
 
 ## Documentation Rules
 
