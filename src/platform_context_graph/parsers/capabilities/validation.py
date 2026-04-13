@@ -5,10 +5,12 @@ from __future__ import annotations
 import ast
 from functools import lru_cache
 from pathlib import Path
+import re
 
 from .models import CapabilitySpec, LanguageCapabilitySpec, SUPPORTED_STATUSES
 
 NamedTestNode = ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+GO_TEST_FUNC_RE = re.compile(r"(?m)^func\s+(Test[0-9A-Za-z_]+)\s*\(")
 
 
 def validate_spec(root: Path, spec: LanguageCapabilitySpec) -> list[str]:
@@ -130,8 +132,16 @@ def _parsed_test_file(path: str) -> ast.Module:
     return ast.parse(Path(path).read_text(encoding="utf-8"))
 
 
+@lru_cache(maxsize=None)
+def _go_test_names(path: str) -> frozenset[str]:
+    """Return top-level Go `Test*` function names defined in one file."""
+
+    content = Path(path).read_text(encoding="utf-8")
+    return frozenset(GO_TEST_FUNC_RE.findall(content))
+
+
 def test_ref_exists(root: Path, ref: str) -> bool:
-    """Return whether a pytest-style ref resolves to a concrete test function."""
+    """Return whether a Python or Go test ref resolves to a concrete test."""
 
     parts = ref.split("::")
     if not parts:
@@ -141,8 +151,15 @@ def test_ref_exists(root: Path, ref: str) -> bool:
         return False
     if len(parts) == 1:
         return False
+    if path.suffix == ".go":
+        return _go_test_ref_exists(path, parts[1:])
+    if path.suffix != ".py":
+        return False
 
-    current_nodes: list[ast.stmt] = list(_parsed_test_file(str(path)).body)
+    try:
+        current_nodes: list[ast.stmt] = list(_parsed_test_file(str(path)).body)
+    except SyntaxError:
+        return False
     for index, name in enumerate(parts[1:], start=1):
         match = _find_named_node(current_nodes, name)
         if match is None:
@@ -155,6 +172,17 @@ def test_ref_exists(root: Path, ref: str) -> bool:
             return False
         current_nodes = list(match.body)
     return True
+
+
+def _go_test_ref_exists(path: Path, parts: list[str]) -> bool:
+    """Return whether a Go test ref resolves to a concrete `Test*` function."""
+
+    if len(parts) != 1:
+        return False
+    test_name = parts[0]
+    if not test_name.startswith("Test"):
+        return False
+    return test_name in _go_test_names(str(path))
 
 
 def _find_named_node(nodes: list[ast.stmt], name: str) -> NamedTestNode | None:

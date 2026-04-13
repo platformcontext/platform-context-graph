@@ -285,3 +285,20 @@ class TestPythonParserRuntimeOwnershipRemoved:
             f"{target.relative_to(REPO_ROOT)} still exists; "
             "Go parser registry ownership replaces this Python scaffold"
         )
+
+    @pytest.mark.parametrize(
+        "relative_path",
+        [
+            "parsers/languages/dockerfile.py",
+            "parsers/languages/dockerfile_support.py",
+            "parsers/languages/groovy.py",
+        ],
+    )
+    def test_deleted_python_parser_facades_stay_gone(self, relative_path: str) -> None:
+        """Go-owned parser families should not keep Python facade modules."""
+
+        target = SRC_ROOT / relative_path
+        assert not target.exists(), (
+            f"{target.relative_to(REPO_ROOT)} still exists; "
+            "Go parser ownership has replaced this Python parser facade"
+        )

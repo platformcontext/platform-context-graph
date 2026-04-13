@@ -138,6 +138,14 @@ from `src/platform_context_graph/relationships/platform_families.py`, which
 keeps the surviving read-path Python package graph aligned with the post-
 resolution deletion layout.
 
+The next proven parser-family deletion wave removes the Python Groovy and
+Dockerfile facades (`parsers/languages/groovy.py`,
+`parsers/languages/dockerfile.py`, and
+`parsers/languages/dockerfile_support.py`). Their runtime behavior is already
+owned by `go/internal/parser/groovy_language.go` and
+`go/internal/parser/dockerfile_language.go`, and the capability metadata now
+points at the Go entrypoint/test coverage instead of the deleted Python files.
+
 Parser extraction ownership already moved further than the generated capability
 matrix currently shows:
 

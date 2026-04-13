@@ -17,7 +17,7 @@ yet been explicitly assessed in the parser maturity program.
 | Dart | `DartTreeSitterParser` | - | - | - | - | - | - | - |
 | Elixir | `ElixirTreeSitterParser` | - | - | - | - | - | - | - |
 | Go | `GoTreeSitterParser` | - | - | - | - | - | - | - |
-| Groovy | `GroovyTreeSitterParser` | - | - | - | - | - | - | - |
+| Groovy | `DefaultEngine (groovy)` | - | - | - | - | - | - | - |
 | Haskell | `HaskellTreeSitterParser` | - | - | - | - | - | - | - |
 | Helm | `InfraYAMLParser` | - | - | - | - | - | - | - |
 | Java | `JavaTreeSitterParser` | - | - | - | - | - | - | - |
