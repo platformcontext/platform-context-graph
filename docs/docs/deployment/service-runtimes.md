@@ -9,6 +9,23 @@ Use this page when you need the operator view of PlatformContextGraph:
 - where metrics are exposed
 - where `ServiceMonitor` applies
 
+Every long-running runtime should also follow one operator principle:
+
+- the service should expose a familiar admin/status story through the shared
+  report seam
+- the same service should be inspectable through CLI now and API/admin
+  transport once mounted
+- the exact counters may differ by runtime, but the operator experience should
+  not
+
+For the Go rewrite, that contract is the same for every long-running service:
+
+- `/healthz` and `/readyz` describe process health and readiness
+- `/metrics` exposes runtime and backlog signals
+- `/admin/status` renders the shared status/report shape
+- the CLI and HTTP/admin views should render the same underlying report
+- live-versus-inferred state must be explicit in both views
+
 ## Runtime Contract
 
 | Runtime | Owns | Default command | Storage access | Metrics exposure | Kubernetes shape |
@@ -17,6 +34,71 @@ Use this page when you need the operator view of PlatformContextGraph:
 | Ingester | repo sync, parsing, fact emission, workspace ownership | `pcg internal repo-sync-loop` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `pcg internal resolution-engine` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Bootstrap Index | one-shot initial indexing | `pcg internal bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
+
+## Milestone 1 Proof Runtimes
+
+The rewrite branch also has three local proof runtimes that exercise the Go
+data plane directly.
+
+They are not yet separate deployed Kubernetes workloads in the public chart,
+but they do follow the same shared admin contract:
+
+- `collector-git`: `go run ./cmd/collector-git`
+- `projector`: `go run ./cmd/projector`
+- `reducer`: `go run ./cmd/reducer`
+
+For Milestone 1, `collector-git` owns cycle orchestration, durable fact commit,
+and the shared admin surface in Go. Repository selection and per-repo parser
+snapshot collection still use narrowed transitional Python adapters. That
+transitional parser seam is intentional for this milestone and is tracked
+forward work, not hidden completion debt.
+
+## Admin Contract
+
+For the Go rewrite path, every long-running service should converge on the same
+operator/admin contract:
+
+- one shared status/report seam
+- one CLI surface for local and on-host inspection
+- one reusable HTTP/admin adapter that can be mounted by a runtime without
+  redefining the report shape
+- one API/admin surface when the transport is mounted
+- explicit live-versus-inferred labeling
+- stage, backlog, success, and failure summaries in a familiar shape
+
+This is intentionally a platform rule, not a one-off `admin-status` feature.
+Operators should not need a different mental model for collector, projector,
+reducer, or future background services.
+
+Current rewrite status:
+
+- `go/internal/status/` owns the shared reader/report seam
+- `go/cmd/admin-status/` renders that report through the local CLI
+- `go/internal/status/http.go` provides the reusable HTTP transport adapter
+- `go/internal/runtime/admin.go` provides the shared runtime probe and admin
+  route mount for `/healthz`, `/readyz`, optional `/metrics`, and optional
+  `/admin/status`
+- hosted Go runtimes can now compose that shared admin server into their
+  lifecycle without bespoke HTTP bootstrap code
+- `collector-git`, `projector`, and `reducer` all mount that shared admin
+  surface in their local proof lanes
+
+## Incremental Refresh And Reconciliation
+
+PCG should refresh incrementally by default and reconcile instead of forcing a
+full re-index whenever possible.
+
+- the `ingester` should reconcile only the scopes and generations that changed
+- the `resolution-engine` should drain queued follow-up work and shared
+  corrections from durable state
+- `bootstrap-index` remains the one-shot escape hatch for empty environments or
+  operator recovery
+- future collector services should follow the same scope/generation contract
+  rather than inventing a second freshness model
+
+This means operators should use status, queue age, and generation state before
+choosing to restart or reindex. A full re-index is a recovery tool, not the
+normal freshness path.
 
 ## Naming Note
 
@@ -196,6 +278,12 @@ steady-state Kubernetes service in the public chart.
 - keep the workspace mounted only on the ingester in Kubernetes
 - use direct `/metrics` endpoints for local verification
 - use `ServiceMonitor` only for the long-running Kubernetes runtimes
+- treat the local proof runtimes as milestone-validation tools until later
+  rewrite milestones promote them into steady-state deployed shapes
+- treat the shared admin/status report as the first place to look for live,
+  inferred, backlog, and failure state
+- prefer incremental scope refresh and reconciliation over platform-wide
+  re-indexing
 - use the [Telemetry Overview](../reference/telemetry/index.md) to decide which
   signal to inspect first
 - use the [Local Testing Runbook](../reference/local-testing.md) before calling

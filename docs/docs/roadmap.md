@@ -2,59 +2,96 @@
 
 This roadmap is the single public place for forward-looking project direction.
 
-## Current phase
+## Current Phase
 
 PCG is in **Phase 3: resolution maturity**.
 
-Phase 3 builds on the facts-first runtime established in Phase 2:
+Phase 3 keeps the facts-first runtime stable while we harden the operator
+experience:
 
-- Git indexing writes durable facts into Postgres
-- a Postgres work queue coordinates projection work
-- the `resolution-engine` owns canonical graph projection
-- deployed runtime shape is `api` + `ingester` + `resolution-engine`
-- telemetry, logs, traces, and operator runbooks align to the real service shape
+- durable facts land in Postgres
+- the work queue drives projection, replay, and recovery
+- `resolution-engine` owns canonical graph projection
+- the deployed runtime shape remains `api` + `ingester` + `resolution-engine`
+- telemetry, logs, traces, and admin/status views match that shape
 
-The immediate goal in Phase 3 is to make the system easier to operate and trust:
+The immediate goal is simpler operations, not new product surface:
 
-- classify fact-projection failures durably instead of relying on logs alone
-- add operator-grade replay, dead-letter, audit, and backfill controls
+- classify failures durably
+- expose replay, dead-letter, audit, and backfill controls
 - persist projection decisions with evidence and confidence summaries
-- expose richer admin and CLI inspection surfaces for work items and decisions
-- strengthen documentation and test guidance before the next architectural step
+- make admin and CLI inspection surfaces consistent
 
-## Next phase
+## Next Phase
 
-### Phase 4: Backend And Scale Decision
+### Phase 4: Go Data-Plane Rewrite
 
-Use the new facts-first telemetry to decide what actually limits scale.
+Replace the current Python write path with a schema-first Go data plane.
 
-- measure graph write contention
-- measure Postgres fact-store and queue pressure
-- measure resolution-engine throughput and saturation
-- decide whether Neo4j remains the right backend
-- evaluate alternatives only with real performance evidence
+The rewrite introduces:
 
-Why it comes before the next collector:
+- scope-first ingestion contracts
+- first-class ingestion scopes and scope generations
+- typed facts and queueable change units
+- source-local projection separated from shared reduction
+- read-only API, MCP, and CLI surfaces over canonical state
 
-- it is better to understand scaling limits before adding another major source
-- the new telemetry should drive the backend discussion instead of assumptions
+Why it comes next:
 
-## After that
+- the current write path is the main scale bottleneck
+- AWS, Kubernetes, and data/ETL collectors need a non-repository substrate
+- the new design is the right place to lock in accuracy, stability, telemetry,
+  tracing, and logging before collector count grows
+
+The rewrite contract for this phase is captured in:
+
+- [Architecture](architecture.md)
+- [Architecture Decision Records](adrs/index.md)
+
+## Rewrite Milestones
+
+| Milestone | Outcome | Effort | Validation focus |
+| --- | --- | --- | --- |
+| 0 | Lock contracts, docs, and operator/admin rules | Small | docs build, contract freeze, no ambiguity in workstream ownership |
+| 1 | Native Git cutover and operability | Large | collector/projector/reducer runtime proof, shared admin/status surfacing, end-to-end bounded Git path |
+| 2 | Scope-first ingestion and incremental refresh | Large | scope/generation lifecycle, replay-safe refresh, no full re-index dependency |
+| 3 | Canonical truth layers and reducer ownership | Large | cross-source correlation, layered truth, canonical-first query behavior |
+| 4 | Legacy write-path retirement | Medium | proof bridge removal, regression coverage, no new logic on the old seam |
+| 5 | Multi-collector expansion | Large | AWS/Kubernetes proof, partitioned scale, end-to-end code-to-cloud flow |
+
+## Rewrite Status Notes
+
+Milestone 1 on the rewrite branch is now defined by a truthful bounded outcome:
+
+- Go owns collector orchestration, fact commit, projector/reducer runtime proof,
+  and the shared admin/metrics story
+- repository selection and per-repo parser snapshotting remain narrow
+  transitional Python adapters
+- full parser-bridge retirement is deferred to later rewrite milestones instead
+  of being implied by Milestone 1
+
+## After That
 
 ### Phase 5: Multi-Collector Expansion
 
-After resolution maturity and backend clarity, add the next collector.
+After the Go data plane is in place, add new collectors without changing the
+core platform contract.
 
-- likely start with AWS
-- plug the collector into the same facts-first path
-- extend canonical identity and relationship resolution across sources
-- validate code -> IaC -> cloud -> documentation graph flows
+- start with the next source family, likely AWS
+- add Kubernetes and other infrastructure collectors on the same scope model
+- keep Git, cloud, and data sources aligned through shared reducers
+- validate code -> IaC -> cloud -> workload -> data graph flows end to end
 
-Why it comes later:
+### Phase 6: Backend And Scale Validation
 
-- the collector model is cleaner once resolution is stronger
-- backend decisions will be better informed before expanding write volume
-- the next collector should build on a stable operational foundation
+Use the rewritten data plane and the first multi-collector workloads to measure
+what actually limits scale.
+
+- measure canonical graph write contention
+- measure fact-store and queue pressure
+- measure reducer throughput and saturation
+- decide whether the backend mix still fits the workload
+- evaluate alternatives only with real performance evidence
 
 ## Longer-term
 

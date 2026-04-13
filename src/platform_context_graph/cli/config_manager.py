@@ -5,10 +5,33 @@ Handles reading, writing, and validating configuration settings.
 
 import os
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
-from rich.console import Console
-from rich.table import Table
+try:
+    from rich.console import Console
+    from rich.table import Table
+except ImportError:  # pragma: no cover - optional dependency fallback.
+    class Console:  # type: ignore[no-redef]
+        """Minimal console shim when ``rich`` is not installed."""
+
+        def print(self, *args: object, **kwargs: object) -> None:
+            del kwargs
+            print(*args)
+
+    class Table:  # type: ignore[no-redef]
+        """Minimal table shim that preserves call compatibility."""
+
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+            self.columns: list[str] = []
+            self.rows: list[tuple[object, ...]] = []
+
+        def add_column(self, header: str, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+            self.columns.append(header)
+
+        def add_row(self, *values: object) -> None:
+            self.rows.append(values)
 
 from .config_catalog import (
     CONFIG_DESCRIPTIONS,

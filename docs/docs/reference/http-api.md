@@ -10,6 +10,11 @@ The live OpenAPI spec is always canonical. If this page and the spec disagree, t
 - `GET /api/v0/docs` — Swagger UI
 - `GET /api/v0/redoc` — ReDoc
 
+For the mounted Go runtime admin surface, the checked-in OpenAPI contract lives
+in `docs/openapi/runtime-admin-v1.yaml`. That contract is separate from the
+public `/api/v0` schema because it belongs to the long-running runtime admin
+endpoints, not the public query API.
+
 ## Scope
 
 The public HTTP API exposes two surfaces:

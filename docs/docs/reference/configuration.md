@@ -112,6 +112,25 @@ Notes:
 | **`NEO4J_USERNAME`** | Database user (default: `neo4j`). |
 | **`NEO4J_PASSWORD`** | Database password. |
 
+### Go Runtime Database Tuning
+
+These settings are consumed by the Go runtime data plane and are especially
+useful for split-service Kubernetes deployments where API, ingester, and
+resolution-engine workloads should be tuned independently.
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| **`PCG_POSTGRES_MAX_OPEN_CONNS`** | runtime default | Maximum open PostgreSQL connections for Go runtimes. |
+| **`PCG_POSTGRES_MAX_IDLE_CONNS`** | runtime default | Maximum idle PostgreSQL connections for Go runtimes. |
+| **`PCG_POSTGRES_CONN_MAX_LIFETIME`** | runtime default | Maximum lifetime for one PostgreSQL connection. |
+| **`PCG_POSTGRES_CONN_MAX_IDLE_TIME`** | runtime default | Maximum idle lifetime for one PostgreSQL connection. |
+| **`PCG_POSTGRES_PING_TIMEOUT`** | runtime default | Timeout used when a Go runtime verifies PostgreSQL connectivity during startup. |
+| **`PCG_NEO4J_MAX_CONNECTION_POOL_SIZE`** | runtime default | Maximum Neo4j driver pool size for Go runtimes. |
+| **`PCG_NEO4J_MAX_CONNECTION_LIFETIME`** | runtime default | Maximum lifetime for one Neo4j driver connection. |
+| **`PCG_NEO4J_CONNECTION_ACQUISITION_TIMEOUT`** | runtime default | Timeout while waiting for a Neo4j pooled connection. |
+| **`PCG_NEO4J_SOCKET_CONNECT_TIMEOUT`** | runtime default | Timeout for establishing a Neo4j socket connection. |
+| **`PCG_NEO4J_VERIFY_TIMEOUT`** | runtime default | Timeout used when a Go runtime verifies Neo4j connectivity during startup. |
+
 ### Content Store And Source Retrieval
 
 | Key | Default | Description |
@@ -130,6 +149,7 @@ Notes:
 - local helper flows may still fall back to the workspace or graph cache
 - content search routes and MCP search tools require PostgreSQL and return an error when the content store is disabled
 - portable source retrieval uses `repo_id + relative_path` for files and `entity_id` for content-bearing entities
+- the Helm chart exposes Go runtime pool tuning per workload under `api.connectionTuning`, `ingester.connectionTuning`, and `resolutionEngine.connectionTuning`
 
 ### Ingester Runtime
 

@@ -62,6 +62,7 @@ nav:
     - CLI Analysis: reference/cli-analysis.md
     - CLI System: reference/cli-system.md
     - Configuration: reference/configuration.md
+    - Runtime Admin API: reference/runtime-admin-api.md
     - How It Works: concepts/how-it-works.md
     - Graph Model: concepts/graph-model.md
     - Modes: concepts/modes.md
@@ -80,6 +81,20 @@ nav:
     - Language Support Maturity: languages/support-maturity.md
     - PHP Parser: languages/php.md
   - Project:
+    - Architecture Decisions:
+      - Overview: adrs/index.md
+      - Go Data Plane in a Monorepo: adrs/2026-04-12-go-data-plane-monorepo.md
+      - Source-Specific Ingestors And Shared Fact Contract: adrs/2026-04-12-source-specific-ingestors-and-shared-fact-contract.md
+      - Scope-First Ingestion: adrs/2026-04-12-scope-first-ingestion.md
+      - Incremental Ingestion And Reconciliation: adrs/2026-04-12-incremental-ingestion-and-reconciliation.md
+      - Resolution Owns Cross-Domain Truth: adrs/2026-04-12-resolution-owns-cross-domain-truth.md
+      - Reducer Intent Architecture: adrs/2026-04-12-reducer-intent-architecture.md
+      - Layered Truth And Asset Identity: adrs/2026-04-12-layered-truth-and-asset-identity.md
+      - Logical Workload Spine: adrs/2026-04-12-logical-workload-spine.md
+      - Observability Contract: adrs/2026-04-12-observability-contract.md
+      - Service Admin And Observability Contract: adrs/2026-04-12-service-admin-and-observability-contract.md
+      - Resiliency And Concurrency Contract: adrs/2026-04-12-resiliency-and-concurrency-contract.md
+      - Cutover And Legacy Bridge: adrs/2026-04-12-cutover-and-legacy-bridge.md
     - Terraform Providers:
       - Overview: guides/terraform-providers/index.md
       - Adding Providers: guides/terraform-providers/adding-providers.md

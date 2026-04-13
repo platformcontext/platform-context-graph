@@ -40,6 +40,17 @@ ingester:
       memory: 1Gi
   persistence:
     size: 20Gi
+  connectionTuning:
+    postgres:
+      maxOpenConns: "40"
+      pingTimeout: 15s
+    neo4j:
+      connectionAcquisitionTimeout: 20s
+
+resolutionEngine:
+  connectionTuning:
+    neo4j:
+      maxConnectionPoolSize: "150"
 
 repoSync:
   source:
