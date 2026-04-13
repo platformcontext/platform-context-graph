@@ -2,27 +2,11 @@
 
 from __future__ import annotations
 
-from importlib import import_module
-from functools import lru_cache
 from typing import Any
 
-from platform_context_graph.resolution.shared_projection.runtime import (
-    PLATFORM_INFRA_PROJECTION_DOMAIN,
-)
+PLATFORM_INFRA_PROJECTION_DOMAIN = "platform_infra"
 
 
-def build_tuning_report(*, include_platform: bool) -> dict[str, object]:
-    """Load the deterministic tuning report builder only when needed."""
-
-    module = import_module("platform_context_graph.query.shared_projection_tuning")
-    return module.build_tuning_report(include_platform=include_platform)
-
-
-@lru_cache(maxsize=2)
-def _cached_tuning_report(include_platform: bool) -> dict[str, object]:
-    """Return the deterministic tuning report for one projection domain set."""
-
-    return build_tuning_report(include_platform=include_platform)
 
 
 def _shared_projection_uses_platform_domain(
@@ -40,23 +24,12 @@ def _shared_projection_uses_platform_domain(
 def _build_shared_projection_tuning(
     backlog: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    """Return the status-safe tuning recommendation for the current backlog."""
+    """Return the status-safe tuning recommendation for the current backlog.
 
-    if not backlog:
-        return None
-    include_platform = _shared_projection_uses_platform_domain(backlog)
-    report = _cached_tuning_report(include_platform)
-    return {
-        "projection_domains": list(report.get("projection_domains") or []),
-        "include_platform": include_platform,
-        "current_pending_intents": sum(
-            int(row.get("pending_intents") or 0) for row in backlog
-        ),
-        "current_oldest_pending_age_seconds": max(
-            float(row.get("oldest_pending_age_seconds") or 0.0) for row in backlog
-        ),
-        "recommended": dict(report.get("recommended") or {}),
-    }
+    Note: Tuning recommendations are now handled by the Go data plane.
+    This function returns None to indicate tuning data is unavailable from Python.
+    """
+    return None
 
 
 def _build_reducer_truth_summary(

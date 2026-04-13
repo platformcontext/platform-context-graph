@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from typing import Any
 
 import typer
@@ -19,10 +18,15 @@ from ..remote_commands import run_remote_admin_reindex
 
 
 def _build_tuning_report(*, include_platform: bool) -> dict[str, object]:
-    """Load the deterministic tuning builder only when the command needs it."""
+    """Load the deterministic tuning builder only when the command needs it.
 
-    module = import_module("platform_context_graph.query.shared_projection_tuning")
-    return module.build_tuning_report(include_platform=include_platform)
+    Note: Tuning recommendations are now handled by the Go data plane.
+    This returns an empty report structure for backward compatibility.
+    """
+    return {
+        "projection_domains": [],
+        "recommended": {},
+    }
 
 
 def register_admin_commands(main_module: Any, admin_app: typer.Typer) -> None:

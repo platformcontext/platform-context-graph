@@ -54,9 +54,6 @@ from ..relationships.data_intelligence_links import (
 )
 from ..relationships.sql_links import create_all_sql_links as _create_all_sql_links
 from ..graph.schema import create_schema as _create_schema
-from ..resolution.workloads.materialization import (
-    materialize_workloads as _materialize_workloads,
-)
 
 if TYPE_CHECKING:
     from ..parsers.registry import TreeSitterParser
@@ -280,19 +277,6 @@ class GraphBuilder:
             **data_metrics,
         }
 
-    def _materialize_workloads(
-        self,
-        committed_repo_paths: list[Path] | None = None,
-        *,
-        progress_callback: Any | None = None,
-    ) -> dict[str, int]:
-        """Materialize canonical workloads after cross-repo links are in place."""
-        return _materialize_workloads(
-            self,
-            info_logger_fn=info_logger,
-            committed_repo_paths=committed_repo_paths,
-            progress_callback=progress_callback,
-        )
 
     def _resolve_repository_relationships(
         self,

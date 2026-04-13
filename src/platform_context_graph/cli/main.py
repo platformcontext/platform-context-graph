@@ -14,12 +14,6 @@ from dotenv import find_dotenv
 from rich.console import Console
 
 from platform_context_graph.core.database import DatabaseManager  # noqa: F401
-from platform_context_graph.runtime.ingester import (
-    RepoSyncConfig,  # noqa: F401
-    run_bootstrap_index,  # noqa: F401
-    run_repo_sync_cycle,  # noqa: F401
-    run_repo_sync_loop,  # noqa: F401
-)
 from platform_context_graph.mcp import MCPServer
 from platform_context_graph.observability import configure_logging
 from platform_context_graph.versioning import ensure_v_prefix

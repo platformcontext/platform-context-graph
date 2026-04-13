@@ -14,7 +14,6 @@ from pydantic import BaseModel
 
 from ..dependencies import get_database
 from ...query.status import request_ingester_reindex_control
-from ...query.shared_projection_tuning import build_tuning_report
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -31,9 +30,11 @@ class ReindexRequest(BaseModel):
 async def shared_projection_tuning_report(
     include_platform: bool = False,
 ) -> dict[str, Any]:
-    """Return the deterministic shared-write tuning report payload."""
-
-    return build_tuning_report(include_platform=include_platform)
+    """Shared-write tuning is now served by the Go admin surface."""
+    raise HTTPException(
+        status_code=410,
+        detail="Shared-projection tuning report has migrated to the Go admin surface.",
+    )
 
 
 @router.post("/reindex")

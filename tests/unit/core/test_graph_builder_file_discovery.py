@@ -37,7 +37,6 @@ def _make_builder() -> GraphBuilder:
     builder._create_all_inheritance_links = MagicMock()
     builder._create_all_function_calls = MagicMock()
     builder._create_all_infra_links = MagicMock()
-    builder._materialize_workloads = MagicMock(return_value={})
     return builder
 
 

@@ -6,7 +6,6 @@ from typing import Any
 
 import typer
 
-from ..query.shared_projection_tuning_format import format_tuning_report_table
 from .remote import (
     RemoteAPIError,
     print_json_payload,
@@ -14,6 +13,15 @@ from .remote import (
     request_json,
     resolve_remote_target,
 )
+
+
+def format_tuning_report_table(payload: dict[str, Any]) -> str:
+    """Format a tuning report as a table string.
+
+    Note: Tuning recommendations are now handled by the Go data plane.
+    This provides a minimal fallback formatter for backward compatibility.
+    """
+    return "Tuning recommendations are now handled by the Go data plane.\n"
 
 
 def render_remote_index_status(

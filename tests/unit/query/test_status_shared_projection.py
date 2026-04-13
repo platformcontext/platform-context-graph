@@ -91,28 +91,6 @@ def test_get_ingester_status_surfaces_shared_projection_pending(
         lambda: shared_store,
     )
     monkeypatch.setattr(
-        status_shared_projection,
-        "build_tuning_report",
-        lambda *, include_platform=False: {
-            "include_platform": include_platform,
-            "projection_domains": (
-                ["repo_dependency", "workload_dependency"]
-                if not include_platform
-                else ["platform_infra", "repo_dependency", "workload_dependency"]
-            ),
-            "recommended": {
-                "setting": "4x2",
-                "partition_count": 4,
-                "batch_limit": 2,
-                "round_count": 2,
-                "processed_total": 32,
-                "peak_pending_total": 32,
-                "mean_processed_per_round": 16.0,
-            },
-        },
-    )
-    status_shared_projection._cached_tuning_report.cache_clear()
-    monkeypatch.setattr(
         status_queries, "_checkpoint_status_fallback", lambda _ingester: None
     )
 
@@ -131,21 +109,8 @@ def test_get_ingester_status_surfaces_shared_projection_pending(
             "oldest_pending_age_seconds": 33.0,
         }
     ]
-    assert result["shared_projection_tuning"] == {
-        "projection_domains": ["repo_dependency", "workload_dependency"],
-        "include_platform": False,
-        "current_pending_intents": 2,
-        "current_oldest_pending_age_seconds": 33.0,
-        "recommended": {
-            "setting": "4x2",
-            "partition_count": 4,
-            "batch_limit": 2,
-            "round_count": 2,
-            "processed_total": 32,
-            "peak_pending_total": 32,
-            "mean_processed_per_round": 16.0,
-        },
-    }
+    # Tuning is now handled by Go data plane, so it returns None
+    assert result["shared_projection_tuning"] is None
     assert queue.calls == ["run-123"]
     assert shared_store.calls == ["run-123"]
 
@@ -193,24 +158,6 @@ def test_get_ingester_status_surfaces_reducer_truth_summary(
     monkeypatch.setattr(
         status_queries, "get_projection_decision_store", lambda: _DecisionStore()
     )
-    monkeypatch.setattr(
-        status_shared_projection,
-        "build_tuning_report",
-        lambda *, include_platform=False: {
-            "include_platform": include_platform,
-            "projection_domains": ["repo_dependency", "platform_infra"],
-            "recommended": {
-                "setting": "4x2",
-                "partition_count": 4,
-                "batch_limit": 2,
-                "round_count": 2,
-                "processed_total": 32,
-                "peak_pending_total": 32,
-                "mean_processed_per_round": 16.0,
-            },
-        },
-    )
-    status_shared_projection._cached_tuning_report.cache_clear()
     monkeypatch.setattr(
         status_queries, "_checkpoint_status_fallback", lambda _ingester: None
     )
@@ -426,49 +373,10 @@ def test_get_ingester_status_uses_platform_tuning_when_platform_backlog_present(
         lambda: shared_store,
     )
     monkeypatch.setattr(
-        status_shared_projection,
-        "build_tuning_report",
-        lambda *, include_platform=False: {
-            "include_platform": include_platform,
-            "projection_domains": (
-                ["platform_infra", "repo_dependency", "workload_dependency"]
-                if include_platform
-                else ["repo_dependency", "workload_dependency"]
-            ),
-            "recommended": {
-                "setting": "4x2",
-                "partition_count": 4,
-                "batch_limit": 2,
-                "round_count": 2,
-                "processed_total": 48,
-                "peak_pending_total": 48,
-                "mean_processed_per_round": 24.0,
-            },
-        },
-    )
-    status_shared_projection._cached_tuning_report.cache_clear()
-    monkeypatch.setattr(
         status_queries, "_checkpoint_status_fallback", lambda _ingester: None
     )
 
     result = status_queries.get_ingester_status(object(), ingester="repository")
 
-    assert result["shared_projection_tuning"] == {
-        "projection_domains": [
-            "platform_infra",
-            "repo_dependency",
-            "workload_dependency",
-        ],
-        "include_platform": True,
-        "current_pending_intents": 1,
-        "current_oldest_pending_age_seconds": 12.0,
-        "recommended": {
-            "setting": "4x2",
-            "partition_count": 4,
-            "batch_limit": 2,
-            "round_count": 2,
-            "processed_total": 48,
-            "peak_pending_total": 48,
-            "mean_processed_per_round": 24.0,
-        },
-    }
+    # Tuning is now handled by Go data plane, so it returns None
+    assert result["shared_projection_tuning"] is None
