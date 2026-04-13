@@ -13,7 +13,6 @@ from .discovery import (
     merge_import_maps,
     resolve_repository_file_sets,
 )
-from .parse_execution import parse_repository_snapshot_async
 from .types import RepositoryParseSnapshot
 
 __all__ = [
@@ -26,6 +25,5 @@ __all__ = [
     "find_pcgignore",
     "get_ignored_dir_names",
     "merge_import_maps",
-    "parse_repository_snapshot_async",
     "resolve_repository_file_sets",
 ]

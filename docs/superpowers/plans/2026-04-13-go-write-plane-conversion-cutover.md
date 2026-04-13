@@ -267,43 +267,62 @@ Progress on this step:
   normal file and directory path indexing now enters through the Go-owned
   `GraphBuilder.build_graph_from_path_async(...)` bootstrap route instead of a
   separate Python collector orchestration module
-- [ ] Finish truthful parser parity and delete the remaining Python runtime
+- [x] The public Python facades no longer advertise the dead snapshot/coordinator
+  parser path: `platform_context_graph.indexing` now exports only run-status
+  helpers, and `platform_context_graph.collectors.git.indexing` no longer
+  re-exports `parse_repository_snapshot_async`
+- [x] Finish truthful parser parity and delete the remaining Python runtime
   seams. The native Go registry now covers every currently registered parser
-  key in `go/internal/parser/registry.go`, so the remaining parity work is no
-  longer whole-language coverage. The blockers are the remaining semantic-depth
-  gaps in long-tail adapters and specialized JSON/data-intelligence families,
-  plus the final Python runtime ownership seams in the legacy snapshot/parser
-  coordinator path, residual single-file mutation helpers, and any remaining
-  SCIP fallback or recovery entrypoints that still execute through Python.
+  key in `go/internal/parser/registry.go`. All semantic-depth gaps are closed:
+  C typedef aliases, Java annotations, Kotlin secondary constructors, Rust
+  impl ownership, Ruby/PHP/Swift/Elixir long-tail edges, SCIP parity
+  tie-break, and JSON/data-intelligence document coverage are all implemented
+  with 101 parser tests across 21 test files passing. The remaining Python
+  runtime ownership seams are in the legacy snapshot/parser coordinator path
+  (Steps 3-8 below).
 
-- [ ] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
+- [x] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 
 Cover repo discovery, filtering, identity normalization, parser dispatch,
 and content-shaping boundaries without invoking Python.
 
-- [ ] **Step 4: Write failing Go tests for native repository snapshot and parse collection**
+Created `go/internal/collector/git_selection_native_test.go`.
+
+- [x] **Step 4: Write failing Go tests for native repository snapshot and parse collection**
 
 Cover per-repo snapshot capture, fingerprinting, content facts, and error
 paths without invoking Python.
 
-- [ ] **Step 5: Implement native selection**
+Created `go/internal/collector/git_snapshot_native_test.go`.
+
+- [x] **Step 5: Implement native selection**
 
 Move selection behavior into `go/internal/collector/git_selection_native.go`
 and wire `collector.GitSource.Selector` to the native implementation.
 
-- [ ] **Step 6: Implement native parser and snapshot collection**
+Implemented in `git_selection_native.go` with supporting files
+`git_selection_discovery.go`, `git_selection_filesystem.go`,
+`git_selection_github.go`, `git_selection_git.go`, `git_selection_config.go`.
+
+- [x] **Step 6: Implement native parser and snapshot collection**
 
 Move snapshot behavior into `go/internal/collector/git_snapshot_native.go` and
 wire `collector.GitSource.Snapshotter` to the native implementation.
 
-- [ ] **Step 7: Delete Python bridge imports and code**
+Implemented in `git_snapshot_native.go` with SCIP support in
+`git_snapshot_scip.go`.
+
+- [x] **Step 7: Delete Python bridge imports and code**
 
 Remove all imports of `go/internal/compatibility/pythonbridge` from the
 collector runtime and delete the Go bridge package.
 
-- [ ] **Step 8: Delete the Python Git bridge modules**
+Deleted `go/internal/compatibility/pythonbridge/` — directory is now empty.
+Zero `pythonbridge` imports remain in Go code.
 
-Delete:
+- [x] **Step 8: Delete the Python Git bridge modules**
+
+Deleted:
 
 ```text
 src/platform_context_graph/runtime/ingester/go_collector_bridge.py
@@ -313,7 +332,7 @@ src/platform_context_graph/runtime/ingester/go_collector_snapshot_bridge.py
 src/platform_context_graph/runtime/ingester/go_collector_snapshot_collection.py
 ```
 
-- [ ] **Step 9: Run focused collector verification**
+- [x] **Step 9: Run focused collector verification**
 
 Run:
 
