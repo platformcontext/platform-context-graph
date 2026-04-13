@@ -1,0 +1,105 @@
+go/internal/storage/postgres/status.go
+  1ca5ee6ce936a402 259,285,316,365,407
+src/platform_context_graph/tools/graph_builder.py
+  1ca5ee6ce936a402 9,305,382
+tests/unit/tools/test_graph_builder_import_seams.py
+  1ca5ee6ce936a402 7-9,11-31,64-72,76-78,80-94
+tests/unit/core/test_graph_builder_file_discovery.py
+  1ca5ee6ce936a402 7-8,13-23,26-34
+go/internal/storage/postgres/instrumented_test.go
+  1ca5ee6ce936a402 205-207,317-318
+go/internal/storage/postgres/shared_intents.go
+  1ca5ee6ce936a402 219,233,271,317,334
+go/internal/storage/postgres/facts.go
+  1ca5ee6ce936a402 101
+src/platform_context_graph/collectors/git/discovery.py
+  1ca5ee6ce936a402 11,91,102,131
+go/internal/storage/postgres/ingestion.go
+  1ca5ee6ce936a402 205
+src/platform_context_graph/collectors/git/parser_support.py
+  1ca5ee6ce936a402 1-79
+go/internal/storage/postgres/decisions.go
+  1ca5ee6ce936a402 194,205
+tests/unit/tools/test_graph_builder_runtime_cutover.py
+  1ca5ee6ce936a402 8-29,31,54,57-60,72-73,76-80,91-94,96,98-99
+go/internal/projector/failure_classification.go
+  1ca5ee6ce936a402 107,194,197,199
+go/internal/storage/postgres/reducer_queue.go
+  1ca5ee6ce936a402 217
+go/internal/storage/postgres/projector_queue.go
+  1ca5ee6ce936a402 252
+go/internal/storage/postgres/recovery.go
+  1ca5ee6ce936a402 200,239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "82f3e0d0059f7542cd507916fe63c838bc5c77d6",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 323,
+      "total_deletions": 189,
+      "accepted_lines": 697,
+      "overriden_lines": 0
+    },
+    "21d0652afb873020": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-260c-7752-ba40-57ff788997eb",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "22a2a4042c410746": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84f1-43ec-7290-9623-acd2dad2ccd7",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 40,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 93,
+      "overriden_lines": 0
+    },
+    "b0d410b9f01dc4ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-2326-7162-8155-6de99ff655dd",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 35,
+      "overriden_lines": 0
+    }
+  }
+}
