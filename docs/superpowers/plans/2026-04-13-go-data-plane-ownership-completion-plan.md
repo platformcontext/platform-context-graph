@@ -407,7 +407,7 @@ git commit -m "feat(projector): add Go-owned failure classification"
 - Create: `go/internal/projector/stage_workloads_test.go`
 - Modify: `go/internal/projector/runtime.go`
 
-- [ ] **Step 1: Write failing tests for entity projection stage**
+- [x] **Step 1: Write failing tests for entity projection stage**
 
 Cover:
 - class, function, method entity projection from file payloads
@@ -415,47 +415,47 @@ Cover:
 - batch streaming for memory-bounded entity processing
 - entity-to-graph record materialization
 
-- [ ] **Step 2: Implement entity projection stage**
+- [x] **Step 2: Implement entity projection stage**
 
 Port `resolution/projection/entities.py`.
 
-- [ ] **Step 3: Write failing tests for file projection stage**
+- [x] **Step 3: Write failing tests for file projection stage**
 
 Cover:
 - file entity iteration and deduplication
 - file-to-graph record materialization
 
-- [ ] **Step 4: Implement file projection stage**
+- [x] **Step 4: Implement file projection stage**
 
 Port `resolution/projection/files.py`.
 
-- [ ] **Step 5: Write failing tests for relationship projection stage**
+- [x] **Step 5: Write failing tests for relationship projection stage**
 
 Cover:
 - cross-repo import and dependency relationship projection
 - relationship-to-graph record materialization
 
-- [ ] **Step 6: Implement relationship projection stage**
+- [x] **Step 6: Implement relationship projection stage**
 
 Port `resolution/projection/relationships.py`.
 
-- [ ] **Step 7: Write failing tests for workload projection stage**
+- [x] **Step 7: Write failing tests for workload projection stage**
 
 Cover:
 - workload identity and runtime materialization
 - workload-to-graph record materialization
 
-- [ ] **Step 8: Implement workload projection stage**
+- [x] **Step 8: Implement workload projection stage**
 
 Port `resolution/projection/workloads.py`.
 
-- [ ] **Step 9: Wire stages into projector runtime**
+- [x] **Step 9: Wire stages into projector runtime**
 
 Update `go/internal/projector/runtime.go` to dispatch through the full stage
 sequence: repositories -> files -> entities -> relationships -> workloads ->
 platforms.
 
-- [ ] **Step 10: Run projector verification**
+- [x] **Step 10: Run projector verification**
 
 Run:
 
@@ -465,7 +465,7 @@ cd go && go test ./internal/projector/... -count=1
 
 Expected: PASS
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add go/internal/projector/
