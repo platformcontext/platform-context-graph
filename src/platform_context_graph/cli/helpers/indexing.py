@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
 from pathlib import Path
 
@@ -186,7 +185,7 @@ def add_package_helper(package_name: str, language: str) -> None:
     if not all(services):
         return
 
-    db_manager, graph_builder, code_finder = services
+    db_manager, _graph_builder, code_finder = services
     package_path_str = get_local_package_path(package_name, language)
     if not package_path_str:
         api.console.print(
@@ -214,12 +213,12 @@ def add_package_helper(package_name: str, language: str) -> None:
     )
 
     try:
-        asyncio.run(
-            api._run_index_with_progress(
-                graph_builder,
-                package_path,
-                is_dependency=True,
-            )
+        run_go_bootstrap_index(
+            package_path.resolve(),
+            force=False,
+            is_dependency=True,
+            package_name=package_name,
+            language=language,
         )
         api.console.print(
             f"[green]Successfully finished indexing package: {package_name}[/green]"

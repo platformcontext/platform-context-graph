@@ -18,8 +18,8 @@ func TestBuildCollectedGenerationDerivesStableFreshnessHintForEquivalentSnapshot
 	snapshotA := testCollectorSnapshot(repoPath, "def handler():\n    return 1\n", "digest-1")
 	snapshotB := testCollectorSnapshot(repoPath, "def handler():\n    return 1\n", "digest-1")
 
-	collectedA := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA)
-	collectedB := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB)
+	collectedA := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA, false)
+	collectedB := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB, false)
 
 	if got, want := collectedA.Generation.FreshnessHint, collectedB.Generation.FreshnessHint; got != want {
 		t.Fatalf("FreshnessHint mismatch for equivalent snapshots: got %q, want %q", got, want)
@@ -42,8 +42,8 @@ func TestBuildCollectedGenerationChangesFreshnessHintForMateriallyDifferentSnaps
 	snapshotA := testCollectorSnapshot(repoPath, "def handler():\n    return 1\n", "digest-1")
 	snapshotB := testCollectorSnapshot(repoPath, "def handler():\n    return 2\n", "digest-2")
 
-	collectedA := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA)
-	collectedB := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB)
+	collectedA := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA, false)
+	collectedB := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB, false)
 
 	if got, want := collectedA.Generation.FreshnessHint, collectedB.Generation.FreshnessHint; got == want {
 		t.Fatalf("FreshnessHint = %q for materially different snapshots, want different values", got)
@@ -66,8 +66,8 @@ func TestBuildCollectedGenerationChangesFreshnessHintWhenImportsMapChanges(t *te
 		"Handler": {repoPath + "/handlers.py"},
 	}
 
-	collectedA := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA)
-	collectedB := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB)
+	collectedA := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA, false)
+	collectedB := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB, false)
 
 	if got, want := collectedA.Generation.FreshnessHint, collectedB.Generation.FreshnessHint; got == want {
 		t.Fatalf("FreshnessHint = %q for changed imports_map, want different values", got)

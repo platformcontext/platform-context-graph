@@ -195,6 +195,44 @@ func TestNativeRepositorySnapshotterIncludesImportsMap(t *testing.T) {
 	}
 }
 
+func TestNativeRepositorySnapshotterPreservesDependencyOwnership(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(
+		t,
+		filepath.Join(repoRoot, "client.py"),
+		"def fetch():\n    return 1\n",
+	)
+
+	engine, err := parser.DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	snapshotter := NativeRepositorySnapshotter{Engine: engine}
+	got, err := snapshotter.SnapshotRepository(
+		context.Background(),
+		SelectedRepository{
+			RepoPath:     repoRoot,
+			IsDependency: true,
+			DisplayName:  "requests",
+			Language:     "python",
+		},
+	)
+	if err != nil {
+		t.Fatalf("SnapshotRepository() error = %v, want nil", err)
+	}
+	if got.FileCount != 1 {
+		t.Fatalf("FileCount = %d, want 1", got.FileCount)
+	}
+
+	parsedFile := got.FileData[0]
+	if got, want := parsedFile["is_dependency"], true; got != want {
+		t.Fatalf("parsed file is_dependency = %#v, want %#v", got, want)
+	}
+}
+
 func writeCollectorTestFile(t *testing.T, path string, body string) {
 	t.Helper()
 

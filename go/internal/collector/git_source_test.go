@@ -185,6 +185,63 @@ func TestGitSourceNextReturnsEmptyWhenSelectionBatchIsEmpty(t *testing.T) {
 	}
 }
 
+func TestGitSourceNextEmitsDependencyOwnershipForDependencyRepositories(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 12, 15, 30, 0, 0, time.UTC)
+	repoPath := t.TempDir()
+	source := &GitSource{
+		Component: "bootstrap-index",
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{{
+				ObservedAt: observedAt,
+				Repositories: []SelectedRepository{
+					{
+						RepoPath:     repoPath,
+						IsDependency: true,
+						DisplayName:  "@scope/service-lib",
+						Language:     "typescript",
+					},
+				},
+			}},
+		},
+		Snapshotter: &stubRepositorySnapshotter{
+			snapshots: map[string]RepositorySnapshot{
+				repoPath: {
+					RepoPath:  repoPath,
+					FileCount: 1,
+					FileData: []map[string]any{{
+						"path":          repoPath + "/index.ts",
+						"lang":          "typescript",
+						"is_dependency": true,
+						"functions":     []any{},
+						"classes":       []any{},
+						"variables":     []any{},
+						"imports":       []any{},
+					}},
+				},
+			},
+		},
+	}
+
+	collected, ok, err := source.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next() error = %v, want nil", err)
+	}
+	if !ok {
+		t.Fatal("Next() ok = false, want true")
+	}
+	if got, want := collected.Scope.Metadata["repo_name"], "@scope/service-lib"; got != want {
+		t.Fatalf("scope repo_name = %q, want %q", got, want)
+	}
+	if got, want := collected.Facts[0].Payload["is_dependency"], true; got != want {
+		t.Fatalf("repository fact is_dependency = %#v, want %#v", got, want)
+	}
+	if got, want := collected.Facts[1].Payload["is_dependency"], true; got != want {
+		t.Fatalf("file fact is_dependency = %#v, want %#v", got, want)
+	}
+}
+
 func TestGitSourceNextDoesNotBufferPartialResultsWhenSnapshottingFails(t *testing.T) {
 	t.Parallel()
 

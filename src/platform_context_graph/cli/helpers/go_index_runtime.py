@@ -62,6 +62,9 @@ def build_go_bootstrap_index_env(
     *,
     selected_repositories: Iterable[Path] | None = None,
     force: bool = False,
+    is_dependency: bool = False,
+    package_name: str | None = None,
+    language: str | None = None,
 ) -> dict[str, str]:
     """Build the effective environment for a Go bootstrap-index run."""
 
@@ -85,6 +88,21 @@ def build_go_bootstrap_index_env(
         base_env["PCG_REPOSITORY_RULES_JSON"] = json.dumps(repository_rules)
     else:
         base_env.pop("PCG_REPOSITORY_RULES_JSON", None)
+
+    if is_dependency:
+        base_env["PCG_BOOTSTRAP_IS_DEPENDENCY"] = "true"
+        if package_name:
+            base_env["PCG_BOOTSTRAP_PACKAGE_NAME"] = package_name
+        else:
+            base_env.pop("PCG_BOOTSTRAP_PACKAGE_NAME", None)
+        if language:
+            base_env["PCG_BOOTSTRAP_PACKAGE_LANGUAGE"] = language
+        else:
+            base_env.pop("PCG_BOOTSTRAP_PACKAGE_LANGUAGE", None)
+    else:
+        base_env.pop("PCG_BOOTSTRAP_IS_DEPENDENCY", None)
+        base_env.pop("PCG_BOOTSTRAP_PACKAGE_NAME", None)
+        base_env.pop("PCG_BOOTSTRAP_PACKAGE_LANGUAGE", None)
 
     return base_env
 
@@ -117,6 +135,9 @@ def run_go_bootstrap_index(
     *,
     selected_repositories: Iterable[Path] | None = None,
     force: bool = False,
+    is_dependency: bool = False,
+    package_name: str | None = None,
+    language: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the Go bootstrap-index runtime for one local root path."""
 
@@ -125,6 +146,9 @@ def run_go_bootstrap_index(
         root_path,
         selected_repositories=selected_repositories,
         force=force,
+        is_dependency=is_dependency,
+        package_name=package_name,
+        language=language,
     )
     result = subprocess.run(
         command,

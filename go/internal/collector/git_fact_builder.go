@@ -20,6 +20,7 @@ func buildCollectedGeneration(
 	sourceRunID string,
 	observedAt time.Time,
 	snapshot RepositorySnapshot,
+	isDependency bool,
 ) CollectedGeneration {
 	scopeValue := buildScope(repo)
 	generation := buildGeneration(
@@ -40,12 +41,21 @@ func buildCollectedGeneration(
 			observedAt,
 			snapshot.FileCount,
 			snapshot.ImportsMap,
+			isDependency,
 		),
 	)
 	for _, fileData := range snapshot.FileData {
 		factEnvelopes = append(
 			factEnvelopes,
-			fileFactEnvelope(repoPath, repo.ID, scopeValue.ScopeID, generation.GenerationID, observedAt, fileData),
+			fileFactEnvelope(
+				repoPath,
+				repo.ID,
+				scopeValue.ScopeID,
+				generation.GenerationID,
+				observedAt,
+				fileData,
+				isDependency,
+			),
 		)
 	}
 	for _, fileSnapshot := range snapshot.ContentFiles {
@@ -184,6 +194,7 @@ func repositoryFactEnvelope(
 	observedAt time.Time,
 	parsedFileCount int,
 	importsMap map[string][]string,
+	isDependency bool,
 ) facts.Envelope {
 	payload := map[string]any{
 		"graph_id":          repo.ID,
@@ -191,6 +202,7 @@ func repositoryFactEnvelope(
 		"name":              repo.Name,
 		"repo_id":           repo.ID,
 		"parsed_file_count": fmt.Sprintf("%d", parsedFileCount),
+		"is_dependency":     isDependency,
 	}
 	if repo.RepoSlug != "" {
 		payload["repo_slug"] = repo.RepoSlug
@@ -215,6 +227,7 @@ func fileFactEnvelope(
 	generationID string,
 	observedAt time.Time,
 	fileData map[string]any,
+	isDependency bool,
 ) facts.Envelope {
 	filePath := payloadPath(fileData, "path")
 	relativePath := repositoryRelativePath(repoPath, filePath)
@@ -224,6 +237,7 @@ func fileFactEnvelope(
 		"repo_id":          repoID,
 		"relative_path":    relativePath,
 		"parsed_file_data": fileData,
+		"is_dependency":    isDependency,
 	}
 	if language := payloadString(fileData, "language", "lang"); language != "" {
 		payload["language"] = language

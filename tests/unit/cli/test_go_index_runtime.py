@@ -112,3 +112,24 @@ def test_build_go_bootstrap_index_env_encodes_selected_repositories(
         {"kind": "exact", "value": "platformcontext/service-b"},
     ]
 
+
+def test_build_go_bootstrap_index_env_marks_dependency_targets(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Dependency package indexing should carry explicit dependency target metadata."""
+
+    package_root = tmp_path / "node_modules" / "@scope" / "service-lib"
+    package_root.mkdir(parents=True)
+    monkeypatch.setenv("PCG_HOME", str(tmp_path / "pcg-home"))
+
+    env = go_index_runtime.build_go_bootstrap_index_env(
+        package_root,
+        is_dependency=True,
+        package_name="@scope/service-lib",
+        language="typescript",
+    )
+
+    assert env["PCG_BOOTSTRAP_IS_DEPENDENCY"] == "true"
+    assert env["PCG_BOOTSTRAP_PACKAGE_NAME"] == "@scope/service-lib"
+    assert env["PCG_BOOTSTRAP_PACKAGE_LANGUAGE"] == "typescript"

@@ -71,8 +71,16 @@ func (s NativeRepositorySnapshotter) buildParsedRepositoryFiles(
 	fileSet discovery.RepoFileSet,
 	engine *parser.Engine,
 	commitSHA string,
+	isDependency bool,
 ) ([]shape.File, []map[string]any, error) {
-	if shapeFiles, parsedFiles, used, err := s.trySCIPSnapshot(ctx, repoPath, fileSet, engine, commitSHA); err != nil {
+	if shapeFiles, parsedFiles, used, err := s.trySCIPSnapshot(
+		ctx,
+		repoPath,
+		fileSet,
+		engine,
+		commitSHA,
+		isDependency,
+	); err != nil {
 		return nil, nil, err
 	} else if used {
 		return shapeFiles, parsedFiles, nil
@@ -85,7 +93,7 @@ func (s NativeRepositorySnapshotter) buildParsedRepositoryFiles(
 			return nil, nil, err
 		}
 
-		parsed, err := engine.ParsePath(repoPath, filePath, false, parser.Options{
+		parsed, err := engine.ParsePath(repoPath, filePath, isDependency, parser.Options{
 			IndexSource:   true,
 			VariableScope: "all",
 		})
@@ -114,6 +122,7 @@ func (s NativeRepositorySnapshotter) trySCIPSnapshot(
 	fileSet discovery.RepoFileSet,
 	engine *parser.Engine,
 	commitSHA string,
+	isDependency bool,
 ) ([]shape.File, []map[string]any, bool, error) {
 	config := s.scipConfig()
 	if !config.Enabled {
@@ -164,7 +173,7 @@ func (s NativeRepositorySnapshotter) trySCIPSnapshot(
 		}
 
 		parsed := clonePayload(result.Files[filePath])
-		supplement, err := engine.ParsePath(repoPath, filePath, false, parser.Options{
+		supplement, err := engine.ParsePath(repoPath, filePath, isDependency, parser.Options{
 			IndexSource:   true,
 			VariableScope: "all",
 		})

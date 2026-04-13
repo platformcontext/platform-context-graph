@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_context_graph.cli.helpers.indexing import index_helper
+from platform_context_graph.cli.helpers.indexing import add_package_helper, index_helper
 
 
 def test_index_helper_skips_when_nested_files_already_exist(
@@ -251,3 +251,56 @@ def test_index_helper_reports_effective_worker_configuration(
         and "queue depth=12" in message
         for message in prints
     )
+
+
+def test_add_package_helper_uses_go_bootstrap_runtime(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Dependency package indexing should launch the Go bootstrap runtime."""
+
+    package_path = tmp_path / "node_modules" / "@scope" / "service-lib"
+    package_path.mkdir(parents=True)
+    prints: list[str] = []
+
+    db_manager = SimpleNamespace(close_driver=MagicMock())
+    graph_builder = MagicMock()
+    code_finder = SimpleNamespace(list_indexed_repositories=lambda: [])
+    api = SimpleNamespace(
+        console=SimpleNamespace(print=prints.append),
+        _initialize_services=lambda: (db_manager, graph_builder, code_finder),
+        _run_index_with_progress=MagicMock(),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing._api",
+        lambda: api,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing.get_local_package_path",
+        lambda package_name, language: str(package_path)
+        if (package_name, language) == ("@scope/service-lib", "typescript")
+        else None,
+    )
+    go_index_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing.run_go_bootstrap_index",
+        lambda *args, **kwargs: go_index_calls.append(
+            {"args": args, "kwargs": kwargs}
+        ),
+    )
+
+    add_package_helper("@scope/service-lib", "typescript")
+
+    assert go_index_calls == [
+        {
+            "args": (package_path.resolve(),),
+            "kwargs": {
+                "force": False,
+                "is_dependency": True,
+                "package_name": "@scope/service-lib",
+                "language": "typescript",
+            },
+        }
+    ]
+    assert api._run_index_with_progress.call_count == 0
+    db_manager.close_driver.assert_called_once()

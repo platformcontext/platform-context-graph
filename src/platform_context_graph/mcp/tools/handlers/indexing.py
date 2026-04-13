@@ -152,10 +152,42 @@ def add_package_to_graph(
             job_id, total_files=total_files, estimated_duration=estimated_time
         )
 
-        coro = graph_builder.build_graph_from_path_async(
-            path_obj, is_dependency, job_id
-        )
-        asyncio.run_coroutine_threadsafe(coro, loop)
+        def _run_job() -> None:
+            """Execute the Go-owned bootstrap indexer for one dependency package."""
+
+            job_manager.update_job(
+                job_id,
+                status=JobStatus.RUNNING,
+                start_time=datetime.now(),
+            )
+            try:
+                run_go_bootstrap_index(
+                    path_obj.resolve(),
+                    force=False,
+                    is_dependency=True,
+                    package_name=package_name,
+                    language=language,
+                )
+            except Exception as exc:
+                job_manager.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    end_time=datetime.now(),
+                    errors=[str(exc)],
+                )
+                debug_log(
+                    f"Background job {job_id} failed for package {package_name}: {exc}"
+                )
+                return
+
+            job_manager.update_job(
+                job_id,
+                status=JobStatus.COMPLETED,
+                end_time=datetime.now(),
+                result={"path": str(path_obj.resolve())},
+            )
+
+        threading.Thread(target=_run_job, daemon=True).start()
 
         debug_log(
             f"Started background job {job_id} for package: {package_name} at {package_path}, is_dependency: {is_dependency}"

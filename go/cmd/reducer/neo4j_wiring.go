@@ -56,7 +56,7 @@ func (r neo4jSessionRunner) RunCypher(ctx context.Context, cypher string, params
 		AccessMode:   neo4jdriver.AccessModeWrite,
 		DatabaseName: r.DatabaseName,
 	})
-	defer session.Close(ctx)
+	defer func() { _ = session.Close(ctx) }()
 
 	result, err := session.Run(ctx, cypher, params)
 	if err != nil {

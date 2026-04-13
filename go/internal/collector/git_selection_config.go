@@ -53,6 +53,9 @@ type RepoSyncConfig struct {
 	GitHubAppPrivateKey   string
 	SSHPrivateKeyPath     string
 	SSHKnownHostsPath     string
+	DependencyMode        bool
+	DependencyName        string
+	DependencyLanguage    string
 }
 
 // LoadRepoSyncConfig parses the repo-sync environment contract for Go runtimes.
@@ -103,6 +106,9 @@ func LoadRepoSyncConfig(component string, getenv func(string) string) (RepoSyncC
 		GitHubAppPrivateKey:   firstNonEmpty(getenv("GITHUB_APP_PRIVATE_KEY"), getenv("PCG_GITHUB_APP_PRIVATE_KEY")),
 		SSHPrivateKeyPath:     strings.TrimSpace(getenv("PCG_SSH_PRIVATE_KEY_PATH")),
 		SSHKnownHostsPath:     strings.TrimSpace(getenv("PCG_SSH_KNOWN_HOSTS_PATH")),
+		DependencyMode:        boolFromEnv(getenv("PCG_BOOTSTRAP_IS_DEPENDENCY")),
+		DependencyName:        strings.TrimSpace(getenv("PCG_BOOTSTRAP_PACKAGE_NAME")),
+		DependencyLanguage:    strings.TrimSpace(getenv("PCG_BOOTSTRAP_PACKAGE_LANGUAGE")),
 	}
 	return config, nil
 }

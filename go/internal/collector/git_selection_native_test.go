@@ -247,6 +247,53 @@ func TestNativeRepositorySelectorSelectRepositoriesFilesystemDirectWorkspaceRepo
 	}
 }
 
+func TestNativeRepositorySelectorSelectRepositoriesMarksDependencyTargets(t *testing.T) {
+	t.Parallel()
+
+	sourceRepo := t.TempDir()
+	reposDir := t.TempDir()
+	writeSelectionTestFile(t, filepath.Join(sourceRepo, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeSelectionTestFile(t, filepath.Join(sourceRepo, "main.py"), "def handler():\n    return 1\n")
+
+	selector := NativeRepositorySelector{
+		Config: RepoSyncConfig{
+			ReposDir:           reposDir,
+			SourceMode:         "filesystem",
+			FilesystemRoot:     sourceRepo,
+			FilesystemDirect:   true,
+			Component:          "bootstrap-index",
+			CloneDepth:         1,
+			RepoLimit:          4000,
+			GitAuthMethod:      "none",
+			DependencyMode:     true,
+			DependencyName:     "@scope/service-lib",
+			DependencyLanguage: "typescript",
+		},
+	}
+
+	batch, err := selector.SelectRepositories(context.Background())
+	if err != nil {
+		t.Fatalf("SelectRepositories() error = %v, want nil", err)
+	}
+	if got, want := len(batch.Repositories), 1; got != want {
+		t.Fatalf("len(Repositories) = %d, want %d", got, want)
+	}
+
+	selected := batch.Repositories[0]
+	if got, want := selected.RepoPath, sourceRepo; got != want {
+		t.Fatalf("RepoPath = %q, want %q", got, want)
+	}
+	if got, want := selected.IsDependency, true; got != want {
+		t.Fatalf("IsDependency = %t, want %t", got, want)
+	}
+	if got, want := selected.DisplayName, "@scope/service-lib"; got != want {
+		t.Fatalf("DisplayName = %q, want %q", got, want)
+	}
+	if got, want := selected.Language, "typescript"; got != want {
+		t.Fatalf("Language = %q, want %q", got, want)
+	}
+}
+
 func TestNativeRepositorySelectorSelectRepositoriesGitModesBuildsChangedRepoBatch(t *testing.T) {
 	t.Parallel()
 

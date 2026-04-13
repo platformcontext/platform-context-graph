@@ -84,7 +84,12 @@ func buildSelectedRepositories(
 		if err != nil {
 			continue
 		}
-		repository := SelectedRepository{RepoPath: absolutePath}
+		repository := SelectedRepository{
+			RepoPath:     absolutePath,
+			IsDependency: config.DependencyMode,
+			DisplayName:  strings.TrimSpace(config.DependencyName),
+			Language:     strings.TrimSpace(config.DependencyLanguage),
+		}
 		if config.SourceMode != "filesystem" {
 			repoID := repoIDFromManagedPath(config.ReposDir, absolutePath)
 			repository.RemoteURL = repoRemoteURL(config, repoID)

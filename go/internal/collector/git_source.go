@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
@@ -31,8 +32,11 @@ type SelectionBatch struct {
 
 // SelectedRepository is one repository chosen for the current collector cycle.
 type SelectedRepository struct {
-	RepoPath  string `json:"repo_path"`
-	RemoteURL string `json:"remote_url"`
+	RepoPath     string `json:"repo_path"`
+	RemoteURL    string `json:"remote_url"`
+	IsDependency bool   `json:"is_dependency"`
+	DisplayName  string `json:"display_name"`
+	Language     string `json:"language"`
 }
 
 // RepositorySnapshot captures one repository parse snapshot and content transport.
@@ -134,8 +138,11 @@ func (s *GitSource) buildCollected(
 		resolvedRepositories = append(
 			resolvedRepositories,
 			SelectedRepository{
-				RepoPath:  repoPath,
-				RemoteURL: repository.RemoteURL,
+				RepoPath:     repoPath,
+				RemoteURL:    repository.RemoteURL,
+				IsDependency: repository.IsDependency,
+				DisplayName:  repository.DisplayName,
+				Language:     repository.Language,
 			},
 		)
 		selectedRepositoryPaths = append(selectedRepositoryPaths, repoPath)
@@ -162,8 +169,12 @@ func (s *GitSource) buildCollected(
 		if snapshot.RemoteURL == "" {
 			snapshot.RemoteURL = repository.RemoteURL
 		}
+		repositoryName := repository.DisplayName
+		if strings.TrimSpace(repositoryName) == "" {
+			repositoryName = filepath.Base(repoPath)
+		}
 		metadata, err := repositoryidentity.MetadataFor(
-			filepath.Base(repoPath),
+			repositoryName,
 			repoPath,
 			repository.RemoteURL,
 		)
@@ -178,6 +189,7 @@ func (s *GitSource) buildCollected(
 				sourceRunID,
 				batch.ObservedAt.UTC(),
 				snapshot,
+				repository.IsDependency,
 			),
 		)
 	}

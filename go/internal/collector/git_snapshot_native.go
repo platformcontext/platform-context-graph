@@ -96,7 +96,14 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 		return RepositorySnapshot{}, fmt.Errorf("repository metadata for %q: %w", repoPath, err)
 	}
 	commitSHA := gitCommitSHA(ctx, repoPath)
-	shapeFiles, parsedFiles, err := s.buildParsedRepositoryFiles(ctx, repoPath, fileSet, engine, commitSHA)
+	shapeFiles, parsedFiles, err := s.buildParsedRepositoryFiles(
+		ctx,
+		repoPath,
+		fileSet,
+		engine,
+		commitSHA,
+		repository.IsDependency,
+	)
 	if err != nil {
 		return RepositorySnapshot{}, fmt.Errorf("build parsed repository files for %q: %w", repoPath, err)
 	}

@@ -35,7 +35,7 @@ func run(parent context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer neo4jCloser.Close()
+	defer func() { _ = neo4jCloser.Close() }()
 
 	serviceRunner, err := buildReducerService(postgres.SQLDB{DB: db}, neo4jExecutor, cypherExecutor, os.Getenv)
 	if err != nil {
