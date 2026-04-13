@@ -72,6 +72,44 @@ func TestBuildReducerServiceWiresPostgresWorkloadIdentityWriter(t *testing.T) {
 	}
 }
 
+func TestBuildReducerServiceWiresPostgresCloudAssetResolutionWriter(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeReducerDB{}
+	service, err := buildReducerService(db, func(string) string { return "" })
+	if err != nil {
+		t.Fatalf("buildReducerService() error = %v, want nil", err)
+	}
+
+	intent := reducer.Intent{
+		IntentID:        "intent-2",
+		ScopeID:         "scope-123",
+		GenerationID:    "generation-456",
+		SourceSystem:    "git",
+		Domain:          reducer.DomainCloudAssetResolution,
+		Cause:           "shared follow-up",
+		EntityKeys:      []string{"aws:s3:bucket:logs-prod"},
+		RelatedScopeIDs: []string{"scope-123"},
+		EnqueuedAt:      time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC),
+		AvailableAt:     time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC),
+		Status:          reducer.IntentStatusPending,
+	}
+
+	result, err := service.Executor.Execute(context.Background(), intent)
+	if err != nil {
+		t.Fatalf("Executor.Execute() error = %v, want nil", err)
+	}
+	if got, want := result.Status, reducer.ResultStatusSucceeded; got != want {
+		t.Fatalf("Executor.Execute().Status = %q, want %q", got, want)
+	}
+	if got, want := len(db.execs), 1; got != want {
+		t.Fatalf("ExecContext calls = %d, want %d", got, want)
+	}
+	if got := db.execs[0].query; !strings.Contains(got, "INSERT INTO fact_records") {
+		t.Fatalf("ExecContext query = %q, want fact_records insert", got)
+	}
+}
+
 func TestBuildReducerServiceWiresRetryConfigFromEnv(t *testing.T) {
 	t.Parallel()
 

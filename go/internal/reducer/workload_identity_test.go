@@ -195,7 +195,10 @@ func TestNewDefaultRegistryRegistersImplementedDomainsOnly(t *testing.T) {
 	if ok {
 		t.Fatalf("Definition(governance) ok = true, want false with %+v", governanceDefinition)
 	}
-	if got, want := registry.SortedDomains(), []Domain{DomainWorkloadIdentity}; !slices.Equal(got, want) {
+	if got, want := registry.SortedDomains(), []Domain{
+		DomainCloudAssetResolution,
+		DomainWorkloadIdentity,
+	}; !slices.Equal(got, want) {
 		t.Fatalf("SortedDomains() = %v, want %v", got, want)
 	}
 }

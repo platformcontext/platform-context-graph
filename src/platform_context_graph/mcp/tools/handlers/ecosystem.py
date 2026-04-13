@@ -219,29 +219,23 @@ def analyze_infra_relationships(
 
 def get_repo_summary(
     db_manager: DatabaseManager,
-    repo_name: str | None = None,
-    *,
     repo_id: str | None = None,
 ) -> dict[str, Any]:
     """Get a structured summary of a repository.
 
     Args:
         db_manager: Database manager.
-        repo_name: Transitional repository-name alias.
         repo_id: Canonical repository identifier.
 
     Returns:
         Summary with files, code entities, infra resources,
         and ecosystem connections.
     """
-    lookup_id = repo_id or repo_name
-    if lookup_id is None:
-        return {
-            "error": "The 'repo_id' argument is required. The 'repo_name' alias is transitional."
-        }
+    if repo_id is None:
+        return {"error": "The 'repo_id' argument is required."}
     context = repository_queries.get_repository_context(
         db_manager,
-        repo_id=lookup_id,
+        repo_id=repo_id,
     )
     if "error" in context:
         return context

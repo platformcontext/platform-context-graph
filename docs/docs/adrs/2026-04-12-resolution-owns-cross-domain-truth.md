@@ -80,3 +80,6 @@ Tradeoffs:
   reducer-owned truth is still pending.
 - Treat any attempt to add cross-domain inference to a collector or projector
   as a design exception that must be justified in writing.
+- Milestone 3 proves this split with reducer-owned workload identity and cloud
+  asset resolution domains plus operator-facing `truth_summary` reporting that
+  shows when shared reducer work is still pending.

@@ -150,5 +150,22 @@ func DefaultDomainDefinitions() []DomainDefinition {
 				},
 			},
 		},
+		{
+			Domain:  DomainCloudAssetResolution,
+			Summary: "resolve canonical cloud asset identity across sources",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+			TruthContract: truth.Contract{
+				CanonicalKind: "cloud_asset",
+				SourceLayers: []truth.Layer{
+					truth.LayerSourceDeclaration,
+					truth.LayerAppliedDeclaration,
+					truth.LayerObservedResource,
+				},
+			},
+		},
 	}
 }

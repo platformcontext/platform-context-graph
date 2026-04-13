@@ -491,7 +491,7 @@ class TestRepoSummary:
                 "relationships": [],
             },
         )
-        result = get_repo_summary(make_mock_db({}), "my-repo")
+        result = get_repo_summary(make_mock_db({}), repo_id="my-repo")
         assert "tier" not in result
 
     def test_repo_summary_surfaces_partial_coverage_note(self, monkeypatch):
@@ -531,7 +531,7 @@ class TestRepoSummary:
             },
         )
 
-        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+        result = get_repo_summary(make_mock_db({}), repo_id="api-node-boats")
 
         assert result["file_count"] == 196
         assert result["coverage"]["completeness_state"] == "graph_partial"
@@ -544,9 +544,8 @@ class TestRepoSummary:
     ) -> None:
         captured: dict[str, object] = {}
 
-        def fake_get_repo_summary(_db_manager, *, repo_id=None, repo_name=None):
+        def fake_get_repo_summary(_db_manager, repo_id=None):
             captured["repo_id"] = repo_id
-            captured["repo_name"] = repo_name
             return {
                 "repo_id": repo_id,
                 "name": "api-node-boats",
@@ -569,7 +568,6 @@ class TestRepoSummary:
         )
 
         assert captured["repo_id"] == "repository:r_repo123"
-        assert captured["repo_name"] is None
         assert result["repo_id"] == "repository:r_repo123"
 
     def test_repo_summary_surfaces_runtime_context_and_limitation_codes(
@@ -761,7 +759,7 @@ class TestRepoSummary:
             },
         )
 
-        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+        result = get_repo_summary(make_mock_db({}), repo_id="api-node-boats")
 
         assert result["name"] == "api-node-boats"
         assert result["platforms"][0]["kind"] == "ecs"
@@ -954,7 +952,7 @@ class TestRepoSummary:
             },
         )
 
-        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+        result = get_repo_summary(make_mock_db({}), repo_id="api-node-boats")
 
         assert "note" in result
         assert "bg-qa, prod" in result["note"]
@@ -1136,7 +1134,7 @@ class TestRepoSummary:
             },
         )
 
-        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+        result = get_repo_summary(make_mock_db({}), repo_id="api-node-boats")
 
         assert result["consumer_repositories"] == []
         assert len(result["delivery_paths"]) == 2
@@ -1225,7 +1223,7 @@ class TestRepoSummary:
             },
         )
 
-        result = get_repo_summary(make_mock_db({}), "automate-mws")
+        result = get_repo_summary(make_mock_db({}), repo_id="automate-mws")
 
         assert result["controller_driven_paths"] == [
             {
@@ -1307,7 +1305,7 @@ class TestRepoSummary:
             },
         )
 
-        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+        result = get_repo_summary(make_mock_db({}), repo_id="api-node-boats")
 
         assert "note" in result
         assert "confirmed runtime environments: bg-qa" in result["note"].lower()
@@ -1361,7 +1359,7 @@ class TestRepoSummary:
             },
         )
 
-        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+        result = get_repo_summary(make_mock_db({}), repo_id="api-node-boats")
 
         assert "note" not in result or (
             "configuration also references" not in result["note"].lower()
@@ -1407,7 +1405,7 @@ class TestRepoSummary:
             },
         )
 
-        result = get_repo_summary(make_mock_db({}), "api-node-boats")
+        result = get_repo_summary(make_mock_db({}), repo_id="api-node-boats")
 
         assert "note" in result
         assert "finalization" in result["note"].lower()

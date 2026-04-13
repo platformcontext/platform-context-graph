@@ -287,7 +287,7 @@ REPOSITORY_STORY_EXAMPLE = {
         ],
         "recommended_drilldowns": [
             {"tool": "repo_context", "args": {"repo_id": "repository:r_ab12cd34"}},
-            {"tool": "repo_summary", "args": {"repo_name": "payments-api"}},
+            {"tool": "repo_summary", "args": {"repo_id": "repository:r_ab12cd34"}},
             {"tool": "deployment_chain", "args": {"service_name": "payments-api"}},
         ],
         "documentation_evidence": {
@@ -407,7 +407,7 @@ REPOSITORY_STORY_EXAMPLE = {
     "coverage": {"completeness_state": "complete"},
     "drilldowns": {
         "repo_context": {"repo_id": "repository:r_ab12cd34"},
-        "repo_summary": {"repo_name": "payments-api"},
+        "repo_summary": {"repo_id": "repository:r_ab12cd34"},
         "deployment_chain": {"service_name": "payments-api"},
     },
 }

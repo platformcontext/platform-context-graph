@@ -67,7 +67,7 @@ def test_get_repo_summary_includes_framework_summary_and_story_line() -> None:
         "platform_context_graph.mcp.tools.handlers.ecosystem.repository_queries.get_repository_context",
         return_value=context,
     ):
-        result = get_repo_summary(object(), "portal-app")
+        result = get_repo_summary(object(), repo_id="portal-app")
 
     assert result["framework_summary"]["nextjs"]["page_count"] == 1
     assert any("Framework evidence shows" in line for line in result["story"])

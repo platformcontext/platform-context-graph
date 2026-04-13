@@ -38,7 +38,7 @@ Use the CLI for local indexing workflows. Use the Helm runtime for deployment-ma
 - file-bearing query results should be interpreted using `repo_id + relative_path`, not an absolute server path.
 - `repo_access` indicates whether the caller may need to ask the user for a local checkout path or clone decision.
 - documentation-oriented clients should resolve canonical graph identity first, then use `repo_id + relative_path` or `entity_id` for exact evidence reads.
-- name-based repository lookup should be treated as transitional compatibility where it still exists; canonical `repo_id` is the preferred public boundary.
+- repository-oriented context, summary, story, stats, and file routes use canonical `repo_id` at the public boundary.
 
 ## Context API
 

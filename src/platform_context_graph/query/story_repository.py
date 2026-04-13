@@ -180,7 +180,7 @@ def build_repository_story_response(
     }
     drilldowns = {
         "repo_context": {"repo_id": subject["id"]},
-        "repo_summary": {"repo_name": subject["name"]},
+        "repo_summary": {"repo_id": subject["id"]},
         "deployment_chain": {"service_name": subject["name"]},
     }
     investigation_hints = build_repository_investigation_hints(

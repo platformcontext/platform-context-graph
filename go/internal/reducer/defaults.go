@@ -3,7 +3,8 @@ package reducer
 // DefaultHandlers captures the reducer-owned backend adapters available for the
 // default domain catalog.
 type DefaultHandlers struct {
-	WorkloadIdentityWriter WorkloadIdentityWriter
+	WorkloadIdentityWriter     WorkloadIdentityWriter
+	CloudAssetResolutionWriter CloudAssetResolutionWriter
 }
 
 // NewDefaultRegistry constructs the canonical reducer catalog for the domains
@@ -36,11 +37,14 @@ func NewDefaultRuntime(handlers DefaultHandlers) (*Runtime, error) {
 func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefinition {
 	definitions := make([]DomainDefinition, 0, len(DefaultDomainDefinitions()))
 	for _, def := range DefaultDomainDefinitions() {
-		if def.Domain != DomainWorkloadIdentity {
+		switch def.Domain {
+		case DomainWorkloadIdentity:
+			def.Handler = WorkloadIdentityHandler{Writer: handlers.WorkloadIdentityWriter}
+		case DomainCloudAssetResolution:
+			def.Handler = CloudAssetResolutionHandler{Writer: handlers.CloudAssetResolutionWriter}
+		default:
 			continue
 		}
-
-		def.Handler = WorkloadIdentityHandler{Writer: handlers.WorkloadIdentityWriter}
 		definitions = append(definitions, def)
 	}
 

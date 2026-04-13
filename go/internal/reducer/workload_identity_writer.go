@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const workloadIdentityFactInsertQuery = `
+const canonicalReducerFactInsertQuery = `
 INSERT INTO fact_records (
     fact_id,
     scope_id,
@@ -69,7 +69,7 @@ func (w PostgresWorkloadIdentityWriter) WriteWorkloadIdentity(
 
 	if _, err := w.DB.ExecContext(
 		ctx,
-		workloadIdentityFactInsertQuery,
+		canonicalReducerFactInsertQuery,
 		write.IntentID,
 		write.ScopeID,
 		write.GenerationID,
@@ -99,11 +99,7 @@ func (w PostgresWorkloadIdentityWriter) WriteWorkloadIdentity(
 }
 
 func (w PostgresWorkloadIdentityWriter) now() time.Time {
-	if w.Now != nil {
-		return w.Now().UTC()
-	}
-
-	return time.Now().UTC()
+	return reducerWriterNow(w.Now)
 }
 
 func workloadIdentityStableFactKey(write WorkloadIdentityWrite) string {
@@ -147,4 +143,12 @@ func workloadIdentityPayload(write WorkloadIdentityWrite, canonicalID string) ma
 		"related_scope_ids": uniqueSortedStrings(write.RelatedScopeIDs),
 		"canonical_id":      canonicalID,
 	}
+}
+
+func reducerWriterNow(now func() time.Time) time.Time {
+	if now != nil {
+		return now().UTC()
+	}
+
+	return time.Now().UTC()
 }

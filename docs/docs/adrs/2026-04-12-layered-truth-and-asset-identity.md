@@ -76,3 +76,6 @@ Tradeoffs:
 - Canonical nodes should record which evidence layers contributed to the final
   resolved asset.
 - Identity conflicts must be observable and diagnosable, not silently merged.
+- Milestone 3 proves this ADR with a typed Go truth-layer package and a
+  reducer-owned `cloud_asset_resolution` domain that accepts source,
+  applied, and observed evidence layers before writing canonical facts.

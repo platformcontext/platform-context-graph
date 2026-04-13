@@ -143,9 +143,9 @@ def test_get_repo_summary_tool_surfaces_platforms_and_limitations() -> None:
             "limitations": ["dns_unknown", "entrypoint_unknown"],
         },
     ) as mock_summary:
-        result = server.get_repo_summary_tool(repo_name="api-node-boats")
+        result = server.get_repo_summary_tool(repo_id="api-node-boats")
 
-    mock_summary.assert_called_once_with(server.db_manager, "api-node-boats")
+    mock_summary.assert_called_once_with(server.db_manager, repo_id="api-node-boats")
     assert result["story"] == [
         "Public entrypoints: api-node-boats.qa.bgrp.io.",
         "GitHub Actions deploy from helm-charts onto EKS.",

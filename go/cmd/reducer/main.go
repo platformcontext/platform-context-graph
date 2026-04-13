@@ -66,7 +66,8 @@ func run(parent context.Context) error {
 
 func buildReducerService(database postgres.ExecQueryer, getenv func(string) string) (reducer.Service, error) {
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
-		WorkloadIdentityWriter: reducer.PostgresWorkloadIdentityWriter{DB: database},
+		WorkloadIdentityWriter:     reducer.PostgresWorkloadIdentityWriter{DB: database},
+		CloudAssetResolutionWriter: reducer.PostgresCloudAssetResolutionWriter{DB: database},
 	})
 	if err != nil {
 		return reducer.Service{}, err

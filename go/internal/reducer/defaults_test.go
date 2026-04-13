@@ -17,6 +17,11 @@ func TestNewDefaultRuntimeUsesDefaultDomainHandlers(t *testing.T) {
 				CanonicalWrites: 1,
 			},
 		},
+		CloudAssetResolutionWriter: &recordingCloudAssetResolutionWriter{
+			result: CloudAssetResolutionWriteResult{
+				CanonicalWrites: 1,
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("NewDefaultRuntime() error = %v, want nil", err)
@@ -40,6 +45,26 @@ func TestNewDefaultRuntimeUsesDefaultDomainHandlers(t *testing.T) {
 	}
 	if got, want := workloadResult.Status, ResultStatusSucceeded; got != want {
 		t.Fatalf("runtime.Execute(workload).Status = %q, want %q", got, want)
+	}
+
+	cloudAssetResult, err := runtime.Execute(context.Background(), Intent{
+		IntentID:        "intent-7",
+		ScopeID:         "scope-123",
+		GenerationID:    "generation-456",
+		SourceSystem:    "git",
+		Domain:          DomainCloudAssetResolution,
+		Cause:           "shared cloud asset follow-up required",
+		EntityKeys:      []string{"aws:s3:bucket:logs-prod"},
+		RelatedScopeIDs: []string{"scope-123"},
+		EnqueuedAt:      time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC),
+		AvailableAt:     time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC),
+		Status:          IntentStatusClaimed,
+	})
+	if err != nil {
+		t.Fatalf("runtime.Execute(cloud_asset) error = %v, want nil", err)
+	}
+	if got, want := cloudAssetResult.Status, ResultStatusSucceeded; got != want {
+		t.Fatalf("runtime.Execute(cloud_asset).Status = %q, want %q", got, want)
 	}
 
 	_, err = runtime.Execute(context.Background(), Intent{
@@ -67,8 +92,8 @@ func TestDefaultDomainDefinitionsMatchImplementedRuntimeCatalog(t *testing.T) {
 	t.Parallel()
 
 	got := DefaultDomainDefinitions()
-	if len(got) != 1 {
-		t.Fatalf("len(DefaultDomainDefinitions()) = %d, want 1", len(got))
+	if len(got) != 2 {
+		t.Fatalf("len(DefaultDomainDefinitions()) = %d, want 2", len(got))
 	}
 	if got[0].Domain != DomainWorkloadIdentity {
 		t.Fatalf("DefaultDomainDefinitions()[0].Domain = %q, want %q", got[0].Domain, DomainWorkloadIdentity)
@@ -78,5 +103,17 @@ func TestDefaultDomainDefinitionsMatchImplementedRuntimeCatalog(t *testing.T) {
 	}
 	if !got[0].TruthContract.Supports(truth.LayerSourceDeclaration) {
 		t.Fatal("DefaultDomainDefinitions()[0].TruthContract.Supports(source_declaration) = false, want true")
+	}
+	if got[1].Domain != DomainCloudAssetResolution {
+		t.Fatalf("DefaultDomainDefinitions()[1].Domain = %q, want %q", got[1].Domain, DomainCloudAssetResolution)
+	}
+	if got[1].TruthContract.CanonicalKind != "cloud_asset" {
+		t.Fatalf("DefaultDomainDefinitions()[1].TruthContract.CanonicalKind = %q, want %q", got[1].TruthContract.CanonicalKind, "cloud_asset")
+	}
+	if !got[1].TruthContract.Supports(truth.LayerAppliedDeclaration) {
+		t.Fatal("DefaultDomainDefinitions()[1].TruthContract.Supports(applied_declaration) = false, want true")
+	}
+	if !got[1].TruthContract.Supports(truth.LayerObservedResource) {
+		t.Fatal("DefaultDomainDefinitions()[1].TruthContract.Supports(observed_resource) = false, want true")
 	}
 }

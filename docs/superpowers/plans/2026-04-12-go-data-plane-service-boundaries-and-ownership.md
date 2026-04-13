@@ -60,6 +60,8 @@ schema/
 - `go/internal/reducer/` owns cross-source and cross-scope reconciliation only.
   Reducer domains must carry an explicit truth-layer contract for the canonical
   kind they own; they must not rely on ad hoc string conventions.
+  Milestone 3 proves this boundary with typed workload-identity and
+  cloud-asset-resolution reducers plus reducer-owned canonical fact writes.
 - `go/internal/graph/` and `go/internal/content/` own canonical write adapters,
   not source parsing or reducer policy.
 - `go/internal/status/` owns the storage-agnostic operator-status reader/report

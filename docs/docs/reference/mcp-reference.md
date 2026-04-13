@@ -136,7 +136,7 @@ story and context tools:
 - canonical story/context answers are the default truth surface
 - `investigate_service` is evidence-first and coverage-first
 - `repo_access` tells the client when local checkout help may still be needed
-- repository summary and context tools should prefer canonical `repo_id` values whenever they are available
+- repository summary and context tools use canonical `repo_id` values at the public boundary
 
 ## Content Retrieval & Search
 

@@ -12,6 +12,14 @@
 
 **Concurrency rule:** use channels and goroutines where they improve bounded in-process work, but keep cross-service handoffs durable, replayable, and operator-visible.
 
+## Milestone Status Snapshot
+
+- Milestone 0: complete
+- Milestone 1: complete
+- Milestone 2: complete
+- Milestone 3: complete
+- Milestone 4: next active milestone
+
 ## Companion Execution Documents
 
 Use these documents together with this SOW before parallel implementation begins:
@@ -225,6 +233,22 @@ Reducer ownership must be explicit. Shared correlation work belongs to reducers,
 - at least one cross-source correlation domain works end to end
 - the reducer boundary is explicit and observable
 - source-local truth and canonical truth are both explainable
+
+### Milestone 3 proof snapshot
+
+This milestone is complete when all of the following remain green together:
+
+- typed truth-layer contracts live in Go code and reducers fail closed on
+  unknown domains
+- workload identity and cloud asset resolution both run as reducer-owned
+  domains on the default runtime
+- the reducer main service wires canonical writers for both domains
+- the proof-domain tests show collector -> projector -> reducer flow for
+  workload identity and cloud asset resolution
+- operator-facing status surfaces expose truthful reducer backlog state through
+  `truth_summary`
+- repository summary and related drilldowns use canonical `repo_id` at the
+  public boundary
 
 ---
 
