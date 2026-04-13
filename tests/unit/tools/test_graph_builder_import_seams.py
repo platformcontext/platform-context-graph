@@ -11,6 +11,7 @@ import platform_context_graph.tools.graph_builder as graph_builder_module
 _SEAM_MODULES = (
     "platform_context_graph.collectors.git.indexing",
     "platform_context_graph.collectors.git.parse_execution",
+    "platform_context_graph.parsers.registry",
     "platform_context_graph.parsers.scip",
     "platform_context_graph.parsers.scip.indexing",
     "platform_context_graph.parsers.scip.parser",
@@ -29,6 +30,7 @@ def test_graph_builder_import_does_not_load_legacy_parse_or_scip_modules() -> No
     importlib.reload(graph_builder_module)
 
     assert "platform_context_graph.collectors.git.parse_execution" not in sys.modules
+    assert "platform_context_graph.parsers.registry" not in sys.modules
     assert "platform_context_graph.parsers.scip" not in sys.modules
     assert "platform_context_graph.parsers.scip.indexing" not in sys.modules
     assert "platform_context_graph.parsers.scip.parser" not in sys.modules
@@ -43,6 +45,7 @@ def test_runtime_modules_do_not_eagerly_load_legacy_parse_or_scip_modules() -> N
     importlib.reload(mcp_server_module)
 
     assert "platform_context_graph.collectors.git.parse_execution" not in sys.modules
+    assert "platform_context_graph.parsers.registry" not in sys.modules
     assert "platform_context_graph.parsers.scip" not in sys.modules
     assert "platform_context_graph.parsers.scip.indexing" not in sys.modules
     assert "platform_context_graph.parsers.scip.parser" not in sys.modules

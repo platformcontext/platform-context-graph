@@ -6,7 +6,7 @@ import asyncio
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..cli.config_manager import get_config_value
 from ..cli.helpers.go_index_runtime import run_go_bootstrap_index
@@ -29,12 +29,6 @@ from ..graph.persistence import (
     delete_repository_from_graph as _delete_repository_from_graph,
     reset_repository_subtree_in_graph as _reset_repository_subtree_in_graph,
     update_file_in_graph as _update_file_in_graph,
-)
-from ..parsers.registry import (
-    TreeSitterParser,
-    build_parser_registry,
-    parse_file as _parse_file,
-    pre_scan_for_imports as _pre_scan_for_imports,
 )
 from ..graph.persistence import (
     add_file_to_graph as _add_file_to_graph,
@@ -63,6 +57,52 @@ from ..graph.schema import create_schema as _create_schema
 from ..resolution.workloads.materialization import (
     materialize_workloads as _materialize_workloads,
 )
+
+if TYPE_CHECKING:
+    from ..parsers.registry import TreeSitterParser
+
+
+def _build_parser_registry(get_config_value_fn: Any) -> dict[str, Any]:
+    """Load the legacy Python parser registry on demand."""
+
+    from ..parsers.registry import build_parser_registry
+
+    return build_parser_registry(get_config_value_fn)
+
+
+def _parse_file_impl(
+    builder: Any,
+    repo_path: Path,
+    path: Path,
+    is_dependency: bool,
+    *,
+    get_config_value_fn: Any,
+    debug_log_fn: Any,
+    error_logger_fn: Any,
+    warning_logger_fn: Any,
+) -> dict[str, Any]:
+    """Load and invoke the legacy Python single-file parser on demand."""
+
+    from ..parsers.registry import parse_file
+
+    return parse_file(
+        builder,
+        repo_path,
+        path,
+        is_dependency,
+        get_config_value_fn=get_config_value_fn,
+        debug_log_fn=debug_log_fn,
+        error_logger_fn=error_logger_fn,
+        warning_logger_fn=warning_logger_fn,
+    )
+
+
+def _pre_scan_for_imports_impl(builder: Any, files: list[Path]) -> dict[str, Any]:
+    """Load and invoke the legacy Python import prescan helper on demand."""
+
+    from ..parsers.registry import pre_scan_for_imports
+
+    return pre_scan_for_imports(builder, files)
 
 
 class GraphBuilder:
@@ -97,13 +137,13 @@ class GraphBuilder:
     def _pre_scan_for_imports(self, files: list[Path]) -> dict[str, Any]:
         """Collect import resolution hints before indexing files."""
         self._ensure_parsers()
-        return _pre_scan_for_imports(self, files)
+        return _pre_scan_for_imports_impl(self, files)
 
     def _ensure_parsers(self) -> dict[str, Any]:
         """Lazily initialize the Python parser registry when a legacy path needs it."""
 
         if self.parsers is None:
-            self.parsers = build_parser_registry(get_config_value)
+            self.parsers = _build_parser_registry(get_config_value)
         return self.parsers
 
     def add_repository_to_graph(
@@ -356,7 +396,7 @@ class GraphBuilder:
     ) -> dict[str, Any]:
         """Parse one file with the registered language parser."""
         self._ensure_parsers()
-        return _parse_file(
+        return _parse_file_impl(
             self,
             repo_path,
             path,
@@ -452,6 +492,15 @@ class GraphBuilder:
                     is_dependency=is_dependency,
                 )
             return
+
+def __getattr__(name: str) -> Any:
+    """Resolve optional legacy parser symbols on demand."""
+
+    if name != "TreeSitterParser":
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from ..parsers.registry import TreeSitterParser
+
+    return TreeSitterParser
 
 
 __all__ = ["GraphBuilder", "TreeSitterParser"]

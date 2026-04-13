@@ -259,7 +259,9 @@ Progress on this step:
   `src/platform_context_graph/indexing/run_status.py` instead of importing the
   legacy Python coordinator execution stack, and `GraphBuilder` startup now
   lazily initializes the Python parser registry so Go-owned runtime startup no
-  longer bootstraps Python parsers by default
+  longer bootstraps Python parsers by default; `GraphBuilder`, the CLI runtime
+  helper, and MCP server imports now avoid eager imports of
+  `platform_context_graph.parsers.registry` and `platform_context_graph.parsers.scip*`
 - [ ] Finish truthful parser parity and delete the remaining Python runtime
   seams. The native Go registry now covers every currently registered parser
   key in `go/internal/parser/registry.go`, so the remaining parity work is no
