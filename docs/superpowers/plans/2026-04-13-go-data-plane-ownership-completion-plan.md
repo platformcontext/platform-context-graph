@@ -731,12 +731,12 @@ git commit -m "test(parity): add Go write-plane integration tests"
 | B | ~~B1~~, ~~B2~~, ~~B3~~, ~~B4~~, ~~B5~~ | **Done** | — |
 | C | ~~C1~~, ~~C2~~, ~~C3~~, ~~C4~~ | **Done** | — |
 
-All phases complete. Validation gate passes.
+All scoped phases in this plan are complete. Validation for the Phase A-C
+ownership package passes.
 
-The indexing coordinator (`src/platform_context_graph/indexing/`, 23 files)
-remains out of scope for this plan because it is tightly coupled to the
-collector pipeline and blocked on Chunk 2. It will be covered by a separate
-plan after the native collector cutover completes.
+Follow-on parser/runtime deletion work continued under the active write-plane
+cutover plan after this plan landed. The legacy Python snapshot/coordinator
+stack that had been blocked on Chunk 2 has since been deleted from the branch.
 
 ## Validation Gate
 

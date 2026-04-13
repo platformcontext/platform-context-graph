@@ -7,8 +7,9 @@ should not become the dumping ground for graph-wide semantics.
 
 Current canonical collector families:
 
-- `git/` — repository discovery, parse execution, snapshot handling, `.gitignore`,
-  and related source indexing helpers up to fact emission
+- `git/` — repository discovery, snapshot handling, `.gitignore`, local
+  indexing handoff to the Go bootstrap runtime, and related source indexing
+  helpers up to fact emission
 
 Future collectors such as AWS and Confluence should follow the same shape:
 source-local collection first, shared graph semantics elsewhere.
@@ -19,9 +20,8 @@ Collectors should:
 - parse or normalize source-local observations
 - emit durable facts
 
-During the current Git cutover, the resulting fact work item may be leased
-inline by the indexing coordinator so one run still completes end-to-end. That
-projection step is owned by `resolution/`, not by the collector package.
+The collector stops at durable facts and work-item creation. Canonical graph
+projection is owned by `resolution/`, not by the collector package.
 
 Collectors should not own:
 

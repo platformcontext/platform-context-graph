@@ -1,28 +1,6 @@
-"""Tests for runtime reclassification wire-up in coordinator pipeline."""
+"""Tests for runtime reclassification rules."""
 
 from __future__ import annotations
-
-import inspect
-
-import pytest
-
-
-class TestPipelineImportsRuntimeClassifier:
-    """Verify the pipeline module imports and can call classify_repo_runtime."""
-
-    def test_coordinator_pipeline_imports_classify_repo_runtime(self):
-        """coordinator_pipeline should import classify_repo_runtime."""
-        from platform_context_graph.indexing import coordinator_pipeline
-
-        assert hasattr(coordinator_pipeline, "classify_repo_runtime")
-
-    def test_classify_repo_runtime_callable(self):
-        """classify_repo_runtime should be callable from the pipeline module."""
-        from platform_context_graph.indexing.coordinator_pipeline import (
-            classify_repo_runtime,
-        )
-
-        assert callable(classify_repo_runtime)
 
 
 class TestRuntimeReclassificationUpgradeOnly:
@@ -80,45 +58,3 @@ class TestRuntimeReclassificationUpgradeOnly:
             entity_count=60000,
         )
         assert result == "xlarge"
-
-
-class TestSnapshotEntityCounting:
-    """Verify entity counting from snapshot file_data for reclassification."""
-
-    def test_count_entities_from_file_data(self):
-        """Should count total entities across all entity-bearing fields."""
-        from platform_context_graph.indexing.coordinator_pipeline import (
-            _count_snapshot_entities,
-        )
-
-        file_data = [
-            {
-                "path": "/repo/a.py",
-                "functions": [{"name": "foo"}, {"name": "bar"}],
-                "classes": [{"name": "MyClass"}],
-                "variables": [],
-            },
-            {
-                "path": "/repo/b.py",
-                "functions": [{"name": "baz"}],
-                "classes": [],
-            },
-        ]
-        assert _count_snapshot_entities(file_data) == 4
-
-    def test_count_entities_empty_file_data(self):
-        """Empty file_data should return 0."""
-        from platform_context_graph.indexing.coordinator_pipeline import (
-            _count_snapshot_entities,
-        )
-
-        assert _count_snapshot_entities([]) == 0
-
-    def test_count_entities_no_entity_fields(self):
-        """Files with no entity fields should contribute 0."""
-        from platform_context_graph.indexing.coordinator_pipeline import (
-            _count_snapshot_entities,
-        )
-
-        file_data = [{"path": "/repo/config.yaml"}]
-        assert _count_snapshot_entities(file_data) == 0

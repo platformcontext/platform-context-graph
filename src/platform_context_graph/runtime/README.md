@@ -25,12 +25,14 @@ For SRE and tuning work, the important telemetry split is:
 
 Internally, the Git path now flows like this:
 
-- `collectors/git/` for source discovery and parse execution
-- `parsers/` for parser registry and language parsing
+- `collectors/git/` for source discovery, snapshot models, and Git-specific
+  collection helpers
+- `parsers/` for the remaining parser registry and language parsing migration
 - `facts/` for durable source observations and the work queue
 - `resolution/` for fact-driven repository, entity, relationship, workload, and platform projection
 - `graph/` for canonical graph writes owned by resolution instead of the collector
 
-During Phase 2 cutover, indexing can execute the same facts-first projection
-path in-process so one indexing run still completes end-to-end on its own. The
-standalone Resolution Engine service uses the same orchestration contract.
+The legacy in-process Python indexing coordinator has been deleted from the
+branch. Normal runtime ownership now flows through the Go-owned collector and
+the standalone Resolution Engine contract, while the remaining parser/helper
+Python modules are being removed separately.

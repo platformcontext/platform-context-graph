@@ -17,10 +17,11 @@ Current Git flow:
 1. the Git collector parses a repository snapshot
 2. `facts/emission/git_snapshot.py` persists repository, file, and entity facts
 3. one queued work item is created for that repository snapshot
-4. during the current cutover, the indexing coordinator can lease that queued
-   work item inline and project canonical graph state through `resolution/`
-5. the standalone `resolution-engine` runtime can claim the same queue for
-   background processing and future multi-collector flows
+4. the `resolution-engine` runtime claims that queued work item and projects
+   canonical graph state through `resolution/`
+5. recovery, replay, dead-letter, and backfill controls operate against the
+   same durable queue state instead of bypassing it through legacy Python
+   runtime shims
 
 Operational visibility for this package now includes:
 
@@ -36,7 +37,8 @@ Operational visibility for this package now includes:
 - manual dead-letter actions with durable operator notes
 - replay-event inspection for incident audit trails
 - durable backfill-request records for repo/run recovery workflows
-- structured log breadcrumbs for snapshot emission and inline projection lease/failure/completion
+- structured log breadcrumbs for snapshot emission, queue lifecycle, replay,
+  dead-letter, and completion
 
 This package should continue to grow as new collectors emit source observations
 before graph projection.

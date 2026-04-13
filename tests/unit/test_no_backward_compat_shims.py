@@ -52,6 +52,12 @@ def test_deleted_compatibility_shim_paths_are_absent() -> None:
         "src/platform_context_graph/tools/scip_parser.py",
         "src/platform_context_graph/tools/scip_support.py",
         "src/platform_context_graph/tools/cross_repo_linker_support.py",
+        "src/platform_context_graph/collectors/git/parse_execution.py",
+        "src/platform_context_graph/collectors/git/parse_worker.py",
+        "src/platform_context_graph/indexing/coordinator.py",
+        "src/platform_context_graph/indexing/coordinator_pipeline.py",
+        "src/platform_context_graph/indexing/coordinator_async_commit.py",
+        "src/platform_context_graph/indexing/parse_recovery.py",
     )
 
     existing = [

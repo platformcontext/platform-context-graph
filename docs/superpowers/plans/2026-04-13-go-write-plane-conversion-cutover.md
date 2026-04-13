@@ -21,9 +21,7 @@ The branch still has active Python-owned runtime seams:
 
 - parser, discovery, snapshot, and content-shaping behavior still depend on
   Python-owned runtime code in
-  `src/platform_context_graph/collectors/git/parse_execution.py`,
-  `src/platform_context_graph/collectors/git/parse_worker.py`,
-  `src/platform_context_graph/parsers/registry.py`, and
+  `src/platform_context_graph/parsers/registry.py`,
   `src/platform_context_graph/content/ingest.py`.
 - reducer, facts, and status-store ownership still depend on Python modules in
   `src/platform_context_graph/resolution/**`,
@@ -94,8 +92,13 @@ cutover draft assumed:
 - Python `GraphBuilder.build_graph_from_path_async(...)` now delegates
   both directory and explicit single-file indexing to the Go
   `bootstrap-index` runtime; the remaining Python parser ownership is now
-  concentrated in the legacy parse/coordinator stack and any uncovered
+  concentrated in the parser matrix, content shaping, and any uncovered
   parser-matrix gaps
+- the legacy Python parse/coordinator runtime stack
+  (`collectors/git/parse_execution.py`, `collectors/git/parse_worker.py`,
+  `indexing/coordinator.py`, `indexing/coordinator_pipeline.py`,
+  `indexing/coordinator_async_commit.py`, and `indexing/parse_recovery.py`)
+  has been deleted from the branch
 
 The known parser-matrix blockers are no longer in the collector bridge path.
 The normal Go collector path now owns both the standard tree-sitter route and

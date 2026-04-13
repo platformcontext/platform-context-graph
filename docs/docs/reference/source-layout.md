@@ -104,10 +104,12 @@ The indexing side now separates source collection, parsing, graph persistence,
 facts, graph persistence, and post-index materialization into clearer
 boundaries:
 
-- `collectors/git/`: repository discovery, `.gitignore`, parse workers, path indexing, parse execution, and facts-first Git collection support
-- `collectors/git/` parser, discovery, and content-shaping modules: temporary
-  Python-owned normal-path seams that must be removed as the parser platform
-  moves to Go
+- `collectors/git/`: repository discovery, `.gitignore`, path indexing handoff,
+  parse snapshot models, and facts-first Git collection support
+- the legacy Python parse/coordinator stack under `collectors/git/` has been
+  deleted from the branch; the remaining parser-platform migration work is now
+  concentrated in `parsers/**`, `content/ingest.py`, and a smaller set of
+  cutover helpers outside the normal collector hot path
 - future `collectors/<source>/` families: source-specific adapters for AWS,
   Kubernetes, ETL, and other product domains, but only after the Git cutover
   and parser-platform cutovers finish
@@ -116,7 +118,10 @@ boundaries:
 - `facts/work_queue/`: Postgres-backed work item queue used by the Resolution Engine
 - `facts/emission/`: source-specific fact emission from parsed snapshots
 - `facts/state.py`: shared fact store and queue lifecycle for deployed runtimes
-- `indexing/coordinator_facts.py` and `indexing/coordinator_facts_support.py`: Git cutover helpers for fact emission, inline projection, and facts-first finalization
+- `indexing/coordinator_facts.py` and `indexing/coordinator_facts_support.py`:
+  remaining Git cutover helpers for fact emission, recovery support, and
+  facts-first finalization while the last Python runtime ownership is being
+  removed
 - `parsers/registry.py`: canonical parser registry and worker-friendly parse entrypoints
 - `parsers/raw_text.py`: raw-text parser support for searchable non-code artifacts
 - `parsers/languages/`: canonical language parser entrypoints and support modules
@@ -125,8 +130,7 @@ boundaries:
 - `graph/schema/`: graph schema creation
 - `graph/persistence/`: graph write helpers, batching, content dual-write, commit orchestration, worker support, and call/inheritance relationship persistence
 - `resolution/orchestration/`: Resolution Engine claim/process loops and the
-  shared work-item projection path reused by the standalone runtime and inline
-  Git cutover processing
+  shared work-item projection path used by the Go-owned runtime
 - `resolution/projection/`: repository/file/entity/relationship/workload/platform projection from stored facts
 - `resolution/workloads/` and `resolution/platforms.py`: workload and platform materialization after graph writes
 
@@ -136,16 +140,12 @@ post-commit finalization bridge has been deleted from the branch; Python
 indexing now requires the facts-first runtime instead of falling back to
 ad hoc finalize helpers.
 
-For the current Git cutover, the coordinator also reuses the same facts-first
-projection contracts in-process. That keeps one indexing run end-to-end
-complete while still moving graph-write ownership out of the collector logic.
-The remaining transition risk is now concentrated in the Python local
-indexing and parser path, not in the deleted post-commit bridge or the deleted
-`runtime/ingester/*bridge.py` modules. Non-dependency directory indexing now
-delegates from `GraphBuilder` to the Go `bootstrap-index` runtime, and direct
-single-file indexing now uses the same Go-owned runtime contract. The
-remaining Python-owned parser edge is primarily the legacy parse/coordinator
-stack and any parser-matrix gaps still being removed.
+The remaining transition risk is now concentrated in the Python parser matrix
+and a smaller set of cutover helpers, not in the deleted post-commit bridge,
+the deleted `runtime/ingester/*bridge.py` modules, or the deleted legacy
+snapshot/coordinator stack. Non-dependency directory indexing now delegates
+from `GraphBuilder` to the Go `bootstrap-index` runtime, and direct single-file
+indexing now uses the same Go-owned runtime contract.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.

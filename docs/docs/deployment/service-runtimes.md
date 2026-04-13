@@ -39,9 +39,11 @@ Current branch caveat:
 - when `SCIP_INDEXER=true`, the Go collector now owns SCIP language detection,
   external `scip-*` indexer execution, protobuf reduction, and Go tree-sitter
   supplementation on the collector path instead of bouncing through Python
+- the legacy Python snapshot/coordinator runtime stack has been deleted from
+  the branch
 - the remaining cutover debt is now outside the normal collector hot path:
-  parser-matrix completion plus Python finalization/recovery/admin repair
-  ownership removal
+  parser-matrix completion plus the last Python helper, finalization,
+  recovery, and admin ownership removals
 - no new ingestor family should start until the Python finalization/recovery
   ownership is gone and the parser cutover is proven end to end
 
@@ -212,7 +214,7 @@ Scale the API when request traffic rises. Do not scale it to fix queue backlog.
 - own the shared workspace in Kubernetes
 - parse repository snapshots
 - emit facts into Postgres
-- drive deterministic inline projection during indexing cutover
+- hand off durable projection work to the Go-owned write plane
 
 ### Why it stays stateful
 

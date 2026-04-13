@@ -23,3 +23,17 @@ def test_git_indexing_package_no_longer_exports_legacy_snapshot_parser() -> None
     assert not hasattr(indexing, "parse_repository_snapshot_async")
     with pytest.raises(AttributeError):
         getattr(indexing, "parse_repository_snapshot_async")
+
+
+def test_config_catalog_no_longer_advertises_async_commit_toggle() -> None:
+    """The Python async-commit feature flag should disappear with the legacy path."""
+
+    from platform_context_graph.cli.config_catalog import (
+        CONFIG_DESCRIPTIONS,
+        CONFIG_VALIDATORS,
+        DEFAULT_CONFIG,
+    )
+
+    assert "PCG_ASYNC_COMMIT_ENABLED" not in DEFAULT_CONFIG
+    assert "PCG_ASYNC_COMMIT_ENABLED" not in CONFIG_DESCRIPTIONS
+    assert "PCG_ASYNC_COMMIT_ENABLED" not in CONFIG_VALIDATORS
