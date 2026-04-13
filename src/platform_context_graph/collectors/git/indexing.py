@@ -14,7 +14,6 @@ from .discovery import (
     resolve_repository_file_sets,
 )
 from .execution import build_graph_from_path_async
-from .finalize import finalize_index_batch, finalize_single_repository
 from .parse_execution import parse_repository_snapshot_async
 from .types import RepositoryParseSnapshot
 
@@ -26,8 +25,6 @@ __all__ = [
     "discover_git_repositories",
     "discover_index_files",
     "estimate_processing_time",
-    "finalize_index_batch",
-    "finalize_single_repository",
     "find_pcgignore",
     "get_ignored_dir_names",
     "merge_import_maps",

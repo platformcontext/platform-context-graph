@@ -19,7 +19,6 @@ from platform_context_graph.graph.persistence.worker import (
     get_commit_worker_connection_params,
 )
 
-from .coordinator_finalize import finalize_repository_batch
 from .memory_diagnostics import log_memory_usage, read_memory_usage_sample
 from .coordinator_models import (
     ACTIVE_REPO_STATES,
@@ -1145,7 +1144,6 @@ async def process_repository_snapshots(
 
 
 __all__ = [
-    "finalize_repository_batch",
     "prepare_repository_snapshots",
     "process_repository_snapshots",
 ]

@@ -105,9 +105,6 @@ facts, graph persistence, and post-index materialization into clearer
 boundaries:
 
 - `collectors/git/`: repository discovery, `.gitignore`, parse workers, path indexing, parse execution, and facts-first Git collection support
-- `collectors/git/finalize.py`: legacy post-commit compatibility adapter for
-  graph-safe recovery and re-finalization; this is temporary until the Git
-  write-plane cutover is complete
 - `collectors/git/` parser, discovery, and content-shaping modules: temporary
   Python-owned normal-path seams that must be removed as the parser platform
   moves to Go
@@ -120,8 +117,6 @@ boundaries:
 - `facts/emission/`: source-specific fact emission from parsed snapshots
 - `facts/state.py`: shared fact store and queue lifecycle for deployed runtimes
 - `indexing/coordinator_facts.py` and `indexing/coordinator_facts_support.py`: Git cutover helpers for fact emission, inline projection, and facts-first finalization
-- `indexing/post_commit_writer.py`: explicit structured post-commit contract
-  used by the remaining legacy finalization bridge
 - `parsers/registry.py`: canonical parser registry and worker-friendly parse entrypoints
 - `parsers/raw_text.py`: raw-text parser support for searchable non-code artifacts
 - `parsers/languages/`: canonical language parser entrypoints and support modules
@@ -136,10 +131,10 @@ boundaries:
 - `resolution/workloads/` and `resolution/platforms.py`: workload and platform materialization after graph writes
 
 `tools/graph_builder.py` remains the stable public facade while the underlying
-source-of-truth modules move into these canonical packages. The remaining
-legacy finalization bridge is now routed through
-`indexing/post_commit_writer.py`; new collector or reducer work must not land
-directly on ad hoc finalize helpers.
+source-of-truth modules move into these canonical packages. The legacy Python
+post-commit finalization bridge has been deleted from the branch; Python
+indexing now requires the facts-first runtime instead of falling back to
+ad hoc finalize helpers.
 
 For the current Git cutover, the coordinator also reuses the same facts-first
 projection contracts in-process. That keeps one indexing run end-to-end
@@ -155,7 +150,7 @@ The important rewrite rule is simple:
 - add new collector logic under source-specific collection or facts packages
 - add source-local projection under `resolution/`
 - add shared cross-domain logic under reducer-owned resolution packages
-- do not add new production behavior under the legacy finalize bridge
+- do not reintroduce deleted Python finalize-bridge behavior
 - do not add new production behavior under the legacy parser bridge or
   `runtime/ingester/*bridge.py`
 

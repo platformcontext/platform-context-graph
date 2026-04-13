@@ -25,10 +25,10 @@ The branch still has active Python-owned runtime seams:
   `src/platform_context_graph/collectors/git/parse_worker.py`,
   `src/platform_context_graph/parsers/registry.py`, and
   `src/platform_context_graph/content/ingest.py`.
-- recovery and refinalization still depend on Python bridge code in
-  `src/platform_context_graph/collectors/git/finalize.py`,
-  `src/platform_context_graph/indexing/post_commit_writer.py`, and
-  `src/platform_context_graph/api/routers/admin.py`.
+- reducer, facts, and status-store ownership still depend on Python modules in
+  `src/platform_context_graph/resolution/**`,
+  `src/platform_context_graph/facts/**`, and
+  `src/platform_context_graph/runtime/status_store*.py`.
 
 The collector bridge inventory changed during Chunk 2:
 
@@ -379,10 +379,16 @@ This is a full migration, not a proxy.
 
 CLI finalize deletion tracked in ownership completion plan Phase A (Chunk A2).
 
-- [ ] **Step 4: Delete the Python finalization bridge** (BLOCKED on Chunk 2)
+- [x] **Step 4: Delete the Python finalization bridge**
 
-Remove the explicit post-commit writer and finalize bridge files once parity is
-proven. Deep import chains prevent deletion until the collector bridge is removed.
+Deleted:
+
+- `src/platform_context_graph/indexing/post_commit_writer.py`
+- `src/platform_context_graph/collectors/git/finalize.py`
+- `src/platform_context_graph/indexing/coordinator_finalize.py`
+
+The Python coordinator now fails closed unless the facts-first runtime is
+available, instead of falling back to the deleted post-commit writer path.
 
 - [ ] **Step 5: Run focused recovery verification**
 

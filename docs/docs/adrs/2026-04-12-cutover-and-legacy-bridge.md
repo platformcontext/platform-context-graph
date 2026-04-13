@@ -88,20 +88,13 @@ ownership. Current status:
   `pcg finalize` CLI command prints a deprecation message directing operators
   to the Go ingester admin surface.
 
-**Still Python-owned (pending deletion):**
+**Deleted on this branch:**
 
-- `src/platform_context_graph/indexing/post_commit_writer.py` is the explicit
-  compatibility contract for the remaining Python-owned post-commit stages.
-- `src/platform_context_graph/collectors/git/finalize.py` is the compatibility
-  adapter that maps legacy `GraphBuilder` stage runners onto that contract.
-- `src/platform_context_graph/indexing/coordinator_finalize.py` may invoke the
-  bridge, but must not infer stage details from `GraphBuilder` side channels.
+- `src/platform_context_graph/indexing/post_commit_writer.py`
+- `src/platform_context_graph/collectors/git/finalize.py`
+- `src/platform_context_graph/indexing/coordinator_finalize.py`
 
-Removal conditions for remaining Python surfaces:
-
-- delete `indexing/coordinator_finalize.py` when checkpointed repo-batch runs no
-  longer persist `finalization_*` fields or call the legacy post-commit writer
-  path
-- delete `collectors/git/finalize.py` when all remaining graph-safe recovery
-  flows have moved onto Go-owned projector or reducer contracts
-- do not start any new ingestor family until these removal conditions are met
+Python indexing now fails closed unless the facts-first runtime is available.
+The remaining ownership blockers have moved forward to the Python
+`resolution/`, `facts/`, and `runtime/status_store*.py` surfaces tracked in the
+ownership completion plan.

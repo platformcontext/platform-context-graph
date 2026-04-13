@@ -23,13 +23,13 @@ system can grow without core rewrites.
   code.
 - New collectors must reuse the shared admin, telemetry, logging, and
   configurability contract.
-- Do not add new runtime logic to the legacy post-commit finalization bridge.
+- Do not reintroduce the deleted Python post-commit finalization bridge.
 - Do not start a new ingestor family until the full Python-to-Go conversion
   removes the legacy Python bridge, the parser platform is Go-owned end to
   end, and the deployed runtime path is Go-owned end to end.
 
-If a design needs bespoke behavior in `collectors/git/finalize.py` or another
-repair surface, it is almost certainly landing in the wrong place.
+If a design needs bespoke post-commit or repair behavior in Python, it is
+almost certainly landing in the wrong place.
 
 ## The Collector Contract
 

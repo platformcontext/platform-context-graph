@@ -5,7 +5,9 @@ must be deleted or quarantined before the Go write-plane conversion is
 complete. Each test targets one category of Python ownership.
 
 When all tests pass, the merge bar condition "no deployed runtime or write
-service starts from Python runtime entrypoints" is satisfied.
+service starts from Python runtime entrypoints" is satisfied and the remaining
+Python resolution, facts, and status-store ownership surfaces have been
+removed.
 
 These tests are expected to FAIL until Chunk 2 (native collector/parser
 cutover) completes and the final Chunk 5 deletions are applied.
@@ -93,6 +95,75 @@ class TestPythonFinalizationBridgeRemoved:
         assert not target.exists(), (
             f"{target.relative_to(REPO_ROOT)} still exists; "
             "Go recovery handler replaces CLI finalize"
+        )
+
+
+class TestPythonResolutionOwnershipRemoved:
+    """Verify Python resolution ownership is removed from the write plane."""
+
+    RESOLUTION_FILES = [
+        "resolution/platforms.py",
+        "resolution/platform_families.py",
+        "resolution/decisions/postgres.py",
+        "resolution/orchestration/runtime.py",
+        "resolution/orchestration/failure_classification.py",
+        "resolution/shared_projection/runtime.py",
+        "resolution/shared_projection/emission.py",
+        "resolution/shared_projection/partitioning.py",
+        "resolution/projection/entities.py",
+        "resolution/projection/files.py",
+        "resolution/projection/relationships.py",
+        "resolution/projection/workloads.py",
+    ]
+
+    @pytest.mark.parametrize("relative_path", RESOLUTION_FILES)
+    def test_no_python_resolution_module(self, relative_path: str) -> None:
+        """Each Python resolution ownership module must be deleted."""
+        target = SRC_ROOT / relative_path
+        assert not target.exists(), (
+            f"{target.relative_to(REPO_ROOT)} still exists; "
+            "Go projector/reducer implementations own resolution logic"
+        )
+
+
+class TestPythonFactsOwnershipRemoved:
+    """Verify Python facts ownership is removed from the write plane."""
+
+    FACTS_FILES = [
+        "facts/state.py",
+        "facts/emission/git_snapshot.py",
+        "facts/storage/postgres.py",
+        "facts/work_queue/postgres.py",
+        "facts/work_queue/recovery.py",
+        "facts/work_queue/replay.py",
+    ]
+
+    @pytest.mark.parametrize("relative_path", FACTS_FILES)
+    def test_no_python_facts_module(self, relative_path: str) -> None:
+        """Each Python facts ownership module must be deleted."""
+        target = SRC_ROOT / relative_path
+        assert not target.exists(), (
+            f"{target.relative_to(REPO_ROOT)} still exists; "
+            "Go facts storage and queue ownership replaces Python facts logic"
+        )
+
+
+class TestPythonStatusStoreOwnershipRemoved:
+    """Verify Python runtime status-store ownership is removed."""
+
+    STATUS_STORE_FILES = [
+        "runtime/status_store.py",
+        "runtime/status_store_db.py",
+        "runtime/status_store_runtime.py",
+    ]
+
+    @pytest.mark.parametrize("relative_path", STATUS_STORE_FILES)
+    def test_no_python_status_store_module(self, relative_path: str) -> None:
+        """Each Python status-store ownership module must be deleted."""
+        target = SRC_ROOT / relative_path
+        assert not target.exists(), (
+            f"{target.relative_to(REPO_ROOT)} still exists; "
+            "Go status-store parity owns scan/reindex and coverage lifecycle"
         )
 
 

@@ -11,6 +11,8 @@ from pathlib import Path
 from types import ModuleType
 from types import SimpleNamespace
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_ROOT = REPO_ROOT / "src" / "platform_context_graph"
 
@@ -99,7 +101,6 @@ def _load_coordinator_module() -> ModuleType:
             collectors_indexing = ModuleType(
                 "platform_context_graph.collectors.git.indexing"
             )
-            collectors_indexing.finalize_index_batch = lambda *_args, **_kwargs: None
             collectors_indexing.parse_repository_snapshot_async = None
             collectors_indexing.resolve_repository_file_sets = None
 
@@ -380,13 +381,6 @@ def test_execute_index_run_uses_facts_first_handlers_and_skips_legacy_finalize(
     )
     monkeypatch.setattr(
         COORDINATOR,
-        "finalize_repository_batch",
-        lambda **_kwargs: (_ for _ in ()).throw(
-            AssertionError("legacy finalize path should not run")
-        ),
-    )
-    monkeypatch.setattr(
-        COORDINATOR,
         "_commit_repository_snapshot",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("legacy direct commit path should not run")
@@ -473,3 +467,97 @@ def test_execute_index_run_uses_facts_first_handlers_and_skips_legacy_finalize(
     assert committed_snapshots == [str(repo.resolve())]
     assert finalized_metrics == [{"projected_repositories": 1}]
     assert result.status == "completed"
+
+
+def test_execute_index_run_requires_facts_first_runtime(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Coordinator should fail closed once the legacy finalize path is removed."""
+
+    repo = tmp_path / "service"
+    repo.mkdir()
+    file_path = repo / "app.py"
+    file_path.write_text("def handler():\n    return 1\n", encoding="utf-8")
+
+    run_state = IndexRunState(
+        run_id="run-legacy-disabled",
+        root_path=str(tmp_path.resolve()),
+        family="index",
+        source="manual",
+        discovery_signature="sig",
+        is_dependency=False,
+        status="running",
+        finalization_status="pending",
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z",
+        repositories={
+            str(repo.resolve()): RepositoryRunState(repo_path=str(repo.resolve()))
+        },
+    )
+
+    monkeypatch.setattr(
+        COORDINATOR,
+        "resolve_repository_file_sets",
+        lambda *_args, **_kwargs: {repo.resolve(): [file_path]},
+    )
+    monkeypatch.setattr(
+        COORDINATOR,
+        "_load_or_create_run",
+        lambda **_kwargs: (run_state, False),
+    )
+    monkeypatch.setattr(COORDINATOR, "facts_first_projection_enabled", lambda: False)
+    monkeypatch.setattr(
+        COORDINATOR,
+        "publish_run_repository_coverage",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        COORDINATOR,
+        "_update_pending_repository_gauge",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        COORDINATOR, "_publish_runtime_progress", lambda **_kwargs: None
+    )
+
+    @contextmanager
+    def _index_run_scope(**_kwargs):
+        yield SimpleNamespace(status=None, finalization_status=None)
+
+    telemetry = SimpleNamespace(
+        index_run=_index_run_scope,
+        start_span=lambda *_args, **_kwargs: _index_run_scope(),
+        record_index_repositories=lambda **_kwargs: None,
+        record_index_repository_duration=lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(COORDINATOR, "get_observability", lambda: telemetry)
+
+    builder = SimpleNamespace(
+        job_manager=SimpleNamespace(update_job=lambda *_args, **_kwargs: None)
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="facts-first runtime is required for Python indexing",
+    ):
+        asyncio.run(
+            COORDINATOR.execute_index_run(
+                builder,
+                tmp_path,
+                is_dependency=False,
+                job_id=None,
+                selected_repositories=[repo],
+                family="index",
+                source="manual",
+                force=False,
+                component="cli",
+                asyncio_module=asyncio,
+                datetime_cls=SimpleNamespace(now=lambda: None),
+                info_logger_fn=lambda *_args, **_kwargs: None,
+                warning_logger_fn=lambda *_args, **_kwargs: None,
+                error_logger_fn=lambda *_args, **_kwargs: None,
+                job_status_enum=SimpleNamespace(COMPLETED="completed", FAILED="failed"),
+                pathspec_module=SimpleNamespace(),
+            )
+        )

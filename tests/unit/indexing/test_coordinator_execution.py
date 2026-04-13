@@ -85,7 +85,6 @@ except Exception:
         collectors_git_indexing = ModuleType(
             "platform_context_graph.collectors.git.indexing"
         )
-        collectors_git_indexing.finalize_index_batch = lambda *_args, **_kwargs: {}
         collectors_git_indexing.merge_import_maps = (
             lambda target, source: target | source
         )
@@ -193,6 +192,7 @@ def test_execute_index_run_parses_multiple_repositories_concurrently(
     second_started = asyncio.Event()
     parse_order: list[str] = []
     committed: list[str] = []
+    emitted: list[str] = []
 
     async def fake_parse_repository_snapshot_async(
         _builder,
@@ -239,9 +239,28 @@ def test_execute_index_run_parses_multiple_repositories_concurrently(
         fake_parse_repository_snapshot_async,
     )
     monkeypatch.setattr(
-        "platform_context_graph.indexing.coordinator._commit_repository_snapshot",
-        lambda _builder, snapshot, *, is_dependency, progress_callback=None, iter_snapshot_file_data_batches_fn=None, repo_class=None: committed.append(
-            snapshot.repo_path
+        "platform_context_graph.indexing.coordinator.facts_first_projection_enabled",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.indexing.coordinator.get_fact_store",
+        lambda: SimpleNamespace(enabled=True),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.indexing.coordinator.get_fact_work_queue",
+        lambda: SimpleNamespace(enabled=True),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.indexing.coordinator.create_snapshot_fact_emitter",
+        lambda **_kwargs: (
+            lambda *, repo_path, **__kwargs: emitted.append(str(repo_path.resolve()))
+            or SimpleNamespace(fact_count=1)
+        ),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.indexing.coordinator.create_facts_first_commit_callback",
+        lambda **_kwargs: (
+            lambda _builder, snapshot, **__kwargs: committed.append(snapshot.repo_path)
         ),
     )
     monkeypatch.setattr(
@@ -249,8 +268,11 @@ def test_execute_index_run_parses_multiple_repositories_concurrently(
         lambda **_kwargs: None,
     )
     monkeypatch.setattr(
-        "platform_context_graph.indexing.coordinator.finalize_index_batch",
-        lambda *_args, **_kwargs: None,
+        "platform_context_graph.indexing.coordinator.finalize_facts_first_run",
+        lambda **kwargs: (
+            setattr(kwargs["run_state"], "status", "completed"),
+            setattr(kwargs["run_state"], "finalization_status", "completed"),
+        ),
     )
 
     @contextmanager
@@ -298,6 +320,10 @@ def test_execute_index_run_parses_multiple_repositories_concurrently(
     )
 
     assert set(parse_order) == {"payments-api", "orders-api"}
+    assert emitted == [str(repo_a.resolve()), str(repo_b.resolve())] or emitted == [
+        str(repo_b.resolve()),
+        str(repo_a.resolve()),
+    ]
     assert committed == [str(repo_a.resolve()), str(repo_b.resolve())] or committed == [
         str(repo_b.resolve()),
         str(repo_a.resolve()),
@@ -407,12 +433,6 @@ def test_execute_index_run_uses_facts_first_projection_when_enabled(
         "platform_context_graph.indexing.coordinator._commit_repository_snapshot",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("old direct commit path should not run")
-        ),
-    )
-    monkeypatch.setattr(
-        "platform_context_graph.indexing.coordinator.finalize_index_batch",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("old finalize path should not run")
         ),
     )
     monkeypatch.setattr(
