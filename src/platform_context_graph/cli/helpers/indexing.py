@@ -7,7 +7,10 @@ import time
 from pathlib import Path
 
 from ...indexing.coordinator import describe_index_run
+from ...core import get_database_manager
+from ...tools.code_finder import CodeFinder
 from ...platform.package_resolver import get_local_package_path
+from .go_index_runtime import run_go_bootstrap_index
 
 
 def _api():
@@ -15,6 +18,17 @@ def _api():
     from .. import cli_helpers as api
 
     return api
+
+
+def _initialize_index_status_services():
+    """Return optional database services used for local skip/status checks."""
+
+    try:
+        db_manager = get_database_manager()
+        db_manager.get_driver()
+    except Exception:
+        return None, None
+    return db_manager, CodeFinder(db_manager)
 
 
 def index_helper(
@@ -58,88 +72,79 @@ def _index_helper(
     """
     api = _api()
     time_start = time.time()
-    services = api._initialize_services()
-    if not all(services):
-        return
-
-    db_manager, graph_builder, code_finder = services
     path_obj = Path(path).resolve()
 
     if not path_obj.exists():
         api.console.print(f"[red]Error: Path does not exist: {path_obj}[/red]")
-        db_manager.close_driver()
         return
 
-    indexed_repos = code_finder.list_indexed_repositories()
-    repo_exists = any(
-        Path(repo["path"]).resolve() == path_obj for repo in indexed_repos
-    )
+    db_manager, code_finder = _initialize_index_status_services()
+    try:
+        repo_exists = False
+        if code_finder is not None:
+            indexed_repos = code_finder.list_indexed_repositories()
+            repo_exists = any(
+                Path(repo["path"]).resolve() == path_obj for repo in indexed_repos
+            )
 
-    if repo_exists and not force:
-        try:
-            with db_manager.get_driver().session() as session:
-                result = session.run(
-                    "MATCH (r:Repository {path: $path})-[:REPO_CONTAINS]->(f:File) "
-                    "RETURN count(DISTINCT f) as file_count",
-                    path=str(path_obj),
-                )
-                record = result.single()
-                file_count = record["file_count"] if record else 0
-
-                if file_count > 0:
-                    api.console.print(
-                        f"[yellow]Repository '{path}' is already indexed with "
-                        f"{file_count} files. Skipping.[/yellow]"
+        if repo_exists and not force:
+            try:
+                with db_manager.get_driver().session() as session:
+                    result = session.run(
+                        "MATCH (r:Repository {path: $path})-[:REPO_CONTAINS]->(f:File) "
+                        "RETURN count(DISTINCT f) as file_count",
+                        path=str(path_obj),
                     )
-                    api.console.print(
-                        "[dim]💡 Tip: Use 'pcg index --force' to re-index[/dim]"
-                    )
-                    db_manager.close_driver()
-                    return
+                    record = result.single()
+                    file_count = record["file_count"] if record else 0
 
+                    if file_count > 0:
+                        api.console.print(
+                            f"[yellow]Repository '{path}' is already indexed with "
+                            f"{file_count} files. Skipping.[/yellow]"
+                        )
+                        api.console.print(
+                            "[dim]💡 Tip: Use 'pcg index --force' to re-index[/dim]"
+                        )
+                        return
+
+                    api.console.print(
+                        f"[yellow]Repository '{path}' exists but has no files "
+                        "(likely interrupted). Re-indexing...[/yellow]"
+                    )
+            except Exception as exc:
                 api.console.print(
-                    f"[yellow]Repository '{path}' exists but has no files "
-                    "(likely interrupted). Re-indexing...[/yellow]"
+                    "[yellow]Warning: Could not check file count: "
+                    f"{exc}. Proceeding with indexing...[/yellow]"
                 )
+
+        api.console.print(f"Starting indexing for: {path_obj}")
+        try:
+            from platform_context_graph.cli.config_manager import (
+                get_index_runtime_config,
+            )
+
+            runtime_config = get_index_runtime_config()
+            api.console.print(
+                "[dim]Indexing config: "
+                f"parse workers={runtime_config['parse_workers']}, "
+                f"queue depth={runtime_config['queue_depth']}"
+                "[/dim]"
+            )
         except Exception as exc:
             api.console.print(
-                "[yellow]Warning: Could not check file count: "
-                f"{exc}. Proceeding with indexing...[/yellow]"
+                "[yellow]Warning: Could not load indexing runtime config: "
+                f"{exc}[/yellow]"
             )
 
-    api.console.print(f"Starting indexing for: {path_obj}")
-    try:
-        from platform_context_graph.cli.config_manager import get_index_runtime_config
-
-        runtime_config = get_index_runtime_config()
-        api.console.print(
-            "[dim]Indexing config: "
-            f"parse workers={runtime_config['parse_workers']}, "
-            f"queue depth={runtime_config['queue_depth']}"
-            "[/dim]"
-        )
-    except Exception as exc:
-        api.console.print(
-            "[yellow]Warning: Could not load indexing runtime config: "
-            f"{exc}[/yellow]"
-        )
-
-    try:
-        asyncio.run(
-            api._run_index_with_progress(
-                graph_builder,
-                path_obj,
-                is_dependency=False,
-                force=force,
-                selected_repositories=(
-                    [repo_path.resolve() for repo_path in selected_repositories]
-                    if selected_repositories
-                    else None
-                ),
-                family=family,
-                source=source,
-                component=component,
-            )
+        run_go_bootstrap_index(
+            path_obj,
+            selected_repositories=(
+                [repo_path.resolve() for repo_path in selected_repositories]
+                if selected_repositories
+                else None
+            ),
+            force=force,
         )
         elapsed = time.time() - time_start
         api.console.print(
@@ -153,20 +158,20 @@ def _index_helper(
                 api.console.print(
                     "\n[cyan]🔍 ENABLE_AUTO_WATCH is enabled. Starting watcher...[/cyan]"
                 )
-                db_manager.close_driver()
                 api.watch_helper(path)
                 return
         except Exception as exc:
             api.console.print(
-                "[yellow]Warning: Could not check ENABLE_AUTO_WATCH: " f"{exc}[/yellow]"
-            )
+                    "[yellow]Warning: Could not check ENABLE_AUTO_WATCH: " f"{exc}[/yellow]"
+                )
     except Exception as exc:
         api.console.print(
             f"[bold red]An error occurred during indexing:[/bold red] {exc}"
         )
         raise
     finally:
-        db_manager.close_driver()
+        if db_manager is not None:
+            db_manager.close_driver()
 
 
 def add_package_helper(package_name: str, language: str) -> None:

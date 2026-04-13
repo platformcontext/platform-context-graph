@@ -139,8 +139,9 @@ ad hoc finalize helpers.
 For the current Git cutover, the coordinator also reuses the same facts-first
 projection contracts in-process. That keeps one indexing run end-to-end
 complete while still moving graph-write ownership out of the collector logic.
-Until the bridge is removed, the Git write plane is still transitional and
-operator docs should say so plainly.
+The remaining transition risk is now concentrated in the Python local
+indexing and parser path, not in the deleted post-commit bridge or the deleted
+`runtime/ingester/*bridge.py` modules.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.
@@ -151,8 +152,8 @@ The important rewrite rule is simple:
 - add source-local projection under `resolution/`
 - add shared cross-domain logic under reducer-owned resolution packages
 - do not reintroduce deleted Python finalize-bridge behavior
-- do not add new production behavior under the legacy parser bridge or
-  `runtime/ingester/*bridge.py`
+- do not add new production behavior under the legacy Python parser/indexing
+  seam or recreate `runtime/ingester/*bridge.py`
 
 ## Query Package Layout
 
@@ -178,9 +179,9 @@ acquisition and indexing grouped under its own subpackage:
 - `runtime/ingester/sync.py`: steady-state sync loop
 - `runtime/ingester/git.py`: git sync helpers
 - `runtime/ingester/support.py`: shared runtime support functions
-- `runtime/ingester/*bridge.py`: temporary Git cutover adapters for repository
-  selection, parser snapshot collection, content shaping, and recovery; these
-  are removal debt, not the target runtime architecture
+
+The temporary `runtime/ingester/*bridge.py` modules have already been deleted
+from the branch. Do not reintroduce them.
 
 The ingester increasingly depends on canonical packages rather than `tools/`:
 
@@ -226,9 +227,10 @@ Current native parser-runtime slice:
 - `go/internal/parser/raw_text_engine.go`: raw-text fallback for searchable
   template and config artifacts
 
-These Go packages are the target normal-path runtime ownership. Python bridge
-modules under `runtime/ingester/*bridge.py` remain removal debt until the
-collector hot path and parser platform are fully cut over.
+These Go packages are the target normal-path runtime ownership. The remaining
+Python ownership debt is the local parser/indexing path under
+`collectors/git/`, `indexing/`, `parsers/`, and `tools/graph_builder.py`, not
+the already-deleted `runtime/ingester/*bridge.py` modules.
 
 The parser cutover is still in progress. SCIP parity, specialized
 data-intelligence JSON families, and the remaining long-tail language adapters

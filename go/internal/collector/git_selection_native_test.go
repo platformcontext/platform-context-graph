@@ -138,6 +138,115 @@ func TestNativeRepositorySelectorSelectRepositoriesFilesystemReturnsEmptyBatchWh
 	}
 }
 
+func TestNativeRepositorySelectorSelectRepositoriesFilesystemRootRepository(t *testing.T) {
+	t.Parallel()
+
+	sourceRepo := t.TempDir()
+	reposDir := t.TempDir()
+	writeSelectionTestFile(t, filepath.Join(sourceRepo, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeSelectionTestFile(t, filepath.Join(sourceRepo, "main.go"), "package main\n")
+
+	observedAt := time.Date(2026, time.April, 13, 21, 15, 0, 0, time.UTC)
+	selector := NativeRepositorySelector{
+		Config: RepoSyncConfig{
+			ReposDir:       reposDir,
+			SourceMode:     "filesystem",
+			FilesystemRoot: sourceRepo,
+			Component:      "bootstrap-index",
+			CloneDepth:     1,
+			RepoLimit:      4000,
+			GitAuthMethod:  "none",
+		},
+		Now: func() time.Time {
+			return observedAt
+		},
+	}
+
+	batch, err := selector.SelectRepositories(context.Background())
+	if err != nil {
+		t.Fatalf("SelectRepositories() error = %v, want nil", err)
+	}
+	if got, want := len(batch.Repositories), 1; got != want {
+		t.Fatalf("len(Repositories) = %d, want %d", got, want)
+	}
+
+	selectedRepo := batch.Repositories[0]
+	wantRepoPath := filepath.Join(reposDir, filepath.Base(sourceRepo))
+	if got, want := selectedRepo.RepoPath, wantRepoPath; got != want {
+		t.Fatalf("RepoPath = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(wantRepoPath, "main.go")); err != nil {
+		t.Fatalf("copied repository missing main.go: %v", err)
+	}
+}
+
+func TestNativeRepositorySelectorSelectRepositoriesFilesystemDirectRootRepository(t *testing.T) {
+	t.Parallel()
+
+	sourceRepo := t.TempDir()
+	reposDir := t.TempDir()
+	writeSelectionTestFile(t, filepath.Join(sourceRepo, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeSelectionTestFile(t, filepath.Join(sourceRepo, "main.go"), "package main\n")
+
+	selector := NativeRepositorySelector{
+		Config: RepoSyncConfig{
+			ReposDir:         reposDir,
+			SourceMode:       "filesystem",
+			FilesystemRoot:   sourceRepo,
+			FilesystemDirect: true,
+			Component:        "bootstrap-index",
+			CloneDepth:       1,
+			RepoLimit:        4000,
+			GitAuthMethod:    "none",
+		},
+	}
+
+	batch, err := selector.SelectRepositories(context.Background())
+	if err != nil {
+		t.Fatalf("SelectRepositories() error = %v, want nil", err)
+	}
+	if got, want := len(batch.Repositories), 1; got != want {
+		t.Fatalf("len(Repositories) = %d, want %d", got, want)
+	}
+	if got, want := batch.Repositories[0].RepoPath, sourceRepo; got != want {
+		t.Fatalf("RepoPath = %q, want %q", got, want)
+	}
+}
+
+func TestNativeRepositorySelectorSelectRepositoriesFilesystemDirectWorkspaceRepositories(t *testing.T) {
+	t.Parallel()
+
+	filesystemRoot := t.TempDir()
+	reposDir := t.TempDir()
+	sourceRepo := filepath.Join(filesystemRoot, "platformcontext", "service-a")
+	writeSelectionTestFile(t, filepath.Join(sourceRepo, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeSelectionTestFile(t, filepath.Join(sourceRepo, "main.go"), "package main\n")
+
+	selector := NativeRepositorySelector{
+		Config: RepoSyncConfig{
+			ReposDir:         reposDir,
+			SourceMode:       "filesystem",
+			FilesystemRoot:   filesystemRoot,
+			FilesystemDirect: true,
+			Component:        "workspace-index",
+			CloneDepth:       1,
+			RepoLimit:        4000,
+			GitAuthMethod:    "none",
+		},
+	}
+
+	batch, err := selector.SelectRepositories(context.Background())
+	if err != nil {
+		t.Fatalf("SelectRepositories() error = %v, want nil", err)
+	}
+	if got, want := len(batch.Repositories), 1; got != want {
+		t.Fatalf("len(Repositories) = %d, want %d", got, want)
+	}
+	if got, want := batch.Repositories[0].RepoPath, sourceRepo; got != want {
+		t.Fatalf("RepoPath = %q, want %q", got, want)
+	}
+}
+
 func TestNativeRepositorySelectorSelectRepositoriesGitModesBuildsChangedRepoBatch(t *testing.T) {
 	t.Parallel()
 

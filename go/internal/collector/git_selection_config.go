@@ -41,6 +41,7 @@ type RepoSyncConfig struct {
 	GithubOrg             string
 	Repositories          []string
 	FilesystemRoot        string
+	FilesystemDirect      bool
 	CloneDepth            int
 	RepoLimit             int
 	Component             string
@@ -90,6 +91,7 @@ func LoadRepoSyncConfig(component string, getenv func(string) string) (RepoSyncC
 		GithubOrg:             strings.TrimSpace(getenv("PCG_GITHUB_ORG")),
 		Repositories:          extractExactRepositoryIDs(sourceMode, repositoryRules),
 		FilesystemRoot:        strings.TrimSpace(getenv("PCG_FILESYSTEM_ROOT")),
+		FilesystemDirect:      boolFromEnv(getenv("PCG_FILESYSTEM_DIRECT")),
 		CloneDepth:            cloneDepth,
 		RepoLimit:             repoLimit,
 		Component:             component,

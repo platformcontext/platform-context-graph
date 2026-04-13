@@ -164,7 +164,7 @@ Tools for managing the graph and background jobs.
 | **`list_indexed_repositories`** | Show what projects are currently indexed. | "What repos are indexed?" |
 | **`get_repository_stats`** | Show counts of files, classes, LOC. | "Show stats for the backend repo." |
 | **`delete_repository`** | Remove a repo from the graph. | "Remove the frontend repo." |
-| **`add_code_to_graph`** | Manually add a specific path. | "Add the `lib` folder." |
+| **`add_code_to_graph`** | Manually add a specific path by launching the Go `bootstrap-index` runtime in a background job. | "Add the `lib` folder." |
 | **`add_package_to_graph`** | Index an external library/package. | "Add the `requests` library." |
 
 ## Ingester Runtime

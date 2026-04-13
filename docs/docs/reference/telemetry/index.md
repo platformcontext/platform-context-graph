@@ -32,8 +32,8 @@ the reported state is live or inferred.
   checkpointed completeness for a repository or run.
 - `/admin/status` proves the live stage, backlog, and failure view for a
   runtime.
-- `GET /api/v0/admin/refinalize/status` is the operator recovery companion for
-  graph-safe refinalization.
+- `POST /admin/refinalize` and `POST /admin/replay` are the Go-owned recovery
+  controls on the ingester runtime.
 - A service can be healthy while indexing is incomplete. Use all three views
   when you are deciding whether to restart, reindex, or wait.
 

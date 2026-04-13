@@ -4,9 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -134,47 +131,4 @@ func closeBootstrapNeo4jDriver(driver neo4jdriver.DriverWithContext) error {
 	closeCtx, cancel := context.WithTimeout(context.Background(), bootstrapIndexConnectionTimeout)
 	defer cancel()
 	return driver.Close(closeCtx)
-}
-
-// resolveBootstrapRepoRoot locates the Python bridge repo root for the
-// bootstrap-index collector. This duplicates the collector-git helper because
-// both live in package main and cannot be shared.
-func resolveBootstrapRepoRoot(
-	getenv func(string) string,
-	getwd func() (string, error),
-) (string, error) {
-	candidates := make([]string, 0, 3)
-
-	if configured := strings.TrimSpace(getenv("PCG_REPO_ROOT")); configured != "" {
-		candidates = append(candidates, configured)
-	}
-
-	workingDirectory, err := getwd()
-	if err != nil {
-		return "", fmt.Errorf("determine working directory for bootstrap-index bridge: %w", err)
-	}
-	candidates = append(candidates, workingDirectory)
-	candidates = append(candidates, filepath.Dir(workingDirectory))
-
-	for _, candidate := range candidates {
-		resolved, err := filepath.Abs(candidate)
-		if err != nil {
-			continue
-		}
-		if bootstrapBridgeRepoRootExists(resolved) {
-			return resolved, nil
-		}
-	}
-
-	return "", fmt.Errorf(
-		"bootstrap-index bridge repo root must contain src/platform_context_graph; set PCG_REPO_ROOT explicitly if needed",
-	)
-}
-
-func bootstrapBridgeRepoRootExists(root string) bool {
-	info, err := os.Stat(filepath.Join(root, "src", "platform_context_graph"))
-	if err != nil {
-		return false
-	}
-	return info.IsDir()
 }

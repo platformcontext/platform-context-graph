@@ -6,6 +6,10 @@ These commands are the foundation of PlatformContextGraph. They allow you to add
 
 Adds a code repository to the graph database. This is the first step for any project.
 
+For directory and workspace targets, this command now launches the Go-owned
+`bootstrap-index` runtime in direct filesystem mode instead of the legacy Python
+parser/coordinator path.
+
 !!! info "Excluding Files (.pcgignore)"
     PCG already skips hidden and well-known cache directories such as `.git`, `.terraform`, `.terragrunt-cache`, `.pulumi`, `.crossplane`, `.serverless`, `.aws-sam`, and `cdk.out`.
     It also excludes built-in dependency roots such as `vendor/`, `node_modules/`, `site-packages/`, and `deps/` before parse by default.
@@ -21,6 +25,11 @@ pcg index [path] [options]
 
 *   `path`: The folder to index (default: current directory).
 *   `--force`: Re-index from scratch, even if it looks unchanged.
+
+**Runtime Notes:**
+
+*   Local index state for the Go launcher is stored under `PCG_HOME/state/go-bootstrap-index/`.
+*   The command still honors `.gitignore`, `.pcgignore`, and the configured parse-worker settings.
 
 **Example:**
 ```bash
@@ -54,6 +63,10 @@ Indexed Repositories:
 ## `pcg watch`
 
 Starts a real-time monitor. If you edit a file, the graph updates instantly.
+
+When the watched repo or workspace is missing index state, the initial warmup
+scan now launches the Go `bootstrap-index` runtime before the incremental
+watcher takes over.
 
 !!! warning "Foreground Process"
     This command runs in the foreground. Open a new terminal tab to keep it running.

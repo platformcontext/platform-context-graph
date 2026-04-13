@@ -176,7 +176,10 @@ uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
+
+Committed in the recovery migration wave before the subsequent parser and
+runtime cutover slices landed.
 
 ```bash
 git add docs/docs/reference/http-api.md docs/docs/reference/cli-reference.md \
@@ -513,7 +516,10 @@ cd go && go test -tags '!collector_integration' ./internal/storage/postgres/... 
 
 Expected: PASS for recovery and resolution tests regardless of collector state
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
+
+Landed in the Phase C operational surface wave that also introduced the status
+request store and parity verification.
 
 ```bash
 git add go/internal/storage/postgres/
@@ -559,7 +565,10 @@ cd go && go test ./internal/runtime/... ./internal/storage/postgres/... -count=1
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
+
+Landed in the Phase C operational surface wave that also introduced the status
+request store and parity verification.
 
 ```bash
 git add go/internal/runtime/status_requests.go go/internal/runtime/status_requests_test.go \
@@ -609,7 +618,10 @@ PYTHONPATH=src uv run pytest tests/integration/deployment/test_python_runtime_ow
 
 Expected: all new tests FAIL (Python files still exist)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
+
+Landed in the Phase C operational surface wave alongside the extended
+ownership-gate assertions.
 
 ```bash
 git add tests/integration/deployment/test_python_runtime_ownership.py
@@ -645,7 +657,10 @@ PYTHONPATH=src uv run pytest tests/integration/deployment/ -q
 
 Expected: PASS for new parity tests, existing gate tests still FAIL (expected)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
+
+Landed in the Phase C operational surface wave that added compose-backed Go
+write-plane parity verification.
 
 ```bash
 git add scripts/ tests/integration/deployment/

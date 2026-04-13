@@ -183,3 +183,61 @@ def test_watch_helper_reports_effective_debounce_configuration(
     assert any(
         "Watch config:" in message and "debounce=1.5s" in message for message in prints
     )
+
+
+def test_watch_helper_uses_go_bootstrap_index_for_missing_repositories(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Watch mode should warm missing repos through the Go bootstrap runtime."""
+
+    workspace = tmp_path / "workspace"
+    repo_a = workspace / "payments-api"
+    repo_a.mkdir(parents=True)
+
+    prints: list[str] = []
+    db_manager = SimpleNamespace(close_driver=MagicMock())
+    graph_builder = MagicMock()
+    code_finder = SimpleNamespace(list_indexed_repositories=lambda: [])
+    watcher = MagicMock()
+    api = SimpleNamespace(
+        console=SimpleNamespace(print=prints.append),
+        _initialize_services=lambda: (db_manager, graph_builder, code_finder),
+    )
+
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.watch._api",
+        lambda: api,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.watch.resolve_watch_targets",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            scope="workspace",
+            repository_paths=[repo_a.resolve()],
+        ),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.watch.CodeWatcher",
+        lambda *_args, **_kwargs: watcher,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.watch.threading.Event",
+        lambda: SimpleNamespace(wait=lambda: None),
+    )
+    go_index_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.watch.run_go_bootstrap_index",
+        lambda *args, **kwargs: go_index_calls.append(
+            {"args": args, "kwargs": kwargs}
+        ),
+    )
+
+    watch_helper(str(workspace), scope="workspace")
+
+    assert go_index_calls == [
+        {
+            "args": (workspace.resolve(),),
+            "kwargs": {"force": False},
+        }
+    ]
+    graph_builder.build_graph_from_path_async.assert_not_called()

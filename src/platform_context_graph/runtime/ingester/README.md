@@ -32,7 +32,7 @@ The `pcg workspace` command group uses the same source contract:
 - `status` — report workspace config and latest index run
 - `watch` — watch the workspace with optional repo rediscovery
 
-Path-first `pcg index <path>` and `pcg watch <path>` remain local convenience wrappers and are not the canonical remote discovery interface.
+Path-first `pcg index <path>` and `pcg watch <path>` remain local convenience wrappers and are not the canonical remote discovery interface. The `pcg index` wrapper now launches the Go-owned `bootstrap-index` runtime in direct filesystem mode so local directory indexing follows the same parser/write ownership boundary as the deployed data plane.
 
 ## Repo-Local Ignore Rules
 

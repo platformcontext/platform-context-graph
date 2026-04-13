@@ -22,8 +22,8 @@ Do not stop at pod health when the goal is operator confidence in freshness.
    `/api/v0/index-status` route for checkpointed completeness.
 3. If you need a run-specific view, inspect `/api/v0/index-runs/{run_id}` and
    `/api/v0/index-runs/{run_id}/coverage`.
-4. If you are debugging a recovery action, inspect
-   `/api/v0/admin/refinalize/status`.
+4. If you are debugging a recovery action, inspect the ingester
+   `/admin/status` surface before and after the recovery call.
 
 ## Useful Hosted Checks
 
@@ -33,7 +33,10 @@ pcg index-status run-123 --profile qa
 curl -fsS https://pcg.example.com/api/v0/index-status
 curl -fsS https://pcg.example.com/api/v0/index-runs/run-123
 curl -fsS https://pcg.example.com/api/v0/index-runs/run-123/coverage
-curl -fsS https://pcg.example.com/api/v0/admin/refinalize/status
+curl -fsS https://pcg-ingester.example.com/admin/status
+curl -fsS -X POST https://pcg-ingester.example.com/admin/refinalize \
+  -H 'content-type: application/json' \
+  -d '{"scope_ids":["scope-123"]}'
 ```
 
 ## Kubernetes Logs
@@ -50,12 +53,12 @@ Use the API logs for status lookups and admin calls, the ingester logs for
 sync and checkpoint progress, and the resolution-engine logs for queue draining
 and projection recovery.
 
-## Refinalize Boundary
+## Recovery Boundary
 
-The hosted `POST /api/v0/admin/refinalize` route is graph-safe only. It
-supports the rewritten graph-stage recovery path and keeps file-dependent
-bridge stages out of the API. If you need the legacy file-dependent bridge,
-use the CLI-only local recovery path until the Go-owned replacement exists.
+Recovery is now owned by the Go ingester admin surface, not the hosted API.
+Use `POST /admin/refinalize` to re-enqueue active scope generations and
+`POST /admin/replay` to replay failed work items. There is no
+`/api/v0/admin/refinalize/status` companion route anymore.
 
 ## When To Stop
 
@@ -64,4 +67,5 @@ You are done when:
 - the health check is green
 - `index-status` reports the expected checkpointed state
 - the run-specific coverage rows match the expected remaining gaps
-- `admin/refinalize/status` is idle or complete for the recovery flow you ran
+- the ingester `/admin/status` surface reflects the expected queue and stage
+  state after the recovery flow you ran

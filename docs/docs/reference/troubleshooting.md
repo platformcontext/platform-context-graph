@@ -30,8 +30,8 @@ mean the latest repository or run reached a completed checkpoint.
 
 1. Check checkpointed completeness with `pcg index-status <path-or-run-id>`
 2. Inspect `GET /api/v0/index-status` or `GET /api/v0/index-runs/{run_id}`
-3. Inspect `GET /api/v0/admin/refinalize/status` if you are debugging a
-   graph-safe recovery flow
+3. Inspect the ingester `/admin/status` surface if you are debugging a
+   recovery or backlog issue
 4. Use `/admin/status` on the long-running runtimes to see live stage and
    backlog state
 

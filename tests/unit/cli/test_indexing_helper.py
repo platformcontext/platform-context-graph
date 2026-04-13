@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -30,20 +30,25 @@ def test_index_helper_skips_when_nested_files_already_exist(
         get_driver=MagicMock(return_value=driver),
         close_driver=MagicMock(),
     )
-    graph_builder = MagicMock()
     code_finder = SimpleNamespace(
         list_indexed_repositories=lambda: [{"path": str(repo_path)}]
     )
 
     api = SimpleNamespace(
         console=SimpleNamespace(print=prints.append),
-        _initialize_services=lambda: (db_manager, graph_builder, code_finder),
-        _run_index_with_progress=AsyncMock(),
         watch_helper=MagicMock(),
     )
     monkeypatch.setattr(
         "platform_context_graph.cli.helpers.indexing._api",
         lambda: api,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing._initialize_index_status_services",
+        lambda: (db_manager, code_finder),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing.run_go_bootstrap_index",
+        lambda *args, **kwargs: None,
     )
 
     index_helper(str(repo_path))
@@ -51,7 +56,6 @@ def test_index_helper_skips_when_nested_files_already_exist(
     query = session.run.call_args.args[0]
     assert "[:REPO_CONTAINS]->(f:File)" in query
     assert any("already indexed with 3 files" in message for message in prints)
-    graph_builder.build_graph_from_path_async.assert_not_called()
     db_manager.close_driver.assert_called_once()
 
 
@@ -74,26 +78,34 @@ def test_index_helper_force_bypasses_existing_repo_skip(
         get_driver=MagicMock(return_value=driver),
         close_driver=MagicMock(),
     )
-    graph_builder = MagicMock()
     code_finder = SimpleNamespace(
         list_indexed_repositories=lambda: [{"path": str(repo_path)}]
     )
 
     api = SimpleNamespace(
         console=SimpleNamespace(print=prints.append),
-        _initialize_services=lambda: (db_manager, graph_builder, code_finder),
-        _run_index_with_progress=AsyncMock(),
         watch_helper=MagicMock(),
     )
     monkeypatch.setattr(
         "platform_context_graph.cli.helpers.indexing._api",
         lambda: api,
     )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing._initialize_index_status_services",
+        lambda: (db_manager, code_finder),
+    )
+    go_index_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing.run_go_bootstrap_index",
+        lambda *args, **kwargs: go_index_calls.append(
+            {"args": args, "kwargs": kwargs}
+        ),
+    )
 
     index_helper(str(repo_path), force=True)
 
     assert not any("already indexed with 3 files" in message for message in prints)
-    api._run_index_with_progress.assert_awaited_once()
+    assert len(go_index_calls) == 1
     db_manager.close_driver.assert_called_once()
 
 
@@ -114,18 +126,23 @@ def test_index_helper_raises_when_indexing_fails(tmp_path: Path, monkeypatch) ->
         get_driver=MagicMock(return_value=driver),
         close_driver=MagicMock(),
     )
-    graph_builder = MagicMock()
     code_finder = SimpleNamespace(list_indexed_repositories=lambda: [])
 
     api = SimpleNamespace(
         console=SimpleNamespace(print=prints.append),
-        _initialize_services=lambda: (db_manager, graph_builder, code_finder),
-        _run_index_with_progress=MagicMock(side_effect=RuntimeError("boom")),
         watch_helper=MagicMock(),
     )
     monkeypatch.setattr(
         "platform_context_graph.cli.helpers.indexing._api",
         lambda: api,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing._initialize_index_status_services",
+        lambda: (db_manager, code_finder),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing.run_go_bootstrap_index",
+        MagicMock(side_effect=RuntimeError("boom")),
     )
 
     with pytest.raises(RuntimeError, match="boom"):
@@ -148,17 +165,25 @@ def test_index_helper_forwards_runtime_batch_parameters(
     prints: list[str] = []
 
     db_manager = SimpleNamespace(close_driver=MagicMock())
-    graph_builder = MagicMock()
     code_finder = SimpleNamespace(list_indexed_repositories=lambda: [])
     api = SimpleNamespace(
         console=SimpleNamespace(print=prints.append),
-        _initialize_services=lambda: (db_manager, graph_builder, code_finder),
-        _run_index_with_progress=AsyncMock(),
         watch_helper=MagicMock(),
     )
     monkeypatch.setattr(
         "platform_context_graph.cli.helpers.indexing._api",
         lambda: api,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing._initialize_index_status_services",
+        lambda: (db_manager, code_finder),
+    )
+    go_index_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing.run_go_bootstrap_index",
+        lambda *args, **kwargs: go_index_calls.append(
+            {"args": args, "kwargs": kwargs}
+        ),
     )
 
     index_helper(
@@ -169,16 +194,15 @@ def test_index_helper_forwards_runtime_batch_parameters(
         component="repository",
     )
 
-    api._run_index_with_progress.assert_called_once_with(
-        graph_builder,
-        workspace.resolve(),
-        is_dependency=False,
-        force=False,
-        selected_repositories=[repo_a.resolve()],
-        family="sync",
-        source="githubOrg",
-        component="repository",
-    )
+    assert go_index_calls == [
+        {
+            "args": (workspace.resolve(),),
+            "kwargs": {
+                "selected_repositories": [repo_a.resolve()],
+                "force": False,
+            },
+        }
+    ]
     db_manager.close_driver.assert_called_once()
 
 
@@ -193,17 +217,22 @@ def test_index_helper_reports_effective_worker_configuration(
     prints: list[str] = []
 
     db_manager = SimpleNamespace(close_driver=MagicMock())
-    graph_builder = MagicMock()
     code_finder = SimpleNamespace(list_indexed_repositories=lambda: [])
     api = SimpleNamespace(
         console=SimpleNamespace(print=prints.append),
-        _initialize_services=lambda: (db_manager, graph_builder, code_finder),
-        _run_index_with_progress=AsyncMock(),
         watch_helper=MagicMock(),
     )
     monkeypatch.setattr(
         "platform_context_graph.cli.helpers.indexing._api",
         lambda: api,
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing._initialize_index_status_services",
+        lambda: (db_manager, code_finder),
+    )
+    monkeypatch.setattr(
+        "platform_context_graph.cli.helpers.indexing.run_go_bootstrap_index",
+        lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
         "platform_context_graph.cli.config_manager.get_config_value",

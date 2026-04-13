@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import threading
 from pathlib import Path
 
 from ...core.jobs import JobManager
 from ...core.watcher import CodeWatcher, resolve_watch_targets
+from .go_index_runtime import run_go_bootstrap_index
 
 
 def _api():
@@ -108,15 +108,7 @@ def watch_helper(
             api.console.print(
                 "[yellow]⚠[/yellow]  Missing repo index data. Performing initial scan..."
             )
-
-            async def do_index() -> None:
-                """Index the repository before watch mode begins."""
-                await graph_builder.build_graph_from_path_async(
-                    path_obj,
-                    is_dependency=False,
-                )
-
-            asyncio.run(do_index())
+            run_go_bootstrap_index(path_obj, force=False)
             api.console.print("[green]✓[/green] Initial scan complete")
 
         watcher.watch_directory(

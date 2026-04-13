@@ -53,7 +53,7 @@ These options apply at the root command level.
 | `pcg help` | Show the full root help screen. | No |
 | `pcg version` | Print the installed version. | No |
 | `pcg doctor` | Run local diagnostics. | No |
-| `pcg index [path]` | Index a local path. | No |
+| `pcg index [path]` | Index a local path by launching the Go `bootstrap-index` runtime. | No |
 | `pcg index-status [target]` | Show checkpointed index status for a local path, local run, or remote run. This is the completeness signal, not process health. | Yes |
 | `pcg finalize` | **Deprecated.** Recovery is owned by the Go ingester at `/admin/refinalize` and `/admin/replay`. | No |
 | `pcg clean` | Remove orphaned nodes and relationships. | No |
@@ -77,7 +77,7 @@ These options apply at the root command level.
 | :--- | :--- | :--- |
 | `pcg workspace plan` | Preview which repositories the current workspace config selects. | No |
 | `pcg workspace sync` | Materialize the configured workspace without indexing it. | No |
-| `pcg workspace index` | Index the configured workspace. | No |
+| `pcg workspace index` | Index the configured workspace through the Go `bootstrap-index` runtime. | No |
 | `pcg workspace status` | Show workspace path and latest index summary. | Yes |
 | `pcg workspace watch` | Watch the materialized workspace. | No |
 

@@ -74,7 +74,8 @@ Notes:
 
 ### Concurrency And Watch Controls
 
-These settings are the public knobs for the checkpointed Python indexing pipeline and repo-partitioned watch loop.
+These settings are the public knobs for the Go-owned `bootstrap-index` local
+indexing runtime and the repo-partitioned watch loop.
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
@@ -91,7 +92,9 @@ Notes:
 - `PCG_REPO_FILE_PARSE_MULTIPROCESS` enables the process-pool parse engine; leave it `false` until you want the heavier worker-process path.
 - `PCG_MULTIPROCESS_START_METHOD` now defaults to `spawn` because it is the most reliable choice for the parser-heavy process-pool path across local macOS and Linux containers.
 - `PCG_WORKER_MAX_TASKS` is now opt-in. The default leaves parse workers alive for the whole run because recycling long-lived parser workers can stall large local and containerized indexing jobs.
-- `pcg index` and `pcg watch` now print the effective worker/debounce values they are using so local runs match the documented configuration.
+- `pcg index` now launches the Go `bootstrap-index` runtime in direct filesystem
+  mode, while `pcg watch` continues to surface the effective debounce/runtime
+  settings it uses locally.
 
 ### Indexing Scope
 
@@ -215,24 +218,27 @@ pcg workspace watch
 
 - `plan` previews the repositories selected by the current source configuration
 - `sync` materializes the matching repositories into `PCG_REPOS_DIR` without starting a manual index run
-- `index` indexes the materialized `PCG_REPOS_DIR` workspace using the same shared Python indexing path as manual local indexing
+- `index` launches the Go `bootstrap-index` runtime against the configured
+  workspace using direct filesystem mode, so local workspace indexing follows
+  the same Go-owned parser and write path as the deployed data plane
 - `status` reports the configured workspace path plus the latest checkpointed workspace index summary
 - `watch` watches the materialized workspace in repo-partitioned mode and can optionally rediscover newly added repos with `--sync-interval-seconds`
 
 Path-first commands such as `pcg index <path>` and `pcg watch <path>` still work as
-local filesystem convenience wrappers. They do not replace the canonical workspace
-source model.
+local filesystem convenience wrappers. `pcg index` now shells into the Go
+`bootstrap-index` runtime with a persistent state directory under `PCG_HOME`,
+while `pcg watch` remains the local incremental convenience surface. They do not
+replace the canonical workspace source model.
 
 ## Repair And Bridge Commands
 
-Some CLI and admin commands exist to preserve safe recovery during the rewrite.
-Treat them as repair surfaces, not as the default long-running ownership model.
+Some CLI and admin commands still exist to preserve safe recovery during the
+rewrite. Treat them as repair surfaces, not as the default long-running
+ownership model.
 
-- `pcg finalize` remains the CLI repair path for post-commit recovery and
-  backup repair flows that still need file-dependent bridge stages.
-- `pcg admin refinalize` uses the same explicit post-commit writer contract,
-  but the mounted admin path is graph-safe only. It does not run
-  file-dependent bridge stages.
+- `pcg finalize` is deprecated. Recovery is owned by the Go ingester at
+  `/admin/refinalize` and `/admin/replay`.
+- Recovery no longer depends on Python post-commit bridge stages.
 - `pcg workspace index` and `pcg workspace watch` remain valuable for local
   proof and workstation workflows, but the canonical deployed write plane is
   still the split `ingester` plus `resolution-engine` runtime model.

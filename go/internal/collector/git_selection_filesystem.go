@@ -37,6 +37,23 @@ func syncFilesystemRepositories(
 	if err := os.MkdirAll(config.ReposDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create repos dir %q: %w", config.ReposDir, err)
 	}
+	if config.FilesystemDirect {
+		selectedPaths := make([]string, 0, len(repositoryIDs))
+		for _, repoID := range repositoryIDs {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			sourcePath, _, err := filesystemRepoPaths(config, repoID)
+			if err != nil {
+				return nil, err
+			}
+			selectedPaths = append(selectedPaths, sourcePath)
+		}
+		if err := os.WriteFile(manifestPath, []byte(currentManifest), 0o644); err != nil {
+			return nil, fmt.Errorf("write filesystem manifest: %w", err)
+		}
+		return selectedPaths, nil
+	}
 	if err := cleanManagedWorkspace(config.ReposDir); err != nil {
 		return nil, err
 	}
@@ -46,12 +63,10 @@ func syncFilesystemRepositories(
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		checkoutName, err := repoCheckoutName(repoID)
+		sourcePath, targetPath, err := filesystemRepoPaths(config, repoID)
 		if err != nil {
 			return nil, err
 		}
-		sourcePath := filepath.Join(config.FilesystemRoot, filepath.FromSlash(repoID))
-		targetPath := filepath.Join(config.ReposDir, filepath.FromSlash(checkoutName))
 		if err := copyRepositoryTree(sourcePath, targetPath); err != nil {
 			return nil, fmt.Errorf("copy filesystem repository %q: %w", repoID, err)
 		}
@@ -62,6 +77,27 @@ func syncFilesystemRepositories(
 		return nil, fmt.Errorf("write filesystem manifest: %w", err)
 	}
 	return selectedPaths, nil
+}
+
+func filesystemRepoPaths(
+	config RepoSyncConfig,
+	repoID string,
+) (string, string, error) {
+	if strings.TrimSpace(repoID) == "." {
+		checkoutName := filepath.Base(filepath.Clean(config.FilesystemRoot))
+		if strings.TrimSpace(checkoutName) == "" || checkoutName == "." || checkoutName == string(filepath.Separator) {
+			return "", "", fmt.Errorf("invalid filesystem root %q", config.FilesystemRoot)
+		}
+		return config.FilesystemRoot, filepath.Join(config.ReposDir, checkoutName), nil
+	}
+
+	checkoutName, err := repoCheckoutName(repoID)
+	if err != nil {
+		return "", "", err
+	}
+	sourcePath := filepath.Join(config.FilesystemRoot, filepath.FromSlash(repoID))
+	targetPath := filepath.Join(config.ReposDir, filepath.FromSlash(checkoutName))
+	return sourcePath, targetPath, nil
 }
 
 func fingerprintTree(root string) (string, error) {

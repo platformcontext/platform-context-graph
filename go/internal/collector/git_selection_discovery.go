@@ -104,6 +104,9 @@ func discoverFilesystemRepositoryIDs(filesystemRoot string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(repoRoots) == 1 && repoRoots[0] == root {
+		return []string{"."}, nil
+	}
 	repoIDs := make([]string, 0, len(repoRoots))
 	for _, repoRoot := range repoRoots {
 		if repoRoot == root {

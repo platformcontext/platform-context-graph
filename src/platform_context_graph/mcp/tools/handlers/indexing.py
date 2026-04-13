@@ -1,10 +1,13 @@
 """MCP handler functions for indexing operations."""
 
-import asyncio
+from datetime import datetime
 import os
 from pathlib import Path
+import threading
 from typing import Any
 
+from ....cli.helpers.go_index_runtime import run_go_bootstrap_index
+from ....core.jobs import JobStatus
 from ....platform.package_resolver import get_local_package_path
 from ....utils.debug_log import debug_log
 
@@ -48,11 +51,36 @@ def add_code_to_graph(
             job_id, total_files=total_files, estimated_duration=estimated_time
         )
 
-        # Create the coroutine for the background task and schedule it on the main event loop.
-        coro = graph_builder.build_graph_from_path_async(
-            path_obj, is_dependency, job_id
-        )
-        asyncio.run_coroutine_threadsafe(coro, loop)
+        def _run_job() -> None:
+            """Execute the Go-owned bootstrap indexer for one MCP job."""
+
+            job_manager.update_job(
+                job_id,
+                status=JobStatus.RUNNING,
+                start_time=datetime.now(),
+            )
+            try:
+                run_go_bootstrap_index(path_obj, force=False)
+            except Exception as exc:
+                job_manager.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    end_time=datetime.now(),
+                    errors=[str(exc)],
+                )
+                debug_log(
+                    f"Background job {job_id} failed for path {str(path_obj)}: {exc}"
+                )
+                return
+
+            job_manager.update_job(
+                job_id,
+                status=JobStatus.COMPLETED,
+                end_time=datetime.now(),
+                result={"path": str(path_obj)},
+            )
+
+        threading.Thread(target=_run_job, daemon=True).start()
 
         debug_log(
             f"Started background job {job_id} for path: {str(path_obj)}, is_dependency: {is_dependency}"
