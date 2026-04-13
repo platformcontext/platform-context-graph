@@ -17,6 +17,17 @@ class _Store:
         return self._payload.get(ingester)
 
 
+class _DecisionStore:
+    enabled = True
+
+
+class _Queue:
+    enabled = True
+
+    def count_shared_projection_pending(self, *, source_run_id: str | None = None):
+        return 0
+
+
 def test_get_ingester_status_normalizes_datetime_fields(
     monkeypatch,
 ) -> None:
@@ -52,6 +63,59 @@ def test_get_ingester_status_normalizes_datetime_fields(
     assert result["active_last_progress_at"] == "2026-03-22T12:00:45+00:00"
     assert result["active_commit_started_at"] == "2026-03-22T12:00:50+00:00"
     assert result["updated_at"] == "2026-03-22T12:01:00+00:00"
+
+
+def test_get_ingester_status_surfaces_truth_summary(
+    monkeypatch,
+) -> None:
+    """Runtime ingester status should include the reducer truth rollup."""
+
+    store = _Store(
+        {
+            "repository": {
+                "runtime_family": "ingester",
+                "ingester": "repository",
+                "provider": "repository",
+                "status": "indexing",
+                "active_run_id": "run-789",
+                "repository_count": 3,
+                "pending_repositories": 1,
+                "completed_repositories": 2,
+                "failed_repositories": 0,
+                "updated_at": datetime(2026, 3, 22, 12, 1, tzinfo=timezone.utc),
+            }
+        }
+    )
+    monkeypatch.setattr(status_queries, "get_runtime_status_store", lambda: store)
+    monkeypatch.setattr(status_queries, "get_fact_work_queue", lambda: _Queue())
+    monkeypatch.setattr(
+        status_queries,
+        "get_projection_decision_store",
+        lambda: _DecisionStore(),
+    )
+    monkeypatch.setattr(
+        status_queries,
+        "get_shared_projection_intent_store",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        status_queries,
+        "_checkpoint_status_fallback",
+        lambda _ingester: None,
+    )
+
+    result = status_queries.get_ingester_status(object(), ingester="repository")
+
+    assert result["truth_summary"] == {
+        "state": "healthy",
+        "reducer_queue_available": True,
+        "projection_decision_store_available": True,
+        "pending_reducer_work_items": 0,
+        "shared_projection_backlog_count": 0,
+        "shared_projection_domains": [],
+        "shared_projection_oldest_pending_age_seconds": 0.0,
+        "reason": "reducer queue and projection decision store are ready",
+    }
 
 
 def test_request_ingester_scan_control_normalizes_datetime_fields(

@@ -133,6 +133,21 @@ class EntityContentResponse(ContentMetadataFields):
     repo_access: RepoAccess | None = None
 
 
+class ReducerTruthSummary(BaseModel):
+    """Compact live reducer-health summary for operator-facing status views."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    state: Literal["healthy", "degraded", "unknown"]
+    reducer_queue_available: bool
+    projection_decision_store_available: bool
+    pending_reducer_work_items: int = 0
+    shared_projection_backlog_count: int = 0
+    shared_projection_domains: list[str] = Field(default_factory=list)
+    shared_projection_oldest_pending_age_seconds: float = 0.0
+    reason: str | None = None
+
+
 class IngesterStatusResponse(BaseModel):
     """Runtime ingester status exposed by the API and MCP layers."""
 
@@ -166,6 +181,7 @@ class IngesterStatusResponse(BaseModel):
         default_factory=list
     )
     shared_projection_tuning: SharedProjectionTuningStatus | None = None
+    truth_summary: ReducerTruthSummary | None = None
     scan_request_state: str = "idle"
     scan_request_token: str | None = None
     scan_requested_at: str | None = None

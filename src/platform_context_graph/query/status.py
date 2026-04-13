@@ -7,7 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ..facts.state import get_fact_work_queue, get_shared_projection_intent_store
+from ..facts.state import get_fact_work_queue, get_projection_decision_store
+from ..facts.state import get_shared_projection_intent_store
 from ..observability import get_observability, trace_query
 from ..runtime.status_store import (
     get_runtime_status_store,
@@ -361,6 +362,7 @@ def get_ingester_status(
         checkpoint_fallback = _checkpoint_status_fallback(ingester)
         queue = get_fact_work_queue()
         shared_projection_intent_store = get_shared_projection_intent_store()
+        decision_store = get_projection_decision_store()
         if store is not None and store.enabled:
             result = _select_runtime_status_payload(store, ingester=ingester)
             if result is not None:
@@ -375,17 +377,21 @@ def get_ingester_status(
                     result,
                     queue=queue,
                     shared_projection_intent_store=shared_projection_intent_store,
+                    decision_store=decision_store,
                 )
         if checkpoint_fallback is not None:
             return enrich_shared_projection_status(
                 checkpoint_fallback,
                 queue=queue,
                 shared_projection_intent_store=shared_projection_intent_store,
+                decision_store=decision_store,
             )
         return apply_shared_projection_pending_status(
             _default_status(ingester),
             pending_count=0,
             backlog=[],
+            queue=queue,
+            decision_store=decision_store,
         )
 
 

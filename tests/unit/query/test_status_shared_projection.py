@@ -47,6 +47,10 @@ class _SharedStore:
         return list(self.rows)
 
 
+class _DecisionStore:
+    enabled = True
+
+
 def test_get_ingester_status_surfaces_shared_projection_pending(
     monkeypatch,
 ) -> None:
@@ -107,6 +111,7 @@ def test_get_ingester_status_surfaces_shared_projection_pending(
             },
         },
     )
+    status_shared_projection._cached_tuning_report.cache_clear()
     monkeypatch.setattr(
         status_queries, "_checkpoint_status_fallback", lambda _ingester: None
     )
@@ -143,6 +148,139 @@ def test_get_ingester_status_surfaces_shared_projection_pending(
     }
     assert queue.calls == ["run-123"]
     assert shared_store.calls == ["run-123"]
+
+
+def test_get_ingester_status_surfaces_reducer_truth_summary(
+    monkeypatch,
+) -> None:
+    """Status should expose a compact reducer-health rollup."""
+
+    store = _Store(
+        {
+            "repository": {
+                "runtime_family": "ingester",
+                "ingester": "repository",
+                "provider": "repository",
+                "status": "completed",
+                "finalization_status": "completed",
+                "active_run_id": "run-456",
+                "repository_count": 4,
+                "pending_repositories": 0,
+                "completed_repositories": 4,
+                "failed_repositories": 0,
+                "updated_at": datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc),
+            }
+        }
+    )
+    queue = _Queue(pending_count=3)
+    shared_store = _SharedStore(
+        [
+            {
+                "projection_domain": "repo_dependency",
+                "pending_depth": 2,
+                "oldest_age_seconds": 22.0,
+            },
+            {
+                "projection_domain": "platform_infra",
+                "pending_depth": 1,
+                "oldest_age_seconds": 33.0,
+            },
+        ]
+    )
+    monkeypatch.setattr(status_queries, "get_runtime_status_store", lambda: store)
+    monkeypatch.setattr(status_queries, "get_fact_work_queue", lambda: queue)
+    monkeypatch.setattr(status_queries, "get_shared_projection_intent_store", lambda: shared_store)
+    monkeypatch.setattr(
+        status_queries, "get_projection_decision_store", lambda: _DecisionStore()
+    )
+    monkeypatch.setattr(
+        status_shared_projection,
+        "build_tuning_report",
+        lambda *, include_platform=False: {
+            "include_platform": include_platform,
+            "projection_domains": ["repo_dependency", "platform_infra"],
+            "recommended": {
+                "setting": "4x2",
+                "partition_count": 4,
+                "batch_limit": 2,
+                "round_count": 2,
+                "processed_total": 32,
+                "peak_pending_total": 32,
+                "mean_processed_per_round": 16.0,
+            },
+        },
+    )
+    status_shared_projection._cached_tuning_report.cache_clear()
+    monkeypatch.setattr(
+        status_queries, "_checkpoint_status_fallback", lambda _ingester: None
+    )
+
+    result = status_queries.get_ingester_status(object(), ingester="repository")
+
+    assert result["truth_summary"] == {
+        "state": "degraded",
+        "reducer_queue_available": True,
+        "projection_decision_store_available": True,
+        "pending_reducer_work_items": 3,
+        "shared_projection_backlog_count": 2,
+        "shared_projection_domains": [
+            "repo_dependency",
+            "platform_infra",
+        ],
+        "shared_projection_oldest_pending_age_seconds": 33.0,
+        "reason": (
+            "3 reducer work item(s) still awaiting follow-up; "
+            "2 shared projection domain(s) still pending"
+        ),
+    }
+
+
+def test_get_ingester_status_marks_truth_summary_unknown_when_support_missing(
+    monkeypatch,
+) -> None:
+    """Status should admit when the reducer truth plane is unavailable."""
+
+    store = _Store(
+        {
+            "repository": {
+                "runtime_family": "ingester",
+                "ingester": "repository",
+                "provider": "repository",
+                "status": "idle",
+                "repository_count": 0,
+                "pending_repositories": 0,
+                "completed_repositories": 0,
+                "failed_repositories": 0,
+                "updated_at": datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc),
+            }
+        }
+    )
+    monkeypatch.setattr(status_queries, "get_runtime_status_store", lambda: store)
+    monkeypatch.setattr(status_queries, "get_fact_work_queue", lambda: None)
+    monkeypatch.setattr(
+        status_queries,
+        "get_shared_projection_intent_store",
+        lambda: _SharedStore([]),
+    )
+    monkeypatch.setattr(
+        status_queries, "get_projection_decision_store", lambda: None
+    )
+    monkeypatch.setattr(
+        status_queries, "_checkpoint_status_fallback", lambda _ingester: None
+    )
+
+    result = status_queries.get_ingester_status(object(), ingester="repository")
+
+    assert result["truth_summary"] == {
+        "state": "unknown",
+        "reducer_queue_available": False,
+        "projection_decision_store_available": False,
+        "pending_reducer_work_items": 0,
+        "shared_projection_backlog_count": 0,
+        "shared_projection_domains": [],
+        "shared_projection_oldest_pending_age_seconds": 0.0,
+        "reason": "reducer queue and projection decision store are unavailable",
+    }
 
 
 def test_get_ingester_status_ignores_shadow_pending_without_active_run(
@@ -308,6 +446,7 @@ def test_get_ingester_status_uses_platform_tuning_when_platform_backlog_present(
             },
         },
     )
+    status_shared_projection._cached_tuning_report.cache_clear()
     monkeypatch.setattr(
         status_queries, "_checkpoint_status_fallback", lambda _ingester: None
     )

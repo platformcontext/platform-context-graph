@@ -59,6 +59,74 @@ def _build_shared_projection_tuning(
     }
 
 
+def _build_reducer_truth_summary(
+    *,
+    queue: Any | None,
+    decision_store: Any | None,
+    pending_count: int | None,
+    backlog: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Return a compact, truthful reducer-health summary."""
+
+    queue_available = bool(queue is not None and getattr(queue, "enabled", True))
+    decision_store_available = bool(
+        decision_store is not None and getattr(decision_store, "enabled", True)
+    )
+    pending_count_known = pending_count is not None
+    pending_work_items = max(int(pending_count or 0), 0)
+    backlog_domains = [
+        str(row.get("projection_domain") or "").strip()
+        for row in backlog
+        if str(row.get("projection_domain") or "").strip()
+    ]
+    oldest_pending_age_seconds = max(
+        (float(row.get("oldest_pending_age_seconds") or 0.0) for row in backlog),
+        default=0.0,
+    )
+
+    if not queue_available and not decision_store_available:
+        state = "unknown"
+        reason = "reducer queue and projection decision store are unavailable"
+    elif (
+        pending_count_known
+        and pending_work_items <= 0
+        and not backlog_domains
+        and queue_available
+        and decision_store_available
+    ):
+        state = "healthy"
+        reason = "reducer queue and projection decision store are ready"
+    else:
+        state = "degraded"
+        reason_parts: list[str] = []
+        if pending_work_items > 0:
+            reason_parts.append(
+                f"{pending_work_items} reducer work item(s) still awaiting follow-up"
+            )
+        if backlog_domains:
+            reason_parts.append(
+                f"{len(backlog_domains)} shared projection domain(s) still pending"
+            )
+        if not queue_available:
+            reason_parts.append("fact queue unavailable")
+        elif not pending_count_known:
+            reason_parts.append("fact queue pending count unavailable")
+        if not decision_store_available:
+            reason_parts.append("projection decision store unavailable")
+        reason = "; ".join(reason_parts) if reason_parts else "reducer health is degraded"
+
+    return {
+        "state": state,
+        "reducer_queue_available": queue_available,
+        "projection_decision_store_available": decision_store_available,
+        "pending_reducer_work_items": pending_work_items,
+        "shared_projection_backlog_count": len(backlog_domains),
+        "shared_projection_domains": backlog_domains,
+        "shared_projection_oldest_pending_age_seconds": oldest_pending_age_seconds,
+        "reason": reason,
+    }
+
+
 def count_pending_shared_projection_repositories(
     queue: Any | None, *, source_run_id: str | None
 ) -> int | None:
@@ -116,6 +184,8 @@ def apply_shared_projection_pending_status(
     *,
     pending_count: int | None,
     backlog: list[dict[str, Any]] | None = None,
+    queue: Any | None = None,
+    decision_store: Any | None = None,
 ) -> dict[str, Any]:
     """Project shared-follow-up pending state into the public ingester payload."""
 
@@ -123,6 +193,12 @@ def apply_shared_projection_pending_status(
     normalized["shared_projection_backlog"] = list(backlog or [])
     normalized["shared_projection_tuning"] = _build_shared_projection_tuning(
         normalized["shared_projection_backlog"]
+    )
+    normalized["truth_summary"] = _build_reducer_truth_summary(
+        queue=queue,
+        decision_store=decision_store,
+        pending_count=pending_count,
+        backlog=normalized["shared_projection_backlog"],
     )
     if pending_count is None:
         normalized["shared_projection_pending_repositories"] = int(
@@ -155,6 +231,7 @@ def enrich_shared_projection_status(
     *,
     queue: Any | None,
     shared_projection_intent_store: Any | None,
+    decision_store: Any | None,
 ) -> dict[str, Any]:
     """Return one status payload enriched with shared-projection state."""
 
@@ -171,4 +248,6 @@ def enrich_shared_projection_status(
         payload,
         pending_count=pending_count,
         backlog=backlog,
+        queue=queue,
+        decision_store=decision_store,
     )

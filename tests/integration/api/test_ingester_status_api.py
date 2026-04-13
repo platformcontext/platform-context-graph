@@ -62,6 +62,16 @@ def test_create_app_exposes_shared_projection_status_fields() -> None:
                         "mean_processed_per_round": 16.0,
                     },
                 },
+                "truth_summary": {
+                    "state": "degraded",
+                    "reducer_queue_available": True,
+                    "projection_decision_store_available": True,
+                    "pending_reducer_work_items": 2,
+                    "shared_projection_backlog_count": 1,
+                    "shared_projection_domains": ["repo_dependency"],
+                    "shared_projection_oldest_pending_age_seconds": 33.0,
+                    "reason": "2 reducer work item(s) still awaiting follow-up; 1 shared projection domain(s) still pending",
+                },
                 "scan_request_state": "idle",
                 "scan_request_token": None,
                 "scan_requested_at": None,
@@ -93,3 +103,4 @@ def test_create_app_exposes_shared_projection_status_fields() -> None:
         }
     ]
     assert payload["shared_projection_tuning"]["recommended"]["setting"] == "4x2"
+    assert payload["truth_summary"]["state"] == "degraded"

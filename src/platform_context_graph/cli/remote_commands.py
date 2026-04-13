@@ -119,6 +119,32 @@ def render_remote_workspace_status(
                 main_module.console.print(
                     f"[cyan]Recommended tuning:[/cyan] {recommended_setting}"
                 )
+    truth_summary = status.get("truth_summary")
+    if isinstance(truth_summary, dict):
+        queue_state = "ready" if truth_summary.get("reducer_queue_available") else "unavailable"
+        decision_state = (
+            "ready"
+            if truth_summary.get("projection_decision_store_available")
+            else "unavailable"
+        )
+        pending_reducer_work_items = int(
+            truth_summary.get("pending_reducer_work_items", 0) or 0
+        )
+        backlog_count = int(truth_summary.get("shared_projection_backlog_count", 0) or 0)
+        oldest_age_seconds = float(
+            truth_summary.get("shared_projection_oldest_pending_age_seconds", 0.0)
+            or 0.0
+        )
+        main_module.console.print(
+            "[cyan]Truth summary:[/cyan] "
+            f"{truth_summary.get('state', 'unknown')} "
+            f"(queue={queue_state}, decision_store={decision_state}, "
+            f"pending={pending_reducer_work_items}, backlog={backlog_count}, "
+            f"oldest={oldest_age_seconds:.1f}s)"
+        )
+        reason = str(truth_summary.get("reason") or "").strip()
+        if reason:
+            main_module.console.print(f"[dim]{reason}[/dim]")
 
 
 def run_remote_admin_reindex(

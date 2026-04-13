@@ -75,3 +75,29 @@ def test_get_index_status_schema_describes_checkpoint_root_default() -> None:
 
     assert "checkpoint root" in description
     assert "current working directory" not in description
+
+
+def test_get_ingester_status_tool_returns_truth_summary(monkeypatch) -> None:
+    """MCP runtime status should pass through the reducer truth summary."""
+
+    monkeypatch.setattr(
+        runtime_tools.status_queries,
+        "get_ingester_status",
+        lambda _database, *, ingester="repository": {
+            "ingester": ingester,
+            "truth_summary": {
+                "state": "healthy",
+                "reducer_queue_available": True,
+                "projection_decision_store_available": True,
+                "pending_reducer_work_items": 0,
+                "shared_projection_backlog_count": 0,
+                "shared_projection_domains": [],
+                "shared_projection_oldest_pending_age_seconds": 0.0,
+                "reason": "reducer queue and projection decision store are ready",
+            },
+        },
+    )
+
+    result = _Server().get_ingester_status_tool(ingester="repository")
+
+    assert result["truth_summary"]["state"] == "healthy"
