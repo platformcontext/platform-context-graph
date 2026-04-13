@@ -120,6 +120,8 @@ func (e *Engine) parseDefinition(
 		return e.parseGo(resolvedPath, isDependency, options)
 	case "hcl":
 		return e.parseHCL(resolvedPath, isDependency, options)
+	case "sql":
+		return e.parseSQL(resolvedPath, isDependency, options)
 	case "tsx":
 		return e.parseJavaScriptLike(resolvedPath, "tsx", "tsx", isDependency, options)
 	case "typescript":

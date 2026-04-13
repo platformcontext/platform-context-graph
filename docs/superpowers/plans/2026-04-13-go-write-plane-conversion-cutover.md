@@ -59,12 +59,14 @@ cutover draft assumed:
   CloudFormation YAML
 - `go/internal/parser/dockerfile_language.go` now owns the first native
   Dockerfile adapter slice
+- `go/internal/parser/sql_language.go` now owns the native SQL schema,
+  relationship, migration, and partial-recovery adapter slice
 - `go/internal/parser/raw_text_engine.go` owns the raw-text fallback path
 
 That slice is still parser-matrix-incomplete. The remaining honest parser
-scope now centers on SQL runtime ownership, SCIP parity, the specialized
-data-intelligence JSON families, and the remaining long-tail language
-adapters before the collector hot path can truthfully drop Python.
+scope now centers on SCIP parity, the specialized data-intelligence JSON
+families, and the remaining long-tail language adapters before the collector
+hot path can truthfully drop Python.
 
 No new ingestors should start until the milestones in this plan are complete.
 Treat this plan as the active cutover path until the merge bar below is fully
@@ -194,10 +196,12 @@ Progress on this step:
 - [x] Native config/IaC adapters landed for JSON, Terraform/Terragrunt, YAML
   infrastructure, and Dockerfile in
   `go/internal/parser/{json_language,hcl_language,yaml_language,yaml_semantics,yaml_helm,dockerfile_language}.go`
+- [x] Native SQL adapter landed in
+  `go/internal/parser/{sql_language,sql_shared,sql_migrations}.go`
 - [ ] Extend the native parser runtime to the remaining representative language
-  family adapters still missing for truthful matrix parity: SQL runtime
-  ownership, SCIP parity, specialized JSON data-intelligence documents, and
-  the remaining long-tail language slices
+  family adapters still missing for truthful matrix parity: SCIP parity,
+  specialized JSON data-intelligence documents, and the remaining long-tail
+  language slices
 
 - [ ] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 

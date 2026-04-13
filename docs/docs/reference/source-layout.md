@@ -226,6 +226,8 @@ Current native parser-runtime slice:
   `yaml_helm.go`: infrastructure YAML adapter slice for Kubernetes, Argo CD,
   Crossplane, Kustomize, Helm, and CloudFormation YAML
 - `go/internal/parser/dockerfile_language.go`: Dockerfile adapter slice
+- `go/internal/parser/sql_language.go`: SQL schema, relationship, migration,
+  and partial-recovery adapter slice
 - `go/internal/parser/raw_text_engine.go`: raw-text fallback for searchable
   template and config artifacts
 
@@ -233,9 +235,9 @@ These Go packages are the target normal-path runtime ownership. Python bridge
 modules under `runtime/ingester/*bridge.py` remain removal debt until the
 collector hot path and parser platform are fully cut over.
 
-The parser cutover is still in progress. SQL runtime ownership, SCIP parity,
-specialized data-intelligence JSON families, and the remaining long-tail
-language adapters are still active cutover work, not finished debt.
+The parser cutover is still in progress. SCIP parity, specialized
+data-intelligence JSON families, and the remaining long-tail language adapters
+are still active cutover work, not finished debt.
 
 Do not start new ingestor families until the Git write-plane cutover, parser
 platform cutover, and bridge removal are complete.
