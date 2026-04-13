@@ -32,6 +32,10 @@ type Service struct {
 	Executor     Executor
 	WorkSink     WorkSink
 	Wait         func(context.Context, time.Duration) error
+
+	// SharedProjectionEdgeWriter is the Neo4j edge writer used by the shared
+	// projection worker loop (ProcessPartitionOnce). Nil until Neo4j is wired.
+	SharedProjectionEdgeWriter SharedProjectionEdgeWriter
 }
 
 // Run polls for reducer work until the context is canceled.

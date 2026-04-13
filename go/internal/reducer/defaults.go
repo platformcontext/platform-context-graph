@@ -6,6 +6,9 @@ type DefaultHandlers struct {
 	WorkloadIdentityWriter        WorkloadIdentityWriter
 	CloudAssetResolutionWriter    CloudAssetResolutionWriter
 	PlatformMaterializationWriter PlatformMaterializationWriter
+
+	// Neo4j-backed adapters for canonical graph writes.
+	WorkloadMaterializer *WorkloadMaterializer
 }
 
 // NewDefaultRegistry constructs the canonical reducer catalog for the domains

@@ -9,14 +9,27 @@ import (
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
+	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
+
+// stubNeo4jExecutor is a no-op executor for tests that don't exercise Neo4j.
+type stubNeo4jExecutor struct{}
+
+func (stubNeo4jExecutor) Execute(_ context.Context, _ sourceneo4j.Statement) error { return nil }
+
+// stubCypherExecutor is a no-op CypherExecutor for tests that don't exercise Neo4j.
+type stubCypherExecutor struct{}
+
+func (stubCypherExecutor) ExecuteCypher(_ context.Context, _ string, _ map[string]any) error {
+	return nil
+}
 
 func TestBuildReducerServiceWiresDefaultRuntimeAndQueue(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, func(string) string { return "" })
+	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("buildReducerService() error = %v, want nil", err)
 	}
@@ -38,7 +51,7 @@ func TestBuildReducerServiceWiresPostgresWorkloadIdentityWriter(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, func(string) string { return "" })
+	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("buildReducerService() error = %v, want nil", err)
 	}
@@ -76,7 +89,7 @@ func TestBuildReducerServiceWiresPostgresCloudAssetResolutionWriter(t *testing.T
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, func(string) string { return "" })
+	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("buildReducerService() error = %v, want nil", err)
 	}
@@ -114,7 +127,7 @@ func TestBuildReducerServiceWiresRetryConfigFromEnv(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, func(name string) string {
+	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, func(name string) string {
 		switch name {
 		case reducerRetryDelayEnv:
 			return "2m"

@@ -14,6 +14,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 	runtimecfg "github.com/platformcontext/platform-context-graph/go/internal/runtime"
 	statuspkg "github.com/platformcontext/platform-context-graph/go/internal/status"
+	sourceneo4j "github.com/platformcontext/platform-context-graph/go/internal/storage/neo4j"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
@@ -30,7 +31,13 @@ func run(parent context.Context) error {
 	}
 	defer db.Close()
 
-	serviceRunner, err := buildReducerService(postgres.SQLDB{DB: db}, os.Getenv)
+	neo4jExecutor, cypherExecutor, neo4jCloser, err := openReducerNeo4jAdapters(parent, os.Getenv)
+	if err != nil {
+		return err
+	}
+	defer neo4jCloser.Close()
+
+	serviceRunner, err := buildReducerService(postgres.SQLDB{DB: db}, neo4jExecutor, cypherExecutor, os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -64,14 +71,24 @@ func run(parent context.Context) error {
 	return service.Run(ctx)
 }
 
-func buildReducerService(database postgres.ExecQueryer, getenv func(string) string) (reducer.Service, error) {
+func buildReducerService(
+	database postgres.ExecQueryer,
+	neo4jExec sourceneo4j.Executor,
+	cypherExec reducer.CypherExecutor,
+	getenv func(string) string,
+) (reducer.Service, error) {
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
-		WorkloadIdentityWriter:     reducer.PostgresWorkloadIdentityWriter{DB: database},
-		CloudAssetResolutionWriter: reducer.PostgresCloudAssetResolutionWriter{DB: database},
+		WorkloadIdentityWriter:        reducer.PostgresWorkloadIdentityWriter{DB: database},
+		CloudAssetResolutionWriter:    reducer.PostgresCloudAssetResolutionWriter{DB: database},
+		PlatformMaterializationWriter: reducer.PostgresPlatformMaterializationWriter{DB: database},
+		WorkloadMaterializer:          reducer.NewWorkloadMaterializer(cypherExec),
 	})
 	if err != nil {
 		return reducer.Service{}, err
 	}
+
+	edgeWriter := sourceneo4j.NewEdgeWriter(neo4jExec)
+
 	retryCfg, err := loadReducerQueueConfig(getenv)
 	if err != nil {
 		return reducer.Service{}, err
@@ -81,9 +98,10 @@ func buildReducerService(database postgres.ExecQueryer, getenv func(string) stri
 	workQueue.MaxAttempts = retryCfg.MaxAttempts
 
 	return reducer.Service{
-		PollInterval: time.Second,
-		WorkSource:   workQueue,
-		Executor:     executor,
-		WorkSink:     workQueue,
+		PollInterval:               time.Second,
+		WorkSource:                 workQueue,
+		Executor:                   executor,
+		WorkSink:                   workQueue,
+		SharedProjectionEdgeWriter: edgeWriter,
 	}, nil
 }
