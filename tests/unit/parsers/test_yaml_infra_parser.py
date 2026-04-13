@@ -413,10 +413,14 @@ def test_yaml_infra_facade_stays_thin_and_semantic_modules_are_importable() -> N
         "argocd",
         "crossplane",
         "helm",
-        "kubernetes_manifest",
         "kustomize",
     ):
         module = importlib.import_module(
             f"platform_context_graph.parsers.languages.{module_name}"
         )
         assert module is not None
+
+    kubernetes_manifest = importlib.import_module(
+        "platform_context_graph.kubernetes_manifest"
+    )
+    assert kubernetes_manifest is not None

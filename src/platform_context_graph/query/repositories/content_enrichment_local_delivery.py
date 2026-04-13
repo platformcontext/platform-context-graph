@@ -6,7 +6,7 @@ import posixpath
 from pathlib import PurePosixPath
 from typing import Any
 
-from ...parsers.languages.kubernetes_manifest import extract_container_images
+from ...kubernetes_manifest import extract_container_images
 from ...resolution.platform_families import format_platform_kind_label
 from .content_enrichment_support import (
     infer_environment_from_path,

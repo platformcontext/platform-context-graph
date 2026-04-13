@@ -1,29 +1,19 @@
-"""Kubernetes-style YAML manifest classification and parsing."""
+"""Shared Kubernetes manifest helpers used outside parser-only modules."""
+
+from __future__ import annotations
 
 from typing import Any
 
 
 def has_k8s_api_version(api_version: str | None) -> bool:
-    """Return whether the document declares any Kubernetes-style API version.
+    """Return whether the document declares any Kubernetes-style API version."""
 
-    Args:
-        api_version: Resource API version.
-
-    Returns:
-        ``True`` when the document has a non-empty API version.
-    """
     return bool(api_version)
 
 
 def extract_container_images(doc: dict[str, Any]) -> list[str]:
-    """Extract container images from workload-style Kubernetes resources.
+    """Extract workload container images from a Kubernetes-style manifest."""
 
-    Args:
-        doc: Parsed YAML document.
-
-    Returns:
-        Image references found in containers and initContainers.
-    """
     images: list[str] = []
     spec = doc.get("spec", {}) or {}
     template = spec.get("template", {}) or {}
@@ -41,26 +31,6 @@ def extract_container_images(doc: dict[str, Any]) -> list[str]:
     return images
 
 
-def _extract_httproute_backends(doc: dict[str, Any]) -> list[str]:
-    """Extract backend service names from an HTTPRoute spec.
-
-    Args:
-        doc: Parsed HTTPRoute YAML document.
-
-    Returns:
-        Service names referenced in backendRefs.
-    """
-    backends: list[str] = []
-    spec = doc.get("spec", {}) or {}
-    for rule in spec.get("rules", []) or []:
-        if not isinstance(rule, dict):
-            continue
-        for ref in rule.get("backendRefs", []) or []:
-            if isinstance(ref, dict) and ref.get("name"):
-                backends.append(ref["name"])
-    return backends
-
-
 def parse_k8s_resource(
     doc: dict[str, Any],
     metadata: dict[str, Any],
@@ -70,20 +40,8 @@ def parse_k8s_resource(
     line_number: int,
     language_name: str,
 ) -> dict[str, Any]:
-    """Parse a generic Kubernetes-style resource.
+    """Parse one generic Kubernetes-style resource into runtime metadata."""
 
-    Args:
-        doc: Parsed YAML document.
-        metadata: Resource metadata.
-        api_version: Resource API version.
-        kind: Resource kind.
-        path: Source file path.
-        line_number: 1-based document start line.
-        language_name: Language name to include in the result.
-
-    Returns:
-        Parsed Kubernetes-style resource metadata.
-    """
     node: dict[str, Any] = {
         "name": metadata.get("name", ""),
         "line_number": line_number,
@@ -108,3 +66,17 @@ def parse_k8s_resource(
         if backends:
             node["backend_refs"] = ",".join(backends)
     return node
+
+
+def _extract_httproute_backends(doc: dict[str, Any]) -> list[str]:
+    """Extract backend service names from an HTTPRoute spec."""
+
+    backends: list[str] = []
+    spec = doc.get("spec", {}) or {}
+    for rule in spec.get("rules", []) or []:
+        if not isinstance(rule, dict):
+            continue
+        for ref in rule.get("backendRefs", []) or []:
+            if isinstance(ref, dict) and ref.get("name"):
+                backends.append(ref["name"])
+    return backends

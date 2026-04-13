@@ -118,6 +118,14 @@ seams, the dependency/package indexing cutover, and the end-to-end
 materialization gaps for newer parser buckets and metadata that now exist in
 Go payloads but still need full runtime persistence parity.
 
+The last live `src/` runtime import into `platform_context_graph.parsers.*`
+has now been removed by moving Kubernetes manifest helpers into
+`src/platform_context_graph/kubernetes_manifest.py`. The remaining Python
+parser package surface is no longer on the normal runtime path; it is now
+concentrated in parser-package modules, capability metadata, and offline/test
+helpers that must be deleted only after Go feature-parity coverage is fully
+proven.
+
 Parser extraction ownership already moved further than the generated capability
 matrix currently shows:
 

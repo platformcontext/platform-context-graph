@@ -16,7 +16,6 @@ cutover) completes and the final Chunk 5 deletions are applied.
 from __future__ import annotations
 
 import ast
-import os
 from pathlib import Path
 
 import pytest
@@ -233,4 +232,38 @@ class TestGoPythonBridgeImportsRemoved:
             "Go cmd/ binaries still import pythonbridge:\n"
             + "\n".join(f"  - {v}" for v in violations)
             + "\nBlocked on Chunk 2 native collector cutover"
+        )
+
+
+class TestPythonParserRuntimeOwnershipRemoved:
+    """Verify runtime modules no longer import parser-owned Python helpers."""
+
+    def test_no_src_runtime_module_imports_parser_package(self) -> None:
+        """Modules outside `parsers/` should not import parser packages."""
+
+        violations: list[str] = []
+        for target in SRC_ROOT.rglob("*.py"):
+            relative_path = target.relative_to(SRC_ROOT)
+            if relative_path.parts[0] == "parsers":
+                continue
+
+            tree = ast.parse(target.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    if any(
+                        alias.name.startswith("platform_context_graph.parsers")
+                        for alias in node.names
+                    ):
+                        violations.append(str(relative_path))
+                        break
+                if isinstance(node, ast.ImportFrom):
+                    module_name = node.module or ""
+                    if "parsers" in module_name:
+                        violations.append(str(relative_path))
+                        break
+
+        assert not violations, (
+            "Runtime modules outside src/platform_context_graph/parsers still "
+            "import the Python parser package:\n"
+            + "\n".join(f"  - {path}" for path in sorted(set(violations)))
         )
