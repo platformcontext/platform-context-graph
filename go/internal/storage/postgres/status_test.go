@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -34,6 +35,12 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 					{"superseded", int64(3)},
 					{"failed", int64(1)},
 					{"inactive", int64(2)},
+				},
+			},
+			{
+				rows: [][]any{
+					{"scope-1", "generation-b", "active", "snapshot", "fresh snapshot", time.Date(2026, 4, 12, 15, 45, 0, 0, time.UTC), time.Date(2026, 4, 12, 15, 46, 0, 0, time.UTC), nil, "generation-b"},
+					{"scope-1", "generation-a", "superseded", "snapshot", "changed files", time.Date(2026, 4, 12, 15, 30, 0, 0, time.UTC), time.Date(2026, 4, 12, 15, 31, 0, 0, time.UTC), time.Date(2026, 4, 12, 15, 40, 0, 0, time.UTC), "generation-b"},
 				},
 			},
 			{
@@ -110,6 +117,12 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 	if len(got.StageCounts) != 3 {
 		t.Fatalf("ReadRawSnapshot().StageCounts len = %d, want 3", len(got.StageCounts))
 	}
+	if len(got.GenerationTransitions) != 2 {
+		t.Fatalf("ReadRawSnapshot().GenerationTransitions len = %d, want 2", len(got.GenerationTransitions))
+	}
+	if got.GenerationTransitions[0].CurrentActiveGenerationID != "generation-b" {
+		t.Fatalf("ReadRawSnapshot().GenerationTransitions[0].CurrentActiveGenerationID = %q, want %q", got.GenerationTransitions[0].CurrentActiveGenerationID, "generation-b")
+	}
 	if len(got.DomainBacklogs) != 2 {
 		t.Fatalf("ReadRawSnapshot().DomainBacklogs len = %d, want 2", len(got.DomainBacklogs))
 	}
@@ -117,12 +130,15 @@ func TestStatusStoreReadRawSnapshot(t *testing.T) {
 		t.Fatalf("ReadRawSnapshot().DomainBacklogs[0].OldestAge = %v, want %v", got.DomainBacklogs[0].OldestAge, 90*time.Second)
 	}
 
-	if len(queryer.queries) != 5 {
-		t.Fatalf("QueryContext() call count = %d, want 5", len(queryer.queries))
+	if len(queryer.queries) != 6 {
+		t.Fatalf("QueryContext() call count = %d, want 6", len(queryer.queries))
 	}
 	for _, want := range []string{
 		"FROM ingestion_scopes",
 		"FROM scope_generations",
+		"JOIN ingestion_scopes",
+		"activated_at",
+		"superseded_at",
 		"FROM fact_work_items",
 	} {
 		joined := strings.Join(queryer.queries, "\n")
@@ -224,6 +240,21 @@ func (r *fakeRows) Scan(dest ...any) error {
 				return fmt.Errorf("row[%d] type = %T, want float64", i, row[i])
 			}
 			*target = value
+		case *time.Time:
+			value, ok := row[i].(time.Time)
+			if !ok {
+				return fmt.Errorf("row[%d] type = %T, want time.Time", i, row[i])
+			}
+			*target = value
+		case *sql.NullTime:
+			switch value := row[i].(type) {
+			case nil:
+				*target = sql.NullTime{}
+			case time.Time:
+				*target = sql.NullTime{Time: value, Valid: true}
+			default:
+				return fmt.Errorf("row[%d] type = %T, want time.Time or nil", i, row[i])
+			}
 		default:
 			return fmt.Errorf("unsupported scan target %T", dest[i])
 		}

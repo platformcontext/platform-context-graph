@@ -62,15 +62,16 @@ type DomainBacklog struct {
 
 // RawSnapshot is the read-only substrate snapshot gathered from Postgres.
 type RawSnapshot struct {
-	AsOf              time.Time
-	ScopeCounts       []NamedCount
-	GenerationCounts  []NamedCount
-	ScopeActivity     ScopeActivitySnapshot
-	GenerationHistory GenerationHistorySnapshot
-	StageCounts       []StageStatusCount
-	DomainBacklogs    []DomainBacklog
-	RetryPolicies     []RetryPolicySummary
-	Queue             QueueSnapshot
+	AsOf                  time.Time
+	ScopeCounts           []NamedCount
+	GenerationCounts      []NamedCount
+	ScopeActivity         ScopeActivitySnapshot
+	GenerationHistory     GenerationHistorySnapshot
+	GenerationTransitions []GenerationTransitionSnapshot
+	StageCounts           []StageStatusCount
+	DomainBacklogs        []DomainBacklog
+	RetryPolicies         []RetryPolicySummary
+	Queue                 QueueSnapshot
 }
 
 // Reader loads the raw status snapshot from an underlying storage backend.
@@ -103,17 +104,18 @@ type StageSummary struct {
 
 // Report is the operator-facing summary rendered by CLI and future admin APIs.
 type Report struct {
-	AsOf              time.Time
-	Health            HealthSummary
-	FlowSummaries     []FlowSummary
-	Queue             QueueSnapshot
-	RetryPolicies     []RetryPolicySummary
-	ScopeActivity     ScopeActivitySnapshot
-	GenerationHistory GenerationHistorySnapshot
-	ScopeTotals       map[string]int
-	GenerationTotals  map[string]int
-	StageSummaries    []StageSummary
-	DomainBacklogs    []DomainBacklog
+	AsOf                  time.Time
+	Health                HealthSummary
+	FlowSummaries         []FlowSummary
+	Queue                 QueueSnapshot
+	RetryPolicies         []RetryPolicySummary
+	ScopeActivity         ScopeActivitySnapshot
+	GenerationHistory     GenerationHistorySnapshot
+	GenerationTransitions []GenerationTransitionSnapshot
+	ScopeTotals           map[string]int
+	GenerationTotals      map[string]int
+	StageSummaries        []StageSummary
+	DomainBacklogs        []DomainBacklog
 }
 
 // DefaultOptions returns the baseline operator heuristics for this first live
@@ -167,17 +169,18 @@ func BuildReport(raw RawSnapshot, opts Options) Report {
 	flowSummaries := buildFlowSummaries(scopeTotals, generationTotals, stageSummaries, raw.Queue, domainBacklogs)
 
 	return Report{
-		AsOf:              raw.AsOf,
-		Health:            evaluateHealth(raw.Queue, generationTotals, opts),
-		FlowSummaries:     flowSummaries,
-		Queue:             raw.Queue,
-		RetryPolicies:     cloneRetryPolicies(raw.RetryPolicies),
-		ScopeActivity:     scopeActivity,
-		GenerationHistory: generationHistory,
-		ScopeTotals:       scopeTotals,
-		GenerationTotals:  generationTotals,
-		StageSummaries:    stageSummaries,
-		DomainBacklogs:    domainBacklogs,
+		AsOf:                  raw.AsOf,
+		Health:                evaluateHealth(raw.Queue, generationTotals, opts),
+		FlowSummaries:         flowSummaries,
+		Queue:                 raw.Queue,
+		RetryPolicies:         cloneRetryPolicies(raw.RetryPolicies),
+		ScopeActivity:         scopeActivity,
+		GenerationHistory:     generationHistory,
+		GenerationTransitions: cloneGenerationTransitions(raw.GenerationTransitions),
+		ScopeTotals:           scopeTotals,
+		GenerationTotals:      generationTotals,
+		StageSummaries:        stageSummaries,
+		DomainBacklogs:        domainBacklogs,
 	}
 }
 
@@ -215,6 +218,7 @@ func RenderText(report Report) string {
 		),
 		fmt.Sprintf("Scope statuses: %s", formatNamedTotals(report.ScopeTotals)),
 		fmt.Sprintf("Generation history: %s", generationHistoryText(report.GenerationHistory)),
+		fmt.Sprintf("Generation transitions: %s", generationTransitionsText(report.GenerationTransitions)),
 	}
 
 	if len(report.Health.Reasons) > 0 {

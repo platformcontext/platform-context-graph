@@ -186,6 +186,10 @@ func (db *proofDomainDB) QueryContext(_ context.Context, query string, args ...a
 		return newProofRows(proofScopeCountRows(db.state.scopeStatuses)), nil
 	case strings.Contains(query, "FROM scope_generations") && strings.Contains(query, "GROUP BY status"):
 		return newProofRows(proofGenerationCountRows(db.state.generations)), nil
+	case strings.Contains(query, "JOIN ingestion_scopes") && strings.Contains(query, "current_active_generation_id"):
+		return newProofRows(
+			proofGenerationTransitionRows(db.state.generations, db.state.activeGenerations, db.now),
+		), nil
 	case strings.Contains(query, "FROM fact_work_items") && strings.Contains(query, "GROUP BY stage, status"):
 		return newProofRows(proofStageCountRows(db.state.workItems)), nil
 	case strings.Contains(query, "GROUP BY domain") && strings.Contains(query, "oldest_outstanding_age_seconds"):

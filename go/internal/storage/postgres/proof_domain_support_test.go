@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,6 +63,15 @@ func (r *proofRows) Scan(dest ...any) error {
 				return fmt.Errorf("row[%d] type = %T, want time.Time", i, row[i])
 			}
 			*target = value
+		case *sql.NullTime:
+			switch value := row[i].(type) {
+			case nil:
+				*target = sql.NullTime{}
+			case time.Time:
+				*target = sql.NullTime{Time: value.UTC(), Valid: true}
+			default:
+				return fmt.Errorf("row[%d] type = %T, want time.Time or nil", i, row[i])
+			}
 		case *int64:
 			value, ok := row[i].(int64)
 			if !ok {
@@ -189,6 +199,46 @@ func proofGenerationCountRows(generations map[string]scope.ScopeGeneration) [][]
 		counts[string(generation.Status)]++
 	}
 	return namedCountRows(counts)
+}
+
+func proofGenerationTransitionRows(
+	generations map[string]scope.ScopeGeneration,
+	activeGenerations map[string]string,
+	asOf time.Time,
+) [][]any {
+	rows := make([][]any, 0, len(generations))
+	for _, generation := range generations {
+		if generation.Status != scope.GenerationStatusActive &&
+			generation.Status != scope.GenerationStatusSuperseded {
+			continue
+		}
+
+		var activatedAt any = generation.IngestedAt.UTC()
+		var supersededAt any
+		if generation.Status == scope.GenerationStatusSuperseded {
+			supersededAt = asOf.UTC()
+		}
+
+		rows = append(rows, []any{
+			generation.ScopeID,
+			generation.GenerationID,
+			string(generation.Status),
+			string(generation.TriggerKind),
+			generation.FreshnessHint,
+			generation.ObservedAt.UTC(),
+			activatedAt,
+			supersededAt,
+			activeGenerations[generation.ScopeID],
+		})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		leftGenerationID, _ := rows[i][1].(string)
+		rightGenerationID, _ := rows[j][1].(string)
+		return leftGenerationID < rightGenerationID
+	})
+
+	return rows
 }
 
 func proofStageCountRows(workItems map[string]proofWorkItem) [][]any {
@@ -372,6 +422,32 @@ func runProofProjectorCycleWithInjector(
 	retryInjector projector.RetryInjector,
 ) {
 	t.Helper()
+	runProofProjectorCycleWithWriters(
+		t,
+		db,
+		now,
+		retryInjector,
+		&recordingGraphWriter{},
+		&recordingContentWriter{},
+	)
+}
+
+func runProofProjectorCycleWithWriters(
+	t *testing.T,
+	db *proofDomainDB,
+	now time.Time,
+	retryInjector projector.RetryInjector,
+	graphWriter *recordingGraphWriter,
+	contentWriter *recordingContentWriter,
+) {
+	t.Helper()
+
+	if graphWriter == nil {
+		graphWriter = &recordingGraphWriter{}
+	}
+	if contentWriter == nil {
+		contentWriter = &recordingContentWriter{}
+	}
 
 	projectorQueue := ProjectorQueue{
 		db:            db,
@@ -385,8 +461,8 @@ func runProofProjectorCycleWithInjector(
 		WorkSource:   projectorQueue,
 		FactStore:    NewFactStore(db),
 		Runner: projector.Runtime{
-			GraphWriter:   &recordingGraphWriter{},
-			ContentWriter: &recordingContentWriter{},
+			GraphWriter:   graphWriter,
+			ContentWriter: contentWriter,
 			IntentWriter:  ReducerQueue{db: db, LeaseOwner: "reducer-1", LeaseDuration: time.Minute, Now: func() time.Time { return now }},
 			RetryInjector: retryInjector,
 		},

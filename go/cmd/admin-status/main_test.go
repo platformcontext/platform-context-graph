@@ -28,6 +28,17 @@ func TestRenderStatusOutputsTextFromSharedStatusReport(t *testing.T) {
 				{Name: "completed", Count: 2},
 				{Name: "superseded", Count: 1},
 			},
+			GenerationTransitions: []statuspkg.GenerationTransitionSnapshot{
+				{
+					ScopeID:       "scope-1",
+					GenerationID:  "generation-b",
+					Status:        "active",
+					TriggerKind:   "snapshot",
+					ObservedAt:    time.Date(2026, 4, 12, 15, 45, 0, 0, time.UTC),
+					ActivatedAt:   time.Date(2026, 4, 12, 15, 46, 0, 0, time.UTC),
+					FreshnessHint: "fresh snapshot",
+				},
+			},
 			Queue: statuspkg.QueueSnapshot{
 				Outstanding:          2,
 				InFlight:             1,
@@ -64,6 +75,9 @@ func TestRenderStatusOutputsTextFromSharedStatusReport(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "Generation history: active=1 pending=0 completed=2 superseded=1 failed=0 other=0") {
 		t.Fatalf("renderStatus() stdout = %q, want generation history summary", got)
 	}
+	if got := stdout.String(); !strings.Contains(got, "Generation transitions:") {
+		t.Fatalf("renderStatus() stdout = %q, want generation transitions summary", got)
+	}
 	if got := stdout.String(); !strings.Contains(got, "Flow:") {
 		t.Fatalf("renderStatus() stdout = %q, want flow summary", got)
 	}
@@ -87,6 +101,17 @@ func TestRenderStatusOutputsJSONFromSharedStatusReport(t *testing.T) {
 				{Name: "completed", Count: 3},
 				{Name: "superseded", Count: 1},
 				{Name: "failed", Count: 1},
+			},
+			GenerationTransitions: []statuspkg.GenerationTransitionSnapshot{
+				{
+					ScopeID:                   "scope-2",
+					GenerationID:              "generation-c",
+					Status:                    "superseded",
+					TriggerKind:               "snapshot",
+					ObservedAt:                time.Date(2026, 4, 12, 15, 30, 0, 0, time.UTC),
+					SupersededAt:              time.Date(2026, 4, 12, 15, 40, 0, 0, time.UTC),
+					CurrentActiveGenerationID: "generation-d",
+				},
 			},
 		},
 	}
@@ -112,6 +137,9 @@ func TestRenderStatusOutputsJSONFromSharedStatusReport(t *testing.T) {
 	}
 	if got := stdout.String(); !strings.Contains(got, "\"generation_history\"") {
 		t.Fatalf("renderStatus() stdout = %q, want generation history payload", got)
+	}
+	if got := stdout.String(); !strings.Contains(got, "\"generation_transitions\"") {
+		t.Fatalf("renderStatus() stdout = %q, want generation transitions payload", got)
 	}
 	if got := stdout.String(); !strings.Contains(got, "\"flow\"") {
 		t.Fatalf("renderStatus() stdout = %q, want flow payload", got)

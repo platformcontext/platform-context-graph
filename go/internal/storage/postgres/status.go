@@ -23,6 +23,27 @@ FROM scope_generations
 GROUP BY status
 ORDER BY status
 `
+	generationTransitionsQuery = `
+SELECT generation.scope_id,
+       generation.generation_id,
+       generation.status,
+       generation.trigger_kind,
+       COALESCE(generation.freshness_hint, '') AS freshness_hint,
+       generation.observed_at,
+       generation.activated_at,
+       generation.superseded_at,
+       COALESCE(scope.active_generation_id, '') AS current_active_generation_id
+FROM scope_generations AS generation
+JOIN ingestion_scopes AS scope
+  ON scope.scope_id = generation.scope_id
+WHERE generation.status IN ('active', 'superseded')
+   OR generation.activated_at IS NOT NULL
+   OR generation.superseded_at IS NOT NULL
+ORDER BY COALESCE(generation.superseded_at, generation.activated_at, generation.ingested_at, generation.observed_at) DESC,
+         generation.scope_id ASC,
+         generation.generation_id ASC
+LIMIT 5
+`
 	stageCountsQuery = `
 SELECT stage, status, COUNT(*) AS count
 FROM fact_work_items
@@ -134,6 +155,10 @@ func (s StatusStore) ReadStatusSnapshot(ctx context.Context, asOf time.Time) (st
 	}
 	scopeActivity := scopeActivityFromCounts(scopeCounts, generationCounts)
 	generationHistory := generationHistoryFromCounts(generationCounts)
+	generationTransitions, err := listGenerationTransitions(ctx, s.queryer)
+	if err != nil {
+		return statuspkg.RawSnapshot{}, err
+	}
 	stageCounts, err := listStageCounts(ctx, s.queryer)
 	if err != nil {
 		return statuspkg.RawSnapshot{}, err
@@ -148,14 +173,15 @@ func (s StatusStore) ReadStatusSnapshot(ctx context.Context, asOf time.Time) (st
 	}
 
 	return statuspkg.RawSnapshot{
-		AsOf:              asOf.UTC(),
-		ScopeCounts:       scopeCounts,
-		ScopeActivity:     scopeActivity,
-		GenerationCounts:  generationCounts,
-		GenerationHistory: generationHistory,
-		StageCounts:       stageCounts,
-		DomainBacklogs:    domainBacklogs,
-		Queue:             queueSnapshot,
+		AsOf:                  asOf.UTC(),
+		ScopeCounts:           scopeCounts,
+		ScopeActivity:         scopeActivity,
+		GenerationCounts:      generationCounts,
+		GenerationHistory:     generationHistory,
+		GenerationTransitions: generationTransitions,
+		StageCounts:           stageCounts,
+		DomainBacklogs:        domainBacklogs,
+		Queue:                 queueSnapshot,
 	}, nil
 }
 
@@ -277,6 +303,54 @@ func listStageCounts(ctx context.Context, queryer Queryer) ([]statuspkg.StageSta
 	}
 
 	return counts, nil
+}
+
+func listGenerationTransitions(
+	ctx context.Context,
+	queryer Queryer,
+) ([]statuspkg.GenerationTransitionSnapshot, error) {
+	rows, err := queryer.QueryContext(ctx, generationTransitionsQuery)
+	if err != nil {
+		return nil, fmt.Errorf("list generation transitions: %w", err)
+	}
+	defer rows.Close()
+
+	transitions := []statuspkg.GenerationTransitionSnapshot{}
+	for rows.Next() {
+		var row statuspkg.GenerationTransitionSnapshot
+		var freshnessHint string
+		var observedAt time.Time
+		var activatedAt sql.NullTime
+		var supersededAt sql.NullTime
+		if scanErr := rows.Scan(
+			&row.ScopeID,
+			&row.GenerationID,
+			&row.Status,
+			&row.TriggerKind,
+			&freshnessHint,
+			&observedAt,
+			&activatedAt,
+			&supersededAt,
+			&row.CurrentActiveGenerationID,
+		); scanErr != nil {
+			return nil, fmt.Errorf("list generation transitions: %w", scanErr)
+		}
+		row.FreshnessHint = strings.TrimSpace(freshnessHint)
+		row.ObservedAt = observedAt.UTC()
+		if activatedAt.Valid {
+			row.ActivatedAt = activatedAt.Time.UTC()
+		}
+		if supersededAt.Valid {
+			row.SupersededAt = supersededAt.Time.UTC()
+		}
+		row.CurrentActiveGenerationID = strings.TrimSpace(row.CurrentActiveGenerationID)
+		transitions = append(transitions, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list generation transitions: %w", err)
+	}
+
+	return transitions, nil
 }
 
 func listDomainBacklogs(

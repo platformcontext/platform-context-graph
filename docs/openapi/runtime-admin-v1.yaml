@@ -122,6 +122,7 @@ paths:
                 Scope activity: active=2 changed=1 unchanged=1
                 Scope statuses: active=2 pending=1
                 Generation history: active=1 pending=1 completed=4 superseded=0 failed=0 other=0
+                Generation transitions: scope=scope-123 generation=generation-b status=active trigger=snapshot freshness=changed files observed=2026-04-12T15:45:00Z activated=2026-04-12T15:46:00Z superseded= current_active=generation-b
             application/json:
               schema:
                 $ref: "#/components/schemas/StatusReport"
@@ -304,6 +305,37 @@ components:
           type: integer
         other:
           type: integer
+    GenerationTransitionSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - scope_id
+        - generation_id
+        - status
+        - trigger_kind
+        - observed_at
+      properties:
+        scope_id:
+          type: string
+        generation_id:
+          type: string
+        status:
+          type: string
+        trigger_kind:
+          type: string
+        freshness_hint:
+          type: string
+        observed_at:
+          type: string
+          format: date-time
+        activated_at:
+          type: string
+          format: date-time
+        superseded_at:
+          type: string
+          format: date-time
+        current_active_generation_id:
+          type: string
     StageSummary:
       type: object
       additionalProperties: false
@@ -364,6 +396,7 @@ components:
         - retry_policies
         - scope_activity
         - generation_history
+        - generation_transitions
         - scopes
         - generations
         - stages
@@ -388,6 +421,10 @@ components:
           $ref: "#/components/schemas/ScopeActivitySummary"
         generation_history:
           $ref: "#/components/schemas/GenerationHistorySummary"
+        generation_transitions:
+          type: array
+          items:
+            $ref: "#/components/schemas/GenerationTransitionSummary"
         scopes:
           type: object
           additionalProperties:

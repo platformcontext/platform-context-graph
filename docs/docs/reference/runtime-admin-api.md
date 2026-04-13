@@ -29,7 +29,8 @@ The shared mounted runtime contract currently covers:
 - `GET` and `HEAD` `/admin/status`
 
 `/metrics` remains runtime-specific and is mounted only when a metrics handler
-is provided by that service.
+is provided by that service. The shared runtime metrics families are documented
+in [Telemetry Metrics](telemetry/metrics.md).
 
 Unsupported verbs return `405 Method Not Allowed` with `Allow: GET, HEAD`.
 
@@ -54,6 +55,7 @@ The JSON response follows the shared status report shape from
 - `retry_policies`
 - `scope_activity`
 - `generation_history`
+- `generation_transitions`
 - `scopes`
 - `generations`
 - `stages`
@@ -75,6 +77,18 @@ Retry policy entries include:
 - `max_attempts`
 - `retry_delay`
 - `retry_delay_seconds`
+
+Generation transition entries include:
+
+- `scope_id`
+- `generation_id`
+- `status`
+- `trigger_kind`
+- `freshness_hint`
+- `observed_at`
+- `activated_at`
+- `superseded_at`
+- `current_active_generation_id`
 
 ## Runtime Ownership
 

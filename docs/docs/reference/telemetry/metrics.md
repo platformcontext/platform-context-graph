@@ -102,6 +102,62 @@ Each metric entry includes:
 - Description: Number of widened repositories that contributed evidence to one investigation.
 - How to leverage: Compare this to `pcg_investigation_repositories_considered` to see whether widening is productive or mostly dead ends.
 
+## Go Runtime Admin Surfaces
+
+### `pcg_runtime_info`
+
+- Type: Gauge
+- Description: Presence metric for one mounted Go runtime metrics endpoint, labeled by service name and namespace.
+- How to leverage: Use it as the anchor series for dashboards and to confirm that scrape targets are alive before trusting the rest of the runtime panel.
+
+### `pcg_runtime_health_state`
+
+- Type: Gauge
+- Description: One-hot health verdict from the shared `/admin/status` reader, labeled by service name and health state.
+- How to leverage: Alert on `degraded` or `stalled`, and use it to separate runtime-level pressure from broader platform incidents.
+
+### `pcg_runtime_scope_active`, `pcg_runtime_scope_changed`, `pcg_runtime_scope_unchanged`
+
+- Type: Gauge
+- Description: Scope lifecycle counters derived from the status reader, including how many scopes are active, how many have a newer pending generation, and how many remain unchanged.
+- How to leverage: Watch the `changed` versus `unchanged` mix during incremental refresh runs to see whether a collector is producing mostly no-op reruns or real churn.
+
+### `pcg_runtime_refresh_skipped_total`
+
+- Type: Counter
+- Description: Total refreshes skipped because the collector observed no meaningful change for a scope.
+- How to leverage: Use it to validate incremental-refresh effectiveness and to quantify avoided downstream projector or reducer work.
+
+### `pcg_runtime_retry_policy_max_attempts`
+
+- Type: Gauge
+- Description: Effective bounded retry budget for each runtime stage, labeled by service name and stage.
+- How to leverage: Keep this on the same dashboard as retrying and failed queue items so operators can tell whether a service is behaving badly or simply configured too aggressively.
+
+### `pcg_runtime_retry_policy_retry_delay_seconds`
+
+- Type: Gauge
+- Description: Effective retry delay for each runtime stage, labeled by service name and stage.
+- How to leverage: Use it to tune recovery behavior for Kubernetes and compose deployments without guessing which retry policy a pod is actually running.
+
+### `pcg_runtime_queue_*`
+
+- Type: Gauge family
+- Description: Shared queue depth, pending, in-flight, retrying, succeeded, failed, overdue-claim, and oldest-outstanding-age metrics for the runtime work queue.
+- How to leverage: This is the first dashboard to open when a runtime feels slow. It tells you whether the service is starved, saturated, retrying, or simply draining cleanly.
+
+### `pcg_runtime_stage_items`
+
+- Type: Gauge
+- Description: Per-stage work-item counts labeled by stage and queue status.
+- How to leverage: Use it to spot whether pressure is concentrated in collector, projector, or reducer behavior instead of treating the whole data plane as one opaque backlog.
+
+### `pcg_runtime_domain_outstanding`, `pcg_runtime_domain_retrying`, `pcg_runtime_domain_failed`, `pcg_runtime_domain_oldest_age_seconds`
+
+- Type: Gauge family
+- Description: Domain-specific backlog and age metrics for runtime work that fans out by reducer or projection domain.
+- How to leverage: These metrics are the operator-facing answer to “which slice of the platform is actually stuck?” and are especially useful once more ingestors and reducers land.
+
 ## Git Collector And Indexing
 
 ### `pcg_index_runs_total`

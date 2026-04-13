@@ -177,10 +177,14 @@ start_projector() {
 
 run_pytest() {
     echo "Running incremental refresh compose pytest (unchanged + live retry-once changed-generation proof)..."
+    local pythonpath="src:."
+    if [[ -n "${PYTHONPATH:-}" ]]; then
+        pythonpath="$pythonpath:$PYTHONPATH"
+    fi
     PCG_E2E_INCREMENTAL_REFRESH_BASE_URL="http://127.0.0.1:${PCG_PROJECTOR_HTTP_PORT}" \
     PCG_E2E_POSTGRES_DSN="$POSTGRES_DSN" \
     PCG_E2E_TIMEOUT_SECONDS="$TIMEOUT_SECONDS" \
-    PYTHONPATH=src \
+    PYTHONPATH="$pythonpath" \
     uv run \
         --with httpx \
         --with 'psycopg[binary]' \

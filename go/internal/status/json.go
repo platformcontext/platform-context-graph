@@ -10,29 +10,31 @@ import (
 // RenderJSON returns a stable machine-readable projection of the report.
 func RenderJSON(report Report) ([]byte, error) {
 	payload := struct {
-		AsOf              string                `json:"as_of"`
-		Health            HealthSummary         `json:"health"`
-		Flow              []flowSummaryJSON     `json:"flow"`
-		Queue             queueJSON             `json:"queue"`
-		RetryPolicies     []retryPolicyJSON     `json:"retry_policies"`
-		ScopeActivity     scopeActivityJSON     `json:"scope_activity"`
-		GenerationHistory generationHistoryJSON `json:"generation_history"`
-		Scopes            map[string]int        `json:"scopes"`
-		Generations       map[string]int        `json:"generations"`
-		Stages            []StageSummary        `json:"stages"`
-		Domains           []domainBacklogJSON   `json:"domains"`
+		AsOf                  string                     `json:"as_of"`
+		Health                HealthSummary              `json:"health"`
+		Flow                  []flowSummaryJSON          `json:"flow"`
+		Queue                 queueJSON                  `json:"queue"`
+		RetryPolicies         []retryPolicyJSON          `json:"retry_policies"`
+		ScopeActivity         scopeActivityJSON          `json:"scope_activity"`
+		GenerationHistory     generationHistoryJSON      `json:"generation_history"`
+		GenerationTransitions []generationTransitionJSON `json:"generation_transitions"`
+		Scopes                map[string]int             `json:"scopes"`
+		Generations           map[string]int             `json:"generations"`
+		Stages                []StageSummary             `json:"stages"`
+		Domains               []domainBacklogJSON        `json:"domains"`
 	}{
-		AsOf:              report.AsOf.UTC().Format(time.RFC3339),
-		Health:            report.Health,
-		Flow:              flowSummariesJSON(report.FlowSummaries),
-		Queue:             queueJSONFromReport(report.Queue),
-		RetryPolicies:     retryPoliciesJSON(report.RetryPolicies),
-		ScopeActivity:     scopeActivityJSONFromReport(report.ScopeActivity),
-		GenerationHistory: generationHistoryJSONFromReport(report.GenerationHistory),
-		Scopes:            cloneCounts(report.ScopeTotals),
-		Generations:       cloneCounts(report.GenerationTotals),
-		Stages:            slices.Clone(report.StageSummaries),
-		Domains:           domainBacklogsJSON(report.DomainBacklogs),
+		AsOf:                  report.AsOf.UTC().Format(time.RFC3339),
+		Health:                report.Health,
+		Flow:                  flowSummariesJSON(report.FlowSummaries),
+		Queue:                 queueJSONFromReport(report.Queue),
+		RetryPolicies:         retryPoliciesJSON(report.RetryPolicies),
+		ScopeActivity:         scopeActivityJSONFromReport(report.ScopeActivity),
+		GenerationHistory:     generationHistoryJSONFromReport(report.GenerationHistory),
+		GenerationTransitions: generationTransitionsJSON(report.GenerationTransitions),
+		Scopes:                cloneCounts(report.ScopeTotals),
+		Generations:           cloneCounts(report.GenerationTotals),
+		Stages:                slices.Clone(report.StageSummaries),
+		Domains:               domainBacklogsJSON(report.DomainBacklogs),
 	}
 
 	return json.MarshalIndent(payload, "", "  ")
