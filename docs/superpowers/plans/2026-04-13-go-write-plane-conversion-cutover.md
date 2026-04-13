@@ -48,11 +48,23 @@ cutover draft assumed:
 - `go/internal/parser/go_language.go` owns the first native Go adapter
 - `go/internal/parser/javascript_language.go` now owns the representative
   JavaScript and TypeScript/TSX adapter slice
+- `go/internal/parser/json_language.go` now owns the first native JSON config
+  slice, including package/composer/tsconfig metadata plus CloudFormation JSON
+- `go/internal/parser/hcl_language.go` now owns the first native Terraform and
+  Terragrunt adapter slice
+- `go/internal/parser/yaml_language.go`,
+  `go/internal/parser/yaml_semantics.go`, and
+  `go/internal/parser/yaml_helm.go` now own the first native infrastructure
+  YAML slice for Kubernetes, Argo CD, Crossplane, Kustomize, Helm, and
+  CloudFormation YAML
+- `go/internal/parser/dockerfile_language.go` now owns the first native
+  Dockerfile adapter slice
 - `go/internal/parser/raw_text_engine.go` owns the raw-text fallback path
 
-That slice is still parser-matrix-incomplete. Infra/data slices, SCIP parity,
-and the remaining long-tail language adapters are still in scope before the
-collector hot path can truthfully drop Python.
+That slice is still parser-matrix-incomplete. The remaining honest parser
+scope now centers on SQL runtime ownership, SCIP parity, the specialized
+data-intelligence JSON families, and the remaining long-tail language
+adapters before the collector hot path can truthfully drop Python.
 
 No new ingestors should start until the milestones in this plan are complete.
 Treat this plan as the active cutover path until the merge bar below is fully
@@ -179,9 +191,13 @@ Progress on this step:
 - [x] Native parse runtime/dispatch landed for Python, Go, JavaScript,
   TypeScript/TSX, and raw-text in
   `go/internal/parser/{runtime,engine,python_language,go_language,javascript_language,raw_text_engine}.go`
+- [x] Native config/IaC adapters landed for JSON, Terraform/Terragrunt, YAML
+  infrastructure, and Dockerfile in
+  `go/internal/parser/{json_language,hcl_language,yaml_language,yaml_semantics,yaml_helm,dockerfile_language}.go`
 - [ ] Extend the native parser runtime to the remaining representative language
-  family adapters for infra/data plus the long-tail language slices required
-  for truthful matrix parity
+  family adapters still missing for truthful matrix parity: SQL runtime
+  ownership, SCIP parity, specialized JSON data-intelligence documents, and
+  the remaining long-tail language slices
 
 - [ ] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 

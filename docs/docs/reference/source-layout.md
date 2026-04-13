@@ -217,12 +217,25 @@ Current native parser-runtime slice:
 - `go/internal/parser/engine.go`: file parse dispatch and prescan fanout
 - `go/internal/parser/python_language.go`: first native Python adapter
 - `go/internal/parser/go_language.go`: first native Go adapter
+- `go/internal/parser/javascript_language.go`: JavaScript/TypeScript/TSX
+  adapter slice
+- `go/internal/parser/json_language.go`: JSON config adapter slice, including
+  package/composer/tsconfig metadata and CloudFormation JSON
+- `go/internal/parser/hcl_language.go`: Terraform and Terragrunt adapter slice
+- `go/internal/parser/yaml_language.go`, `yaml_semantics.go`, and
+  `yaml_helm.go`: infrastructure YAML adapter slice for Kubernetes, Argo CD,
+  Crossplane, Kustomize, Helm, and CloudFormation YAML
+- `go/internal/parser/dockerfile_language.go`: Dockerfile adapter slice
 - `go/internal/parser/raw_text_engine.go`: raw-text fallback for searchable
   template and config artifacts
 
 These Go packages are the target normal-path runtime ownership. Python bridge
 modules under `runtime/ingester/*bridge.py` remain removal debt until the
 collector hot path and parser platform are fully cut over.
+
+The parser cutover is still in progress. SQL runtime ownership, SCIP parity,
+specialized data-intelligence JSON families, and the remaining long-tail
+language adapters are still active cutover work, not finished debt.
 
 Do not start new ingestor families until the Git write-plane cutover, parser
 platform cutover, and bridge removal are complete.

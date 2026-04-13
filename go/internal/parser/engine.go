@@ -108,18 +108,26 @@ func (e *Engine) parseDefinition(
 	options Options,
 ) (map[string]any, error) {
 	switch definition.Language {
+	case "dockerfile":
+		return e.parseDockerfile(resolvedPath, isDependency, options)
 	case "javascript":
 		return e.parseJavaScriptLike(resolvedPath, "javascript", "javascript", isDependency, options)
+	case "json":
+		return e.parseJSON(resolvedPath, isDependency, options)
 	case "python":
 		return e.parsePython(resolvedPath, isDependency, options)
 	case "go":
 		return e.parseGo(resolvedPath, isDependency, options)
+	case "hcl":
+		return e.parseHCL(resolvedPath, isDependency, options)
 	case "tsx":
 		return e.parseJavaScriptLike(resolvedPath, "tsx", "tsx", isDependency, options)
 	case "typescript":
 		return e.parseJavaScriptLike(resolvedPath, "typescript", "typescript", isDependency, options)
 	case "raw_text":
 		return parseRawText(resolvedPath, isDependency), nil
+	case "yaml":
+		return e.parseYAML(resolvedPath, isDependency, options)
 	default:
 		return nil, fmt.Errorf(
 			"parser %q for language %q is not implemented in the native engine yet",
