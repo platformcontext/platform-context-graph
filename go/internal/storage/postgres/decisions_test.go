@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -373,11 +374,23 @@ func (db *decisionTestDB) QueryContext(_ context.Context, query string, args ...
 
 	case strings.Contains(query, "FROM projection_decision_evidence"):
 		decisionID := args[0].(string)
-		var rows [][]any
+		// Collect matching evidence, then sort by (created_at, evidence_id) to
+		// match the real SQL ORDER BY and avoid map-iteration non-determinism.
+		var matched []projector.ProjectionDecisionEvidenceRow
 		for _, e := range db.evidence {
 			if e.DecisionID != decisionID {
 				continue
 			}
+			matched = append(matched, e)
+		}
+		sort.Slice(matched, func(i, j int) bool {
+			if !matched[i].CreatedAt.Equal(matched[j].CreatedAt) {
+				return matched[i].CreatedAt.Before(matched[j].CreatedAt)
+			}
+			return matched[i].EvidenceID < matched[j].EvidenceID
+		})
+		var rows [][]any
+		for _, e := range matched {
 			detailBytes, _ := json.Marshal(e.Detail)
 			var factID any
 			if e.FactID != nil {
