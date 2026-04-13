@@ -146,6 +146,12 @@ owned by `go/internal/parser/groovy_language.go` and
 `go/internal/parser/dockerfile_language.go`, and the capability metadata now
 points at the Go entrypoint/test coverage instead of the deleted Python files.
 
+The next parser-family deletion slice removes the Python Rust facade
+(`parsers/languages/rust.py`). Its runtime behavior is already owned by
+`go/internal/parser/rust_language.go`, and the Rust capability metadata now
+points at `go/internal/parser/engine_systems_test.go` instead of the deleted
+Python parser unit suite.
+
 Parser extraction ownership already moved further than the generated capability
 matrix currently shows:
 

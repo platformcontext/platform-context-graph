@@ -30,7 +30,7 @@ yet been explicitly assessed in the parser maturity program.
 | PHP | `PhpTreeSitterParser` | - | - | - | - | - | - | - |
 | Python | `PythonTreeSitterParser` | supported | supported | supported | `fastapi-base`, `flask-base` | supported | supported | supported |
 | Ruby | `RubyTreeSitterParser` | - | - | - | - | - | - | - |
-| Rust | `RustTreeSitterParser` | - | - | - | - | - | - | - |
+| Rust | `DefaultEngine (rust)` | - | - | - | - | - | - | - |
 | Scala | `ScalaTreeSitterParser` | - | - | - | - | - | - | - |
 | SQL | `SQLTreeSitterParser` | supported | supported | unsupported | - | supported | partial | partial |
 | Swift | `SwiftTreeSitterParser` | - | - | - | - | - | - | - |

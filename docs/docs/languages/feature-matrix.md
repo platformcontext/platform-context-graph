@@ -22,7 +22,7 @@ This file is auto-generated. Do not edit manually.
 | PHP | `PhpTreeSitterParser` | Y | Y | Y | Y | Y | Y | Y | - | - | - | 10/10 | 10/10 | `tests/fixtures/ecosystems/php_comprehensive/` |
 | Python | `PythonTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 6/6 | 6/6 | `tests/fixtures/ecosystems/python_comprehensive/` |
 | Ruby | `RubyTreeSitterParser` | Y | Y | - | - | P | Y | Y | - | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/ruby_comprehensive/` |
-| Rust | `RustTreeSitterParser` | Y | - | - | Y | Y | Y | - | Y | Y | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/rust_comprehensive/` |
+| Rust | `DefaultEngine (rust)` | Y | - | - | Y | Y | Y | - | Y | Y | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/rust_comprehensive/` |
 | Scala | `ScalaTreeSitterParser` | Y | Y | - | Y | Y | Y | Y | - | - | - | 10/10 | 10/10 | `tests/fixtures/ecosystems/scala_comprehensive/` |
 | SQL | `SQLTreeSitterParser` | - | - | - | - | - | - | - | - | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/sql_comprehensive/` |
 | Swift | `SwiftTreeSitterParser` | Y | Y | - | P | Y | Y | Y | Y | Y | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/swift_comprehensive/` |
