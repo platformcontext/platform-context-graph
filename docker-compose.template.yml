@@ -65,7 +65,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["pcg", "internal", "bootstrap-index"]
+    command: ["/usr/local/bin/pcg-bootstrap-index"]
     healthcheck:
       disable: true
     environment:
@@ -165,7 +165,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["pcg", "internal", "repo-sync-loop"]
+    command: ["/usr/local/bin/pcg-ingester"]
     healthcheck:
       disable: true
     ports:
@@ -218,7 +218,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["pcg", "internal", "resolution-engine"]
+    command: ["/usr/local/bin/pcg-reducer"]
     healthcheck:
       disable: true
     ports:

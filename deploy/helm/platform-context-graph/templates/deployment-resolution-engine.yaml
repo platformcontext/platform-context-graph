@@ -43,7 +43,7 @@ spec:
         - name: resolution-engine
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["pcg", "internal", "resolution-engine"]
+          command: ["/usr/local/bin/pcg-reducer"]
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           env:

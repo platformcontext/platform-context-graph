@@ -20,6 +20,27 @@ COPY src/ ./src/
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir .
 
+# Go builder stage
+FROM golang:1.26-alpine AS go-builder
+
+WORKDIR /build
+
+# Copy Go module files and download dependencies
+COPY go/go.mod go/go.sum ./go/
+RUN cd go && go mod download
+
+# Copy Go source
+COPY go/ ./go/
+
+# Build all Go binaries
+RUN cd go && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-ingester ./cmd/ingester \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-bootstrap-index ./cmd/bootstrap-index \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-reducer ./cmd/reducer \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-projector ./cmd/projector \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-collector-git ./cmd/collector-git \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-bootstrap-data-plane ./cmd/bootstrap-data-plane \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-admin-status ./cmd/admin-status
+
 # Production stage
 FROM python:3.12-slim
 
@@ -45,6 +66,9 @@ COPY --from=builder /usr/local/bin/pcg /usr/local/bin/pcg
 
 # Copy source code
 COPY --from=builder /app/src /app/src
+
+# Copy Go binaries from go-builder
+COPY --from=go-builder /go-bin/ /usr/local/bin/
 
 # Create the runtime user and writable working directories.
 RUN useradd --create-home --uid 10001 --user-group pcg \

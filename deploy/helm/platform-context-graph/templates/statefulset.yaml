@@ -66,7 +66,7 @@ spec:
         - name: ingester
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["pcg", "internal", "repo-sync-loop"]
+          command: ["/usr/local/bin/pcg-ingester"]
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           env:

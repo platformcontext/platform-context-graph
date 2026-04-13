@@ -118,7 +118,7 @@ services:
       - |
         mkdir -p /data/repos && \
         if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi && \
-        exec pcg internal bootstrap-index
+        exec /usr/local/bin/pcg-bootstrap-index
     depends_on:
       neo4j:
         condition: service_healthy
@@ -236,7 +236,7 @@ services:
       - -c
       - |
         if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi && \
-        exec pcg internal repo-sync-loop
+        exec /usr/local/bin/pcg-ingester
     depends_on:
       neo4j:
         condition: service_healthy
@@ -253,7 +253,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["pcg", "internal", "resolution-engine"]
+    command: ["/usr/local/bin/pcg-reducer"]
     healthcheck:
       disable: true
     ports:

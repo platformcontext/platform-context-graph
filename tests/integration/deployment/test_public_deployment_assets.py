@@ -105,6 +105,10 @@ def test_runtime_dockerfile_uses_non_root_data_home() -> None:
     assert "USER pcg" in dockerfile
     assert "ENV PCG_HOME=/root/.platform-context-graph" not in dockerfile
 
+    assert "go-builder" in dockerfile
+    assert "pcg-ingester" in dockerfile
+    assert "pcg-reducer" in dockerfile
+
 
 def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
     docs = _render_chart()
@@ -171,12 +175,8 @@ def test_default_chart_renders_api_deployment_and_worker_statefulset() -> None:
         "--port",
         "8080",
     ]
-    assert resolution_engine_container["command"] == [
-        "pcg",
-        "internal",
-        "resolution-engine",
-    ]
-    assert worker_container["command"] == ["pcg", "internal", "repo-sync-loop"]
+    assert resolution_engine_container["command"] == ["/usr/local/bin/pcg-reducer"]
+    assert worker_container["command"] == ["/usr/local/bin/pcg-ingester"]
     assert worker_init_container["command"] == [
         "sh",
         "-c",
@@ -689,15 +689,11 @@ def test_compose_stack_includes_service_and_external_test_database() -> None:
     assert "postgres" in services
     ingester_service = services["ingester"]
     assert "entrypoint" in ingester_service
-    assert "exec pcg internal repo-sync-loop" in "\n".join(
+    assert "exec /usr/local/bin/pcg-ingester" in "\n".join(
         ingester_service["entrypoint"]
     )
     assert services["ingester"]["healthcheck"] == {"disable": True}
-    assert services["resolution-engine"]["command"] == [
-        "pcg",
-        "internal",
-        "resolution-engine",
-    ]
+    assert services["resolution-engine"]["command"] == ["/usr/local/bin/pcg-reducer"]
     assert services["resolution-engine"]["healthcheck"] == {"disable": True}
 
 
