@@ -8,16 +8,40 @@ reported by architectural outcome instead of by tiny internal slices.
 
 ## Summary
 
-Milestone 1 delivers a **native Git write path** with end-to-end operability.
+Milestone 1 delivers a **Go-owned Git runtime proof path** with end-to-end
+operability.
 
 The target outcome is:
 
-- Git collection no longer depends on the Python compatibility bridge for core
-  correctness
+- Git collection no longer depends on the old monolithic Python batch bridge
+  for cycle orchestration or fact shaping
 - native facts flow through projector, content, and reducer boundaries cleanly
 - operator/admin status surfaces explain what collector, projector, and reducer
   are doing live
 - local validation proves the full data path before any future image build
+
+## Completion Status
+
+Milestone 1 is complete on this branch when evaluated against the bounded proof
+path and the rewrite decisions we made during implementation.
+
+Completed on this branch:
+
+- `collector-git` now owns cycle orchestration and durable fact commit in Go
+- the old monolithic batch bridge has been split into narrower transitional
+  Python adapters for repo selection and per-repo snapshot collection
+- `projector` and `reducer` both have compose-backed live runtime proofs
+- the shared admin contract is mounted on `collector-git`, `projector`, and
+  `reducer`
+- projector persistence now includes the content-store schema it actually needs
+- source-local Neo4j writes no longer attempt invalid map-valued properties
+
+Carried forward intentionally:
+
+- full parser/discovery retirement from the transitional Python adapters
+- broadening the scope model beyond the bounded Git proof path
+- incremental refresh, authoritative generation replacement, and stale
+  generation cleanup for non-trivial scope hierarchies
 
 This milestone is the proof that the Go data plane is a real runtime substrate,
 not just a set of internal packages.
@@ -94,7 +118,8 @@ Effort:
 ### Workstream B: Native Collector
 
 Purpose:
-Remove the Python compatibility bridge as the authority for Git fact shaping.
+Move collector orchestration and fact shaping into Go while narrowing Python
+down to explicit transitional adapters.
 
 Owned paths:
 
@@ -105,16 +130,21 @@ Owned paths:
 
 Deliverables:
 
+- Go-owned collector cycle orchestration
 - native Git fact emission
 - parsed file payload support
 - explicit content-entity fact emission
 - durable source-boundary validation
+- narrowed repo-selection and per-repo snapshot adapters where parser logic
+  still remains in Python
 
 Acceptance criteria:
 
-- collector correctness no longer depends on Python bridge logic
+- collector correctness no longer depends on the old monolithic batch bridge
 - fact payloads are typed and replay-safe
-- native collector output is accepted by the projector without compatibility hacks
+- native collector output is accepted by the projector without compatibility
+  hacks
+- remaining Python use is explicit, narrow, and removable in a later milestone
 
 Effort:
 
@@ -258,6 +288,41 @@ Parallel work allowed:
 
 - Workstream D
 - Workstream E
+
+## Validation Evidence
+
+The bounded Milestone 1 proof closes with these commands:
+
+```bash
+cd go
+go test ./internal/collector ./internal/compatibility/pythonbridge ./cmd/collector-git \
+  ./internal/runtime ./internal/app ./internal/telemetry \
+  ./internal/storage/neo4j ./internal/storage/postgres \
+  ./internal/reducer ./cmd/reducer -count=1
+```
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/compatibility/test_go_collector_selection_bridge.py \
+  tests/unit/compatibility/test_go_collector_snapshot_bridge.py -q
+```
+
+```bash
+./scripts/verify_collector_git_runtime_compose.sh
+./scripts/verify_projector_runtime_compose.sh
+./scripts/verify_reducer_runtime_compose.sh
+```
+
+## Milestone 2 Handoff
+
+Milestone 2 should start from the truthful Milestone 1 finish line:
+
+- the runtime substrate is now real and locally provable
+- scope/generation contracts exist in durable storage
+- the next work is to expand those contracts into authoritative incremental
+  refresh and scope-first replacement semantics
+- parser-bridge retirement is no longer part of Milestone 1 and should not
+  block scope-first ingestion work
 
 Blocking output:
 

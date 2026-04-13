@@ -13,14 +13,15 @@ func TestBootstrapDefinitionsAreOrderedAndComplete(t *testing.T) {
 	t.Parallel()
 
 	defs := BootstrapDefinitions()
-	if len(defs) != 5 {
-		t.Fatalf("BootstrapDefinitions() len = %d, want 5", len(defs))
+	if len(defs) != 6 {
+		t.Fatalf("BootstrapDefinitions() len = %d, want 6", len(defs))
 	}
 
 	wantNames := []string{
 		"ingestion_scopes",
 		"scope_generations",
 		"fact_records",
+		"content_store",
 		"fact_work_items",
 		"fact_work_item_audit",
 	}
@@ -40,6 +41,27 @@ func TestBootstrapDefinitionsAreOrderedAndComplete(t *testing.T) {
 	}
 }
 
+func TestBootstrapDefinitionsIncludeContentStoreTables(t *testing.T) {
+	t.Parallel()
+
+	var contentStore Definition
+	for _, def := range BootstrapDefinitions() {
+		if def.Name == "content_store" {
+			contentStore = def
+			break
+		}
+	}
+	if contentStore.Name == "" {
+		t.Fatal("content_store definition missing")
+	}
+	if !strings.Contains(contentStore.SQL, "CREATE TABLE IF NOT EXISTS content_files") {
+		t.Fatal("content_store SQL missing content_files table")
+	}
+	if !strings.Contains(contentStore.SQL, "CREATE TABLE IF NOT EXISTS content_entities") {
+		t.Fatal("content_store SQL missing content_entities table")
+	}
+}
+
 func TestApplyBootstrapExecutesDefinitionsInOrder(t *testing.T) {
 	t.Parallel()
 
@@ -55,6 +77,7 @@ func TestApplyBootstrapExecutesDefinitionsInOrder(t *testing.T) {
 		bootstrapDefinitions[2].SQL,
 		bootstrapDefinitions[3].SQL,
 		bootstrapDefinitions[4].SQL,
+		bootstrapDefinitions[5].SQL,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("ApplyBootstrap() executed %d statements, want %d", len(got), len(want))

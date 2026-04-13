@@ -53,11 +53,22 @@ The rewrite contract for this phase is captured in:
 | Milestone | Outcome | Effort | Validation focus |
 | --- | --- | --- | --- |
 | 0 | Lock contracts, docs, and operator/admin rules | Small | docs build, contract freeze, no ambiguity in workstream ownership |
-| 1 | Native Git cutover and operability | Large | local runtime proof, admin/status surfacing, end-to-end Git path |
+| 1 | Native Git cutover and operability | Large | collector/projector/reducer runtime proof, shared admin/status surfacing, end-to-end bounded Git path |
 | 2 | Scope-first ingestion and incremental refresh | Large | scope/generation lifecycle, replay-safe refresh, no full re-index dependency |
 | 3 | Canonical truth layers and reducer ownership | Large | cross-source correlation, layered truth, canonical-first query behavior |
 | 4 | Legacy write-path retirement | Medium | proof bridge removal, regression coverage, no new logic on the old seam |
 | 5 | Multi-collector expansion | Large | AWS/Kubernetes proof, partitioned scale, end-to-end code-to-cloud flow |
+
+## Rewrite Status Notes
+
+Milestone 1 on the rewrite branch is now defined by a truthful bounded outcome:
+
+- Go owns collector orchestration, fact commit, projector/reducer runtime proof,
+  and the shared admin/metrics story
+- repository selection and per-repo parser snapshotting remain narrow
+  transitional Python adapters
+- full parser-bridge retirement is deferred to later rewrite milestones instead
+  of being implied by Milestone 1
 
 ## After That
 

@@ -11,15 +11,28 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 )
 
-// SnapshotRunner collects one narrowed parser/snapshot batch.
-type SnapshotRunner interface {
-	CollectSnapshots(context.Context) (SnapshotBatch, error)
+// RepositorySelector selects the repositories for one collector cycle.
+type RepositorySelector interface {
+	SelectRepositories(context.Context) (SelectionBatch, error)
 }
 
-// SnapshotBatch is one narrowed compatibility batch for Go-owned fact shaping.
-type SnapshotBatch struct {
+// RepositorySnapshotter collects one narrowed parser/snapshot payload for one
+// selected repository.
+type RepositorySnapshotter interface {
+	SnapshotRepository(context.Context, SelectedRepository) (RepositorySnapshot, error)
+}
+
+// SelectionBatch is one narrowed repository-selection batch for Go-owned fact
+// shaping.
+type SelectionBatch struct {
 	ObservedAt   time.Time
-	Repositories []RepositorySnapshot
+	Repositories []SelectedRepository
+}
+
+// SelectedRepository is one repository chosen for the current collector cycle.
+type SelectedRepository struct {
+	RepoPath  string `json:"repo_path"`
+	RemoteURL string `json:"remote_url"`
 }
 
 // RepositorySnapshot captures one repository parse snapshot and content transport.
@@ -64,22 +77,24 @@ type ContentEntitySnapshot struct {
 
 // GitSource converts narrowed snapshot batches into durable collector generations.
 type GitSource struct {
-	Component string
-	Runner    SnapshotRunner
-	pending   []CollectedGeneration
+	Component   string
+	Selector    RepositorySelector
+	Snapshotter RepositorySnapshotter
+	pending     []CollectedGeneration
 }
 
-// Next returns one Go-shaped collected generation, collecting a new snapshot batch when needed.
+// Next returns one Go-shaped collected generation, collecting a new selection
+// batch when needed.
 func (s *GitSource) Next(ctx context.Context) (CollectedGeneration, bool, error) {
 	if len(s.pending) == 0 {
-		if s.Runner == nil {
-			return CollectedGeneration{}, false, fmt.Errorf("git snapshot runner is required")
+		if s.Selector == nil {
+			return CollectedGeneration{}, false, fmt.Errorf("git repository selector is required")
 		}
-		batch, err := s.Runner.CollectSnapshots(ctx)
+		batch, err := s.Selector.SelectRepositories(ctx)
 		if err != nil {
 			return CollectedGeneration{}, false, err
 		}
-		collected, err := s.buildCollected(batch)
+		collected, err := s.buildCollected(ctx, batch)
 		if err != nil {
 			return CollectedGeneration{}, false, err
 		}
@@ -94,32 +109,57 @@ func (s *GitSource) Next(ctx context.Context) (CollectedGeneration, bool, error)
 	return item, true, nil
 }
 
-func (s *GitSource) buildCollected(batch SnapshotBatch) ([]CollectedGeneration, error) {
+func (s *GitSource) buildCollected(
+	ctx context.Context,
+	batch SelectionBatch,
+) ([]CollectedGeneration, error) {
 	if len(batch.Repositories) == 0 {
 		return nil, nil
 	}
 	if batch.ObservedAt.IsZero() {
-		return nil, fmt.Errorf("snapshot batch observed_at is required")
+		return nil, fmt.Errorf("selection batch observed_at is required")
+	}
+	if s.Snapshotter == nil {
+		return nil, fmt.Errorf("git repository snapshotter is required")
 	}
 
-	selectedRepositories := make([]string, 0, len(batch.Repositories))
+	resolvedRepositories := make([]SelectedRepository, 0, len(batch.Repositories))
+	selectedRepositoryPaths := make([]string, 0, len(batch.Repositories))
 	for _, repository := range batch.Repositories {
-		selectedRepositories = append(selectedRepositories, repository.RepoPath)
+		repoPath, err := filepath.Abs(repository.RepoPath)
+		if err != nil {
+			return nil, fmt.Errorf("resolve selected repo path %q: %w", repository.RepoPath, err)
+		}
+		resolvedRepositories = append(
+			resolvedRepositories,
+			SelectedRepository{
+				RepoPath:  repoPath,
+				RemoteURL: repository.RemoteURL,
+			},
+		)
+		selectedRepositoryPaths = append(selectedRepositoryPaths, repoPath)
 	}
 	sourceRunID := facts.StableID(
 		"GitCollectorSnapshotRun",
 		map[string]any{
 			"component":             s.componentName(),
 			"observed_at":           batch.ObservedAt.UTC().Format(time.RFC3339Nano),
-			"selected_repositories": selectedRepositories,
+			"selected_repositories": selectedRepositoryPaths,
 		},
 	)
 
-	collected := make([]CollectedGeneration, 0, len(batch.Repositories))
-	for _, repository := range batch.Repositories {
-		repoPath, err := filepath.Abs(repository.RepoPath)
+	collected := make([]CollectedGeneration, 0, len(resolvedRepositories))
+	for _, repository := range resolvedRepositories {
+		snapshot, err := s.Snapshotter.SnapshotRepository(ctx, repository)
 		if err != nil {
-			return nil, fmt.Errorf("resolve repo path %q: %w", repository.RepoPath, err)
+			return nil, fmt.Errorf("snapshot repository %q: %w", repository.RepoPath, err)
+		}
+		repoPath := repository.RepoPath
+		if snapshot.RepoPath == "" {
+			snapshot.RepoPath = repoPath
+		}
+		if snapshot.RemoteURL == "" {
+			snapshot.RemoteURL = repository.RemoteURL
 		}
 		metadata, err := repositoryidentity.MetadataFor(
 			filepath.Base(repoPath),
@@ -136,7 +176,7 @@ func (s *GitSource) buildCollected(batch SnapshotBatch) ([]CollectedGeneration, 
 				metadata,
 				sourceRunID,
 				batch.ObservedAt.UTC(),
-				repository,
+				snapshot,
 			),
 		)
 	}

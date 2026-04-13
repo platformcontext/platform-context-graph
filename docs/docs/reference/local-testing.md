@@ -44,21 +44,63 @@ export PYTHONPATH=src
 | Admin replay flow | `PYTHONPATH=src uv run pytest tests/integration/api/test_admin_facts_replay.py tests/integration/cli/test_admin_facts_replay_cli.py -q` |
 | Python file layout/quality gates | `python3 scripts/check_python_file_lengths.py --max-lines 500` and `git diff --check` |
 
+## Go Data Plane Milestone 1 Gate
+
+Use this gate when validating the bounded Go rewrite proof path for Milestone 1.
+
+Current bounded proof path:
+
+- `collector-git` owns cycle orchestration and durable fact commit
+- `projector` owns source-local graph and content materialization
+- `reducer` owns workload-identity follow-up drain
+- all three runtimes expose `/healthz`, `/readyz`, `/metrics`, and
+  `/admin/status`
+
+Focused Go package gate:
+
+```bash
+cd go
+go test ./internal/collector ./internal/compatibility/pythonbridge ./cmd/collector-git \
+  ./internal/runtime ./internal/app ./internal/telemetry \
+  ./internal/storage/neo4j ./internal/storage/postgres \
+  ./internal/reducer ./cmd/reducer -count=1
+```
+
+Focused Python bridge gate:
+
+```bash
+PYTHONPATH=src uv run pytest \
+  tests/unit/compatibility/test_go_collector_selection_bridge.py \
+  tests/unit/compatibility/test_go_collector_snapshot_bridge.py -q
+```
+
+Live runtime proof gate:
+
+```bash
+./scripts/verify_collector_git_runtime_compose.sh
+./scripts/verify_projector_runtime_compose.sh
+./scripts/verify_reducer_runtime_compose.sh
+```
+
+These proof scripts allocate their own local ports, start only the required
+compose-backed infrastructure, and tear the stack down automatically unless
+`PCG_KEEP_COMPOSE_STACK=true` is set.
+
 ## Go Data Plane Proof Domain Gate
 
-Use this when validating the currently selected repo-backed Go proof domain
-before broader collector wiring lands.
+Use this narrower proof-domain gate when you only need to validate the
+collector-to-projector-to-reducer workload-identity path without rerunning all
+three runtime proof scripts.
 
 Current proof domain: `workload_identity`
 
 ```bash
 cd go
-uv run go test ./internal/storage/postgres -run TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent -count=1
+go test ./internal/storage/postgres -run TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent -count=1
 ```
 
 This proves the deterministic path from a repo snapshot into facts, source-local
-projection, and reducer-intent enqueue/drain. It is intentionally narrow and
-does not depend on the future live collector entrypoint or cloud runtime wiring.
+projection, and reducer-intent enqueue/drain.
 
 ## Local Full Stack
 

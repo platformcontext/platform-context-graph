@@ -72,7 +72,8 @@ SELECT
     generation.ingested_at,
     generation.status,
     generation.trigger_kind,
-    COALESCE(generation.freshness_hint, '')
+    COALESCE(generation.freshness_hint, ''),
+    COALESCE(scope.payload, '{}'::jsonb)
 FROM claimed
 JOIN ingestion_scopes AS scope
   ON scope.scope_id = claimed.scope_id
@@ -280,6 +281,7 @@ func scanProjectorWork(rows Rows) (projector.ScopeGenerationWork, error) {
 	var collectorKind string
 	var generationStatus string
 	var triggerKind string
+	var rawPayload []byte
 
 	if err := rows.Scan(
 		&work.Scope.ScopeID,
@@ -294,6 +296,7 @@ func scanProjectorWork(rows Rows) (projector.ScopeGenerationWork, error) {
 		&generationStatus,
 		&triggerKind,
 		&work.Generation.FreshnessHint,
+		&rawPayload,
 	); err != nil {
 		return projector.ScopeGenerationWork{}, err
 	}
@@ -305,10 +308,38 @@ func scanProjectorWork(rows Rows) (projector.ScopeGenerationWork, error) {
 	work.Generation.TriggerKind = scope.TriggerKind(triggerKind)
 	work.Generation.ObservedAt = work.Generation.ObservedAt.UTC()
 	work.Generation.IngestedAt = work.Generation.IngestedAt.UTC()
+	work.Scope.Metadata = projectorScopeMetadata(rawPayload)
 
 	return work, nil
 }
 
 func projectorWorkItemID(scopeID string, generationID string) string {
 	return fmt.Sprintf("projector_%s_%s", scopeID, generationID)
+}
+
+func projectorScopeMetadata(rawPayload []byte) map[string]string {
+	payload, err := unmarshalPayload(rawPayload)
+	if err != nil || len(payload) == 0 {
+		return nil
+	}
+
+	metadata := make(map[string]string, len(payload))
+	for key, value := range payload {
+		switch typed := value.(type) {
+		case string:
+			if typed != "" {
+				metadata[key] = typed
+			}
+		case fmt.Stringer:
+			text := typed.String()
+			if text != "" {
+				metadata[key] = text
+			}
+		}
+	}
+	if len(metadata) == 0 {
+		return nil
+	}
+
+	return metadata
 }

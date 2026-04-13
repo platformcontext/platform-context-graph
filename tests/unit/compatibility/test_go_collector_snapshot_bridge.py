@@ -12,19 +12,19 @@ from platform_context_graph.collectors.git.types import RepositoryParseSnapshot
 from platform_context_graph.runtime.ingester.config import RepoSyncConfig, RepoSyncResult
 from platform_context_graph.runtime.ingester.go_collector_bridge import _BridgeBuilder
 from platform_context_graph.runtime.ingester.go_collector_snapshot_bridge import (
-    collect_snapshot_batch,
+    collect_repository_snapshot,
     main,
 )
 
 
-def test_collect_snapshot_batch_emits_repo_snapshots_and_content_entries(
+def test_collect_repository_snapshot_emits_one_repo_snapshot_and_content_entries(
     tmp_path: Path,
 ) -> None:
-    """The snapshot bridge should emit parse snapshots plus content transport."""
+    """The snapshot bridge should emit one repository snapshot at a time."""
 
-    repo_path = tmp_path / "service"
-    repo_path.mkdir()
-    source_file = repo_path / "app.py"
+    expected_repo_path = tmp_path / "service"
+    expected_repo_path.mkdir()
+    source_file = expected_repo_path / "app.py"
     source_file.write_text(
         "def handler():\n"
         "    return 1\n"
@@ -48,29 +48,15 @@ def test_collect_snapshot_batch_emits_repo_snapshots_and_content_entries(
         component="collector-git-snapshot-bridge",
     )
 
-    def fake_run_repo_sync_cycle(
-        _config: RepoSyncConfig,
-        *,
-        index_workspace,
-    ) -> RepoSyncResult:
-        index_workspace(
-            config.repos_dir,
-            selected_repositories=[repo_path],
-            family="sync",
-            source="filesystem",
-            component=config.component,
-        )
-        return RepoSyncResult(discovered=1, indexed=1)
-
     def fake_resolve_repository_file_sets(
         _builder: object,
         _workspace: Path,
         *,
-        selected_repositories,
+        repo_path: Path,
         pathspec_module: object,
     ) -> dict[Path, list[Path]]:
         del pathspec_module
-        assert [path.resolve() for path in selected_repositories] == [repo_path.resolve()]
+        assert repo_path == expected_repo_path.resolve()
         return {repo_path.resolve(): [source_file]}
 
     async def fake_parse_repository_snapshot_async(
@@ -117,7 +103,7 @@ def test_collect_snapshot_batch_emits_repo_snapshots_and_content_entries(
             source,
             time_monotonic_fn,
         )
-        assert repo_root == repo_path.resolve()
+        assert repo_root == expected_repo_path.resolve()
         assert repo_files == [source_file]
         return RepositoryParseSnapshot(
             repo_path=str(repo_root),
@@ -145,38 +131,35 @@ def test_collect_snapshot_batch_emits_repo_snapshots_and_content_entries(
             ],
         )
 
-    batch = collect_snapshot_batch(
+    snapshot = collect_repository_snapshot(
         config,
-        run_repo_sync_cycle_fn=fake_run_repo_sync_cycle,
         resolve_repository_file_sets_fn=fake_resolve_repository_file_sets,
         parse_repository_snapshot_async_fn=fake_parse_repository_snapshot_async,
         build_parser_registry_fn=lambda _ignored: {},
         git_remote_for_path_fn=lambda _path: "https://github.com/example/service",
         utc_now_fn=lambda: observed_at,
         pathspec_module=object(),
+        repo_path=expected_repo_path,
     )
 
-    json.dumps(batch)
+    json.dumps(snapshot)
 
-    assert batch["observed_at"] == "2026-04-12T15:30:00+00:00"
-    assert len(batch["collected"]) == 1
+    assert snapshot["observed_at"] == "2026-04-12T15:30:00+00:00"
+    assert snapshot["repo_path"] == str(expected_repo_path.resolve())
+    assert snapshot["remote_url"] == "https://github.com/example/service"
+    assert snapshot["file_count"] == 1
+    assert snapshot["file_data"][0]["functions"][0]["uid"].startswith("content-entity:e_")
 
-    collected = batch["collected"][0]
-    assert collected["repo_path"] == str(repo_path.resolve())
-    assert collected["remote_url"] == "https://github.com/example/service"
-    assert collected["file_count"] == 1
-    assert collected["file_data"][0]["functions"][0]["uid"].startswith("content-entity:e_")
-
-    content_file = collected["content_files"][0]
+    content_file = snapshot["content_files"][0]
     assert content_file["relative_path"] == "app.py"
     assert content_file["language"] == "python"
     assert content_file["content_body"] == source_file.read_text(encoding="utf-8")
     assert content_file["content_digest"]
 
-    entity_names = [entity["entity_name"] for entity in collected["content_entities"]]
+    entity_names = [entity["entity_name"] for entity in snapshot["content_entities"]]
     assert entity_names == ["handler", "Worker"]
-    assert collected["content_entities"][0]["entity_type"] == "Function"
-    assert collected["content_entities"][1]["entity_type"] == "Class"
+    assert snapshot["content_entities"][0]["entity_type"] == "Function"
+    assert snapshot["content_entities"][1]["entity_type"] == "Class"
 
 
 def test_bridge_builder_parse_file_delegates_to_registry_entrypoint(
@@ -247,21 +230,28 @@ def test_main_reserves_stdout_for_json_payload(
         component="collector-git-snapshot-bridge",
     )
 
-    def fake_collect_snapshot_batch(
+    def fake_collect_repository_snapshot(
         _config: RepoSyncConfig,
         *,
         utc_now_fn,
+        repo_path,
     ) -> dict[str, object]:
+        del repo_path
         print("bridge-noise")
         return {
             "observed_at": utc_now_fn().isoformat(),
-            "collected": [],
+            "repo_path": "/tmp/example",
+            "remote_url": "https://example.invalid/repo",
+            "file_count": 0,
+            "file_data": [],
+            "content_files": [],
+            "content_entities": [],
         }
 
     monkeypatch.setattr(RepoSyncConfig, "from_env", lambda *, component: config)
     monkeypatch.setattr(
-        "platform_context_graph.runtime.ingester.go_collector_snapshot_bridge.collect_snapshot_batch",
-        fake_collect_snapshot_batch,
+        "platform_context_graph.runtime.ingester.go_collector_snapshot_bridge.collect_repository_snapshot",
+        fake_collect_repository_snapshot,
     )
 
     assert main() == 0
@@ -270,4 +260,4 @@ def test_main_reserves_stdout_for_json_payload(
     assert "bridge-noise" not in captured.out
     assert "bridge-noise" in captured.err
     payload = json.loads(captured.out)
-    assert payload["collected"] == []
+    assert payload["repo_path"] == "/tmp/example"

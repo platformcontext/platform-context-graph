@@ -33,6 +33,7 @@ func TestProjectorQueueClaimReturnsScopeGenerationWork(t *testing.T) {
 					"pending",
 					"snapshot",
 					"",
+					[]byte(`{"repo_id":"repository:r_test"}`),
 				}},
 			},
 		},
@@ -60,6 +61,51 @@ func TestProjectorQueueClaimReturnsScopeGenerationWork(t *testing.T) {
 	}
 	if !strings.Contains(db.queries[0].query, "stage = 'projector'") {
 		t.Fatalf("claim query = %q, want projector stage filter", db.queries[0].query)
+	}
+}
+
+func TestProjectorQueueClaimPopulatesScopeMetadataFromPayload(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 11, 0, 0, 0, time.UTC)
+	db := &fakeExecQueryer{
+		queryResponses: []queueFakeRows{
+			{
+				rows: [][]any{{
+					"scope-123",
+					"git",
+					"repository",
+					"",
+					"git",
+					"repo-123",
+					"generation-456",
+					time.Date(2026, time.April, 12, 10, 0, 0, 0, time.UTC),
+					time.Date(2026, time.April, 12, 10, 5, 0, 0, time.UTC),
+					"pending",
+					"snapshot",
+					"",
+					[]byte(`{"repo_id":"repository:r_test","source_key":"repo-123"}`),
+				}},
+			},
+		},
+	}
+
+	queue := ProjectorQueue{
+		db:            db,
+		LeaseOwner:    "projector-1",
+		LeaseDuration: 30 * time.Second,
+		Now:           func() time.Time { return now },
+	}
+
+	work, ok, err := queue.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("Claim() error = %v, want nil", err)
+	}
+	if !ok {
+		t.Fatal("Claim() ok = false, want true")
+	}
+	if got, want := work.Scope.Metadata["repo_id"], "repository:r_test"; got != want {
+		t.Fatalf("Claim().Scope.Metadata[repo_id] = %q, want %q", got, want)
 	}
 }
 
@@ -186,8 +232,16 @@ func TestReducerQueueAckAndFailUpdateClaimedWork(t *testing.T) {
 func TestBootstrapWorkItemSchemaIncludesPayloadAndLeaseOwner(t *testing.T) {
 	t.Parallel()
 
-	defs := BootstrapDefinitions()
-	workItemSQL := defs[3].SQL
+	var workItemSQL string
+	for _, def := range BootstrapDefinitions() {
+		if def.Name == "fact_work_items" {
+			workItemSQL = def.SQL
+			break
+		}
+	}
+	if workItemSQL == "" {
+		t.Fatal("fact_work_items definition missing")
+	}
 	for _, want := range []string{"lease_owner TEXT NULL", "payload JSONB NOT NULL DEFAULT '{}'::jsonb"} {
 		if !strings.Contains(workItemSQL, want) {
 			t.Fatalf("work item SQL missing %q", want)

@@ -129,6 +129,18 @@ func cloneWorkItems(input map[string]proofWorkItem) map[string]proofWorkItem {
 	return cloned
 }
 
+func mustMarshalProofMetadata(metadata map[string]string) []byte {
+	if len(metadata) == 0 {
+		return []byte("{}")
+	}
+
+	payload, err := json.Marshal(metadata)
+	if err != nil {
+		panic(err)
+	}
+	return payload
+}
+
 func proofFactRows(input map[string]facts.Envelope, scopeID, generationID string) [][]any {
 	rows := [][]any{}
 	for _, envelope := range input {

@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
-import os
 import sys
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, Callable
 
-from platform_context_graph.collectors.git.types import RepositoryParseSnapshot
 from platform_context_graph.content.ingest import prepare_content_entries
+from platform_context_graph.collectors.git.types import RepositoryParseSnapshot
 from platform_context_graph.facts.models.base import stable_fact_id, utc_now
 from platform_context_graph.indexing.coordinator_facts_support import (
     repository_id_for_path,
@@ -30,203 +26,18 @@ from .go_collector_bridge_facts import (
     repository_fact,
     workload_identity_fact,
 )
-
-
-@dataclass(slots=True)
-class _BridgeBuilder:
-    """Minimal builder surface required by parse and discovery helpers."""
-
-    parsers: dict[str, Any]
-    job_manager: Any | None = None
-
-    def __post_init__(self) -> None:
-        """Attach the ``job_manager`` shape expected by parse helpers."""
-
-        if self.job_manager is None:
-            self.job_manager = SimpleNamespace(
-                update_job=lambda *_args, **_kwargs: None,
-            )
-
-    def _collect_supported_files(self, path: Path) -> list[Path]:
-        """Return supported files under one repository root."""
-
-        from platform_context_graph.collectors.git.discovery import collect_supported_files
-        from platform_context_graph.cli.config_manager import get_config_value
-        from platform_context_graph.observability import get_observability
-
-        return collect_supported_files(
-            self,
-            path,
-            get_config_value_fn=get_config_value,
-            get_observability_fn=get_observability,
-            os_module=os,
-        )
-
-    def _pre_scan_for_imports(self, files: list[Path]) -> dict[str, Any]:
-        """Return import hints for one repository parse snapshot."""
-
-        from platform_context_graph.parsers.registry import pre_scan_for_imports
-
-        return pre_scan_for_imports(self, files)
-
-    def parse_file(
-        self,
-        repo_path: Path,
-        path: Path,
-        is_dependency: bool = False,
-    ) -> dict[str, Any]:
-        """Parse one file through the shared parser-registry entrypoint."""
-
-        from platform_context_graph.cli.config_manager import get_config_value
-        from platform_context_graph.parsers.registry import parse_file
-        from platform_context_graph.utils.debug_log import (
-            debug_log,
-            error_logger,
-            warning_logger,
-        )
-
-        return parse_file(
-            self,
-            repo_path,
-            path,
-            is_dependency,
-            get_config_value_fn=get_config_value,
-            debug_log_fn=debug_log,
-            error_logger_fn=error_logger,
-            warning_logger_fn=warning_logger,
-        )
-
-
-def _default_build_parser_registry(_get_config_value: object) -> dict[str, Any]:
-    """Load the parser registry lazily."""
-
-    from platform_context_graph.cli.config_manager import get_config_value
-    from platform_context_graph.parsers.registry import build_parser_registry
-
-    del _get_config_value
-    return build_parser_registry(get_config_value)
-
-
-def _default_resolve_repository_file_sets(
-    builder: _BridgeBuilder,
-    workspace: Path,
-    *,
-    selected_repositories: list[Path],
-    pathspec_module: object,
-) -> dict[Path, list[Path]]:
-    """Load repository file-set resolution lazily."""
-
-    from platform_context_graph.collectors.git.discovery import (
-        resolve_repository_file_sets,
-    )
-
-    return resolve_repository_file_sets(
-        builder,
-        workspace,
-        selected_repositories=selected_repositories,
-        pathspec_module=pathspec_module,
-    )
-
-
-def _default_parse_repository_snapshot_async(*args: object, **kwargs: object) -> Any:
-    """Load repository parse execution lazily."""
-
-    from platform_context_graph.collectors.git.parse_execution import (
-        parse_repository_snapshot_async,
-    )
-
-    return parse_repository_snapshot_async(*args, **kwargs)
-
-
-def _default_run_repo_sync_cycle(*args: object, **kwargs: object) -> Any:
-    """Load repo-sync execution lazily."""
-
-    from .sync import run_repo_sync_cycle
-
-    return run_repo_sync_cycle(*args, **kwargs)
-
-
-def _default_git_remote_for_path(repo_path: Path) -> str | None:
-    """Load repository remote resolution lazily."""
-
-    from platform_context_graph.repository_identity import git_remote_for_path
-
-    return git_remote_for_path(repo_path)
-
-
-def _default_repository_metadata(**kwargs: object) -> dict[str, Any]:
-    """Load repository metadata shaping lazily."""
-
-    from platform_context_graph.repository_identity import repository_metadata
-
-    return repository_metadata(**kwargs)
-
-
-def _default_pathspec_module() -> object:
-    """Load ``pathspec`` lazily for real repository discovery."""
-
-    import pathspec
-
-    return pathspec
-
-
-def _selected_repositories_for_cycle(
-    config: RepoSyncConfig,
-    *,
-    run_repo_sync_cycle_fn: Callable[..., object],
-) -> list[Path]:
-    """Return the repositories selected by one repo-sync cycle."""
-
-    selected: list[Path] = []
-
-    def _capture_index_request(
-        _workspace: Path,
-        *,
-        selected_repositories: list[Path] | None = None,
-        **_kwargs: object,
-    ) -> None:
-        if not selected_repositories:
-            return
-        for repo_path in selected_repositories:
-            resolved = Path(repo_path).resolve()
-            if resolved not in selected:
-                selected.append(resolved)
-
-    run_repo_sync_cycle_fn(config, index_workspace=_capture_index_request)
-    return sorted(selected, key=str)
-
-
-def _snapshot_for_repository(
-    builder: _BridgeBuilder,
-    *,
-    repo_path: Path,
-    repo_files: list[Path],
-    parse_repository_snapshot_async_fn: Callable[..., Any],
-) -> RepositoryParseSnapshot:
-    """Parse one selected repository into an in-memory snapshot."""
-
-    if not repo_files:
-        return RepositoryParseSnapshot(
-            repo_path=str(repo_path.resolve()),
-            file_count=0,
-            imports_map={},
-            file_data=[],
-        )
-
-    return asyncio.run(
-        parse_repository_snapshot_async_fn(
-            builder,
-            repo_path.resolve(),
-            repo_files,
-            is_dependency=False,
-            job_id=None,
-            asyncio_module=asyncio,
-            info_logger_fn=lambda *_args, **_kwargs: None,
-            component="collector-git-bridge",
-            mode="sync",
-            source="git",
-        )
-    )
+from .go_collector_selection_bridge import _default_run_repo_sync_cycle
+from .go_collector_selection_bridge import _selected_repositories_for_cycle
+from .go_collector_snapshot_collection import (
+    _BridgeBuilder,
+    _default_build_parser_registry,
+    _default_git_remote_for_path,
+    _default_parse_repository_snapshot_async,
+    _default_pathspec_module,
+    _default_resolve_repository_file_sets,
+    _default_repository_metadata,
+    _snapshot_for_repository,
+)
 
 
 def _repository_facts(

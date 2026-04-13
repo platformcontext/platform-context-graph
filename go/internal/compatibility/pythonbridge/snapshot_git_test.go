@@ -4,9 +4,11 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 )
 
-func TestGitSnapshotRunnerCollectSnapshotsRunsPythonSnapshotBridge(t *testing.T) {
+func TestGitRepositorySnapshotRunnerSnapshotsOneRepository(t *testing.T) {
 	t.Parallel()
 
 	var gotName string
@@ -14,7 +16,7 @@ func TestGitSnapshotRunnerCollectSnapshotsRunsPythonSnapshotBridge(t *testing.T)
 	var gotDir string
 	var gotEnv []string
 
-	runner := GitSnapshotRunner{
+	runner := GitRepositorySnapshotRunner{
 		PythonExecutable: "python3",
 		RepoRoot:         "/tmp/platform-context-graph",
 		Env:              []string{"PATH=/usr/bin", "PYTHONPATH=/existing"},
@@ -30,24 +32,25 @@ func TestGitSnapshotRunnerCollectSnapshotsRunsPythonSnapshotBridge(t *testing.T)
 			gotDir = dir
 			gotEnv = append([]string(nil), env...)
 			return []byte(`{
-  "observed_at":"2026-04-12T15:30:00Z",
-  "collected":[
-    {
-      "repo_path":"/tmp/service",
-      "remote_url":"https://github.com/example/service",
-      "file_count":1,
-      "file_data":[{"path":"/tmp/service/app.py","lang":"python"}],
-      "content_files":[{"relative_path":"app.py","content_body":"print(1)\n","content_digest":"digest-1","language":"python"}],
-      "content_entities":[{"entity_id":"content-entity:e_fn123456789","relative_path":"app.py","entity_type":"Function","entity_name":"handler","start_line":1,"end_line":2,"language":"python","source_cache":"def handler():\n    return 1\n","indexed_at":"2026-04-12T15:30:00Z"}]
-    }
-  ]
+  "repo_path":"/tmp/service",
+  "remote_url":"https://github.com/example/service",
+  "file_count":1,
+  "file_data":[{"path":"/tmp/service/app.py","lang":"python"}],
+  "content_files":[{"relative_path":"app.py","content_body":"print(1)\n","content_digest":"digest-1","language":"python"}],
+  "content_entities":[{"entity_id":"content-entity:e_fn123456789","relative_path":"app.py","entity_type":"Function","entity_name":"handler","start_line":1,"end_line":2,"language":"python","source_cache":"def handler():\n    return 1\n","indexed_at":"2026-04-12T15:30:00Z"}]
 }`), nil
 		},
 	}
 
-	batch, err := runner.CollectSnapshots(context.Background())
+	snapshot, err := runner.SnapshotRepository(
+		context.Background(),
+		collector.SelectedRepository{
+			RepoPath:  "/tmp/service",
+			RemoteURL: "https://github.com/example/service",
+		},
+	)
 	if err != nil {
-		t.Fatalf("CollectSnapshots() error = %v, want nil", err)
+		t.Fatalf("SnapshotRepository() error = %v, want nil", err)
 	}
 	if got, want := gotName, "python3"; got != want {
 		t.Fatalf("command name = %q, want %q", got, want)
@@ -58,6 +61,8 @@ func TestGitSnapshotRunnerCollectSnapshotsRunsPythonSnapshotBridge(t *testing.T)
 	wantArgs := []string{
 		"-m",
 		"platform_context_graph.runtime.ingester.go_collector_snapshot_bridge",
+		"--repo-path",
+		"/tmp/service",
 	}
 	if len(gotArgs) != len(wantArgs) {
 		t.Fatalf("len(command args) = %d, want %d", len(gotArgs), len(wantArgs))
@@ -70,16 +75,13 @@ func TestGitSnapshotRunnerCollectSnapshotsRunsPythonSnapshotBridge(t *testing.T)
 	if len(gotEnv) == 0 {
 		t.Fatal("command env = empty, want repo-root PYTHONPATH")
 	}
-	if got, want := batch.ObservedAt, time.Date(2026, time.April, 12, 15, 30, 0, 0, time.UTC); !got.Equal(want) {
-		t.Fatalf("ObservedAt = %v, want %v", got, want)
-	}
-	if got, want := len(batch.Repositories), 1; got != want {
-		t.Fatalf("len(Repositories) = %d, want %d", got, want)
-	}
-	if got, want := batch.Repositories[0].RepoPath, "/tmp/service"; got != want {
+	if got, want := snapshot.RepoPath, "/tmp/service"; got != want {
 		t.Fatalf("RepoPath = %q, want %q", got, want)
 	}
-	if got, want := len(batch.Repositories[0].ContentEntities), 1; got != want {
+	if got, want := snapshot.ContentEntities[0].IndexedAt, time.Date(2026, time.April, 12, 15, 30, 0, 0, time.UTC); !got.Equal(want) {
+		t.Fatalf("IndexedAt = %v, want %v", got, want)
+	}
+	if got, want := len(snapshot.ContentEntities), 1; got != want {
 		t.Fatalf("len(ContentEntities) = %d, want %d", got, want)
 	}
 }

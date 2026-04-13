@@ -35,6 +35,24 @@ For the Go rewrite, that contract is the same for every long-running service:
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `pcg internal resolution-engine` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Bootstrap Index | one-shot initial indexing | `pcg internal bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
 
+## Milestone 1 Proof Runtimes
+
+The rewrite branch also has three local proof runtimes that exercise the Go
+data plane directly.
+
+They are not yet separate deployed Kubernetes workloads in the public chart,
+but they do follow the same shared admin contract:
+
+- `collector-git`: `go run ./cmd/collector-git`
+- `projector`: `go run ./cmd/projector`
+- `reducer`: `go run ./cmd/reducer`
+
+For Milestone 1, `collector-git` owns cycle orchestration, durable fact commit,
+and the shared admin surface in Go. Repository selection and per-repo parser
+snapshot collection still use narrowed transitional Python adapters. That
+transitional parser seam is intentional for this milestone and is tracked
+forward work, not hidden completion debt.
+
 ## Admin Contract
 
 For the Go rewrite path, every long-running service should converge on the same
@@ -62,6 +80,8 @@ Current rewrite status:
   `/admin/status`
 - hosted Go runtimes can now compose that shared admin server into their
   lifecycle without bespoke HTTP bootstrap code
+- `collector-git`, `projector`, and `reducer` all mount that shared admin
+  surface in their local proof lanes
 
 ## Incremental Refresh And Reconciliation
 
@@ -258,6 +278,8 @@ steady-state Kubernetes service in the public chart.
 - keep the workspace mounted only on the ingester in Kubernetes
 - use direct `/metrics` endpoints for local verification
 - use `ServiceMonitor` only for the long-running Kubernetes runtimes
+- treat the local proof runtimes as milestone-validation tools until later
+  rewrite milestones promote them into steady-state deployed shapes
 - treat the shared admin/status report as the first place to look for live,
   inferred, backlog, and failure state
 - prefer incremental scope refresh and reconciliation over platform-wide

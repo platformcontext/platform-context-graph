@@ -48,8 +48,10 @@ func run(parent context.Context) error {
 	return service.Run(ctx)
 }
 
-func buildReducerService(database postgres.SQLDB) (reducer.Service, error) {
-	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{})
+func buildReducerService(database postgres.ExecQueryer) (reducer.Service, error) {
+	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
+		WorkloadIdentityWriter: reducer.PostgresWorkloadIdentityWriter{DB: database},
+	})
 	if err != nil {
 		return reducer.Service{}, err
 	}

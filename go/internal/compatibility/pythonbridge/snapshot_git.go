@@ -5,26 +5,34 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
 )
 
 const gitCollectorSnapshotBridgeModule = "platform_context_graph.runtime.ingester.go_collector_snapshot_bridge"
 
-// GitSnapshotRunner executes the narrowed Python snapshot bridge for one sync cycle.
-type GitSnapshotRunner struct {
+// GitRepositorySnapshotRunner executes the narrowed Python snapshot bridge for
+// one selected repository.
+type GitRepositorySnapshotRunner struct {
 	PythonExecutable string
 	RepoRoot         string
 	Env              []string
 	RunCommand       RunCommandFn
 }
 
-// CollectSnapshots runs the Python snapshot bridge once and decodes the batch payload.
-func (r GitSnapshotRunner) CollectSnapshots(ctx context.Context) (collector.SnapshotBatch, error) {
+// SnapshotRepository runs the Python snapshot bridge once for one repository
+// and decodes the snapshot payload.
+func (r GitRepositorySnapshotRunner) SnapshotRepository(
+	ctx context.Context,
+	repository collector.SelectedRepository,
+) (collector.RepositorySnapshot, error) {
 	repoRoot := strings.TrimSpace(r.RepoRoot)
 	if repoRoot == "" {
-		return collector.SnapshotBatch{}, fmt.Errorf("collector snapshot bridge repo root is required")
+		return collector.RepositorySnapshot{}, fmt.Errorf("collector snapshot bridge repo root is required")
+	}
+	repositoryPath := strings.TrimSpace(repository.RepoPath)
+	if repositoryPath == "" {
+		return collector.RepositorySnapshot{}, fmt.Errorf("selected repository repo_path is required")
 	}
 
 	pythonExecutable := strings.TrimSpace(r.PythonExecutable)
@@ -40,34 +48,36 @@ func (r GitSnapshotRunner) CollectSnapshots(ctx context.Context) (collector.Snap
 	stdout, err := runCommand(
 		ctx,
 		pythonExecutable,
-		[]string{"-m", gitCollectorSnapshotBridgeModule},
+		[]string{
+			"-m",
+			gitCollectorSnapshotBridgeModule,
+			"--repo-path",
+			repositoryPath,
+		},
 		repoRoot,
 		mergedEnv(r.Env, repoRoot),
 	)
 	if err != nil {
-		return collector.SnapshotBatch{}, fmt.Errorf("run python collector snapshot bridge: %w", err)
+		return collector.RepositorySnapshot{}, fmt.Errorf("run python collector snapshot bridge: %w", err)
 	}
 
-	batch, err := decodeSnapshotBatch(stdout)
+	snapshot, err := decodeSnapshot(stdout)
 	if err != nil {
-		return collector.SnapshotBatch{}, fmt.Errorf("decode collector snapshot bridge output: %w", err)
+		return collector.RepositorySnapshot{}, fmt.Errorf("decode collector snapshot bridge output: %w", err)
 	}
-	return batch, nil
+	if strings.TrimSpace(snapshot.RepoPath) == "" {
+		snapshot.RepoPath = repositoryPath
+	}
+	if strings.TrimSpace(snapshot.RemoteURL) == "" {
+		snapshot.RemoteURL = repository.RemoteURL
+	}
+	return snapshot, nil
 }
 
-func decodeSnapshotBatch(raw []byte) (collector.SnapshotBatch, error) {
-	var payload snapshotBatchJSON
+func decodeSnapshot(raw []byte) (collector.RepositorySnapshot, error) {
+	var payload collector.RepositorySnapshot
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		return collector.SnapshotBatch{}, err
+		return collector.RepositorySnapshot{}, err
 	}
-
-	return collector.SnapshotBatch{
-		ObservedAt:   payload.ObservedAt.UTC(),
-		Repositories: payload.Collected,
-	}, nil
-}
-
-type snapshotBatchJSON struct {
-	ObservedAt time.Time                      `json:"observed_at"`
-	Collected  []collector.RepositorySnapshot `json:"collected"`
+	return payload, nil
 }

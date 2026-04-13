@@ -37,13 +37,18 @@ var bootstrapDefinitions = []Definition{
 		SQL:  factRecordSchemaSQL,
 	},
 	{
+		Name: "content_store",
+		Path: "schema/data-plane/postgres/004_content_store.sql",
+		SQL:  contentStoreSchemaSQL,
+	},
+	{
 		Name: "fact_work_items",
-		Path: "schema/data-plane/postgres/004_fact_work_items.sql",
+		Path: "schema/data-plane/postgres/005_fact_work_items.sql",
 		SQL:  workItemSchemaSQL,
 	},
 	{
 		Name: "fact_work_item_audit",
-		Path: "schema/data-plane/postgres/005_fact_work_item_audit.sql",
+		Path: "schema/data-plane/postgres/006_fact_work_item_audit.sql",
 		SQL:  workItemAuditSchemaSQL,
 	},
 }
@@ -124,6 +129,68 @@ CREATE INDEX IF NOT EXISTS fact_records_scope_generation_idx
 
 CREATE INDEX IF NOT EXISTS fact_records_stable_key_idx
     ON fact_records (stable_fact_key, generation_id);
+`
+
+const contentStoreSchemaSQL = `
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE TABLE IF NOT EXISTS content_files (
+    repo_id TEXT NOT NULL,
+    relative_path TEXT NOT NULL,
+    commit_sha TEXT NULL,
+    content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    line_count INTEGER NOT NULL,
+    language TEXT NULL,
+    indexed_at TIMESTAMPTZ NOT NULL,
+    artifact_type TEXT NULL,
+    template_dialect TEXT NULL,
+    iac_relevant BOOLEAN NULL,
+    PRIMARY KEY (repo_id, relative_path)
+);
+
+CREATE TABLE IF NOT EXISTS content_entities (
+    entity_id TEXT PRIMARY KEY,
+    repo_id TEXT NOT NULL,
+    relative_path TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_name TEXT NOT NULL,
+    start_line INTEGER NOT NULL,
+    end_line INTEGER NOT NULL,
+    start_byte INTEGER NULL,
+    end_byte INTEGER NULL,
+    language TEXT NULL,
+    source_cache TEXT NOT NULL,
+    indexed_at TIMESTAMPTZ NOT NULL,
+    artifact_type TEXT NULL,
+    template_dialect TEXT NULL,
+    iac_relevant BOOLEAN NULL
+);
+
+CREATE INDEX IF NOT EXISTS content_files_repo_path_idx
+    ON content_files (repo_id, relative_path);
+CREATE INDEX IF NOT EXISTS content_entities_repo_idx
+    ON content_entities (repo_id);
+CREATE INDEX IF NOT EXISTS content_entities_type_idx
+    ON content_entities (entity_type);
+CREATE INDEX IF NOT EXISTS content_entities_path_idx
+    ON content_entities (relative_path);
+CREATE INDEX IF NOT EXISTS content_files_content_trgm_idx
+    ON content_files USING gin (content gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS content_entities_source_trgm_idx
+    ON content_entities USING gin (source_cache gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS content_files_artifact_type_idx
+    ON content_files (artifact_type);
+CREATE INDEX IF NOT EXISTS content_files_template_dialect_idx
+    ON content_files (template_dialect);
+CREATE INDEX IF NOT EXISTS content_files_iac_relevant_idx
+    ON content_files (iac_relevant);
+CREATE INDEX IF NOT EXISTS content_entities_artifact_type_idx
+    ON content_entities (artifact_type);
+CREATE INDEX IF NOT EXISTS content_entities_template_dialect_idx
+    ON content_entities (template_dialect);
+CREATE INDEX IF NOT EXISTS content_entities_iac_relevant_idx
+    ON content_entities (iac_relevant);
 `
 
 const workItemSchemaSQL = `

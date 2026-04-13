@@ -2,6 +2,7 @@ package neo4j
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -68,7 +69,17 @@ func TestBuildPlanMaterializesSourceLocalNodeUpsertsAndTombstoneDeletes(t *testi
 	if got, want := upsert.Parameters["kind"], "repository"; got != want {
 		t.Fatalf("upsert.Parameters[kind] = %v, want %q", got, want)
 	}
-	attributes := upsert.Parameters["attributes"].(map[string]string)
+	if _, ok := upsert.Parameters["attributes"]; ok {
+		t.Fatal("upsert.Parameters[attributes] present, want serialized attributes_json only")
+	}
+	attributesJSON, ok := upsert.Parameters["attributes_json"].(string)
+	if !ok {
+		t.Fatalf("upsert.Parameters[attributes_json] type = %T, want string", upsert.Parameters["attributes_json"])
+	}
+	var attributes map[string]string
+	if err := json.Unmarshal([]byte(attributesJSON), &attributes); err != nil {
+		t.Fatalf("json.Unmarshal(attributes_json) error = %v, want nil", err)
+	}
 	if got, want := attributes["name"], "platform-context-graph"; got != want {
 		t.Fatalf("upsert attributes[name] = %q, want %q", got, want)
 	}

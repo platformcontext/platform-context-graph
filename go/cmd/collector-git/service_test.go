@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector"
+	pythonbridge "github.com/platformcontext/platform-context-graph/go/internal/compatibility/pythonbridge"
 	"github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
@@ -35,6 +36,13 @@ func TestBuildCollectorServiceUsesIngestionStoreBoundary(t *testing.T) {
 			"buildCollectorService() source type = %T, want *collector.GitSource",
 			service.Source,
 		)
+	}
+	source := service.Source.(*collector.GitSource)
+	if _, ok := source.Selector.(pythonbridge.GitSelectionRunner); !ok {
+		t.Fatalf("buildCollectorService() selector type = %T, want pythonbridge.GitSelectionRunner", source.Selector)
+	}
+	if _, ok := source.Snapshotter.(pythonbridge.GitRepositorySnapshotRunner); !ok {
+		t.Fatalf("buildCollectorService() snapshotter type = %T, want pythonbridge.GitRepositorySnapshotRunner", source.Snapshotter)
 	}
 	if service.PollInterval <= 0 {
 		t.Fatalf(

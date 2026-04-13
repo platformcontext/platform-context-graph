@@ -258,6 +258,7 @@ func (db *proofDomainDB) claimProjectorWork(now time.Time, leaseOwner string, cl
 			string(generationRow.Status),
 			string(generationRow.TriggerKind),
 			generationRow.FreshnessHint,
+			mustMarshalProofMetadata(scopeRow.Metadata),
 		}}), nil
 	}
 
@@ -296,6 +297,14 @@ func (tx *proofDomainTx) ExecContext(ctx context.Context, query string, args ...
 	_ = ctx
 	switch {
 	case strings.Contains(query, "INSERT INTO ingestion_scopes"):
+		metadata := map[string]string{}
+		if payload, err := unmarshalPayload(args[11].([]byte)); err == nil {
+			for key, value := range payload {
+				if text, ok := value.(string); ok && text != "" {
+					metadata[key] = text
+				}
+			}
+		}
 		scopeValue := scope.IngestionScope{
 			ScopeID:       args[0].(string),
 			ScopeKind:     scope.ScopeKind(args[1].(string)),
@@ -303,7 +312,7 @@ func (tx *proofDomainTx) ExecContext(ctx context.Context, query string, args ...
 			ParentScopeID: stringFromAny(args[4]),
 			CollectorKind: scope.CollectorKind(args[5].(string)),
 			PartitionKey:  args[6].(string),
-			Metadata:      nil,
+			Metadata:      metadata,
 		}
 		tx.state.scopes[scopeValue.ScopeID] = scopeValue
 		tx.state.scopeStatuses[scopeValue.ScopeID] = args[9].(string)

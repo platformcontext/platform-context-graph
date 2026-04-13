@@ -17,11 +17,16 @@ func NewStatusAdminServer(cfg Config, reader statuspkg.Reader) (*HTTPServer, err
 	if err != nil {
 		return nil, err
 	}
+	metricsHandler, err := NewStatusMetricsHandler(cfg.ServiceName, reader)
+	if err != nil {
+		return nil, err
+	}
 
 	adminMux, err := NewAdminMux(AdminMuxConfig{
-		ServiceName:   cfg.ServiceName,
-		Ready:         statusReadinessCheck(reader),
-		StatusHandler: statusHandler,
+		ServiceName:    cfg.ServiceName,
+		Ready:          statusReadinessCheck(reader),
+		StatusHandler:  statusHandler,
+		MetricsHandler: metricsHandler,
 	})
 	if err != nil {
 		return nil, err

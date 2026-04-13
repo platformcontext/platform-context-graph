@@ -8,6 +8,7 @@ package neo4j
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -18,7 +19,7 @@ const (
 	upsertNodeCypher = `MERGE (n:SourceLocalRecord {scope_id: $scope_id, generation_id: $generation_id, record_id: $record_id})
 SET n.source_system = $source_system,
     n.kind = $kind,
-    n.attributes = $attributes,
+    n.attributes_json = $attributes_json,
     n.deleted = false`
 
 	deleteNodeCypher = `MATCH (n:SourceLocalRecord {scope_id: $scope_id, generation_id: $generation_id, record_id: $record_id})
@@ -125,10 +126,15 @@ func buildStatement(materialization graph.Materialization, record graph.Record, 
 		return Statement{}, err
 	}
 
+	parameters, err := upsertParameters(materialization, record)
+	if err != nil {
+		return Statement{}, fmt.Errorf("build upsert parameters: %w", err)
+	}
+
 	return Statement{
 		Operation:  OperationUpsertNode,
 		Cypher:     upsertNodeCypher,
-		Parameters: upsertParameters(materialization, record),
+		Parameters: parameters,
 	}, nil
 }
 
@@ -162,20 +168,24 @@ func validateUpsertRecord(record graph.Record, index int) error {
 	return nil
 }
 
-func upsertParameters(materialization graph.Materialization, record graph.Record) map[string]any {
+func upsertParameters(materialization graph.Materialization, record graph.Record) (map[string]any, error) {
 	attributes := cloneStringMap(record.Attributes)
 	if attributes == nil {
 		attributes = map[string]string{}
 	}
+	attributesJSON, err := json.Marshal(attributes)
+	if err != nil {
+		return nil, fmt.Errorf("marshal attributes json: %w", err)
+	}
 
 	return map[string]any{
-		"scope_id":      materialization.ScopeID,
-		"generation_id": materialization.GenerationID,
-		"source_system": materialization.SourceSystem,
-		"record_id":     record.RecordID,
-		"kind":          record.Kind,
-		"attributes":    attributes,
-	}
+		"scope_id":        materialization.ScopeID,
+		"generation_id":   materialization.GenerationID,
+		"source_system":   materialization.SourceSystem,
+		"record_id":       record.RecordID,
+		"kind":            record.Kind,
+		"attributes_json": string(attributesJSON),
+	}, nil
 }
 
 func deleteParameters(materialization graph.Materialization, record graph.Record) map[string]any {
