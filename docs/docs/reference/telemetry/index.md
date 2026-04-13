@@ -198,6 +198,136 @@ Recommended staging order:
 If partition count goes up but oldest pending age still rises, traces should be
 the next stop before turning batch size further.
 
+## Go Data Plane Telemetry Reference
+
+The Go data plane emits OTEL metrics, traces, and structured JSON logs via the
+`go/internal/telemetry` package. All OTEL metric names use the `pcg_dp_` prefix
+to differentiate from the Python `pcg_` namespace. Hand-rolled `pcg_runtime_*`
+status gauges are preserved alongside the new OTEL metrics on the same `/metrics`
+endpoint via a composite handler.
+
+### Metrics
+
+#### Counters
+
+| Metric | Description | Dimensions |
+| --- | --- | --- |
+| `pcg_dp_facts_emitted_total` | Total facts emitted by collector | `scope_id`, `source_system`, `collector_kind` |
+| `pcg_dp_facts_committed_total` | Total facts committed to store | `scope_id`, `source_system` |
+| `pcg_dp_projections_completed_total` | Total projection cycles completed | `scope_id`, status (`succeeded`/`failed`) |
+| `pcg_dp_reducer_intents_enqueued_total` | Total reducer intents enqueued | `domain` |
+| `pcg_dp_reducer_executions_total` | Total reducer intent executions | `domain`, status (`succeeded`/`failed`) |
+| `pcg_dp_canonical_writes_total` | Total canonical graph write batches | `domain` |
+| `pcg_dp_shared_projection_cycles_total` | Total shared projection partition cycles | `domain`, `partition_key` |
+
+#### Histograms
+
+| Metric | Description | Unit | Custom buckets |
+| --- | --- | --- | --- |
+| `pcg_dp_collector_observe_duration_seconds` | Collector observe cycle duration | s | 0.01 .. 60 |
+| `pcg_dp_scope_assign_duration_seconds` | Scope assignment duration | s | default |
+| `pcg_dp_fact_emit_duration_seconds` | Fact emission duration | s | default |
+| `pcg_dp_projector_run_duration_seconds` | Projector run cycle duration | s | 0.1 .. 120 |
+| `pcg_dp_projector_stage_duration_seconds` | Projector stage duration | s | default |
+| `pcg_dp_reducer_run_duration_seconds` | Reducer intent execution duration | s | default |
+| `pcg_dp_canonical_write_duration_seconds` | Canonical graph write duration | s | default |
+| `pcg_dp_queue_claim_duration_seconds` | Queue work item claim duration | s | default |
+| `pcg_dp_postgres_query_duration_seconds` | Postgres query duration | s | 0.001 .. 2.5 |
+| `pcg_dp_neo4j_query_duration_seconds` | Neo4j query duration | s | default |
+
+### Metric Dimension Keys
+
+| Key | Description |
+| --- | --- |
+| `scope_id` | Ingestion scope identifier |
+| `scope_kind` | Scope type (e.g. repository) |
+| `source_system` | Origin system (e.g. git) |
+| `generation_id` | Scope generation identifier |
+| `collector_kind` | Collector type (e.g. git) |
+| `domain` | Reducer or projection domain |
+| `partition_key` | Shared projection partition |
+
+### Span Names
+
+#### Pipeline spans
+
+| Span | Where | Description |
+| --- | --- | --- |
+| `collector.observe` | Ingester collector loop | One collect + commit cycle |
+| `scope.assign` | Collector repo discovery | Repository selection and scope assignment |
+| `fact.emit` | Collector per-repo snapshot | File parse, snapshot, content extraction per repo |
+| `projector.run` | Ingester projector loop | One claim + project + ack cycle |
+| `reducer_intent.enqueue` | Projector runtime | Enqueuing reducer intents after projection |
+| `reducer.run` | Reducer main loop | One claim + execute + ack cycle |
+| `canonical.write` | Projector runtime / Reducer shared projection | Graph and content writes to Neo4j |
+
+#### Dependency service spans
+
+| Span | Where | Description |
+| --- | --- | --- |
+| `postgres.exec` | Instrumented Postgres wrapper | Every `ExecContext` call (writes) |
+| `postgres.query` | Instrumented Postgres wrapper | Every `QueryContext` call (reads) |
+| `neo4j.execute` | Instrumented Neo4j wrapper | Every Cypher statement execution |
+
+These dependency spans are child spans of the pipeline spans above, creating
+end-to-end traces from collection through parsing through projection through
+reduction, including every database call along the way.
+
+### Structured Log Keys
+
+All Go data plane services emit JSON logs via `log/slog` with a custom
+`TraceHandler` that injects `trace_id` and `span_id` from the active OTEL span
+context. Base attributes (`service.name`, `service.namespace`) are set at logger
+creation. The following keys appear in structured log events:
+
+| Key | Description |
+| --- | --- |
+| `scope_id` | Ingestion scope identifier |
+| `scope_kind` | Scope type |
+| `source_system` | Origin system |
+| `generation_id` | Scope generation identifier |
+| `collector_kind` | Collector type |
+| `domain` | Reducer or projection domain |
+| `partition_key` | Shared projection partition |
+| `request_id` | Request correlation ID |
+| `failure_class` | Failure classification (terminal/retryable) |
+| `refresh_skipped` | Whether incremental refresh was skipped |
+| `pipeline_phase` | Pipeline phase: discovery, parsing, emission, projection, reduction, shared |
+| `trace_id` | OTEL trace ID (injected by TraceHandler) |
+| `span_id` | OTEL span ID (injected by TraceHandler) |
+
+The `pipeline_phase` key enables filtering logs by stage when tracing
+end-to-end. Every structured log event from a service loop carries exactly
+one phase value, so `jq 'select(.pipeline_phase == "projection")'` isolates
+projector-specific events across all services.
+
+### OTEL Provider Configuration
+
+The Go data plane configures OTEL SDK providers at startup in each `cmd/`
+entrypoint. Configuration is environment-driven:
+
+| Env var | Effect |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | When set, enables OTLP gRPC trace and metric export. When empty, uses noop exporters (safe for local dev). |
+| `OTEL_SERVICE_NAME` | Overrides the service name resource attribute (defaults to the binary name). |
+
+The Prometheus exporter is always active regardless of OTLP configuration,
+serving on the existing `/metrics` endpoint alongside `pcg_runtime_*` gauges.
+
+### Grafana Dashboards
+
+Pre-built dashboard JSON definitions are in `docs/dashboards/`:
+
+| Dashboard | File | Panels |
+| --- | --- | --- |
+| Ingester | `ingester.json` | Collection rate, projection P95, queue depth, claim latency |
+| Reducer | `reducer.json` | Execution by domain, shared projection, canonical writes, errors |
+| Overview | `overview.json` | End-to-end throughput, latency waterfall, queue depths |
+
+Import into Grafana via **Dashboards > Import > Upload JSON**. All dashboards
+use `$service` and `$namespace` template variables matching Helm ServiceMonitor
+labels.
+
 ## Prometheus And ServiceMonitor
 
 - In Docker Compose, validate runtime metrics by curling the direct `/metrics`

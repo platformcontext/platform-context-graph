@@ -640,3 +640,184 @@ Use these together:
 - `pcg_neo4j_query_duration_seconds`
 
 If stage output is flat but duration rises, look at graph batch size, Cypher cost, or database contention.
+
+## Go Data Plane Metrics
+
+The Go data plane emits OTEL metrics via the `go/internal/telemetry` package. All
+metric names use the `pcg_dp_` prefix to differentiate from the Python `pcg_`
+namespace. The hand-rolled `pcg_runtime_*` status gauges documented above are
+preserved alongside the new OTEL metrics on the same `/metrics` endpoint via a
+composite handler.
+
+### Counters
+
+### `pcg_dp_facts_emitted_total`
+
+- Type: Counter
+- Description: Total facts emitted by the collector during snapshot collection.
+- Dimensions: `scope_id`, `source_system`, `collector_kind`
+- How to leverage: Use as the top-line ingestion volume signal. Compare with `pcg_dp_facts_committed_total` to detect emission-to-commit drop-off.
+
+### `pcg_dp_facts_committed_total`
+
+- Type: Counter
+- Description: Total facts durably committed to the Postgres fact store.
+- Dimensions: `scope_id`, `source_system`, `collector_kind`
+- How to leverage: If this diverges from `pcg_dp_facts_emitted_total`, the commit path is failing or dropping work.
+
+### `pcg_dp_projections_completed_total`
+
+- Type: Counter
+- Description: Total projection cycles completed by the projector.
+- Dimensions: `scope_id`, `status` (`succeeded` or `failed`)
+- How to leverage: Primary success/failure signal for the Go projector. Alert on rising `failed` count.
+
+### `pcg_dp_reducer_intents_enqueued_total`
+
+- Type: Counter
+- Description: Total reducer intents enqueued after projection.
+- Dimensions: `scope_id`
+- How to leverage: Tracks how much downstream reducer work each projection cycle generates.
+
+### `pcg_dp_reducer_executions_total`
+
+- Type: Counter
+- Description: Total reducer intent executions.
+- Dimensions: `domain`, `status` (`succeeded` or `failed`)
+- How to leverage: Top-line reducer throughput and failure signal, segmented by domain.
+
+### `pcg_dp_canonical_writes_total`
+
+- Type: Counter
+- Description: Total canonical graph write batches to Neo4j.
+- Dimensions: `scope_id` or `domain`
+- How to leverage: Track graph write volume. Pair with `pcg_dp_canonical_write_duration_seconds` for throughput analysis.
+
+### `pcg_dp_shared_projection_cycles_total`
+
+- Type: Counter
+- Description: Total shared projection partition cycles across all domains.
+- Dimensions: `domain`, `partition_key`
+- How to leverage: Track shared projection activity by domain to detect stuck or overloaded partitions.
+
+### Histograms
+
+### `pcg_dp_collector_observe_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of one collector observe cycle (discovery + snapshot + commit).
+- Unit: seconds
+- Custom buckets: 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60
+- How to leverage: Primary latency signal for the Git collector. Watch p95 for regression detection.
+
+### `pcg_dp_scope_assign_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of repository discovery and scope assignment.
+- Unit: seconds
+- Dimensions: `collector_kind`, `source_system`
+- How to leverage: Separates discovery time from snapshot time inside the collector cycle.
+
+### `pcg_dp_fact_emit_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of fact emission for one repository (snapshot + fact building).
+- Unit: seconds
+- Dimensions: `collector_kind`, `source_system`, `scope_id`
+- How to leverage: Identifies slow repositories at the per-repo level before they inflate the overall collector duration.
+
+### `pcg_dp_projector_run_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of one projector claim-load-project-ack cycle.
+- Unit: seconds
+- Custom buckets: 0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120
+- How to leverage: Primary latency signal for the Go projector work loop.
+
+### `pcg_dp_projector_stage_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of individual projector stages (graph write, content write, intent enqueue).
+- Unit: seconds
+- Dimensions: `scope_id`
+- How to leverage: Breaks down where time is spent within a single projection cycle.
+
+### `pcg_dp_reducer_run_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of one reducer claim-execute-ack cycle.
+- Unit: seconds
+- Dimensions: `domain`
+- How to leverage: Primary latency signal for reducer intent execution, segmented by domain.
+
+### `pcg_dp_canonical_write_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of canonical graph writes to Neo4j.
+- Unit: seconds
+- Dimensions: `scope_id` or `domain`
+- How to leverage: Shows whether Neo4j write latency is the bottleneck in projection or shared projection.
+
+### `pcg_dp_queue_claim_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of work-item claims from the Postgres work queue.
+- Unit: seconds
+- Dimensions: `queue` (`projector` or `reducer`)
+- How to leverage: Rising claim latency often indicates Postgres queue contention before backlog becomes visible.
+
+### `pcg_dp_postgres_query_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of every Postgres query executed through the instrumented database wrapper.
+- Unit: seconds
+- Custom buckets: 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5
+- Dimensions: `operation` (`read` or `write`), `store` (e.g. `ingester`, `reducer`, `bootstrap-index`)
+- How to leverage: The most granular Postgres performance signal. Use to detect slow queries, connection pressure, or per-store hotspots before they surface as pipeline backlog.
+
+### `pcg_dp_neo4j_query_duration_seconds`
+
+- Type: Histogram
+- Description: Duration of every Neo4j Cypher statement executed through the instrumented executor wrapper.
+- Unit: seconds
+- Dimensions: `operation` (`write`)
+- How to leverage: Shows Neo4j write latency at the individual statement level. Pair with `pcg_dp_canonical_write_duration_seconds` to see whether batch overhead or individual statement cost dominates.
+
+### Go Data Plane Tuning Recipes
+
+#### Database Performance Diagnosis
+
+Use these together:
+
+- `pcg_dp_postgres_query_duration_seconds` (by store and operation)
+- `pcg_dp_neo4j_query_duration_seconds`
+- `pcg_dp_queue_claim_duration_seconds`
+- `pcg_dp_canonical_write_duration_seconds`
+
+If Postgres query duration rises while queue claim stays flat, investigate specific
+stores. If both rise together, suspect Postgres connection saturation.
+
+#### Collector Throughput
+
+Use these together:
+
+- `pcg_dp_collector_observe_duration_seconds`
+- `pcg_dp_scope_assign_duration_seconds`
+- `pcg_dp_fact_emit_duration_seconds`
+- `pcg_dp_facts_emitted_total`
+- `pcg_dp_facts_committed_total`
+
+If collector duration rises, check whether discovery (`scope_assign`) or per-repo
+snapshot (`fact_emit`) is the bottleneck.
+
+#### End-to-End Pipeline Health
+
+Use these together:
+
+- `pcg_dp_facts_emitted_total` (rate)
+- `pcg_dp_projections_completed_total` (rate by status)
+- `pcg_dp_reducer_executions_total` (rate by status)
+- `pcg_dp_shared_projection_cycles_total` (rate)
+
+If emitted facts rate is healthy but projection or reducer rates drop, the
+bottleneck is downstream. Use the per-stage histograms to pinpoint the slowdown.

@@ -202,6 +202,147 @@ Use logs to validate what the metrics imply:
 
 Use logs to confirm whether worker saturation is real or whether the queue/database path is the true bottleneck.
 
+## Go Data Plane Logs
+
+The Go data plane emits structured JSON logs via `log/slog` with a custom
+`TraceHandler` that injects OTEL trace context into every log line. All Go
+services (`ingester`, `reducer`, `bootstrap-index`) share this logging
+infrastructure from the `go/internal/telemetry` package.
+
+### Log Format
+
+Every Go data plane log line is a single JSON document written to stderr:
+
+```json
+{
+  "time": "2026-04-13T18:30:00.000Z",
+  "level": "INFO",
+  "msg": "collector snapshot completed",
+  "service.name": "pcg-ingester",
+  "service.namespace": "platform-context-graph",
+  "trace_id": "abc123def456...",
+  "span_id": "789abc...",
+  "scope_id": "git-repository-scope:...",
+  "generation_id": "...",
+  "source_system": "git",
+  "pipeline_phase": "emission",
+  "collector_kind": "git",
+  "fact_count": 42
+}
+```
+
+Base attributes (`service.name`, `service.namespace`) are set once at logger
+creation and appear on every line. Trace correlation (`trace_id`, `span_id`)
+is injected automatically by `TraceHandler` from the active OTEL span context.
+
+### Structured Log Keys
+
+These keys come from the frozen telemetry contract (`contract.go`) and appear
+consistently across all Go data plane services:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `scope_id` | string | Ingestion scope identifier (e.g. `git-repository-scope:<repo_id>`) |
+| `scope_kind` | string | Scope type (e.g. `repository`) |
+| `source_system` | string | Origin system (e.g. `git`) |
+| `generation_id` | string | Scope generation identifier for this collect cycle |
+| `collector_kind` | string | Collector type (e.g. `git`) |
+| `domain` | string | Reducer or projection domain (e.g. `workload`, `platform`) |
+| `partition_key` | string | Shared projection partition key |
+| `request_id` | string | Request correlation identifier |
+| `failure_class` | string | Error classification for retryable vs terminal failures |
+| `refresh_skipped` | bool | Whether a freshness check skipped re-collection |
+| `pipeline_phase` | string | Pipeline phase identifier (see below) |
+
+### Pipeline Phase Values
+
+The `pipeline_phase` key lets operators filter logs by pipeline stage. Every
+structured log line in the Go data plane carries exactly one of these values:
+
+| Phase | Value | Where | What it covers |
+| --- | --- | --- | --- |
+| Discovery | `discovery` | Collector | Repository selection and scope assignment |
+| Parsing | `parsing` | Collector | File parse, snapshot, content extraction |
+| Emission | `emission` | Collector | Fact envelope creation and durable commit |
+| Projection | `projection` | Projector | Fact-to-graph/content projection |
+| Reduction | `reduction` | Reducer | Reducer intent execution |
+| Shared | `shared` | Reducer | Shared projection partition processing |
+
+### Trace Correlation
+
+The custom `TraceHandler` wraps the standard `slog.JSONHandler` and
+automatically injects `trace_id` and `span_id` from the active OTEL span
+context. This means every structured log line inside a traced code path
+carries the trace identifiers needed to jump from logs into Jaeger or your
+trace backend.
+
+When no span is active (e.g. during startup), `trace_id` and `span_id` are
+omitted rather than emitted as zero values.
+
+### Helper Functions
+
+The telemetry package provides attribute helpers for consistent log shaping:
+
+- `ScopeAttrs(scopeID, generationID, sourceSystem)` — returns scope-level
+  attributes for collector and projector logs
+- `DomainAttrs(domain, partitionKey)` — returns domain-level attributes for
+  reducer and shared projection logs
+- `PhaseAttr(phase)` — returns a `pipeline_phase` attribute
+- `FailureClassAttr(class)` — returns a `failure_class` attribute for error
+  classification
+
+### Go Data Plane Log Events
+
+#### Collector
+
+- Scope assignment completed — `pipeline_phase=discovery`, includes
+  `collector_kind` and repository count
+- Snapshot completed — `pipeline_phase=emission`, includes `repo_path`,
+  `file_count`, `fact_count`
+- Commit succeeded/failed — `pipeline_phase=emission`, includes `scope_id`,
+  `generation_id`, `fact_count`
+
+#### Projector
+
+- Projection succeeded/failed — `pipeline_phase=projection`, includes
+  `scope_id`, `generation_id`, graph/content/intent counts
+
+#### Reducer
+
+- Execution succeeded/failed — `pipeline_phase=reduction`, includes `domain`,
+  `partition_key`, `failure_class` on errors
+- Shared projection cycle — `pipeline_phase=shared`, includes `domain`,
+  `partition_key`
+
+### Go Data Plane Log Recipes
+
+#### Trace a single repository through the pipeline
+
+```
+# Filter by scope_id across all services
+jq 'select(.scope_id == "git-repository-scope:<repo_id>")' < logs.jsonl
+```
+
+#### Find all errors in one pipeline phase
+
+```
+jq 'select(.pipeline_phase == "projection" and .level == "ERROR")' < logs.jsonl
+```
+
+#### Jump from a log line to its trace
+
+1. Find the log line with the error or event of interest.
+2. Copy the `trace_id` value.
+3. Search for that trace ID in Jaeger or your trace backend.
+4. The matching trace shows the full span tree for that operation.
+
+#### Correlate database latency with pipeline failures
+
+1. Filter logs by `pipeline_phase` and `failure_class`.
+2. Use the `trace_id` to find the matching trace.
+3. Inspect child `postgres.exec`/`postgres.query` or `neo4j.execute` spans
+   for database-level latency or errors.
+
 ## Relationship To Existing Logging Standard
 
 This page is the operator-facing guide.

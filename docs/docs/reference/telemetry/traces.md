@@ -171,8 +171,105 @@ These attributes are especially useful for narrowing traces:
 3. Use the trace attributes to decide whether the issue is sparse evidence,
    repo-widening failure, or downstream query latency.
 
+## Go Data Plane Spans
+
+The Go data plane emits OTEL spans via the `go/internal/telemetry` package. These
+spans form end-to-end traces from collection through parsing through projection
+through reduction, including every database call along the way.
+
+### Pipeline Spans
+
+| Span | Where | Description |
+| --- | --- | --- |
+| `collector.observe` | Ingester collector loop | One collect + commit cycle |
+| `scope.assign` | Collector repo discovery | Repository selection and scope assignment |
+| `fact.emit` | Collector per-repo snapshot | File parse, snapshot, content extraction per repo |
+| `projector.run` | Ingester projector loop | One claim + project + ack cycle |
+| `reducer_intent.enqueue` | Projector runtime | Enqueuing reducer intents after projection |
+| `reducer.run` | Reducer main loop | One claim + execute + ack cycle |
+| `canonical.write` | Projector runtime / Reducer shared projection | Graph and content writes to Neo4j |
+
+### Dependency Service Spans
+
+| Span | Where | Description |
+| --- | --- | --- |
+| `postgres.exec` | Instrumented Postgres wrapper | Every `ExecContext` call (writes) |
+| `postgres.query` | Instrumented Postgres wrapper | Every `QueryContext` call (reads) |
+| `neo4j.execute` | Instrumented Neo4j wrapper | Every Cypher statement execution |
+
+These dependency spans are child spans of the pipeline spans above, creating
+end-to-end traces from collection through projection through reduction, including
+every database call along the way.
+
+### Go Span Attributes
+
+Attributes on pipeline spans:
+
+- `scope_id` — ingestion scope identifier
+- `source_system` — origin system (e.g. `git`)
+- `collector_kind` — collector type (e.g. `git`)
+- `domain` — reducer or projection domain
+
+Attributes on dependency spans:
+
+- `db.system` — `postgresql` or `neo4j`
+- `db.operation` — `exec`, `query`, or the Cypher operation type
+- `pcg.store` — store name for Postgres spans (e.g. `ingester`, `reducer`, `bootstrap-index`)
+
+### Go Data Plane Trace Topology
+
+```text
+collector.observe
+  ├── scope.assign (discovery)
+  ├── fact.emit (per-repo snapshot)
+  │   ├── postgres.exec (fact writes)
+  │   └── postgres.query (freshness checks)
+  └── postgres.exec (commit scope generation)
+
+projector.run
+  ├── postgres.query (fact loading)
+  ├── canonical.write (graph materialization)
+  │   └── neo4j.execute (Cypher statements)
+  ├── postgres.exec (content writes)
+  └── reducer_intent.enqueue
+      └── postgres.exec (intent writes)
+
+reducer.run
+  ├── postgres.query (intent loading)
+  ├── postgres.exec (domain handler writes)
+  └── neo4j.execute (workload/platform materialization)
+
+canonical.write (shared projection)
+  ├── postgres.query (intent reads, lease management)
+  └── neo4j.execute (edge writes)
+```
+
+### Go Data Plane Incident Recipes
+
+#### Ingester is slow
+
+1. Start with `pcg_dp_collector_observe_duration_seconds`.
+2. Open `collector.observe` trace — check whether `scope.assign` or `fact.emit`
+   dominates.
+3. Inspect child `postgres.exec` and `postgres.query` spans for database latency.
+
+#### Projector backlog is rising
+
+1. Start with `pcg_dp_queue_claim_duration_seconds{queue=projector}`.
+2. Open `projector.run` traces — check `postgres.query` (fact load) and
+   `canonical.write` → `neo4j.execute` (graph write) for bottlenecks.
+3. If `neo4j.execute` is slow, investigate Neo4j separately.
+
+#### Reducer is failing
+
+1. Start with `pcg_dp_reducer_executions_total{status=failed}`.
+2. Open `reducer.run` traces for the failing domain.
+3. Check child `postgres.exec` and `neo4j.execute` spans for errors.
+
 ## Best Practices
 
 - Use metrics to choose the right trace first.
 - Filter by `service.name` to separate API, ingester, and resolution-engine behavior.
 - Use `request_id`, `correlation_id`, `run_id`, and `work_item_id` to jump from logs into traces quickly.
+- For Go data plane traces, filter by `db.system` to isolate Postgres versus Neo4j
+  latency contributions within a single pipeline span.
