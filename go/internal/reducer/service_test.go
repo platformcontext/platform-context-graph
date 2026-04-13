@@ -103,6 +103,63 @@ func TestServiceRunMarksFailureWhenExecutionFails(t *testing.T) {
 	}
 }
 
+func TestServiceRunStartsSharedProjectionRunner(t *testing.T) {
+	t.Parallel()
+
+	leaseManager := &fakeLeaseManager{granted: false}
+
+	service := Service{
+		PollInterval: 10 * time.Millisecond,
+		WorkSource:   &stubReducerWorkSource{},
+		Executor:     &stubReducerExecutor{},
+		WorkSink:     &stubReducerWorkSink{},
+		SharedProjectionRunner: &SharedProjectionRunner{
+			IntentReader: &fakeSharedIntentReader{},
+			LeaseManager: leaseManager,
+			EdgeWriter:   &fakeEdgeWriter{},
+			AcceptedGen:  func(_, _ string) (string, bool) { return "", false },
+			Config: SharedProjectionRunnerConfig{
+				PartitionCount: 1,
+				PollInterval:   10 * time.Millisecond,
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err := service.Run(ctx)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	// Verify the shared projection runner attempted lease claims (proving it ran).
+	leaseManager.mu.Lock()
+	claims := leaseManager.claims
+	leaseManager.mu.Unlock()
+
+	if claims == 0 {
+		t.Fatal("expected shared projection runner to attempt at least one lease claim")
+	}
+}
+
+func TestServiceRunWorksWithoutSharedProjectionRunner(t *testing.T) {
+	t.Parallel()
+
+	service := Service{
+		PollInterval: 10 * time.Millisecond,
+		WorkSource:   &stubReducerWorkSource{},
+		Executor:     &stubReducerExecutor{},
+		WorkSink:     &stubReducerWorkSink{},
+		Wait:         func(context.Context, time.Duration) error { return context.Canceled },
+	}
+
+	err := service.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil (should work without projection runner)", err)
+	}
+}
+
 type stubReducerWorkSource struct {
 	claimCalls int
 	intents    []Intent

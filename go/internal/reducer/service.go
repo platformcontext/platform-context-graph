@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -36,14 +37,49 @@ type Service struct {
 	// SharedProjectionEdgeWriter is the Neo4j edge writer used by the shared
 	// projection worker loop (ProcessPartitionOnce). Nil until Neo4j is wired.
 	SharedProjectionEdgeWriter SharedProjectionEdgeWriter
+
+	// SharedProjectionRunner runs the shared projection intent processing loop
+	// concurrently with the main claim/execute/ack loop. Nil disables the runner.
+	SharedProjectionRunner *SharedProjectionRunner
 }
 
-// Run polls for reducer work until the context is canceled.
+// Run polls for reducer work until the context is canceled. If a
+// SharedProjectionRunner is configured, it runs concurrently as a goroutine.
 func (s Service) Run(ctx context.Context) error {
 	if err := s.validate(); err != nil {
 		return err
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	var runnerErr error
+
+	if s.SharedProjectionRunner != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.SharedProjectionRunner.Run(ctx); err != nil {
+				runnerErr = err
+				cancel()
+			}
+		}()
+	}
+
+	err := s.runMainLoop(ctx)
+
+	cancel()
+	wg.Wait()
+
+	if err != nil {
+		return err
+	}
+	return runnerErr
+}
+
+// runMainLoop is the main claim/execute/ack loop extracted for concurrent use.
+func (s Service) runMainLoop(ctx context.Context) error {
 	for {
 		intent, ok, err := s.WorkSource.Claim(ctx)
 		if err != nil {

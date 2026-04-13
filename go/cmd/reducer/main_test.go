@@ -29,7 +29,7 @@ func TestBuildReducerServiceWiresDefaultRuntimeAndQueue(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, func(string) string { return "" })
+	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("buildReducerService() error = %v, want nil", err)
 	}
@@ -51,7 +51,7 @@ func TestBuildReducerServiceWiresPostgresWorkloadIdentityWriter(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, func(string) string { return "" })
+	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("buildReducerService() error = %v, want nil", err)
 	}
@@ -89,7 +89,7 @@ func TestBuildReducerServiceWiresPostgresCloudAssetResolutionWriter(t *testing.T
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, func(string) string { return "" })
+	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), func(string) string { return "" })
 	if err != nil {
 		t.Fatalf("buildReducerService() error = %v, want nil", err)
 	}
@@ -127,7 +127,7 @@ func TestBuildReducerServiceWiresRetryConfigFromEnv(t *testing.T) {
 	t.Parallel()
 
 	db := &fakeReducerDB{}
-	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, func(name string) string {
+	service, err := buildReducerService(db, stubNeo4jExecutor{}, stubCypherExecutor{}, postgres.NewSharedIntentStore(db), func(name string) string {
 		switch name {
 		case reducerRetryDelayEnv:
 			return "2m"

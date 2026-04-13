@@ -89,6 +89,32 @@ SET completed_at = $1
 WHERE intent_id = $2
 `
 
+const claimPartitionLeaseSQL = `
+INSERT INTO shared_projection_partition_leases (
+    projection_domain, partition_id, partition_count,
+    lease_owner, lease_expires_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (projection_domain, partition_id, partition_count) DO UPDATE
+SET lease_owner = EXCLUDED.lease_owner,
+    lease_expires_at = EXCLUDED.lease_expires_at,
+    updated_at = EXCLUDED.updated_at
+WHERE shared_projection_partition_leases.lease_expires_at IS NULL
+   OR shared_projection_partition_leases.lease_expires_at <= $6
+   OR shared_projection_partition_leases.lease_owner = $4
+RETURNING projection_domain
+`
+
+const releasePartitionLeaseSQL = `
+UPDATE shared_projection_partition_leases
+SET lease_owner = NULL,
+    lease_expires_at = NULL,
+    updated_at = $5
+WHERE projection_domain = $1
+  AND partition_id = $2
+  AND partition_count = $3
+  AND lease_owner = $4
+`
+
 // SharedIntentFilter specifies query parameters for listing shared intents.
 type SharedIntentFilter struct {
 	RepositoryID     string
@@ -198,6 +224,55 @@ func (s *SharedIntentStore) MarkIntentsCompleted(ctx context.Context, intentIDs 
 		if err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+// ClaimPartitionLease attempts to claim a partition lease. Returns true if the
+// lease was successfully claimed, false if it is held by another worker.
+func (s *SharedIntentStore) ClaimPartitionLease(ctx context.Context, domain string, partitionID, partitionCount int, leaseOwner string, leaseTTL time.Duration) (bool, error) {
+	now := time.Now().UTC()
+	leaseExpiresAt := now.Add(leaseTTL)
+
+	rows, err := s.db.QueryContext(ctx, claimPartitionLeaseSQL,
+		domain,
+		partitionID,
+		partitionCount,
+		leaseOwner,
+		leaseExpiresAt,
+		now,
+	)
+	if err != nil {
+		return false, fmt.Errorf("claim partition lease: %w", err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return false, nil
+	}
+
+	var projectionDomain string
+	if err := rows.Scan(&projectionDomain); err != nil {
+		return false, fmt.Errorf("scan lease claim result: %w", err)
+	}
+
+	return true, rows.Err()
+}
+
+// ReleasePartitionLease releases a partition lease owned by the given worker.
+func (s *SharedIntentStore) ReleasePartitionLease(ctx context.Context, domain string, partitionID, partitionCount int, leaseOwner string) error {
+	now := time.Now().UTC()
+
+	_, err := s.db.ExecContext(ctx, releasePartitionLeaseSQL,
+		domain,
+		partitionID,
+		partitionCount,
+		leaseOwner,
+		now,
+	)
+	if err != nil {
+		return fmt.Errorf("release partition lease: %w", err)
 	}
 
 	return nil

@@ -37,7 +37,8 @@ func run(parent context.Context) error {
 	}
 	defer func() { _ = neo4jCloser.Close() }()
 
-	serviceRunner, err := buildReducerService(postgres.SQLDB{DB: db}, neo4jExecutor, cypherExecutor, os.Getenv)
+	intentStore := postgres.NewSharedIntentStore(postgres.SQLDB{DB: db})
+	serviceRunner, err := buildReducerService(postgres.SQLDB{DB: db}, neo4jExecutor, cypherExecutor, intentStore, os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -75,6 +76,7 @@ func buildReducerService(
 	database postgres.ExecQueryer,
 	neo4jExec sourceneo4j.Executor,
 	cypherExec reducer.CypherExecutor,
+	intentStore *postgres.SharedIntentStore,
 	getenv func(string) string,
 ) (reducer.Service, error) {
 	executor, err := reducer.NewDefaultRuntime(reducer.DefaultHandlers{
@@ -103,5 +105,11 @@ func buildReducerService(
 		Executor:                   executor,
 		WorkSink:                   workQueue,
 		SharedProjectionEdgeWriter: edgeWriter,
+		SharedProjectionRunner: &reducer.SharedProjectionRunner{
+			IntentReader: intentStore,
+			LeaseManager: intentStore,
+			EdgeWriter:   edgeWriter,
+			AcceptedGen:  postgres.NewAcceptedGenerationLookup(database),
+		},
 	}, nil
 }

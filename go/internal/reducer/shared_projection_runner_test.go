@@ -1,0 +1,237 @@
+package reducer
+
+import (
+	"context"
+	"sync"
+	"testing"
+	"time"
+)
+
+type fakeSharedIntentReader struct {
+	mu      sync.Mutex
+	intents []SharedProjectionIntentRow
+	marked  []string
+}
+
+func (f *fakeSharedIntentReader) ListPendingDomainIntents(_ context.Context, domain string, limit int) ([]SharedProjectionIntentRow, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var result []SharedProjectionIntentRow
+	for _, row := range f.intents {
+		if row.ProjectionDomain == domain && row.CompletedAt == nil {
+			result = append(result, row)
+			if len(result) >= limit {
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
+func (f *fakeSharedIntentReader) MarkIntentsCompleted(_ context.Context, intentIDs []string, completedAt time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.marked = append(f.marked, intentIDs...)
+	idSet := make(map[string]struct{}, len(intentIDs))
+	for _, id := range intentIDs {
+		idSet[id] = struct{}{}
+	}
+	for i := range f.intents {
+		if _, ok := idSet[f.intents[i].IntentID]; ok {
+			t := completedAt
+			f.intents[i].CompletedAt = &t
+		}
+	}
+	return nil
+}
+
+type fakeLeaseManager struct {
+	mu      sync.Mutex
+	claims  int
+	granted bool
+}
+
+func (f *fakeLeaseManager) ClaimPartitionLease(_ context.Context, _ string, _, _ int, _ string, _ time.Duration) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.claims++
+	return f.granted, nil
+}
+
+func (f *fakeLeaseManager) ReleasePartitionLease(_ context.Context, _ string, _, _ int, _ string) error {
+	return nil
+}
+
+type fakeEdgeWriter struct {
+	mu        sync.Mutex
+	writes    int
+	retracts  int
+	writeRows []SharedProjectionIntentRow
+}
+
+func (f *fakeEdgeWriter) WriteEdges(_ context.Context, _ string, rows []SharedProjectionIntentRow, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.writes++
+	f.writeRows = append(f.writeRows, rows...)
+	return nil
+}
+
+func (f *fakeEdgeWriter) RetractEdges(_ context.Context, _ string, rows []SharedProjectionIntentRow, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.retracts++
+	return nil
+}
+
+func TestSharedProjectionRunnerConfigDefaults(t *testing.T) {
+	t.Parallel()
+
+	cfg := SharedProjectionRunnerConfig{}
+	if got := cfg.partitionCount(); got != defaultPartitionCount {
+		t.Fatalf("partitionCount() = %d, want %d", got, defaultPartitionCount)
+	}
+	if got := cfg.pollInterval(); got != defaultSharedPollInterval {
+		t.Fatalf("pollInterval() = %v, want %v", got, defaultSharedPollInterval)
+	}
+	if got := cfg.leaseTTL(); got != defaultLeaseTTL {
+		t.Fatalf("leaseTTL() = %v, want %v", got, defaultLeaseTTL)
+	}
+	if got := cfg.batchLimit(); got != defaultBatchLimit {
+		t.Fatalf("batchLimit() = %d, want %d", got, defaultBatchLimit)
+	}
+}
+
+func TestSharedProjectionRunnerStopsOnCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	runner := SharedProjectionRunner{
+		IntentReader: &fakeSharedIntentReader{},
+		LeaseManager: &fakeLeaseManager{granted: false},
+		EdgeWriter:   &fakeEdgeWriter{},
+		AcceptedGen:  func(_, _ string) (string, bool) { return "gen-1", true },
+		Config: SharedProjectionRunnerConfig{
+			PollInterval: 10 * time.Millisecond,
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := runner.Run(ctx)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil on cancelled context", err)
+	}
+}
+
+func TestSharedProjectionRunnerProcessesPendingIntents(t *testing.T) {
+	t.Parallel()
+
+	reader := &fakeSharedIntentReader{
+		intents: []SharedProjectionIntentRow{
+			{
+				IntentID:         "intent-1",
+				ProjectionDomain: DomainPlatformInfra,
+				PartitionKey:     "platform:eks-prod",
+				RepositoryID:     "repo-a",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				Payload:          map[string]any{"action": "upsert", "repo_id": "repo-a", "platform_id": "p1"},
+				CreatedAt:        time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	leaseManager := &fakeLeaseManager{granted: true}
+	edgeWriter := &fakeEdgeWriter{}
+
+	runner := SharedProjectionRunner{
+		IntentReader: reader,
+		LeaseManager: leaseManager,
+		EdgeWriter:   edgeWriter,
+		AcceptedGen:  func(_, _ string) (string, bool) { return "gen-1", true },
+		Config: SharedProjectionRunnerConfig{
+			PartitionCount: 1,
+			LeaseOwner:     "test-runner",
+			PollInterval:   10 * time.Millisecond,
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_ = runner.Run(ctx)
+
+	reader.mu.Lock()
+	markedCount := len(reader.marked)
+	reader.mu.Unlock()
+
+	if markedCount == 0 {
+		t.Fatal("expected at least one intent to be marked completed")
+	}
+}
+
+func TestSharedProjectionRunnerIteratesAllDomains(t *testing.T) {
+	t.Parallel()
+
+	reader := &fakeSharedIntentReader{}
+	leaseManager := &fakeLeaseManager{granted: false}
+	edgeWriter := &fakeEdgeWriter{}
+
+	runner := SharedProjectionRunner{
+		IntentReader: reader,
+		LeaseManager: leaseManager,
+		EdgeWriter:   edgeWriter,
+		AcceptedGen:  func(_, _ string) (string, bool) { return "", false },
+		Config: SharedProjectionRunnerConfig{
+			PartitionCount: 2,
+			PollInterval:   10 * time.Millisecond,
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_ = runner.Run(ctx)
+
+	leaseManager.mu.Lock()
+	claims := leaseManager.claims
+	leaseManager.mu.Unlock()
+
+	// 3 domains * 2 partitions = 6 lease claims per cycle, should have at least one full cycle
+	if claims < 6 {
+		t.Fatalf("expected at least 6 lease claims (3 domains * 2 partitions), got %d", claims)
+	}
+}
+
+func TestSharedProjectionRunnerValidation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		runner SharedProjectionRunner
+	}{
+		{
+			name:   "nil intent reader",
+			runner: SharedProjectionRunner{LeaseManager: &fakeLeaseManager{}, EdgeWriter: &fakeEdgeWriter{}},
+		},
+		{
+			name:   "nil lease manager",
+			runner: SharedProjectionRunner{IntentReader: &fakeSharedIntentReader{}, EdgeWriter: &fakeEdgeWriter{}},
+		},
+		{
+			name:   "nil edge writer",
+			runner: SharedProjectionRunner{IntentReader: &fakeSharedIntentReader{}, LeaseManager: &fakeLeaseManager{}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := tt.runner.Run(context.Background())
+			if err == nil {
+				t.Fatal("Run() error = nil, want validation error")
+			}
+		})
+	}
+}
