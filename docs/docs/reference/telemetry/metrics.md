@@ -122,6 +122,12 @@ Each metric entry includes:
 - Description: Scope lifecycle counters derived from the status reader, including how many scopes are active, how many have a newer pending generation, and how many remain unchanged.
 - How to leverage: Watch the `changed` versus `unchanged` mix during incremental refresh runs to see whether a collector is producing mostly no-op reruns or real churn.
 
+### `pcg_runtime_generation_total`
+
+- Type: Gauge
+- Description: Generation lifecycle totals labeled by service name and generation state.
+- How to leverage: Pair this with the scope activity gauges to see whether changed scopes are draining into `active`, `superseded`, or `failed` generations as expected during incremental refresh or replay-heavy workloads.
+
 ### `pcg_runtime_refresh_skipped_total`
 
 - Type: Counter

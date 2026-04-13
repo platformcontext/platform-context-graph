@@ -179,10 +179,15 @@ go test ./internal/scope ./internal/collector ./internal/projector \
 ./scripts/verify_incremental_refresh_compose.sh
 ```
 
-The incremental-refresh proof is currently blocked by the projector handoff
-ordering around `scope_generations_active_scope_idx`; keep that blocker
-visible until the changed rerun can swap generations cleanly. The new retryable
-proof shape is intentionally aligned to the runtime marking a projector work
-item `retrying` once through the live retry-once env var before it gets
-reclaimed; if the live stack cannot emit that state itself, call that out
-explicitly instead of pretending the retry loop is automatic.
+The incremental-refresh compose proof is now part of the Milestone 2 release
+gate, not a known blocker. It must continue to prove all three phases on the
+live stack:
+
+- initial authoritative generation projection
+- unchanged rerun stability with no unnecessary projector churn
+- changed rerun replacement after one explicit `retrying` transition through
+  the live retry-once environment override
+
+If that proof fails again, treat it as a Milestone 2 regression and keep the
+failing phase explicit in the logs, status output, and follow-up plan instead
+of downgrading the requirement back into a vague blocker note.

@@ -127,12 +127,18 @@ go test ./internal/runtime ./internal/status ./internal/storage/postgres \
 ./scripts/verify_incremental_refresh_compose.sh
 ```
 
-The current live blocker is the projector handoff ordering around the
-`scope_generations_active_scope_idx` uniqueness check; if the changed rerun
-cannot promote cleanly, the proof should fail and the proof log will show the
-exact SQL error. If the runtime does not emit the retrying projector work item
-after the configured retry-once claim fails, keep that gap explicit in the
-proof output instead of pretending the retry transition already exists.
+This gate is expected to pass on the current branch. If it fails, treat that as
+a regression in one of three areas:
+
+- generation replacement did not swap the authoritative active generation
+  cleanly
+- the projector retry-once path did not emit and reclaim the `retrying` work
+  item
+- the shared `/admin/status?format=json` surface no longer reflects the live
+  replacement lifecycle while the compose proof is running
+
+Keep the compose proof output and the runtime logs together when debugging this
+gate so the failing phase is explicit instead of inferred.
 
 ## Local Full Stack
 
