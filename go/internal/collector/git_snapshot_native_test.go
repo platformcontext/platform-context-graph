@@ -320,6 +320,57 @@ func TestNativeRepositorySnapshotterSingleFileTargetsBypassGitignore(t *testing.
 	}
 }
 
+func TestNativeRepositorySnapshotterCarriesExtendedParserEntityTypes(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(
+		t,
+		filepath.Join(repoRoot, "widget.tsx"),
+		`type WidgetProps = {
+  label: string;
+};
+
+export function ToolbarButton({ label }: WidgetProps) {
+  return <button>{label}</button>;
+}
+`,
+	)
+	writeCollectorTestFile(
+		t,
+		filepath.Join(repoRoot, "protocols.swift"),
+		`protocol Runnable {
+  func run()
+}
+`,
+	)
+	writeCollectorTestFile(
+		t,
+		filepath.Join(repoRoot, "types.c"),
+		`typedef int my_int;
+`,
+	)
+
+	engine, err := parser.DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	snapshotter := NativeRepositorySnapshotter{Engine: engine}
+	got, err := snapshotter.SnapshotRepository(
+		context.Background(),
+		SelectedRepository{RepoPath: repoRoot},
+	)
+	if err != nil {
+		t.Fatalf("SnapshotRepository() error = %v, want nil", err)
+	}
+
+	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "TypeAlias", "WidgetProps")
+	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "Component", "ToolbarButton")
+	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "Protocol", "Runnable")
+	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "Typedef", "my_int")
+}
+
 func writeCollectorTestFile(t *testing.T, path string, body string) {
 	t.Helper()
 
@@ -329,4 +380,26 @@ func writeCollectorTestFile(t *testing.T, path string, body string) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", path, err)
 	}
+}
+
+func assertSnapshotEntityTypeAndName(
+	t *testing.T,
+	entities []ContentEntitySnapshot,
+	entityType string,
+	entityName string,
+) {
+	t.Helper()
+
+	for _, entity := range entities {
+		if entity.EntityType == entityType && entity.EntityName == entityName {
+			return
+		}
+	}
+
+	t.Fatalf(
+		"ContentEntities missing %s/%s in %#v",
+		entityType,
+		entityName,
+		entities,
+	)
 }

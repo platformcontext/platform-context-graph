@@ -10,6 +10,7 @@ var (
 	elixirModulePattern   = regexp.MustCompile(`^\s*(defmodule|defprotocol|defimpl)\s+(.+)$`)
 	elixirFunctionPattern = regexp.MustCompile(`^\s*(def|defp|defmacro|defmacrop|defdelegate|defguard|defguardp)\s+(.+)$`)
 	elixirImportPattern   = regexp.MustCompile(`^\s*(use|import|alias|require)\s+(.+)$`)
+	elixirAttributePattern = regexp.MustCompile(`^\s*(@[a-z_]\w*)\s+(.+)$`)
 	elixirScopedCall      = regexp.MustCompile(`([A-Z][A-Za-z0-9_.]+)\.([a-z_]\w*[!?]?)\(`)
 	elixirCallPattern     = regexp.MustCompile(`\b([a-z_]\w*[!?]?)\(`)
 
@@ -79,49 +80,77 @@ func (e *Engine) parseElixir(path string, isDependency bool, options Options) (m
 			continue
 		}
 
-		isGuardDefinition := false
 		if keyword, name, args, openBlock, ok := parseElixirFunctionLine(trimmed); ok {
-			isGuardDefinition = keyword == "defguard" || keyword == "defguardp"
-			if !isGuardDefinition {
-				item := map[string]any{
-					"name":          name,
-					"line_number":   lineNumber,
-					"end_line":      lineNumber,
-					"args":          args,
-					"lang":          "elixir",
-					"is_dependency": isDependency,
-					"visibility":    "public",
-					"type":          keyword,
-					"decorators":    []string{},
-				}
-				if strings.HasSuffix(keyword, "p") {
-					item["visibility"] = "private"
-				}
-				if moduleName, moduleLine := currentElixirModule(scopes); moduleName != "" {
-					item["context"] = []any{moduleName, "module", moduleLine}
-					item["context_type"] = "module"
-					item["class_context"] = moduleName
-				}
-				if options.IndexSource {
-					item["source"] = rawLine
-					if docstring := elixirDocstringFromPreviousLine(lastMeaningfulLine); docstring != "" {
-						item["docstring"] = docstring
-					}
-				}
-				appendBucket(payload, "functions", item)
-				if openBlock {
-					scopes = append(scopes, elixirScope{
-						kind:       "function",
-						name:       name,
-						lineNumber: lineNumber,
-						item:       item,
-					})
-				} else if options.IndexSource {
-					item["source"] = rawLine
-				}
-				lastMeaningfulLine = trimmed
-				continue
+			item := map[string]any{
+				"name":          name,
+				"line_number":   lineNumber,
+				"end_line":      lineNumber,
+				"args":          args,
+				"lang":          "elixir",
+				"is_dependency": isDependency,
+				"visibility":    "public",
+				"type":          keyword,
+				"decorators":    []string{},
 			}
+			if strings.HasSuffix(keyword, "p") {
+				item["visibility"] = "private"
+			}
+			if moduleName, moduleLine := currentElixirModule(scopes); moduleName != "" {
+				item["context"] = []any{moduleName, "module", moduleLine}
+				item["context_type"] = "module"
+				item["class_context"] = moduleName
+			}
+			if options.IndexSource {
+				item["source"] = rawLine
+				if docstring := elixirDocstringFromPreviousLine(lastMeaningfulLine); docstring != "" {
+					item["docstring"] = docstring
+				}
+			}
+			appendBucket(payload, "functions", item)
+			if keyword == "defguard" || keyword == "defguardp" {
+				guardExpression := trimmed
+				if whenIndex := strings.Index(guardExpression, " when "); whenIndex >= 0 {
+					guardExpression = guardExpression[whenIndex+len(" when "):]
+				}
+				currentContextName, currentContextType, currentContextLine := currentElixirContext(scopes)
+				currentModuleName, _ := currentElixirModule(scopes)
+				for _, match := range elixirCallPattern.FindAllStringSubmatchIndex(guardExpression, -1) {
+					if len(match) < 4 {
+						continue
+					}
+					name := guardExpression[match[2]:match[3]]
+					if name == item["name"] {
+						continue
+					}
+					args := elixirCallArgs(guardExpression, match[1]-1)
+					appendUniqueElixirCall(
+						payload,
+						seenCalls,
+						name,
+						name,
+						"",
+						args,
+						lineNumber,
+						currentContextName,
+						currentContextType,
+						currentContextLine,
+						currentModuleName,
+						isDependency,
+					)
+				}
+			}
+			if openBlock {
+				scopes = append(scopes, elixirScope{
+					kind:       "function",
+					name:       name,
+					lineNumber: lineNumber,
+					item:       item,
+				})
+			} else if options.IndexSource {
+				item["source"] = rawLine
+			}
+			lastMeaningfulLine = trimmed
+			continue
 		}
 
 		if keyword, paths, ok := parseElixirImportLine(trimmed); ok {
@@ -144,12 +173,37 @@ func (e *Engine) parseElixir(path string, isDependency bool, options Options) (m
 			continue
 		}
 
+		if matches := elixirAttributePattern.FindStringSubmatch(trimmed); len(matches) == 3 {
+			attributeName := strings.TrimSpace(matches[1])
+			if attributeName != "@doc" && attributeName != "@moduledoc" {
+				item := map[string]any{
+					"name":          attributeName,
+					"line_number":   lineNumber,
+					"end_line":      lineNumber,
+					"lang":          "elixir",
+					"is_dependency": isDependency,
+					"value":         strings.TrimSpace(matches[2]),
+				}
+				if moduleName, moduleLine := currentElixirModule(scopes); moduleName != "" {
+					item["context"] = []any{moduleName, "module", moduleLine}
+					item["context_type"] = "module"
+					item["class_context"] = moduleName
+				}
+				if options.IndexSource {
+					item["source"] = rawLine
+				}
+				appendBucket(payload, "variables", item)
+				lastMeaningfulLine = trimmed
+				continue
+			}
+		}
+
 		if strings.HasPrefix(trimmed, "#") {
 			lastMeaningfulLine = trimmed
 			continue
 		}
 
-		if isElixirDefinitionLine(trimmed) && !isGuardDefinition {
+		if isElixirDefinitionLine(trimmed) {
 			lastMeaningfulLine = trimmed
 			continue
 		}
@@ -213,6 +267,7 @@ func (e *Engine) parseElixir(path string, isDependency bool, options Options) (m
 
 	sortNamedBucket(payload, "functions")
 	sortNamedBucket(payload, "modules")
+	sortNamedBucket(payload, "variables")
 	sortNamedBucket(payload, "imports")
 	sortNamedBucket(payload, "function_calls")
 	return payload, nil

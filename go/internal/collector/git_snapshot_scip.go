@@ -142,7 +142,9 @@ func (s NativeRepositorySnapshotter) trySCIPSnapshot(
 	if err != nil {
 		return nil, nil, false, err
 	}
-	defer os.RemoveAll(outputDir)
+	defer func() {
+		_ = os.RemoveAll(outputDir)
+	}()
 
 	indexPath, err := indexer.Run(ctx, repoPath, language, outputDir)
 	if err != nil {

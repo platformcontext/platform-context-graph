@@ -81,8 +81,8 @@ end
 
 	if functions, ok := got["functions"].([]map[string]any); !ok {
 		t.Fatalf("functions = %T, want []map[string]any", got["functions"])
-	} else if len(functions) != 3 {
-		t.Fatalf("functions = %#v, want 3 entries", functions)
+	} else if len(functions) != 4 {
+		t.Fatalf("functions = %#v, want 4 entries", functions)
 	}
 
 	expand := assertBucketItemByName(t, got, "functions", "expand")
@@ -104,7 +104,11 @@ end
 	assertStringFieldValue(t, size, "class_context", "Demo.Macros")
 	assertStringSliceFieldValue(t, size, "args", []string{"values"})
 
-	assertBucketMissingName(t, got, "functions", "is_even")
+	isEven := assertBucketItemByName(t, got, "functions", "is_even")
+	assertStringFieldValue(t, isEven, "type", "defguard")
+	assertStringFieldValue(t, isEven, "visibility", "public")
+	assertStringFieldValue(t, isEven, "class_context", "Demo.Macros")
+	assertStringSliceFieldValue(t, isEven, "args", []string{"value"})
 }
 
 func TestDefaultEngineParsePathElixirImportAndCallMetadata(t *testing.T) {
@@ -230,9 +234,46 @@ end
 	assertStringFieldValue(t, user, "alias", "User")
 	assertStringFieldValue(t, user, "full_import_name", "alias Demo.User")
 
-	assertBucketContainsFieldValue(t, got, "function_calls", "name", "is_even")
+	assertBucketContainsFieldValue(t, got, "functions", "name", "is_even")
 	assertBucketContainsFieldValue(t, got, "function_calls", "name", "rem")
-	assertBucketMissingName(t, got, "functions", "is_even")
+}
+
+func TestDefaultEngineParsePathElixirEmitsModuleAttributes(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "attributes.ex")
+	writeTestFile(
+		t,
+		filePath,
+		`defmodule Demo.Attributes do
+  @timeout 5_000
+  @service_name "worker"
+
+  def run, do: :ok
+end
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{IndexSource: true})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	timeout := assertBucketItemByName(t, got, "variables", "@timeout")
+	assertStringFieldValue(t, timeout, "class_context", "Demo.Attributes")
+	assertStringFieldValue(t, timeout, "context_type", "module")
+	assertStringFieldValue(t, timeout, "value", "5_000")
+
+	serviceName := assertBucketItemByName(t, got, "variables", "@service_name")
+	assertStringFieldValue(t, serviceName, "class_context", "Demo.Attributes")
+	assertStringFieldValue(t, serviceName, "context_type", "module")
+	assertStringFieldValue(t, serviceName, "value", `"worker"`)
 }
 
 func TestDefaultEngineParsePathElixirMultilineSourceSpans(t *testing.T) {

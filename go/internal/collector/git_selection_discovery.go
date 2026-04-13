@@ -2,7 +2,6 @@ package collector
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -216,33 +215,4 @@ func repoIDFromManagedPath(reposDir string, repoPath string) string {
 		return ""
 	}
 	return filepath.ToSlash(filepath.Clean(rel))
-}
-
-func walkManagedRepositoryRoots(root string) ([]string, error) {
-	root, err := filepath.Abs(root)
-	if err != nil {
-		return nil, fmt.Errorf("resolve repos dir %q: %w", root, err)
-	}
-	roots := make([]string, 0)
-	err = filepath.WalkDir(root, func(current string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if current == root {
-			return nil
-		}
-		if !entry.IsDir() {
-			return nil
-		}
-		if _, err := os.Stat(filepath.Join(current, ".git")); err == nil {
-			roots = append(roots, current)
-			return filepath.SkipDir
-		}
-		return nil
-	})
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-	sort.Strings(roots)
-	return roots, nil
 }

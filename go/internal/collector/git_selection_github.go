@@ -176,7 +176,9 @@ func mintGitHubAppToken(ctx context.Context, config RepoSyncConfig) (string, err
 	if err != nil {
 		return "", fmt.Errorf("mint GitHub App token: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	if response.StatusCode >= 300 {
 		return "", fmt.Errorf("mint GitHub App token: status %d", response.StatusCode)
 	}

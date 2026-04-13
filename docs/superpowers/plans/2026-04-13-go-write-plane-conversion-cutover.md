@@ -111,9 +111,28 @@ parser foundation now covers the earlier Python decorator/async/type-
 annotation gaps, TypeScript decorator/type-parameter metadata, C typedef
 entities, Swift protocol extraction, and Ruby require/load import extraction;
 the JavaScript family now also emits native JSDoc docstrings plus getter,
-setter, and async method metadata in Go; the branch blockers after that are
-the separate Python-owned
-finalization/recovery seams and the final parser/coordinator deletions.
+setter, and async method metadata in Go. The latest Go parser-payload parity
+work also covers Elixir guard definitions and module attributes. The remaining
+branch blockers after that are the separate Python-owned finalization/recovery
+seams, the dependency/package indexing cutover, and the end-to-end
+materialization gaps for newer parser buckets and metadata that now exist in
+Go payloads but still need full runtime persistence parity.
+
+Parser extraction ownership already moved further than the generated capability
+matrix currently shows:
+
+- Elixir now emits `defguard` and `defguardp` definitions in `functions`
+- Elixir now emits module attributes in `variables`
+- Ruby now emits `require`, `require_relative`, and `load` into normalized
+  `imports`
+- Swift now emits `protocol` declarations in a dedicated `protocols` bucket
+- the Go snapshot/content path now preserves `Module`, `Protocol`,
+  `TypeAlias`, `TypeAnnotation`, `Typedef`, and `Component` entities instead
+  of dropping those parser buckets during native repository snapshot shaping
+
+Treat any remaining capability-matrix drift for those surfaces as a
+materialization/documentation follow-up, not as a reason to keep Python in the
+normal parser path.
 
 No new ingestors should start until the milestones in this plan are complete.
 Treat this plan as the active cutover path until the merge bar below is fully

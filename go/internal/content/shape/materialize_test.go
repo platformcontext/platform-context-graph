@@ -198,6 +198,70 @@ func TestMaterializeDefaultsInvalidStartLineToOne(t *testing.T) {
 	}
 }
 
+func TestMaterializeCarriesExtendedParserEntityBuckets(t *testing.T) {
+	t.Parallel()
+
+	input := Input{
+		RepoID: "repository:r_12345678",
+		Files: []File{
+			{
+				Path: "src/parity.tsx",
+				Body: "content\n",
+				EntityBuckets: map[string][]Entity{
+					"modules": {
+						{Name: "Demo.Module", LineNumber: 1},
+					},
+					"protocols": {
+						{Name: "Runnable", LineNumber: 2},
+					},
+					"type_aliases": {
+						{Name: "WidgetProps", LineNumber: 3},
+					},
+					"type_annotations": {
+						{Name: "name", LineNumber: 4},
+					},
+					"typedefs": {
+						{Name: "my_int", LineNumber: 5},
+					},
+					"components": {
+						{Name: "ToolbarButton", LineNumber: 6},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := Materialize(input)
+	if err != nil {
+		t.Fatalf("Materialize() error = %v, want nil", err)
+	}
+
+	if len(got.Entities) != 6 {
+		t.Fatalf("len(Materialize().Entities) = %d, want 6", len(got.Entities))
+	}
+
+	wantTypes := []string{
+		"Module",
+		"Protocol",
+		"TypeAlias",
+		"TypeAnnotation",
+		"Typedef",
+		"Component",
+	}
+	gotTypes := make([]string, 0, len(got.Entities))
+	for _, entity := range got.Entities {
+		gotTypes = append(gotTypes, entity.EntityType)
+	}
+	if len(gotTypes) != len(wantTypes) {
+		t.Fatalf("entity type count = %d, want %d", len(gotTypes), len(wantTypes))
+	}
+	for i, want := range wantTypes {
+		if gotTypes[i] != want {
+			t.Fatalf("entity[%d].EntityType = %q, want %q", i, gotTypes[i], want)
+		}
+	}
+}
+
 type EntityRecordExpectation struct {
 	entityType  string
 	entityName  string

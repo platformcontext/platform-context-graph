@@ -132,7 +132,7 @@ func fingerprintTree(root string) (string, error) {
 			return "", err
 		}
 		_, _ = digest.Write([]byte(filepath.ToSlash(rel)))
-		_, _ = digest.Write([]byte(fmt.Sprintf("%d:%d", info.ModTime().UnixNano(), info.Size())))
+		_, _ = fmt.Fprintf(digest, "%d:%d", info.ModTime().UnixNano(), info.Size())
 	}
 	return hex.EncodeToString(digest.Sum(nil)), nil
 }
@@ -219,7 +219,9 @@ func copyRepositoryFile(sourcePath string, targetPath string) error {
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer func() {
+		_ = sourceFile.Close()
+	}()
 
 	info, err := sourceFile.Stat()
 	if err != nil {
@@ -235,7 +237,9 @@ func copyRepositoryFile(sourcePath string, targetPath string) error {
 	if err != nil {
 		return err
 	}
-	defer targetFile.Close()
+	defer func() {
+		_ = targetFile.Close()
+	}()
 	if _, err := io.Copy(targetFile, sourceFile); err != nil {
 		return err
 	}
