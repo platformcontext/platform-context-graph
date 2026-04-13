@@ -5,13 +5,14 @@
 > Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** extend Go write-plane ownership beyond deployment surfaces to cover
-resolution domain logic, operational surfaces, and recovery proxy wiring so the
-branch merges with honest Go ownership of the full write path.
+resolution domain logic, operational surfaces, and recovery endpoint migration
+so the branch merges with honest Go ownership of the full write path.
 
 **Architecture:** the Go projector and reducer service loops already exist. This
 plan fills them with domain-specific logic so they stop delegating to Python.
-Recovery and admin operations are proxied to Go immediately. Resolution domain
-ports proceed in parallel with Codex's Chunk 2 parser/collector work.
+Recovery and admin operations are migrated by deleting the Python endpoints
+and letting the Go ingester own them directly. Resolution domain ports proceed
+in parallel with Codex's Chunk 2 parser/collector work.
 
 **Tech Stack:** Go, PostgreSQL, Neo4j, Docker Compose, Helm, OpenTelemetry.
 
@@ -44,7 +45,7 @@ The Go write plane does NOT have:
 - failure classification (exception-to-durable-metadata mapping)
 - full projector fact stages (entity, file, relationship, workload projection)
 - status store request lifecycle (scan/reindex tracking, coverage metrics)
-- admin/CLI proxy wiring (Python admin still calls Python finalization)
+- Python admin recovery endpoints deleted (Go ingester owns replay/refinalize)
 
 ## Merge Bar Extension
 
@@ -53,15 +54,15 @@ In addition to the existing cutover merge bar, this plan adds:
 - Go projector owns all fact-to-graph/content/intent projection stages
 - Go reducer owns platform materialization and shared projection intent
   processing
-- Go recovery handlers are wired into Python admin and CLI surfaces
+- Python admin recovery endpoints deleted; Go ingester owns replay/refinalize
 - Go status store covers scan/reindex request lifecycle
 - gate tests cover resolution, facts, and status store Python ownership removal
 
 ---
 
-## Phase A: Recovery And Operational Proxy
+## Phase A: Recovery Endpoint Migration
 
-### Chunk A1: Rewire Python Admin To Go Recovery
+### Chunk A1: Delete Python Admin Recovery Endpoints
 
 **Prerequisite work completed:**
 
@@ -70,96 +71,75 @@ In addition to the existing cutover merge bar, this plan adds:
 - [x] Go admin mux wires RecoveryHandler at `/admin/replay` and `/admin/refinalize` (commit `5eab84b`)
 - [x] Postgres RecoveryStore with replay and refinalize queries (commit `5eab84b`)
 - [x] 20 Go tests covering recovery domain, HTTP handlers, and admin mux (commit `5eab84b`)
+- [x] RecoveryHandler wired into ingester via `StatusAdminOption` functional options
+- [x] Ingester admin mux serves `/admin/replay` and `/admin/refinalize` directly
 
-**Remaining files:**
-- Modify: `src/platform_context_graph/api/routers/admin.py`
-- Modify: `src/platform_context_graph/api/routers/admin_facts.py`
-- Create: `src/platform_context_graph/api/routers/admin_go_proxy.py`
-- Modify: `tests/unit/api/test_admin_router.py`
-- Create: `tests/unit/api/test_admin_go_proxy.py`
+**Migration completed — Python endpoints deleted:**
 
-- [ ] **Step 1: Write failing tests for Go recovery proxy**
+- [x] **Step 1: Delete Python refinalize endpoint from admin.py**
 
-Cover:
-- admin refinalize routes to Go `/admin/refinalize` endpoint
-- admin replay routes to Go `/admin/replay` endpoint
-- proxy returns structured JSON matching existing admin response shape
-- proxy handles Go service unavailability gracefully
+Removed `RefinalizeRequest`, `_finalization_state`, `_finalization_lock`,
+`_update_finalization_state`, `_utc_now_iso`, `_load_target_repositories`,
+`_repair_repository_coverage`, `_run_refinalization`, `refinalize` endpoint,
+and `refinalize_status` endpoint. Kept only `reindex` and
+`shared_projection_tuning_report` endpoints.
 
-- [ ] **Step 2: Implement Go recovery proxy helper**
+- [x] **Step 2: Delete Python replay endpoint from admin_facts.py**
 
-Create a thin HTTP proxy in `admin_go_proxy.py` that forwards refinalize and
-replay requests to the Go admin port. Keep the Python admin router signatures
-unchanged for API compatibility.
+Removed `ReplayFailedFactsRequest` model and `replay_failed_facts` endpoint.
+Kept dead-letter, skip, backfill, replay-events query, work-items query, and
+projection decisions query endpoints.
 
-- [ ] **Step 3: Rewire admin.py refinalize to use Go proxy**
+- [x] **Step 3: Delete Python Go proxy module**
 
-Replace the direct Python finalization call in the refinalize endpoint with the
-Go proxy. Keep the existing endpoint path and response shape.
+Deleted `src/platform_context_graph/api/routers/admin_go_proxy.py` and
+`tests/unit/api/test_admin_go_proxy.py`. The proxy approach was wrong — this
+is a full migration, not a bridge.
 
-- [ ] **Step 4: Rewire admin_facts.py replay to use Go proxy**
+- [x] **Step 4: Update Python tests for remaining endpoints**
 
-Replace the direct Python replay call with the Go proxy.
+Rewrote `tests/unit/api/test_admin_router.py` to cover only `reindex` and
+`shared_projection_tuning_report`. Rewrote
+`tests/unit/api/test_admin_facts_recovery_router.py` to cover dead-letter,
+skip, backfill, and replay-events query (no replay tests).
 
-- [ ] **Step 5: Run admin verification**
+- [x] **Step 5: Remove PCG_INGESTER_ADMIN_URL from docker-compose**
 
-Run:
+Removed the proxy env var from the Python API service since there is no proxy.
 
-```bash
-PYTHONPATH=src uv run pytest tests/unit/api/test_admin_router.py tests/unit/api/test_admin_go_proxy.py -q
-```
-
-Expected: PASS
-
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Run admin verification**
 
 ```bash
-git add src/platform_context_graph/api/routers/admin.py \
-  src/platform_context_graph/api/routers/admin_facts.py \
-  src/platform_context_graph/api/routers/admin_go_proxy.py \
-  tests/unit/api/test_admin_router.py \
-  tests/unit/api/test_admin_go_proxy.py
-git commit -m "feat(admin): proxy refinalize and replay to Go recovery handlers"
+PYTHONPATH=src uv run pytest tests/unit/api/test_admin_router.py \
+  tests/unit/api/test_admin_facts_recovery_router.py -q
 ```
 
-### Chunk A2: Rewire Python CLI Finalize To Go Recovery
+Result: 8 passed
+
+### Chunk A2: Delete Python CLI Finalize Bridge
 
 **Files:**
+- Delete: `src/platform_context_graph/cli/helpers/finalize.py`
 - Modify: `src/platform_context_graph/cli/commands/basic.py`
-- Modify: `src/platform_context_graph/cli/helpers/finalize.py`
-- Create: `tests/unit/cli/test_finalize_go_proxy.py`
 
-- [ ] **Step 1: Write failing tests for CLI Go proxy**
+- [x] **Step 1: Delete the Python finalize CLI helper**
 
-Cover:
-- `pcg finalize` command routes to Go recovery endpoint
-- command handles Go service unavailability with clear error message
-- command preserves existing CLI output format
+Deleted `cli/helpers/finalize.py`, removed `finalize_helper` import from
+`cli/cli_helpers.py` and `cli/main.py`.
 
-- [ ] **Step 2: Implement CLI finalize Go proxy**
+- [x] **Step 2: Stub the `pcg finalize` CLI command**
 
-Add a Go recovery proxy path in the finalize helper that sends refinalize
-requests to the Go admin port instead of invoking the Python post-commit
-writer.
+Replaced command body with a deprecation message directing operators to the Go
+ingester admin endpoints (`/admin/refinalize`, `/admin/replay`). Command is
+marked `deprecated=True` in Typer and exits with code 1.
 
-- [ ] **Step 3: Run CLI verification**
-
-Run:
+- [x] **Step 3: Run CLI verification**
 
 ```bash
-PYTHONPATH=src uv run pytest tests/unit/cli/test_finalize_go_proxy.py tests/integration/cli/test_cli_commands.py -q
+PYTHONPATH=src uv run pytest tests/integration/cli/test_cli_commands.py -q
 ```
 
-Expected: PASS
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add src/platform_context_graph/cli/commands/basic.py \
-  src/platform_context_graph/cli/helpers/finalize.py \
-  tests/unit/cli/test_finalize_go_proxy.py
-git commit -m "feat(cli): proxy finalize command to Go recovery handlers"
-```
+Result: 32 passed
 
 ### Chunk A3: Update Documentation For Go Recovery Surfaces
 
@@ -168,21 +148,24 @@ git commit -m "feat(cli): proxy finalize command to Go recovery handlers"
 - Modify: `docs/docs/reference/cli-reference.md`
 - Modify: `docs/docs/adrs/2026-04-12-cutover-and-legacy-bridge.md`
 
-- [ ] **Step 1: Document Go-owned recovery endpoints**
+- [x] **Step 1: Document Go-owned recovery endpoints**
 
-Add `/admin/replay` and `/admin/refinalize` to the HTTP API reference with
-request/response shapes.
+Updated HTTP API reference: removed Python refinalize/status endpoints,
+documented Go ingester `/admin/refinalize` and `/admin/replay` as the
+authoritative recovery surface.
 
-- [ ] **Step 2: Update CLI reference for Go-proxied finalize**
+- [x] **Step 2: Update CLI reference**
 
-Document that `pcg finalize` now proxies to Go recovery.
+Marked `pcg finalize` as deprecated in the CLI command map, noting Go ingester
+owns recovery.
 
-- [ ] **Step 3: Update cutover ADR bridge inventory**
+- [x] **Step 3: Update cutover ADR bridge inventory**
 
-Mark recovery/refinalize as Go-owned in the bridge inventory. Update removal
-conditions.
+Rewrote bridge inventory to split into "Go-owned (Python deleted)" and "Still
+Python-owned (pending deletion)" sections. Recovery endpoints and CLI finalize
+helper listed as deleted.
 
-- [ ] **Step 4: Run docs verification**
+- [x] **Step 4: Run docs verification**
 
 Run:
 
@@ -378,7 +361,7 @@ git commit -m "feat(reducer): add Go-owned shared projection intent workers"
 - Create: `go/internal/projector/failure_classification.go`
 - Create: `go/internal/projector/failure_classification_test.go`
 
-- [ ] **Step 1: Write failing tests for failure classification**
+- [x] **Step 1: Write failing tests for failure classification**
 
 Cover:
 - Neo4j transient error mapping
@@ -388,12 +371,12 @@ Cover:
 - retry disposition assignment (retry, skip, dead-letter)
 - stage error unwrapping
 
-- [ ] **Step 2: Implement failure classification**
+- [x] **Step 2: Implement failure classification**
 
 Port `resolution/orchestration/failure_classification.py` into Go. Wire into
 projector and reducer service error paths.
 
-- [ ] **Step 3: Run classification verification**
+- [x] **Step 3: Run classification verification**
 
 Run:
 
@@ -403,7 +386,7 @@ cd go && go test ./internal/projector/... -count=1
 
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add go/internal/projector/failure_classification.go \
@@ -661,7 +644,7 @@ git commit -m "test(parity): add Go write-plane integration tests"
 
 | Phase | Chunks | Effort | Blocked on |
 | --- | --- | --- | --- |
-| A | A1, A2, A3 | Medium | Nothing |
+| A | ~~A1~~, ~~A2~~, ~~A3~~ | **Done** | — |
 | B | B1, B2, B3, B4, B5 | Large | Nothing |
 | C | C1, C2, C3, C4 | Medium | Phase B for gate test coverage |
 
