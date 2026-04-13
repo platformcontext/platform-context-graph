@@ -110,7 +110,9 @@ partial capability rows called out by the language capability specs. The Go
 parser foundation now covers the earlier Python decorator/async/type-
 annotation gaps, TypeScript decorator/type-parameter metadata, C typedef
 entities, Swift protocol extraction, and Ruby require/load import extraction;
-the branch blockers after that are the separate Python-owned
+the JavaScript family now also emits native JSDoc docstrings plus getter,
+setter, and async method metadata in Go; the branch blockers after that are
+the separate Python-owned
 finalization/recovery seams and the final parser/coordinator deletions.
 
 No new ingestors should start until the milestones in this plan are complete.

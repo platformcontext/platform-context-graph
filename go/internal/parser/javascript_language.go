@@ -224,6 +224,12 @@ func appendFunctionDeclaration(
 		"type_parameters": javaScriptTypeParameters(node, source),
 		"lang":            lang,
 	}
+	if functionType := javaScriptFunctionKind(node, source); functionType != "" {
+		item["type"] = functionType
+	}
+	if docstring := javaScriptDocstring(node, source); docstring != "" {
+		item["docstring"] = docstring
+	}
 	if options.IndexSource {
 		item["source"] = nodeText(node, source)
 	}

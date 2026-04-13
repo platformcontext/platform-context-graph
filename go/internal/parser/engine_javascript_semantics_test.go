@@ -168,6 +168,59 @@ const client = new vision.ImageAnnotatorClient();
 	assertNestedStringSliceEqual(t, got, "react", "hooks_used", []string{"useState", "useToolbarOverflow"})
 }
 
+func TestDefaultEngineParsePathJavaScriptDocstringsAndMethodKinds(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "runtime_surface.js")
+	writeTestFile(
+		t,
+		filePath,
+		`/** Documented utility. */
+function documented(value) {
+  return value;
+}
+
+class Counter {
+  get count() {
+    return 1;
+  }
+
+  set count(value) {
+    this._count = value;
+  }
+
+  async load() {
+    return Promise.resolve(this.count);
+  }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	documented := findNamedBucketItem(t, got, "functions", "documented")
+	assertStringFieldValue(t, documented, "docstring", "Documented utility.")
+
+	countItems := findAllNamedBucketItems(t, got, "functions", "count")
+	if len(countItems) != 2 {
+		t.Fatalf("functions.count entries = %#v, want 2 items", countItems)
+	}
+	assertStringFieldValue(t, countItems[0], "type", "getter")
+	assertStringFieldValue(t, countItems[1], "type", "setter")
+
+	load := findNamedBucketItem(t, got, "functions", "load")
+	assertStringFieldValue(t, load, "type", "async")
+}
+
 func TestDefaultEngineParsePathJSXStatelessComponentSemantics(t *testing.T) {
 	t.Parallel()
 
@@ -307,6 +360,23 @@ func findNamedBucketItem(t *testing.T, payload map[string]any, key string, name 
 	}
 	t.Fatalf("%s missing item with name %q", key, name)
 	return nil
+}
+
+func findAllNamedBucketItems(t *testing.T, payload map[string]any, key string, name string) []map[string]any {
+	t.Helper()
+
+	items, ok := payload[key].([]map[string]any)
+	if !ok {
+		t.Fatalf("%s = %T, want []map[string]any", key, payload[key])
+	}
+	matches := make([]map[string]any, 0)
+	for _, item := range items {
+		itemName, _ := item["name"].(string)
+		if itemName == name {
+			matches = append(matches, item)
+		}
+	}
+	return matches
 }
 
 func assertFrameworksEqual(t *testing.T, payload map[string]any, want ...string) {
