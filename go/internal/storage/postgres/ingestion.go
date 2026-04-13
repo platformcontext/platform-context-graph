@@ -76,6 +76,15 @@ ON CONFLICT (generation_id) DO UPDATE SET
     payload = EXCLUDED.payload
 `
 
+const activeGenerationFreshnessQuery = `
+SELECT generation.generation_id, COALESCE(generation.freshness_hint, '')
+FROM ingestion_scopes AS scope
+JOIN scope_generations AS generation
+  ON generation.generation_id = scope.active_generation_id
+WHERE scope.scope_id = $1
+LIMIT 1
+`
+
 // IngestionStore owns the durable commit boundary for scope generations, facts,
 // and projector follow-up work.
 type IngestionStore struct {
@@ -105,6 +114,13 @@ func (s IngestionStore) CommitScopeGeneration(
 ) error {
 	if err := validateProjectionInput(scopeValue, generation, envelopes); err != nil {
 		return err
+	}
+	skip, err := s.shouldSkipUnchangedGeneration(ctx, scopeValue.ScopeID, generation.FreshnessHint)
+	if err != nil {
+		return fmt.Errorf("check active generation freshness: %w", err)
+	}
+	if skip {
+		return nil
 	}
 	if s.beginner == nil {
 		return fmt.Errorf("transaction beginner is required")
@@ -151,6 +167,43 @@ func (s IngestionStore) now() time.Time {
 	}
 
 	return time.Now().UTC()
+}
+
+func (s IngestionStore) shouldSkipUnchangedGeneration(
+	ctx context.Context,
+	scopeID string,
+	freshnessHint string,
+) (bool, error) {
+	if s.db == nil {
+		return false, nil
+	}
+	if strings.TrimSpace(scopeID) == "" || strings.TrimSpace(freshnessHint) == "" {
+		return false, nil
+	}
+
+	rows, err := s.db.QueryContext(ctx, activeGenerationFreshnessQuery, scopeID)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+
+	var generationID string
+	var activeFreshnessHint string
+	if err := rows.Scan(&generationID, &activeFreshnessHint); err != nil {
+		return false, err
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+
+	return strings.TrimSpace(activeFreshnessHint) == strings.TrimSpace(freshnessHint), nil
 }
 
 func validateProjectionInput(

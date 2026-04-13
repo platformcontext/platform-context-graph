@@ -1,8 +1,12 @@
 package collector
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,7 +22,13 @@ func buildCollectedGeneration(
 	snapshot RepositorySnapshot,
 ) CollectedGeneration {
 	scopeValue := buildScope(repo)
-	generation := buildGeneration(scopeValue.ScopeID, sourceRunID, repoPath, observedAt)
+	generation := buildGeneration(
+		scopeValue.ScopeID,
+		sourceRunID,
+		repoPath,
+		observedAt,
+		snapshotFreshnessHint(snapshot),
+	)
 	factEnvelopes := make([]facts.Envelope, 0, 1+len(snapshot.FileData)+len(snapshot.ContentFiles)+len(snapshot.ContentEntities)+1)
 	factEnvelopes = append(
 		factEnvelopes,
@@ -52,6 +62,109 @@ func buildCollectedGeneration(
 		Generation: generation,
 		Facts:      factEnvelopes,
 	}
+}
+
+func snapshotFreshnessHint(snapshot RepositorySnapshot) string {
+	canonicalSnapshot := map[string]any{
+		"file_count":       snapshot.FileCount,
+		"file_data":        normalizeFingerprintValue(snapshot.FileData),
+		"content_files":    normalizeFingerprintValue(snapshot.ContentFiles),
+		"content_entities": normalizeFingerprintValue(snapshot.ContentEntities),
+	}
+
+	fingerprintInput, err := json.Marshal(canonicalSnapshot)
+	if err != nil {
+		return fmt.Sprintf("snapshot:marshal-error:%x", sha256.Sum256([]byte(err.Error())))
+	}
+
+	sum := sha256.Sum256(fingerprintInput)
+	return fmt.Sprintf("snapshot:%x", sum[:])
+}
+
+func normalizeFingerprintValue(value any) any {
+	if value == nil {
+		return nil
+	}
+
+	switch typed := value.(type) {
+	case string, bool, int, int8, int16, int32, int64:
+		return typed
+	case uint, uint8, uint16, uint32, uint64:
+		return typed
+	case float32, float64:
+		return typed
+	case json.Number:
+		return typed.String()
+	case time.Time:
+		return typed.UTC().Format(time.RFC3339Nano)
+	case map[string]any:
+		return normalizeStringMap(typed)
+	case map[string]string:
+		cloned := make(map[string]any, len(typed))
+		for key, value := range typed {
+			cloned[key] = normalizeFingerprintValue(value)
+		}
+		return normalizeStringMap(cloned)
+	}
+
+	if stringer, ok := value.(fmt.Stringer); ok {
+		return stringer.String()
+	}
+
+	reflectValue := reflect.ValueOf(value)
+	switch reflectValue.Kind() {
+	case reflect.Slice, reflect.Array:
+		if reflectValue.Kind() == reflect.Slice && reflectValue.IsNil() {
+			return []any{}
+		}
+
+		items := make([]any, 0, reflectValue.Len())
+		for i := 0; i < reflectValue.Len(); i++ {
+			items = append(items, normalizeFingerprintValue(reflectValue.Index(i).Interface()))
+		}
+		sort.Slice(items, func(i, j int) bool {
+			return canonicalFingerprintJSON(items[i]) < canonicalFingerprintJSON(items[j])
+		})
+		return items
+	case reflect.Map:
+		if reflectValue.Type().Key().Kind() != reflect.String {
+			return fmt.Sprint(value)
+		}
+
+		cloned := make(map[string]any, reflectValue.Len())
+		for _, key := range reflectValue.MapKeys() {
+			cloned[key.String()] = normalizeFingerprintValue(reflectValue.MapIndex(key).Interface())
+		}
+		return normalizeStringMap(cloned)
+	default:
+		return fmt.Sprint(value)
+	}
+}
+
+func normalizeStringMap(input map[string]any) map[string]any {
+	if len(input) == 0 {
+		return map[string]any{}
+	}
+
+	keys := make([]string, 0, len(input))
+	for key := range input {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	cloned := make(map[string]any, len(input))
+	for _, key := range keys {
+		cloned[key] = normalizeFingerprintValue(input[key])
+	}
+	return cloned
+}
+
+func canonicalFingerprintJSON(value any) string {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("marshal-error:%v", err)
+	}
+	return string(payload)
 }
 
 func repositoryFactEnvelope(

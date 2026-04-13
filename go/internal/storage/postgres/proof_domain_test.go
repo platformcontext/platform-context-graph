@@ -229,14 +229,157 @@ func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) 
 	if got, want := report.Queue.Outstanding, 0; got != want {
 		t.Fatalf("status queue outstanding = %d, want %d", got, want)
 	}
-	if got, want := report.ScopeTotals["pending"], 1; got != want {
-		t.Fatalf("status pending scope count = %d, want %d", got, want)
+	if got, want := report.ScopeTotals["active"], 1; got != want {
+		t.Fatalf("status active scope count = %d, want %d", got, want)
 	}
-	if got, want := report.GenerationTotals["pending"], 1; got != want {
-		t.Fatalf("status pending generation count = %d, want %d", got, want)
+	if got, want := report.GenerationTotals["active"], 1; got != want {
+		t.Fatalf("status active generation count = %d, want %d", got, want)
 	}
 	if got, want := len(report.FlowSummaries), 3; got != want {
 		t.Fatalf("status flow summary count = %d, want %d", got, want)
+	}
+}
+
+func TestProofDomainIncrementalRefreshLeavesActiveGenerationUnchangedForIdenticalRerun(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 13, 0, 0, 0, time.UTC)
+	db := newProofDomainDB(t, now)
+	store := NewIngestionStore(db)
+	store.Now = func() time.Time { return now }
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+		Metadata: map[string]string{
+			"repo_id": "repo-123",
+		},
+	}
+	generation := scope.ScopeGeneration{
+		GenerationID:  "generation-aaa",
+		ScopeID:       scopeValue.ScopeID,
+		ObservedAt:    now.Add(-time.Minute),
+		IngestedAt:    now,
+		Status:        scope.GenerationStatusPending,
+		TriggerKind:   scope.TriggerKindSnapshot,
+		FreshnessHint: "fingerprint-aaa",
+	}
+
+	if err := store.CommitScopeGeneration(
+		context.Background(),
+		scopeValue,
+		generation,
+		proofRepositoryFacts(scopeValue.ScopeID, generation.GenerationID, "fact-1", "digest-aaa", generation.ObservedAt),
+	); err != nil {
+		t.Fatalf("CommitScopeGeneration() error = %v, want nil", err)
+	}
+	runProofProjectorCycle(t, db, now)
+
+	if got, want := db.activeGenerationID(scopeValue.ScopeID), generation.GenerationID; got != want {
+		t.Fatalf("active generation after first run = %q, want %q", got, want)
+	}
+	if got, want := db.generationStatus(generation.GenerationID), scope.GenerationStatusActive; got != want {
+		t.Fatalf("generation status after first run = %q, want %q", got, want)
+	}
+	if err := store.CommitScopeGeneration(
+		context.Background(),
+		scopeValue,
+		generation,
+		proofRepositoryFacts(scopeValue.ScopeID, generation.GenerationID, "fact-1", "digest-aaa", generation.ObservedAt),
+	); err != nil {
+		t.Fatalf("CommitScopeGeneration() rerun error = %v, want nil", err)
+	}
+	runProofProjectorCycle(t, db, now)
+
+	if got, want := db.activeGenerationID(scopeValue.ScopeID), generation.GenerationID; got != want {
+		t.Fatalf("active generation after identical rerun = %q, want %q", got, want)
+	}
+	if got, want := db.generationStatus(generation.GenerationID), scope.GenerationStatusActive; got != want {
+		t.Fatalf("generation status after identical rerun = %q, want %q", got, want)
+	}
+	if got, want := db.projectorWorkItemCount(), 1; got != want {
+		t.Fatalf("total projector work items after identical rerun = %d, want %d", got, want)
+	}
+}
+
+func TestProofDomainIncrementalRefreshSupersedesActiveGenerationOnChangedRerun(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 14, 0, 0, 0, time.UTC)
+	db := newProofDomainDB(t, now)
+	store := NewIngestionStore(db)
+	store.Now = func() time.Time { return now }
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+		Metadata: map[string]string{
+			"repo_id": "repo-123",
+		},
+	}
+	generationA := scope.ScopeGeneration{
+		GenerationID:  "generation-aaa",
+		ScopeID:       scopeValue.ScopeID,
+		ObservedAt:    now.Add(-2 * time.Minute),
+		IngestedAt:    now,
+		Status:        scope.GenerationStatusPending,
+		TriggerKind:   scope.TriggerKindSnapshot,
+		FreshnessHint: "fingerprint-aaa",
+	}
+	generationB := scope.ScopeGeneration{
+		GenerationID:  "generation-bbb",
+		ScopeID:       scopeValue.ScopeID,
+		ObservedAt:    now.Add(-time.Minute),
+		IngestedAt:    now.Add(time.Minute),
+		Status:        scope.GenerationStatusPending,
+		TriggerKind:   scope.TriggerKindSnapshot,
+		FreshnessHint: "fingerprint-bbb",
+	}
+
+	if err := store.CommitScopeGeneration(
+		context.Background(),
+		scopeValue,
+		generationA,
+		proofRepositoryFacts(scopeValue.ScopeID, generationA.GenerationID, "fact-1", "digest-aaa", generationA.ObservedAt),
+	); err != nil {
+		t.Fatalf("CommitScopeGeneration() generation A error = %v, want nil", err)
+	}
+	runProofProjectorCycle(t, db, now)
+
+	if got, want := db.activeGenerationID(scopeValue.ScopeID), generationA.GenerationID; got != want {
+		t.Fatalf("active generation after generation A = %q, want %q", got, want)
+	}
+	if got, want := db.generationStatus(generationA.GenerationID), scope.GenerationStatusActive; got != want {
+		t.Fatalf("generation A status = %q, want %q", got, want)
+	}
+
+	if err := store.CommitScopeGeneration(
+		context.Background(),
+		scopeValue,
+		generationB,
+		proofRepositoryFacts(scopeValue.ScopeID, generationB.GenerationID, "fact-2", "digest-bbb", generationB.ObservedAt),
+	); err != nil {
+		t.Fatalf("CommitScopeGeneration() generation B error = %v, want nil", err)
+	}
+	runProofProjectorCycle(t, db, now)
+
+	if got, want := db.activeGenerationID(scopeValue.ScopeID), generationB.GenerationID; got != want {
+		t.Fatalf("active generation after generation B = %q, want %q", got, want)
+	}
+	if got, want := db.generationStatus(generationA.GenerationID), scope.GenerationStatusSuperseded; got != want {
+		t.Fatalf("generation A status after rerun = %q, want %q", got, want)
+	}
+	if got, want := db.generationStatus(generationB.GenerationID), scope.GenerationStatusActive; got != want {
+		t.Fatalf("generation B status after rerun = %q, want %q", got, want)
+	}
+	if got, want := db.projectorWorkItemCount(), 2; got != want {
+		t.Fatalf("total projector work items after changed rerun = %d, want %d", got, want)
 	}
 }
 

@@ -1,13 +1,16 @@
 package postgres
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
+	"testing"
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
+	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 	"github.com/platformcontext/platform-context-graph/go/internal/scope"
 )
 
@@ -349,4 +352,60 @@ func namedCountRows(counts map[string]int64) [][]any {
 func stringFromAny(value any) string {
 	text, _ := value.(string)
 	return text
+}
+
+func runProofProjectorCycle(t *testing.T, db *proofDomainDB, now time.Time) {
+	t.Helper()
+
+	projectorQueue := ProjectorQueue{
+		db:            db,
+		LeaseOwner:    "projector-1",
+		LeaseDuration: time.Minute,
+		Now:           func() time.Time { return now },
+	}
+	projectorService := projector.Service{
+		PollInterval: time.Millisecond,
+		WorkSource:   projectorQueue,
+		FactStore:    NewFactStore(db),
+		Runner: projector.Runtime{
+			GraphWriter:   &recordingGraphWriter{},
+			ContentWriter: &recordingContentWriter{},
+			IntentWriter:  ReducerQueue{db: db, LeaseOwner: "reducer-1", LeaseDuration: time.Minute, Now: func() time.Time { return now }},
+		},
+		WorkSink: projectorQueue,
+		Wait:     func(context.Context, time.Duration) error { return context.Canceled },
+	}
+
+	if err := projectorService.Run(context.Background()); err != nil {
+		t.Fatalf("projector service Run() error = %v, want nil", err)
+	}
+}
+
+func proofRepositoryFacts(
+	scopeID string,
+	generationID string,
+	factID string,
+	digest string,
+	observedAt time.Time,
+) []facts.Envelope {
+	return []facts.Envelope{
+		{
+			FactID:        factID,
+			ScopeID:       scopeID,
+			GenerationID:  generationID,
+			FactKind:      "repository",
+			StableFactKey: "repository:" + factID,
+			ObservedAt:    observedAt,
+			Payload: map[string]any{
+				"graph_id":   "repo-123",
+				"graph_kind": "repository",
+				"name":       "platform-context-graph",
+				"digest":     digest,
+			},
+			SourceRef: facts.Ref{
+				SourceSystem: "git",
+				FactKey:      factID,
+			},
+		},
+	}
 }

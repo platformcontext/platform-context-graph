@@ -41,11 +41,12 @@ type proofDomainDB struct {
 }
 
 type proofState struct {
-	scopes        map[string]scope.IngestionScope
-	scopeStatuses map[string]string
-	generations   map[string]scope.ScopeGeneration
-	facts         map[string]facts.Envelope
-	workItems     map[string]proofWorkItem
+	scopes            map[string]scope.IngestionScope
+	scopeStatuses     map[string]string
+	activeGenerations map[string]string
+	generations       map[string]scope.ScopeGeneration
+	facts             map[string]facts.Envelope
+	workItems         map[string]proofWorkItem
 }
 
 type proofScopeRow struct {
@@ -74,11 +75,12 @@ func newProofDomainDB(t *testing.T, now time.Time) *proofDomainDB {
 	return &proofDomainDB{
 		now: now.UTC(),
 		state: proofState{
-			scopes:        make(map[string]scope.IngestionScope),
-			scopeStatuses: make(map[string]string),
-			generations:   make(map[string]scope.ScopeGeneration),
-			facts:         make(map[string]facts.Envelope),
-			workItems:     make(map[string]proofWorkItem),
+			scopes:            make(map[string]scope.IngestionScope),
+			scopeStatuses:     make(map[string]string),
+			activeGenerations: make(map[string]string),
+			generations:       make(map[string]scope.ScopeGeneration),
+			facts:             make(map[string]facts.Envelope),
+			workItems:         make(map[string]proofWorkItem),
 		},
 	}
 }
@@ -87,11 +89,12 @@ func (db *proofDomainDB) Begin(context.Context) (Transaction, error) {
 	return &proofDomainTx{
 		db: db,
 		state: proofState{
-			scopes:        cloneScopes(db.state.scopes),
-			scopeStatuses: cloneStrings(db.state.scopeStatuses),
-			generations:   cloneGenerations(db.state.generations),
-			facts:         cloneFacts(db.state.facts),
-			workItems:     cloneWorkItems(db.state.workItems),
+			scopes:            cloneScopes(db.state.scopes),
+			scopeStatuses:     cloneStrings(db.state.scopeStatuses),
+			activeGenerations: cloneStrings(db.state.activeGenerations),
+			generations:       cloneGenerations(db.state.generations),
+			facts:             cloneFacts(db.state.facts),
+			workItems:         cloneWorkItems(db.state.workItems),
 		},
 	}, nil
 }
@@ -119,12 +122,16 @@ func (db *proofDomainDB) ExecContext(_ context.Context, query string, args ...an
 		}
 		return db.updateWorkItemStatusByID(args[4].(string), args[5].(string), "failed")
 	case strings.Contains(query, "INSERT INTO fact_work_items") && strings.Contains(query, "'reducer'"):
+		workItemID := args[0].(string)
+		if _, exists := db.state.workItems[workItemID]; exists {
+			return proofResult{}, nil
+		}
 		payload, err := unmarshalPayload(args[5].([]byte))
 		if err != nil {
 			return nil, err
 		}
 		workItem := proofWorkItem{
-			workItemID:   args[0].(string),
+			workItemID:   workItemID,
 			stage:        "reducer",
 			domain:       args[3].(string),
 			status:       "pending",
@@ -147,6 +154,23 @@ func (db *proofDomainDB) ExecContext(_ context.Context, query string, args ...an
 
 func (db *proofDomainDB) QueryContext(_ context.Context, query string, args ...any) (Rows, error) {
 	switch {
+	case strings.Contains(query, "SELECT generation.generation_id, COALESCE(generation.freshness_hint, '')"):
+		if len(args) != 1 {
+			return nil, fmt.Errorf("active generation freshness args = %d, want 1", len(args))
+		}
+		scopeID := args[0].(string)
+		activeGenerationID := db.state.activeGenerations[scopeID]
+		if activeGenerationID == "" {
+			return newProofRows(nil), nil
+		}
+		generation, ok := db.state.generations[activeGenerationID]
+		if !ok {
+			return newProofRows(nil), nil
+		}
+		return newProofRows([][]any{{
+			generation.GenerationID,
+			generation.FreshnessHint,
+		}}), nil
 	case strings.Contains(query, "FROM ingestion_scopes") && strings.Contains(query, "GROUP BY status"):
 		return newProofRows(proofScopeCountRows(db.state.scopeStatuses)), nil
 	case strings.Contains(query, "FROM scope_generations") && strings.Contains(query, "GROUP BY status"):
@@ -197,6 +221,12 @@ func (db *proofDomainDB) updateWorkItemStatus(stage string, scopeID string, gene
 			item.leaseOwner = ""
 			item.claimUntil = time.Time{}
 			db.state.workItems[key] = item
+			if stage == "projector" && status == "succeeded" {
+				db.promoteGeneration(scopeID, generationID)
+			}
+			if stage == "projector" && status == "failed" {
+				db.failGeneration(scopeID, generationID)
+			}
 			return proofResult{}, nil
 		}
 	}
@@ -305,8 +335,15 @@ func (tx *proofDomainTx) ExecContext(ctx context.Context, query string, args ...
 				}
 			}
 		}
+		scopeID := args[0].(string)
+		incomingStatus := args[9].(string)
+		incomingActiveGenerationID := stringFromAny(args[10])
+		if existingActiveGenerationID := tx.state.activeGenerations[scopeID]; existingActiveGenerationID != "" && incomingActiveGenerationID == "" && incomingStatus == "pending" {
+			incomingStatus = tx.state.scopeStatuses[scopeID]
+			incomingActiveGenerationID = existingActiveGenerationID
+		}
 		scopeValue := scope.IngestionScope{
-			ScopeID:       args[0].(string),
+			ScopeID:       scopeID,
 			ScopeKind:     scope.ScopeKind(args[1].(string)),
 			SourceSystem:  args[2].(string),
 			ParentScopeID: stringFromAny(args[4]),
@@ -315,7 +352,10 @@ func (tx *proofDomainTx) ExecContext(ctx context.Context, query string, args ...
 			Metadata:      metadata,
 		}
 		tx.state.scopes[scopeValue.ScopeID] = scopeValue
-		tx.state.scopeStatuses[scopeValue.ScopeID] = args[9].(string)
+		tx.state.scopeStatuses[scopeValue.ScopeID] = incomingStatus
+		if incomingActiveGenerationID != "" {
+			tx.state.activeGenerations[scopeValue.ScopeID] = incomingActiveGenerationID
+		}
 		return proofResult{}, nil
 	case strings.Contains(query, "INSERT INTO scope_generations"):
 		generation := scope.ScopeGeneration{
@@ -326,6 +366,11 @@ func (tx *proofDomainTx) ExecContext(ctx context.Context, query string, args ...
 			ObservedAt:    args[4].(time.Time).UTC(),
 			IngestedAt:    args[5].(time.Time).UTC(),
 			Status:        scope.GenerationStatus(args[6].(string)),
+		}
+		if existing, ok := tx.state.generations[generation.GenerationID]; ok && existing.Status == scope.GenerationStatusActive && generation.Status == scope.GenerationStatusPending && existing.FreshnessHint == generation.FreshnessHint {
+			generation.Status = existing.Status
+			generation.ObservedAt = existing.ObservedAt
+			generation.IngestedAt = existing.IngestedAt
 		}
 		tx.state.generations[generation.GenerationID] = generation
 		return proofResult{}, nil
@@ -355,8 +400,12 @@ func (tx *proofDomainTx) ExecContext(ctx context.Context, query string, args ...
 		tx.state.facts[envelope.FactID] = envelope
 		return proofResult{}, nil
 	case strings.Contains(query, "INSERT INTO fact_work_items") && strings.Contains(query, "'projector'"):
+		workItemID := args[0].(string)
+		if _, exists := tx.state.workItems[workItemID]; exists {
+			return proofResult{}, nil
+		}
 		workItem := proofWorkItem{
-			workItemID:   args[0].(string),
+			workItemID:   workItemID,
 			stage:        "projector",
 			domain:       args[3].(string),
 			status:       "pending",
@@ -387,4 +436,57 @@ func (tx *proofDomainTx) Rollback() error { return nil }
 type proofDomainTx struct {
 	db    *proofDomainDB
 	state proofState
+}
+
+func (db *proofDomainDB) activeGenerationID(scopeID string) string {
+	return db.state.activeGenerations[scopeID]
+}
+
+func (db *proofDomainDB) generationStatus(generationID string) scope.GenerationStatus {
+	generation, ok := db.state.generations[generationID]
+	if !ok {
+		return ""
+	}
+	return generation.Status
+}
+
+func (db *proofDomainDB) projectorWorkItemCount() int {
+	count := 0
+	for _, item := range db.state.workItems {
+		if item.stage == "projector" {
+			count++
+		}
+	}
+	return count
+}
+
+func (db *proofDomainDB) promoteGeneration(scopeID string, generationID string) {
+	for key, generation := range db.state.generations {
+		if generation.ScopeID != scopeID {
+			continue
+		}
+		if key == generationID {
+			generation.Status = scope.GenerationStatusActive
+			db.state.generations[key] = generation
+			continue
+		}
+		if generation.Status == scope.GenerationStatusActive {
+			generation.Status = scope.GenerationStatusSuperseded
+			db.state.generations[key] = generation
+		}
+	}
+	db.state.activeGenerations[scopeID] = generationID
+	db.state.scopeStatuses[scopeID] = string(scope.GenerationStatusActive)
+}
+
+func (db *proofDomainDB) failGeneration(scopeID string, generationID string) {
+	generation, ok := db.state.generations[generationID]
+	if ok {
+		generation.Status = scope.GenerationStatusFailed
+		db.state.generations[generationID] = generation
+	}
+	if db.state.activeGenerations[scopeID] == generationID {
+		delete(db.state.activeGenerations, scopeID)
+		db.state.scopeStatuses[scopeID] = string(scope.GenerationStatusFailed)
+	}
 }

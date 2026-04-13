@@ -141,10 +141,102 @@ func TestUpsertIngestionScopeQueryPreservesActiveStatusDuringPendingRefresh(t *t
 	}
 }
 
+func TestIngestionStoreCommitScopeGenerationSkipsUnchangedActiveGeneration(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC)
+	db := &fakeTransactionalDB{
+		tx: &fakeTx{},
+		queryResponses: []queueFakeRows{{
+			rows: [][]any{{"generation-active", "fingerprint-same"}},
+		}},
+	}
+	store := NewIngestionStore(db)
+	store.Now = func() time.Time { return now }
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+	}
+	generation := scope.ScopeGeneration{
+		GenerationID:  "generation-456",
+		ScopeID:       "scope-123",
+		ObservedAt:    time.Date(2026, time.April, 12, 11, 59, 0, 0, time.UTC),
+		IngestedAt:    now,
+		Status:        scope.GenerationStatusPending,
+		TriggerKind:   scope.TriggerKindSnapshot,
+		FreshnessHint: "fingerprint-same",
+	}
+
+	if err := store.CommitScopeGeneration(context.Background(), scopeValue, generation, nil); err != nil {
+		t.Fatalf("CommitScopeGeneration() error = %v, want nil", err)
+	}
+
+	if got, want := len(db.queries), 1; got != want {
+		t.Fatalf("query count = %d, want %d", got, want)
+	}
+	if got, want := db.beginCalls, 0; got != want {
+		t.Fatalf("begin call count = %d, want %d", got, want)
+	}
+	if got, want := len(db.tx.execs), 0; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+}
+
+func TestIngestionStoreCommitScopeGenerationContinuesWhenActiveFingerprintDiffers(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC)
+	db := &fakeTransactionalDB{
+		tx: &fakeTx{},
+		queryResponses: []queueFakeRows{{
+			rows: [][]any{{"generation-active", "fingerprint-old"}},
+		}},
+	}
+	store := NewIngestionStore(db)
+	store.Now = func() time.Time { return now }
+
+	scopeValue := scope.IngestionScope{
+		ScopeID:       "scope-123",
+		SourceSystem:  "git",
+		ScopeKind:     scope.KindRepository,
+		CollectorKind: scope.CollectorGit,
+		PartitionKey:  "repo-123",
+	}
+	generation := scope.ScopeGeneration{
+		GenerationID:  "generation-456",
+		ScopeID:       "scope-123",
+		ObservedAt:    time.Date(2026, time.April, 12, 11, 59, 0, 0, time.UTC),
+		IngestedAt:    now,
+		Status:        scope.GenerationStatusPending,
+		TriggerKind:   scope.TriggerKindSnapshot,
+		FreshnessHint: "fingerprint-new",
+	}
+
+	if err := store.CommitScopeGeneration(context.Background(), scopeValue, generation, nil); err != nil {
+		t.Fatalf("CommitScopeGeneration() error = %v, want nil", err)
+	}
+
+	if got, want := len(db.queries), 1; got != want {
+		t.Fatalf("query count = %d, want %d", got, want)
+	}
+	if got, want := db.beginCalls, 1; got != want {
+		t.Fatalf("begin call count = %d, want %d", got, want)
+	}
+	if got, want := len(db.tx.execs), 3; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+}
+
 type fakeTransactionalDB struct {
 	tx         *fakeTx
 	beginCalls int
 	beginErr   error
+	queries        []fakeQueryCall
+	queryResponses []queueFakeRows
 }
 
 func (f *fakeTransactionalDB) Begin(context.Context) (Transaction, error) {
@@ -159,8 +251,19 @@ func (f *fakeTransactionalDB) ExecContext(context.Context, string, ...any) (sql.
 	return nil, errors.New("unexpected ExecContext on outer db")
 }
 
-func (f *fakeTransactionalDB) QueryContext(context.Context, string, ...any) (Rows, error) {
-	return nil, errors.New("unexpected QueryContext on outer db")
+func (f *fakeTransactionalDB) QueryContext(_ context.Context, query string, args ...any) (Rows, error) {
+	f.queries = append(f.queries, fakeQueryCall{query: query, args: args})
+	if len(f.queryResponses) == 0 {
+		return nil, errors.New("unexpected QueryContext on outer db")
+	}
+
+	rows := f.queryResponses[0]
+	f.queryResponses = f.queryResponses[1:]
+	if rows.err != nil {
+		return nil, rows.err
+	}
+
+	return &rows, nil
 }
 
 type fakeTx struct {

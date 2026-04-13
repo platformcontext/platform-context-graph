@@ -216,7 +216,13 @@ func buildScope(repo repositoryidentity.Metadata) scope.IngestionScope {
 	}
 }
 
-func buildGeneration(scopeID string, sourceRunID string, repoPath string, observedAt time.Time) scope.ScopeGeneration {
+func buildGeneration(
+	scopeID string,
+	sourceRunID string,
+	repoPath string,
+	observedAt time.Time,
+	freshnessHint string,
+) scope.ScopeGeneration {
 	return scope.ScopeGeneration{
 		GenerationID: facts.StableID(
 			"GitRepositorySnapshot",
@@ -230,6 +236,6 @@ func buildGeneration(scopeID string, sourceRunID string, repoPath string, observ
 		IngestedAt:    observedAt,
 		Status:        scope.GenerationStatusPending,
 		TriggerKind:   scope.TriggerKindSnapshot,
-		FreshnessHint: "snapshot",
+		FreshnessHint: freshnessHint,
 	}
 }

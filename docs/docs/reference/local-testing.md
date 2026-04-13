@@ -103,6 +103,25 @@ go test ./internal/storage/postgres -run TestProofDomainWorkloadIdentityFlowsCol
 This proves the deterministic path from a repo snapshot into facts, source-local
 projection, and reducer-intent enqueue/drain.
 
+## Go Data Plane Milestone 2 Gate
+
+Use this gate when validating the stronger scope-first incremental refresh
+proof. It keeps the same compose shape but now expects three phases:
+
+- one active generation at the start
+- an unchanged rerun that leaves the authoritative generation and projector
+  queue unchanged
+- a changed rerun that still drives the active/superseded swap
+
+```bash
+./scripts/verify_incremental_refresh_compose.sh
+```
+
+The current live blocker is the projector handoff ordering around the
+`scope_generations_active_scope_idx` uniqueness check; if the changed rerun
+cannot promote cleanly, the proof should fail and the proof log will show the
+exact SQL error.
+
 ## Local Full Stack
 
 Start the full stack:
@@ -208,45 +227,15 @@ canonical data entity types, or SQL/data impact-query surfacing.
 
 ### Current branch coverage
 
-The current foundation slice proves:
-
-- canonical data-native entity types in the query/domain model
-- entity resolution for `data_asset`, `data_column`, `analytics_model`,
-  `query_execution`, `dashboard_asset`, and `data_quality_check`
-- generic entity context for vendor-neutral data entities
-- impact-query compatibility for data-asset and dashboard-style IDs
-- plugin registration foundations for future warehouse and BI replay adapters
-- dbt-style compiled manifest normalization through a checked-in replay fixture
-- supported-subset compiled SQL column lineage extraction
-- explicit partial coverage reporting for remaining unsupported derived
-  expressions
-- safe scalar wrapper coverage for `upper(column)`, `coalesce(column, 'literal')`,
-  `cast(column as type)`, and `date_trunc('day', column)`
-- `manifest.json` parsing through the targeted JSON lane
-- graph/content persistence registration for `AnalyticsModel`, `DataAsset`, and
-  `DataColumn`
-- post-commit compiled-analytics lineage materialization
-- content-entity context and generic impact responses can label declared versus
-  observed lineage evidence for data-native entities
-- replay-backed dashboard normalization through `bi_replay.json`
-- graph/content persistence registration for `DashboardAsset`
-- post-commit BI downstream materialization for `POWERS`
-- replay-backed semantic normalization through `semantic_replay.json`
-- semantic datasets and fields reusing `DataAsset` and `DataColumn`
-- post-commit semantic lineage materialization for `ASSET_DERIVES_FROM` and
-  `COLUMN_DERIVES_FROM`
-- replay-backed quality normalization through `quality_replay.json`
-- graph/content persistence registration for `DataQualityCheck`
-- post-commit quality assertion materialization for `ASSERTS_QUALITY_ON`
-- replay-backed governance normalization through `governance_replay.json`
-- graph/content persistence registration for `DataOwner` and `DataContract`
-- post-commit governance materialization for `OWNS` and
-  `DECLARES_CONTRACT_FOR`
-- governance overlays stamped onto `DataAsset` and `DataColumn` targets for
-  owner, contract, sensitivity, and protected-field metadata
-- persona-friendly `get_entity_context` summaries for data-native entities,
-  including lineage evidence, change classification, ownership, contract, and
-  downstream-impact summaries
+The current foundation slice proves canonical data-native entity types,
+resolution and impact-query support for `data_asset`, `data_column`,
+`analytics_model`, `query_execution`, `dashboard_asset`, and
+`data_quality_check`, plus replay-backed compiled SQL, BI, semantic,
+quality, and governance lineage surfaces. It also covers the supported
+compiled-SQL subset, explicit partial coverage reporting, graph/content
+persistence registration for the new data entity families, and
+persona-friendly context summaries that label declared versus observed
+evidence.
 
 ### Fast foundation gate
 
@@ -320,20 +309,7 @@ PYTHONPATH=src uv run pytest \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py -q
 ```
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=change-me
-export DEFAULT_DATABASE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
-
-uv run pytest \
-  tests/integration/test_warehouse_replay_graph.py \
-  tests/integration/test_mcp_data_intelligence_queries.py -q
-```
+Use the same compose-backed integration smoke command as the warehouse replay gate.
 
 ### Semantic replay gate
 
@@ -347,20 +323,7 @@ PYTHONPATH=src uv run pytest \
   tests/unit/query/test_story_data_intelligence.py \
   tests/unit/query/test_change_surface.py -q
 ```
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=change-me
-export DEFAULT_DATABASE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
-
-uv run pytest \
-  tests/integration/test_warehouse_replay_graph.py \
-  tests/integration/test_mcp_data_intelligence_queries.py -q
-```
+Use the same compose-backed integration smoke command as the warehouse replay gate.
 
 ### Governance replay gate
 
@@ -374,20 +337,7 @@ PYTHONPATH=src uv run pytest \
   tests/unit/query/test_story_data_governance.py \
   tests/unit/tools/test_graph_builder_schema.py -q
 ```
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=change-me
-export DEFAULT_DATABASE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
-
-uv run pytest \
-  tests/integration/test_governance_replay_graph.py \
-  tests/integration/test_mcp_data_governance_queries.py -q
-```
+Use the same compose-backed integration smoke command as the warehouse replay gate.
 
 ### Quality replay gate
 
@@ -402,20 +352,7 @@ PYTHONPATH=src uv run pytest \
   tests/unit/query/test_story_data_intelligence.py \
   tests/unit/query/test_change_surface.py -q
 ```
-
-```bash
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=change-me
-export DEFAULT_DATABASE=neo4j
-export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
-
-uv run pytest \
-  tests/integration/test_warehouse_replay_graph.py \
-  tests/integration/test_mcp_data_intelligence_queries.py -q
-```
+Use the same compose-backed integration smoke command as the warehouse replay gate.
 
 ### Declared vs observed reconciliation gate
 
