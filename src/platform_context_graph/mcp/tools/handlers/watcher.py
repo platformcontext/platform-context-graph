@@ -91,7 +91,7 @@ def watch_directory(
 
             code_watcher.watch_directory(
                 path_str,
-                perform_initial_scan=True,
+                perform_initial_scan=False,
                 scope=args.get("scope", "auto"),
                 include_repositories=args.get("include_repositories"),
                 exclude_repositories=args.get("exclude_repositories"),

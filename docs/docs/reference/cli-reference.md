@@ -157,9 +157,9 @@ These options apply at the root command level.
 | `pcg ecosystem candidates` | List relationship candidates waiting for review. |
 | `pcg ecosystem assert-relationship` | Persist an explicit dependency assertion. |
 | `pcg ecosystem reject-relationship` | Persist an explicit dependency rejection. |
-| `pcg ecosystem index` | Index all repositories in a manifest. |
+| `pcg ecosystem index` | Index all repositories in a manifest through the Go `bootstrap-index` runtime. |
 | `pcg ecosystem status` | Show per-repository index status. |
-| `pcg ecosystem update` | Re-index only stale repositories. |
+| `pcg ecosystem update` | Re-index only stale repositories through the Go `bootstrap-index` runtime. |
 | `pcg ecosystem link` | Build cross-repository relationships. |
 | `pcg ecosystem resolve` | Resolve evidence-backed repository dependencies. |
 | `pcg ecosystem overview` | Show ecosystem summary statistics. |

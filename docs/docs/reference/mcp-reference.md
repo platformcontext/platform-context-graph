@@ -158,7 +158,7 @@ Tools for managing the graph and background jobs.
 
 | Tool Name | Description | Natural Language Example |
 | :--- | :--- | :--- |
-| **`monitor_directory`** | Start monitoring a folder (Alias: `watch_directory`)| "Watch the `src` folder." |
+| **`monitor_directory`** | Start monitoring a folder (Alias: `watch_directory`) with a Go `bootstrap-index` initial scan when needed and debounced repo-level Go reindexing for later changes. | "Watch the `src` folder." |
 | **`list_watched_paths`** | See what is being monitored. | "What directories are being watched?" |
 | **`unwatch_directory`** | Stop monitoring a folder. | "Stop watching `src`." |
 | **`list_indexed_repositories`** | Show what projects are currently indexed. | "What repos are indexed?" |

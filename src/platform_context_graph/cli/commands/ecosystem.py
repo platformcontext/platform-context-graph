@@ -11,6 +11,7 @@ from rich import box
 from rich.table import Table
 
 from platform_context_graph.observability import new_request_id
+from platform_context_graph.cli.helpers.go_index_runtime import run_go_bootstrap_index
 
 from .ecosystem_relationships import register_ecosystem_relationship_commands
 
@@ -95,7 +96,11 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
         db_manager, graph_builder, _ = services
         try:
             job_manager = JobManager()
-            indexer = EcosystemIndexer(graph_builder, job_manager)
+            indexer = EcosystemIndexer(
+                graph_builder,
+                job_manager,
+                index_repository=run_go_bootstrap_index,
+            )
             result = graph_builder.loop.run_until_complete(
                 indexer.index_ecosystem(
                     manifest_path=manifest,
@@ -136,7 +141,11 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
             raise typer.Exit(1)
         db_manager, graph_builder, _ = services
         try:
-            indexer = EcosystemIndexer(graph_builder, JobManager())
+            indexer = EcosystemIndexer(
+                graph_builder,
+                JobManager(),
+                index_repository=run_go_bootstrap_index,
+            )
             status = indexer.get_status()
             if not status.get("repos"):
                 main_module.console.print(
@@ -203,7 +212,11 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
             raise typer.Exit(1)
         db_manager, graph_builder, _ = services
         try:
-            indexer = EcosystemIndexer(graph_builder, JobManager())
+            indexer = EcosystemIndexer(
+                graph_builder,
+                JobManager(),
+                index_repository=run_go_bootstrap_index,
+            )
             result = graph_builder.loop.run_until_complete(
                 indexer.update_ecosystem(
                     manifest_path=manifest,

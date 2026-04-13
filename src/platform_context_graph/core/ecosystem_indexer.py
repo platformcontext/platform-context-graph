@@ -10,7 +10,7 @@ import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlsplit
 
 from .ecosystem import (
@@ -108,10 +108,13 @@ class EcosystemIndexer:
         self,
         graph_builder: GraphBuilder,
         job_manager: JobManager,
+        *,
+        index_repository: Callable[[Path], None] | Callable[..., None],
     ) -> None:
         """Initialize the ecosystem indexer."""
         self.graph_builder = graph_builder
         self.job_manager = job_manager
+        self.index_repository = index_repository
 
     async def index_ecosystem(
         self,
@@ -346,23 +349,17 @@ class EcosystemIndexer:
             job_id = self.job_manager.create_job(f"ecosystem-{repo_name}")
 
             try:
-                await self.graph_builder.build_graph_from_path_async(
-                    Path(local_path),
-                    is_dependency=False,
-                    job_id=job_id,
+                del job_id
+                repo_path = Path(local_path).resolve()
+                await asyncio.to_thread(
+                    self.index_repository,
+                    repo_path,
+                    force=False,
                 )
 
                 current_sha = _get_git_head_sha(local_path)
                 now = datetime.now(timezone.utc).isoformat()
-
-                driver = self.graph_builder.db_manager.get_driver()
-                with driver.session() as session:
-                    result = session.run(
-                        "MATCH (r:Repository)-[:REPO_CONTAINS]->(f:File) "
-                        "WHERE r.name = $name RETURN count(f) as cnt",
-                        name=repo_name,
-                    ).single()
-                    file_count = result["cnt"] if result else 0
+                file_count = _count_indexed_files(repo_path)
 
                 state.repos[repo_name] = RepoIndexState(
                     name=repo_name,
@@ -383,6 +380,19 @@ class EcosystemIndexer:
                     error=str(e),
                 )
                 results["failed"].append({"name": repo_name, "error": str(e)})
+
+
+def _count_indexed_files(repo_path: Path) -> int:
+    """Return a lightweight file count for ecosystem status bookkeeping."""
+
+    total = 0
+    for candidate in repo_path.rglob("*"):
+        if not candidate.is_file():
+            continue
+        if ".git" in candidate.parts:
+            continue
+        total += 1
+    return total
 
     def _create_ecosystem_nodes(self, manifest: EcosystemManifest) -> None:
         """Create Ecosystem and Tier nodes in the graph."""

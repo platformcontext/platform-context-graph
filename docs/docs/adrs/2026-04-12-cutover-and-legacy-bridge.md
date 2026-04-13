@@ -38,10 +38,11 @@ Rules:
 Current branch status:
 
 - the Go runtime, admin/status, projection, and recovery surfaces are in place
-- the Git write plane still has temporary Python bridge ownership for
-  selection and snapshot collection seams
+- the Git write plane no longer uses Python bridge ownership for selection,
+  snapshot collection, local bootstrap indexing, local watch refreshes, or
+  ecosystem manifest indexing on the normal path
 - the parser, discovery, and content-shaping path still has Python ownership on
-  the normal runtime path
+  the remaining uncovered portions of the normal runtime path
 - no new ingestor family should start until the Python runtime ownership is
   fully removed and the cutover is proven end to end
 
@@ -95,6 +96,6 @@ ownership. Current status:
 - `src/platform_context_graph/indexing/coordinator_finalize.py`
 
 Python indexing now fails closed unless the facts-first runtime is available.
-The remaining ownership blockers have moved forward to the Python
-`resolution/`, `facts/`, and `runtime/status_store*.py` surfaces tracked in the
-ownership completion plan.
+The remaining ownership blockers have moved forward to parser-matrix
+completion plus the Python `resolution/`, `facts/`, and
+`runtime/status_store*.py` surfaces tracked in the ownership completion plan.

@@ -6,7 +6,6 @@ import logging
 import threading
 from pathlib import Path
 
-from ...core.jobs import JobManager
 from ...core.watcher import CodeWatcher, resolve_watch_targets
 from .go_index_runtime import run_go_bootstrap_index
 
@@ -44,7 +43,7 @@ def watch_helper(
     if not all(services):
         return
 
-    db_manager, graph_builder, code_finder = services
+    db_manager, _graph_builder, code_finder = services
     path_obj = Path(path).resolve()
 
     if not path_obj.exists():
@@ -96,7 +95,7 @@ def watch_helper(
         if repo_path not in indexed_paths
     ]
 
-    watcher = CodeWatcher(graph_builder, JobManager())
+    watcher = CodeWatcher(run_go_bootstrap_index)
     try:
         watcher.start()
 

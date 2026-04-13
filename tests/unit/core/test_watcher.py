@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 from platform_context_graph.core.watcher import (
     CodeWatcher,
@@ -101,12 +99,12 @@ def test_refresh_watch_directory_adds_new_workspace_repository(
     class FakeHandler:
         def __init__(
             self,
-            graph_builder,
+            index_repository,
             repo_path: Path,
             debounce_interval: float = 2.0,
             perform_initial_scan: bool = True,
         ) -> None:
-            del graph_builder, debounce_interval, perform_initial_scan
+            del index_repository, debounce_interval, perform_initial_scan
             self.repo_path = repo_path.resolve()
 
         def cleanup(self) -> None:
@@ -121,7 +119,7 @@ def test_refresh_watch_directory_adds_new_workspace_repository(
         FakeHandler,
     )
 
-    watcher = CodeWatcher(graph_builder=SimpleNamespace())
+    watcher = CodeWatcher(index_repository=lambda *_args, **_kwargs: None)
     watcher.watch_directory(
         str(workspace),
         perform_initial_scan=False,
@@ -151,38 +149,19 @@ def test_repository_event_handlers_keep_workspace_repo_updates_partitioned(
     file_a.write_text("print('a')\n", encoding="utf-8")
     file_b.write_text("print('b')\n", encoding="utf-8")
 
-    update_calls: list[tuple[Path, Path]] = []
+    reindex_calls: list[tuple[Path, bool]] = []
 
-    def _collect_supported_files(path: Path) -> list[Path]:
-        return sorted(
-            candidate
-            for candidate in path.rglob("*")
-            if candidate.is_file() and candidate.suffix == ".py"
-        )
-
-    graph_builder = SimpleNamespace(
-        parsers={".py": object()},
-        _collect_supported_files=_collect_supported_files,
-        _pre_scan_for_imports=lambda _files: {},
-        update_file_in_graph=lambda path, repo_path, imports_map: (
-            update_calls.append((repo_path.resolve(), path.resolve())),
-            {"path": str(path.resolve()), "imports_map": imports_map},
-        )[1],
-        delete_file_from_graph=lambda _path: None,
-        _create_all_function_calls=lambda _file_data, _imports_map: None,
-        _create_all_inheritance_links=lambda _file_data, _imports_map: None,
-        _create_all_sql_relationships=lambda _file_data: None,
-        _create_all_infra_links=lambda _file_data: None,
-    )
+    def _index_repository(repo_path: Path, *, force: bool) -> None:
+        reindex_calls.append((repo_path.resolve(), force))
 
     handler_a = RepositoryEventHandler(
-        graph_builder,
+        _index_repository,
         repo_a,
         debounce_interval=0.1,
         perform_initial_scan=False,
     )
     handler_b = RepositoryEventHandler(
-        graph_builder,
+        _index_repository,
         repo_b,
         debounce_interval=0.1,
         perform_initial_scan=False,
@@ -193,9 +172,9 @@ def test_repository_event_handlers_keep_workspace_repo_updates_partitioned(
     handler_b._queue_event(str(file_b))
     handler_b._process_pending_changes()
 
-    assert update_calls == [
-        (repo_a.resolve(), file_a.resolve()),
-        (repo_b.resolve(), file_b.resolve()),
+    assert reindex_calls == [
+        (repo_a.resolve(), True),
+        (repo_b.resolve(), True),
     ]
 
 
@@ -238,12 +217,12 @@ def test_code_watcher_stop_clears_repo_partition_state(
     class FakeHandler:
         def __init__(
             self,
-            graph_builder,
+            index_repository,
             repo_path: Path,
             debounce_interval: float = 2.0,
             perform_initial_scan: bool = True,
         ) -> None:
-            del graph_builder, debounce_interval, perform_initial_scan
+            del index_repository, debounce_interval, perform_initial_scan
             self.repo_path = repo_path.resolve()
 
         def cleanup(self) -> None:
@@ -258,7 +237,7 @@ def test_code_watcher_stop_clears_repo_partition_state(
         FakeHandler,
     )
 
-    watcher = CodeWatcher(graph_builder=SimpleNamespace())
+    watcher = CodeWatcher(index_repository=lambda *_args, **_kwargs: None)
     watcher.watch_directory(
         str(workspace),
         perform_initial_scan=False,
@@ -275,122 +254,45 @@ def test_code_watcher_stop_clears_repo_partition_state(
     assert watcher._watch_configs == {}
 
 
-def test_repository_event_handler_initial_scan_skips_gitignored_files(
+def test_repository_event_handler_initial_scan_reindexes_repository_once(
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
-    """Initial watcher scans should honor repo-local .gitignore rules."""
+    """Initial watcher setup should trigger one non-forced repo reindex."""
 
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
-    visible = repo / "visible.py"
-    ignored = repo / "ignored.py"
-    visible.write_text("print('visible')\n", encoding="utf-8")
-    ignored.write_text("print('ignored')\n", encoding="utf-8")
-    (repo / ".gitignore").write_text("ignored.py\n", encoding="utf-8")
 
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder.get_config_value",
-        lambda key: "true" if key == "PCG_HONOR_GITIGNORE" else None,
-    )
-
-    parse_calls: list[Path] = []
-
-    def _collect_supported_files(path: Path) -> list[Path]:
-        return sorted(
-            candidate
-            for candidate in path.rglob("*")
-            if candidate.is_file() and candidate.suffix == ".py"
-        )
-
-    graph_builder = SimpleNamespace(
-        parsers={".py": object()},
-        _collect_supported_files=_collect_supported_files,
-        _pre_scan_for_imports=lambda files: {
-            "visible": [str(path.resolve()) for path in files]
-        },
-        parse_file=lambda repo_path, file_path, is_dependency=False: (
-            parse_calls.append(file_path.resolve()),
-            {"path": str(file_path.resolve()), "functions": [], "classes": []},
-        )[1],
-        update_file_in_graph=lambda *_args, **_kwargs: None,
-        delete_file_from_graph=lambda *_args, **_kwargs: None,
-        _create_all_function_calls=lambda *_args, **_kwargs: None,
-        _create_all_inheritance_links=lambda *_args, **_kwargs: None,
-        _create_all_sql_relationships=lambda *_args, **_kwargs: None,
-        _create_all_infra_links=lambda *_args, **_kwargs: None,
-    )
+    reindex_calls: list[tuple[Path, bool]] = []
 
     handler = RepositoryEventHandler(
-        graph_builder,
+        lambda repo_path, *, force: reindex_calls.append((repo_path.resolve(), force)),
         repo,
         debounce_interval=0.1,
         perform_initial_scan=True,
     )
 
-    assert parse_calls == [visible.resolve()]
-    assert sorted(handler.file_data_by_path) == [str(visible.resolve())]
+    assert handler.repo_path == repo.resolve()
+    assert reindex_calls == [(repo.resolve(), False)]
 
 
-def test_repository_event_handler_gitignore_change_removes_newly_ignored_files(
+def test_repository_event_handler_gitignore_change_triggers_forced_reindex(
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
-    """Changing .gitignore should trigger a full rescan and stale graph cleanup."""
+    """Changing `.gitignore` should trigger one forced repo reindex."""
 
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
-    tracked = repo / "app.py"
-    tracked.write_text("print('tracked')\n", encoding="utf-8")
     (repo / ".gitignore").write_text("", encoding="utf-8")
 
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder.get_config_value",
-        lambda key: "true" if key == "PCG_HONOR_GITIGNORE" else None,
-    )
-
-    delete_file_from_graph = MagicMock()
-
-    def _collect_supported_files(path: Path) -> list[Path]:
-        return sorted(
-            candidate
-            for candidate in path.rglob("*")
-            if candidate.is_file() and candidate.suffix == ".py"
-        )
-
-    graph_builder = SimpleNamespace(
-        parsers={".py": object()},
-        _collect_supported_files=_collect_supported_files,
-        _pre_scan_for_imports=lambda files: {
-            "app": [str(path.resolve()) for path in files]
-        },
-        parse_file=lambda repo_path, file_path, is_dependency=False: {
-            "path": str(file_path.resolve()),
-            "functions": [],
-            "classes": [],
-        },
-        update_file_in_graph=lambda path, repo_path, imports_map: {
-            "path": str(path.resolve()),
-            "imports_map": imports_map,
-        },
-        delete_file_from_graph=delete_file_from_graph,
-        _create_all_function_calls=lambda *_args, **_kwargs: None,
-        _create_all_inheritance_links=lambda *_args, **_kwargs: None,
-        _create_all_sql_relationships=lambda *_args, **_kwargs: None,
-        _create_all_infra_links=lambda *_args, **_kwargs: None,
-    )
-
+    reindex_calls: list[tuple[Path, bool]] = []
     handler = RepositoryEventHandler(
-        graph_builder,
+        lambda repo_path, *, force: reindex_calls.append((repo_path.resolve(), force)),
         repo,
         debounce_interval=0.1,
-        perform_initial_scan=True,
+        perform_initial_scan=False,
     )
-    assert str(tracked.resolve()) in handler.file_data_by_path
 
-    (repo / ".gitignore").write_text("app.py\n", encoding="utf-8")
     handler._queue_event(str((repo / ".gitignore").resolve()))
     handler._process_pending_changes()
 
-    delete_file_from_graph.assert_called_once_with(str(tracked.resolve()))
-    assert handler.file_data_by_path == {}
+    assert reindex_calls == [(repo.resolve(), True)]

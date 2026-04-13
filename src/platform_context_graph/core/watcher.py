@@ -5,17 +5,13 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-import typing
+from typing import Any
 
 from watchdog.observers import Observer
 
 from platform_context_graph.utils.debug_log import info_logger, warning_logger
-from .watch_repository import RepositoryEventHandler
+from .watch_repository import RepositoryEventHandler, RepositoryIndexer
 from .watch_targets import WatchPlan, resolve_watch_targets, watch_debounce_seconds
-
-if typing.TYPE_CHECKING:
-    from platform_context_graph.core.jobs import JobManager
-    from platform_context_graph.tools.graph_builder import GraphBuilder
 
 
 class CodeWatcher:
@@ -23,21 +19,19 @@ class CodeWatcher:
 
     def __init__(
         self,
-        graph_builder: "GraphBuilder",
-        job_manager: "JobManager | None" = None,
+        index_repository: RepositoryIndexer,
     ) -> None:
         """Initialize one process-wide watcher manager and its root registries."""
 
-        self.graph_builder = graph_builder
+        self.index_repository = index_repository
         self.observer = Observer()
         self.watched_paths: set[str] = set()
-        self.watches: dict[str, dict[str, typing.Any]] = {}
+        self.watches: dict[str, dict[str, Any]] = {}
         self._handlers: dict[str, dict[str, RepositoryEventHandler]] = {}
         self._plans: dict[str, WatchPlan] = {}
-        self._watch_configs: dict[str, dict[str, typing.Any]] = {}
+        self._watch_configs: dict[str, dict[str, Any]] = {}
         self._refresh_stop_events: dict[str, threading.Event] = {}
         self._refresh_threads: dict[str, threading.Thread] = {}
-        self.job_manager = job_manager
 
     def _add_repository_watch(
         self,
@@ -53,7 +47,7 @@ class CodeWatcher:
             return
 
         handler = RepositoryEventHandler(
-            self.graph_builder,
+            self.index_repository,
             repo_path,
             debounce_interval=watch_debounce_seconds(),
             perform_initial_scan=perform_initial_scan,

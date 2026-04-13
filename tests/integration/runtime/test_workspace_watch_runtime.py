@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 from platform_context_graph.core.watcher import CodeWatcher, RepositoryEventHandler
 
@@ -39,12 +38,12 @@ def test_workspace_watch_refresh_adds_new_repo_without_churning_existing_ones(
     class FakeHandler:
         def __init__(
             self,
-            graph_builder,
+            index_repository,
             repo_path: Path,
             debounce_interval: float = 2.0,
             perform_initial_scan: bool = True,
         ) -> None:
-            del graph_builder, debounce_interval, perform_initial_scan
+            del index_repository, debounce_interval, perform_initial_scan
             self.repo_path = repo_path.resolve()
 
         def cleanup(self) -> None:
@@ -59,7 +58,7 @@ def test_workspace_watch_refresh_adds_new_repo_without_churning_existing_ones(
         FakeHandler,
     )
 
-    watcher = CodeWatcher(graph_builder=SimpleNamespace())
+    watcher = CodeWatcher(index_repository=lambda *_args, **_kwargs: None)
     watcher.watch_directory(
         str(workspace),
         perform_initial_scan=False,
@@ -86,65 +85,45 @@ def test_workspace_watch_refresh_adds_new_repo_without_churning_existing_ones(
     )
 
 
-def test_workspace_watch_repo_handlers_keep_gitignore_scoped_to_each_repo(
+def test_workspace_watch_repo_handlers_keep_reindex_requests_scoped_to_each_repo(
     tmp_path: Path,
 ) -> None:
-    """Repo-local `.gitignore` files should not leak across workspace repos."""
+    """Repo-local change batches should stay scoped to the changed repository."""
 
     workspace = tmp_path / "workspace"
     repo_a = workspace / "payments-api"
     repo_b = workspace / "orders-api"
     (repo_a / ".git").mkdir(parents=True)
     (repo_b / ".git").mkdir(parents=True)
-    (workspace / ".gitignore").write_text("*.py\n", encoding="utf-8")
-    (repo_a / ".gitignore").write_text("ignored.py\n", encoding="utf-8")
-
     kept_a = repo_a / "visible.py"
-    dropped_a = repo_a / "ignored.py"
     kept_b = repo_b / "worker.py"
-    for file_path in (kept_a, dropped_a, kept_b):
+    for file_path in (kept_a, kept_b):
         file_path.write_text("print('ok')\n", encoding="utf-8")
 
-    parse_calls: list[Path] = []
+    reindex_calls: list[tuple[Path, bool]] = []
 
-    def _collect_supported_files(path: Path) -> list[Path]:
-        return sorted(
-            candidate
-            for candidate in path.rglob("*")
-            if candidate.is_file() and candidate.suffix == ".py"
-        )
-
-    graph_builder = SimpleNamespace(
-        parsers={".py": object()},
-        _collect_supported_files=_collect_supported_files,
-        _pre_scan_for_imports=lambda files: {
-            "files": [str(path.resolve()) for path in files]
-        },
-        parse_file=lambda repo_path, file_path, is_dependency=False: (
-            parse_calls.append(file_path.resolve()),
-            {"path": str(file_path.resolve()), "functions": [], "classes": []},
-        )[1],
-        update_file_in_graph=lambda *_args, **_kwargs: None,
-        delete_file_from_graph=lambda *_args, **_kwargs: None,
-        _create_all_function_calls=lambda *_args, **_kwargs: None,
-        _create_all_inheritance_links=lambda *_args, **_kwargs: None,
-        _create_all_sql_relationships=lambda *_args, **_kwargs: None,
-        _create_all_infra_links=lambda *_args, **_kwargs: None,
-    )
+    def _index_repository(repo_path: Path, *, force: bool) -> None:
+        reindex_calls.append((repo_path.resolve(), force))
 
     handler_a = RepositoryEventHandler(
-        graph_builder,
+        _index_repository,
         repo_a,
         debounce_interval=0.1,
-        perform_initial_scan=True,
+        perform_initial_scan=False,
     )
     handler_b = RepositoryEventHandler(
-        graph_builder,
+        _index_repository,
         repo_b,
         debounce_interval=0.1,
-        perform_initial_scan=True,
+        perform_initial_scan=False,
     )
 
-    assert set(parse_calls) == {kept_a.resolve(), kept_b.resolve()}
-    assert set(handler_a.file_data_by_path) == {str(kept_a.resolve())}
-    assert set(handler_b.file_data_by_path) == {str(kept_b.resolve())}
+    handler_a._queue_event(str(kept_a.resolve()))
+    handler_a._process_pending_changes()
+    handler_b._queue_event(str(kept_b.resolve()))
+    handler_b._process_pending_changes()
+
+    assert reindex_calls == [
+        (repo_a.resolve(), True),
+        (repo_b.resolve(), True),
+    ]

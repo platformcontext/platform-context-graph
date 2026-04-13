@@ -82,6 +82,11 @@ cutover draft assumed:
   deployed runtime service commands `bootstrap-index`, `repo-sync-loop`, or
   `resolution-engine`; Compose and Helm now start the Go-owned write plane
   through dedicated binaries
+- local `pcg watch`, MCP `watch_directory`, and `pcg ecosystem index/update`
+  now launch Go-owned `bootstrap-index` reindex flows for normal refreshes
+  instead of re-entering the legacy Python parser/coordinator path
+- `go/cmd/collector-git/source_python_bridge.go` and
+  `go/cmd/ingester/source_python_bridge.go` have been deleted from the branch
 
 The known parser-matrix blockers are no longer in the collector bridge path.
 The normal Go collector path now owns both the standard tree-sitter route and

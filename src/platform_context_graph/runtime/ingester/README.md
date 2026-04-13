@@ -34,6 +34,11 @@ The `pcg workspace` command group uses the same source contract:
 
 Path-first `pcg index <path>` and `pcg watch <path>` remain local convenience wrappers and are not the canonical remote discovery interface. The `pcg index` wrapper now launches the Go-owned `bootstrap-index` runtime in direct filesystem mode so local directory indexing follows the same parser/write ownership boundary as the deployed data plane.
 
+`pcg watch`, MCP watch flows, and `pcg ecosystem index/update` now use that
+same Go-owned bootstrap runtime for initial scans and repo-level refreshes, so
+normal local reindexing no longer routes back through the legacy Python
+parser/coordinator path.
+
 ## Repo-Local Ignore Rules
 
 Repo and workspace indexing honor the target repository's own `.gitignore` files by

@@ -12,7 +12,11 @@ from platform_context_graph.core.ecosystem_indexer import EcosystemIndexer
 
 
 def _indexer() -> EcosystemIndexer:
-    indexer = EcosystemIndexer(MagicMock(), MagicMock())
+    indexer = EcosystemIndexer(
+        MagicMock(),
+        MagicMock(),
+        index_repository=lambda *_args, **_kwargs: None,
+    )
     indexer._create_ecosystem_nodes = lambda _manifest: None  # type: ignore[method-assign]
     return indexer
 

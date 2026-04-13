@@ -32,6 +32,10 @@ Current branch caveat:
 - `collector-git`, `ingester`, and `bootstrap-index` now use Go-owned
   repository selection, repo sync, per-repo snapshot collection, and content
   shaping on the normal Git runtime path
+- local `pcg index`, `pcg workspace index`, `pcg watch`, MCP
+  `add_code_to_graph`, MCP `watch_directory`, and `pcg ecosystem index/update`
+  now all launch the Go `bootstrap-index` runtime for normal local refresh and
+  bootstrap behavior instead of the legacy Python parser/coordinator path
 - when `SCIP_INDEXER=true`, the Go collector now owns SCIP language detection,
   external `scip-*` indexer execution, protobuf reduction, and Go tree-sitter
   supplementation on the collector path instead of bouncing through Python
@@ -115,8 +119,9 @@ Current rewrite status:
   surface in their local proof lanes
 - the collector proof lane now uses native Go selection, repo sync, snapshot
   collection, content shaping, and optional SCIP execution/parsing; the
-  remaining non-Go ownership is now centered on Python runtime and
-  recovery/finalization seams
+  deleted `source_python_bridge.go` entrypoint shims are no longer part of the
+  branch, and the remaining non-Go ownership is now centered on parser-matrix
+  completion plus Python runtime and recovery/finalization seams
 
 ## Incremental Refresh And Reconciliation
 

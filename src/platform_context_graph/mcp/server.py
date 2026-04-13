@@ -21,6 +21,7 @@ from ..runtime.roles import get_runtime_role, runtime_supports_mutations
 from ..tools.code_finder import CodeFinder
 from ..relationships.cross_repo_linker import CrossRepoLinker
 from ..tools.graph_builder import GraphBuilder
+from ..cli.helpers.go_index_runtime import run_go_bootstrap_index
 from .content_tools import ContentToolMixin
 from .query_tools import QueryToolMixin
 from .repo_access import ServerRepoAccessMixin
@@ -85,10 +86,11 @@ class MCPServer(
         self.cross_repo_linker = None
         if runtime_supports_mutations():
             self.graph_builder = GraphBuilder(db_manager, self.job_manager, loop)
-            self.code_watcher = CodeWatcher(self.graph_builder, self.job_manager)
+            self.code_watcher = CodeWatcher(run_go_bootstrap_index)
             self.ecosystem_indexer = EcosystemIndexer(
                 self.graph_builder,
                 self.job_manager,
+                index_repository=run_go_bootstrap_index,
             )
             self.cross_repo_linker = CrossRepoLinker(db_manager)
         self.observability = initialize_observability(component="mcp")
