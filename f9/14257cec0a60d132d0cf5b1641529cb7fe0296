@@ -1,0 +1,70 @@
+go/internal/query/code.go
+  1ca5ee6ce936a402 5,22-26,255-319
+go/internal/query/language_queries.go
+  1ca5ee6ce936a402 1-395
+go/internal/mcp/server_test.go
+  1ca5ee6ce936a402 78
+go/internal/storage/postgres/schema_test.go
+  1ca5ee6ce936a402 16-17,28
+go/internal/storage/postgres/content_store.go
+  1ca5ee6ce936a402 1-402
+go/internal/storage/postgres/relationship_store_test.go
+  1ca5ee6ce936a402 1-649
+go/internal/query/language_queries_test.go
+  1ca5ee6ce936a402 1-333
+go/internal/storage/postgres/content_store_test.go
+  1ca5ee6ce936a402 1-616
+go/internal/storage/postgres/work_queue_test.go
+  1ca5ee6ce936a402 491-508
+tests/unit/test_service_entrypoints.py
+  1ca5ee6ce936a402 24,35-36,40,51-52
+go/internal/mcp/types.go
+  1ca5ee6ce936a402 12
+go/internal/mcp/tools_codebase.go
+  1ca5ee6ce936a402 237-291
+schema/data-plane/postgres/010_relationship_tables.sql
+  1ca5ee6ce936a402 1-90
+go/internal/mcp/tools_test.go
+  1ca5ee6ce936a402 10
+go/internal/storage/postgres/content_store_writes.go
+  1ca5ee6ce936a402 1-175
+go/internal/storage/postgres/relationship_store.go
+  1ca5ee6ce936a402 1-291
+go/internal/mcp/dispatch.go
+  1ca5ee6ce936a402 116-126
+go/internal/storage/postgres/relationship_schema.go
+  1ca5ee6ce936a402 1-236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "f914257cec0a60d132d0cf5b1641529cb7fe0296",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 236,
+      "total_deletions": 236,
+      "accepted_lines": 4130,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}
