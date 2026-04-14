@@ -1,0 +1,35 @@
+go/internal/collector/git_source.go
+  1ca5ee6ce936a402 60-63,78-91,206
+go/internal/collector/git_snapshot_native_test.go
+  1ca5ee6ce936a402 75-76,78-79,81-83,85-86,88-89,144-145,321-322,324-325
+go/internal/collector/git_snapshot_fingerprint_test.go
+  1ca5ee6ce936a402 5,133-242,321-357
+go/internal/collector/git_snapshot_native.go
+  1ca5ee6ce936a402 177,179-187,385-400
+go/internal/telemetry/instruments.go
+  1ca5ee6ce936a402 62-65,296-311
+go/internal/collector/git_source_test.go
+  1ca5ee6ce936a402 6,10-11,91-92,94,97,99-101,103-128,131,134,146,151,160,168,186-188,194-200
+go/internal/collector/git_fact_builder.go
+  1ca5ee6ce936a402 6,42-46,60-67,93-123,137-140,142-149,151-153,157-160,163-166,168-178,181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "929a8a72d5af33c77e0be10fb0239d4ad9d66d57",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1260,
+      "total_deletions": 3746,
+      "accepted_lines": 366,
+      "overriden_lines": 0
+    }
+  }
+}
