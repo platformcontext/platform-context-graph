@@ -40,6 +40,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Row-level aggregate lineage, simple windowed expressions, and simple
   qualified macro wrappers such as `dbt_utils.identity(source.amount)` are now
   tracked in the Go dbt path.
+- Nested safe wrappers over those supported row-level forms, such as
+  `upper(coalesce(source.segment, 'unknown'))`, are also tracked in the Go dbt
+  path.
 - Compiled-model lineage still carries explicit unresolved limits for
   unresolved references, templated expressions, complex macros, and some
   derived expressions.

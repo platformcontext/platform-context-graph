@@ -192,6 +192,14 @@ func isSupportedScalarWrapper(expression string) bool {
 	return ok || supportedFunctionMetadata(expression) != nil
 }
 
+func isSupportedRowLevelExpression(expression string) bool {
+	normalized := stripWrappingParentheses(strings.TrimSpace(expression))
+	if normalized == "" {
+		return false
+	}
+	return isSimpleReferenceExpression(normalized) || isLiteralExpression(normalized) || isSupportedScalarWrapper(normalized)
+}
+
 func isSupportedCaseExpression(expression string) bool {
 	if !dbtCaseExpressionRe.MatchString(expression) || hasUnsupportedFunctionCall(expression) {
 		return false
@@ -222,7 +230,7 @@ func supportedCastExpression(expression string) (string, string, bool) {
 		return "", "", false
 	}
 	valueExpression, typeExpression, ok := splitCastArguments(matches[2])
-	if !ok || !isSimpleReferenceExpression(valueExpression) || strings.TrimSpace(typeExpression) == "" {
+	if !ok || !isSupportedRowLevelExpression(valueExpression) || strings.TrimSpace(typeExpression) == "" {
 		return "", "", false
 	}
 	return valueExpression, typeExpression, true
@@ -281,7 +289,7 @@ func supportedFunctionMetadata(expression string) map[string]string {
 	}
 	functionName := strings.ToLower(strings.TrimSpace(matches[1]))
 	arguments := splitTopLevelArguments(matches[2])
-	if _, ok := dbtSimpleScalarFunctions[functionName]; ok && len(arguments) == 1 && isSimpleReferenceExpression(arguments[0]) {
+	if _, ok := dbtSimpleScalarFunctions[functionName]; ok && len(arguments) == 1 && isSupportedRowLevelExpression(arguments[0]) {
 		return map[string]string{"transform_kind": functionName, "transform_expression": expression}
 	}
 	if functionName == "coalesce" && len(arguments) >= 2 && supportsRowLevelArguments(arguments) {
@@ -312,13 +320,11 @@ func supportedFunctionMetadata(expression string) map[string]string {
 func supportsRowLevelArguments(arguments []string) bool {
 	referenceCount := 0
 	for _, argument := range arguments {
-		if isSimpleReferenceExpression(argument) {
+		if isSupportedRowLevelExpression(argument) {
 			referenceCount++
 			continue
 		}
-		if !isLiteralExpression(argument) {
-			return false
-		}
+		return false
 	}
 	return referenceCount >= 1
 }

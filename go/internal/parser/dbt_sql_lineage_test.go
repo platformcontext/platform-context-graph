@@ -72,3 +72,74 @@ from raw.public.orders o`,
 		t.Fatalf("ColumnLineage = %#v, want %#v", got.ColumnLineage, want)
 	}
 }
+
+func TestExtractCompiledModelLineageCapturesNestedSafeWrapperWithoutUnresolvedGap(t *testing.T) {
+	t.Parallel()
+
+	got := extractCompiledModelLineage(
+		`select
+  upper(coalesce(c.segment, 'unknown')) as normalized_segment
+from raw.public.customers c`,
+		"order_metrics",
+		map[string][]string{
+			"raw.public.customers": {"segment"},
+		},
+	)
+
+	if got.ProjectionCount != 1 {
+		t.Fatalf("ProjectionCount = %d, want 1", got.ProjectionCount)
+	}
+	if len(got.UnresolvedReferences) != 0 {
+		t.Fatalf("UnresolvedReferences = %#v, want none", got.UnresolvedReferences)
+	}
+
+	want := []ColumnLineage{
+		{
+			OutputColumn:        "normalized_segment",
+			SourceColumns:       []string{"raw.public.customers.segment"},
+			TransformKind:       "upper",
+			TransformExpression: "upper(coalesce(c.segment, 'unknown'))",
+		},
+	}
+	if !reflect.DeepEqual(got.ColumnLineage, want) {
+		t.Fatalf("ColumnLineage = %#v, want %#v", got.ColumnLineage, want)
+	}
+}
+
+func TestExtractCompiledModelLineageCapturesNestedWrapperOnCTEColumnWithoutUnresolvedGap(t *testing.T) {
+	t.Parallel()
+
+	got := extractCompiledModelLineage(
+		`with customer_orders as (
+  select
+    c.full_name as source_customer_name
+  from raw.public.customers c
+)
+select
+  trim(lower(source_customer_name)) as normalized_customer_name
+from customer_orders`,
+		"order_metrics",
+		map[string][]string{
+			"raw.public.customers": {"full_name"},
+		},
+	)
+
+	if got.ProjectionCount != 1 {
+		t.Fatalf("ProjectionCount = %d, want 1", got.ProjectionCount)
+	}
+	if len(got.UnresolvedReferences) != 0 {
+		t.Fatalf("UnresolvedReferences = %#v, want none", got.UnresolvedReferences)
+	}
+
+	want := []ColumnLineage{
+		{
+			OutputColumn:        "normalized_customer_name",
+			SourceColumns:       []string{"raw.public.customers.full_name"},
+			TransformKind:       "trim",
+			TransformExpression: "trim(lower(source_customer_name))",
+		},
+	}
+	if !reflect.DeepEqual(got.ColumnLineage, want) {
+		t.Fatalf("ColumnLineage = %#v, want %#v", got.ColumnLineage, want)
+	}
+}
