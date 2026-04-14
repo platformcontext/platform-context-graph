@@ -34,6 +34,7 @@ def test_deleted_compatibility_shim_paths_are_absent() -> None:
         "src/platform_context_graph/tools/graph_builder_indexing_types.py",
         "src/platform_context_graph/tools/graph_builder_mutations.py",
         "src/platform_context_graph/tools/graph_builder_parsers.py",
+        "src/platform_context_graph/tools/graph_builder_relationships.py",
         "src/platform_context_graph/tools/graph_builder_persistence_batch.py",
         "src/platform_context_graph/tools/graph_builder_raw_text.py",
         "src/platform_context_graph/tools/graph_builder_schema.py",
