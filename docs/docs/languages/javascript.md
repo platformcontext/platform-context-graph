@@ -38,11 +38,15 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Notes:
   - Real-repo validation covers React, Next.js, Express, Hapi, and bounded AWS
     and GCP SDK evidence through the Go-owned parser and indexing path.
-  - JSDoc and method-kind semantics already survive parse and content
-    materialization, and graph-backed `language-query`, `code/search`,
-    `dead-code`, `code/relationships`, `code/complexity`,
-    `entities/resolve`, and entity-context results now surface the matching
-    metadata. Broader graph/story/context surfacing is still partial.
+- JSDoc and method-kind semantics already survive parse and content
+  materialization, and graph-backed `language-query`, `code/search`,
+  `dead-code`, `code/relationships`, `code/complexity`,
+  `entities/resolve`, and entity-context results now surface the matching
+  metadata. Broader graph/story/context surfacing is still partial.
+  - The Go query layer now also has a dedicated JavaScript semantic promotion
+    helper in `go/internal/query/javascript_semantics.go` so the shared
+    handlers can promote `docstring` and `method_kind` into a consistent
+    first-class shape later without reworking the extraction logic.
 
 
 ## Known Limitations
