@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"log/slog"
@@ -214,11 +217,14 @@ func (f *fakeCommitter) CommitScopeGeneration(
 }
 
 type fakeWorkSource struct {
+	mu    sync.Mutex
 	items []projector.ScopeGenerationWork
 	index int
 }
 
 func (f *fakeWorkSource) Claim(context.Context) (projector.ScopeGenerationWork, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.index >= len(f.items) {
 		return projector.ScopeGenerationWork{}, false, nil
 	}
@@ -252,4 +258,198 @@ func (f *fakeWorkSink) Ack(context.Context, projector.ScopeGenerationWork, proje
 
 func (f *fakeWorkSink) Fail(context.Context, projector.ScopeGenerationWork, error) error {
 	return nil
+}
+
+// --- concurrency tests ---
+
+func TestDrainProjectorConcurrentMultipleItems(t *testing.T) {
+	t.Parallel()
+
+	items := make([]projector.ScopeGenerationWork, 10)
+	for i := range items {
+		items[i] = projector.ScopeGenerationWork{
+			Scope: scope.IngestionScope{ScopeID: fmt.Sprintf("scope-%d", i)},
+		}
+	}
+
+	ws := &concurrentWorkSource{items: items}
+	sink := &concurrentWorkSink{}
+
+	err := drainProjector(
+		context.Background(),
+		ws, &fakeFactStore{}, &fakeProjectionRunner{}, sink,
+		4, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("drainProjector() error = %v, want nil", err)
+	}
+	if got := sink.acked.Load(); got != 10 {
+		t.Fatalf("drainProjector() acked = %d, want 10", got)
+	}
+}
+
+func TestDrainProjectorSequentialFallback(t *testing.T) {
+	t.Parallel()
+
+	items := []projector.ScopeGenerationWork{
+		{Scope: scope.IngestionScope{ScopeID: "s1"}},
+		{Scope: scope.IngestionScope{ScopeID: "s2"}},
+	}
+	ws := &concurrentWorkSource{items: items}
+	sink := &concurrentWorkSink{}
+
+	// workers=1 should use sequential path
+	err := drainProjector(
+		context.Background(),
+		ws, &fakeFactStore{}, &fakeProjectionRunner{}, sink,
+		1, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("drainProjector(workers=1) error = %v, want nil", err)
+	}
+	if got := sink.acked.Load(); got != 2 {
+		t.Fatalf("drainProjector(workers=1) acked = %d, want 2", got)
+	}
+}
+
+func TestDrainProjectorErrorCancelsWorkers(t *testing.T) {
+	t.Parallel()
+
+	projectErr := errors.New("project failed")
+	items := make([]projector.ScopeGenerationWork, 20)
+	for i := range items {
+		items[i] = projector.ScopeGenerationWork{
+			Scope: scope.IngestionScope{ScopeID: fmt.Sprintf("scope-%d", i)},
+		}
+	}
+
+	ws := &concurrentWorkSource{items: items}
+	runner := &failingProjectionRunner{failAfter: 2, err: projectErr}
+
+	err := drainProjector(
+		context.Background(),
+		ws, &fakeFactStore{}, runner, &concurrentWorkSink{},
+		4, nil, nil, nil,
+	)
+	if err == nil {
+		t.Fatal("drainProjector() expected error, got nil")
+	}
+	if !errors.Is(err, projectErr) {
+		t.Fatalf("drainProjector() error = %v, want wrapping %v", err, projectErr)
+	}
+}
+
+func TestProjectionWorkerCount(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  string
+		want int
+	}{
+		{name: "default", env: "", want: -1}, // will be runtime.NumCPU capped at 8
+		{name: "explicit_2", env: "2", want: 2},
+		{name: "explicit_16", env: "16", want: 16},
+		{name: "zero_uses_default", env: "0", want: -1},
+		{name: "negative_uses_default", env: "-1", want: -1},
+		{name: "invalid_uses_default", env: "abc", want: -1},
+		{name: "whitespace_trimmed", env: " 4 ", want: 4},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := projectionWorkerCount(func(key string) string {
+				if key == "PCG_PROJECTION_WORKERS" {
+					return tt.env
+				}
+				return ""
+			})
+			if tt.want == -1 {
+				// Default: expect NumCPU capped at 8
+				maxDefault := 8
+				if got < 1 || got > maxDefault {
+					t.Fatalf("projectionWorkerCount(%q) = %d, want 1..%d", tt.env, got, maxDefault)
+				}
+			} else if got != tt.want {
+				t.Fatalf("projectionWorkerCount(%q) = %d, want %d", tt.env, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDrainCollectorWithTelemetry(t *testing.T) {
+	t.Parallel()
+
+	source := &fakeSource{
+		generations: []collector.CollectedGeneration{
+			{
+				Scope: scope.IngestionScope{ScopeID: "s1"},
+				Facts: []facts.Envelope{{}, {}},
+			},
+		},
+	}
+
+	err := drainCollector(
+		context.Background(),
+		source, &fakeCommitter{},
+		nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("drainCollector() error = %v, want nil", err)
+	}
+}
+
+// --- thread-safe fakes for concurrency tests ---
+
+type concurrentWorkSource struct {
+	mu    sync.Mutex
+	items []projector.ScopeGenerationWork
+	index int
+}
+
+func (f *concurrentWorkSource) Claim(context.Context) (projector.ScopeGenerationWork, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.index >= len(f.items) {
+		return projector.ScopeGenerationWork{}, false, nil
+	}
+	item := f.items[f.index]
+	f.index++
+	return item, true, nil
+}
+
+type concurrentWorkSink struct {
+	acked atomic.Int64
+}
+
+func (f *concurrentWorkSink) Ack(context.Context, projector.ScopeGenerationWork, projector.Result) error {
+	f.acked.Add(1)
+	return nil
+}
+
+func (f *concurrentWorkSink) Fail(context.Context, projector.ScopeGenerationWork, error) error {
+	return nil
+}
+
+type failingProjectionRunner struct {
+	mu        sync.Mutex
+	count     int
+	failAfter int
+	err       error
+}
+
+func (f *failingProjectionRunner) Project(
+	_ context.Context,
+	_ scope.IngestionScope,
+	_ scope.ScopeGeneration,
+	_ []facts.Envelope,
+) (projector.Result, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.count++
+	if f.count > f.failAfter {
+		return projector.Result{}, f.err
+	}
+	return projector.Result{}, nil
 }

@@ -97,6 +97,62 @@ rg --files . -g '*.py' | rg -v '^tests/fixtures/'
 
 That command should return no runtime Python files.
 
+## Bootstrap Projection Concurrency
+
+The `bootstrap-index` one-shot runtime runs projection concurrently using a
+goroutine worker pool. Each worker claims a scope-generation work item from
+the Postgres projector queue (`SELECT ... FOR UPDATE SKIP LOCKED`) and
+independently loads facts, projects, and acks.
+
+### Tuning
+
+| Env var | Default | Description |
+| --- | --- | --- |
+| `PCG_PROJECTION_WORKERS` | `min(NumCPU, 8)` | Number of concurrent projection goroutines |
+
+Set `PCG_PROJECTION_WORKERS=1` to force sequential processing (useful for
+debugging). Values above 8 are supported for machines with high core counts
+and fast I/O to Postgres and Neo4j.
+
+### Telemetry signals for tuning
+
+All signals use the `pcg_dp_` prefix and are exported via OTLP and Prometheus.
+
+| Signal | Type | What it tells you |
+| --- | --- | --- |
+| `pcg_dp_projector_run_duration_seconds` | histogram | Per-item projection wall time. High P95 on a single scope means a large repo is the bottleneck. |
+| `pcg_dp_queue_claim_duration_seconds{queue=projector}` | histogram | Time to claim work from Postgres. High values mean lock contention — reduce workers or tune Postgres. |
+| `pcg_dp_projections_completed_total{status}` | counter | Success/failure rate. Track `status=failed` for projection errors. |
+| `pcg_dp_facts_emitted_total` | counter | Total facts produced by the collector phase. |
+| `pcg_dp_facts_committed_total` | counter | Total facts durably committed before projection starts. |
+| `pcg_dp_collector_observe_duration_seconds` | histogram | Per-scope collection wall time. Dominated by Git discovery and parsing. |
+
+Structured JSON logs include `worker_id`, `scope_id`, `fact_count`,
+`duration_seconds`, and `pipeline_phase` on every projection line:
+
+```json
+{"message":"bootstrap projection succeeded","scope_id":"my-repo","worker_id":3,"fact_count":1234,"duration_seconds":2.5,"pipeline_phase":"projection"}
+```
+
+Filter by `pipeline_phase=projection` and group by `worker_id` to identify
+worker imbalance (one worker stuck on a large repo while others idle).
+
+### Concurrency model
+
+```text
+main goroutine
+  |
+  |-- drainCollector (sequential: sync -> discover -> parse -> commit)
+  |
+  |-- drainProjector (N goroutine workers)
+        |-- worker 0: Claim -> LoadFacts -> Project -> Ack (loop)
+        |-- worker 1: Claim -> LoadFacts -> Project -> Ack (loop)
+        |-- ...
+        |-- worker N-1: Claim -> LoadFacts -> Project -> Ack (loop)
+        |
+        On first error: cancel shared context -> all workers drain -> errors.Join
+```
+
 ## Live Runtime Proof Gates
 
 These scripts allocate their own local ports, start only the required
