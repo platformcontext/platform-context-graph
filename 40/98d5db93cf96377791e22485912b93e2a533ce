@@ -1,0 +1,40 @@
+docker-compose.yaml
+  1ca5ee6ce936a402 75-93,142-143,186-187,235-236,301-302,355-356
+go/cmd/bootstrap-data-plane/main.go
+  1ca5ee6ce936a402 7,9,12,14,28-32,34-36,46-47,56-59,61-65,75,78-86,91,94,102-145
+go/cmd/bootstrap-data-plane/main_test.go
+  1ca5ee6ce936a402 7,9-10,13-18,20-24,28-29,38,45-50,57-58,60-61,64,82-83,111-112,128-199,227-235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "4098d5db93cf96377791e22485912b93e2a533ce",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 629,
+      "total_deletions": 61,
+      "accepted_lines": 234,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 85,
+      "overriden_lines": 0
+    }
+  }
+}
