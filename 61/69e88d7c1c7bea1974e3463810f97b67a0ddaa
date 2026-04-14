@@ -1,0 +1,42 @@
+docs/docs/reference/local-testing.md
+  1ca5ee6ce936a402 100-155
+go/cmd/bootstrap-index/main_test.go
+  1ca5ee6ce936a402 7-9,220,226-227,262-455
+go/cmd/bootstrap-index/main.go
+  1ca5ee6ce936a402 10-15,18-19,134,143-148,151-166,170-180,182-192,194-197,201-209,213-218,222,227-239,242-265,267,271-284,291-294,296-319,321-357,363-367,369-447,449-453,455,457-458,460-472,474-478,480-481,483-514
+docker-compose.yaml
+  1ca5ee6ce936a402 103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "6169e88d7c1c7bea1974e3463810f97b67a0ddaa",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 962,
+      "total_deletions": 1060,
+      "accepted_lines": 1264,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 75,
+      "overriden_lines": 0
+    }
+  }
+}
