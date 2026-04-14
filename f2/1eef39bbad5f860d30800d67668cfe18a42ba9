@@ -1,0 +1,54 @@
+go/internal/query/code.go
+  1ca5ee6ce936a402 198-207,210-219,255-282
+go/internal/query/code_relationships_content_fallback_test.go
+  1ca5ee6ce936a402 1-154
+go/internal/query/content_reader_test.go
+  1ca5ee6ce936a402 230-267
+docs/docs/languages/typescriptjsx.md
+  1ca5ee6ce936a402 25,39-42,46
+go/internal/query/entity.go
+  1ca5ee6ce936a402 221-227
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 79,101
+go/internal/query/entity_content_fallback_test.go
+  1ca5ee6ce936a402 89-100,137-151
+go/internal/query/content_reader.go
+  1ca5ee6ce936a402 338-407
+go/internal/query/content_relationships.go
+  1ca5ee6ce936a402 1-136
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 45,81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "f21eef39bbad5f860d30800d67668cfe18a42ba9",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 492,
+      "total_deletions": 17,
+      "accepted_lines": 492,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    }
+  }
+}
