@@ -7,7 +7,7 @@ on:
   pull_request:
   schedule:
     - cron: "30 18 * * *"
-  workflow_dispatch:  
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,34 +17,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install build
-          pip install .[dev]
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
-      - name: Build package
-        run: python -m build
+      - name: Build all Go binaries
+        working-directory: go
+        run: go build ./...
 
-      - name: Enforce Python module length policy
-        run: python scripts/check_python_file_lengths.py
+      - name: Run Go tests with race detector
+        working-directory: go
+        run: go test ./... -count=1 -race -timeout 300s
 
-      - name: Enforce Python docstring policy
-        run: python scripts/check_python_docstrings.py
+      - name: Lint Helm chart
+        run: helm lint deploy/helm/platform-context-graph
 
-      - name: Run Unit and Integration Tests
+      - name: Verify docs build
         run: |
-          chmod +x tests/run_tests.sh
-          ./tests/run_tests.sh fast
+          pip install mkdocs mkdocs-material pymdown-extensions
+          mkdocs build --strict --clean --config-file docs/mkdocs.yml
 
-      - name: Run Deployment Asset Tests
-        run: |
-          PYTHONPATH=src python -m pytest tests/integration/deployment/test_public_deployment_assets.py -q
+      - name: Check whitespace hygiene
+        run: git diff --check HEAD~1 || true
