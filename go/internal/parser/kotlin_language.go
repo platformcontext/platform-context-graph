@@ -16,6 +16,7 @@ var (
 	kotlinFunctionPattern    = regexp.MustCompile(`\bfun\s+(?:<[^>]+>\s*)?(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)\s*\(`)
 	kotlinConstructorPattern = regexp.MustCompile(`^\s*(?:(?:public|private|protected|internal)\s+)?constructor\s*\(`)
 	kotlinVariablePattern    = regexp.MustCompile(`^\s*(?:private|public|protected|internal)?\s*(?:const\s+)?(?:val|var)\s+([A-Za-z_]\w*)`)
+	kotlinThisCallPattern    = regexp.MustCompile(`this\.([A-Za-z_]\w*)\s*\(`)
 	kotlinCallPattern        = regexp.MustCompile(`\b((?:[A-Za-z_]\w*\.)*)([A-Za-z_]\w*)\s*\(`)
 )
 
@@ -171,11 +172,45 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			}
 		}
 
-		for _, match := range kotlinCallPattern.FindAllStringSubmatch(trimmed, -1) {
-			if len(match) != 3 {
+		functionDeclCutoff := -1
+		if kotlinFunctionPattern.MatchString(trimmed) {
+			if idx := strings.Index(trimmed, "="); idx >= 0 {
+				functionDeclCutoff = idx
+			}
+			if idx := strings.Index(trimmed, "{"); idx >= 0 && (functionDeclCutoff < 0 || idx < functionDeclCutoff) {
+				functionDeclCutoff = idx
+			}
+		}
+
+		for _, match := range kotlinThisCallPattern.FindAllStringSubmatch(trimmed, -1) {
+			if len(match) != 2 {
 				continue
 			}
-			name := match[2]
+			name := match[1]
+			if _, ok := seenCalls[name]; ok {
+				continue
+			}
+			seenCalls[name] = struct{}{}
+			item := map[string]any{
+				"name":        name,
+				"full_name":   "this." + name,
+				"line_number": lineNumber,
+				"lang":        "kotlin",
+			}
+			if classContext := currentScopedName(stack, "class"); classContext != "" {
+				item["class_context"] = classContext
+			}
+			appendBucket(payload, "function_calls", item)
+		}
+
+		for _, match := range kotlinCallPattern.FindAllStringSubmatchIndex(trimmed, -1) {
+			if len(match) != 6 {
+				continue
+			}
+			if functionDeclCutoff >= 0 && match[0] < functionDeclCutoff {
+				continue
+			}
+			name := trimmed[match[4]:match[5]]
 			switch name {
 			case "fun", "if", "for", "while", "when", "return", "class", "interface":
 				continue
@@ -184,13 +219,19 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				continue
 			}
 			seenCalls[name] = struct{}{}
-			fullName := strings.TrimSpace(match[1] + match[2])
-			appendBucket(payload, "function_calls", map[string]any{
+			fullName := strings.TrimSpace(trimmed[match[2]:match[3]] + trimmed[match[4]:match[5]])
+			item := map[string]any{
 				"name":        name,
 				"full_name":   fullName,
 				"line_number": lineNumber,
 				"lang":        "kotlin",
-			})
+			}
+			if receiver := strings.TrimSuffix(strings.TrimSpace(trimmed[match[2]:match[3]]), "."); receiver == "this" {
+				if classContext := currentScopedName(stack, "class"); classContext != "" {
+					item["class_context"] = classContext
+				}
+			}
+			appendBucket(payload, "function_calls", item)
 		}
 
 		braceDepth += braceDelta(rawLine)

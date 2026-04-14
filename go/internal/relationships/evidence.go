@@ -208,7 +208,11 @@ func discoverKustomizeEvidence(
 	seen map[evidenceKey]struct{},
 ) []EvidenceFact {
 	var evidence []EvidenceFact
-
+	for _, document := range parseYAMLDocuments(content) {
+		evidence = append(evidence, discoverKustomizeDocumentEvidence(
+			sourceRepoID, filePath, document, catalog, seen,
+		)...)
+	}
 	for _, candidate := range extractYAMLStringValues(content) {
 		evidence = append(evidence, matchCatalog(
 			sourceRepoID, candidate, filePath,
@@ -221,9 +225,6 @@ func discoverKustomizeEvidence(
 	return evidence
 }
 
-// argoCDRepoURLPattern matches ArgoCD Application spec.source.repoURL fields.
-var argoCDRepoURLPattern = regexp.MustCompile(`(?i)repoURL:\s*['"]?([^\s'"]+)`)
-
 // discoverArgoCDEvidence extracts ArgoCD Application source references.
 func discoverArgoCDEvidence(
 	sourceRepoID, filePath, content string,
@@ -231,18 +232,9 @@ func discoverArgoCDEvidence(
 	seen map[evidenceKey]struct{},
 ) []EvidenceFact {
 	var evidence []EvidenceFact
-
-	matches := argoCDRepoURLPattern.FindAllStringSubmatch(content, -1)
-	for _, match := range matches {
-		if len(match) < 2 {
-			continue
-		}
-		candidate := strings.TrimSpace(match[1])
-		evidence = append(evidence, matchCatalog(
-			sourceRepoID, candidate, filePath,
-			EvidenceKindArgoCDAppSource, RelDeploysFrom, 0.95,
-			"ArgoCD Application source references the target repository",
-			"argocd", catalog, seen, nil,
+	for _, document := range parseYAMLDocuments(content) {
+		evidence = append(evidence, discoverArgoCDDocumentEvidence(
+			sourceRepoID, filePath, document, catalog, seen,
 		)...)
 	}
 

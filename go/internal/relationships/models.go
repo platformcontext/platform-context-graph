@@ -22,6 +22,12 @@ const (
 	EvidenceKindHelmValues EvidenceKind = "HELM_VALUES_REFERENCE"
 	// EvidenceKindArgoCDAppSource is an ArgoCD Application source reference.
 	EvidenceKindArgoCDAppSource EvidenceKind = "ARGOCD_APPLICATION_SOURCE"
+	// EvidenceKindArgoCDApplicationSetDiscovery is an ApplicationSet discovery reference.
+	EvidenceKindArgoCDApplicationSetDiscovery EvidenceKind = "ARGOCD_APPLICATIONSET_DISCOVERY"
+	// EvidenceKindArgoCDApplicationSetDeploySource is an ApplicationSet deploy-source reference.
+	EvidenceKindArgoCDApplicationSetDeploySource EvidenceKind = "ARGOCD_APPLICATIONSET_DEPLOY_SOURCE"
+	// EvidenceKindArgoCDDestinationPlatform is an ApplicationSet destination-platform reference.
+	EvidenceKindArgoCDDestinationPlatform EvidenceKind = "ARGOCD_DESTINATION_PLATFORM"
 	// EvidenceKindKustomizeResource is a Kustomize resource reference.
 	EvidenceKindKustomizeResource EvidenceKind = "KUSTOMIZE_RESOURCE_REFERENCE"
 	// EvidenceKindKustomizeHelmChart is a Kustomize Helm chart reference.
@@ -36,6 +42,10 @@ type RelationshipType string
 const (
 	// RelDeploysFrom indicates the source deploys artifacts from the target.
 	RelDeploysFrom RelationshipType = "DEPLOYS_FROM"
+	// RelDiscoversConfigIn indicates the source discovers config in the target.
+	RelDiscoversConfigIn RelationshipType = "DISCOVERS_CONFIG_IN"
+	// RelRunsOn indicates the source runs on the target platform.
+	RelRunsOn RelationshipType = "RUNS_ON"
 	// RelProvisionsDependencyFor indicates the source provisions infra for the target.
 	RelProvisionsDependencyFor RelationshipType = "PROVISIONS_DEPENDENCY_FOR"
 	// RelDependsOn is a generic dependency relationship.

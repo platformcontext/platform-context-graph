@@ -168,6 +168,43 @@ func TestDiscoverKustomizeEvidence(t *testing.T) {
 	}
 }
 
+func TestDiscoverKustomizeEvidenceTypedKinds(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-deploy",
+			Payload: map[string]any{
+				"relative_path": "overlays/prod/kustomization.yaml",
+				"content": `resources:
+  - ../../payments-service/base
+helmCharts:
+  - name: payments-service
+    repo: https://github.com/myorg/payments-service
+images:
+  - name: payments-service
+    newName: ghcr.io/myorg/payments-service
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	if !hasEvidenceKind(evidence, EvidenceKindKustomizeResource) {
+		t.Fatal("missing KUSTOMIZE_RESOURCE_REFERENCE evidence")
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindKustomizeHelmChart) {
+		t.Fatal("missing KUSTOMIZE_HELM_CHART_REFERENCE evidence")
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindKustomizeImage) {
+		t.Fatal("missing KUSTOMIZE_IMAGE_REFERENCE evidence")
+	}
+}
+
 func TestDiscoverArgoCDEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -201,6 +238,51 @@ spec:
 	}
 	if evidence[0].Confidence != 0.95 {
 		t.Errorf("confidence = %f", evidence[0].Confidence)
+	}
+}
+
+func TestDiscoverArgoCDApplicationSetEvidence(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			ScopeID: "repo-gitops",
+			Payload: map[string]any{
+				"artifact_type": "argocd",
+				"relative_path": "apps/applicationset.yaml",
+				"content": `apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/myorg/payments-config.git
+        files:
+          - path: argocd/*/config.yaml
+  template:
+    spec:
+      destination:
+        name: prod-cluster
+      source:
+        repoURL: https://github.com/myorg/payments-service.git
+`,
+			},
+		},
+	}
+	catalog := []CatalogEntry{
+		{RepoID: "repo-config", Aliases: []string{"payments-config"}},
+		{RepoID: "repo-payments", Aliases: []string{"payments-service"}},
+	}
+
+	evidence := DiscoverEvidence(envelopes, catalog)
+
+	if !hasEvidenceKind(evidence, EvidenceKindArgoCDApplicationSetDiscovery) {
+		t.Fatal("missing ARGOCD_APPLICATIONSET_DISCOVERY evidence")
+	}
+	if !hasEvidenceKind(evidence, EvidenceKindArgoCDApplicationSetDeploySource) {
+		t.Fatal("missing ARGOCD_APPLICATIONSET_DEPLOY_SOURCE evidence")
+	}
+	if !hasRelationshipType(evidence, RelDiscoversConfigIn) {
+		t.Fatal("missing DISCOVERS_CONFIG_IN relationship evidence")
 	}
 }
 
@@ -378,4 +460,22 @@ func TestMatchesEntry(t *testing.T) {
 	if got := matchesEntry("unrelated-repo", entry); got != "" {
 		t.Errorf("got %q, want empty for no match", got)
 	}
+}
+
+func hasEvidenceKind(evidence []EvidenceFact, want EvidenceKind) bool {
+	for _, fact := range evidence {
+		if fact.EvidenceKind == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasRelationshipType(evidence []EvidenceFact, want RelationshipType) bool {
+	for _, fact := range evidence {
+		if fact.RelationshipType == want {
+			return true
+		}
+	}
+	return false
 }

@@ -146,6 +146,9 @@ func codeCallFunctionCandidateNames(item map[string]any) []string {
 	appendName(name)
 	fullName := anyToString(item["full_name"])
 	appendName(fullName)
+	if implContext := codeCallImplContext(item); implContext != "" && name != "" {
+		appendName(implContext + "::" + name)
+	}
 	classContext := codeCallClassContext(item["class_context"])
 	if classContext != "" && strings.TrimSpace(name) != "" {
 		appendName(classContext + "." + name)
@@ -158,6 +161,15 @@ func codeCallFunctionCandidateNames(item map[string]any) []string {
 		appendName(contextName + "." + name)
 	}
 	return names
+}
+
+func codeCallImplContext(item map[string]any) string {
+	switch typed := item["impl_context"].(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	default:
+		return ""
+	}
 }
 
 func codeCallClassContext(value any) string {
