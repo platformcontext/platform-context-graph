@@ -105,6 +105,7 @@ services:
       PCG_SNAPSHOT_WORKERS: ${PCG_SNAPSHOT_WORKERS:-}
       PCG_PARSE_WORKERS: ${PCG_PARSE_WORKERS:-}
       GOMEMLIMIT: ${PCG_GOMEMLIMIT:-8GiB}
+      GODEBUG: madvdontneed=1
     volumes:
       - pcg_data:/data
       - ./:/app-src
