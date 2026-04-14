@@ -64,17 +64,21 @@ func parseCloudFormationTemplate(
 	lang string,
 ) cloudFormationParseResult {
 	result := cloudFormationParseResult{}
+	withFormat := func(row map[string]any) map[string]any {
+		row["file_format"] = lang
+		return row
+	}
 
 	if params, ok := document["Parameters"].(map[string]any); ok {
 		for _, name := range sortedMapKeys(params) {
 			body, _ := params[name].(map[string]any)
-			row := map[string]any{
+			row := withFormat(map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
 				"path":        path,
 				"lang":        lang,
 				"param_type":  "String",
-			}
+			})
 			setOptionalString(row, "param_type", body["Type"])
 			setOptionalString(row, "default", body["Default"])
 			setOptionalString(row, "description", body["Description"])
@@ -88,12 +92,12 @@ func parseCloudFormationTemplate(
 	if resources, ok := document["Resources"].(map[string]any); ok {
 		for _, name := range sortedMapKeys(resources) {
 			body, _ := resources[name].(map[string]any)
-			row := map[string]any{
+			row := withFormat(map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
 				"path":        path,
 				"lang":        lang,
-			}
+			})
 			resourceType := fmt.Sprint(body["Type"])
 			if strings.TrimSpace(resourceType) != "" && resourceType != "<nil>" {
 				row["resource_type"] = resourceType
@@ -112,35 +116,35 @@ func parseCloudFormationTemplate(
 		rawImports := make([]string, 0)
 		collectCloudFormationImports(resources, &rawImports)
 		for _, name := range rawImports {
-			result.imports = append(result.imports, map[string]any{
+			result.imports = append(result.imports, withFormat(map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
 				"path":        path,
 				"lang":        lang,
-			})
+			}))
 		}
 	}
 
 	if outputs, ok := document["Outputs"].(map[string]any); ok {
 		for _, name := range sortedMapKeys(outputs) {
 			body, _ := outputs[name].(map[string]any)
-			row := map[string]any{
+			row := withFormat(map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
 				"path":        path,
 				"lang":        lang,
-			}
+			})
 			setOptionalString(row, "description", body["Description"])
 			setOptionalString(row, "value", body["Value"])
 			if exportBody, ok := body["Export"].(map[string]any); ok {
 				setOptionalString(row, "export_name", exportBody["Name"])
 				if exportName, ok := row["export_name"].(string); ok && strings.TrimSpace(exportName) != "" {
-					result.exports = append(result.exports, map[string]any{
+					result.exports = append(result.exports, withFormat(map[string]any{
 						"name":        exportName,
 						"line_number": lineNumber,
 						"path":        path,
 						"lang":        lang,
-					})
+					}))
 				}
 			}
 			setOptionalString(row, "condition", body["Condition"])
