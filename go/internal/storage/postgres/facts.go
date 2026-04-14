@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -295,7 +296,26 @@ func marshalPayload(payload map[string]any) ([]byte, error) {
 		return []byte("{}"), nil
 	}
 
-	return json.Marshal(payload)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Postgres JSONB rejects \u0000 (null byte) Unicode escape sequences
+	// (SQLSTATE 22P05). Source code files may contain these in raw content
+	// or metadata. Strip them before insertion.
+	data = sanitizeJSONBNullEscapes(data)
+
+	return data, nil
+}
+
+// sanitizeJSONBNullEscapes removes \u0000 escape sequences that Postgres JSONB
+// rejects with SQLSTATE 22P05 ("unsupported Unicode escape sequence").
+func sanitizeJSONBNullEscapes(data []byte) []byte {
+	if !bytes.Contains(data, []byte(`\u0000`)) {
+		return data
+	}
+	return bytes.ReplaceAll(data, []byte(`\u0000`), nil)
 }
 
 func unmarshalPayload(raw []byte) (map[string]any, error) {

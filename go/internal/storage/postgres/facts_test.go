@@ -220,6 +220,27 @@ func TestUpsertFactsEmptySliceNoOp(t *testing.T) {
 	}
 }
 
+func TestMarshalPayloadStripsNullUnicodeEscapes(t *testing.T) {
+	t.Parallel()
+
+	payload := map[string]any{
+		"content": "hello\u0000world",
+		"clean":   "no nulls here",
+	}
+
+	data, err := marshalPayload(payload)
+	if err != nil {
+		t.Fatalf("marshalPayload() error = %v, want nil", err)
+	}
+
+	if strings.Contains(string(data), `\u0000`) {
+		t.Fatalf("marshalPayload() output contains \\u0000: %s", data)
+	}
+	if !strings.Contains(string(data), "hello") {
+		t.Fatalf("marshalPayload() missing content: %s", data)
+	}
+}
+
 func TestFactStoreListFactsPropagatesQueryErrors(t *testing.T) {
 	t.Parallel()
 
