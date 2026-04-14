@@ -46,7 +46,7 @@ func expressionHonestyGapReason(expression string) string {
 	if strings.Contains(normalized, "{{") || strings.Contains(normalized, "}}") || strings.Contains(normalized, "{%") || strings.Contains(normalized, "%}") {
 		return dbtTemplatedExpressionReason
 	}
-	if dbtQualifiedMacroCallRe.MatchString(normalized) {
+	if dbtQualifiedMacroCallRe.MatchString(normalized) && !isSupportedQualifiedMacroExpression(normalized) {
 		return dbtMacroExpressionReason
 	}
 	return ""
@@ -87,10 +87,54 @@ func expressionPartialReason(expression string) string {
 	if isSupportedCaseExpression(normalized) || isSupportedArithmeticExpression(normalized) || isSupportedScalarWrapper(normalized) {
 		return ""
 	}
+	if isSupportedQualifiedMacroExpression(normalized) {
+		return ""
+	}
+	if isSupportedAggregateExpression(normalized) {
+		return ""
+	}
+	if isSupportedWindowExpression(normalized) {
+		return ""
+	}
 	if reason := unsupportedFunctionReason(normalized); reason != "" {
 		return reason
 	}
 	return dbtDerivedExpressionReason
+}
+
+func isSupportedAggregateExpression(expression string) bool {
+	matches := dbtFunctionCallRe.FindStringSubmatch(expression)
+	if matches == nil {
+		return false
+	}
+	functionName := strings.ToLower(strings.TrimSpace(matches[1]))
+	if _, ok := dbtAggregateFunctions[functionName]; !ok {
+		return false
+	}
+	return supportsRowLevelArguments(splitTopLevelArguments(matches[2]))
+}
+
+func isSupportedWindowExpression(expression string) bool {
+	matches := dbtWindowFunctionRe.FindStringSubmatch(expression)
+	if matches == nil {
+		return false
+	}
+	functionName := strings.ToLower(strings.TrimSpace(matches[1]))
+	if _, ok := dbtAggregateFunctions[functionName]; !ok {
+		return false
+	}
+	if !supportsRowLevelArguments(splitTopLevelArguments(matches[2])) {
+		return false
+	}
+	return len(simpleReferenceTokens(expression)) > 0
+}
+
+func isSupportedQualifiedMacroExpression(expression string) bool {
+	matches := dbtQualifiedMacroCallRe.FindStringSubmatch(expression)
+	if matches == nil {
+		return false
+	}
+	return supportsRowLevelArguments(splitTopLevelArguments(matches[2]))
 }
 
 func expressionTransformMetadata(expression string) map[string]string {
@@ -186,6 +230,9 @@ func supportedCastExpression(expression string) (string, string, bool) {
 
 func unsupportedFunctionReason(expression string) string {
 	if matches := dbtWindowFunctionRe.FindStringSubmatch(expression); matches != nil {
+		if isSupportedWindowExpression(expression) {
+			return ""
+		}
 		return dbtWindowExpressionReason
 	}
 	matches := dbtFunctionCallRe.FindStringSubmatch(expression)

@@ -243,8 +243,9 @@ func lineageForProjection(selectItem string, bindings map[string]*relationBindin
 	unresolved := make([]map[string]string, 0)
 	seenColumns := make(map[string]struct{})
 	matchedIdentifiers := expressionIgnoredIdentifiers(expression)
+	referenceExpression := referenceScanExpression(expression)
 
-	for _, match := range dbtQualifiedReferenceScanRe.FindAllStringSubmatch(expression, -1) {
+	for _, match := range dbtQualifiedReferenceScanRe.FindAllStringSubmatch(referenceExpression, -1) {
 		alias := match[1]
 		column := match[2]
 		matchedIdentifiers[alias] = struct{}{}
@@ -267,7 +268,7 @@ func lineageForProjection(selectItem string, bindings map[string]*relationBindin
 		}
 	}
 
-	for _, identifier := range unqualifiedIdentifiers(expression, matchedIdentifiers) {
+	for _, identifier := range unqualifiedIdentifiers(referenceExpression, matchedIdentifiers) {
 		columns, unresolvedRef := resolveUnqualifiedReferenceColumns(identifier, bindings, modelName)
 		if unresolvedRef != nil {
 			unresolved = append(unresolved, unresolvedRef)
@@ -305,6 +306,14 @@ func lineageForProjection(selectItem string, bindings map[string]*relationBindin
 		UnresolvedReferences: unresolved,
 		ProjectionCount:      1,
 	}
+}
+
+func referenceScanExpression(expression string) string {
+	matches := dbtQualifiedMacroCallRe.FindStringSubmatch(strings.TrimSpace(expression))
+	if matches == nil || !isSupportedQualifiedMacroExpression(strings.TrimSpace(expression)) {
+		return expression
+	}
+	return matches[2]
 }
 
 func resolveQualifiedReference(binding *relationBinding, alias string, column string, modelName string) ([]string, []ColumnLineage, map[string]string) {

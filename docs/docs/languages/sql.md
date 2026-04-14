@@ -34,7 +34,15 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - End-to-end indexing: `partial`
 - Notes:
   - SQL support is Go-owned end to end for native SQL parsing, migration extraction, embedded SQL link hints, and the JSON-backed dbt and data-intelligence families.
-  - Real-repo and end-to-end status remain partial because compiled dbt lineage still carries explicit unresolved-reference and derived-expression limits in the current Go implementation.
+- Real-repo and end-to-end status remain partial because compiled dbt lineage
+  still carries explicit unresolved-reference, templated-expression, complex
+  macro, and derived-expression limits in the current Go implementation.
+- Row-level aggregate lineage, simple windowed expressions, and simple
+  qualified macro wrappers such as `dbt_utils.identity(source.amount)` are now
+  tracked in the Go dbt path.
+- Compiled-model lineage still carries explicit unresolved limits for
+  unresolved references, templated expressions, complex macros, and some
+  derived expressions.
 
 ## Go-Owned Data-Intelligence Path
 
@@ -53,5 +61,5 @@ service path.
 - Dialect-specific procedural SQL beyond common Postgres-style bodies may surface only partial table references.
 - ALTER/DDL mutation parsing currently prioritizes affected object names over full clause normalization.
 - Compiled dbt lineage still records partial coverage for unresolved references,
-  macros, templated expressions, window semantics, and some multi-input
-  derived expressions.
+  templated expressions, complex macro expansion, and some derived
+  expressions.

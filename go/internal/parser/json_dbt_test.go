@@ -134,35 +134,5 @@ func TestDefaultEngineParsePathJSONDBTManifestFixtureVariant(t *testing.T) {
 		t.Fatalf("analytics models = %#v, want %#v", got, want)
 	}
 	assertRelationshipPresent(t, got, "COLUMN_DERIVES_FROM", "analytics.public.orders_expanded.id", "raw.public.orders.id")
-	assertCoverageState(t, got, "partial")
-	assertCoverageUnresolvedReferencePresent(t, got, "sum(p.amount)", "order_metrics", "aggregate_expression_semantics_not_captured")
-}
-
-func assertCoverageUnresolvedReferencePresent(
-	t *testing.T,
-	payload map[string]any,
-	expression string,
-	modelName string,
-	reason string,
-) {
-	t.Helper()
-
-	coverage, ok := payload["data_intelligence_coverage"].(map[string]any)
-	if !ok {
-		t.Fatalf("data_intelligence_coverage = %T, want map[string]any", payload["data_intelligence_coverage"])
-	}
-	unresolved, ok := coverage["unresolved_references"].([]any)
-	if !ok {
-		t.Fatalf("data_intelligence_coverage.unresolved_references = %T, want []any", coverage["unresolved_references"])
-	}
-	for _, rawItem := range unresolved {
-		item, ok := rawItem.(map[string]any)
-		if !ok {
-			continue
-		}
-		if item["expression"] == expression && item["model_name"] == modelName && item["reason"] == reason {
-			return
-		}
-	}
-	t.Fatalf("missing unresolved reference expression=%q model=%q reason=%q in %#v", expression, modelName, reason, unresolved)
+	assertCoverageState(t, got, "complete")
 }

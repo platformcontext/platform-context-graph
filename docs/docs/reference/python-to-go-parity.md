@@ -73,7 +73,7 @@ parity from persisted graph and query-surface parity.
 | Area | Ownership | Parity status | Current truth | Remaining work |
 | --- | --- | --- | --- | --- |
 | SQL core parsing | Go-owned | mostly complete | schema objects, migrations, and embedded SQL hints are native Go | close procedural SQL and DDL edge cases as needed |
-| SQL/dbt lineage and data intelligence | Go-owned | partial | dbt manifest, compiled SQL, and analytics JSON families are in Go | resolve macros, templated expressions, unresolved references, window semantics, and multi-input derived expressions |
+| SQL/dbt lineage and data intelligence | Go-owned | partial | dbt manifest, compiled SQL, and analytics JSON families are in Go; row-level aggregates, simple windows, and simple qualified macro wrappers now resolve in lineage | resolve unresolved references, templated expressions, complex macros, and multi-input or richer derived expressions |
 | JavaScript | Go-owned | partial | core JS parsing is complete | persist or normalize docstrings and fuller method-kind metadata |
 | TypeScript | Go-owned | partial | core TS parsing and framework packs are complete | materialize type aliases, decorators, and generics into the graph/query surface |
 | TypeScript JSX | Go-owned | partial | core TSX parsing and React/Next evidence are complete | add dedicated JSX component-reference semantics and type-alias persistence |
@@ -114,7 +114,7 @@ capabilities in the checked-in language pages:
 - Terraform: `terraform {}` block metadata
 - Terragrunt: locals, inputs
 - JSON: generic JSON intentionally remains partial
-- SQL/dbt: compiled lineage maturity remains partial even though the runtime is Go-owned
+- SQL/dbt: compiled lineage maturity remains partial even though the runtime is Go-owned; remaining gaps are unresolved refs, templated expressions, complex macros, and richer derived expressions
 
 The parser-family audit currently groups the remaining work into these high
 leverage buckets:
@@ -157,3 +157,6 @@ If any of those are missing, the feature is not parity complete.
 Use the execution plan in
 `docs/superpowers/plans/2026-04-14-go-parity-closure-plan.md` to finish the
 remaining parity work in milestone-sized chunks.
+
+For the approval and execution checklist view, use
+`docs/docs/reference/parity-closure-matrix.md`.

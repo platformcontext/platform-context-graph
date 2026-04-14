@@ -172,5 +172,6 @@ Prove parity closure and make the docs reflect the completed state.
 Track completion against:
 
 - `docs/docs/reference/python-to-go-parity.md`
+- `docs/docs/reference/parity-closure-matrix.md`
 - the affected language pages under `docs/docs/languages/`
 - `docs/docs/languages/support-maturity.md`
