@@ -34,6 +34,7 @@ func TestSpanNames(t *testing.T) {
 
 	want := []string{
 		"collector.observe",
+		"collector.stream",
 		"scope.assign",
 		"fact.emit",
 		"projector.run",

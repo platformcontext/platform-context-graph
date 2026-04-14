@@ -163,6 +163,145 @@ Every long-running service should also expose the shared admin contract:
 The status surface should come from the same report model whether the operator
 is using the CLI or the HTTP endpoint.
 
+## Streaming Collector Architecture
+
+The Git collector uses a channel-based streaming architecture to bound memory
+during large-scale indexing. Instead of accumulating all repository snapshots
+in memory before committing, the collector streams generations through a
+bounded channel so the consumer can commit each one to Postgres before the
+next arrives.
+
+### Streaming Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant Caller as drainCollector / Service.Run
+    participant Next as GitSource.Next()
+    participant Stream as startStream()
+    participant Discovery as discoverRepositories()
+    participant Workers as Snapshot Workers (N)
+    participant Channel as Bounded Channel
+    participant Postgres as CommitScopeGeneration
+
+    Caller->>Next: Next(ctx) [first call]
+    Next->>Stream: startStream(ctx)
+    Stream->>Discovery: SelectRepositories(ctx)
+    Discovery-->>Stream: SelectionBatch (878 repos)
+    Stream->>Stream: resolveRepositories(batch)
+    Stream->>Workers: Launch N goroutines
+    Stream-->>Next: return (channel ready)
+
+    loop For each repository
+        Workers->>Workers: snapshotOneRepository(ctx, repo)
+        Workers->>Channel: send generation (blocks if full)
+        Next->>Channel: receive one generation
+        Next-->>Caller: return (generation, true, nil)
+        Caller->>Postgres: CommitScopeGeneration(scope, gen, facts)
+        Caller->>Next: Next(ctx) [subsequent call]
+    end
+
+    Workers->>Channel: close (all done)
+    Next-->>Caller: return (_, false, nil)
+```
+
+### Worker Pool And Backpressure
+
+```mermaid
+flowchart TB
+    subgraph Discovery["Phase 1: Discovery"]
+        SELECT["SelectRepositories()"]
+        RESOLVE["resolveRepositories()"]
+    end
+
+    subgraph Streaming["Phase 2: Streaming Workers"]
+        REPO_CHAN["repoChan\n(buffered: N)"]
+        W1["Worker 1"]
+        W2["Worker 2"]
+        WN["Worker N"]
+        STREAM["s.stream\n(buffered: N)"]
+    end
+
+    subgraph Consumer["Phase 3: Consumer"]
+        NEXT["Next()"]
+        COMMIT["CommitScopeGeneration()"]
+    end
+
+    SELECT --> RESOLVE
+    RESOLVE --> REPO_CHAN
+    REPO_CHAN --> W1
+    REPO_CHAN --> W2
+    REPO_CHAN --> WN
+    W1 -->|"blocks when full"| STREAM
+    W2 -->|"blocks when full"| STREAM
+    WN -->|"blocks when full"| STREAM
+    STREAM --> NEXT
+    NEXT --> COMMIT
+    COMMIT -->|"next call"| NEXT
+```
+
+### Memory Bound
+
+With `PCG_SNAPSHOT_WORKERS=8` and channel buffer = 8:
+
+- At most 8 generations buffered + 8 in-flight = 16 repo generations
+- Each generation holds facts for one repository (~130MB worst case)
+- Peak memory: ~2GB vs ~115GB without streaming (878 repos x 130MB)
+- Consumer commits to Postgres before reading next, keeping pressure low
+
+### Error Propagation
+
+```mermaid
+flowchart LR
+    subgraph Workers
+        W1["Worker 1: succeeds"]
+        W2["Worker 2: fails"]
+        W3["Worker 3: running"]
+    end
+
+    W2 -->|"errOnce.Do"| CANCEL["cancel(workerCtx)"]
+    CANCEL --> W3
+    W3 -->|"ctx.Err() != nil"| STOP["return"]
+
+    subgraph Coordinator
+        WAIT["wg.Wait()"]
+        STORE["s.streamErr = firstErr"]
+        CLOSE["close(s.stream)"]
+    end
+
+    STOP --> WAIT
+    WAIT --> STORE
+    STORE --> CLOSE
+
+    subgraph Consumer
+        READ["Next() reads buffered OK generations"]
+        DRAIN["channel closed: return streamErr"]
+    end
+
+    CLOSE --> DRAIN
+```
+
+### Telemetry Contract
+
+| Signal | Name | Attributes | Phase |
+| --- | --- | --- | --- |
+| Span | `collector.stream` | `component`, `repository_count`, `snapshot_workers`, `repos_completed`, `duration_seconds` | emission |
+| Span | `scope.assign` | `collector_kind`, `source_system` | discovery |
+| Span | `fact.emit` | per-repository (child of stream) | emission |
+| Histogram | `pcg_dp_repo_snapshot_duration_seconds` | `scope_id` | emission |
+| Histogram | `pcg_dp_collector_observe_duration_seconds` | `collector_kind`, `component` | emission |
+| Counter | `pcg_dp_repos_snapshotted_total` | `status=succeeded\|failed` | emission |
+| Counter | `pcg_dp_facts_emitted_total` | `collector_kind`, `source_system`, `scope_id` | emission |
+| Log | `collector stream started` | `repository_count`, `snapshot_workers`, `component` | emission |
+| Log | `collector snapshot completed` | `repo_path`, `file_count`, `fact_count`, `worker_id` | emission |
+| Log | `collector stream completed` | `repos_completed`, `repos_total`, `snapshot_workers`, `duration_seconds` | emission |
+
+### Configuration
+
+| Env Var | Default | Description |
+| --- | --- | --- |
+| `PCG_SNAPSHOT_WORKERS` | min(NumCPU, 4) | Concurrent repo snapshot workers |
+| `PCG_FILESYSTEM_DIRECT` | false | Read repos in-place without copying |
+
 ## Deployed Control Plane
 
 ```mermaid

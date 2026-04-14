@@ -171,8 +171,7 @@ type stubProjectionRunner struct {
 	runCalls   int
 	result     Result
 	runErr     error
-	failAfter  int
-	callsUntil int
+	failAfter int
 }
 
 func (s *stubProjectionRunner) Project(ctx context.Context, scopeValue scope.IngestionScope, generation scope.ScopeGeneration, inputFacts []facts.Envelope) (Result, error) {

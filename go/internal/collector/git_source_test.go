@@ -281,15 +281,21 @@ func TestGitSourceNextDoesNotBufferPartialResultsWhenSnapshottingFails(t *testin
 		},
 	}
 
-	_, ok, err := source.Next(context.Background())
-	if err == nil {
-		t.Fatal("Next() error = nil, want non-nil")
+	// With streaming, the first repo may succeed before the second fails.
+	// Drain all results and verify at least one error surfaces.
+	var gotErr error
+	for {
+		_, ok, err := source.Next(context.Background())
+		if err != nil {
+			gotErr = err
+			break
+		}
+		if !ok {
+			break
+		}
 	}
-	if ok {
-		t.Fatal("Next() ok = true, want false")
-	}
-	if len(source.pending) != 0 {
-		t.Fatalf("pending buffered generations = %d, want 0", len(source.pending))
+	if gotErr == nil {
+		t.Fatal("expected error from failing snapshot, got nil")
 	}
 }
 
@@ -474,14 +480,173 @@ func TestBuildCollectedConcurrentHandlesErrors(t *testing.T) {
 		Snapshotter: snapshotter,
 	}
 
-	_, ok, err := source.Next(context.Background())
-	if err == nil {
-		t.Fatal("Next() error = nil, want non-nil")
+	// With streaming, the first repo may succeed before the second fails.
+	var gotErr error
+	for {
+		_, ok, err := source.Next(context.Background())
+		if err != nil {
+			gotErr = err
+			break
+		}
+		if !ok {
+			break
+		}
+	}
+	if gotErr == nil {
+		t.Fatal("expected error from failing snapshot, got nil")
+	}
+}
+
+func TestGitSourceStreamingSequentialFallback(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 14, 10, 0, 0, 0, time.UTC)
+	repo1 := t.TempDir()
+	repo2 := t.TempDir()
+
+	source := &GitSource{
+		Component:       "collector-git",
+		SnapshotWorkers: 0, // sequential fallback
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{{
+				ObservedAt: observedAt,
+				Repositories: []SelectedRepository{
+					{RepoPath: repo1, RemoteURL: "https://github.com/example/repo1"},
+					{RepoPath: repo2, RemoteURL: "https://github.com/example/repo2"},
+				},
+			}},
+		},
+		Snapshotter: &stubRepositorySnapshotter{
+			snapshots: map[string]RepositorySnapshot{
+				repo1: {RepoPath: repo1, FileCount: 3},
+				repo2: {RepoPath: repo2, FileCount: 5},
+			},
+		},
+	}
+
+	var collected []CollectedGeneration
+	for {
+		gen, ok, err := source.Next(context.Background())
+		if err != nil {
+			t.Fatalf("Next() error = %v, want nil", err)
+		}
+		if !ok {
+			break
+		}
+		collected = append(collected, gen)
+	}
+
+	if got, want := len(collected), 2; got != want {
+		t.Fatalf("collected count = %d, want %d", got, want)
+	}
+}
+
+func TestGitSourceStreamingCancellation(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 14, 10, 0, 0, 0, time.UTC)
+	repos := make([]SelectedRepository, 20)
+	snapshots := make(map[string]RepositorySnapshot)
+	for i := range repos {
+		dir := t.TempDir()
+		repos[i] = SelectedRepository{RepoPath: dir}
+		snapshots[dir] = RepositorySnapshot{RepoPath: dir, FileCount: 1}
+	}
+
+	source := &GitSource{
+		Component:       "collector-git",
+		SnapshotWorkers: 4,
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{{
+				ObservedAt:   observedAt,
+				Repositories: repos,
+			}},
+		},
+		Snapshotter: &stubRepositorySnapshotter{snapshots: snapshots},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Read one generation, then cancel
+	_, ok, err := source.Next(ctx)
+	if err != nil {
+		t.Fatalf("first Next() error = %v, want nil", err)
+	}
+	if !ok {
+		t.Fatal("first Next() ok = false, want true")
+	}
+
+	cancel()
+
+	// Subsequent calls should return context.Canceled or drain cleanly
+	for {
+		_, ok, err := source.Next(ctx)
+		if err != nil {
+			break // expected: context cancelled
+		}
+		if !ok {
+			break
+		}
+	}
+}
+
+func TestGitSourceStreamResetsBetweenBatches(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 14, 10, 0, 0, 0, time.UTC)
+	repo1 := t.TempDir()
+	repo2 := t.TempDir()
+
+	source := &GitSource{
+		Component:       "collector-git",
+		SnapshotWorkers: 1,
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{
+				{
+					ObservedAt:   observedAt,
+					Repositories: []SelectedRepository{{RepoPath: repo1}},
+				},
+				{
+					ObservedAt:   observedAt.Add(time.Minute),
+					Repositories: []SelectedRepository{{RepoPath: repo2}},
+				},
+			},
+		},
+		Snapshotter: &stubRepositorySnapshotter{
+			snapshots: map[string]RepositorySnapshot{
+				repo1: {RepoPath: repo1, FileCount: 1},
+				repo2: {RepoPath: repo2, FileCount: 2},
+			},
+		},
+	}
+
+	// First batch: one repo
+	gen1, ok, err := source.Next(context.Background())
+	if err != nil {
+		t.Fatalf("batch1 Next() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("batch1 Next() ok = false, want true")
+	}
+
+	// Drain first batch
+	_, ok, err = source.Next(context.Background())
+	if err != nil {
+		t.Fatalf("batch1 drain error = %v", err)
 	}
 	if ok {
-		t.Fatal("Next() ok = true, want false")
+		t.Fatal("batch1 should be exhausted")
 	}
-	if len(source.pending) != 0 {
-		t.Fatalf("pending generations = %d, want 0", len(source.pending))
+
+	// Second batch: should trigger fresh discovery
+	gen2, ok, err := source.Next(context.Background())
+	if err != nil {
+		t.Fatalf("batch2 Next() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("batch2 Next() ok = false, want true")
+	}
+
+	if gen1.Scope.ScopeID == gen2.Scope.ScopeID {
+		t.Fatal("expected different scopes across batches")
 	}
 }

@@ -38,6 +38,7 @@ const (
 // Span names define the stable data-plane tracing contract.
 const (
 	SpanCollectorObserve     = "collector.observe"
+	SpanCollectorStream      = "collector.stream"
 	SpanScopeAssign          = "scope.assign"
 	SpanFactEmit             = "fact.emit"
 	SpanProjectorRun         = "projector.run"
@@ -79,6 +80,7 @@ var metricDimensionKeys = []string{
 
 var spanNames = []string{
 	SpanCollectorObserve,
+	SpanCollectorStream,
 	SpanScopeAssign,
 	SpanFactEmit,
 	SpanProjectorRun,

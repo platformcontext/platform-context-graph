@@ -90,7 +90,10 @@ type ContentEntitySnapshot struct {
 	IndexedAt       time.Time      `json:"indexed_at"`
 }
 
-// GitSource converts narrowed snapshot batches into durable collector generations.
+// GitSource converts narrowed snapshot batches into durable collector
+// generations. Generations are streamed through a bounded channel so memory
+// stays proportional to the channel buffer size, not the total number of
+// repositories.
 type GitSource struct {
 	Component       string
 	Selector        RepositorySelector
@@ -99,123 +102,303 @@ type GitSource struct {
 	Instruments     *telemetry.Instruments
 	Logger          *slog.Logger
 	SnapshotWorkers int
-	pending         []CollectedGeneration
+
+	// Streaming state, lazily initialized on first Next call.
+	// The channel carries one CollectedGeneration at a time; the coordinator
+	// goroutine closes it when all workers finish or on first error.
+	stream    chan CollectedGeneration
+	streamErr error
+	started   bool
 }
 
-// Next returns one Go-shaped collected generation, collecting a new selection
-// batch when needed.
+// Next returns one Go-shaped collected generation, streaming from background
+// snapshot workers. On the first call it launches background goroutines that
+// discover repos, snapshot them concurrently, and feed results through a
+// bounded channel. Subsequent calls read one generation at a time.
+//
+// When the current batch is fully consumed the stream resets so the next call
+// triggers a fresh discovery cycle (used by the ingester poll loop).
 func (s *GitSource) Next(ctx context.Context) (CollectedGeneration, bool, error) {
-	if len(s.pending) == 0 {
+	if !s.started {
 		if s.Selector == nil {
 			return CollectedGeneration{}, false, fmt.Errorf("git repository selector is required")
 		}
-
-		// Trace and measure scope assignment (discovery phase)
-		var batch SelectionBatch
-		var err error
-		if s.Tracer != nil {
-			ctx, span := s.Tracer.Start(ctx, telemetry.SpanScopeAssign)
-			defer span.End()
-
-			start := time.Now()
-			batch, err = s.Selector.SelectRepositories(ctx)
-			duration := time.Since(start).Seconds()
-
-			if s.Instruments != nil {
-				s.Instruments.ScopeAssignDuration.Record(ctx, duration,
-					metric.WithAttributes(
-						telemetry.AttrCollectorKind("git"),
-						telemetry.AttrSourceSystem("git"),
-					),
-				)
-			}
-
-			if s.Logger != nil && err == nil {
-				s.Logger.InfoContext(ctx, "collector discovery completed",
-					slog.String("collector_kind", "git"),
-					slog.Int("repository_count", len(batch.Repositories)),
-				)
-			}
-		} else {
-			batch, err = s.Selector.SelectRepositories(ctx)
-		}
-
-		if err != nil {
+		if err := s.startStream(ctx); err != nil {
 			return CollectedGeneration{}, false, err
 		}
-		collected, err := s.buildCollected(ctx, batch)
-		if err != nil {
-			return CollectedGeneration{}, false, err
-		}
-		s.pending = append(s.pending, collected...)
-	}
-	if len(s.pending) == 0 {
-		return CollectedGeneration{}, false, nil
+		s.started = true
 	}
 
-	item := s.pending[0]
-	s.pending = s.pending[1:]
-	return item, true, nil
+	select {
+	case gen, ok := <-s.stream:
+		if !ok {
+			// Channel closed: stream exhausted. Reset for next discovery cycle.
+			s.started = false
+			if s.streamErr != nil {
+				err := s.streamErr
+				s.streamErr = nil
+				return CollectedGeneration{}, false, err
+			}
+			return CollectedGeneration{}, false, nil
+		}
+		return gen, true, nil
+	case <-ctx.Done():
+		return CollectedGeneration{}, false, ctx.Err()
+	}
 }
 
-func (s *GitSource) buildCollected(
-	ctx context.Context,
-	batch SelectionBatch,
-) ([]CollectedGeneration, error) {
+// startStream performs synchronous repo discovery, then launches background
+// snapshot workers that feed generations into s.stream. The channel buffer
+// equals the worker count, providing natural backpressure: workers block on
+// send when the consumer hasn't committed the previous generation yet.
+//
+// Telemetry:
+//   - Parent span: collector.stream (covers entire stream lifecycle)
+//   - Child spans: fact.emit (one per repository, from snapshotOneRepository)
+//   - Metrics: RepoSnapshotDuration, ReposSnapshotted, FactEmitDuration, FactsEmitted
+//   - Logging: stream start (repos discovered, workers), stream end (completed, failed, duration)
+func (s *GitSource) startStream(ctx context.Context) error {
+	// Phase 1: Discovery (synchronous, fast)
+	batch, err := s.discoverRepositories(ctx)
+	if err != nil {
+		return err
+	}
 	if len(batch.Repositories) == 0 {
-		return nil, nil
-	}
-	if batch.ObservedAt.IsZero() {
-		return nil, fmt.Errorf("selection batch observed_at is required")
-	}
-	if s.Snapshotter == nil {
-		return nil, fmt.Errorf("git repository snapshotter is required")
+		if s.Logger != nil {
+			s.Logger.InfoContext(ctx, "collector stream: no repositories discovered",
+				slog.String("collector_kind", "git"),
+				slog.String("component", s.componentName()),
+				telemetry.PhaseAttr(telemetry.PhaseDiscovery),
+			)
+		}
+		s.stream = make(chan CollectedGeneration)
+		close(s.stream)
+		return nil
 	}
 
-	resolvedRepositories := make([]SelectedRepository, 0, len(batch.Repositories))
-	selectedRepositoryPaths := make([]string, 0, len(batch.Repositories))
-	for _, repository := range batch.Repositories {
-		repoPath, err := filepath.Abs(repository.RepoPath)
-		if err != nil {
-			return nil, fmt.Errorf("resolve selected repo path %q: %w", repository.RepoPath, err)
-		}
-		resolvedRepositories = append(
-			resolvedRepositories,
-			SelectedRepository{
-				RepoPath:     repoPath,
-				RemoteURL:    repository.RemoteURL,
-				IsDependency: repository.IsDependency,
-				DisplayName:  repository.DisplayName,
-				Language:     repository.Language,
-				FileTargets:  append([]string(nil), repository.FileTargets...),
-			},
-		)
-		selectedRepositoryPaths = append(selectedRepositoryPaths, repoPath)
+	// Phase 2: Resolve paths and compute stable source run ID
+	resolved, sourceRunID, err := s.resolveRepositories(batch)
+	if err != nil {
+		return err
 	}
+
+	// Phase 3: Launch background snapshot workers
+	workers := s.SnapshotWorkers
+	if workers <= 0 {
+		workers = 1
+	}
+	s.stream = make(chan CollectedGeneration, workers)
+	s.streamErr = nil
+
+	// Start the parent stream span — kept open until coordinator closes it
+	var streamSpan trace.Span
+	streamCtx := ctx
+	if s.Tracer != nil {
+		streamCtx, streamSpan = s.Tracer.Start(ctx, telemetry.SpanCollectorStream,
+			trace.WithAttributes(
+				attribute.String("component", s.componentName()),
+				attribute.Int("repository_count", len(resolved)),
+				attribute.Int("snapshot_workers", workers),
+			),
+		)
+	}
+
+	streamStart := time.Now()
+	if s.Logger != nil {
+		s.Logger.InfoContext(streamCtx, "collector stream started",
+			slog.String("collector_kind", "git"),
+			slog.String("component", s.componentName()),
+			slog.Int("repository_count", len(resolved)),
+			slog.Int("snapshot_workers", workers),
+			telemetry.PhaseAttr(telemetry.PhaseEmission),
+		)
+	}
+
+	workerCtx, cancel := context.WithCancel(streamCtx)
+	repoChan := make(chan SelectedRepository, workers)
+	observedAt := batch.ObservedAt.UTC()
+
+	// Feed repos into work channel
+	go func() {
+		defer close(repoChan)
+		for _, repo := range resolved {
+			select {
+			case repoChan <- repo:
+			case <-workerCtx.Done():
+				return
+			}
+		}
+	}()
+
+	// Snapshot workers: read repos, snapshot, send generations
+	var wg sync.WaitGroup
+	var errOnce sync.Once
+	var firstErr error
+	var completed atomic.Int64
+
+	for i := 0; i < workers; i++ {
+		workerID := i + 1
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for repo := range repoChan {
+				if workerCtx.Err() != nil {
+					return
+				}
+
+				gen, err := s.snapshotOneRepository(
+					workerCtx, repo, sourceRunID, observedAt, workerID,
+				)
+				if err != nil {
+					if s.Instruments != nil {
+						s.Instruments.ReposSnapshotted.Add(ctx, 1,
+							metric.WithAttributes(attribute.String("status", "failed")),
+						)
+					}
+					errOnce.Do(func() {
+						firstErr = err
+						cancel()
+					})
+					return
+				}
+
+				completed.Add(1)
+
+				select {
+				case s.stream <- gen:
+				case <-workerCtx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	// Coordinator: wait for all workers, record telemetry, close channel.
+	// The channel close happens-before any receive that returns ok==false,
+	// so s.streamErr is safely visible to Next() without additional sync.
+	go func() {
+		wg.Wait()
+		cancel()
+		s.streamErr = firstErr
+
+		streamDuration := time.Since(streamStart).Seconds()
+		completedCount := completed.Load()
+
+		// Record stream-level metrics
+		if s.Instruments != nil {
+			s.Instruments.CollectorObserveDuration.Record(ctx, streamDuration,
+				metric.WithAttributes(
+					telemetry.AttrCollectorKind("git"),
+					attribute.String("component", s.componentName()),
+				),
+			)
+		}
+
+		// Close stream span
+		if streamSpan != nil {
+			streamSpan.SetAttributes(
+				attribute.Int64("repos_completed", completedCount),
+				attribute.Int("repos_total", len(resolved)),
+				attribute.Float64("duration_seconds", streamDuration),
+			)
+			if firstErr != nil {
+				streamSpan.RecordError(firstErr)
+			}
+			streamSpan.End()
+		}
+
+		// Log stream completion
+		if s.Logger != nil {
+			logAttrs := []any{
+				slog.String("collector_kind", "git"),
+				slog.String("component", s.componentName()),
+				slog.Int64("repos_completed", completedCount),
+				slog.Int("repos_total", len(resolved)),
+				slog.Int("snapshot_workers", workers),
+				slog.Float64("duration_seconds", streamDuration),
+				telemetry.PhaseAttr(telemetry.PhaseEmission),
+			}
+			if firstErr != nil {
+				logAttrs = append(logAttrs,
+					slog.String("error", firstErr.Error()),
+					telemetry.FailureClassAttr("stream_snapshot_failure"),
+				)
+				s.Logger.ErrorContext(ctx, "collector stream failed", logAttrs...)
+			} else {
+				s.Logger.InfoContext(ctx, "collector stream completed", logAttrs...)
+			}
+		}
+
+		close(s.stream)
+	}()
+
+	return nil
+}
+
+// discoverRepositories runs repo selection with telemetry instrumentation.
+func (s *GitSource) discoverRepositories(ctx context.Context) (SelectionBatch, error) {
+	if s.Tracer != nil {
+		ctx, span := s.Tracer.Start(ctx, telemetry.SpanScopeAssign)
+		defer span.End()
+
+		start := time.Now()
+		batch, err := s.Selector.SelectRepositories(ctx)
+		duration := time.Since(start).Seconds()
+
+		if s.Instruments != nil {
+			s.Instruments.ScopeAssignDuration.Record(ctx, duration,
+				metric.WithAttributes(
+					telemetry.AttrCollectorKind("git"),
+					telemetry.AttrSourceSystem("git"),
+				),
+			)
+		}
+
+		if s.Logger != nil && err == nil {
+			s.Logger.InfoContext(ctx, "collector discovery completed",
+				slog.String("collector_kind", "git"),
+				slog.Int("repository_count", len(batch.Repositories)),
+			)
+		}
+
+		return batch, err
+	}
+
+	return s.Selector.SelectRepositories(ctx)
+}
+
+// resolveRepositories converts selected repositories to absolute paths and
+// computes the stable source run ID.
+func (s *GitSource) resolveRepositories(batch SelectionBatch) ([]SelectedRepository, string, error) {
+	resolved := make([]SelectedRepository, 0, len(batch.Repositories))
+	paths := make([]string, 0, len(batch.Repositories))
+
+	for _, repo := range batch.Repositories {
+		absPath, err := filepath.Abs(repo.RepoPath)
+		if err != nil {
+			return nil, "", fmt.Errorf("resolve selected repo path %q: %w", repo.RepoPath, err)
+		}
+		resolved = append(resolved, SelectedRepository{
+			RepoPath:     absPath,
+			RemoteURL:    repo.RemoteURL,
+			IsDependency: repo.IsDependency,
+			DisplayName:  repo.DisplayName,
+			Language:     repo.Language,
+			FileTargets:  append([]string(nil), repo.FileTargets...),
+		})
+		paths = append(paths, absPath)
+	}
+
 	sourceRunID := facts.StableID(
 		"GitCollectorSnapshotRun",
 		map[string]any{
 			"component":             s.componentName(),
 			"observed_at":           batch.ObservedAt.UTC().Format(time.RFC3339Nano),
-			"selected_repositories": selectedRepositoryPaths,
+			"selected_repositories": paths,
 		},
 	)
 
-	// Sequential path when workers <= 1
-	if s.SnapshotWorkers <= 1 {
-		collected := make([]CollectedGeneration, 0, len(resolvedRepositories))
-		for _, repository := range resolvedRepositories {
-			generation, err := s.snapshotOneRepository(ctx, repository, sourceRunID, batch.ObservedAt.UTC(), 0)
-			if err != nil {
-				return nil, err
-			}
-			collected = append(collected, generation)
-		}
-		return collected, nil
-	}
-
-	// Concurrent path when workers > 1
-	return s.buildCollectedConcurrent(ctx, resolvedRepositories, sourceRunID, batch.ObservedAt.UTC())
+	return resolved, sourceRunID, nil
 }
 
 // snapshotOneRepository processes a single repository snapshot and returns a
@@ -313,85 +496,6 @@ func (s *GitSource) snapshotOneRepository(
 	}
 
 	return generation, nil
-}
-
-// buildCollectedConcurrent uses a worker pool to snapshot repositories
-// concurrently. Workers claim repositories from a channel, snapshot them,
-// and collect results. On first error, the context is cancelled and all
-// errors are collected.
-func (s *GitSource) buildCollectedConcurrent(
-	ctx context.Context,
-	repositories []SelectedRepository,
-	sourceRunID string,
-	observedAt time.Time,
-) ([]CollectedGeneration, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	repoChan := make(chan SelectedRepository, len(repositories))
-	for _, repo := range repositories {
-		repoChan <- repo
-	}
-	close(repoChan)
-
-	type result struct {
-		generation CollectedGeneration
-		err        error
-		index      int
-	}
-
-	resultChan := make(chan result, len(repositories))
-	var wg sync.WaitGroup
-	var completed atomic.Int64
-
-	for i := 0; i < s.SnapshotWorkers; i++ {
-		workerID := i + 1
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for repo := range repoChan {
-				if ctx.Err() != nil {
-					return
-				}
-
-				generation, err := s.snapshotOneRepository(ctx, repo, sourceRunID, observedAt, workerID)
-				completed.Add(1)
-
-				if err != nil {
-					if s.Instruments != nil {
-						s.Instruments.ReposSnapshotted.Add(ctx, 1,
-							metric.WithAttributes(attribute.String("status", "failed")),
-						)
-					}
-					resultChan <- result{err: err}
-					cancel()
-					return
-				}
-
-				resultChan <- result{generation: generation}
-			}
-		}()
-	}
-
-	wg.Wait()
-	close(resultChan)
-
-	// Collect results
-	collected := make([]CollectedGeneration, 0, len(repositories))
-	var errs []error
-	for res := range resultChan {
-		if res.err != nil {
-			errs = append(errs, res.err)
-		} else {
-			collected = append(collected, res.generation)
-		}
-	}
-
-	if len(errs) > 0 {
-		return nil, fmt.Errorf("snapshot failed: %w", errs[0])
-	}
-
-	return collected, nil
 }
 
 func (s *GitSource) componentName() string {
