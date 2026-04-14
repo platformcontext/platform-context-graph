@@ -350,29 +350,36 @@ func (tx *proofDomainTx) ExecContext(ctx context.Context, query string, args ...
 		tx.state.generations[generation.GenerationID] = generation
 		return proofResult{}, nil
 	case strings.Contains(query, "INSERT INTO fact_records"):
-		payload, err := unmarshalPayload(args[12].([]byte))
-		if err != nil {
-			return nil, err
+		// Batch INSERT: args contains N * columnsPerFactRow parameters.
+		if len(args)%columnsPerFactRow != 0 {
+			return nil, fmt.Errorf("fact batch args = %d, not a multiple of %d", len(args), columnsPerFactRow)
 		}
-		envelope := facts.Envelope{
-			FactID:        args[0].(string),
-			ScopeID:       args[1].(string),
-			GenerationID:  args[2].(string),
-			FactKind:      args[3].(string),
-			StableFactKey: args[4].(string),
-			ObservedAt:    args[9].(time.Time).UTC(),
-			IsTombstone:   args[11].(bool),
-			Payload:       payload,
-			SourceRef: facts.Ref{
-				SourceSystem:   args[5].(string),
-				ScopeID:        args[1].(string),
-				GenerationID:   args[2].(string),
-				FactKey:        args[6].(string),
-				SourceURI:      stringFromAny(args[7]),
-				SourceRecordID: stringFromAny(args[8]),
-			},
+		for off := 0; off < len(args); off += columnsPerFactRow {
+			a := args[off : off+columnsPerFactRow]
+			payload, err := unmarshalPayload(a[12].([]byte))
+			if err != nil {
+				return nil, err
+			}
+			envelope := facts.Envelope{
+				FactID:        a[0].(string),
+				ScopeID:       a[1].(string),
+				GenerationID:  a[2].(string),
+				FactKind:      a[3].(string),
+				StableFactKey: a[4].(string),
+				ObservedAt:    a[9].(time.Time).UTC(),
+				IsTombstone:   a[11].(bool),
+				Payload:       payload,
+				SourceRef: facts.Ref{
+					SourceSystem:   a[5].(string),
+					ScopeID:        a[1].(string),
+					GenerationID:   a[2].(string),
+					FactKey:        a[6].(string),
+					SourceURI:      stringFromAny(a[7]),
+					SourceRecordID: stringFromAny(a[8]),
+				},
+			}
+			tx.state.facts[envelope.FactID] = envelope
 		}
-		tx.state.facts[envelope.FactID] = envelope
 		return proofResult{}, nil
 	case strings.Contains(query, "INSERT INTO fact_work_items") && strings.Contains(query, "'projector'"):
 		workItemID := args[0].(string)

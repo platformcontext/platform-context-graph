@@ -62,8 +62,8 @@ func TestNewWiresObservabilityContract(t *testing.T) {
 		t.Fatalf("Observability.MetricDimensions[0] = %q, want %q", got.Observability.MetricDimensions[0], telemetry.MetricDimensionScopeID)
 	}
 
-	if got.Observability.SpanNames[3] != telemetry.SpanProjectorRun {
-		t.Fatalf("Observability.SpanNames[3] = %q, want %q", got.Observability.SpanNames[3], telemetry.SpanProjectorRun)
+	if got.Observability.SpanNames[4] != telemetry.SpanProjectorRun {
+		t.Fatalf("Observability.SpanNames[4] = %q, want %q", got.Observability.SpanNames[4], telemetry.SpanProjectorRun)
 	}
 
 	if !slices.Equal(got.Observability.LogKeys, telemetry.LogKeys()) {

@@ -4,42 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/projector"
 )
 
-const upsertFactQuery = `
-INSERT INTO fact_records (
-    fact_id,
-    scope_id,
-    generation_id,
-    fact_kind,
-    stable_fact_key,
-    source_system,
-    source_fact_key,
-    source_uri,
-    source_record_id,
-    observed_at,
-    ingested_at,
-    is_tombstone,
-    payload
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb
+const (
+	// factBatchSize is the number of rows per multi-row INSERT batch.
+	// 500 rows * 13 columns = 6500 parameters per query, well under the
+	// Postgres limit of 65535. This reduces 91k facts from 91k round trips
+	// to ~184 queries.
+	factBatchSize = 500
+
+	// columnsPerFactRow is the number of columns in the fact_records INSERT.
+	columnsPerFactRow = 13
 )
-ON CONFLICT (fact_id) DO UPDATE SET
-    fact_kind = EXCLUDED.fact_kind,
-    stable_fact_key = EXCLUDED.stable_fact_key,
-    source_system = EXCLUDED.source_system,
-    source_fact_key = EXCLUDED.source_fact_key,
-    source_uri = EXCLUDED.source_uri,
-    source_record_id = EXCLUDED.source_record_id,
-    observed_at = EXCLUDED.observed_at,
-    ingested_at = EXCLUDED.ingested_at,
-    is_tombstone = EXCLUDED.is_tombstone,
-    payload = EXCLUDED.payload
-`
 
 const listFactsQuery = `
 SELECT
@@ -171,12 +152,38 @@ func scanFactEnvelope(rows Rows) (facts.Envelope, error) {
 	}, nil
 }
 
+// upsertFacts persists fact envelopes using batched multi-row INSERT statements.
+// Each batch inserts up to factBatchSize rows in a single query, reducing
+// 91k facts from 91k round trips to ~184 queries. This is critical for memory
+// because a slow consumer causes streaming workers to pile up generations.
 func upsertFacts(ctx context.Context, db ExecQueryer, envelopes []facts.Envelope) error {
 	if db == nil {
 		return fmt.Errorf("fact store database is required")
 	}
 
-	for _, envelope := range envelopes {
+	for i := 0; i < len(envelopes); i += factBatchSize {
+		end := i + factBatchSize
+		if end > len(envelopes) {
+			end = len(envelopes)
+		}
+		if err := upsertFactBatch(ctx, db, envelopes[i:end]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// upsertFactBatch inserts one batch of facts using a multi-row INSERT query.
+func upsertFactBatch(ctx context.Context, db ExecQueryer, batch []facts.Envelope) error {
+	if len(batch) == 0 {
+		return nil
+	}
+
+	args := make([]any, 0, len(batch)*columnsPerFactRow)
+	var values strings.Builder
+
+	for i, envelope := range batch {
 		if err := validateFactEnvelope(envelope); err != nil {
 			return err
 		}
@@ -187,9 +194,19 @@ func upsertFacts(ctx context.Context, db ExecQueryer, envelopes []facts.Envelope
 		}
 
 		observedAt := envelope.ObservedAt.UTC()
-		if _, err := db.ExecContext(
-			ctx,
-			upsertFactQuery,
+
+		if i > 0 {
+			values.WriteString(", ")
+		}
+		offset := i * columnsPerFactRow
+		fmt.Fprintf(&values,
+			"($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d::jsonb)",
+			offset+1, offset+2, offset+3, offset+4, offset+5,
+			offset+6, offset+7, offset+8, offset+9, offset+10,
+			offset+11, offset+12, offset+13,
+		)
+
+		args = append(args,
 			envelope.FactID,
 			envelope.ScopeID,
 			envelope.GenerationID,
@@ -203,13 +220,37 @@ func upsertFacts(ctx context.Context, db ExecQueryer, envelopes []facts.Envelope
 			observedAt,
 			envelope.IsTombstone,
 			payloadJSON,
-		); err != nil {
-			return fmt.Errorf("upsert fact %q: %w", envelope.FactID, err)
-		}
+		)
+	}
+
+	query := upsertFactBatchPrefix + values.String() + upsertFactBatchSuffix
+
+	if _, err := db.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("upsert fact batch (%d facts): %w", len(batch), err)
 	}
 
 	return nil
 }
+
+const upsertFactBatchPrefix = `INSERT INTO fact_records (
+    fact_id, scope_id, generation_id, fact_kind, stable_fact_key,
+    source_system, source_fact_key, source_uri, source_record_id,
+    observed_at, ingested_at, is_tombstone, payload
+) VALUES `
+
+const upsertFactBatchSuffix = `
+ON CONFLICT (fact_id) DO UPDATE SET
+    fact_kind = EXCLUDED.fact_kind,
+    stable_fact_key = EXCLUDED.stable_fact_key,
+    source_system = EXCLUDED.source_system,
+    source_fact_key = EXCLUDED.source_fact_key,
+    source_uri = EXCLUDED.source_uri,
+    source_record_id = EXCLUDED.source_record_id,
+    observed_at = EXCLUDED.observed_at,
+    ingested_at = EXCLUDED.ingested_at,
+    is_tombstone = EXCLUDED.is_tombstone,
+    payload = EXCLUDED.payload
+`
 
 func validateFactEnvelope(envelope facts.Envelope) error {
 	observedAt := envelope.ObservedAt.UTC()

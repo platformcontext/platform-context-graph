@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -94,6 +95,66 @@ func TestFactStoreLoadFactsReturnsEnvelope(t *testing.T) {
 	}
 	if got, want := loaded[0].Payload["name"], "platform-context-graph"; got != want {
 		t.Fatalf("LoadFacts()[0].Payload[name] = %v, want %v", got, want)
+	}
+}
+
+func TestUpsertFactsBatchesLargeEnvelopes(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeExecQueryer{}
+
+	// Create factBatchSize + 1 envelopes to force exactly 2 batches.
+	envelopes := make([]facts.Envelope, factBatchSize+1)
+	for i := range envelopes {
+		envelopes[i] = facts.Envelope{
+			FactID:        fmt.Sprintf("fact-%d", i),
+			ScopeID:       "scope-123",
+			GenerationID:  "generation-456",
+			FactKind:      "file",
+			StableFactKey: fmt.Sprintf("file:fact-%d", i),
+			ObservedAt:    time.Date(2026, time.April, 14, 0, 0, 0, 0, time.UTC),
+			SourceRef: facts.Ref{
+				SourceSystem: "git",
+				FactKey:      fmt.Sprintf("key-%d", i),
+			},
+		}
+	}
+
+	if err := upsertFacts(context.Background(), db, envelopes); err != nil {
+		t.Fatalf("upsertFacts() error = %v, want nil", err)
+	}
+
+	if got, want := len(db.execs), 2; got != want {
+		t.Fatalf("exec count = %d, want %d (two batches)", got, want)
+	}
+	// First batch should have factBatchSize * columnsPerFactRow args.
+	if got, want := len(db.execs[0].args), factBatchSize*columnsPerFactRow; got != want {
+		t.Fatalf("first batch arg count = %d, want %d", got, want)
+	}
+	// Second batch should have 1 * columnsPerFactRow args.
+	if got, want := len(db.execs[1].args), 1*columnsPerFactRow; got != want {
+		t.Fatalf("second batch arg count = %d, want %d", got, want)
+	}
+	// Both queries should be multi-row inserts.
+	for i, exec := range db.execs {
+		if !strings.Contains(exec.query, "INSERT INTO fact_records") {
+			t.Fatalf("exec[%d] query missing INSERT INTO fact_records", i)
+		}
+		if !strings.Contains(exec.query, "ON CONFLICT") {
+			t.Fatalf("exec[%d] query missing ON CONFLICT upsert clause", i)
+		}
+	}
+}
+
+func TestUpsertFactsEmptySliceNoOp(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeExecQueryer{}
+	if err := upsertFacts(context.Background(), db, nil); err != nil {
+		t.Fatalf("upsertFacts(nil) error = %v, want nil", err)
+	}
+	if got := len(db.execs); got != 0 {
+		t.Fatalf("exec count = %d, want 0 for empty envelopes", got)
 	}
 }
 
