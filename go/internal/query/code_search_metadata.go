@@ -50,6 +50,7 @@ func (h *CodeHandler) enrichGraphSearchResultsWithContentMetadata(
 			continue
 		}
 		results[i]["metadata"] = metadata
+		attachSemanticSummary(results[i])
 	}
 
 	return results, nil

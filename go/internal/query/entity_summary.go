@@ -60,6 +60,34 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 	return fmt.Sprintf("%s %s %s.", label, name, joinSentenceFragments(fragments))
 }
 
+func attachSemanticSummary(result map[string]any) {
+	if result == nil {
+		return
+	}
+	metadata, _ := result["metadata"].(map[string]any)
+	if len(metadata) == 0 {
+		return
+	}
+
+	entity := map[string]any{
+		"metadata": metadata,
+	}
+	if name := StringVal(result, "name"); name != "" {
+		entity["name"] = name
+	} else if name := StringVal(result, "entity_name"); name != "" {
+		entity["name"] = name
+	}
+	if labels := StringSliceVal(result, "labels"); len(labels) > 0 {
+		entity["labels"] = labels
+	} else if entityType := StringVal(result, "entity_type"); entityType != "" {
+		entity["labels"] = []string{entityType}
+	}
+
+	if summary := buildEntitySemanticSummary(entity); summary != "" {
+		result["semantic_summary"] = summary
+	}
+}
+
 func primaryEntityLabel(entity map[string]any) string {
 	labels := StringSliceVal(entity, "labels")
 	if len(labels) == 0 {

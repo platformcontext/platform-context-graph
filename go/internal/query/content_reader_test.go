@@ -239,6 +239,9 @@ func TestCodeHandlerSearchEntityContentIncludesEntityNameMatches(t *testing.T) {
 	if got, want := results[0]["language"], "tsx"; got != want {
 		t.Fatalf("results[0][language] = %#v, want %#v", got, want)
 	}
+	if got, want := results[0]["semantic_summary"], "Component Button is associated with the react framework."; got != want {
+		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", got, want)
+	}
 }
 
 func TestContentReaderSearchEntitiesByLanguageAndTypeIncludesLanguageVariants(t *testing.T) {

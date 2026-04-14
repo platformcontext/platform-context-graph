@@ -180,6 +180,7 @@ func (h *LanguageQueryHandler) queryContentByLanguage(
 			"end_line":   row.EndLine,
 			"metadata":   row.Metadata,
 		}
+		attachSemanticSummary(result)
 		results = append(results, result)
 	}
 

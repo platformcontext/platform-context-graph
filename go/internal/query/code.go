@@ -183,6 +183,7 @@ func (h *CodeHandler) searchEntityContent(ctx context.Context, repoID, pattern, 
 			"metadata":     entity.Metadata,
 			"repo_id":      entity.RepoID,
 		})
+		attachSemanticSummary(results[len(results)-1])
 	}
 
 	for _, entity := range nameMatches {

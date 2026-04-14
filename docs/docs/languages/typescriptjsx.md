@@ -38,7 +38,8 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   - TSX type aliases and JSX evidence are queryable through the Go
     content-backed APIs, normal entity resolve/context can surface
     content-backed entities, normal `code/search` can now search
-    content-backed entity names as well as source text, and normal
+    content-backed entity names as well as source text and emit semantic
+    summaries for content-backed component entities, and normal
     `code/relationships` can synthesize JSX component-reference edges for
     content-backed entities. Full graph-first component/reference surfacing
     remains partial.

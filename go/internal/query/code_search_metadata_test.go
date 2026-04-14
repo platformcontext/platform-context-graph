@@ -63,6 +63,9 @@ func TestEnrichGraphSearchResultsWithContentMetadata(t *testing.T) {
 	if len(decorators) != 1 || decorators[0] != "@route" {
 		t.Fatalf("metadata[decorators] = %#v, want [@route]", decorators)
 	}
+	if gotValue, want := got[0]["semantic_summary"], "Function handler is async and uses decorators @route."; gotValue != want {
+		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", gotValue, want)
+	}
 }
 
 func TestEnrichGraphSearchResultsWithContentMetadataSkipsUnmatchedRows(t *testing.T) {
@@ -109,5 +112,8 @@ func TestEnrichGraphSearchResultsWithContentMetadataSkipsUnmatchedRows(t *testin
 	}
 	if _, ok := got[0]["metadata"]; ok {
 		t.Fatalf("results[0][metadata] = %#v, want metadata to remain absent", got[0]["metadata"])
+	}
+	if _, ok := got[0]["semantic_summary"]; ok {
+		t.Fatalf("results[0][semantic_summary] = %#v, want semantic summary to remain absent", got[0]["semantic_summary"])
 	}
 }

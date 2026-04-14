@@ -432,6 +432,11 @@ func TestHandleLanguageQuery_ContentBackedEntityTypes(t *testing.T) {
 			if got, want := metadata[tt.wantKey], tt.wantValue; got != want {
 				t.Fatalf("metadata[%s] = %#v, want %#v", tt.wantKey, got, want)
 			}
+			if tt.entityType == "component" {
+				if got, want := result["semantic_summary"], "Component Button is associated with the react framework."; got != want {
+					t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
+				}
+			}
 		})
 	}
 }

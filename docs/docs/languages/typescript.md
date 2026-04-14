@@ -45,8 +45,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     names as well as source text. Graph-backed `language-query`, `code/search`, `dead-code`,
     `code/relationships`, `code/complexity`, `entities/resolve`, and
     entity-context results also enrich matching class/function rows with
-    decorator and generic metadata. Dedicated graph/story/context surfacing
-    remains partial.
+    decorator and generic metadata, and `language-query` plus `code/search`
+    now emit semantic summaries for matching graph-backed entities. Dedicated
+    graph/story/context surfacing remains partial.
 
 
 ## Known Limitations
