@@ -105,6 +105,11 @@ cutover draft assumed:
   `bootstrap-index` runtime; parser-family ownership is now Go-owned, and the
   remaining Python ownership is concentrated in content shaping plus the
   Python API/MCP/CLI orchestration seams
+- `src/platform_context_graph/tools/graph_builder.py` has been thinned to the
+  live runtime facade only; the dead per-file Python persistence helpers,
+  parser-registry bootstrap methods, discovery convenience methods, and legacy
+  call/inheritance helper methods have been deleted instead of retained as
+  compatibility shells
 - the legacy Python parse/coordinator runtime stack
   (`collectors/git/parse_execution.py`, `collectors/git/parse_worker.py`,
   `indexing/coordinator.py`, `indexing/coordinator_pipeline.py`,
@@ -151,6 +156,16 @@ Current parser-package truth:
   are now Go-owned in the canonical parser contract and on disk
 - several semantics now exist in Go and the remaining work is downstream
   graph/materialization parity rather than brand-new parser scaffolding
+
+Current GraphBuilder truth:
+
+- the Python facade still exists because CLI/runtime helpers call it directly
+- it no longer owns parser bootstrap, Python discovery, or per-file graph
+  persistence helpers
+- the remaining live surface is schema bootstrap, Go `bootstrap-index` handoff,
+  repository delete/reset helpers, and repository relationship resolution
+- deleting the facade entirely is blocked on removing the last Python
+  CLI/runtime callers, not on parser-family ownership
 
 Known parser parity blockers to close before honest deletion:
 

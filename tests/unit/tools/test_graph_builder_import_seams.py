@@ -92,3 +92,27 @@ def test_graph_builder_discovery_paths_do_not_load_legacy_parser_registry(
         "platform_context_graph.collectors.git.parser_support" not in sys.modules
     )
     assert "platform_context_graph.parsers.registry" not in sys.modules
+
+
+def test_graph_builder_import_does_not_keep_legacy_python_persistence_surface() -> None:
+    """Importing GraphBuilder should not pull dead Python persistence facades back in."""
+
+    _clear_modules()
+    importlib.reload(graph_builder_module)
+
+    for attribute_name in (
+        "add_repository_to_graph",
+        "add_file_to_graph",
+        "commit_file_batch_to_graph",
+        "delete_file_from_graph",
+        "_safe_run_create",
+        "_create_function_calls",
+        "_create_all_function_calls",
+        "_create_all_infra_links",
+        "_create_all_sql_relationships",
+        "_create_inheritance_links",
+        "_create_csharp_inheritance_and_interfaces",
+        "_create_all_inheritance_links",
+        "_name_from_symbol",
+    ):
+        assert not hasattr(graph_builder_module.GraphBuilder, attribute_name)

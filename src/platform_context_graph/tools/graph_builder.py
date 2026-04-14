@@ -3,48 +3,20 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
-from typing import Any
 
-from ..cli.config_manager import get_config_value
 from ..cli.helpers.go_index_runtime import run_go_bootstrap_index
 from ..core.database import DatabaseManager
 from ..core.jobs import JobManager
 from ..relationships import (
     resolve_repository_relationships_for_committed_repositories as _resolve_repository_relationships_for_committed_repositories,
 )
-from ..repository_identity import git_remote_for_path, repository_metadata
-from ..utils.debug_log import debug_log, info_logger, warning_logger
+from ..utils.debug_log import info_logger, warning_logger
 from ..utils.debug_log import debug_logger
 from ..graph.persistence import (
-    delete_file_from_graph as _delete_file_from_graph,
     delete_repository_from_graph as _delete_repository_from_graph,
     reset_repository_subtree_in_graph as _reset_repository_subtree_in_graph,
 )
-from ..graph.persistence import (
-    add_file_to_graph as _add_file_to_graph,
-    add_repository_to_graph as _add_repository_to_graph,
-    commit_file_batch_to_graph as _commit_file_batch_to_graph,
-)
-from ..graph.persistence.calls import (
-    create_all_function_calls as _create_all_function_calls,
-    create_function_calls as _create_function_calls,
-    name_from_symbol as _name_from_symbol,
-    safe_run_create as _safe_run_create,
-)
-from ..graph.persistence.inheritance import (
-    create_all_inheritance_links as _create_all_inheritance_links,
-    create_csharp_inheritance_and_interfaces as _create_csharp_inheritance_and_interfaces,
-    create_inheritance_links as _create_inheritance_links,
-)
-from ..relationships.infra_links import (
-    create_all_infra_links as _create_all_infra_links,
-)
-from ..relationships.data_intelligence_links import (
-    create_all_data_intelligence_links as _create_all_data_intelligence_links,
-)
-from ..relationships.sql_links import create_all_sql_links as _create_all_sql_links
 from ..graph.schema import create_schema as _create_schema
 
 
@@ -76,140 +48,6 @@ class GraphBuilder:
             self, info_logger_fn=info_logger, warning_logger_fn=warning_logger
         )
 
-    def add_repository_to_graph(
-        self, repo_path: Path, is_dependency: bool = False
-    ) -> None:
-        """Add or update a repository node in the graph.
-
-        Args:
-            repo_path: Repository root path.
-            is_dependency: Whether the repository is a dependency index target.
-        """
-        _add_repository_to_graph(
-            self,
-            repo_path,
-            is_dependency,
-            git_remote_for_path_fn=git_remote_for_path,
-            repository_metadata_fn=repository_metadata,
-        )
-
-    def add_file_to_graph(
-        self, file_data: dict[str, Any], repo_name: str, imports_map: dict[str, Any]
-    ) -> None:
-        """Persist one parsed file and its contained graph nodes.
-
-        Args:
-            file_data: Parsed file payload.
-            repo_name: Repository name retained for signature compatibility.
-            imports_map: Import resolution map retained for signature compatibility.
-        """
-        _add_file_to_graph(
-            self,
-            file_data,
-            repo_name,
-            imports_map,
-            debug_log_fn=debug_log,
-            info_logger_fn=info_logger,
-            warning_logger_fn=warning_logger,
-        )
-
-    def commit_file_batch_to_graph(
-        self,
-        file_data_list: list[dict[str, Any]],
-        repo_path: Path,
-        *,
-        progress_callback: Any | None = None,
-        adaptive_flush_threshold: int | None = None,
-        adaptive_entity_batch_size: int | None = None,
-        adaptive_tx_file_limit: int | None = None,
-        adaptive_content_batch_size: int | None = None,
-    ) -> Any:
-        """Persist a batch of parsed files in a single Neo4j transaction.
-
-        Args:
-            file_data_list: List of parsed file payloads.
-            repo_path: Repository root path for the batch.
-            progress_callback: Optional heartbeat callback invoked per file.
-            adaptive_flush_threshold: Optional class-aware flush threshold.
-            adaptive_entity_batch_size: Optional class-aware UNWIND size.
-            adaptive_tx_file_limit: Optional class-aware tx file limit.
-            adaptive_content_batch_size: Optional class-aware content upsert size.
-        """
-        return _commit_file_batch_to_graph(
-            self,
-            file_data_list,
-            repo_path,
-            progress_callback=progress_callback,
-            debug_log_fn=debug_log,
-            info_logger_fn=info_logger,
-            warning_logger_fn=warning_logger,
-            adaptive_flush_threshold=adaptive_flush_threshold,
-            adaptive_entity_batch_size=adaptive_entity_batch_size,
-            adaptive_tx_file_limit=adaptive_tx_file_limit,
-            adaptive_content_batch_size=adaptive_content_batch_size,
-        )
-
-    def _safe_run_create(
-        self, session: Any, query: str, params: dict[str, Any]
-    ) -> bool:
-        """Run a relationship creation query and report whether it created rows."""
-        return _safe_run_create(session, query, params)
-
-    def _create_function_calls(
-        self, session: Any, file_data: dict[str, Any], imports_map: dict[str, Any]
-    ) -> None:
-        """Create ``CALLS`` relationships for one parsed file."""
-        _create_function_calls(
-            self,
-            session,
-            file_data,
-            imports_map,
-            debug_log_fn=debug_log,
-            get_config_value_fn=get_config_value,
-            warning_logger_fn=warning_logger,
-        )
-
-    def _create_all_function_calls(
-        self,
-        all_file_data: Any,
-        imports_map: dict[str, Any],
-        *,
-        progress_callback: Any | None = None,
-    ) -> dict[str, float | int]:
-        """Create ``CALLS`` relationships after all files are indexed."""
-        return _create_all_function_calls(
-            self,
-            all_file_data,
-            imports_map,
-            debug_log_fn=debug_log,
-            get_config_value_fn=get_config_value,
-            warning_logger_fn=warning_logger,
-            progress_callback=progress_callback,
-        )
-
-    def _create_all_infra_links(self, all_file_data: Any) -> None:
-        """Create infrastructure relationships after indexing completes."""
-        _create_all_infra_links(self, all_file_data, info_logger_fn=info_logger)
-
-    def _create_all_sql_relationships(self, all_file_data: Any) -> dict[str, int]:
-        """Create SQL relationships after indexing completes."""
-
-        file_data_list = list(all_file_data)
-        sql_metrics = _create_all_sql_links(
-            self,
-            file_data_list,
-            info_logger_fn=info_logger,
-        )
-        data_metrics = _create_all_data_intelligence_links(
-            self,
-            file_data_list,
-            info_logger_fn=info_logger,
-        )
-        return {
-            **sql_metrics,
-            **data_metrics,
-        }
-
     def _resolve_repository_relationships(
         self,
         committed_repo_paths: list[Path],
@@ -224,32 +62,6 @@ class GraphBuilder:
             run_id=run_id,
             info_logger_fn=info_logger,
         )
-
-    def _create_inheritance_links(
-        self, session: Any, file_data: dict[str, Any], imports_map: dict[str, Any]
-    ) -> None:
-        """Create inheritance edges for one parsed file."""
-        _create_inheritance_links(session, file_data, imports_map)
-
-    def _create_csharp_inheritance_and_interfaces(
-        self, session: Any, file_data: dict[str, Any], imports_map: dict[str, Any]
-    ) -> None:
-        """Create inheritance and implementation edges for one C# file."""
-        _create_csharp_inheritance_and_interfaces(session, file_data, imports_map)
-
-    def _create_all_inheritance_links(
-        self, all_file_data: Any, imports_map: dict[str, Any]
-    ) -> None:
-        """Create inheritance-style relationships after all files are indexed."""
-        _create_all_inheritance_links(self, all_file_data, imports_map)
-
-    def delete_file_from_graph(self, path: str) -> None:
-        """Delete one file subtree from the graph.
-
-        Args:
-            path: File path to remove.
-        """
-        _delete_file_from_graph(self, path, info_logger_fn=info_logger)
 
     def delete_repository_from_graph(self, repo_identifier: str) -> bool:
         """Delete one repository subtree from the graph.
@@ -285,10 +97,6 @@ class GraphBuilder:
             debug_logger_fn=debug_logger,
             warning_logger_fn=warning_logger,
         )
-
-    def _name_from_symbol(self, symbol: str) -> str:
-        """Extract a readable function name from a SCIP symbol identifier."""
-        return _name_from_symbol(symbol)
 
     async def build_graph_from_path_async(
         self,

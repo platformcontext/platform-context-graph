@@ -45,13 +45,17 @@ def test_graph_builder_init_does_not_build_parser_registry(monkeypatch) -> None:
         graph_builder_module, "_create_schema", lambda *_args, **_kwargs: None
     )
 
-    builder = graph_builder_module.GraphBuilder(
-        _DummyDBManager(),
-        SimpleNamespace(),
-        asyncio.new_event_loop(),
-    )
+    loop = asyncio.new_event_loop()
+    try:
+        builder = graph_builder_module.GraphBuilder(
+            _DummyDBManager(),
+            SimpleNamespace(),
+            loop,
+        )
 
-    assert not hasattr(builder, "parsers")
+        assert not hasattr(builder, "parsers")
+    finally:
+        loop.close()
 
 
 def test_graph_builder_no_longer_exposes_legacy_python_parse_entrypoint(
@@ -63,14 +67,18 @@ def test_graph_builder_no_longer_exposes_legacy_python_parse_entrypoint(
         graph_builder_module, "_create_schema", lambda *_args, **_kwargs: None
     )
 
-    builder = graph_builder_module.GraphBuilder(
-        _DummyDBManager(),
-        SimpleNamespace(),
-        asyncio.new_event_loop(),
-    )
+    loop = asyncio.new_event_loop()
+    try:
+        builder = graph_builder_module.GraphBuilder(
+            _DummyDBManager(),
+            SimpleNamespace(),
+            loop,
+        )
 
-    assert not hasattr(builder, "parse_file")
-    assert "TreeSitterParser" not in graph_builder_module.__all__
+        assert not hasattr(builder, "parse_file")
+        assert "TreeSitterParser" not in graph_builder_module.__all__
+    finally:
+        loop.close()
 
 
 def test_graph_builder_no_longer_exposes_python_discovery_helpers(
@@ -82,12 +90,50 @@ def test_graph_builder_no_longer_exposes_python_discovery_helpers(
         graph_builder_module, "_create_schema", lambda *_args, **_kwargs: None
     )
 
-    builder = graph_builder_module.GraphBuilder(
-        _DummyDBManager(),
-        SimpleNamespace(),
-        asyncio.new_event_loop(),
+    loop = asyncio.new_event_loop()
+    try:
+        builder = graph_builder_module.GraphBuilder(
+            _DummyDBManager(),
+            SimpleNamespace(),
+            loop,
+        )
+
+        assert not hasattr(builder, "parsers")
+        assert not hasattr(builder, "_collect_supported_files")
+        assert not hasattr(builder, "estimate_processing_time")
+    finally:
+        loop.close()
+
+
+def test_graph_builder_no_longer_exposes_dead_python_persistence_facade(
+    monkeypatch,
+) -> None:
+    """GraphBuilder should not retain dead per-file Python persistence helpers."""
+
+    monkeypatch.setattr(
+        graph_builder_module, "_create_schema", lambda *_args, **_kwargs: None
     )
 
-    assert not hasattr(builder, "parsers")
-    assert not hasattr(builder, "_collect_supported_files")
-    assert not hasattr(builder, "estimate_processing_time")
+    loop = asyncio.new_event_loop()
+    try:
+        builder = graph_builder_module.GraphBuilder(
+            _DummyDBManager(),
+            SimpleNamespace(),
+            loop,
+        )
+
+        assert not hasattr(builder, "add_repository_to_graph")
+        assert not hasattr(builder, "add_file_to_graph")
+        assert not hasattr(builder, "commit_file_batch_to_graph")
+        assert not hasattr(builder, "delete_file_from_graph")
+        assert not hasattr(builder, "_safe_run_create")
+        assert not hasattr(builder, "_create_function_calls")
+        assert not hasattr(builder, "_create_all_function_calls")
+        assert not hasattr(builder, "_create_all_infra_links")
+        assert not hasattr(builder, "_create_all_sql_relationships")
+        assert not hasattr(builder, "_create_inheritance_links")
+        assert not hasattr(builder, "_create_csharp_inheritance_and_interfaces")
+        assert not hasattr(builder, "_create_all_inheritance_links")
+        assert not hasattr(builder, "_name_from_symbol")
+    finally:
+        loop.close()

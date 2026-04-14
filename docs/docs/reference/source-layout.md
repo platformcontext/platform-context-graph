@@ -128,20 +128,29 @@ The legacy Python package families that used to appear in this page have already
 been deleted from the branch. Their former responsibilities now live in Go
 runtime services, Go query handlers, and storage-backed runtime/status helpers.
 
-`tools/graph_builder.py` remains the stable public facade while the underlying
-source-of-truth modules move into these canonical packages. The legacy Python
-post-commit finalization bridge has been deleted from the branch; Python
+`tools/graph_builder.py` remains the stable public facade, but it is now a thin
+runtime shim instead of the historical "everything index-related lives here"
+surface. Its normal-path ownership is limited to:
+
+- schema bootstrap
+- Go `bootstrap-index` handoff for directory and explicit single-file indexing
+- repository delete/reset helpers
+- repository relationship-resolution handoff
+
+The dead per-file Python persistence helpers, parser-registry bootstrap, parse
+entrypoints, and discovery convenience methods have been removed from the
+facade instead of being kept as compatibility shells. The legacy Python
+post-commit finalization bridge has also been deleted from the branch; Python
 indexing now requires the remaining cutover helpers rather than ad hoc finalize
 helpers.
 
-The remaining transition risk is now concentrated in Python-owned façade,
-evidence, and materialization seams such as `tools/graph_builder.py`,
-Terraform provider-schema extraction, `content/ingest.py`, and a smaller set
-of CLI/API support modules, not in the deleted post-commit bridge, the deleted
-ingester bridge modules, the deleted legacy snapshot/coordinator stack, or the
-now-deleted Python discovery shims. Non-dependency directory indexing now
-delegates from `GraphBuilder` to the Go `bootstrap-index` runtime, and direct
-single-file indexing now uses the same Go-owned runtime contract.
+The remaining transition risk is now concentrated in Python-owned evidence and
+materialization seams such as Terraform provider-schema extraction,
+`content/ingest.py`, and a smaller set of CLI/API support modules. `GraphBuilder`
+is still present, but it no longer owns the removed parser bootstrap, discovery,
+or per-file persistence surface. Non-dependency directory indexing now delegates
+from `GraphBuilder` to the Go `bootstrap-index` runtime, and direct single-file
+indexing now uses the same Go-owned runtime contract.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.
