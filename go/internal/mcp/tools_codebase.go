@@ -234,5 +234,60 @@ func codebaseTools() []ToolDefinition {
 				"required": []string{},
 			},
 		},
+		{
+			Name:        "execute_language_query",
+			Description: "Execute a language-specific query to find code entities (functions, classes, structs, etc.) filtered by programming language. Supports 15 languages: c, cpp, csharp, dart, go, haskell, java, javascript, perl, python, ruby, rust, scala, swift, typescript.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"language": map[string]any{
+						"type":        "string",
+						"description": "Programming language to filter by (e.g., python, go, rust)",
+					},
+					"entity_type": map[string]any{
+						"type":        "string",
+						"description": "Type of code entity to search for",
+						"enum":        []string{"repository", "directory", "file", "module", "function", "class", "struct", "enum", "union", "macro", "variable"},
+					},
+					"query": map[string]any{
+						"type":        "string",
+						"description": "Optional name pattern to filter results",
+					},
+					"repo_id": map[string]any{
+						"type":        "string",
+						"description": "Optional canonical repository identifier to scope the search",
+					},
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": "Maximum number of results to return",
+						"default":     50,
+					},
+				},
+				"required": []string{"language", "entity_type"},
+			},
+		},
+		{
+			Name:        "find_function_call_chain",
+			Description: "Find the transitive call chain between two functions by following CALLS edges in the code graph. Returns shortest paths up to a configurable depth.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"start": map[string]any{
+						"type":        "string",
+						"description": "Starting function name or entity ID",
+					},
+					"end": map[string]any{
+						"type":        "string",
+						"description": "Ending function name or entity ID",
+					},
+					"max_depth": map[string]any{
+						"type":        "integer",
+						"description": "Maximum chain depth (1-10)",
+						"default":     5,
+					},
+				},
+				"required": []string{"start", "end"},
+			},
+		},
 	}
 }

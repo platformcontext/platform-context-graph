@@ -488,6 +488,24 @@ func (r *queueFakeRows) Scan(dest ...any) error {
 				return fmt.Errorf("row[%d] type = %T, want int", i, row[i])
 			}
 			*target = value
+		case *sql.NullString:
+			value, ok := row[i].(sql.NullString)
+			if !ok {
+				return fmt.Errorf("row[%d] type = %T, want sql.NullString", i, row[i])
+			}
+			*target = value
+		case *sql.NullBool:
+			value, ok := row[i].(sql.NullBool)
+			if !ok {
+				return fmt.Errorf("row[%d] type = %T, want sql.NullBool", i, row[i])
+			}
+			*target = value
+		case *sql.NullInt64:
+			value, ok := row[i].(sql.NullInt64)
+			if !ok {
+				return fmt.Errorf("row[%d] type = %T, want sql.NullInt64", i, row[i])
+			}
+			*target = value
 		default:
 			return fmt.Errorf("unsupported scan target %T", dest[i])
 		}

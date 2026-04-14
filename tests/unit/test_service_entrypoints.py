@@ -21,7 +21,7 @@ def test_get_service_entrypoint_returns_api_spec() -> None:
 
 
 def test_get_service_entrypoint_returns_git_collector_spec() -> None:
-    """The Git collector should be represented even before deeper moves land."""
+    """The Git collector is now owned by Go (go/cmd/ingester)."""
 
     service_entrypoints = importlib.import_module(
         "platform_context_graph.app.service_entrypoints"
@@ -32,13 +32,12 @@ def test_get_service_entrypoint_returns_git_collector_spec() -> None:
     assert spec.service_role == "git-collector"
     assert spec.runtime_role == "ingester"
     assert spec.implemented is True
-    assert (
-        spec.import_path == "platform_context_graph.runtime.ingester:run_repo_sync_loop"
-    )
+    # Go owns this now, Python runtime.ingester is deleted
+    assert spec.import_path == "go:cmd/ingester"
 
 
 def test_get_service_entrypoint_returns_resolution_engine_spec() -> None:
-    """The resolution engine role should resolve to a real entrypoint."""
+    """The resolution engine is now owned by Go (go/cmd/reducer)."""
 
     service_entrypoints = importlib.import_module(
         "platform_context_graph.app.service_entrypoints"
@@ -49,10 +48,8 @@ def test_get_service_entrypoint_returns_resolution_engine_spec() -> None:
     assert spec.service_role == "resolution-engine"
     assert spec.runtime_role == "resolution-engine"
     assert spec.implemented is True
-    assert (
-        spec.import_path
-        == "platform_context_graph.resolution.orchestration.runtime:start_resolution_engine"
-    )
+    # Go owns this now, Python resolution.orchestration.runtime is deleted
+    assert spec.import_path == "go:cmd/reducer"
 
 
 def test_get_service_entrypoint_rejects_unknown_role() -> None:

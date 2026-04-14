@@ -113,6 +113,17 @@ func resolveRoute(toolName string, args map[string]any) (*route, error) {
 		return &route{method: "POST", path: "/api/v0/code/complexity", body: map[string]any{
 			"repo_id": str(args, "repo_id"), "limit": intOr(args, "limit", 10),
 		}}, nil
+	case "execute_language_query":
+		return &route{method: "POST", path: "/api/v0/code/language-query", body: map[string]any{
+			"language": str(args, "language"), "entity_type": str(args, "entity_type"),
+			"query": str(args, "query"), "repo_id": str(args, "repo_id"),
+			"limit": intOr(args, "limit", 50),
+		}}, nil
+	case "find_function_call_chain":
+		return &route{method: "POST", path: "/api/v0/code/call-chain", body: map[string]any{
+			"start": str(args, "start"), "end": str(args, "end"),
+			"max_depth": intOr(args, "max_depth", 5),
+		}}, nil
 
 	// ── Repositories ──
 	case "list_indexed_repositories":
