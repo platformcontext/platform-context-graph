@@ -1,0 +1,41 @@
+go/internal/reducer/defaults.go
+  1ca5ee6ce936a402 17-20,69-72
+docs/docs/deployment/service-runtimes.md
+  1ca5ee6ce936a402 117-119
+docs/docs/adrs/2026-04-13-go-data-plane-ownership-completion.md
+  1ca5ee6ce936a402 46,71-72
+go/internal/reducer/intent.go
+  1ca5ee6ce936a402 31-32
+go/internal/reducer/registry.go
+  1ca5ee6ce936a402 187-200
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 43,82
+go/internal/reducer/code_call_materialization.go
+  1ca5ee6ce936a402 1-326
+go/cmd/reducer/main.go
+  1ca5ee6ce936a402 131
+docs/superpowers/plans/2026-04-14-go-parity-closure-plan.md
+  1ca5ee6ce936a402 85-87,93-94
+go/internal/reducer/domain.go
+  1ca5ee6ce936a402 16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "1993bb3b55e7b58b75662626105c7899eddd7c0c",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 367,
+      "total_deletions": 1,
+      "accepted_lines": 367,
+      "overriden_lines": 0
+    }
+  }
+}
