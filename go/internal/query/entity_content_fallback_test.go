@@ -150,4 +150,7 @@ func TestGetEntityContextFallsBackToContentEntities(t *testing.T) {
 	if got, want := relationship["reason"], "jsx_component_usage"; got != want {
 		t.Fatalf("relationship[reason] = %#v, want %#v", got, want)
 	}
+	if got, want := resp["semantic_summary"], "Component Button is associated with the react framework."; got != want {
+		t.Fatalf("resp[semantic_summary] = %#v, want %#v", got, want)
+	}
 }

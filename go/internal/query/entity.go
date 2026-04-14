@@ -179,6 +179,9 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	response = enriched[0]
+	if summary := buildEntitySemanticSummary(response); summary != "" {
+		response["semantic_summary"] = summary
+	}
 
 	WriteJSON(w, http.StatusOK, response)
 }
@@ -225,6 +228,9 @@ func (h *EntityHandler) getEntityContextFromContent(ctx context.Context, entityI
 	relationships := append([]map[string]any{}, relationshipSet.incoming...)
 	relationships = append(relationships, relationshipSet.outgoing...)
 	response["relationships"] = relationships
+	if summary := buildEntitySemanticSummary(response); summary != "" {
+		response["semantic_summary"] = summary
+	}
 	return response, nil
 }
 
