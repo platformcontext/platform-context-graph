@@ -335,6 +335,76 @@ func (cr *ContentReader) SearchEntitiesByName(
 	return results, nil
 }
 
+// SearchEntitiesReferencingComponent returns content entities whose metadata
+// records JSX usage of the requested component name.
+func (cr *ContentReader) SearchEntitiesReferencingComponent(
+	ctx context.Context,
+	repoID string,
+	componentName string,
+	limit int,
+) ([]EntityContent, error) {
+	ctx, span := cr.tracer.Start(ctx, "postgres.query",
+		trace.WithAttributes(
+			attribute.String("db.system", "postgresql"),
+			attribute.String("db.operation", "search_entities_referencing_component"),
+			attribute.String("db.sql.table", "content_entities"),
+		),
+	)
+	defer span.End()
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	rows, err := cr.db.QueryContext(ctx, `
+		SELECT entity_id, repo_id, relative_path, entity_type, entity_name,
+		       start_line, end_line, coalesce(language, ''), coalesce(source_cache, ''),
+		       metadata
+		FROM content_entities
+		WHERE repo_id = $1
+		  AND coalesce(metadata -> 'jsx_component_usage', '[]'::jsonb) ? $2
+		ORDER BY relative_path, start_line, entity_name
+		LIMIT $3
+	`, repoID, componentName, limit)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("search entities referencing component: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []EntityContent
+	for rows.Next() {
+		var entity EntityContent
+		var rawMetadata []byte
+		if err := rows.Scan(
+			&entity.EntityID,
+			&entity.RepoID,
+			&entity.RelativePath,
+			&entity.EntityType,
+			&entity.EntityName,
+			&entity.StartLine,
+			&entity.EndLine,
+			&entity.Language,
+			&entity.SourceCache,
+			&rawMetadata,
+		); err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("scan referencing component result: %w", err)
+		}
+		entity.Metadata, err = decodeEntityMetadata(rawMetadata)
+		if err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("scan referencing component result: %w", err)
+		}
+		results = append(results, entity)
+	}
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		return results, err
+	}
+	return results, nil
+}
+
 // ListRepoFiles returns all indexed files for one repository.
 func (cr *ContentReader) ListRepoFiles(ctx context.Context, repoID string, limit int) ([]FileContent, error) {
 	ctx, span := cr.tracer.Start(ctx, "postgres.query",

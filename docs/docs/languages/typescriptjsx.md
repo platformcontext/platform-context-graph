@@ -22,7 +22,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTSXJSXComponentUsageParity` | Compose-backed fixture verification | - |
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTSXSemanticsAndComponents` | Compose-backed fixture verification | - |
 | Type aliases | `type-aliases` | partial | `type_aliases` | `name, line_number` | `content:TypeAlias entity` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes`, `go/internal/query/entity_content_fallback_test.go::TestResolveEntityFallsBackToContentEntities` | Compose-backed fixture verification | TSX files inherit TypeScript type-alias extraction, and those aliases are queryable through the Go content-backed language-query and content APIs. The normal entity resolve/context surfaces now also fall back to content-backed entities. The remaining gap is dedicated graph/story surfacing. |
-| JSX component usage | `jsx-component-usage` | partial | `function_calls` | `name, line_number` | `content:Entity.metadata + component entities` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes`, `go/internal/query/entity_content_fallback_test.go::TestGetEntityContextFallsBackToContentEntities` | Compose-backed fixture verification | PascalCase JSX tag usage is queryable through the Go content-backed `component` contract, and content-backed component entities now participate in the normal entity context surface. Graph/reference-edge modeling and higher-level story surfacing remain partial. |
+| JSX component usage | `jsx-component-usage` | partial | `function_calls` | `name, line_number` | `content:Entity.metadata + component entities + synthesized REFERENCES edges` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes`, `go/internal/query/entity_content_fallback_test.go::TestGetEntityContextFallsBackToContentEntities`, `go/internal/query/code_relationships_content_fallback_test.go::TestHandleRelationshipsFallsBackToContentEntityReferences` | Compose-backed fixture verification | PascalCase JSX tag usage is queryable through the Go content-backed `component` contract, content-backed component entities now participate in the normal entity context surface, and the normal `code/relationships` surface now synthesizes `REFERENCES` edges from `jsx_component_usage` metadata. Full graph-first component/reference modeling and higher-level story surfacing remain partial. |
 
 ## Support Maturity
 - Grammar routing: `supported`
@@ -36,12 +36,13 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   - Real-repo validation covers React and Next.js evidence through the
     Go-owned parser and indexing path.
   - TSX type aliases and JSX evidence are queryable through the Go
-    content-backed APIs, and normal entity resolve/context can now surface
-    content-backed entities. Dedicated graph/reference-edge surfacing remains
-    partial.
+    content-backed APIs, normal entity resolve/context can surface
+    content-backed entities, and normal `code/relationships` can now
+    synthesize JSX component-reference edges for content-backed entities.
+    Full graph-first component/reference surfacing remains partial.
 
 
 ## Known Limitations
-- JSX element tag names are not fully modeled as distinct component reference nodes
+- JSX element tag names are not yet persisted as first-class graph nodes
 - Fragment shorthand (`<>...</>`) is not separately tracked
 - TSX-specific type narrowing patterns (e.g., `as ComponentType`) are not captured

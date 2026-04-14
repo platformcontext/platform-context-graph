@@ -195,13 +195,28 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 		       collect(DISTINCT {direction: 'incoming', type: type(r2), source_name: source.name, source_id: source.id}) as incoming
 	`
 
-	row, err := h.Neo4j.RunSingle(ctx, cypher, map[string]any{"entity_id": req.EntityID})
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, err.Error())
-		return
+	var (
+		row map[string]any
+		err error
+	)
+	if h.Neo4j != nil {
+		row, err = h.Neo4j.RunSingle(ctx, cypher, map[string]any{"entity_id": req.EntityID})
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 	if row == nil {
-		WriteError(w, http.StatusNotFound, "entity not found")
+		response, fallbackErr := h.relationshipsFromContent(ctx, req.EntityID)
+		if fallbackErr != nil {
+			WriteError(w, http.StatusInternalServerError, fallbackErr.Error())
+			return
+		}
+		if response == nil {
+			WriteError(w, http.StatusNotFound, "entity not found")
+			return
+		}
+		WriteJSON(w, http.StatusOK, response)
 		return
 	}
 
@@ -235,6 +250,36 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 	}
 
 	WriteJSON(w, http.StatusOK, enriched[0])
+}
+
+func (h *CodeHandler) relationshipsFromContent(ctx context.Context, entityID string) (map[string]any, error) {
+	if h == nil || h.Content == nil || entityID == "" {
+		return nil, nil
+	}
+
+	entity, err := h.Content.GetEntityContent(ctx, entityID)
+	if err != nil || entity == nil {
+		return nil, err
+	}
+
+	relationshipSet, err := buildContentRelationshipSet(ctx, h.Content, *entity)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"entity_id":  entity.EntityID,
+		"name":       entity.EntityName,
+		"labels":     []string{entity.EntityType},
+		"file_path":  entity.RelativePath,
+		"repo_id":    entity.RepoID,
+		"language":   entity.Language,
+		"start_line": entity.StartLine,
+		"end_line":   entity.EndLine,
+		"metadata":   entity.Metadata,
+		"outgoing":   relationshipSet.outgoing,
+		"incoming":   relationshipSet.incoming,
+	}, nil
 }
 
 // handleDeadCode finds entities with no incoming references.

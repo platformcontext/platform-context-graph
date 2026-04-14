@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestResolveEntityFallsBackToContentEntities(t *testing.T) {
+func TestHandleRelationshipsFallsBackToContentEntityReferences(t *testing.T) {
 	t.Parallel()
 
 	db := openContentReaderTestDB(t, []contentReaderQueryResult{
@@ -20,21 +20,33 @@ func TestResolveEntityFallsBackToContentEntities(t *testing.T) {
 			},
 			rows: [][]driver.Value{
 				{
-					"alias-1", "repo-1", "src/types.ts", "TypeAlias", "UserID",
-					int64(3), int64(3), "typescript", "type UserID = string", []byte(`{"type":"string"}`),
+					"function-1", "repo-1", "src/App.tsx", "Function", "renderApp",
+					int64(5), int64(20), "tsx", "return <Button />", []byte(`{"jsx_component_usage":["Button"]}`),
+				},
+			},
+		},
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"component-1", "repo-1", "src/Button.tsx", "Component", "Button",
+					int64(1), int64(12), "tsx", "export function Button() {}", []byte(`{"framework":"react"}`),
 				},
 			},
 		},
 	})
 
-	handler := &EntityHandler{Content: NewContentReader(db)}
+	handler := &CodeHandler{Content: NewContentReader(db)}
 	mux := http.NewServeMux()
 	handler.Mount(mux)
 
 	req := httptest.NewRequest(
 		http.MethodPost,
-		"/api/v0/entities/resolve",
-		bytes.NewBufferString(`{"name":"UserID","type":"type_alias","repo_id":"repo-1"}`),
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"entity_id":"function-1"}`),
 	)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
@@ -47,30 +59,29 @@ func TestResolveEntityFallsBackToContentEntities(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
 	}
-	entities, ok := resp["entities"].([]any)
-	if !ok || len(entities) != 1 {
-		t.Fatalf("entities = %#v, want one content-backed entity", resp["entities"])
-	}
-	entity, ok := entities[0].(map[string]any)
+	outgoing, ok := resp["outgoing"].([]any)
 	if !ok {
-		t.Fatalf("entity type = %T, want map[string]any", entities[0])
+		t.Fatalf("resp[outgoing] type = %T, want []any", resp["outgoing"])
 	}
-	if got, want := entity["name"], "UserID"; got != want {
-		t.Fatalf("entity[name] = %#v, want %#v", got, want)
+	if len(outgoing) != 1 {
+		t.Fatalf("len(resp[outgoing]) = %d, want 1", len(outgoing))
 	}
-	if got, want := entity["language"], "typescript"; got != want {
-		t.Fatalf("entity[language] = %#v, want %#v", got, want)
-	}
-	metadata, ok := entity["metadata"].(map[string]any)
+	relationship, ok := outgoing[0].(map[string]any)
 	if !ok {
-		t.Fatalf("entity[metadata] type = %T, want map[string]any", entity["metadata"])
+		t.Fatalf("resp[outgoing][0] type = %T, want map[string]any", outgoing[0])
 	}
-	if got, want := metadata["type"], "string"; got != want {
-		t.Fatalf("entity[metadata][type] = %#v, want %#v", got, want)
+	if got, want := relationship["type"], "REFERENCES"; got != want {
+		t.Fatalf("relationship[type] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["target_name"], "Button"; got != want {
+		t.Fatalf("relationship[target_name] = %#v, want %#v", got, want)
+	}
+	if got, want := relationship["reason"], "jsx_component_usage"; got != want {
+		t.Fatalf("relationship[reason] = %#v, want %#v", got, want)
 	}
 }
 
-func TestGetEntityContextFallsBackToContentEntities(t *testing.T) {
+func TestHandleRelationshipsFallsBackToContentComponentInboundReferences(t *testing.T) {
 	t.Parallel()
 
 	db := openContentReaderTestDB(t, []contentReaderQueryResult{
@@ -100,12 +111,15 @@ func TestGetEntityContextFallsBackToContentEntities(t *testing.T) {
 		},
 	})
 
-	handler := &EntityHandler{Content: NewContentReader(db)}
+	handler := &CodeHandler{Content: NewContentReader(db)}
 	mux := http.NewServeMux()
 	handler.Mount(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v0/entities/component-1/context", nil)
-	req.SetPathValue("entity_id", "component-1")
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/relationships",
+		bytes.NewBufferString(`{"entity_id":"component-1"}`),
+	)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -117,29 +131,16 @@ func TestGetEntityContextFallsBackToContentEntities(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
 	}
-	if got, want := resp["name"], "Button"; got != want {
-		t.Fatalf("resp[name] = %#v, want %#v", got, want)
-	}
-	if got, want := resp["language"], "tsx"; got != want {
-		t.Fatalf("resp[language] = %#v, want %#v", got, want)
-	}
-	metadata, ok := resp["metadata"].(map[string]any)
+	incoming, ok := resp["incoming"].([]any)
 	if !ok {
-		t.Fatalf("resp[metadata] type = %T, want map[string]any", resp["metadata"])
+		t.Fatalf("resp[incoming] type = %T, want []any", resp["incoming"])
 	}
-	if got, want := metadata["framework"], "react"; got != want {
-		t.Fatalf("resp[metadata][framework] = %#v, want %#v", got, want)
+	if len(incoming) != 1 {
+		t.Fatalf("len(resp[incoming]) = %d, want 1", len(incoming))
 	}
-	relationships, ok := resp["relationships"].([]any)
+	relationship, ok := incoming[0].(map[string]any)
 	if !ok {
-		t.Fatalf("resp[relationships] type = %T, want []any", resp["relationships"])
-	}
-	if len(relationships) != 1 {
-		t.Fatalf("len(resp[relationships]) = %d, want 1", len(relationships))
-	}
-	relationship, ok := relationships[0].(map[string]any)
-	if !ok {
-		t.Fatalf("resp[relationships][0] type = %T, want map[string]any", relationships[0])
+		t.Fatalf("resp[incoming][0] type = %T, want map[string]any", incoming[0])
 	}
 	if got, want := relationship["type"], "REFERENCES"; got != want {
 		t.Fatalf("relationship[type] = %#v, want %#v", got, want)

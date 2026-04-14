@@ -218,7 +218,13 @@ func (h *EntityHandler) getEntityContextFromContent(ctx context.Context, entityI
 	}
 
 	response := contentEntityToMap(*entity)
-	response["relationships"] = []map[string]any{}
+	relationshipSet, err := buildContentRelationshipSet(ctx, h.Content, *entity)
+	if err != nil {
+		return nil, err
+	}
+	relationships := append([]map[string]any{}, relationshipSet.incoming...)
+	relationships = append(relationships, relationshipSet.outgoing...)
+	response["relationships"] = relationships
 	return response, nil
 }
 

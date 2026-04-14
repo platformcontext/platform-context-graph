@@ -227,6 +227,44 @@ func TestContentReaderSearchEntitiesByLanguageAndTypeIncludesLanguageVariants(t 
 	}
 }
 
+func TestContentReaderSearchEntitiesReferencingComponent(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"function-1", "repo-1", "src/App.tsx", "Function", "renderApp",
+					int64(5), int64(20), "tsx", "return <Button />", []byte(`{"jsx_component_usage":["Button","Panel"]}`),
+				},
+			},
+		},
+	})
+
+	reader := NewContentReader(db)
+	results, err := reader.SearchEntitiesReferencingComponent(context.Background(), "repo-1", "Button", 10)
+	if err != nil {
+		t.Fatalf("SearchEntitiesReferencingComponent() error = %v, want nil", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(results))
+	}
+	if got, want := results[0].EntityName, "renderApp"; got != want {
+		t.Fatalf("results[0].EntityName = %#v, want %#v", got, want)
+	}
+	usage, ok := results[0].Metadata["jsx_component_usage"].([]any)
+	if !ok {
+		t.Fatalf("Metadata[jsx_component_usage] type = %T, want []any", results[0].Metadata["jsx_component_usage"])
+	}
+	if len(usage) != 2 || usage[0] != "Button" || usage[1] != "Panel" {
+		t.Fatalf("Metadata[jsx_component_usage] = %#v, want [Button Panel]", usage)
+	}
+}
+
 type contentReaderQueryResult struct {
 	columns []string
 	rows    [][]driver.Value
