@@ -26,6 +26,8 @@ Read these documents in order before implementation work begins:
 14. [Relationship Mapping Observability And Examples](../../docs/reference/relationship-mapping-observability.md)
 15. [Go Write-Plane Conversion Cutover](2026-04-13-go-write-plane-conversion-cutover.md)
 16. [Go Data Plane Ownership Completion Plan](2026-04-13-go-data-plane-ownership-completion-plan.md)
+17. [Terraform Provider Schema Go-Port Checklist](2026-04-13-terraform-provider-schema-go-port-checklist.md)
+18. [Terraform Provider Schema Go-Port Implementation Plan](2026-04-13-terraform-provider-schema-go-port-implementation.md)
 
 ## Canonical Roles
 
@@ -46,6 +48,8 @@ Read these documents in order before implementation work begins:
 | Relationship-mapping observability appendix | The traversal appendix and observability examples for the relationship map |
 | Write-plane conversion cutover | Chunk-by-chunk Python-to-Go deployment surface cutover |
 | Ownership completion plan | Resolution domain, operational surface, and recovery endpoint migration to Go |
+| Terraform provider schema checklist | Runtime parity checklist for the schema-driven Terraform evidence seam |
+| Terraform provider schema implementation plan | Chunked execution plan for moving provider-schema runtime ownership to Go |
 
 ## Documentation Rules
 

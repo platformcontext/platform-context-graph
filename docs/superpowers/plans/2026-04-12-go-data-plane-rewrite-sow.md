@@ -25,6 +25,18 @@ The rewrite proof and documentation package is complete on this branch, but
 the full Python-to-Go platform conversion is not complete yet. Future work
 must finish the conversion before any new ingestor work starts.
 
+Current remaining ownership seams are narrower than the early milestone labels
+imply:
+
+- the parser-family runtime cutover itself is now Go-owned on the normal Git
+  path
+- the remaining parser-related work is parity hardening plus downstream
+  materialization of Go-emitted buckets and metadata
+- Terraform provider-schema relationship extraction is still Python-owned on
+  the normal runtime path and must move to Go or be deleted and replaced
+- `content/ingest.py` and the remaining API/MCP/CLI orchestration helpers are
+  still active Python-owned seams
+
 Hard merge bar for the branch:
 
 - no deployed runtime or write service starts from Python runtime entrypoints

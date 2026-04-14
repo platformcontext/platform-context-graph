@@ -21,7 +21,7 @@ live in the repository today.
 | `graph/` | canonical graph schema and persistence helpers |
 | `mcp/` | MCP server, transport, tool registry, and handler wiring |
 | `observability/` | OTEL bootstrap, runtime state, metrics, and instrumentation helpers |
-| `parsers/` | parser registry, raw-text parsing, parser capabilities, language parsers, and SCIP |
+| `parsers/` | parser capability metadata, validation, framework-pack specs, and rewrite-era parser support artifacts |
 | `platform/` | Shared platform/runtime primitives such as dependency rules, package resolution, and runtime-family inference |
 | `relationships/` | evidence-backed repo relationship discovery, resolution, persistence, and projection |
 | `runtime/` | repo sync, bootstrap indexing, resolution-engine runtime loops, and long-running runtime helpers |
@@ -103,17 +103,18 @@ and post-index materialization into clearer boundaries:
 - `collectors/git/`: repository discovery, `.gitignore`, path indexing handoff,
   parse snapshot models, and facts-first Git collection support
 - the legacy Python parse/coordinator stack under `collectors/git/` has been
-  deleted from the branch; the remaining parser-platform migration work is now
-  concentrated in `parsers/**`, `content/ingest.py`, and a smaller set of
-  cutover helpers outside the normal collector hot path
+  deleted from the branch; the remaining parser-platform migration work is no
+  longer the parser-family runtime itself and is now concentrated in downstream
+  materialization plus Python-owned evidence seams such as Terraform provider
+  schemas
 - future `collectors/<source>/` families: source-specific adapters for AWS,
   Kubernetes, ETL, and other product domains, but only after the Git cutover
   and parser-platform cutovers finish
 - `parsers/`: parser capability catalog, models, validation, packaged specs,
-  and the remaining Python language adapters still being retired language by
-  language
-- parser registry and raw-text helper modules that used to live here are gone
-  from this branch
+  and non-runtime parser-support artifacts that still document or validate the
+  Go-owned parser contract
+- parser registry, raw-text helpers, and the legacy Python language-adapter
+  runtime modules that used to live here are gone from this branch
 - `indexing/coordinator_facts.py` and `indexing/coordinator_facts_support.py`:
   remaining Git cutover helpers for fact emission, recovery support, and
   facts-first finalization while the last Python runtime ownership is being
@@ -133,12 +134,15 @@ post-commit finalization bridge has been deleted from the branch; Python
 indexing now requires the remaining cutover helpers rather than ad hoc finalize
 helpers.
 
-The remaining transition risk is now concentrated in the Python parser matrix,
-`content/ingest.py`, and a smaller set of CLI/API support modules, not in the
-deleted post-commit bridge, the deleted ingester bridge modules, or the deleted
-legacy snapshot/coordinator stack. Non-dependency directory indexing now
-delegates from `GraphBuilder` to the Go `bootstrap-index` runtime, and direct
-single-file indexing now uses the same Go-owned runtime contract.
+The remaining transition risk is now concentrated in Python-owned façade,
+evidence, and materialization seams such as `tools/graph_builder.py`,
+`collectors/git/discovery.py`, `collectors/git/parser_support.py`,
+Terraform provider-schema extraction, `content/ingest.py`, and a smaller set
+of CLI/API support modules, not in the deleted post-commit bridge, the deleted
+ingester bridge modules, or the deleted legacy snapshot/coordinator stack.
+Non-dependency directory indexing now delegates from `GraphBuilder` to the Go
+`bootstrap-index` runtime, and direct single-file indexing now uses the same
+Go-owned runtime contract.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.
@@ -179,8 +183,8 @@ services rather than `tools/`:
 The in-progress Go rewrite keeps the same ownership boundaries under `go/` so
 the cutover can remove Python runtime ownership instead of recreating it:
 
-- `go/internal/parser/`: parser registry metadata and future native parse
-  execution ownership
+- `go/internal/parser/`: parser registry metadata and native parse execution
+  ownership
 - `go/internal/collector/discovery/`: parser-aware file discovery, nested repo
   grouping, and repo-local `.gitignore` handling
 - `go/internal/content/shape/`: translation from normalized parser payloads
@@ -211,13 +215,16 @@ Current native parser-runtime slice:
   template and config artifacts
 
 These Go packages are the target normal-path runtime ownership. The remaining
-Python ownership debt is the local parser/indexing path under
-`collectors/git/`, `indexing/`, `parsers/`, and `tools/graph_builder.py`, not
-the already-deleted ingester bridge modules.
+Python ownership debt is no longer the deleted parser/coordinator stack. It is
+centered on the GraphBuilder/discovery façade, downstream
+evidence/materialization, and orchestration seams, including Terraform
+provider-schema extraction, `content/ingest.py`, and the remaining CLI/API
+helpers that still touch the normal path.
 
-The parser cutover is still in progress. SCIP parity, specialized
-data-intelligence JSON families, and the remaining long-tail language adapters
-are still active cutover work, not finished debt.
+The parser-family runtime cutover is complete on this branch. The remaining
+parser-related work is parity hardening: SCIP depth, specialized
+data-intelligence JSON families, and end-to-end materialization of newer Go
+parser buckets and metadata.
 
 Do not start new ingestor families until the Git write-plane cutover, parser
 platform cutover, and bridge removal are complete.

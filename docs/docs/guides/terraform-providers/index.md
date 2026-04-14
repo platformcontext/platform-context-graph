@@ -2,13 +2,36 @@
 
 PlatformContextGraph uses a **schema-driven approach** to extract infrastructure relationships from Terraform code. Instead of hand-writing extractors for each resource type, PCG automatically generates extractors from real Terraform provider schemas.
 
+## Migration Status
+
+This subsystem is still **Python-owned on the normal runtime path** on the
+current rewrite branch.
+
+The live path today is:
+
+- `relationships/execution.py`
+- `relationships/file_evidence.py`
+- `relationships/evidence_terraform.py`
+- `relationships/terraform_evidence/__init__.py`
+- `relationships/terraform_evidence/generic.py`
+- `relationships/terraform_evidence/provider_schema.py`
+
+That means Terraform provider schemas are not just an offline packaging detail.
+They currently drive runtime relationship extraction through import-time
+extractor registration, schema loading, identity-key inference, service-
+category classification, and schema-driven generic extractors.
+
+This migration matters because the branch is not honestly mergeable until that
+normal-path runtime ownership moves to Go or is deleted and replaced with an
+equivalent Go-owned flow.
+
 ## How It Works
 
 1. **Provider schemas** are generated from official Terraform provider binaries using `terraform providers schema -json`
 2. **Schemas are compressed** to `.json.gz` format with version tags (e.g., `aws-5.100.0.json.gz`)
-3. **Schemas ship inside the Python package** — no runtime downloads, works in Docker, pip installs, and development
+3. **Schemas ship inside the package** — no runtime downloads, works in Docker, development, and deployed runtimes
 4. **Extractors auto-register** at import time for all resource types with name-like attributes
-5. **Zero manual maintenance** — adding providers or updating versions requires no code changes
+5. **Zero manual maintenance** — adding providers or updating versions requires no code changes in the generic extractor flow
 
 ## Supported Providers
 

@@ -38,6 +38,7 @@ export PYTHONPATH=src
 | Docs, `CLAUDE.md`, `AGENTS.md`, or README files | `uv run --with mkdocs --with mkdocs-material --with pymdown-extensions mkdocs build --strict --clean --config-file docs/mkdocs.yml` |
 | CLI/runtime wiring | `PYTHONPATH=src uv run pytest tests/integration/cli/test_cli_commands.py -q` |
 | Parser platform or collector snapshot flow | `cd go && go test ./internal/parser -count=1` and `PYTHONPATH=src uv run pytest tests/unit/relationships/test_sql_links.py -q` |
+| Terraform provider-schema evidence or relationship extraction | `PYTHONPATH=src uv run python -m pytest tests/unit/relationships/test_terraform_provider_schema.py tests/unit/relationships/test_terraform_evidence_registry.py tests/unit/relationships/test_terraform_evidence_integration.py -q` |
 | Compose, Helm, or deployable runtime shape | `PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q` and `helm lint deploy/helm/platform-context-graph` |
 | Facts-first indexing, queue, or resolution flow | `PYTHONPATH=src:. uv run pytest tests/integration/indexing/test_git_facts_end_to_end.py tests/integration/indexing/test_git_facts_projection_parity.py -q` |
 | Phase 3 recovery controls | `PYTHONPATH=src:. uv run pytest tests/unit/facts/test_fact_work_queue_recovery.py tests/unit/api/test_admin_facts_recovery_router.py tests/integration/cli/test_remote_cli.py -q` |
@@ -121,8 +122,23 @@ The collector/native-selector cutover now deletes the temporary bridge modules
 instead of proving them in isolation. This ownership gate is now a passing
 regression suite, not an expected-failure milestone. If it fails, the
 remaining debt is no longer the collector bridge path. It is now concentrated
-in the Python API/CLI orchestration layer, `content/ingest.py`, and the 10
-remaining parser capability rows that still point at Python ownership.
+in the Python API/CLI orchestration layer, `content/ingest.py`, the Terraform
+provider-schema evidence subsystem, and downstream parity hardening for Go-
+emitted parser buckets.
+
+## Terraform Provider-Schema Parity Gate
+
+Use this gate when touching the Terraform provider-schema runtime path or the
+schema-driven relationship extractors. This subsystem is still Python-owned on
+the normal runtime path today, so it needs its own explicit parity suite until
+the Go replacement lands.
+
+```bash
+PYTHONPATH=src uv run python -m pytest \
+  tests/unit/relationships/test_terraform_provider_schema.py \
+  tests/unit/relationships/test_terraform_evidence_registry.py \
+  tests/unit/relationships/test_terraform_evidence_integration.py -q
+```
 
 ## Go Data Plane Proof Domain Gate
 

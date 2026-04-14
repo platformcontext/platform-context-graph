@@ -208,9 +208,12 @@ flowchart LR
 8. Query surfaces continue reading the canonical graph and content store.
 
 The legacy Python snapshot/coordinator runtime stack has now been deleted from
-the branch. The remaining conversion work is centered on parser-matrix
-completion plus the last residual Python helper modules that still need Go or
-deletion treatment outside the normal runtime hot path.
+the branch. The remaining conversion work is no longer the parser-family
+runtime itself. It is centered on downstream materialization parity plus the
+last active Python-owned evidence and helper seams that still sit on the normal
+runtime path, especially Terraform provider-schema relationship extraction and
+the remaining content/API orchestration surfaces that still need Go or deletion
+treatment.
 
 That is the current operating baseline. In the target
 architecture:

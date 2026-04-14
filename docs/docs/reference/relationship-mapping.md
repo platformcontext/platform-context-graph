@@ -216,6 +216,19 @@ The current mapping and enrichment flow understands these families:
 
 The important constraint is not the tool name itself. The important constraint is whether the tool gives you a truthful, explainable source of repository or platform meaning.
 
+Terraform has one migration-specific caveat on the current rewrite branch:
+
+- the provider-schema-driven Terraform evidence subsystem is still Python-owned
+  on the normal runtime path
+- the live path runs through `relationships/file_evidence.py`,
+  `relationships/evidence_terraform.py`, and
+  `relationships/terraform_evidence/**`
+- that code is not just an offline schema packager; it still performs runtime
+  schema loading, identity-key inference, service-category classification, and
+  generic extractor registration for Terraform relationship evidence
+
+Treat that subsystem as active migration scope, not as a retired helper.
+
 ## Terraform-Managed Runtime Variants
 
 Terraform-managed runtime summaries need to stay broader than ECS, even when ECS is the first concrete example in our corpus. The parser and summary layers should capture generic deployment-oriented module attributes first, then let the mapping and answer-shaping layers decide whether those attributes describe ECS, Fargate, Elastic Beanstalk, Kubernetes, or another provider/runtime combination.

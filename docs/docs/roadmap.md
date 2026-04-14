@@ -88,6 +88,18 @@ Python-to-Go conversion:
 - Docker Compose and Helm run the Go-owned platform
 - local and cloud validation prove parity for the Git parser and write path
 
+Current remaining runtime ownership seams are narrower than the earlier parser
+cutover language implied:
+
+- the parser-family runtime itself is now Go-owned on the normal Git path
+- the remaining parser-related work is parity hardening and downstream
+  materialization for Go-emitted buckets and metadata
+- Terraform provider-schema relationship extraction is still Python-owned on
+  the normal runtime path and remains a required migration surface before this
+  branch is honestly mergeable
+- `content/ingest.py` and the remaining API/MCP/CLI orchestration helpers are
+  still active Python-owned seams that need Go replacement or deletion
+
 No new ingestors before full conversion completes.
 
 ## After That
