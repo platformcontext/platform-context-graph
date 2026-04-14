@@ -18,7 +18,7 @@ This file is auto-generated. Do not edit manually.
 | JavaScript | `JavascriptTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/javascript_comprehensive/` |
 | JSON Config | `JSONConfigTreeSitterParser` | Y | - | - | - | - | - | Y | - | - | - | 5/5 | 5/5 | `tests/fixtures/ecosystems/json_comprehensive/` |
 | Kotlin | `KotlinTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/kotlin_comprehensive/` |
-| Perl | `PerlTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/perl_comprehensive/` |
+| Perl | `DefaultEngine (perl)` | Y | Y | - | - | Y | Y | Y | - | - | - | 9/9 | 9/9 | `tests/fixtures/ecosystems/perl_comprehensive/` |
 | PHP | `PhpTreeSitterParser` | Y | Y | Y | Y | Y | Y | Y | - | - | - | 10/10 | 10/10 | `tests/fixtures/ecosystems/php_comprehensive/` |
 | Python | `PythonTreeSitterParser` | Y | Y | - | - | Y | Y | Y | - | - | - | 6/6 | 6/6 | `tests/fixtures/ecosystems/python_comprehensive/` |
 | Ruby | `RubyTreeSitterParser` | Y | Y | - | - | P | Y | Y | - | - | - | 8/8 | 8/8 | `tests/fixtures/ecosystems/ruby_comprehensive/` |

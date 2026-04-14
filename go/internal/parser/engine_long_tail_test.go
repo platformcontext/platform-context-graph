@@ -208,6 +208,33 @@ func TestDefaultEngineParsePathPerlFixtures(t *testing.T) {
 	assertBucketContainsFieldValue(t, payload, "imports", "name", "File::Basename")
 }
 
+func TestDefaultEngineParsePathPerlCallsAndVariables(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := repoFixturePath("ecosystems", "perl_comprehensive")
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	modulesPath := filepath.Join(repoRoot, "modules.pl")
+	modulesPayload, err := engine.ParsePath(repoRoot, modulesPath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", modulesPath, err)
+	}
+	assertBucketContainsFieldValue(t, modulesPayload, "function_calls", "name", "File::Basename::basename")
+	assertBucketContainsFieldValue(t, modulesPayload, "function_calls", "name", "List::Util::sum")
+	assertBucketContainsFieldValue(t, modulesPayload, "function_calls", "name", "Carp::croak")
+
+	callbacksPath := filepath.Join(repoRoot, "callbacks.pl")
+	callbacksPayload, err := engine.ParsePath(repoRoot, callbacksPath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath(%q) error = %v, want nil", callbacksPath, err)
+	}
+	assertNamedBucketContains(t, callbacksPayload, "classes", "EventSystem")
+	assertNamedBucketContains(t, callbacksPayload, "variables", "handlers")
+}
+
 func TestDefaultEngineParsePathHaskellFixtures(t *testing.T) {
 	t.Parallel()
 

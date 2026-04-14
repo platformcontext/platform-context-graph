@@ -26,7 +26,7 @@ yet been explicitly assessed in the parser maturity program.
 | Kotlin | `KotlinTreeSitterParser` | - | - | - | - | - | - | - |
 | Kubernetes | `InfraYAMLParser` | - | - | - | - | - | - | - |
 | Kustomize | `InfraYAMLParser` | - | - | - | - | - | - | - |
-| Perl | `PerlTreeSitterParser` | - | - | - | - | - | - | - |
+| Perl | `DefaultEngine (perl)` | - | - | - | - | - | - | - |
 | PHP | `PhpTreeSitterParser` | - | - | - | - | - | - | - |
 | Python | `PythonTreeSitterParser` | supported | supported | supported | `fastapi-base`, `flask-base` | supported | supported | supported |
 | Ruby | `RubyTreeSitterParser` | - | - | - | - | - | - | - |

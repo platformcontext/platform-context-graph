@@ -1,11 +1,11 @@
 language: perl
 title: Perl Parser
 family: language
-parser: PerlTreeSitterParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/perl.py
+parser: DefaultEngine (perl)
+parser_entrypoint: go/internal/parser/perl_haskell_language.go
 doc_path: docs/docs/languages/perl.md
 fixture_repo: tests/fixtures/ecosystems/perl_comprehensive/
-unit_test_file: tests/unit/parsers/test_perl_parser.py
+unit_test_file: go/internal/parser/engine_long_tail_test.go
 integration_test_suite: tests/integration/test_language_graph.py::TestPerlGraph
 capabilities:
 - id: subroutines
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_subroutines
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathPerlFixtures
   integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
 - id: packages
   name: Packages
@@ -30,7 +30,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_packages
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathPerlCallsAndVariables
   integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
 - id: use-statements
   name: Use statements
@@ -42,7 +42,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: IMPORTS
-  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_imports
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathPerlFixtures
   integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
 - id: method-calls
   name: Method calls
@@ -54,7 +54,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_function_calls
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathPerlCallsAndVariables
   integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
 - id: ambiguous-function-calls
   name: Ambiguous function calls
@@ -66,7 +66,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_function_calls
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathPerlCallsAndVariables
   integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
 - id: plain-function-calls
   name: Plain function calls
@@ -78,7 +78,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_function_calls
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathPerlCallsAndVariables
   integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
 - id: scalar-variables-my-x
   name: Scalar variables (`my $x`)
@@ -90,7 +90,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_variables
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathPerlCallsAndVariables
   integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
 - id: array-variables-my-x
   name: Array variables (`my @x`)
@@ -102,7 +102,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_variables
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathPerlCallsAndVariables
   integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
 - id: hash-variables-my-x
   name: Hash variables (`my %x`)
@@ -114,7 +114,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_perl_parser.py::test_parse_variables
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathPerlCallsAndVariables
   integration_test: tests/integration/test_language_graph.py::TestPerlGraph::test_runtime_surface
 known_limitations:
 - Anonymous subroutines assigned to variables are not captured as named functions

@@ -167,6 +167,12 @@ and the C# capability metadata now points at
 parser unit suite. The Go C# parser now also emits base-list metadata in
 `bases` so inheritance edges no longer depend on the deleted Python parser.
 
+The next parser-family deletion slice removes the Python Perl facade
+(`parsers/languages/perl.py`). Its runtime behavior is already owned by
+`go/internal/parser/perl_haskell_language.go`, and the Perl capability
+metadata now points at `go/internal/parser/engine_long_tail_test.go` instead of
+the deleted Python parser unit suite.
+
 Parser extraction ownership already moved further than the generated capability
 matrix currently shows:
 
