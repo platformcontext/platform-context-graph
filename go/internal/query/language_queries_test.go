@@ -35,13 +35,13 @@ func TestSupportedLanguages(t *testing.T) {
 
 func TestSupportedEntityTypes(t *testing.T) {
 	types := SupportedEntityTypes()
-	if len(types) != 17 {
-		t.Errorf("expected 17 supported entity types, got %d: %v", len(types), types)
+	if len(types) != 18 {
+		t.Errorf("expected 18 supported entity types, got %d: %v", len(types), types)
 	}
 	expected := map[string]bool{
 		"repository": true, "directory": true, "file": true,
 		"function": true, "class": true, "struct": true,
-		"type_alias": true, "type_annotation": true, "component": true,
+		"type_alias": true, "type_annotation": true, "typedef": true, "component": true,
 		"terragrunt_dependency": true, "terragrunt_local": true, "terragrunt_input": true,
 	}
 	typeSet := make(map[string]bool, len(types))
@@ -330,6 +330,19 @@ func TestHandleLanguageQuery_ContentBackedEntityTypes(t *testing.T) {
 			wantName:  "user_id",
 			wantKey:   "type",
 			wantValue: "str",
+		},
+		{
+			name:       "typedef from c content store",
+			language:   "c",
+			entityType: "typedef",
+			query:      "my_int",
+			row: []driver.Value{
+				"typedef-1", "repo-1", "src/types.c", "Typedef", "my_int",
+				int64(3), int64(3), "c", "typedef int my_int;", []byte(`{"type":"int"}`),
+			},
+			wantName:  "my_int",
+			wantKey:   "type",
+			wantValue: "int",
 		},
 		{
 			name:       "component from tsx content store",

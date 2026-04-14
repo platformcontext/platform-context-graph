@@ -189,6 +189,7 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	}
 	if !containsValue(enumValues, "type_alias") ||
 		!containsValue(enumValues, "type_annotation") ||
+		!containsValue(enumValues, "typedef") ||
 		!containsValue(enumValues, "component") ||
 		!containsValue(enumValues, "terragrunt_dependency") ||
 		!containsValue(enumValues, "terragrunt_local") ||

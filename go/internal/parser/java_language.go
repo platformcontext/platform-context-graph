@@ -2,14 +2,11 @@ package parser
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
-
-var javaAppliedAnnotationPattern = regexp.MustCompile(`@([A-Za-z_]\w*)`)
 
 func (e *Engine) parseJava(
 	path string,
@@ -46,7 +43,18 @@ func (e *Engine) parseJava(
 		case "interface_declaration":
 			appendNamedType(payload, "interfaces", node, source, "java")
 		case "annotation_type_declaration":
-			appendNamedType(payload, "annotations", node, source, "java")
+			nameNode := node.ChildByFieldName("name")
+			name := nodeText(nameNode, source)
+			if strings.TrimSpace(name) == "" {
+				return
+			}
+			appendBucket(payload, "annotations", map[string]any{
+				"name":        name,
+				"line_number": nodeLine(nameNode),
+				"end_line":    nodeEndLine(node),
+				"kind":        "declaration",
+				"lang":        "java",
+			})
 		case "annotation", "marker_annotation":
 			appendJavaAnnotation(payload, node, source)
 		case "enum_declaration":
@@ -85,24 +93,6 @@ func (e *Engine) parseJava(
 			appendCall(payload, nameNode, source, "java")
 		}
 	})
-
-	for lineNumber, rawLine := range strings.Split(string(source), "\n") {
-		trimmed := strings.TrimSpace(rawLine)
-		if !strings.HasPrefix(trimmed, "@") {
-			continue
-		}
-		for _, match := range javaAppliedAnnotationPattern.FindAllStringSubmatch(trimmed, -1) {
-			if len(match) != 2 {
-				continue
-			}
-			appendBucket(payload, "annotations", map[string]any{
-				"name":        strings.TrimSpace(match[1]),
-				"line_number": lineNumber + 1,
-				"end_line":    lineNumber + 1,
-				"lang":        "java",
-			})
-		}
-	}
 
 	sortNamedBucket(payload, "functions")
 	sortNamedBucket(payload, "classes")
@@ -186,6 +176,18 @@ func appendJavaAnnotation(payload map[string]any, node *tree_sitter.Node, source
 	appendBucket(payload, "annotations", map[string]any{
 		"name":        name,
 		"line_number": nodeLine(nameNode),
+		"kind":        "applied",
+		"target_kind": javaAnnotationTargetKind(node),
 		"lang":        "java",
 	})
+}
+
+func javaAnnotationTargetKind(node *tree_sitter.Node) string {
+	for current := node.Parent(); current != nil; current = current.Parent() {
+		switch current.Kind() {
+		case "class_declaration", "interface_declaration", "enum_declaration", "annotation_type_declaration", "method_declaration", "constructor_declaration", "field_declaration":
+			return current.Kind()
+		}
+	}
+	return ""
 }

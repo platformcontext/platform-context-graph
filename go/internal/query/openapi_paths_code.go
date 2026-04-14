@@ -70,6 +70,7 @@ const openAPIPathsCode = `
                       "variable",
                       "type_alias",
                       "type_annotation",
+                      "typedef",
                       "component",
                       "terragrunt_dependency",
                       "terragrunt_local",

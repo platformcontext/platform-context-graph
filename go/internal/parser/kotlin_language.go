@@ -126,11 +126,12 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		}
 		if kotlinConstructorPattern.MatchString(trimmed) {
 			item := map[string]any{
-				"name":        "constructor",
-				"line_number": lineNumber,
-				"end_line":    lineNumber,
-				"lang":        "kotlin",
-				"decorators":  []string{},
+				"name":             "constructor",
+				"line_number":      lineNumber,
+				"end_line":         lineNumber,
+				"constructor_kind": "secondary",
+				"lang":             "kotlin",
+				"decorators":       []string{},
 			}
 			if classContext := currentScopedName(stack, "class"); classContext != "" {
 				item["class_context"] = classContext

@@ -47,7 +47,7 @@ the old Python platform feature for feature for that surface.
 | Java graph parity | `partial` | applied annotation usage is not fully first-class | annotations persist and query correctly | parser tests plus query proof | long-tail wave |
 | Kotlin graph parity | `partial` | secondary constructor semantics are incomplete | constructors persist as first-class semantics | parser tests plus query proof | long-tail wave |
 | PHP graph parity | `partial` | static method call parity is not proven end to end | static call edges are persisted and queryable with proof | parser tests plus end-to-end proof | long-tail wave |
-| C graph parity | `partial` | typedefs are not first-class graph entities | typedef semantics persist and query correctly | parser tests plus query proof | long-tail wave |
+| C graph parity | `partial` | typedefs are queryable through the Go content-backed language-query surface, but they are not first-class graph entities yet | typedef semantics persist, query correctly, and become graph-first where parity requires it | parser tests plus query proof | long-tail wave |
 | Rust graph parity | `partial` | impl-block semantics are not first-class | impl ownership and relationships persist and query correctly | parser tests plus query proof | long-tail wave |
 | Elixir graph parity | `partial` | guards, protocols, implementations, and module attributes are flattened or dropped | those semantics persist and query correctly | parser tests plus query proof | long-tail wave |
 

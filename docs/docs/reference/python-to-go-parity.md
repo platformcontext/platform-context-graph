@@ -81,7 +81,7 @@ parity from persisted graph and query-surface parity.
 | Java | Go-owned | partial | core Java parsing is complete | persist applied annotation usage |
 | Kotlin | Go-owned | partial | core Kotlin parsing is complete | persist secondary constructor semantics |
 | PHP | Go-owned | partial | core PHP parsing is complete | expand end-to-end proof for static method call graph edges |
-| C | Go-owned | partial | core C parsing is complete | materialize typedefs as graph entities |
+| C | Go-owned | partial | core C parsing is complete; typedefs are now queryable through the Go content-backed `code/language-query` surface | materialize typedefs as full graph entities and relationships end to end |
 | Rust | Go-owned | partial | core Rust parsing is complete | persist explicit impl-block graph semantics |
 | Elixir | Go-owned | partial | core Elixir parsing is complete | persist guards, protocols, protocol implementations, and module attributes |
 | Kubernetes | Go-owned | partial | YAML resource parsing is complete | normalize and persist labels |
@@ -104,7 +104,7 @@ capabilities in the checked-in language pages:
 - Java: applied annotations
 - Kotlin: secondary constructors
 - PHP: static method calls end-to-end proof
-- C: typedefs
+- C: typedef graph-first materialization beyond the now-supported content-backed `code/language-query` surface
 - Rust: impl blocks
 - Elixir: guards, protocols, protocol implementations, module attributes
 - Kubernetes: labels

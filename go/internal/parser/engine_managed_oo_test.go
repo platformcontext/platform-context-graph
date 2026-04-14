@@ -78,6 +78,48 @@ func TestDefaultEngineParsePathJavaAnnotationMetadata(t *testing.T) {
 	assertNamedBucketContains(t, got, "functions", "cleanup")
 }
 
+func TestDefaultEngineParsePathJavaAnnotationUsageKinds(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "AnnotatedService.java")
+	writeTestFile(
+		t,
+		filePath,
+		`package comprehensive;
+
+@interface Logged {
+    String value() default "";
+}
+
+@Logged("service")
+public class AnnotatedService {
+
+    @Logged("process")
+    public String process(String input) {
+        return input.toUpperCase();
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "annotations", "Logged")
+	assertBucketContainsFieldValue(t, got, "annotations", "kind", "declaration")
+	assertBucketContainsFieldValue(t, got, "annotations", "kind", "applied")
+	assertBucketContainsFieldValue(t, got, "annotations", "target_kind", "class_declaration")
+	assertBucketContainsFieldValue(t, got, "annotations", "target_kind", "method_declaration")
+}
+
 func TestDefaultEngineParsePathCSharp(t *testing.T) {
 	t.Parallel()
 
@@ -275,6 +317,7 @@ class Greeter private constructor(private val prefix: String) {
 
 	assertNamedBucketContains(t, got, "functions", "constructor")
 	assertBucketContainsFieldValue(t, got, "functions", "class_context", "Greeter")
+	assertBucketContainsFieldValue(t, got, "functions", "constructor_kind", "secondary")
 }
 
 func TestDefaultEnginePreScanPathsManagedOO(t *testing.T) {

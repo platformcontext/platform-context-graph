@@ -26,7 +26,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Object creation | `object-creation` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava` | Compose-backed fixture verification | - |
 | Local variables | `local-variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava` | Compose-backed fixture verification | - |
 | Field declarations | `field-declarations` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava` | Compose-backed fixture verification | - |
-| Annotations (applied) | `annotations-applied` | partial | `annotations` | `name, line_number` | `none:not_persisted` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJavaAnnotationMetadata` | Compose-backed fixture verification | Annotation declarations are indexed, but annotation usage on classes, methods, and fields is not persisted as a first-class graph surface. |
+| Annotations (applied) | `annotations-applied` | supported | `annotations` | `name, line_number, kind, target_kind` | `payload:annotations[kind=applied,target_kind]` | `go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJavaAnnotationUsageKinds` | Compose-backed fixture verification | Applied annotations are now tagged with their usage kind and nearest declaration target kind in the parser contract. |
 
 ## Known Limitations
 - Generic type bounds and wildcards not captured as structured data

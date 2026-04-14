@@ -45,6 +45,7 @@ var graphBackedEntityTypes = map[string]string{
 var contentBackedEntityTypes = map[string]string{
 	"type_alias":            "TypeAlias",
 	"type_annotation":       "TypeAnnotation",
+	"typedef":               "Typedef",
 	"component":             "Component",
 	"terragrunt_dependency": "TerragruntDependency",
 	"terragrunt_local":      "TerragruntLocal",
