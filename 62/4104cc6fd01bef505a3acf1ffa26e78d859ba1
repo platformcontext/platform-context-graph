@@ -1,0 +1,31 @@
+go/internal/content/shape/materialize_test.go
+  1ca5ee6ce936a402 287-342
+go/internal/collector/git_snapshot_native.go
+  1ca5ee6ce936a402 84
+go/internal/content/shape/materialize.go
+  1ca5ee6ce936a402 110,122,143
+go/internal/collector/git_snapshot_native_test.go
+  1ca5ee6ce936a402 380-422
+docs/docs/languages/rust.md
+  1ca5ee6ce936a402 26,29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "624104cc6fd01bef505a3acf1ffa26e78d859ba1",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 353,
+      "total_deletions": 9,
+      "accepted_lines": 353,
+      "overriden_lines": 0
+    }
+  }
+}
