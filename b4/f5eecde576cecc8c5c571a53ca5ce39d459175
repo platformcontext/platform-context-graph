@@ -1,0 +1,56 @@
+go/internal/terraformschema/schema.go
+  1ca5ee6ce936a402 180-182,190-192
+go/internal/relationships/resolver.go
+  1ca5ee6ce936a402 1-379
+go/internal/relationships/evidence.go
+  1ca5ee6ce936a402 1-158,160-163,168-196,198-216,218-244,246-261,263-283,285-288,293-299,301-391
+go/internal/relationships/evidence_test.go
+  1ca5ee6ce936a402 1-381
+go/internal/terraformschema/identity_test.go
+  1ca5ee6ce936a402 45-55
+go/internal/terraformschema/loader_test.go
+  1ca5ee6ce936a402 4-5,90-184
+go/internal/relationships/terraform_schema_test.go
+  1ca5ee6ce936a402 12
+go/internal/relationships/resolver_test.go
+  1ca5ee6ce936a402 1-314
+go/internal/relationships/models_test.go
+  1ca5ee6ce936a402 1-88
+go/internal/relationships/terraform_schema.go
+  1ca5ee6ce936a402 34-35,201-205
+go/internal/relationships/models.go
+  1ca5ee6ce936a402 1-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "b4f5eecde576cecc8c5c571a53ca5ce39d459175",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 6997,
+      "total_deletions": 8956,
+      "accepted_lines": 5675,
+      "overriden_lines": 6
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}
