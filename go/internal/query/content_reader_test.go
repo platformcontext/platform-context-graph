@@ -166,6 +166,13 @@ func TestCodeHandlerSearchEntityContentIncludesMetadata(t *testing.T) {
 				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
 				"start_line", "end_line", "language", "source_cache", "metadata",
 			},
+			rows: [][]driver.Value{},
+		},
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
 			rows: [][]driver.Value{
 				{
 					"entity-1", "repo-1", "src/app.py", "Function", "handler",
@@ -176,7 +183,7 @@ func TestCodeHandlerSearchEntityContentIncludesMetadata(t *testing.T) {
 	})
 
 	handler := &CodeHandler{Content: NewContentReader(db)}
-	results, err := handler.searchEntityContent(context.Background(), "repo-1", "handler", 10)
+	results, err := handler.searchEntityContent(context.Background(), "repo-1", "handler", "", 10)
 	if err != nil {
 		t.Fatalf("searchEntityContent() error = %v, want nil", err)
 	}
@@ -190,6 +197,47 @@ func TestCodeHandlerSearchEntityContentIncludesMetadata(t *testing.T) {
 	}
 	if got, want := metadata["async"], true; got != want {
 		t.Fatalf("metadata[async] = %#v, want %#v", got, want)
+	}
+}
+
+func TestCodeHandlerSearchEntityContentIncludesEntityNameMatches(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"component-1", "repo-1", "src/Button.tsx", "Component", "Button",
+					int64(1), int64(10), "tsx", "export default memo(() => null)", []byte(`{"framework":"react"}`),
+				},
+			},
+		},
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{},
+		},
+	})
+
+	handler := &CodeHandler{Content: NewContentReader(db)}
+	results, err := handler.searchEntityContent(context.Background(), "repo-1", "Button", "typescript", 10)
+	if err != nil {
+		t.Fatalf("searchEntityContent() error = %v, want nil", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(results))
+	}
+	if got, want := results[0]["entity_name"], "Button"; got != want {
+		t.Fatalf("results[0][entity_name] = %#v, want %#v", got, want)
+	}
+	if got, want := results[0]["language"], "tsx"; got != want {
+		t.Fatalf("results[0][language] = %#v, want %#v", got, want)
 	}
 }
 

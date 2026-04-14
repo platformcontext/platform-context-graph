@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // CodeHandler provides HTTP routes for code-level queries: search, relationships,
@@ -72,7 +73,7 @@ func (h *CodeHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fall back to content-based search if no graph results
-	contentResults, err := h.searchEntityContent(ctx, req.RepoID, req.Query, req.Limit)
+	contentResults, err := h.searchEntityContent(ctx, req.RepoID, req.Query, req.Language, req.Limit)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -138,26 +139,57 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 }
 
 // searchEntityContent searches entity source code in the content store.
-func (h *CodeHandler) searchEntityContent(ctx context.Context, repoID, pattern string, limit int) ([]map[string]any, error) {
-	entities, err := h.Content.SearchEntityContent(ctx, repoID, pattern, limit)
+func (h *CodeHandler) searchEntityContent(ctx context.Context, repoID, pattern, language string, limit int) ([]map[string]any, error) {
+	nameMatches, err := h.Content.SearchEntitiesByName(ctx, repoID, "", pattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	sourceMatches, err := h.Content.SearchEntityContent(ctx, repoID, pattern, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	results := make([]map[string]any, 0, len(entities))
-	for _, e := range entities {
+	allowedLanguages := make(map[string]struct{})
+	if strings.TrimSpace(language) != "" {
+		for _, variant := range normalizedLanguageVariants(language) {
+			allowedLanguages[variant] = struct{}{}
+		}
+	}
+
+	results := make([]map[string]any, 0, len(nameMatches)+len(sourceMatches))
+	seen := make(map[string]struct{}, len(nameMatches)+len(sourceMatches))
+	appendResult := func(entity EntityContent) {
+		if entity.EntityID == "" {
+			return
+		}
+		if len(allowedLanguages) > 0 {
+			if _, ok := allowedLanguages[entity.Language]; !ok {
+				return
+			}
+		}
+		if _, ok := seen[entity.EntityID]; ok {
+			return
+		}
+		seen[entity.EntityID] = struct{}{}
 		results = append(results, map[string]any{
-			"entity_id":    e.EntityID,
-			"entity_name":  e.EntityName,
-			"entity_type":  e.EntityType,
-			"file_path":    e.RelativePath,
-			"start_line":   e.StartLine,
-			"end_line":     e.EndLine,
-			"language":     e.Language,
-			"source_cache": e.SourceCache,
-			"metadata":     e.Metadata,
-			"repo_id":      e.RepoID,
+			"entity_id":    entity.EntityID,
+			"entity_name":  entity.EntityName,
+			"entity_type":  entity.EntityType,
+			"file_path":    entity.RelativePath,
+			"start_line":   entity.StartLine,
+			"end_line":     entity.EndLine,
+			"language":     entity.Language,
+			"source_cache": entity.SourceCache,
+			"metadata":     entity.Metadata,
+			"repo_id":      entity.RepoID,
 		})
+	}
+
+	for _, entity := range nameMatches {
+		appendResult(entity)
+	}
+	for _, entity := range sourceMatches {
+		appendResult(entity)
 	}
 
 	return results, nil
