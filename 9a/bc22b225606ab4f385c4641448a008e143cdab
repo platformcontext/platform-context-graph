@@ -1,0 +1,35 @@
+DEVELOPING.md
+  1ca5ee6ce936a402 9-17,35-46,151-152
+TESTING.md
+  1ca5ee6ce936a402 7-10,84-86
+AGENTS.md
+  1ca5ee6ce936a402 6,39-42
+docs/docs/deployment/docker-compose.md
+  1ca5ee6ce936a402 24-31,131-132,134-135
+docs/docs/reference/local-testing.md
+  1ca5ee6ce936a402 13-22,43-53,120-121
+docs/docs/reference/troubleshooting.md
+  1ca5ee6ce936a402 101-114
+README.md
+  1ca5ee6ce936a402 222-223
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "9abc22b225606ab4f385c4641448a008e143cdab",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 91,
+      "total_deletions": 7,
+      "accepted_lines": 754,
+      "overriden_lines": 0
+    }
+  }
+}
