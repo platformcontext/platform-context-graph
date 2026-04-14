@@ -1,0 +1,95 @@
+docs/superpowers/plans/2026-04-13-terraform-provider-schema-go-port-implementation.md
+  1ca5ee6ce936a402 29,107-108
+scripts/generate_terraform_provider_schema.sh
+  1ca5ee6ce936a402 15-16
+docs/superpowers/plans/2026-04-13-terraform-provider-schema-go-port-checklist.md
+  1ca5ee6ce936a402 24-25
+go/internal/terraformschema/paths_test.go
+  1ca5ee6ce936a402 1-38
+docs/docs/guides/terraform-providers/updating-providers.md
+  1ca5ee6ce936a402 92,117,142,145,204
+go/internal/terraformschema/paths.go
+  1ca5ee6ce936a402 1-22
+docs/docs/reference/local-testing.md
+  1ca5ee6ce936a402 41,132-135,138-140
+scripts/package_terraform_schemas.sh
+  1ca5ee6ce936a402 7,24,41,83
+docs/docs/guides/terraform-providers/service-categories.md
+  1ca5ee6ce936a402 33-34,38-40,42,64-66,68,82-85,97-98,111,192-194,228-230,240-241
+docs/docs/guides/terraform-providers/adding-providers.md
+  1ca5ee6ce936a402 89,98,154
+docs/docs/guides/terraform-providers/index.md
+  1ca5ee6ce936a402 7-9,11-14,39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "3833db17b789093e885f6331dee39f2dfec06d68",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 16388,
+      "total_deletions": 9165,
+      "accepted_lines": 15512,
+      "overriden_lines": 0
+    },
+    "21d0652afb873020": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-260c-7752-ba40-57ff788997eb",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "22a2a4042c410746": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84f1-43ec-7290-9623-acd2dad2ccd7",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 66,
+      "overriden_lines": 0
+    },
+    "b0d410b9f01dc4ee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d84c1-2326-7162-8155-6de99ff655dd",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  }
+}
