@@ -1,0 +1,40 @@
+go/internal/collector/git_snapshot_scip.go
+  1ca5ee6ce936a402 101-105,109,114
+go/internal/collector/git_selection_filesystem.go
+  1ca5ee6ce936a402 209-215
+docs/docs/reference/local-testing.md
+  1ca5ee6ce936a402 117,119,125-147,149-150,152-162,164-166,170-175,177,184-192,195-209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "eb65936c91ea820b4b4044df542757c16cf36c40",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 530,
+      "total_deletions": 13,
+      "accepted_lines": 751,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 75,
+      "overriden_lines": 0
+    }
+  }
+}
