@@ -1,0 +1,54 @@
+docker-compose.yaml
+  1ca5ee6ce936a402 107-108,277-279
+go/internal/collector/git_selection_config.go
+  1ca5ee6ce936a402 62-66,120-123,424-457
+go/internal/collector/git_source.go
+  1ca5ee6ce936a402 6,125-140,225-238,266-267,288-291,307-340,344-348,632-658
+go/internal/telemetry/instruments.go
+  1ca5ee6ce936a402 67-70,316-334,468-472
+go/cmd/ingester/wiring.go
+  1ca5ee6ce936a402 104-109
+go/internal/telemetry/contract.go
+  1ca5ee6ce936a402 36,80
+go/internal/telemetry/contract_test.go
+  1ca5ee6ce936a402 19
+go/cmd/collector-git/service.go
+  1ca5ee6ce936a402 31-33
+go/cmd/bootstrap-index/wiring.go
+  1ca5ee6ce936a402 53-58
+go/internal/collector/git_source_test.go
+  1ca5ee6ce936a402 6-8,11,623-844
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "9ecc4349202e6dcbaa7049d35d68ee6ef2bbf4d8",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 2,
+      "accepted_lines": 423,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 85,
+      "overriden_lines": 0
+    }
+  }
+}
