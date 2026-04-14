@@ -193,6 +193,40 @@ func TestCodeHandlerSearchEntityContentIncludesMetadata(t *testing.T) {
 	}
 }
 
+func TestContentReaderSearchEntitiesByLanguageAndTypeIncludesLanguageVariants(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"component-1", "repo-1", "src/Button.tsx", "Component", "Button",
+					int64(1), int64(10), "tsx", "export function Button() {}", []byte(`{"framework":"react"}`),
+				},
+			},
+		},
+	})
+
+	reader := NewContentReader(db)
+	results, err := reader.SearchEntitiesByLanguageAndType(context.Background(), "repo-1", "typescript", "Component", "Button", 10)
+	if err != nil {
+		t.Fatalf("SearchEntitiesByLanguageAndType() error = %v, want nil", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(results))
+	}
+	if got, want := results[0].Language, "tsx"; got != want {
+		t.Fatalf("results[0].Language = %#v, want %#v", got, want)
+	}
+	if got, want := results[0].Metadata["framework"], "react"; got != want {
+		t.Fatalf("results[0].Metadata[framework] = %#v, want %#v", got, want)
+	}
+}
+
 type contentReaderQueryResult struct {
 	columns []string
 	rows    [][]driver.Value

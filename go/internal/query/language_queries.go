@@ -8,10 +8,11 @@ import (
 )
 
 // LanguageQueryHandler provides language-specific entity queries against the
-// Neo4j graph. Each supported language defines Cypher templates for the
-// entity types the graph can contain (Repository, File, Function, Class, etc.).
+// graph and content store. Graph-backed entity types use Neo4j. Content-only
+// entity types use the Postgres content store.
 type LanguageQueryHandler struct {
-	Neo4j *Neo4jReader
+	Neo4j   *Neo4jReader
+	Content *ContentReader
 }
 
 // supportedLanguages lists every language that has Cypher templates registered.
@@ -22,9 +23,9 @@ var supportedLanguages = map[string]bool{
 	"scala": true, "swift": true, "typescript": true,
 }
 
-// supportedEntityTypes maps the user-facing entity type name to the Neo4j
+// graphBackedEntityTypes maps the user-facing entity type name to the Neo4j
 // node label used in Cypher queries.
-var supportedEntityTypes = map[string]string{
+var graphBackedEntityTypes = map[string]string{
 	"repository": "Repository",
 	"directory":  "Directory",
 	"file":       "File",
@@ -36,6 +37,15 @@ var supportedEntityTypes = map[string]string{
 	"union":      "Union",
 	"macro":      "Macro",
 	"variable":   "Variable",
+}
+
+// contentBackedEntityTypes maps user-facing entity types to content-entity
+// labels that are already materialized in Postgres but not yet first-class in
+// the graph query surface.
+var contentBackedEntityTypes = map[string]string{
+	"type_alias":      "TypeAlias",
+	"type_annotation": "TypeAnnotation",
+	"component":       "Component",
 }
 
 // languageFileExtensions maps language names to their common file extensions
@@ -97,31 +107,90 @@ func (h *LanguageQueryHandler) handleLanguageQuery(w http.ResponseWriter, r *htt
 		return
 	}
 
-	label, ok := supportedEntityTypes[req.EntityType]
-	if !ok {
-		WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"unsupported entity_type %q; supported: %s",
-			req.EntityType, joinKeys(supportedEntityTypes),
-		))
-		return
-	}
-
 	if req.Limit <= 0 {
 		req.Limit = 50
 	}
 
-	results, err := h.queryByLanguage(r.Context(), req.Language, label, req.Query, req.RepoID, req.Limit)
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, err.Error())
+	if label, ok := graphBackedEntityTypes[req.EntityType]; ok {
+		results, err := h.queryByLanguage(r.Context(), req.Language, label, req.Query, req.RepoID, req.Limit)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"language":    req.Language,
+			"entity_type": req.EntityType,
+			"query":       req.Query,
+			"results":     results,
+		})
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]any{
-		"language":    req.Language,
-		"entity_type": req.EntityType,
-		"query":       req.Query,
-		"results":     results,
-	})
+	if label, ok := contentBackedEntityTypes[req.EntityType]; ok {
+		results, err := h.queryContentByLanguage(r.Context(), req.Language, label, req.Query, req.RepoID, req.Limit)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"language":    req.Language,
+			"entity_type": req.EntityType,
+			"query":       req.Query,
+			"results":     results,
+		})
+		return
+	}
+
+	WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+		"unsupported entity_type %q; supported: %s",
+		req.EntityType, joinKeys(allSupportedEntityTypes()),
+	))
+}
+
+func (h *LanguageQueryHandler) queryContentByLanguage(
+	ctx context.Context,
+	language, entityType, query, repoID string,
+	limit int,
+) ([]map[string]any, error) {
+	if h.Content == nil {
+		return nil, fmt.Errorf("content reader is required for %s queries", entityType)
+	}
+
+	rows, err := h.Content.SearchEntitiesByLanguageAndType(ctx, repoID, language, entityType, query, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		result := map[string]any{
+			"entity_id":  row.EntityID,
+			"name":       row.EntityName,
+			"labels":     []string{row.EntityType},
+			"file_path":  row.RelativePath,
+			"repo_id":    row.RepoID,
+			"language":   row.Language,
+			"start_line": row.StartLine,
+			"end_line":   row.EndLine,
+			"metadata":   row.Metadata,
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+func allSupportedEntityTypes() map[string]string {
+	merged := make(map[string]string, len(graphBackedEntityTypes)+len(contentBackedEntityTypes))
+	for key, value := range graphBackedEntityTypes {
+		merged[key] = value
+	}
+	for key, value := range contentBackedEntityTypes {
+		merged[key] = value
+	}
+	return merged
 }
 
 // queryByLanguage builds and executes a language-specific Cypher query.
@@ -381,7 +450,18 @@ func SupportedLanguages() []string {
 
 // SupportedEntityTypes returns the set of entity type names with query support.
 func SupportedEntityTypes() []string {
-	return mapKeys(supportedEntityTypes)
+	return mapKeys(allSupportedEntityTypes())
+}
+
+func normalizedLanguageVariants(language string) []string {
+	switch strings.ToLower(strings.TrimSpace(language)) {
+	case "javascript":
+		return []string{"javascript", "jsx"}
+	case "typescript":
+		return []string{"typescript", "tsx"}
+	default:
+		return []string{strings.ToLower(strings.TrimSpace(language))}
+	}
 }
 
 // mapKeys returns sorted keys from a map.

@@ -1,0 +1,185 @@
+package query
+
+const openAPIPathsImpact = `
+    "/api/v0/impact/blast-radius": {
+      "post": {
+        "tags": ["impact"],
+        "summary": "Find blast radius",
+        "description": "Analyzes the blast radius for a target entity.",
+        "operationId": "findBlastRadius",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["target", "target_type"],
+                "properties": {
+                  "target": {"type": "string", "description": "Target entity name"},
+                  "target_type": {
+                    "type": "string",
+                    "enum": ["repository", "terraform_module", "crossplane_xrd", "sql_table"],
+                    "description": "Type of target entity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Blast radius analysis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "target": {"type": "string"},
+                    "target_type": {"type": "string"},
+                    "affected": {"type": "array", "items": {"type": "object"}},
+                    "affected_count": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v0/impact/change-surface": {
+      "post": {
+        "tags": ["impact"],
+        "summary": "Find change surface",
+        "description": "Analyzes the change surface for a target entity.",
+        "operationId": "findChangeSurface",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["target"],
+                "properties": {
+                  "target": {"type": "string", "description": "Target entity ID"},
+                  "environment": {"type": "string", "description": "Optional environment filter"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Change surface analysis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "target": {"type": "object"},
+                    "impacted": {"type": "array", "items": {"type": "object"}},
+                    "count": {"type": "integer"},
+                    "environment": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v0/impact/trace-resource-to-code": {
+      "post": {
+        "tags": ["impact"],
+        "summary": "Trace resource to code",
+        "description": "Traces a resource back to its source code repositories.",
+        "operationId": "traceResourceToCode",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["start"],
+                "properties": {
+                  "start": {"type": "string", "description": "Starting entity ID"},
+                  "environment": {"type": "string"},
+                  "max_depth": {"type": "integer", "default": 8, "minimum": 1, "maximum": 20}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Trace paths",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "start": {"type": "object"},
+                    "paths": {"type": "array", "items": {"type": "object"}},
+                    "count": {"type": "integer"},
+                    "environment": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/v0/impact/explain-dependency-path": {
+      "post": {
+        "tags": ["impact"],
+        "summary": "Explain dependency path",
+        "description": "Finds and explains the shortest path between two entities.",
+        "operationId": "explainDependencyPath",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["source", "target"],
+                "properties": {
+                  "source": {"type": "string", "description": "Source entity ID"},
+                  "target": {"type": "string", "description": "Target entity ID"},
+                  "environment": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dependency path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "source": {"type": "object"},
+                    "target": {"type": "object"},
+                    "path": {"type": "object"},
+                    "confidence": {"type": "number"},
+                    "reason": {"type": "string"},
+                    "environment": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+`

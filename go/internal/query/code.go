@@ -22,7 +22,7 @@ func (h *CodeHandler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v0/code/call-chain", h.handleCallChain)
 
 	// Language-specific queries.
-	lq := &LanguageQueryHandler{Neo4j: h.Neo4j}
+	lq := &LanguageQueryHandler{Neo4j: h.Neo4j, Content: h.Content}
 	lq.Mount(mux)
 }
 

@@ -53,6 +53,7 @@ func TestServeOpenAPI(t *testing.T) {
 		"/api/v0/repositories",
 		"/api/v0/entities/resolve",
 		"/api/v0/code/search",
+		"/api/v0/code/language-query",
 		"/api/v0/content/files/read",
 		"/api/v0/infra/resources/search",
 		"/api/v0/impact/blast-radius",
@@ -156,6 +157,20 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if got, want := codeSearchSchema["$ref"], "#/components/schemas/CodeSearchResponse"; got != want {
 		t.Fatalf("code/search schema ref = %#v, want %#v", got, want)
 	}
+
+	languageQueryPath := mustMapField(t, paths, "/api/v0/code/language-query")
+	languageQueryPost := mustMapField(t, languageQueryPath, "post")
+	languageQueryBody := mustMapField(t, mustMapField(t, languageQueryPost, "requestBody"), "content")
+	languageQueryJSON := mustMapField(t, languageQueryBody, "application/json")
+	languageQuerySchema := mustMapField(t, mustMapField(t, languageQueryJSON, "schema"), "properties")
+	entityType := mustMapField(t, languageQuerySchema, "entity_type")
+	enumValues, ok := entityType["enum"].([]any)
+	if !ok {
+		t.Fatalf("language-query entity_type enum type = %T, want []any", entityType["enum"])
+	}
+	if !containsValue(enumValues, "type_alias") || !containsValue(enumValues, "type_annotation") || !containsValue(enumValues, "component") {
+		t.Fatalf("language-query entity_type enum = %#v, want content-backed entity types", enumValues)
+	}
 }
 
 func mustMapField(t *testing.T, parent map[string]any, key string) map[string]any {
@@ -170,4 +185,13 @@ func mustMapField(t *testing.T, parent map[string]any, key string) map[string]an
 		t.Fatalf("key %q type = %T, want map[string]any", key, value)
 	}
 	return typed
+}
+
+func containsValue(values []any, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

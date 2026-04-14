@@ -2,6 +2,7 @@ package query
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -34,12 +35,13 @@ func TestSupportedLanguages(t *testing.T) {
 
 func TestSupportedEntityTypes(t *testing.T) {
 	types := SupportedEntityTypes()
-	if len(types) != 11 {
-		t.Errorf("expected 11 supported entity types, got %d: %v", len(types), types)
+	if len(types) != 14 {
+		t.Errorf("expected 14 supported entity types, got %d: %v", len(types), types)
 	}
 	expected := map[string]bool{
 		"repository": true, "directory": true, "file": true,
 		"function": true, "class": true, "struct": true,
+		"type_alias": true, "type_annotation": true, "component": true,
 	}
 	typeSet := make(map[string]bool, len(types))
 	for _, typ := range types {
@@ -291,6 +293,109 @@ func TestHandleLanguageQuery_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestHandleLanguageQuery_ContentBackedEntityTypes(t *testing.T) {
+	tests := []struct {
+		name       string
+		language   string
+		entityType string
+		query      string
+		row        []driver.Value
+		wantName   string
+		wantKey    string
+		wantValue  any
+	}{
+		{
+			name:       "type alias from typescript content store",
+			language:   "typescript",
+			entityType: "type_alias",
+			query:      "UserID",
+			row: []driver.Value{
+				"alias-1", "repo-1", "src/types.ts", "TypeAlias", "UserID",
+				int64(3), int64(3), "typescript", "type UserID = string", []byte(`{"type":"string"}`),
+			},
+			wantName:  "UserID",
+			wantKey:   "type",
+			wantValue: "string",
+		},
+		{
+			name:       "type annotation from python content store",
+			language:   "python",
+			entityType: "type_annotation",
+			query:      "user_id",
+			row: []driver.Value{
+				"ann-1", "repo-1", "app/models.py", "TypeAnnotation", "user_id",
+				int64(10), int64(10), "python", "user_id: str", []byte(`{"type":"str"}`),
+			},
+			wantName:  "user_id",
+			wantKey:   "type",
+			wantValue: "str",
+		},
+		{
+			name:       "component from tsx content store",
+			language:   "typescript",
+			entityType: "component",
+			query:      "Button",
+			row: []driver.Value{
+				"component-1", "repo-1", "src/Button.tsx", "Component", "Button",
+				int64(1), int64(12), "tsx", "export function Button() {}", []byte(`{"framework":"react"}`),
+			},
+			wantName:  "Button",
+			wantKey:   "framework",
+			wantValue: "react",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := openContentReaderTestDB(t, []contentReaderQueryResult{
+				{
+					columns: []string{
+						"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+						"start_line", "end_line", "language", "source_cache", "metadata",
+					},
+					rows: [][]driver.Value{tt.row},
+				},
+			})
+
+			h := &LanguageQueryHandler{Content: NewContentReader(db)}
+			mux := http.NewServeMux()
+			h.Mount(mux)
+
+			body := `{"language":"` + tt.language + `","entity_type":"` + tt.entityType + `","query":"` + tt.query + `","repo_id":"repo-1"}`
+			req := httptest.NewRequest(http.MethodPost, "/api/v0/code/language-query", bytes.NewBufferString(body))
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+			}
+
+			var resp map[string]any
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			results, ok := resp["results"].([]any)
+			if !ok || len(results) != 1 {
+				t.Fatalf("results = %#v, want 1 result", resp["results"])
+			}
+			result, ok := results[0].(map[string]any)
+			if !ok {
+				t.Fatalf("result type = %T, want map[string]any", results[0])
+			}
+			if got, want := result["name"], tt.wantName; got != want {
+				t.Fatalf("result[name] = %#v, want %#v", got, want)
+			}
+			metadata, ok := result["metadata"].(map[string]any)
+			if !ok {
+				t.Fatalf("result[metadata] type = %T, want map[string]any", result["metadata"])
+			}
+			if got, want := metadata[tt.wantKey], tt.wantValue; got != want {
+				t.Fatalf("metadata[%s] = %#v, want %#v", tt.wantKey, got, want)
+			}
+		})
+	}
+}
+
 func TestJoinKeys(t *testing.T) {
 	m := map[string]bool{"c": true, "a": true, "b": true}
 	got := joinKeys(m)
@@ -321,7 +426,7 @@ func TestLanguageFileExtensions_Coverage(t *testing.T) {
 
 func TestBuildLanguageCypher_AllEntityTypes(t *testing.T) {
 	// Verify all entity types produce valid cypher.
-	for typeName, label := range supportedEntityTypes {
+	for typeName, label := range graphBackedEntityTypes {
 		cypher, params := buildLanguageCypher("python", label, "", "", 10)
 		if cypher == "" {
 			t.Errorf("entity type %q produced empty cypher", typeName)
