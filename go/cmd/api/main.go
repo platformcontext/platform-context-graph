@@ -12,10 +12,10 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 )
 
 func main() {
@@ -86,17 +86,10 @@ func initTracer(ctx context.Context) (func(context.Context) error, error) {
 		serviceName = "pcg-api"
 	}
 
-	res, err := resource.Merge(
-		resource.Default(),
-		resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(serviceName),
-			semconv.ServiceNamespaceKey.String("platform-context-graph"),
-		),
+	res := resource.NewWithAttributes("",
+		attribute.String("service.name", serviceName),
+		attribute.String("service.namespace", "platform-context-graph"),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("create resource: %w", err)
-	}
 
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),

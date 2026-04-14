@@ -178,17 +178,15 @@ func (f *fakeBootstrapDB) Close() error {
 	return nil
 }
 
-type fakeBootstrapSQLDB struct {
-	fakeBootstrapDB
-}
-
-func (f *fakeBootstrapSQLDB) ExecContext(context.Context, string, ...any) (sql.Result, error) {
+func (f *fakeBootstrapDB) ExecContext(context.Context, string, ...any) (sql.Result, error) {
 	return nil, nil
 }
 
-func (f *fakeBootstrapSQLDB) QueryContext(context.Context, string, ...any) (postgres.Rows, error) {
+func (f *fakeBootstrapDB) QueryContext(context.Context, string, ...any) (postgres.Rows, error) {
 	return nil, nil
 }
+
+type fakeBootstrapSQLDB = fakeBootstrapDB
 
 type fakeSource struct {
 	generations []collector.CollectedGeneration

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +20,7 @@ import (
 )
 
 type bootstrapDB interface {
+	postgres.ExecQueryer
 	Close() error
 }
 
@@ -188,16 +190,25 @@ func drainProjector(
 	}
 }
 
+// bootstrapSQLDB wraps a *sql.DB so it satisfies both bootstrapDB (Close) and
+// postgres.ExecQueryer (QueryContext returns postgres.Rows, not *sql.Rows).
+type bootstrapSQLDB struct {
+	postgres.SQLDB
+	raw *sql.DB
+}
+
+func (b *bootstrapSQLDB) Close() error { return b.raw.Close() }
+
 func openBootstrapDB(ctx context.Context, getenv func(string) string) (bootstrapDB, error) {
-	return runtimecfg.OpenPostgres(ctx, getenv)
+	db, err := runtimecfg.OpenPostgres(ctx, getenv)
+	if err != nil {
+		return nil, err
+	}
+	return &bootstrapSQLDB{SQLDB: postgres.SQLDB{DB: db}, raw: db}, nil
 }
 
 func applySchema(ctx context.Context, db bootstrapDB) error {
-	exec, ok := db.(postgres.Executor)
-	if !ok {
-		return fmt.Errorf("bootstrap database does not support schema execution")
-	}
-	return postgres.ApplyBootstrap(ctx, exec)
+	return postgres.ApplyBootstrap(ctx, db)
 }
 
 func openBootstrapGraph(ctx context.Context, getenv func(string) string) (graphDeps, error) {

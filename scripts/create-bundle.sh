@@ -38,7 +38,7 @@ check_requirements() {
     fi
     
     if ! command -v pcg &> /dev/null; then
-        print_error "pcg is not installed. Install with: pip install platform-context-graph"
+        print_error "pcg is not installed. Build it from source with: cd go && go build -o ../pcg ./cmd/pcg"
         exit 1
     fi
     

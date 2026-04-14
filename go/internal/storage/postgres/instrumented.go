@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -131,4 +132,14 @@ func (db *InstrumentedDB) QueryContext(ctx context.Context, query string, args .
 	}
 
 	return rows, err
+}
+
+// Begin proxies to the inner database if it implements Beginner.
+// This allows InstrumentedDB to satisfy the Beginner interface when the
+// underlying connection supports transactions (e.g. SQLDB).
+func (db *InstrumentedDB) Begin(ctx context.Context) (Transaction, error) {
+	if beginner, ok := db.Inner.(Beginner); ok {
+		return beginner.Begin(ctx)
+	}
+	return nil, fmt.Errorf("inner database does not support transactions")
 }

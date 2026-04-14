@@ -167,6 +167,8 @@ services:
         condition: service_started
       jaeger:
         condition: service_started
+      bootstrap-index:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
       interval: 15s
@@ -218,6 +220,8 @@ services:
         condition: service_started
       jaeger:
         condition: service_started
+      bootstrap-index:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
       interval: 15s
@@ -328,6 +332,8 @@ services:
         condition: service_started
       jaeger:
         condition: service_started
+      bootstrap-index:
+        condition: service_completed_successfully
 
 volumes:
   neo4j_data:

@@ -29,13 +29,8 @@ func buildBootstrapCollector(
 	instruments *telemetry.Instruments,
 	logger *slog.Logger,
 ) (collectorDeps, error) {
-	sqlDB, ok := database.(postgres.ExecQueryer)
-	if !ok {
-		return collectorDeps{}, fmt.Errorf("bootstrap collector requires a SQL database")
-	}
-
 	instrumentedDB := &postgres.InstrumentedDB{
-		Inner:       sqlDB,
+		Inner:       database,
 		Tracer:      tracer,
 		Instruments: instruments,
 		StoreName:   "bootstrap-index",
@@ -69,13 +64,8 @@ func buildBootstrapProjector(
 	tracer trace.Tracer,
 	instruments *telemetry.Instruments,
 ) (projectorDeps, error) {
-	sqlDB, ok := database.(postgres.ExecQueryer)
-	if !ok {
-		return projectorDeps{}, fmt.Errorf("bootstrap projector requires a SQL database")
-	}
-
 	instrumentedDB := &postgres.InstrumentedDB{
-		Inner:       sqlDB,
+		Inner:       database,
 		Tracer:      tracer,
 		Instruments: instruments,
 		StoreName:   "bootstrap-index",

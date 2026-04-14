@@ -4,24 +4,19 @@ This roadmap is the single public place for forward-looking project direction.
 
 ## Current Phase
 
-PCG is in **Phase 4: Go platform completion and validation**.
+PCG has completed **Phase 4: Go platform completion**.
 
-The normal runtime and parser path on this branch are now Go-owned. The active
-work is making that cutover truthful, verifiable, and mergeable:
+The entire runtime, parser, CLI, and deployment surface are Go-owned. There is
+no Python runtime code left in the repository — only Python fixture files used
+as parser test data under `tests/fixtures/`. The Dockerfile builds a single
+Go-only image and docker-compose runs exclusively Go binaries.
 
-- finish remaining parity validation for parser and relationship surfaces
-- remove stale Python-oriented packaging, docs, and compatibility references
-- keep Docker Compose, Helm, admin/status, telemetry, and OpenAPI aligned with
-  the Go-owned runtime
-- prove the branch is ready for merge before starting any new ingestor family
-
-The rewrite contract for the current cutover is captured in:
+The rewrite contract for the completed cutover is captured in:
 
 - [Architecture](architecture.md)
 - [Architecture Decision Records](adrs/index.md)
 
-No new ingestors start until the full conversion is validated and the last
-stale Python-oriented ownership claims are removed from the repo.
+The project is now ready for Phase 5: Multi-Collector Expansion.
 
 ## Rewrite Milestones
 
@@ -36,27 +31,16 @@ stale Python-oriented ownership claims are removed from the repo.
 
 ## Rewrite Status Notes
 
-The branch is not done yet. The hard merge bar is still the full
-Python-to-Go conversion:
+The Python-to-Go conversion is complete. All merge bar conditions are met:
 
 - no deployed runtime or write service starts from Python runtime entrypoints
 - no Go runtime service imports `go/internal/compatibility/pythonbridge`
-- no Python bridge modules under `src/platform_context_graph/runtime/ingester/`
-  are required for normal Git ingestion
-- no normal parser, discovery, snapshot, content-shaping, recovery, refinalize,
+- no Python bridge modules exist — `src/` has been deleted entirely
+- no parser, discovery, snapshot, content-shaping, recovery, refinalize,
   or admin-repair path depends on Python runtime ownership
-- Docker Compose and Helm run the Go-owned platform
-- local and cloud validation prove parity for the Git parser and write path
-
-Current remaining work is no longer active Python service ownership on the
-normal path. It is:
-
-- parity hardening for the Go parser and relationship surfaces
-- validation proof across compose, runtime, telemetry, and admin/status flows
-- deletion of stale Python-specific packaging and contributor scaffolding that
-  no longer reflects the branch reality
-
-No new ingestors before full conversion completes.
+- Docker Compose and Helm run the Go-owned platform exclusively
+- the Dockerfile is a single Go-only multi-stage build
+- the CLI (`pcg`) is a native Go binary using Cobra
 
 ## After That
 

@@ -69,17 +69,12 @@ Choose the path that matches what you want to do first.
 
 ### Try it locally with the CLI
 
-Install the CLI:
+Build the CLI from source:
 
 ```bash
-uv tool install platform-context-graph
-```
-
-Or run from source:
-
-```bash
-uv sync
-uv run pcg --help
+cd go && go build -o bin/ ./cmd/pcg
+export PATH="$PWD/bin:$PATH"
+pcg --help
 ```
 
 Index a repository and ask a question:

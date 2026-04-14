@@ -9,13 +9,13 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 // Providers holds the initialized OTEL SDK providers and their shutdown function.
@@ -47,16 +47,12 @@ func NewProviders(ctx context.Context, b Bootstrap, opts ...ProviderOption) (*Pr
 		opt(cfg)
 	}
 
-	// Create resource from bootstrap attributes
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName(b.ServiceName),
-			semconv.ServiceNamespace(b.ServiceNamespace),
-		),
+	// Create resource with plain attributes to avoid semconv schema URL
+	// conflicts between default detectors and explicit semconv versions.
+	res := resource.NewWithAttributes("",
+		attribute.String("service.name", b.ServiceName),
+		attribute.String("service.namespace", b.ServiceNamespace),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create resource: %w", err)
-	}
 
 	// Check if OTLP endpoint is configured
 	otlpEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")

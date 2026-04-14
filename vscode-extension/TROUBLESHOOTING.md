@@ -37,8 +37,8 @@ The extension searches for `pcg` in this order:
 Fix:
 
 ```bash
-# Verify pcg is installed
-uv tool install platform-context-graph
+# Verify pcg is built and reachable
+cd go && go build -o bin/ ./cmd/pcg
 pcg --version
 ```
 

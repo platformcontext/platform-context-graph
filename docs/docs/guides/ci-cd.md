@@ -12,14 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install PCG
-        run: uv tool install platform-context-graph
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+      - name: Build PCG
+        run: |
+          cd go
+          go build -o ../pcg ./cmd/pcg
       - name: Index the repo
-        run: pcg index .
+        run: ./pcg index .
       - name: Check complexity
-        run: pcg analyze complexity --threshold 20 --fail-on-found
+        run: ./pcg analyze complexity --threshold 20 --fail-on-found
       - name: Check dead code
-        run: pcg analyze dead-code --fail-on-found
+        run: ./pcg analyze dead-code --fail-on-found
 ```
 
 ### What each step does

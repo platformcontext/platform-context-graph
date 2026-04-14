@@ -6,8 +6,12 @@
 
 **Fix:**
 
-- macOS / Linux: add the relevant scripts directory to your shell profile
-- Windows: reinstall Python with PATH enabled, or prefer `uv tool install` / `pipx`
+Build the CLI from source and add it to your PATH:
+
+```bash
+cd go && go build -o bin/ ./cmd/pcg
+export PATH="$PWD/bin:$PATH"
+```
 
 ## Neo4j connection refused
 
@@ -45,7 +49,7 @@ mean the latest repository or run reached a completed checkpoint.
 2. Inspect the generated config snippet
 3. Run `pcg mcp start` manually and confirm it starts cleanly
 
-For this repository's checked-in MCP example, copy `.mcp.json.example` to `.mcp.json`, replace `<REPO_ROOT>` with your checkout path. Note that a host-run `uv run pcg mcp start` with only Neo4j credentials can answer graph queries, but content tools require the PostgreSQL DSN and container workspace mounts.
+For this repository's checked-in MCP example, copy `.mcp.json.example` to `.mcp.json`, replace `<REPO_ROOT>` with your checkout path. Note that a host-run `pcg mcp start` with only Neo4j credentials can answer graph queries, but content tools require the PostgreSQL DSN and container workspace mounts.
 
 ## HTTP API starts but queries fail
 
