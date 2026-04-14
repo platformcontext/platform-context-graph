@@ -199,6 +199,76 @@ func TestExtractCodeCallRowsSkipsAmbiguousGenericCalls(t *testing.T) {
 	}
 }
 
+func TestExtractCodeCallRowsDisambiguatesGenericCallsUsingFullName(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-payments",
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-payments",
+				"relative_path": "service.py",
+				"parsed_file_data": map[string]any{
+					"path": "service.py",
+					"functions": []any{
+						map[string]any{
+							"name":        "handle",
+							"line_number": 3,
+							"end_line":    6,
+							"uid":         "content-entity:handle",
+						},
+						map[string]any{
+							"name":          "request",
+							"class_context": "Service",
+							"line_number":   8,
+							"end_line":      10,
+							"uid":           "content-entity:service-request",
+						},
+						map[string]any{
+							"name":          "request",
+							"class_context": "Queue",
+							"line_number":   12,
+							"end_line":      14,
+							"uid":           "content-entity:queue-request",
+						},
+					},
+					"function_calls": []any{
+						map[string]any{
+							"name":        "request",
+							"full_name":   "Service.request",
+							"call_kind":   "function_call",
+							"line_number": 4,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, rows := ExtractCodeCallRows(envelopes)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if got, want := rows[0]["caller_entity_id"], "content-entity:handle"; got != want {
+		t.Fatalf("caller_entity_id = %#v, want %#v", got, want)
+	}
+	if got, want := rows[0]["callee_entity_id"], "content-entity:service-request"; got != want {
+		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
+	}
+	if got, want := rows[0]["full_name"], "Service.request"; got != want {
+		t.Fatalf("full_name = %#v, want %#v", got, want)
+	}
+	if got, want := rows[0]["call_kind"], "function_call"; got != want {
+		t.Fatalf("call_kind = %#v, want %#v", got, want)
+	}
+}
+
 func TestCodeCallMaterializationHandlerWritesCanonicalCalls(t *testing.T) {
 	t.Parallel()
 

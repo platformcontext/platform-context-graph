@@ -201,7 +201,6 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 		rawPath := anyToString(fileData["path"])
 		for _, item := range mapSlice(fileData["functions"]) {
 			entityID := anyToString(item["uid"])
-			name := strings.TrimSpace(anyToString(item["name"]))
 			startLine := codeCallInt(item["line_number"], item["start_line"])
 			endLine := codeCallInt(item["end_line"])
 			if entityID == "" || startLine <= 0 {
@@ -217,16 +216,15 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 					endLine:   endLine,
 					entityID:  entityID,
 				})
-				if name == "" {
-					continue
+				for _, candidateName := range codeCallFunctionCandidateNames(item) {
+					if _, ok := nameCandidates[pathKey]; !ok {
+						nameCandidates[pathKey] = make(map[string]map[string]struct{})
+					}
+					if _, ok := nameCandidates[pathKey][candidateName]; !ok {
+						nameCandidates[pathKey][candidateName] = make(map[string]struct{})
+					}
+					nameCandidates[pathKey][candidateName][entityID] = struct{}{}
 				}
-				if _, ok := nameCandidates[pathKey]; !ok {
-					nameCandidates[pathKey] = make(map[string]map[string]struct{})
-				}
-				if _, ok := nameCandidates[pathKey][name]; !ok {
-					nameCandidates[pathKey][name] = make(map[string]struct{})
-				}
-				nameCandidates[pathKey][name][entityID] = struct{}{}
 			}
 		}
 	}
@@ -343,6 +341,8 @@ func extractGenericCodeCallRows(
 			"ref_line":         callLine,
 			"action":           IntentActionUpsert,
 		}
+		copyOptionalCodeCallField(row, edge, "full_name")
+		copyOptionalCodeCallField(row, edge, "call_kind")
 		rows = append(rows, row)
 	}
 	return rows
@@ -393,7 +393,7 @@ func resolveSameFileCalleeEntityID(
 }
 
 func codeCallCandidateNames(call map[string]any) []string {
-	names := make([]string, 0, 2)
+	names := make([]string, 0, 4)
 	appendName := func(value string) {
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" {
@@ -411,6 +411,7 @@ func codeCallCandidateNames(call map[string]any) []string {
 	fullName := anyToString(call["full_name"])
 	appendName(fullName)
 	appendName(codeCallTrailingName(fullName))
+	appendName(codeCallTrailingSegments(fullName, 2))
 	return names
 }
 
@@ -439,6 +440,69 @@ func codeCallPreferredPath(rawPath string, relativePath string) string {
 		return normalized
 	}
 	return normalizeCodeCallPath(rawPath)
+}
+
+func codeCallFunctionCandidateNames(item map[string]any) []string {
+	names := make([]string, 0, 4)
+	appendName := func(value string) {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return
+		}
+		for _, existing := range names {
+			if existing == trimmed {
+				return
+			}
+		}
+		names = append(names, trimmed)
+	}
+
+	name := anyToString(item["name"])
+	appendName(name)
+	fullName := anyToString(item["full_name"])
+	appendName(fullName)
+	classContext := codeCallClassContext(item["class_context"])
+	if classContext != "" && strings.TrimSpace(name) != "" {
+		appendName(classContext + "." + name)
+	}
+	return names
+}
+
+func codeCallClassContext(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case []any:
+		if len(typed) == 0 {
+			return ""
+		}
+		return strings.TrimSpace(anyToString(typed[0]))
+	default:
+		return ""
+	}
+}
+
+func codeCallTrailingSegments(value string, count int) string {
+	if count <= 0 {
+		return ""
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	cutset := func(r rune) bool {
+		switch r {
+		case '.', ':', '#', '/', '\\':
+			return true
+		default:
+			return false
+		}
+	}
+	parts := strings.FieldsFunc(trimmed, cutset)
+	if len(parts) < count {
+		return ""
+	}
+	return strings.Join(parts[len(parts)-count:], ".")
 }
 
 func codeCallPathKeys(rawPath string, relativePath string) []string {
