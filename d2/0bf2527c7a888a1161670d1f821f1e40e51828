@@ -1,0 +1,39 @@
+go/internal/query/code.go
+  1ca5ee6ce936a402 186
+go/internal/query/language_queries_test.go
+  1ca5ee6ce936a402 435-439
+go/internal/query/code_search_metadata_test.go
+  1ca5ee6ce936a402 66-68,116-117
+go/internal/query/entity_summary.go
+  1ca5ee6ce936a402 63-90
+go/internal/query/language_queries.go
+  1ca5ee6ce936a402 183
+go/internal/query/content_reader_test.go
+  1ca5ee6ce936a402 242-244
+go/internal/query/language_query_metadata.go
+  1ca5ee6ce936a402 63
+go/internal/query/code_search_metadata.go
+  1ca5ee6ce936a402 53
+go/internal/query/language_query_metadata_test.go
+  1ca5ee6ce936a402 68-70,120-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "d20bf2527c7a888a1161670d1f821f1e40e51828",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 52,
+      "total_deletions": 0,
+      "accepted_lines": 52,
+      "overriden_lines": 0
+    }
+  }
+}
