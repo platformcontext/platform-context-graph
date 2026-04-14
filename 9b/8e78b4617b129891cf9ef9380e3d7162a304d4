@@ -1,0 +1,64 @@
+docker-compose.yaml
+  1ca5ee6ce936a402 104,268,325-330
+go/internal/collector/git_source.go
+  1ca5ee6ce936a402 9-10,13,95-102,204-208,210,212-215,217-219,221-235,237-241,243-249,251-369,371,373-374,376-384,386,389-391,393
+docs/docs/deployment/service-runtimes.md
+  1ca5ee6ce936a402 233-239,270-287
+go/cmd/bootstrap-index/wiring.go
+  1ca5ee6ce936a402 45-51
+go/internal/reducer/service_test.go
+  1ca5ee6ce936a402 7,171,177-178,190,197-198,204,211-212,218-219
+docs/docs/reference/telemetry/index.md
+  1ca5ee6ce936a402 223-224,240-252,265-268
+go/internal/collector/git_selection_config.go
+  1ca5ee6ce936a402 10,63,117,382-399
+go/internal/projector/runtime.go
+  1ca5ee6ce936a402 11,83,88-92,130-133,143-144,149-155,180
+go/cmd/collector-git/service.go
+  1ca5ee6ce936a402 30
+go/internal/telemetry/instruments.go
+  1ca5ee6ce936a402 55-60,232-270
+go/internal/reducer/service.go
+  1ca5ee6ce936a402 56,66-69,100-107,109,111-115,129,135-195,197-199,240,255,266,270,288,295
+go/internal/reducer/shared_projection_runner.go
+  1ca5ee6ce936a402 8-10,44,135-142,172-187,189-228,231,326-360
+go/internal/collector/git_source_test.go
+  1ca5ee6ce936a402 6,316,323,325-326,361-487
+go/cmd/ingester/wiring.go
+  1ca5ee6ce936a402 93-99
+docs/docs/reference/local-testing.md
+  1ca5ee6ce936a402 156-203
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "9b8e78b4617b129891cf9ef9380e3d7162a304d4",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1588,
+      "total_deletions": 129,
+      "accepted_lines": 1402,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 75,
+      "overriden_lines": 0
+    }
+  }
+}
