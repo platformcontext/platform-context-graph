@@ -1,0 +1,31 @@
+go/internal/storage/postgres/facts.go
+  1ca5ee6ce936a402 7,14-22,155-158,164-186,197-209,223,226-229,235-253
+go/internal/app/app_test.go
+  1ca5ee6ce936a402 65-66
+go/internal/storage/postgres/facts_test.go
+  1ca5ee6ce936a402 6,101-160
+docker-compose.yaml
+  1ca5ee6ce936a402 107
+go/internal/storage/postgres/proof_domain_harness_test.go
+  1ca5ee6ce936a402 353-355,357-381
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "34f73668dbe1af4cc011c3634f273ce8358177c7",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 672,
+      "total_deletions": 1179,
+      "accepted_lines": 832,
+      "overriden_lines": 0
+    }
+  }
+}
