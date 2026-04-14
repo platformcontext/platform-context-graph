@@ -43,6 +43,10 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Nested safe wrappers over those supported row-level forms, such as
   `upper(coalesce(source.segment, 'unknown'))`, are also tracked in the Go dbt
   path.
+- The checked-in dbt parity matrix now explicitly proves cast, `date_trunc`,
+  `concat`, multi-source `case`, multi-source arithmetic, and the key
+  unresolved-summary paths in
+  `go/internal/parser/dbt_sql_lineage_parity_test.go`.
 - Compiled-model lineage still carries explicit unresolved limits for
   unresolved references, templated expressions, complex macros, and some
   derived expressions.
