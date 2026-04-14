@@ -1,0 +1,78 @@
+go/cmd/bootstrap-index/main_test.go
+  1ca5ee6ce936a402 181,185,189
+Dockerfile
+  1ca5ee6ce936a402 2,4,15-25
+docs/docs/guides/ci-cd.md
+  1ca5ee6ce936a402 15-21,23,25,27
+docs/internal/README.md
+  1ca5ee6ce936a402 8
+.gitignore
+  1ca5ee6ce936a402 1-2,6-14
+docs/docs/getting-started/installation.md
+  1ca5ee6ce936a402 5,7,10-12,15,17,20,23-25
+scripts/create-bundle.sh
+  1ca5ee6ce936a402 41
+README.md
+  1ca5ee6ce936a402 72,75-77
+vscode-extension/README.md
+  1ca5ee6ce936a402 24,27-29
+go/internal/telemetry/provider.go
+  1ca5ee6ce936a402 12,50-54
+docs/docs/getting-started/windows-setup.md
+  1ca5ee6ce936a402 13-14,25-26,31-39,48-49,57-59
+docs/docs/roadmap.md
+  1ca5ee6ce936a402 7,9-12,14,19,34,38-39,41-43
+go/internal/storage/postgres/instrumented.go
+  1ca5ee6ce936a402 7,136-145
+docs/docs/reference/troubleshooting.md
+  1ca5ee6ce936a402 9-14,52
+docs/docs/guides/fixture-ecosystems.md
+  1ca5ee6ce936a402 56-57,60-61
+go/cmd/bootstrap-index/main.go
+  1ca5ee6ce936a402 5,23,193-201,203-207,211
+vscode-extension/DEVELOPMENT.md
+  1ca5ee6ce936a402 23
+vscode-extension/TROUBLESHOOTING.md
+  1ca5ee6ce936a402 40-41
+go/cmd/api/main.go
+  1ca5ee6ce936a402 15,89-91
+vscode-extension/QUICKSTART.md
+  1ca5ee6ce936a402 8
+docker-compose.yaml
+  1ca5ee6ce936a402 170-171,223-224,335-336
+go/cmd/bootstrap-index/wiring.go
+  1ca5ee6ce936a402 33,68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "1b0a70fb9c7f4aab534be6e55172699b0fd5f7e1",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 964,
+      "total_deletions": 1589,
+      "accepted_lines": 814,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 75,
+      "overriden_lines": 0
+    }
+  }
+}
