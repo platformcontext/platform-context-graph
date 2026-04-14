@@ -1,0 +1,33 @@
+go/internal/query/entity_summary_test.go
+  1ca5ee6ce936a402 80-210
+go/internal/query/language_queries_test.go
+  1ca5ee6ce936a402 14-15,24-27,41-42,48,364-401
+go/internal/query/openapi_paths_code.go
+  1ca5ee6ce936a402 71-73
+go/internal/query/language_queries.go
+  1ca5ee6ce936a402 21-23,50-52,66,72,74
+go/internal/query/openapi_test.go
+  1ca5ee6ce936a402 191-193
+go/internal/query/entity_summary.go
+  1ca5ee6ce936a402 27-57,84-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "ddf6cccab5df83f8fa78384dbd86917c28ce6b78",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 6,
+      "accepted_lines": 248,
+      "overriden_lines": 0
+    }
+  }
+}
