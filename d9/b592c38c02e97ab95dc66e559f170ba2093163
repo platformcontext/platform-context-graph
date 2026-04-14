@@ -1,0 +1,44 @@
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 76
+go/internal/parser/dbt_sql_lineage_test.go
+  1ca5ee6ce936a402 75-145
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 42
+go/internal/parser/dbt_sql_expressions.go
+  1ca5ee6ce936a402 195-202,233,292,323,327
+docs/docs/languages/sql.md
+  1ca5ee6ce936a402 43-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "d9b592c38c02e97ab95dc66e559f170ba2093163",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 88,
+      "total_deletions": 8,
+      "accepted_lines": 88,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 85,
+      "overriden_lines": 0
+    }
+  }
+}
