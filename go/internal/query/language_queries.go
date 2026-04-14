@@ -214,7 +214,15 @@ func (h *LanguageQueryHandler) queryByLanguage(
 	for _, row := range rows {
 		results = append(results, buildLanguageResult(row, label))
 	}
-	return results, nil
+	return h.enrichLanguageResultsWithContentMetadata(
+		ctx,
+		results,
+		language,
+		label,
+		query,
+		repoID,
+		limit,
+	)
 }
 
 // buildLanguageCypher constructs the Cypher query and parameters for a

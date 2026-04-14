@@ -20,8 +20,8 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Imports | `imports` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
 | Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
-| Decorators | `decorators` | partial | `functions` | `name, line_number, decorators` | `content:Entity.metadata.decorators` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonDecoratedFunctionsEmitDecoratorMetadata` | Compose-backed fixture verification | Decorator metadata is emitted and preserved in content entities, but is not yet promoted into the normal query contract. |
-| Async functions | `async-functions` | partial | `functions` | `name, line_number, async` | `content:Entity.metadata.async` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonAsyncFunctionsEmitAsyncFlag` | Compose-backed fixture verification | The async flag is emitted and preserved in content entities, but is not yet first-class on the normal query surface. |
+| Decorators | `decorators` | partial | `functions` | `name, line_number, decorators` | `content:Entity.metadata.decorators` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonDecoratedFunctionsEmitDecoratorMetadata`, `go/internal/query/language_query_metadata_test.go::TestEnrichLanguageResultsWithContentMetadata` | Compose-backed fixture verification | Decorator metadata is emitted and preserved in content entities, and graph-backed `language-query` responses now enrich matching rows with that metadata. Broader graph/story/context surfacing remains partial. |
+| Async functions | `async-functions` | partial | `functions` | `name, line_number, async` | `content:Entity.metadata.async` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonAsyncFunctionsEmitAsyncFlag`, `go/internal/query/language_query_metadata_test.go::TestEnrichLanguageResultsWithContentMetadata` | Compose-backed fixture verification | The async flag is emitted and preserved in content entities, and graph-backed `language-query` responses now enrich matching rows with that metadata. Fully first-class graph/story/context surfacing remains partial. |
 | Inheritance | `inheritance` | supported | `classes` | `name, line_number, bases` | `relationship:INHERITS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
 | Type annotations | `type-annotations` | partial | `type_annotations` | `name, line_number, type` | `content:TypeAnnotation entity` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes` | Compose-backed fixture verification | Type annotations are queryable through the Go content-backed language-query and content APIs, but graph/story/context surfacing remains partial. |
 
@@ -36,9 +36,10 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Notes:
   - Framework evidence for FastAPI and Flask is carried by the Go parser and
     indexing path.
-  - Type annotations are now queryable through the Go content-backed APIs,
-    while decorators and async flags remain partial on the normal graph/query
-    surfaces.
+  - Type annotations are queryable through the Go content-backed APIs, and
+    graph-backed `language-query` results now enrich matching rows with
+    decorator and async metadata. Fully first-class graph/story/context
+    surfacing remains partial.
 
 
 ## Known Limitations

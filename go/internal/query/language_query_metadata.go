@@ -1,0 +1,79 @@
+package query
+
+import (
+	"context"
+	"fmt"
+)
+
+func (h *LanguageQueryHandler) enrichLanguageResultsWithContentMetadata(
+	ctx context.Context,
+	results []map[string]any,
+	language string,
+	label string,
+	query string,
+	repoID string,
+	limit int,
+) ([]map[string]any, error) {
+	if h == nil || h.Content == nil || len(results) == 0 {
+		return results, nil
+	}
+
+	entityType := graphLabelToContentEntityType(label)
+	if entityType == "" {
+		return results, nil
+	}
+
+	rows, err := h.Content.SearchEntitiesByLanguageAndType(
+		ctx,
+		repoID,
+		language,
+		entityType,
+		query,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("enrich language results with content metadata: %w", err)
+	}
+	if len(rows) == 0 {
+		return results, nil
+	}
+
+	metadataByKey := make(map[string]map[string]any, len(rows))
+	for _, row := range rows {
+		metadataByKey[languageResultMatchKey(
+			row.RelativePath,
+			row.EntityType,
+			row.EntityName,
+			row.StartLine,
+		)] = row.Metadata
+	}
+
+	for i := range results {
+		key := languageResultMatchKey(
+			StringVal(results[i], "file_path"),
+			label,
+			StringVal(results[i], "name"),
+			IntVal(results[i], "start_line"),
+		)
+		metadata, ok := metadataByKey[key]
+		if !ok || len(metadata) == 0 {
+			continue
+		}
+		results[i]["metadata"] = metadata
+	}
+
+	return results, nil
+}
+
+func graphLabelToContentEntityType(label string) string {
+	switch label {
+	case "Function", "Class", "Module", "Variable", "Struct", "Enum", "Union", "Macro":
+		return label
+	default:
+		return ""
+	}
+}
+
+func languageResultMatchKey(filePath string, entityType string, name string, startLine int) string {
+	return fmt.Sprintf("%s|%s|%s|%d", filePath, entityType, name, startLine)
+}
