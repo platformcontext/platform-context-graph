@@ -1,6 +1,8 @@
-"""Guardrails that keep deleted parser-runtime facades out of public exports."""
+"""Guardrails that keep deleted parser-runtime facades out of public imports."""
 
 from __future__ import annotations
+
+import importlib
 
 import pytest
 
@@ -15,14 +17,11 @@ def test_indexing_package_no_longer_exports_legacy_execution_entrypoints() -> No
     assert not hasattr(indexing, "IndexExecutionResult")
 
 
-def test_git_indexing_package_no_longer_exports_legacy_snapshot_parser() -> None:
-    """Git collector indexing should expose discovery helpers, not old parse runtime."""
+def test_git_indexing_package_is_deleted_after_go_cutover() -> None:
+    """The old Git indexing shim should disappear once Go owns the path."""
 
-    from platform_context_graph.collectors.git import indexing
-
-    assert not hasattr(indexing, "parse_repository_snapshot_async")
-    with pytest.raises(AttributeError):
-        getattr(indexing, "parse_repository_snapshot_async")
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("platform_context_graph.collectors.git.indexing")
 
 
 def test_config_catalog_no_longer_advertises_async_commit_toggle() -> None:

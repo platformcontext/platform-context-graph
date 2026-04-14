@@ -11,18 +11,12 @@ from ..cli.config_manager import get_config_value
 from ..cli.helpers.go_index_runtime import run_go_bootstrap_index
 from ..core.database import DatabaseManager
 from ..core.jobs import JobManager
-from ..observability import get_observability
 from ..relationships import (
     resolve_repository_relationships_for_committed_repositories as _resolve_repository_relationships_for_committed_repositories,
 )
 from ..repository_identity import git_remote_for_path, repository_metadata
-from ..utils.debug_log import debug_log, error_logger, info_logger, warning_logger
+from ..utils.debug_log import debug_log, info_logger, warning_logger
 from ..utils.debug_log import debug_logger
-from ..collectors.git.discovery import (
-    collect_supported_files as _collect_supported_files,
-    estimate_processing_time as _estimate_processing_time,
-    get_ignored_dir_names as _get_ignored_dir_names,
-)
 from ..graph.persistence import (
     delete_file_from_graph as _delete_file_from_graph,
     delete_repository_from_graph as _delete_repository_from_graph,
@@ -290,24 +284,6 @@ class GraphBuilder:
             info_logger_fn=info_logger,
             debug_logger_fn=debug_logger,
             warning_logger_fn=warning_logger,
-        )
-
-    def estimate_processing_time(self, path: Path) -> tuple[int, float] | None:
-        """Estimate indexing duration for a file or directory."""
-        return _estimate_processing_time(self, path, error_logger_fn=error_logger)
-
-    def _get_ignored_dir_names(self) -> set[str]:
-        """Return configured hidden directory names that should be skipped."""
-        return _get_ignored_dir_names(get_config_value_fn=get_config_value)
-
-    def _collect_supported_files(self, path: Path) -> list[Path]:
-        """Collect files whose names/extensions match the Go parser matrix."""
-        return _collect_supported_files(
-            self,
-            path,
-            get_config_value_fn=get_config_value,
-            get_observability_fn=get_observability,
-            os_module=os,
         )
 
     def _name_from_symbol(self, symbol: str) -> str:

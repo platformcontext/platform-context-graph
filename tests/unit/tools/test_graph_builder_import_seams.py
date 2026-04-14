@@ -35,6 +35,8 @@ import platform_context_graph.tools.graph_builder as graph_builder_module
 
 _SEAM_MODULES = (
     "platform_context_graph.collectors.git.indexing",
+    "platform_context_graph.collectors.git.discovery",
+    "platform_context_graph.collectors.git.parser_support",
     "platform_context_graph.collectors.git.parse_execution",
     "platform_context_graph.parsers.registry",
     "platform_context_graph.parsers.scip",
@@ -70,7 +72,7 @@ class _DummyDBManager:
 def test_graph_builder_discovery_paths_do_not_load_legacy_parser_registry(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """Discovery and estimation should stay on Go-owned metadata, not Python parsers."""
+    """GraphBuilder should not retain Python discovery helpers after cutover."""
 
     _clear_modules()
     importlib.reload(graph_builder_module)
@@ -83,14 +85,10 @@ def test_graph_builder_discovery_paths_do_not_load_legacy_parser_registry(
         object(),
         asyncio.new_event_loop(),
     )
-    python_file = tmp_path / "main.py"
-    python_file.write_text("print('ok')\n", encoding="utf-8")
-    dockerfile = tmp_path / "Dockerfile"
-    dockerfile.write_text("FROM python:3.12-slim\n", encoding="utf-8")
-
-    files = builder._collect_supported_files(tmp_path)
-    estimate = builder.estimate_processing_time(tmp_path)
-
-    assert files == [dockerfile, python_file]
-    assert estimate == (2, 0.1)
+    assert not hasattr(builder, "_collect_supported_files")
+    assert not hasattr(builder, "estimate_processing_time")
+    assert "platform_context_graph.collectors.git.discovery" not in sys.modules
+    assert (
+        "platform_context_graph.collectors.git.parser_support" not in sys.modules
+    )
     assert "platform_context_graph.parsers.registry" not in sys.modules

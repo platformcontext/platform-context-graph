@@ -30,6 +30,8 @@ imply:
 
 - the parser-family runtime cutover itself is now Go-owned on the normal Git
   path
+- the dead Python discovery shim layer under `collectors/git/` has also been
+  deleted from the normal path
 - the remaining parser-related work is parity hardening plus downstream
   materialization of Go-emitted buckets and metadata
 - Terraform provider-schema relationship extraction is still Python-owned on

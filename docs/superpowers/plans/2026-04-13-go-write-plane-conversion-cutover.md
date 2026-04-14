@@ -317,10 +317,9 @@ Progress on this step:
   `src/platform_context_graph/indexing/run_status.py` instead of importing the
   legacy Python coordinator execution stack. `GraphBuilder` no longer owns any
   Python parser-registry bootstrap, single-file parse entrypoint, or
-  file-refresh mutation path; parser-aware file discovery now uses Go-aligned
-  support metadata in `src/platform_context_graph/collectors/git/parser_support.py`,
-  and `GraphBuilder`, the CLI runtime helper, and MCP server imports avoid
-  eager imports of `platform_context_graph.parsers.registry`
+  file-refresh mutation path; `GraphBuilder`, the CLI runtime helper, and MCP
+  server imports avoid eager imports of
+  `platform_context_graph.parsers.registry`
 - [x] Runtime-owned templated content inference and Jenkins controller metadata
   no longer import parser-owned helper modules. The canonical Python helpers
   now live in `src/platform_context_graph/content/templated_detection.py` and
@@ -333,6 +332,11 @@ Progress on this step:
   normal file and directory path indexing now enters through the Go-owned
   `GraphBuilder.build_graph_from_path_async(...)` bootstrap route instead of a
   separate Python collector orchestration module
+- [x] The obsolete Python discovery shim layer has been deleted from the
+  branch: `src/platform_context_graph/collectors/git/indexing.py`,
+  `src/platform_context_graph/collectors/git/discovery.py`, and
+  `src/platform_context_graph/collectors/git/parser_support.py` are gone, and
+  `GraphBuilder` no longer exposes Python discovery convenience helpers
 - [x] The public Python facades no longer advertise the dead snapshot/coordinator
   parser path: `platform_context_graph.indexing` now exports only run-status
   helpers, and `platform_context_graph.collectors.git.indexing` no longer
@@ -344,8 +348,9 @@ Progress on this step:
   impl ownership, Ruby/PHP/Swift/Elixir long-tail edges, SCIP parity
   tie-break, and JSON/data-intelligence document coverage are all implemented
   with 101 parser tests across 21 test files passing. The remaining Python
-  runtime ownership seams are in the legacy snapshot/parser coordinator path
-  (Steps 3-8 below).
+  runtime ownership seams are now outside the deleted parser/discovery stack
+  and are concentrated in evidence, content materialization, and API/CLI
+  orchestration (Steps 3-8 below).
 
 - [x] **Step 3: Write failing Go tests for native collector selection and snapshot ownership**
 

@@ -73,11 +73,10 @@ def test_graph_builder_no_longer_exposes_legacy_python_parse_entrypoint(
     assert "TreeSitterParser" not in graph_builder_module.__all__
 
 
-def test_collect_supported_files_uses_go_aligned_support_without_python_registry(
+def test_graph_builder_no_longer_exposes_python_discovery_helpers(
     monkeypatch,
-    tmp_path: Path,
 ) -> None:
-    """File discovery should not need the Python parser registry anymore."""
+    """GraphBuilder should not keep Python-only discovery convenience helpers."""
 
     monkeypatch.setattr(
         graph_builder_module, "_create_schema", lambda *_args, **_kwargs: None
@@ -88,12 +87,7 @@ def test_collect_supported_files_uses_go_aligned_support_without_python_registry
         SimpleNamespace(),
         asyncio.new_event_loop(),
     )
-    python_file = tmp_path / "service.py"
-    python_file.write_text("print('ok')\n", encoding="utf-8")
-    dockerfile = tmp_path / "Dockerfile"
-    dockerfile.write_text("FROM python:3.12-slim\n", encoding="utf-8")
 
-    files = builder._collect_supported_files(tmp_path)
-
-    assert files == [dockerfile, python_file]
     assert not hasattr(builder, "parsers")
+    assert not hasattr(builder, "_collect_supported_files")
+    assert not hasattr(builder, "estimate_processing_time")

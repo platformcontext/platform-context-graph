@@ -136,13 +136,12 @@ helpers.
 
 The remaining transition risk is now concentrated in Python-owned façade,
 evidence, and materialization seams such as `tools/graph_builder.py`,
-`collectors/git/discovery.py`, `collectors/git/parser_support.py`,
 Terraform provider-schema extraction, `content/ingest.py`, and a smaller set
 of CLI/API support modules, not in the deleted post-commit bridge, the deleted
-ingester bridge modules, or the deleted legacy snapshot/coordinator stack.
-Non-dependency directory indexing now delegates from `GraphBuilder` to the Go
-`bootstrap-index` runtime, and direct single-file indexing now uses the same
-Go-owned runtime contract.
+ingester bridge modules, the deleted legacy snapshot/coordinator stack, or the
+now-deleted Python discovery shims. Non-dependency directory indexing now
+delegates from `GraphBuilder` to the Go `bootstrap-index` runtime, and direct
+single-file indexing now uses the same Go-owned runtime contract.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.
@@ -215,11 +214,11 @@ Current native parser-runtime slice:
   template and config artifacts
 
 These Go packages are the target normal-path runtime ownership. The remaining
-Python ownership debt is no longer the deleted parser/coordinator stack. It is
-centered on the GraphBuilder/discovery façade, downstream
-evidence/materialization, and orchestration seams, including Terraform
-provider-schema extraction, `content/ingest.py`, and the remaining CLI/API
-helpers that still touch the normal path.
+Python ownership debt is no longer the deleted parser/coordinator stack or the
+deleted Python discovery shim layer. It is now centered on GraphBuilder
+facade/orchestration cleanup, downstream evidence/materialization, including
+Terraform provider-schema extraction and `content/ingest.py`, plus the
+remaining CLI/API helpers that still touch the normal path.
 
 The parser-family runtime cutover is complete on this branch. The remaining
 parser-related work is parity hardening: SCIP depth, specialized
