@@ -1,0 +1,25 @@
+go/internal/storage/postgres/facts_test.go
+  1ca5ee6ce936a402 149-210
+go/internal/storage/postgres/facts.go
+  1ca5ee6ce936a402 159-163,169,262-283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "6d6c2138ff5477013b4b7661569519f267e42e3d",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 93,
+      "total_deletions": 561,
+      "accepted_lines": 754,
+      "overriden_lines": 0
+    }
+  }
+}
