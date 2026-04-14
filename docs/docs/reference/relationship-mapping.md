@@ -218,8 +218,15 @@ The important constraint is not the tool name itself. The important constraint i
 
 Terraform has one migration-specific caveat on the current rewrite branch:
 
-- the provider-schema-driven Terraform evidence subsystem is still Python-owned
-  on the normal runtime path
+- the provider-schema-driven Terraform evidence subsystem is now split:
+  schema loading, identity-key inference, category classification, and
+  schema-driven generic Terraform evidence now exist in Go under
+  `go/internal/terraformschema` and `go/internal/relationships`
+- Python still owns the remaining Terraform relationship runtime boundary
+  through:
+  `relationships/file_evidence.py`,
+  `relationships/evidence_terraform.py`, and
+  `relationships/terraform_evidence/**`
 - the live path runs through `relationships/file_evidence.py`,
   `relationships/evidence_terraform.py`, and
   `relationships/terraform_evidence/**`

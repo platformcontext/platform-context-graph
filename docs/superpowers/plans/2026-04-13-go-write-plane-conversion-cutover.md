@@ -33,6 +33,10 @@ The branch still has active Python-owned runtime seams:
   Go-emitted buckets and metadata
 - `src/platform_context_graph/content/ingest.py` remains a live Python
   content-shaping seam on the normal indexing path
+- the Terraform provider-schema relationship seam is now split:
+  Go owns schema loading/classification and schema-driven generic evidence
+  under `go/internal/terraformschema` and `go/internal/relationships`,
+  while Python still owns the outer relationship finalization/runtime boundary
 
 The collector bridge inventory changed during Chunk 2:
 

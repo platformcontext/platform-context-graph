@@ -41,22 +41,37 @@ Supporting artifacts:
 These tests define the parity surface. The Go port should add equivalent Go
 tests first, then cut callers over, then delete the Python runtime path.
 
-## Proposed Go Package Layout
+## Current Go Layout
 
-- `go/internal/relationships/terraformschema/loader.go`
-- `go/internal/relationships/terraformschema/loader_test.go`
-- `go/internal/relationships/terraformschema/classify.go`
-- `go/internal/relationships/terraformschema/classify_test.go`
-- `go/internal/relationships/terraformevidence/registry.go`
-- `go/internal/relationships/terraformevidence/registry_test.go`
-- `go/internal/relationships/terraformevidence/generic.go`
-- `go/internal/relationships/terraformevidence/generic_test.go`
-- `go/internal/relationships/terraformevidence/runtime.go`
-- `go/internal/relationships/terraformevidence/runtime_test.go`
+Landed on this branch:
+
+- `go/internal/terraformschema/schema.go`
+- `go/internal/terraformschema/categories.go`
+- `go/internal/terraformschema/*_test.go`
+- `go/internal/relationships/terraform_schema.go`
+- `go/internal/relationships/terraform_schema*_test.go`
+
+This means the Go side now owns:
+
+- plain JSON and `.json.gz` schema loading
+- nested `metadata` attribute merge for identity discovery
+- identity-key inference parity
+- longest-prefix service-category classification parity
+- schema-driven Terraform generic extractor registration
+- schema-driven Terraform evidence emission inside the Go
+  `internal/relationships` runtime
+
+Still not cut over:
+
+- the Python relationship-resolution/finalization call path that still invokes
+  `relationships/file_evidence.py` and `relationships/evidence_terraform.py`
+- deletion of the Python Terraform registry/runtime packages
 
 ## Execution Chunks
 
 ### Chunk 1: Lock loader and classifier parity in Go tests
+
+Status: done on this branch.
 
 - write failing Go tests for:
   - JSON and `.json.gz` loading
@@ -68,6 +83,8 @@ tests first, then cut callers over, then delete the Python runtime path.
 
 ### Chunk 2: Port registry and generic extractor semantics
 
+Status: done on this branch.
+
 - write failing Go tests for:
   - extractor registration
   - handwritten override preservation
@@ -77,11 +94,18 @@ tests first, then cut callers over, then delete the Python runtime path.
 
 ### Chunk 3: Port runtime Terraform evidence orchestration
 
+Status: partially done.
+
 - write failing Go tests for:
   - startup-time registration behavior
   - schema-directory discovery
   - integration into the Terraform evidence runtime flow
 - implement the Go runtime orchestration package
+- current truth:
+  - Go `internal/relationships` now performs schema-driven extractor bootstrap
+    and emits schema-driven Terraform evidence during `DiscoverEvidence(...)`
+  - the remaining runtime cutover is the outer Python relationship execution
+    and finalization boundary, not the inner schema semantics
 
 ### Chunk 4: Cut the normal runtime path to Go
 
@@ -105,7 +129,8 @@ Smallest-first validation order:
 
 ```bash
 cd go
-go test ./internal/relationships/terraformschema ./internal/relationships/terraformevidence -count=1
+go test ./internal/terraformschema ./internal/relationships -count=1
+golangci-lint run ./internal/terraformschema/... ./internal/relationships/...
 ```
 
 Then broader parity and docs checks:
