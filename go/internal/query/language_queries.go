@@ -18,8 +18,9 @@ type LanguageQueryHandler struct {
 // supportedLanguages lists every language that has Cypher templates registered.
 var supportedLanguages = map[string]bool{
 	"c": true, "cpp": true, "csharp": true, "dart": true,
-	"go": true, "haskell": true, "java": true, "javascript": true,
-	"hcl": true, "perl": true, "python": true, "ruby": true, "rust": true,
+	"elixir": true, "go": true, "haskell": true, "java": true,
+	"javascript": true, "hcl": true, "kotlin": true, "perl": true,
+	"php": true, "python": true, "ruby": true, "rust": true,
 	"scala": true, "swift": true, "typescript": true,
 }
 
@@ -46,6 +47,9 @@ var contentBackedEntityTypes = map[string]string{
 	"type_alias":            "TypeAlias",
 	"type_annotation":       "TypeAnnotation",
 	"typedef":               "Typedef",
+	"annotation":            "Annotation",
+	"protocol":              "Protocol",
+	"impl_block":            "ImplBlock",
 	"component":             "Component",
 	"terragrunt_dependency": "TerragruntDependency",
 	"terragrunt_local":      "TerragruntLocal",
@@ -59,12 +63,15 @@ var languageFileExtensions = map[string][]string{
 	"cpp":        {".cpp", ".cc", ".cxx", ".hpp", ".hxx", ".h"},
 	"csharp":     {".cs"},
 	"dart":       {".dart"},
+	"elixir":     {".ex", ".exs"},
 	"go":         {".go"},
 	"haskell":    {".hs", ".lhs"},
 	"java":       {".java"},
 	"javascript": {".js", ".jsx", ".mjs", ".cjs"},
 	"hcl":        {".hcl"},
+	"kotlin":     {".kt", ".kts"},
 	"perl":       {".pl", ".pm"},
+	"php":        {".php"},
 	"python":     {".py", ".pyi"},
 	"ruby":       {".rb"},
 	"rust":       {".rs"},

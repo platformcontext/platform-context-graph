@@ -188,6 +188,9 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		t.Fatalf("language-query entity_type enum type = %T, want []any", entityType["enum"])
 	}
 	if !containsValue(enumValues, "type_alias") ||
+		!containsValue(enumValues, "annotation") ||
+		!containsValue(enumValues, "protocol") ||
+		!containsValue(enumValues, "impl_block") ||
 		!containsValue(enumValues, "type_annotation") ||
 		!containsValue(enumValues, "typedef") ||
 		!containsValue(enumValues, "component") ||

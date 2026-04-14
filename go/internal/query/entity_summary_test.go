@@ -77,6 +77,137 @@ func TestBuildEntitySemanticSummaryComponent(t *testing.T) {
 	}
 }
 
+func TestBuildEntitySemanticSummaryTypedef(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Typedef"},
+		"name":   "my_int",
+		"metadata": map[string]any{
+			"type": "int",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Typedef my_int aliases int."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildEntitySemanticSummaryAnnotation(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Annotation"},
+		"name":   "Logged",
+		"metadata": map[string]any{
+			"kind":        "applied",
+			"target_kind": "method_declaration",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Annotation Logged is applied to a method_declaration."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildEntitySemanticSummaryProtocol(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Protocol"},
+		"name":   "Demo.Serializable",
+		"metadata": map[string]any{
+			"module_kind": "protocol",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Protocol Demo.Serializable is a protocol."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildEntitySemanticSummaryRustImplBlock(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"ImplBlock"},
+		"name":   "Point",
+		"metadata": map[string]any{
+			"kind":   "trait_impl",
+			"trait":  "Display",
+			"target": "Point",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "ImplBlock Point implements Display for Point."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildEntitySemanticSummaryKotlinSecondaryConstructor(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Function"},
+		"name":   "Widget",
+		"metadata": map[string]any{
+			"constructor_kind": "secondary",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Function Widget is a secondary constructor."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildEntitySemanticSummaryElixirModule(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Module"},
+		"name":   "Demo.Serializable",
+		"metadata": map[string]any{
+			"module_kind":     "protocol_implementation",
+			"protocol":        "Demo.Serializable",
+			"implemented_for": "Demo.Worker",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Module Demo.Serializable is a protocol implementation for Demo.Worker via Demo.Serializable."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildEntitySemanticSummaryElixirFunctionKinds(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Function"},
+		"name":   "is_even",
+		"metadata": map[string]any{
+			"semantic_kind": "guard",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Function is_even is a guard."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildEntitySemanticSummaryJavaScriptFunction(t *testing.T) {
 	t.Parallel()
 

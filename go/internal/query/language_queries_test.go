@@ -11,8 +11,8 @@ import (
 
 func TestSupportedLanguages(t *testing.T) {
 	langs := SupportedLanguages()
-	if len(langs) != 16 {
-		t.Errorf("expected 16 supported languages, got %d: %v", len(langs), langs)
+	if len(langs) != 19 {
+		t.Errorf("expected 19 supported languages, got %d: %v", len(langs), langs)
 	}
 	// Verify sorted order.
 	for i := 1; i < len(langs); i++ {
@@ -21,7 +21,10 @@ func TestSupportedLanguages(t *testing.T) {
 		}
 	}
 	// Spot-check a few.
-	expected := map[string]bool{"go": true, "python": true, "rust": true, "typescript": true, "hcl": true}
+	expected := map[string]bool{
+		"go": true, "python": true, "rust": true, "typescript": true, "hcl": true,
+		"kotlin": true, "php": true, "elixir": true,
+	}
 	langSet := make(map[string]bool, len(langs))
 	for _, l := range langs {
 		langSet[l] = true
@@ -35,13 +38,14 @@ func TestSupportedLanguages(t *testing.T) {
 
 func TestSupportedEntityTypes(t *testing.T) {
 	types := SupportedEntityTypes()
-	if len(types) != 18 {
-		t.Errorf("expected 18 supported entity types, got %d: %v", len(types), types)
+	if len(types) != 21 {
+		t.Errorf("expected 21 supported entity types, got %d: %v", len(types), types)
 	}
 	expected := map[string]bool{
 		"repository": true, "directory": true, "file": true,
 		"function": true, "class": true, "struct": true,
 		"type_alias": true, "type_annotation": true, "typedef": true, "component": true,
+		"annotation": true, "protocol": true, "impl_block": true,
 		"terragrunt_dependency": true, "terragrunt_local": true, "terragrunt_input": true,
 	}
 	typeSet := make(map[string]bool, len(types))
@@ -356,6 +360,45 @@ func TestHandleLanguageQuery_ContentBackedEntityTypes(t *testing.T) {
 			wantName:  "Button",
 			wantKey:   "framework",
 			wantValue: "react",
+		},
+		{
+			name:       "annotation from java content store",
+			language:   "java",
+			entityType: "annotation",
+			query:      "Logged",
+			row: []driver.Value{
+				"annotation-1", "repo-1", "src/Logged.java", "Annotation", "Logged",
+				int64(2), int64(2), "java", "@Logged", []byte(`{"kind":"applied","target_kind":"method_declaration"}`),
+			},
+			wantName:  "Logged",
+			wantKey:   "target_kind",
+			wantValue: "method_declaration",
+		},
+		{
+			name:       "protocol from swift content store",
+			language:   "swift",
+			entityType: "protocol",
+			query:      "Runnable",
+			row: []driver.Value{
+				"protocol-1", "repo-1", "Sources/Runnable.swift", "Protocol", "Runnable",
+				int64(1), int64(8), "swift", "protocol Runnable {\n  func run()\n}\n", []byte(`{"module_kind":"protocol"}`),
+			},
+			wantName:  "Runnable",
+			wantKey:   "module_kind",
+			wantValue: "protocol",
+		},
+		{
+			name:       "impl block from rust content store",
+			language:   "rust",
+			entityType: "impl_block",
+			query:      "Point",
+			row: []driver.Value{
+				"impl-1", "repo-1", "src/point.rs", "ImplBlock", "Point",
+				int64(10), int64(24), "rust", "impl Point {\n  fn x(&self) -> i32 { self.x }\n}\n", []byte(`{"kind":"inherent_impl","target":"Point"}`),
+			},
+			wantName:  "Point",
+			wantKey:   "kind",
+			wantValue: "inherent_impl",
 		},
 		{
 			name:       "terragrunt dependency from content store",

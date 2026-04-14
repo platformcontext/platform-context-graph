@@ -78,12 +78,12 @@ parity from persisted graph and query-surface parity.
 | TypeScript | Go-owned | partial | core TS parsing plus decorator/generic metadata preservation are present; type aliases are queryable through Go content-backed APIs, content-backed entities now participate in normal entity resolve/context, the normal `code/search` fallback can now search content-backed entity names as well as source text, and graph-backed `language-query`, `code/search`, `dead-code`, `code/relationships`, `code/complexity`, `entities/resolve`, and entity-context results now enrich matching rows with that metadata while `language-query` and `code/search` also emit semantic summaries for matching graph-backed entities | promote decorators and generics into first-class normal graph/story/context surfaces |
 | TypeScript JSX | Go-owned | partial | core TSX parsing plus JSX tag capture are present; type aliases and component semantics are queryable through Go content-backed APIs, content-backed entities now participate in normal entity resolve/context, the normal `code/search` fallback can now search content-backed entity names as well as source text and emit semantic summaries for content-backed component entities, and normal `code/relationships` now synthesizes JSX component `REFERENCES` edges for content-backed entities | promote component/reference semantics into first-class graph/story surfaces beyond the content-backed fallback and close the remaining normal-path alias/story gaps |
 | Python language parsing | Go-owned | partial | core Python parsing plus decorator/async extraction are present; type annotations are queryable through Go content-backed APIs, content-backed entities now participate in normal entity resolve/context, the normal `code/search` fallback can now search content-backed entity names as well as source text, graph-backed query surfaces enrich matching rows with that metadata, and `language-query`, `code/search`, plus entity-context now emit semantic summaries for Python decorator/async/type-annotation semantics | promote decorators and async flags into fuller first-class normal graph/story surfaces |
-| Java | Go-owned | partial | core Java parsing is complete | persist applied annotation usage |
-| Kotlin | Go-owned | partial | core Kotlin parsing is complete | persist secondary constructor semantics |
+| Java | Go-owned | partial | core Java parsing is complete, and applied annotations are now queryable through the normal Go `code/language-query` surface as content-backed `Annotation` entities | promote annotation usage into first-class graph/story surfaces beyond the content-backed query path |
+| Kotlin | Go-owned | partial | core Kotlin parsing is complete, and secondary constructor metadata now surfaces through normal Go query/context semantic summaries on function entities | persist constructor semantics as first-class graph/story behavior beyond metadata enrichment |
 | PHP | Go-owned | partial | core PHP parsing is complete | expand end-to-end proof for static method call graph edges |
-| C | Go-owned | partial | core C parsing is complete; typedefs are now queryable through the Go content-backed `code/language-query` surface | materialize typedefs as full graph entities and relationships end to end |
-| Rust | Go-owned | partial | core Rust parsing is complete | persist explicit impl-block graph semantics |
-| Elixir | Go-owned | partial | core Elixir parsing is complete | persist guards, protocols, protocol implementations, and module attributes |
+| C | Go-owned | partial | core C parsing is complete; typedefs are queryable through the Go content-backed `code/language-query` surface and now carry semantic summaries in normal query/context responses | materialize typedefs as full graph entities and relationships end to end |
+| Rust | Go-owned | partial | core Rust parsing is complete, and impl blocks now persist as `ImplBlock` content entities that the normal Go `code/language-query` surface can return | persist explicit impl-block graph semantics and relationships end to end |
+| Elixir | Go-owned | partial | core Elixir parsing is complete, and module/function semantic kinds now surface through normal Go query/context semantic summaries on `Module` and `Function` entities | persist guards, protocols, protocol implementations, and module attributes as first-class graph semantics rather than generic metadata |
 | Kubernetes | Go-owned | partial | YAML resource parsing is complete | normalize and persist labels |
 | ArgoCD | Go-owned | partial | Applications and ApplicationSets parse in Go | normalize and persist sync policy |
 | CloudFormation | Go-owned | partial | YAML and JSON detection are native Go | bring JSON-template fixture and end-to-end proof to YAML parity |
@@ -101,12 +101,12 @@ capabilities in the checked-in language pages:
 - TypeScript JSX: graph/story/context surfacing for JSX component/reference semantics, with type aliases and component semantics now available through both content-backed query APIs and content-backed entity resolve/context, plus content-backed `code/search` fallback coverage, semantic-summary fallback for content-backed components, and synthesized JSX component-reference edges on the normal `code/relationships` fallback path
 - Python: graph/story/context surfacing for decorators and async functions, with graph-backed `language-query`, `code/search`, `dead-code`, `code/relationships`, `code/complexity`, `entities/resolve`, and entity-context metadata enrichment now in place, `language-query` and `code/search` semantic summaries now in place, plus content-backed entity resolve/context, `code/search` fallback coverage for type annotations, and entity-context semantic summaries for Python-specific semantics
 - JavaScript: graph/story/context promotion beyond the now-enriched `language-query`, `code/search`, `dead-code`, `code/relationships`, `code/complexity`, `entities/resolve`, and entity-context metadata/semantic-summary surfaces
-- Java: applied annotations
-- Kotlin: secondary constructors
+- Java: applied annotations are queryable through content-backed `Annotation` entities, but graph/story promotion is still partial
+- Kotlin: secondary constructors now surface through semantic summaries on normal query/context responses, but graph/story promotion is still partial
 - PHP: static method calls end-to-end proof
-- C: typedef graph-first materialization beyond the now-supported content-backed `code/language-query` surface
-- Rust: impl blocks
-- Elixir: guards, protocols, protocol implementations, module attributes
+- C: typedef graph-first materialization beyond the now-supported content-backed `code/language-query` plus semantic-summary surface
+- Rust: impl blocks now persist as `ImplBlock` content entities and are queryable through `code/language-query`, but graph implementation edges remain partial
+- Elixir: guards, protocols, protocol implementations, and module attributes now appear in semantic summaries on normal query/context responses, but the graph still stores them as generic modules/functions/variables
 - Kubernetes: labels
 - ArgoCD: sync policy
 - CloudFormation: JSON-template parity
