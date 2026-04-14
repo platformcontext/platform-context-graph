@@ -171,18 +171,13 @@ class TestCLICommands:
 
     def test_start_service_uses_combined_app(self, monkeypatch):
         """Test the combined service startup helper wires the service app into Uvicorn."""
-        with (
-            patch("platform_context_graph.cli.main.MCPServer") as mock_server_cls,
-            patch("uvicorn.run") as mock_run,
-        ):
+        with patch("uvicorn.run") as mock_run:
             from platform_context_graph.cli.main import start_service
 
             monkeypatch.setenv("PCG_API_KEY", "test-api-key")
             monkeypatch.delenv("PCG_RUNTIME_ROLE", raising=False)
-            mock_server = mock_server_cls.return_value
             start_service(host="0.0.0.0", port=9000, reload=False)
 
-        assert mock_server is mock_server_cls.return_value
         assert os.environ["PCG_RUNTIME_ROLE"] == "api"
         app_obj = mock_run.call_args.args[0]
         assert app_obj.title == "PlatformContextGraph HTTP API"
@@ -197,10 +192,7 @@ class TestCLICommands:
 
     def test_start_service_preserves_explicit_runtime_role(self, monkeypatch):
         """Explicit runtime-role settings should win over the safe default."""
-        with (
-            patch("platform_context_graph.cli.main.MCPServer"),
-            patch("uvicorn.run"),
-        ):
+        with patch("uvicorn.run"):
             from platform_context_graph.cli.main import start_service
 
             monkeypatch.setenv("PCG_API_KEY", "test-api-key")
@@ -213,10 +205,7 @@ class TestCLICommands:
         self, monkeypatch, tmp_path
     ):
         """Interactive local combined-service starts should generate a token once."""
-        with (
-            patch("platform_context_graph.cli.main.MCPServer"),
-            patch("uvicorn.run"),
-        ):
+        with patch("uvicorn.run"):
             from platform_context_graph.cli.main import start_service
 
             monkeypatch.chdir(tmp_path)
@@ -242,10 +231,7 @@ class TestCLICommands:
         self, monkeypatch
     ):
         """Non-local Kubernetes starts should still require an explicit bearer token."""
-        with (
-            patch("platform_context_graph.cli.main.MCPServer"),
-            patch("uvicorn.run"),
-        ):
+        with patch("uvicorn.run"):
             from platform_context_graph.cli.main import start_service
 
             monkeypatch.delenv("PCG_API_KEY", raising=False)
@@ -264,14 +250,13 @@ class TestCLICommands:
 
         assert result.exit_code == 2
 
-    @patch("platform_context_graph.cli.main.run_repo_sync_cycle")
-    def test_internal_repo_sync_command_remains_available_for_local_helpers(
-        self, mock_run_repo_sync
-    ):
+    def test_internal_repo_sync_command_shows_deprecation_message(self):
+        """Test that `pcg internal repo-sync` shows a deprecation message."""
         result = runner.invoke(app, ["internal", "repo-sync"])
 
         assert result.exit_code == 0
-        mock_run_repo_sync.assert_called_once()
+        output = result.stdout + result.output
+        assert "Go ingester" in output or "pcg-ingester" in output
 
     def test_internal_repo_sync_loop_command_is_not_exposed_in_python_cli(self):
         result = runner.invoke(

@@ -187,6 +187,57 @@ services:
       timeout: 5s
       retries: 10
 
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/usr/local/bin/pcg-mcp-server"]
+    ports:
+      - "${PCG_MCP_PORT:-8081}:8080"
+      - "${PCG_MCP_METRICS_PORT:-19468}:9464"
+    environment:
+      DEFAULT_DATABASE: neo4j
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: ${PCG_NEO4J_PASSWORD:-change-me}
+      PCG_CONTENT_STORE_DSN: postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-me}@postgres:5432/platform_context_graph
+      PCG_POSTGRES_DSN: postgresql://pcg:${PCG_POSTGRES_PASSWORD:-change-me}@postgres:5432/platform_context_graph
+      PCG_HOME: /data/.platform-context-graph
+      PCG_REPOS_DIR: /data/repos
+      PCG_REPO_SOURCE_MODE: filesystem
+      PCG_FILESYSTEM_ROOT: /fixtures
+      PCG_GIT_AUTH_METHOD: none
+      PCG_REPOSITORY_RULES_JSON: "[]"
+      PCG_MCP_TRANSPORT: http
+      PCG_MCP_ADDR: ":8080"
+      PCG_DEPLOYMENT_ENVIRONMENT: local-compose
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+      PCG_PROMETHEUS_METRICS_ENABLED: "true"
+      PCG_PROMETHEUS_METRICS_PORT: "9464"
+    volumes:
+      - pcg_data:/data
+      - ./:/app-src
+      - ${PCG_FILESYSTEM_HOST_ROOT:-./tests/fixtures/ecosystems}:/fixtures:ro
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+      jaeger:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
   ingester:
     build:
       context: .
