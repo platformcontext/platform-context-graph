@@ -58,7 +58,8 @@ at `partial` maturity.
 ### Primary gaps
 
 - unresolved dbt references
-- macro and templated expression handling
+- templated expression handling and opaque macro bodies
+- lineage-preserving macro wrappers that still expose real source refs
 - window-function lineage semantics
 - multi-input derived expressions
 - broader real-repo and end-to-end proof for compiled analytics models
@@ -90,8 +91,9 @@ application languages.
   calls without unsafe bare-name fallback, and exact-only qualified Elixir
   matching. The current cross-file reducer proof now also covers JS/TS/TSX
   import-driven generic calls plus exact-qualified Swift/Ruby/Elixir/PHP
-  static-style calls; Python cross-file generic calls still need parser
-  import-source identity before they can close honestly
+  static-style calls; Python module and `from` imports now close cross-file
+  generic call proof honestly. The remaining call-edge gap is the parser-first
+  bare-name families that still cannot identify truthful cross-file callees
 
 ### Validation
 

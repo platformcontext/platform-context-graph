@@ -120,22 +120,12 @@ func (e *Engine) parsePython(
 			}
 			appendBucket(payload, "variables", item)
 		case "import_statement":
-			cursor := node.Walk()
-			defer cursor.Close()
-			for _, child := range node.NamedChildren(cursor) {
-				child := child
-				if child.Kind() != "dotted_name" && child.Kind() != "aliased_import" && child.Kind() != "identifier" {
-					continue
-				}
-				name := pythonImportName(&child, source)
-				if strings.TrimSpace(name) == "" {
-					continue
-				}
-				appendBucket(payload, "imports", map[string]any{
-					"name":        name,
-					"line_number": nodeLine(&child),
-					"lang":        "python",
-				})
+			for _, item := range pythonImportEntries(path, node, source) {
+				appendBucket(payload, "imports", item)
+			}
+		case "import_from_statement":
+			for _, item := range pythonImportEntries(path, node, source) {
+				appendBucket(payload, "imports", item)
 			}
 		case "call":
 			function := node.ChildByFieldName("function")
@@ -175,17 +165,6 @@ func (e *Engine) preScanPython(path string) ([]string, error) {
 	names := collectBucketNames(payload, "functions", "classes")
 	slices.Sort(names)
 	return names, nil
-}
-
-func pythonImportName(node *tree_sitter.Node, source []byte) string {
-	if node == nil {
-		return ""
-	}
-	if node.Kind() == "aliased_import" {
-		nameNode := node.ChildByFieldName("name")
-		return nodeText(nameNode, source)
-	}
-	return nodeText(node, source)
 }
 
 func pythonCallName(node *tree_sitter.Node, source []byte) string {

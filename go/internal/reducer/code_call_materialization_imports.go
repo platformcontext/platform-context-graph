@@ -129,7 +129,14 @@ func resolveImportedCrossFileCallee(
 		if len(paths) == 0 {
 			continue
 		}
-		matchedPath := codeCallMatchImportedPath(rawPath, relativePath, target.importSource, paths)
+		language := codeCallLanguage(call, rawPath, relativePath)
+		matchedPath := codeCallMatchImportedPath(
+			rawPath,
+			relativePath,
+			target.importSource,
+			language,
+			paths,
+		)
 		if matchedPath == "" {
 			continue
 		}
@@ -178,6 +185,7 @@ func codeCallImportedTargets(
 		entryName := strings.TrimSpace(anyToString(entry["name"]))
 		entryAlias := strings.TrimSpace(anyToString(entry["alias"]))
 		entrySource := strings.TrimSpace(anyToString(entry["source"]))
+		entryType := strings.TrimSpace(anyToString(entry["import_type"]))
 		if entrySource == "" {
 			continue
 		}
@@ -190,7 +198,7 @@ func codeCallImportedTargets(
 			appendTarget(entryName, entrySource)
 		}
 
-		if entryName == "*" && entryAlias != "" {
+		if (entryName == "*" || entryType == "import") && entryAlias != "" {
 			prefix := entryAlias + "."
 			if strings.HasPrefix(callFullName, prefix) {
 				appendTarget(callName, entrySource)
@@ -205,9 +213,15 @@ func codeCallMatchImportedPath(
 	rawPath string,
 	relativePath string,
 	importSource string,
+	language string,
 	candidatePaths []string,
 ) string {
-	for _, expectedPath := range codeCallRelativeImportCandidates(rawPath, relativePath, importSource) {
+	for _, expectedPath := range codeCallImportSourceCandidates(
+		rawPath,
+		relativePath,
+		importSource,
+		language,
+	) {
 		for _, candidatePath := range candidatePaths {
 			if normalizeCodeCallPath(candidatePath) == expectedPath {
 				return expectedPath
@@ -217,30 +231,14 @@ func codeCallMatchImportedPath(
 	return ""
 }
 
-func codeCallRelativeImportCandidates(
+func codeCallImportSourceCandidates(
 	rawPath string,
 	relativePath string,
 	importSource string,
+	language string,
 ) []string {
 	importSource = strings.TrimSpace(importSource)
-	if !strings.HasPrefix(importSource, ".") {
-		return nil
-	}
-
-	callerPath := normalizeCodeCallPath(rawPath)
-	if callerPath == "" {
-		callerPath = normalizeCodeCallPath(relativePath)
-	}
-	if callerPath == "" {
-		return nil
-	}
-
-	basePath := normalizeCodeCallPath(filepath.Join(filepath.Dir(callerPath), importSource))
-	if basePath == "" {
-		return nil
-	}
-
-	candidates := make([]string, 0, 10)
+	candidates := make([]string, 0, 12)
 	appendCandidate := func(value string) {
 		normalized := normalizeCodeCallPath(value)
 		if normalized == "" {
@@ -254,11 +252,78 @@ func codeCallRelativeImportCandidates(
 		candidates = append(candidates, normalized)
 	}
 
-	appendCandidate(basePath)
-	for _, ext := range []string{".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"} {
-		appendCandidate(basePath + ext)
-		appendCandidate(filepath.Join(basePath, "index"+ext))
+	appendCandidate(importSource)
+
+	callerPath := normalizeCodeCallPath(rawPath)
+	if callerPath == "" {
+		callerPath = normalizeCodeCallPath(relativePath)
+	}
+
+	repositoryRoot := codeCallRepositoryRoot(rawPath, relativePath)
+	if repositoryRoot != "" && importSource != "" && !strings.HasPrefix(importSource, ".") {
+		appendCandidate(filepath.Join(repositoryRoot, importSource))
+	}
+
+	if strings.HasPrefix(importSource, ".") && callerPath != "" {
+		basePath := normalizeCodeCallPath(filepath.Join(filepath.Dir(callerPath), importSource))
+		appendCandidate(basePath)
+		for _, ext := range []string{".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"} {
+			appendCandidate(basePath + ext)
+			appendCandidate(filepath.Join(basePath, "index"+ext))
+		}
+		if language == "python" {
+			appendCandidate(basePath + ".py")
+			appendCandidate(filepath.Join(basePath, "__init__.py"))
+		}
+	}
+
+	if language == "python" {
+		for _, candidate := range codeCallPythonModuleCandidates(
+			repositoryRoot,
+			importSource,
+		) {
+			appendCandidate(candidate)
+		}
 	}
 
 	return candidates
+}
+
+func codeCallRepositoryRoot(rawPath string, relativePath string) string {
+	callerPath := normalizeCodeCallPath(rawPath)
+	repositoryPath := normalizeCodeCallPath(relativePath)
+	if callerPath == "" || repositoryPath == "" {
+		return ""
+	}
+	if !strings.HasSuffix(callerPath, repositoryPath) {
+		return ""
+	}
+	root := strings.TrimSuffix(callerPath, repositoryPath)
+	return normalizeCodeCallPath(root)
+}
+
+func codeCallPythonModuleCandidates(
+	repositoryRoot string,
+	importSource string,
+) []string {
+	importSource = strings.TrimSpace(importSource)
+	if repositoryRoot == "" || importSource == "" || strings.Contains(importSource, "/") {
+		return nil
+	}
+
+	leadingDots := 0
+	for leadingDots < len(importSource) && importSource[leadingDots] == '.' {
+		leadingDots++
+	}
+	modulePath := strings.TrimLeft(importSource, ".")
+	if modulePath == "" || !strings.Contains(modulePath, ".") {
+		return nil
+	}
+
+	resolved := strings.ReplaceAll(modulePath, ".", string(filepath.Separator))
+	basePath := filepath.Join(repositoryRoot, resolved)
+	return []string{
+		basePath + ".py",
+		filepath.Join(basePath, "__init__.py"),
+	}
 }
