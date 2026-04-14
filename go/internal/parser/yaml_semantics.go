@@ -199,14 +199,17 @@ func parseCrossplaneClaim(metadata map[string]any, apiVersion string, kind strin
 }
 
 func parseK8sResource(document map[string]any, metadata map[string]any, apiVersion string, kind string, path string, lineNumber int) map[string]any {
+	name := strings.TrimSpace(fmt.Sprint(metadata["name"]))
+	namespace := strings.TrimSpace(fmt.Sprint(metadata["namespace"]))
 	row := map[string]any{
-		"name":        strings.TrimSpace(fmt.Sprint(metadata["name"])),
-		"line_number": lineNumber,
-		"kind":        kind,
-		"api_version": apiVersion,
-		"namespace":   strings.TrimSpace(fmt.Sprint(metadata["namespace"])),
-		"path":        path,
-		"lang":        "yaml",
+		"name":           name,
+		"line_number":    lineNumber,
+		"kind":           kind,
+		"api_version":    apiVersion,
+		"namespace":      namespace,
+		"qualified_name": normalizeK8sQualifiedName(namespace, kind, name),
+		"path":           path,
+		"lang":           "yaml",
 	}
 	if labels := collectMetadataLabels(metadata); labels != "" {
 		row["labels"] = labels
@@ -218,6 +221,20 @@ func parseK8sResource(document map[string]any, metadata map[string]any, apiVersi
 		row["backend_refs"] = strings.Join(backends, ",")
 	}
 	return row
+}
+
+func normalizeK8sQualifiedName(namespace string, kind string, name string) string {
+	parts := make([]string, 0, 3)
+	if cleaned := strings.TrimSpace(namespace); cleaned != "" {
+		parts = append(parts, cleaned)
+	}
+	if cleaned := strings.TrimSpace(kind); cleaned != "" {
+		parts = append(parts, cleaned)
+	}
+	if cleaned := strings.TrimSpace(name); cleaned != "" {
+		parts = append(parts, cleaned)
+	}
+	return strings.Join(parts, "/")
 }
 
 func collectContainerImages(document map[string]any) []string {
