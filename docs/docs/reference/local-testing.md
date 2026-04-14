@@ -114,33 +114,99 @@ compose-backed infrastructure, and tear the stack down automatically unless
 
 ## Local Full Stack
 
-Start the full stack:
+### With fixture ecosystems (default)
+
+Start the full stack with the bundled test fixtures:
 
 ```bash
 docker compose up --build
 ```
 
-This brings up:
+### With real repositories
+
+To test against real Git repositories from a local directory, set
+`PCG_FILESYSTEM_HOST_ROOT` to an absolute path containing one or more
+cloned repositories. Each subdirectory with a `.git` folder is
+discovered automatically.
+
+```bash
+PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos docker compose up --build
+```
+
+Port overrides are available when default ports conflict with other
+services (SSH tunnels, other Compose stacks, etc.):
+
+```bash
+PCG_FILESYSTEM_HOST_ROOT=/path/to/your/repos \
+  PCG_POSTGRES_PORT=25432 \
+  NEO4J_HTTP_PORT=27474 \
+  NEO4J_BOLT_PORT=27687 \
+  PCG_HTTP_PORT=28080 \
+  PCG_MCP_PORT=28081 \
+  JAEGER_UI_PORT=26686 \
+  docker compose up --build
+```
+
+**Important notes for real repo testing:**
+
+- The path must be a real directory (not a symlink). On macOS, `/tmp`
+  is a symlink to `/private/tmp` which Docker Desktop cannot resolve.
+  Use a path under `/Users/` or `/home/`.
+- Each repo subdirectory must contain a `.git` directory.
+- Large repo sets (10+ repos, thousands of files) require significant
+  memory. The bootstrap-index process holds all parsed facts in memory
+  during the commit phase. For large repo sets, use a machine with at
+  least 16 GB of RAM allocated to Docker.
+- Symlinks inside repositories are skipped during the filesystem copy
+  phase. This is intentional — symlinks cannot be reliably resolved
+  inside the container.
+
+### Services
+
+Both modes bring up:
 
 - Neo4j
 - Postgres
-- OTEL collector
-- Jaeger
-- `bootstrap-index`
-- `platform-context-graph`
-- `ingester`
-- `resolution-engine`
+- OTEL collector + Jaeger
+- `bootstrap-index` (one-shot, seeds the graph and fact store)
+- `platform-context-graph` (HTTP API)
+- `mcp-server` (MCP tool server)
+- `ingester` (ongoing repo sync)
+- `resolution-engine` (reducer / shared projection)
 
-Useful checks:
+### Useful checks
 
 ```bash
 docker compose ps
 docker compose logs bootstrap-index | tail -50
 docker compose logs ingester | tail -50
 docker compose logs resolution-engine | tail -50
+```
+
+### Health and pipeline status
+
+Replace `localhost:8080` with the appropriate host and port if using
+overrides.
+
+```bash
+# Health probes
 curl -s http://localhost:8080/healthz
 curl -s http://localhost:8080/readyz
-curl -s http://localhost:8080/admin/status
+
+# Pipeline summary (scopes, facts, work items, failures)
+curl -s http://localhost:8080/admin/status | python3 -m json.tool
+
+# Content store stats
+curl -s http://localhost:8080/api/v0/content/stats | python3 -m json.tool
+
+# Query the graph for repositories
+curl -s http://localhost:8080/api/v0/repositories | python3 -m json.tool
+
+# Query relationships (if any were built)
+curl -s 'http://localhost:8080/api/v0/query' \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "MATCH (n)-[r]->(m) RETURN labels(n)[0] AS from_type, type(r) AS rel, labels(m)[0] AS to_type, count(*) AS cnt ORDER BY cnt DESC LIMIT 20"}' \
+  | python3 -m json.tool
 ```
 
 ## Docs And Hygiene

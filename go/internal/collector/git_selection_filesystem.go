@@ -206,6 +206,13 @@ func copyRepositoryTree(sourceRoot string, targetRoot string) error {
 			return nil
 		}
 
+		// Skip symlinks — they cannot be reliably copied into the
+		// managed workspace (a symlink-to-directory looks like a file
+		// to WalkDir but cannot be read with io.Copy).
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+
 		targetPath := filepath.Join(targetRoot, filepath.FromSlash(rel))
 		if entry.IsDir() {
 			return os.MkdirAll(targetPath, 0o755)

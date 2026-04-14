@@ -98,16 +98,20 @@ func (s NativeRepositorySnapshotter) buildParsedRepositoryFiles(
 			VariableScope: "all",
 		})
 		if err != nil {
-			return nil, nil, err
+			// Skip files that cannot be parsed (e.g. malformed JSON,
+			// binary files with recognized extensions). A single bad
+			// file must not prevent the rest of the repository from
+			// being indexed.
+			continue
 		}
 		body, err := os.ReadFile(filePath)
 		if err != nil {
-			return nil, nil, err
+			continue
 		}
 
 		relativePath, err := filepath.Rel(repoPath, filePath)
 		if err != nil {
-			return nil, nil, err
+			continue
 		}
 		relativePath = filepath.ToSlash(filepath.Clean(relativePath))
 		shapeFiles = append(shapeFiles, shapeFileFromParsed(parsed, relativePath, string(body), commitSHA))
