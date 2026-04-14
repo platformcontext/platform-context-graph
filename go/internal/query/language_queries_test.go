@@ -11,8 +11,8 @@ import (
 
 func TestSupportedLanguages(t *testing.T) {
 	langs := SupportedLanguages()
-	if len(langs) != 15 {
-		t.Errorf("expected 15 supported languages, got %d: %v", len(langs), langs)
+	if len(langs) != 16 {
+		t.Errorf("expected 16 supported languages, got %d: %v", len(langs), langs)
 	}
 	// Verify sorted order.
 	for i := 1; i < len(langs); i++ {
@@ -21,7 +21,7 @@ func TestSupportedLanguages(t *testing.T) {
 		}
 	}
 	// Spot-check a few.
-	expected := map[string]bool{"go": true, "python": true, "rust": true, "typescript": true}
+	expected := map[string]bool{"go": true, "python": true, "rust": true, "typescript": true, "hcl": true}
 	langSet := make(map[string]bool, len(langs))
 	for _, l := range langs {
 		langSet[l] = true
@@ -35,13 +35,14 @@ func TestSupportedLanguages(t *testing.T) {
 
 func TestSupportedEntityTypes(t *testing.T) {
 	types := SupportedEntityTypes()
-	if len(types) != 14 {
-		t.Errorf("expected 14 supported entity types, got %d: %v", len(types), types)
+	if len(types) != 17 {
+		t.Errorf("expected 17 supported entity types, got %d: %v", len(types), types)
 	}
 	expected := map[string]bool{
 		"repository": true, "directory": true, "file": true,
 		"function": true, "class": true, "struct": true,
 		"type_alias": true, "type_annotation": true, "component": true,
+		"terragrunt_dependency": true, "terragrunt_local": true, "terragrunt_input": true,
 	}
 	typeSet := make(map[string]bool, len(types))
 	for _, typ := range types {
@@ -342,6 +343,45 @@ func TestHandleLanguageQuery_ContentBackedEntityTypes(t *testing.T) {
 			wantName:  "Button",
 			wantKey:   "framework",
 			wantValue: "react",
+		},
+		{
+			name:       "terragrunt dependency from content store",
+			language:   "hcl",
+			entityType: "terragrunt_dependency",
+			query:      "vpc",
+			row: []driver.Value{
+				"tg-dep-1", "repo-1", "infra/terragrunt.hcl", "TerragruntDependency", "vpc",
+				int64(5), int64(7), "hcl", "dependency \"vpc\" {\n  config_path = \"../vpc\"\n}\n", []byte(`{"config_path":"../vpc"}`),
+			},
+			wantName:  "vpc",
+			wantKey:   "config_path",
+			wantValue: "../vpc",
+		},
+		{
+			name:       "terragrunt local from content store",
+			language:   "hcl",
+			entityType: "terragrunt_local",
+			query:      "env",
+			row: []driver.Value{
+				"tg-local-1", "repo-1", "infra/terragrunt.hcl", "TerragruntLocal", "env",
+				int64(9), int64(9), "hcl", "env = \"dev\"\n", []byte(`{"value":"dev"}`),
+			},
+			wantName:  "env",
+			wantKey:   "value",
+			wantValue: "dev",
+		},
+		{
+			name:       "terragrunt input from content store",
+			language:   "hcl",
+			entityType: "terragrunt_input",
+			query:      "image_tag",
+			row: []driver.Value{
+				"tg-input-1", "repo-1", "infra/terragrunt.hcl", "TerragruntInput", "image_tag",
+				int64(13), int64(13), "hcl", "image_tag = \"latest\"\n", []byte(`{"value":"latest"}`),
+			},
+			wantName:  "image_tag",
+			wantKey:   "value",
+			wantValue: "latest",
 		},
 	}
 

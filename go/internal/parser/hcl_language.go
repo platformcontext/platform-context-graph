@@ -36,6 +36,15 @@ func (e *Engine) parseHCL(
 	payload := hclBasePayload(path, isDependency)
 	if strings.EqualFold(filepath.Base(path), "terragrunt.hcl") {
 		appendBucket(payload, "terragrunt_configs", parseTerragruntConfig(body, source, path))
+		for _, row := range parseTerragruntDependencies(body, source, path) {
+			appendBucket(payload, "terragrunt_dependencies", row)
+		}
+		for _, row := range parseTerragruntLocals(body, source, path) {
+			appendBucket(payload, "terragrunt_locals", row)
+		}
+		for _, row := range parseTerragruntInputs(body, source, path) {
+			appendBucket(payload, "terragrunt_inputs", row)
+		}
 	} else {
 		parseTerraformBlocks(payload, body, source, path)
 	}
@@ -48,6 +57,9 @@ func (e *Engine) parseHCL(
 	sortNamedBucket(payload, "terraform_providers")
 	sortNamedBucket(payload, "terraform_locals")
 	sortNamedBucket(payload, "terragrunt_configs")
+	sortNamedBucket(payload, "terragrunt_dependencies")
+	sortNamedBucket(payload, "terragrunt_locals")
+	sortNamedBucket(payload, "terragrunt_inputs")
 	if options.IndexSource {
 		payload["source"] = string(source)
 	}
@@ -64,6 +76,9 @@ func hclBasePayload(path string, isDependency bool) map[string]any {
 	payload["terraform_providers"] = []map[string]any{}
 	payload["terraform_locals"] = []map[string]any{}
 	payload["terragrunt_configs"] = []map[string]any{}
+	payload["terragrunt_dependencies"] = []map[string]any{}
+	payload["terragrunt_locals"] = []map[string]any{}
+	payload["terragrunt_inputs"] = []map[string]any{}
 	return payload
 }
 
@@ -219,6 +234,78 @@ func parseTerragruntConfig(body *hclsyntax.Body, source []byte, path string) map
 	row["locals"] = strings.Join(localNames, ",")
 	row["inputs"] = strings.Join(objectAttributeKeys(body.Attributes["inputs"], source), ",")
 	return row
+}
+
+func parseTerragruntDependencies(body *hclsyntax.Body, source []byte, path string) []map[string]any {
+	rows := make([]map[string]any, 0)
+	for _, block := range body.Blocks {
+		if block.Type != "dependency" || len(block.Labels) == 0 {
+			continue
+		}
+		row := map[string]any{
+			"name":        block.Labels[0],
+			"line_number": block.TypeRange.Start.Line,
+			"path":        path,
+			"lang":        "hcl",
+		}
+		if configPath := attributeValue(block.Body.Attributes["config_path"], source); configPath != "" {
+			row["config_path"] = configPath
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func parseTerragruntLocals(body *hclsyntax.Body, source []byte, path string) []map[string]any {
+	rows := make([]map[string]any, 0)
+	for _, block := range body.Blocks {
+		if block.Type != "locals" {
+			continue
+		}
+		for _, item := range sortedAttributes(block.Body.Attributes) {
+			rows = append(rows, map[string]any{
+				"name":        item.name,
+				"line_number": item.attribute.NameRange.Start.Line,
+				"value":       expressionText(item.attribute.Expr, source),
+				"path":        path,
+				"lang":        "hcl",
+			})
+		}
+	}
+	return rows
+}
+
+func parseTerragruntInputs(body *hclsyntax.Body, source []byte, path string) []map[string]any {
+	inputs := body.Attributes["inputs"]
+	if inputs == nil {
+		return nil
+	}
+
+	objectExpr, ok := inputs.Expr.(*hclsyntax.ObjectConsExpr)
+	if !ok {
+		return nil
+	}
+
+	rows := make([]map[string]any, 0, len(objectExpr.Items))
+	for _, item := range objectExpr.Items {
+		name := strings.Trim(expressionText(item.KeyExpr, source), `"`)
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		rows = append(rows, map[string]any{
+			"name":        name,
+			"line_number": item.KeyExpr.Range().Start.Line,
+			"value":       expressionText(item.ValueExpr, source),
+			"path":        path,
+			"lang":        "hcl",
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		left, _ := rows[i]["name"].(string)
+		right, _ := rows[j]["name"].(string)
+		return left < right
+	})
+	return rows
 }
 
 type namedAttribute struct {

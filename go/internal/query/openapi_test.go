@@ -168,7 +168,12 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	if !ok {
 		t.Fatalf("language-query entity_type enum type = %T, want []any", entityType["enum"])
 	}
-	if !containsValue(enumValues, "type_alias") || !containsValue(enumValues, "type_annotation") || !containsValue(enumValues, "component") {
+	if !containsValue(enumValues, "type_alias") ||
+		!containsValue(enumValues, "type_annotation") ||
+		!containsValue(enumValues, "component") ||
+		!containsValue(enumValues, "terragrunt_dependency") ||
+		!containsValue(enumValues, "terragrunt_local") ||
+		!containsValue(enumValues, "terragrunt_input") {
 		t.Fatalf("language-query entity_type enum = %#v, want content-backed entity types", enumValues)
 	}
 }

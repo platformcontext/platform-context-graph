@@ -276,6 +276,50 @@ inputs = {
 	assertBucketContainsFieldValue(t, got, "terragrunt_configs", "locals", "env")
 }
 
+func TestDefaultEngineParsePathHCLTerragruntBuildsFirstClassDependencyLocalAndInputEntities(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "terragrunt.hcl")
+	writeTestFile(
+		t,
+		filePath,
+		`terraform {
+  source = "../modules/app"
+}
+
+dependency "vpc" {
+  config_path = "../vpc"
+}
+
+locals {
+  env = "dev"
+}
+
+inputs = {
+  image_tag = "latest"
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "terragrunt_dependencies", "vpc")
+	assertBucketContainsFieldValue(t, got, "terragrunt_dependencies", "config_path", "../vpc")
+	assertNamedBucketContains(t, got, "terragrunt_locals", "env")
+	assertBucketContainsFieldValue(t, got, "terragrunt_locals", "value", "dev")
+	assertNamedBucketContains(t, got, "terragrunt_inputs", "image_tag")
+	assertBucketContainsFieldValue(t, got, "terragrunt_inputs", "value", "latest")
+}
+
 func TestDefaultEngineParsePathHCLTerragruntIncludesEmptyLocalsAndInputs(t *testing.T) {
 	t.Parallel()
 

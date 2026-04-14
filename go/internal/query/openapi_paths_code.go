@@ -70,7 +70,10 @@ const openAPIPathsCode = `
                       "variable",
                       "type_alias",
                       "type_annotation",
-                      "component"
+                      "component",
+                      "terragrunt_dependency",
+                      "terragrunt_local",
+                      "terragrunt_input"
                     ]
                   },
                   "query": {"type": "string", "description": "Optional name filter"},

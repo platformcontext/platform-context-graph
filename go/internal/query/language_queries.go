@@ -19,7 +19,7 @@ type LanguageQueryHandler struct {
 var supportedLanguages = map[string]bool{
 	"c": true, "cpp": true, "csharp": true, "dart": true,
 	"go": true, "haskell": true, "java": true, "javascript": true,
-	"perl": true, "python": true, "ruby": true, "rust": true,
+	"hcl": true, "perl": true, "python": true, "ruby": true, "rust": true,
 	"scala": true, "swift": true, "typescript": true,
 }
 
@@ -43,9 +43,12 @@ var graphBackedEntityTypes = map[string]string{
 // labels that are already materialized in Postgres but not yet first-class in
 // the graph query surface.
 var contentBackedEntityTypes = map[string]string{
-	"type_alias":      "TypeAlias",
-	"type_annotation": "TypeAnnotation",
-	"component":       "Component",
+	"type_alias":            "TypeAlias",
+	"type_annotation":       "TypeAnnotation",
+	"component":             "Component",
+	"terragrunt_dependency": "TerragruntDependency",
+	"terragrunt_local":      "TerragruntLocal",
+	"terragrunt_input":      "TerragruntInput",
 }
 
 // languageFileExtensions maps language names to their common file extensions
@@ -59,6 +62,7 @@ var languageFileExtensions = map[string][]string{
 	"haskell":    {".hs", ".lhs"},
 	"java":       {".java"},
 	"javascript": {".js", ".jsx", ".mjs", ".cjs"},
+	"hcl":        {".hcl"},
 	"perl":       {".pl", ".pm"},
 	"python":     {".py", ".pyi"},
 	"ruby":       {".rb"},

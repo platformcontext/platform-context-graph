@@ -377,6 +377,51 @@ export function ToolbarButton({ label }: WidgetProps) {
 	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "Typedef", "my_int")
 }
 
+func TestNativeRepositorySnapshotterCarriesTerragruntDependencyAndVariableEntities(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(
+		t,
+		filepath.Join(repoRoot, "terragrunt.hcl"),
+		`terraform {
+  source = "../modules/app"
+}
+
+dependency "vpc" {
+  config_path = "../vpc"
+}
+
+locals {
+  env = "dev"
+}
+
+inputs = {
+  image_tag = "latest"
+}
+`,
+	)
+
+	engine, err := parser.DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	snapshotter := NativeRepositorySnapshotter{Engine: engine}
+	got, err := snapshotter.SnapshotRepository(
+		context.Background(),
+		SelectedRepository{RepoPath: repoRoot},
+	)
+	if err != nil {
+		t.Fatalf("SnapshotRepository() error = %v, want nil", err)
+	}
+
+	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "TerragruntConfig", "terragrunt")
+	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "TerragruntDependency", "vpc")
+	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "TerragruntLocal", "env")
+	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "TerragruntInput", "image_tag")
+}
+
 func writeCollectorTestFile(t *testing.T, path string, body string) {
 	t.Helper()
 

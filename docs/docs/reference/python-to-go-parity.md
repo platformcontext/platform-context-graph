@@ -89,7 +89,7 @@ parity from persisted graph and query-surface parity.
 | CloudFormation | Go-owned | partial | YAML and JSON detection are native Go | bring JSON-template fixture and end-to-end proof to YAML parity |
 | Kustomize | Go-owned | partial | overlays and resources parse in Go | model base references explicitly |
 | Terraform | Go-owned | partial | HCL parser and provider schema support are Go-owned | materialize `terraform {}` block metadata as a first-class graph surface if parity requires it |
-| Terragrunt | Go-owned | partial | core Terragrunt parsing is complete | normalize locals and inputs into independently queryable entities |
+| Terragrunt | Go-owned | partial | core Terragrunt parsing is complete and Terragrunt dependency/local/input semantics are queryable through Go content entities | resolve typed provisioning relationships from dependency config paths and `read_terragrunt_config()` semantics where parity requires them |
 | Generic JSON | Go-owned | intentionally partial | arbitrary JSON stays quiet to avoid graph noise | confirm whether Python-era behavior needs any targeted JSON families promoted |
 
 ## Documented Gap Inventory
@@ -112,7 +112,7 @@ capabilities in the checked-in language pages:
 - CloudFormation: JSON-template parity
 - Kustomize: base references
 - Terraform: `terraform {}` block metadata
-- Terragrunt: locals, inputs
+- Terragrunt: typed provisioning relationships from dependency/config-path semantics and `read_terragrunt_config()` resolution
 - JSON: generic JSON intentionally remains partial
 - SQL/dbt: compiled lineage maturity remains partial even though the runtime is Go-owned; remaining gaps are unresolved refs, templated expressions, complex macros, and richer derived expressions
 
