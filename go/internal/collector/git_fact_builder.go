@@ -2,10 +2,9 @@ package collector
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -40,7 +39,11 @@ func buildStreamingGeneration(
 		observedAt,
 		snapshotFreshnessHint(snapshot),
 	)
-	factCount := 1 + len(snapshot.FileData) + len(snapshot.ContentFiles) + len(snapshot.ContentEntities) + 1
+	contentFileCount := len(snapshot.ContentFiles)
+	if len(snapshot.ContentFileMetas) > 0 {
+		contentFileCount = len(snapshot.ContentFileMetas)
+	}
+	factCount := 1 + len(snapshot.FileData) + contentFileCount + len(snapshot.ContentEntities) + 1
 
 	factCh := make(chan facts.Envelope, factStreamBuffer)
 	go streamFacts(factCh, repoPath, repo, scopeValue.ScopeID, generation.GenerationID, observedAt, &snapshot, isDependency)
@@ -54,9 +57,14 @@ func buildStreamingGeneration(
 }
 
 // streamFacts emits fact envelopes through the channel and progressively
-// releases snapshot data as it goes. Each ContentFileSnapshot.Body (raw file
-// source — the largest memory consumer per fact) becomes GC-eligible as soon
-// as its fact is sent, rather than after all 295k facts are built.
+// releases snapshot data as it goes.
+//
+// Two-phase path (ContentFileMetas populated): re-reads each file body from
+// disk when building content facts. Memory stays O(single_file) because the
+// body is read, sent to the channel, and released before the next file.
+//
+// Legacy path (ContentFiles populated): bodies are already in memory from
+// SnapshotRepository. Each entry is zeroed after sending.
 func streamFacts(
 	ch chan<- facts.Envelope,
 	repoPath string,
@@ -82,12 +90,38 @@ func streamFacts(
 	}
 	snapshot.FileData = nil
 
-	// Content file facts (the large ones — each contains content_body)
-	for i, fileSnapshot := range snapshot.ContentFiles {
-		ch <- contentFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt, fileSnapshot)
-		snapshot.ContentFiles[i] = ContentFileSnapshot{}
+	// Content file facts — two-phase re-read path or legacy path.
+	if len(snapshot.ContentFileMetas) > 0 {
+		for i, meta := range snapshot.ContentFileMetas {
+			body, err := os.ReadFile(filepath.Join(repoPath, filepath.FromSlash(meta.RelativePath)))
+			if err != nil {
+				// File disappeared between parse and emit — skip.
+				snapshot.ContentFileMetas[i] = ContentFileMeta{}
+				continue
+			}
+			bodyStr := string(body)
+			body = nil // release []byte immediately
+
+			ch <- contentFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt, ContentFileSnapshot{
+				RelativePath:    meta.RelativePath,
+				Body:            bodyStr,
+				Digest:          meta.Digest,
+				Language:        meta.Language,
+				ArtifactType:    meta.ArtifactType,
+				TemplateDialect: meta.TemplateDialect,
+				IACRelevant:     meta.IACRelevant,
+				CommitSHA:       meta.CommitSHA,
+			})
+			snapshot.ContentFileMetas[i] = ContentFileMeta{}
+		}
+		snapshot.ContentFileMetas = nil
+	} else {
+		for i, fileSnapshot := range snapshot.ContentFiles {
+			ch <- contentFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt, fileSnapshot)
+			snapshot.ContentFiles[i] = ContentFileSnapshot{}
+		}
+		snapshot.ContentFiles = nil
 	}
-	snapshot.ContentFiles = nil
 
 	// Content entity facts
 	for i, entitySnapshot := range snapshot.ContentEntities {
@@ -100,108 +134,51 @@ func streamFacts(
 	ch <- workloadIdentityFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
 }
 
+// snapshotFreshnessHint computes a deterministic hash from file digests and
+// entity metadata. This replaces the old approach that JSON-marshaled the
+// entire snapshot (including all file bodies) which created a massive
+// temporary allocation for large repos.
 func snapshotFreshnessHint(snapshot RepositorySnapshot) string {
-	canonicalSnapshot := map[string]any{
-		"file_count":       snapshot.FileCount,
-		"imports_map":      normalizeFingerprintValue(snapshot.ImportsMap),
-		"file_data":        normalizeFingerprintValue(snapshot.FileData),
-		"content_files":    normalizeFingerprintValue(snapshot.ContentFiles),
-		"content_entities": normalizeFingerprintValue(snapshot.ContentEntities),
-	}
+	h := sha256.New()
+	fmt.Fprintf(h, "v2:file_count=%d\n", snapshot.FileCount)
 
-	fingerprintInput, err := json.Marshal(canonicalSnapshot)
-	if err != nil {
-		return fmt.Sprintf("snapshot:marshal-error:%x", sha256.Sum256([]byte(err.Error())))
-	}
-
-	sum := sha256.Sum256(fingerprintInput)
-	return fmt.Sprintf("snapshot:%x", sum[:])
-}
-
-func normalizeFingerprintValue(value any) any {
-	if value == nil {
-		return nil
-	}
-
-	switch typed := value.(type) {
-	case string, bool, int, int8, int16, int32, int64:
-		return typed
-	case uint, uint8, uint16, uint32, uint64:
-		return typed
-	case float32, float64:
-		return typed
-	case json.Number:
-		return typed.String()
-	case time.Time:
-		return typed.UTC().Format(time.RFC3339Nano)
-	case map[string]any:
-		return normalizeStringMap(typed)
-	case map[string]string:
-		cloned := make(map[string]any, len(typed))
-		for key, value := range typed {
-			cloned[key] = normalizeFingerprintValue(value)
+	// Hash file digests — already computed during materialization.
+	// ContentFileMetas is the two-phase path; ContentFiles is the legacy path.
+	if len(snapshot.ContentFileMetas) > 0 {
+		for _, meta := range snapshot.ContentFileMetas {
+			fmt.Fprintf(h, "file:%s:%s\n", meta.RelativePath, meta.Digest)
 		}
-		return normalizeStringMap(cloned)
-	}
-
-	if stringer, ok := value.(fmt.Stringer); ok {
-		return stringer.String()
-	}
-
-	reflectValue := reflect.ValueOf(value)
-	switch reflectValue.Kind() {
-	case reflect.Slice, reflect.Array:
-		if reflectValue.Kind() == reflect.Slice && reflectValue.IsNil() {
-			return []any{}
+	} else {
+		for _, cf := range snapshot.ContentFiles {
+			fmt.Fprintf(h, "file:%s:%s\n", cf.RelativePath, cf.Digest)
 		}
+	}
 
-		items := make([]any, 0, reflectValue.Len())
-		for i := 0; i < reflectValue.Len(); i++ {
-			items = append(items, normalizeFingerprintValue(reflectValue.Index(i).Interface()))
+	// Hash entity count and identity (lightweight).
+	fmt.Fprintf(h, "entities=%d\n", len(snapshot.ContentEntities))
+	for _, e := range snapshot.ContentEntities {
+		fmt.Fprintf(h, "entity:%s:%s:%d\n", e.RelativePath, e.EntityType, e.StartLine)
+	}
+
+	// Hash imports map keys (sorted for determinism).
+	importKeys := make([]string, 0, len(snapshot.ImportsMap))
+	for k := range snapshot.ImportsMap {
+		importKeys = append(importKeys, k)
+	}
+	sort.Strings(importKeys)
+	for _, k := range importKeys {
+		fmt.Fprintf(h, "import:%s:", k)
+		targets := snapshot.ImportsMap[k]
+		sorted := make([]string, len(targets))
+		copy(sorted, targets)
+		sort.Strings(sorted)
+		for _, v := range sorted {
+			fmt.Fprintf(h, "%s,", v)
 		}
-		sort.Slice(items, func(i, j int) bool {
-			return canonicalFingerprintJSON(items[i]) < canonicalFingerprintJSON(items[j])
-		})
-		return items
-	case reflect.Map:
-		if reflectValue.Type().Key().Kind() != reflect.String {
-			return fmt.Sprint(value)
-		}
-
-		cloned := make(map[string]any, reflectValue.Len())
-		for _, key := range reflectValue.MapKeys() {
-			cloned[key.String()] = normalizeFingerprintValue(reflectValue.MapIndex(key).Interface())
-		}
-		return normalizeStringMap(cloned)
-	default:
-		return fmt.Sprint(value)
-	}
-}
-
-func normalizeStringMap(input map[string]any) map[string]any {
-	if len(input) == 0 {
-		return map[string]any{}
+		h.Write([]byte("\n"))
 	}
 
-	keys := make([]string, 0, len(input))
-	for key := range input {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	cloned := make(map[string]any, len(input))
-	for _, key := range keys {
-		cloned[key] = normalizeFingerprintValue(input[key])
-	}
-	return cloned
-}
-
-func canonicalFingerprintJSON(value any) string {
-	payload, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Sprintf("marshal-error:%v", err)
-	}
-	return string(payload)
+	return fmt.Sprintf("snapshot:%x", h.Sum(nil))
 }
 
 func repositoryFactEnvelope(

@@ -72,21 +72,21 @@ func TestNativeRepositorySnapshotterSnapshotsOneRepository(t *testing.T) {
 		t.Fatal("classes[0].uid = empty, want canonical content entity id")
 	}
 
-	if len(got.ContentFiles) != 1 {
-		t.Fatalf("len(ContentFiles) = %d, want 1", len(got.ContentFiles))
+	if len(got.ContentFileMetas) != 1 {
+		t.Fatalf("len(ContentFileMetas) = %d, want 1", len(got.ContentFileMetas))
 	}
-	contentFile := got.ContentFiles[0]
-	if contentFile.RelativePath != "app.py" {
-		t.Fatalf("ContentFiles[0].RelativePath = %q, want %q", contentFile.RelativePath, "app.py")
+	if len(got.ContentFiles) != 0 {
+		t.Fatalf("len(ContentFiles) = %d, want 0 (two-phase: bodies not retained)", len(got.ContentFiles))
 	}
-	if contentFile.Body != "@cached\nasync def handler():\n    return 1\n\nclass Worker:\n    pass\n" {
-		t.Fatalf("ContentFiles[0].Body = %q, want source body", contentFile.Body)
+	contentMeta := got.ContentFileMetas[0]
+	if contentMeta.RelativePath != "app.py" {
+		t.Fatalf("ContentFileMetas[0].RelativePath = %q, want %q", contentMeta.RelativePath, "app.py")
 	}
-	if contentFile.Digest == "" {
-		t.Fatal("ContentFiles[0].Digest = empty, want content hash")
+	if contentMeta.Digest == "" {
+		t.Fatal("ContentFileMetas[0].Digest = empty, want content hash")
 	}
-	if contentFile.Language != "python" {
-		t.Fatalf("ContentFiles[0].Language = %q, want %q", contentFile.Language, "python")
+	if contentMeta.Language != "python" {
+		t.Fatalf("ContentFileMetas[0].Language = %q, want %q", contentMeta.Language, "python")
 	}
 
 	if len(got.ContentEntities) != 2 {
@@ -141,8 +141,8 @@ func TestNativeRepositorySnapshotterReturnsEmptySnapshotForRepoWithoutSupportedF
 	if len(got.FileData) != 0 {
 		t.Fatalf("len(FileData) = %d, want 0", len(got.FileData))
 	}
-	if len(got.ContentFiles) != 0 {
-		t.Fatalf("len(ContentFiles) = %d, want 0", len(got.ContentFiles))
+	if len(got.ContentFileMetas) != 0 {
+		t.Fatalf("len(ContentFileMetas) = %d, want 0", len(got.ContentFileMetas))
 	}
 	if len(got.ContentEntities) != 0 {
 		t.Fatalf("len(ContentEntities) = %d, want 0", len(got.ContentEntities))
@@ -318,11 +318,11 @@ func TestNativeRepositorySnapshotterSingleFileTargetsBypassGitignore(t *testing.
 	if parsedPath := got.FileData[0]["path"]; parsedPath != resolvedTarget {
 		t.Fatalf("FileData[0].path = %#v, want %q", parsedPath, resolvedTarget)
 	}
-	if got, want := len(got.ContentFiles), 1; got != want {
-		t.Fatalf("len(ContentFiles) = %d, want %d", got, want)
+	if got, want := len(got.ContentFileMetas), 1; got != want {
+		t.Fatalf("len(ContentFileMetas) = %d, want %d", got, want)
 	}
-	if got, want := got.ContentFiles[0].RelativePath, "ignored.py"; got != want {
-		t.Fatalf("ContentFiles[0].RelativePath = %q, want %q", got, want)
+	if got, want := got.ContentFileMetas[0].RelativePath, "ignored.py"; got != want {
+		t.Fatalf("ContentFileMetas[0].RelativePath = %q, want %q", got, want)
 	}
 }
 

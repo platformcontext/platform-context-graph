@@ -174,8 +174,17 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 
 	annotateParsedFilesWithEntityIDs(repoPath, parsedFiles, materialization.Entities)
 	snapshot.FileData = parsedFiles
-	snapshot.ContentFiles = materializationRecordsToSnapshots(materialization.Records)
+	snapshot.ContentFileMetas = materializationRecordsToMetas(materialization.Records)
 	snapshot.ContentEntities = materializationEntitiesToSnapshots(materialization.Entities, s.now())
+
+	// Release body references — bodies are no longer needed in the snapshot.
+	// streamFacts will re-read each file from disk when building content facts.
+	// The OS page cache keeps file contents warm, so re-reads are nearly free.
+	//nolint:ineffassign // intentional: drop references so GC can collect bodies
+	shapeFiles = nil
+	//nolint:ineffassign
+	materialization = content.Materialization{}
+
 	return snapshot, nil
 }
 
@@ -371,6 +380,22 @@ func materializationRecordsToSnapshots(records []content.Record) []ContentFileSn
 		})
 	}
 	return snapshots
+}
+
+func materializationRecordsToMetas(records []content.Record) []ContentFileMeta {
+	metas := make([]ContentFileMeta, 0, len(records))
+	for _, record := range records {
+		metas = append(metas, ContentFileMeta{
+			RelativePath:    record.Path,
+			Digest:          record.Digest,
+			Language:        record.Metadata["language"],
+			ArtifactType:    record.Metadata["artifact_type"],
+			TemplateDialect: record.Metadata["template_dialect"],
+			IACRelevant:     snapshotMetadataBoolPtr(record.Metadata, "iac_relevant"),
+			CommitSHA:       record.Metadata["commit_sha"],
+		})
+	}
+	return metas
 }
 
 func materializationEntitiesToSnapshots(

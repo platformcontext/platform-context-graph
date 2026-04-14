@@ -59,8 +59,10 @@ type Instruments struct {
 	FilesParsed           metric.Int64Counter
 
 	// Streaming fact production metrics
-	FactBatchesCommitted metric.Int64Counter
-	GenerationFactCount  metric.Float64Histogram
+	FactBatchesCommitted  metric.Int64Counter
+	GenerationFactCount   metric.Float64Histogram
+	ContentReReads        metric.Int64Counter
+	ContentReReadSkips    metric.Int64Counter
 
 	// Observable gauges for autoscaling signals
 	QueueDepth         metric.Int64ObservableGauge
@@ -289,6 +291,22 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register GenerationFactCount histogram: %w", err)
+	}
+
+	inst.ContentReReads, err = meter.Int64Counter(
+		"pcg_dp_content_rereads_total",
+		metric.WithDescription("Total content file re-reads from disk during two-phase streaming"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register ContentReReads counter: %w", err)
+	}
+
+	inst.ContentReReadSkips, err = meter.Int64Counter(
+		"pcg_dp_content_reread_skips_total",
+		metric.WithDescription("Content re-reads skipped due to missing file or read error"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register ContentReReadSkips counter: %w", err)
 	}
 
 	return inst, nil

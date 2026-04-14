@@ -3,9 +3,12 @@ package collector
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 )
 
 func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(t *testing.T) {
@@ -85,27 +88,51 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		Snapshotter: snapshotter,
 	}
 
-	firstCollected, ok, err := source.Next(context.Background())
+	// Collect both generations — order is non-deterministic with concurrent workers.
+	collected1, ok, err := source.Next(context.Background())
 	if err != nil {
-		t.Fatalf("Next() error = %v, want nil", err)
+		t.Fatalf("Next(1) error = %v, want nil", err)
 	}
 	if !ok {
-		t.Fatal("Next() ok = false, want true")
+		t.Fatal("Next(1) ok = false, want true")
 	}
-	if got, want := firstCollected.Scope.SourceSystem, "git"; got != want {
+	collected2, ok, err := source.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(2) error = %v, want nil", err)
+	}
+	if !ok {
+		t.Fatal("Next(2) ok = false, want true")
+	}
+
+	facts1 := drainFactChannel(collected1.Facts)
+	facts2 := drainFactChannel(collected2.Facts)
+
+	// Identify which result is the full repo (5 facts) vs empty repo (2 facts).
+	var fullCollected CollectedGeneration
+	var fullFacts []facts.Envelope
+	var emptyFacts []facts.Envelope
+	switch {
+	case len(facts1) == 5 && len(facts2) == 2:
+		fullCollected = collected1
+		fullFacts = facts1
+		emptyFacts = facts2
+	case len(facts1) == 2 && len(facts2) == 5:
+		fullCollected = collected2
+		fullFacts = facts2
+		emptyFacts = facts1
+	default:
+		t.Fatalf("unexpected fact counts: %d and %d, want 5 and 2", len(facts1), len(facts2))
+	}
+
+	// Validate common scope/generation fields on the full repo.
+	if got, want := fullCollected.Scope.SourceSystem, "git"; got != want {
 		t.Fatalf("Scope.SourceSystem = %q, want %q", got, want)
 	}
-	if got, want := string(firstCollected.Scope.ScopeKind), "repository"; got != want {
+	if got, want := string(fullCollected.Scope.ScopeKind), "repository"; got != want {
 		t.Fatalf("Scope.ScopeKind = %q, want %q", got, want)
 	}
-	if got, want := string(firstCollected.Generation.TriggerKind), "snapshot"; got != want {
+	if got, want := string(fullCollected.Generation.TriggerKind), "snapshot"; got != want {
 		t.Fatalf("Generation.TriggerKind = %q, want %q", got, want)
-	}
-
-	firstFacts := drainFactChannel(firstCollected.Facts)
-
-	if got, want := len(firstFacts), 5; got != want {
-		t.Fatalf("len(Facts) = %d, want %d", got, want)
 	}
 
 	wantKinds := []string{
@@ -116,12 +143,12 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		"shared_followup",
 	}
 	for i, want := range wantKinds {
-		if got := firstFacts[i].FactKind; got != want {
+		if got := fullFacts[i].FactKind; got != want {
 			t.Fatalf("Facts[%d].FactKind = %q, want %q", i, got, want)
 		}
 	}
 
-	repositoryFact := firstFacts[0]
+	repositoryFact := fullFacts[0]
 	importsMap, ok := repositoryFact.Payload["imports_map"].(map[string][]string)
 	if !ok {
 		t.Fatalf("repository fact imports_map = %#v, want map[string][]string", repositoryFact.Payload["imports_map"])
@@ -130,7 +157,7 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		t.Fatalf("repository fact imports_map Worker path = %q, want %q", got, want)
 	}
 
-	fileFact := firstFacts[1]
+	fileFact := fullFacts[1]
 	if got, want := fileFact.Payload["relative_path"], "app.py"; got != want {
 		t.Fatalf("file fact relative_path = %#v, want %#v", got, want)
 	}
@@ -138,7 +165,7 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		t.Fatal("file fact parsed_file_data missing, want present")
 	}
 
-	entityFact := firstFacts[3]
+	entityFact := fullFacts[3]
 	if got, want := entityFact.Payload["entity_id"], "content-entity:e_fn123456789"; got != want {
 		t.Fatalf("entity fact entity_id = %#v, want %#v", got, want)
 	}
@@ -156,27 +183,21 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		t.Fatalf("entity fact entity_metadata[docstring] = %#v, want %#v", got, want)
 	}
 
-	secondCollected, ok, err := source.Next(context.Background())
-	if err != nil {
-		t.Fatalf("Next(second) error = %v, want nil", err)
-	}
-	if !ok {
-		t.Fatal("Next(second) ok = false, want true")
-	}
-	if got, want := secondCollected.Scope.Metadata["repo_name"], filepathBase(secondRepoPath); got != want {
-		t.Fatalf("second scope repo_name = %q, want %q", got, want)
+	// Validate empty repo has just repo + workload facts.
+	if got, want := len(emptyFacts), 2; got != want {
+		t.Fatalf("len(empty facts) = %d, want %d", got, want)
 	}
 
-	secondFacts := drainFactChannel(secondCollected.Facts)
-
-	if got, want := len(secondFacts), 2; got != want {
-		t.Fatalf("len(second facts) = %d, want %d", got, want)
-	}
 	if got, want := selector.calls, 1; got != want {
 		t.Fatalf("selector calls = %d, want %d", got, want)
 	}
-	if got, want := snapshotter.calls, []string{firstRepoPath, secondRepoPath}; !equalStrings(got, want) {
-		t.Fatalf("snapshotter calls = %v, want %v", got, want)
+	gotCalls := make([]string, len(snapshotter.calls))
+	copy(gotCalls, snapshotter.calls)
+	sort.Strings(gotCalls)
+	wantCalls := []string{firstRepoPath, secondRepoPath}
+	sort.Strings(wantCalls)
+	if !equalStrings(gotCalls, wantCalls) {
+		t.Fatalf("snapshotter calls = %v, want %v (order-independent)", snapshotter.calls, wantCalls)
 	}
 }
 

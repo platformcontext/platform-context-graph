@@ -57,12 +57,30 @@ type RepositorySnapshot struct {
 	FileData        []map[string]any        `json:"file_data"`
 	ContentFiles    []ContentFileSnapshot   `json:"content_files"`
 	ContentEntities []ContentEntitySnapshot `json:"content_entities"`
+	// ContentFileMetas holds body-free file metadata for two-phase snapshots.
+	// When populated, streamFacts re-reads bodies from AbsolutePath at emit time
+	// instead of carrying all bodies in memory.
+	ContentFileMetas []ContentFileMeta `json:"content_file_metas,omitempty"`
 }
 
 // ContentFileSnapshot captures one portable file-content record.
 type ContentFileSnapshot struct {
 	RelativePath    string `json:"relative_path"`
 	Body            string `json:"content_body"`
+	Digest          string `json:"content_digest"`
+	Language        string `json:"language"`
+	ArtifactType    string `json:"artifact_type"`
+	TemplateDialect string `json:"template_dialect"`
+	IACRelevant     *bool  `json:"iac_relevant"`
+	CommitSHA       string `json:"commit_sha"`
+}
+
+// ContentFileMeta captures file metadata without the body string.
+// Used in the two-phase snapshot architecture: Phase A collects metadata
+// during parse/materialize (bodies temporary), Phase B re-reads bodies from
+// disk during fact streaming so memory stays O(single_file) not O(repo).
+type ContentFileMeta struct {
+	RelativePath    string `json:"relative_path"`
 	Digest          string `json:"content_digest"`
 	Language        string `json:"language"`
 	ArtifactType    string `json:"artifact_type"`
@@ -185,7 +203,7 @@ func (s *GitSource) startStream(ctx context.Context) error {
 	// Phase 3: Launch background snapshot workers
 	workers := s.SnapshotWorkers
 	if workers <= 0 {
-		workers = 1
+		workers = 4 // conservative default; two-phase snapshotting makes 8 safe
 	}
 	// Buffer of 1: only one completed generation waits while the consumer
 	// commits the previous one. This bounds memory to at most
