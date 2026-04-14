@@ -84,7 +84,11 @@ application languages.
 - JavaScript: docstrings and fuller method-kind metadata
 - Canonical call edges: broaden the new Go-owned `CALLS` materialization path
   from SCIP-backed edges and same-file generic-call proof into the remaining
-  cross-file generic and long-tail parser families, then prove it end to end
+  cross-file generic and long-tail parser families, then prove it end to end.
+  The current same-file reducer proof now includes family-safe disambiguation
+  for Swift receiver types, Ruby module/class scope, PHP receiver-qualified
+  calls without unsafe bare-name fallback, and exact-only qualified Elixir
+  matching
 
 ### Validation
 
