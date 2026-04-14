@@ -310,7 +310,7 @@ func lineageForProjection(selectItem string, bindings map[string]*relationBindin
 
 func referenceScanExpression(expression string) string {
 	matches := dbtQualifiedMacroCallRe.FindStringSubmatch(strings.TrimSpace(expression))
-	if matches == nil || !isSupportedQualifiedMacroExpression(strings.TrimSpace(expression)) {
+	if matches == nil || (!isSupportedQualifiedMacroExpression(strings.TrimSpace(expression)) && !macroExpressionHasLineage(strings.TrimSpace(expression))) {
 		return expression
 	}
 	return matches[2]

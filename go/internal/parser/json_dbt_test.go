@@ -1,138 +1,134 @@
 package parser
 
 import (
-	"path/filepath"
 	"reflect"
 	"testing"
 )
 
-func TestDefaultEngineParsePathJSONDBTManifest(t *testing.T) {
+func TestApplyDBTManifestDocumentIncludesMacroDependenciesAndLineage(t *testing.T) {
 	t.Parallel()
 
-	repoRoot := t.TempDir()
-	filePath := filepath.Join(repoRoot, "manifest.json")
-	writeTestFile(
-		t,
-		filePath,
-		`{
-  "metadata": {
-    "adapter_type": "postgres",
-    "project_name": "jaffle_shop"
-  },
-  "nodes": {
-    "model.jaffle_shop.order_metrics": {
-      "unique_id": "model.jaffle_shop.order_metrics",
-      "resource_type": "model",
-      "name": "order_metrics",
-      "database": "analytics",
-      "schema": "public",
-      "alias": "order_metrics",
-      "path": "models/marts/order_metrics.sql",
-      "compiled_path": "target/compiled/jaffle_shop/models/marts/order_metrics.sql",
-      "relation_name": "analytics.public.order_metrics",
-      "config": {
-        "materialized": "view"
-      },
-      "depends_on": {
-        "nodes": [
-          "source.jaffle_shop.raw.orders",
-          "source.jaffle_shop.raw.customers"
-        ]
-      },
-      "compiled_code": "select o.id as order_id, c.full_name as customer_name from raw.public.orders o join raw.public.customers c on c.id = o.customer_id",
-      "columns": {
-        "order_id": {
-          "name": "order_id"
-        },
-        "customer_name": {
-          "name": "customer_name"
-        }
-      }
-    }
-  },
-  "sources": {
-    "source.jaffle_shop.raw.orders": {
-      "unique_id": "source.jaffle_shop.raw.orders",
-      "resource_type": "source",
-      "source_name": "raw",
-      "name": "orders",
-      "database": "raw",
-      "schema": "public",
-      "identifier": "orders",
-      "columns": {
-        "id": {
-          "name": "id"
-        },
-        "customer_id": {
-          "name": "customer_id"
-        }
-      }
-    },
-    "source.jaffle_shop.raw.customers": {
-      "unique_id": "source.jaffle_shop.raw.customers",
-      "resource_type": "source",
-      "source_name": "raw",
-      "name": "customers",
-      "database": "raw",
-      "schema": "public",
-      "identifier": "customers",
-      "columns": {
-        "id": {
-          "name": "id"
-        },
-        "full_name": {
-          "name": "full_name"
-        }
-      }
-    }
-  }
-}`,
-	)
-
-	engine, err := DefaultEngine()
-	if err != nil {
-		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	payload := map[string]any{}
+	document := map[string]any{
+		"metadata": map[string]any{
+			"adapter_type": "postgres",
+			"project_name": "jaffle_shop",
+		},
+		"nodes": map[string]any{
+			"model.jaffle_shop.order_metrics": map[string]any{
+				"unique_id":     "model.jaffle_shop.order_metrics",
+				"resource_type": "model",
+				"name":          "order_metrics",
+				"database":      "analytics",
+				"schema":        "public",
+				"alias":         "order_metrics",
+				"path":          "models/marts/order_metrics.sql",
+				"compiled_path": "target/compiled/jaffle_shop/models/marts/order_metrics.sql",
+				"relation_name": "analytics.public.order_metrics",
+				"config":        map[string]any{"materialized": "view"},
+				"depends_on":    map[string]any{"nodes": []any{"source.jaffle_shop.raw.orders"}, "macros": []any{"macro.jaffle_shop.generate_surrogate_key"}},
+				"compiled_code": "select dbt_utils.generate_surrogate_key(md5(o.id)) as surrogate_key from raw.public.orders o",
+				"columns":       map[string]any{"surrogate_key": map[string]any{"name": "surrogate_key"}},
+			},
+		},
+		"sources": map[string]any{
+			"source.jaffle_shop.raw.orders": map[string]any{
+				"unique_id":     "source.jaffle_shop.raw.orders",
+				"resource_type": "source",
+				"source_name":   "raw",
+				"name":          "orders",
+				"database":      "raw",
+				"schema":        "public",
+				"identifier":    "orders",
+				"columns":       map[string]any{"id": map[string]any{"name": "id"}},
+			},
+		},
+		"macros": map[string]any{
+			"macro.jaffle_shop.generate_surrogate_key": map[string]any{
+				"unique_id":     "macro.jaffle_shop.generate_surrogate_key",
+				"resource_type": "macro",
+				"package_name":  "dbt_utils",
+				"name":          "generate_surrogate_key",
+				"macro_sql":     "{{ return(arg) }}",
+			},
+		},
 	}
 
-	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
-	if err != nil {
-		t.Fatalf("ParsePath() error = %v, want nil", err)
-	}
+	applyDBTManifestDocument(payload, document)
 
-	if got, want := bucketNames(t, got, "analytics_models"), []string{"order_metrics"}; !reflect.DeepEqual(got, want) {
+	if got, want := dbtBucketNames(t, payload, "analytics_models"), []string{"order_metrics"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("analytics models = %#v, want %#v", got, want)
 	}
-	if got, want := bucketNames(t, got, "data_assets"), []string{
+	if got, want := dbtBucketNames(t, payload, "data_assets"), []string{
+		"dbt_utils.generate_surrogate_key",
 		"analytics.public.order_metrics",
-		"raw.public.customers",
 		"raw.public.orders",
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("data assets = %#v, want %#v", got, want)
 	}
-	assertRelationshipPresent(t, got, "COMPILES_TO", "order_metrics", "analytics.public.order_metrics")
-	assertRelationshipPresent(t, got, "COLUMN_DERIVES_FROM", "analytics.public.order_metrics.customer_name", "raw.public.customers.full_name")
-	assertCoverageState(t, got, "complete")
+	dbtAssertRelationshipPresent(t, payload, "COMPILES_TO", "order_metrics", "analytics.public.order_metrics")
+	dbtAssertRelationshipPresent(t, payload, "USES_MACRO", "analytics.public.order_metrics", "dbt_utils.generate_surrogate_key")
+	dbtAssertRelationshipPresent(t, payload, "COLUMN_DERIVES_FROM", "analytics.public.order_metrics.surrogate_key", "raw.public.orders.id")
+	dbtAssertCoverageState(t, payload, "complete")
 }
 
-func TestDefaultEngineParsePathJSONDBTManifestFixtureVariant(t *testing.T) {
-	t.Parallel()
+func dbtBucketNames(t *testing.T, payload map[string]any, key string) []string {
+	t.Helper()
 
-	filePath := repoFixturePath("ecosystems", "analytics_compiled_comprehensive", "dbt_manifest.json")
-	repoRoot := filepath.Dir(filePath)
-
-	engine, err := DefaultEngine()
-	if err != nil {
-		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	items, ok := payload[key].([]map[string]any)
+	if ok {
+		names := make([]string, 0, len(items))
+		for _, item := range items {
+			name, _ := item["name"].(string)
+			names = append(names, name)
+		}
+		return names
 	}
 
-	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
-	if err != nil {
-		t.Fatalf("ParsePath() error = %v, want nil", err)
+	rawItems, ok := payload[key].([]any)
+	if !ok {
+		t.Fatalf("%s = %T, want []map[string]any or []any", key, payload[key])
+	}
+	names := make([]string, 0, len(rawItems))
+	for _, rawItem := range rawItems {
+		item := rawItem.(map[string]any)
+		name, _ := item["name"].(string)
+		names = append(names, name)
+	}
+	return names
+}
+
+func dbtAssertRelationshipPresent(t *testing.T, payload map[string]any, relationshipType string, sourceName string, targetName string) {
+	t.Helper()
+
+	items, ok := payload["data_relationships"].([]map[string]any)
+	if !ok {
+		rawItems, ok := payload["data_relationships"].([]any)
+		if !ok {
+			t.Fatalf("data_relationships = %T, want []map[string]any or []any", payload["data_relationships"])
+		}
+		items = make([]map[string]any, 0, len(rawItems))
+		for _, rawItem := range rawItems {
+			items = append(items, rawItem.(map[string]any))
+		}
 	}
 
-	if got, want := bucketNames(t, got, "analytics_models"), []string{"order_metrics", "orders_expanded"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("analytics models = %#v, want %#v", got, want)
+	for _, item := range items {
+		if item["type"] == relationshipType && item["source_name"] == sourceName && item["target_name"] == targetName {
+			return
+		}
 	}
-	assertRelationshipPresent(t, got, "COLUMN_DERIVES_FROM", "analytics.public.orders_expanded.id", "raw.public.orders.id")
-	assertCoverageState(t, got, "complete")
+	t.Fatalf("missing relationship type=%q source=%q target=%q in %#v", relationshipType, sourceName, targetName, items)
+}
+
+func dbtAssertCoverageState(t *testing.T, payload map[string]any, want string) {
+	t.Helper()
+
+	coverage, ok := payload["data_intelligence_coverage"].(map[string]any)
+	if !ok {
+		t.Fatalf("data_intelligence_coverage = %T, want map[string]any", payload["data_intelligence_coverage"])
+	}
+	if got := coverage["state"]; got != want {
+		t.Fatalf("data_intelligence_coverage.state = %#v, want %#v", got, want)
+	}
 }

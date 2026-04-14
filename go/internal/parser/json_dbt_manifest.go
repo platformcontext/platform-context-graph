@@ -17,8 +17,10 @@ func isDBTManifestDocument(document map[string]any, filename string) bool {
 func applyDBTManifestDocument(payload map[string]any, document map[string]any) {
 	sources, _ := document["sources"].(map[string]any)
 	nodes, _ := document["nodes"].(map[string]any)
+	macros, _ := document["macros"].(map[string]any)
 	outputAssets := make(map[string]map[string]any)
 	sourceAssets := make(map[string]map[string]any)
+	macroAssets := make(map[string]map[string]any)
 	assetColumns := make(map[string][]string)
 	dataColumns := make(map[string]map[string]any)
 	analyticsModels := make([]map[string]any, 0)
@@ -39,6 +41,16 @@ func applyDBTManifestDocument(payload map[string]any, document map[string]any) {
 			columnName, _ := column["name"].(string)
 			dataColumns[columnName] = column
 		}
+	}
+
+	for _, uniqueID := range sortedMapKeys(macros) {
+		macroNode, ok := macros[uniqueID].(map[string]any)
+		if !ok {
+			continue
+		}
+		macroAsset := dbtAssetRecord(macroNode)
+		outputAssets[uniqueID] = macroAsset
+		macroAssets[uniqueID] = macroAsset
 	}
 
 	for _, uniqueID := range sortedMapKeys(nodes) {
@@ -115,6 +127,16 @@ func applyDBTManifestDocument(payload map[string]any, document map[string]any) {
 				relationships = append(relationships, relationship)
 			}
 		}
+		for _, dependency := range dbtMacroDependencyAssets(node, outputAssets, macroAssets) {
+			relationships = append(relationships, map[string]any{
+				"type":        "USES_MACRO",
+				"source_id":   modelAsset["id"],
+				"source_name": modelAssetName,
+				"target_id":   dependency["id"],
+				"target_name": dependency["name"],
+				"confidence":  0.99,
+			})
+		}
 		assetColumns[modelAssetName] = modelColumnNames
 		unresolvedSummary := dbtUnresolvedReferenceSummary(lineage.UnresolvedReferences)
 		analyticsModels = append(analyticsModels, map[string]any{
@@ -157,6 +179,12 @@ func dbtAssetRecord(node map[string]any) map[string]any {
 }
 
 func dbtAssetName(node map[string]any) string {
+	if fmt.Sprint(node["resource_type"]) == "macro" {
+		return strings.Join(nonEmptyStrings(
+			fmt.Sprint(node["package_name"]),
+			defaultString(node["name"], fmt.Sprint(node["unique_id"])),
+		), ".")
+	}
 	if relationName := strings.TrimSpace(fmt.Sprint(node["relation_name"])); relationName != "" && relationName != "<nil>" {
 		return relationName
 	}
@@ -210,6 +238,22 @@ func dbtDependencyAssets(node map[string]any, outputAssets map[string]map[string
 			} else if dependencySource, ok := allSources[rawDependency].(map[string]any); ok {
 				asset = dbtAssetRecord(dependencySource)
 			}
+		}
+		if asset == nil {
+			continue
+		}
+		dependencies[asset["name"].(string)] = asset
+	}
+	return sortedJSONRecords(dependencies)
+}
+
+func dbtMacroDependencyAssets(node map[string]any, outputAssets map[string]map[string]any, macroAssets map[string]map[string]any) []map[string]any {
+	dependencies := make(map[string]map[string]any)
+	dependsOn, _ := node["depends_on"].(map[string]any)
+	for _, rawDependency := range jsonStringSlice(dependsOn["macros"]) {
+		asset := outputAssets[rawDependency]
+		if asset == nil {
+			asset = macroAssets[rawDependency]
 		}
 		if asset == nil {
 			continue

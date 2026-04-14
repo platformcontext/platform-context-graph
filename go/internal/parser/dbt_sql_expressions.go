@@ -46,7 +46,7 @@ func expressionHonestyGapReason(expression string) string {
 	if strings.Contains(normalized, "{{") || strings.Contains(normalized, "}}") || strings.Contains(normalized, "{%") || strings.Contains(normalized, "%}") {
 		return dbtTemplatedExpressionReason
 	}
-	if dbtQualifiedMacroCallRe.MatchString(normalized) && !isSupportedQualifiedMacroExpression(normalized) {
+	if dbtQualifiedMacroCallRe.MatchString(normalized) && !macroExpressionHasLineage(normalized) && !isSupportedQualifiedMacroExpression(normalized) {
 		return dbtMacroExpressionReason
 	}
 	return ""
@@ -81,6 +81,9 @@ func expressionPartialReason(expression string) string {
 	if reason := expressionHonestyGapReason(normalized); reason != "" {
 		return reason
 	}
+	if dbtQualifiedMacroCallRe.MatchString(normalized) && macroExpressionHasLineage(normalized) {
+		return ""
+	}
 	if dbtBareIdentifierRe.MatchString(normalized) || dbtQualifiedReferenceRe.MatchString(normalized) {
 		return ""
 	}
@@ -100,6 +103,14 @@ func expressionPartialReason(expression string) string {
 		return reason
 	}
 	return dbtDerivedExpressionReason
+}
+
+func macroExpressionHasLineage(expression string) bool {
+	matches := dbtQualifiedMacroCallRe.FindStringSubmatch(strings.TrimSpace(expression))
+	if matches == nil {
+		return false
+	}
+	return len(simpleReferenceTokens(matches[2])) > 0
 }
 
 func isSupportedAggregateExpression(expression string) bool {

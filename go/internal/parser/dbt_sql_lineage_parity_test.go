@@ -66,14 +66,29 @@ from raw.public.customers c`,
 			},
 		},
 		{
+			name: "macro-heavy wrapper",
+			sql: `select
+  dbt_utils.generate_surrogate_key(md5(o.id)) as surrogate_key
+from raw.public.orders o`,
+			relations: map[string][]string{
+				"raw.public.orders": {"id"},
+			},
+			want: []ColumnLineage{
+				{
+					OutputColumn:  "surrogate_key",
+					SourceColumns: []string{"raw.public.orders.id"},
+				},
+			},
+		},
+		{
 			name: "case with multiple sources",
 			sql: `select
   case when o.amount > 100 then c.segment else 'standard' end as customer_segment
 from raw.public.orders o
 join raw.public.customers c on c.id = o.customer_id`,
 			relations: map[string][]string{
-				"raw.public.orders":     {"amount", "customer_id"},
-				"raw.public.customers":  {"id", "segment"},
+				"raw.public.orders":    {"amount", "customer_id"},
+				"raw.public.customers": {"id", "segment"},
 			},
 			want: []ColumnLineage{
 				{
@@ -146,14 +161,14 @@ from raw.public.orders o`,
 			reason:     dbtTemplatedExpressionReason,
 		},
 		{
-			name: "unsupported macro",
+			name: "opaque macro",
 			sql: `select
-  dbt_utils.generate_surrogate_key(md5(o.id)) as surrogate_key
+  dbt_utils.generate_surrogate_key(md5('static-value')) as surrogate_key
 from raw.public.orders o`,
 			relations: map[string][]string{
 				"raw.public.orders": {"id"},
 			},
-			expression: "dbt_utils.generate_surrogate_key(md5(o.id))",
+			expression: "dbt_utils.generate_surrogate_key(md5('static-value'))",
 			reason:     dbtMacroExpressionReason,
 		},
 		{
