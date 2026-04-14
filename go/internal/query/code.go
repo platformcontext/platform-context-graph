@@ -106,7 +106,10 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 	cypher += `
 		RETURN e.id as entity_id, e.name as name, labels(e) as labels,
 		       f.relative_path as file_path,
-		       r.id as repo_id, r.name as repo_name
+		       r.id as repo_id, r.name as repo_name,
+		       coalesce(e.language, f.language) as language,
+		       e.start_line as start_line,
+		       e.end_line as end_line
 		ORDER BY e.name
 		LIMIT $limit
 	`
@@ -119,16 +122,19 @@ func (h *CodeHandler) searchGraphEntities(ctx context.Context, repoID, query, la
 	results := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		results = append(results, map[string]any{
-			"entity_id": StringVal(row, "entity_id"),
-			"name":      StringVal(row, "name"),
-			"labels":    StringSliceVal(row, "labels"),
-			"file_path": StringVal(row, "file_path"),
-			"repo_id":   StringVal(row, "repo_id"),
-			"repo_name": StringVal(row, "repo_name"),
+			"entity_id":  StringVal(row, "entity_id"),
+			"name":       StringVal(row, "name"),
+			"labels":     StringSliceVal(row, "labels"),
+			"file_path":  StringVal(row, "file_path"),
+			"repo_id":    StringVal(row, "repo_id"),
+			"repo_name":  StringVal(row, "repo_name"),
+			"language":   StringVal(row, "language"),
+			"start_line": IntVal(row, "start_line"),
+			"end_line":   IntVal(row, "end_line"),
 		})
 	}
 
-	return results, nil
+	return h.enrichGraphSearchResultsWithContentMetadata(ctx, results, repoID, query, limit)
 }
 
 // searchEntityContent searches entity source code in the content store.

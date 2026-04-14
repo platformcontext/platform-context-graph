@@ -23,8 +23,8 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathTypeScript` | Compose-backed fixture verification | - |
 | Enums | `enums` | supported | `enums` | `name, line_number` | `node:Enum` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptSemanticsAndTypes` | Compose-backed fixture verification | - |
 | Type aliases | `type-aliases` | partial | `type_aliases` | `name, line_number` | `content:TypeAlias entity` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes` | Compose-backed fixture verification | Type aliases are queryable through the Go content-backed language-query and content APIs, but graph/story/context surfacing remains partial. |
-| Decorators | `decorators` | partial | `classes` | `name, line_number` | `content:Entity.metadata.decorators` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity`, `go/internal/query/language_query_metadata_test.go::TestEnrichLanguageResultsWithContentMetadata` | Compose-backed fixture verification | Decorator metadata is emitted and preserved in content entities, and graph-backed `language-query` responses now enrich matching rows with that metadata. What remains partial is dedicated graph/story/context surfacing. |
-| Generics | `generics` | partial | `type_parameters` | `name, line_number, type_parameters` | `content:Entity.metadata.type_parameters` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity`, `go/internal/query/language_query_metadata_test.go::TestEnrichLanguageResultsWithContentMetadata` | Compose-backed fixture verification | Type parameter metadata is preserved in content entities and can now flow into graph-backed `language-query` responses for matching entities. What remains partial is first-class graph/story/context modeling beyond the query response. |
+| Decorators | `decorators` | partial | `classes` | `name, line_number` | `content:Entity.metadata.decorators` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity`, `go/internal/query/language_query_metadata_test.go::TestEnrichLanguageResultsWithContentMetadata`, `go/internal/query/code_search_metadata_test.go::TestEnrichGraphSearchResultsWithContentMetadata` | Compose-backed fixture verification | Decorator metadata is emitted and preserved in content entities, and graph-backed `language-query` plus `code/search` responses now enrich matching rows with that metadata. What remains partial is dedicated graph/story/context surfacing. |
+| Generics | `generics` | partial | `type_parameters` | `name, line_number, type_parameters` | `content:Entity.metadata.type_parameters` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity`, `go/internal/query/language_query_metadata_test.go::TestEnrichLanguageResultsWithContentMetadata`, `go/internal/query/code_search_metadata_test.go::TestEnrichGraphSearchResultsWithContentMetadata` | Compose-backed fixture verification | Type parameter metadata is preserved in content entities and can now flow into graph-backed `language-query` plus `code/search` responses for matching entities. What remains partial is first-class graph/story/context modeling beyond those query responses. |
 
 ## Support Maturity
 - Grammar routing: `supported`
@@ -40,9 +40,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   - TypeScript participates in the same declarative Node HTTP and provider-pack
     program as JavaScript.
   - Type aliases are queryable through the Go content-backed APIs, and
-    graph-backed `language-query` results now enrich matching rows with
-    decorator and generic metadata. Dedicated graph/story/context surfacing
-    remains partial.
+    graph-backed `language-query` plus `code/search` results now enrich
+    matching rows with decorator and generic metadata. Dedicated
+    graph/story/context surfacing remains partial.
 
 
 ## Known Limitations
