@@ -1,0 +1,68 @@
+go/cmd/pcg/ecosystem.go
+  1ca5ee6ce936a402 1-54
+go/cmd/pcg/output.go
+  1ca5ee6ce936a402 1-13,16,18,20-38
+go/cmd/pcg/admin.go
+  1ca5ee6ce936a402 1-127,129-142,144-156,158-179,181-199,201-219,221-241,243-260,262-278,280-286
+docker-compose.yaml
+  1ca5ee6ce936a402 129
+go/cmd/pcg/basic.go
+  1ca5ee6ce936a402 1-120,125-294,298-337
+go/cmd/pcg/config.go
+  1ca5ee6ce936a402 1-41,45-105
+go/cmd/pcg/find.go
+  1ca5ee6ce936a402 1-180
+go/cmd/pcg/doctor.go
+  1ca5ee6ce936a402 1-49,51-78
+go/cmd/pcg/workspace.go
+  1ca5ee6ce936a402 1-10,12-16,46,69,92,98-100,109,117
+go/cmd/pcg/config_cmd.go
+  1ca5ee6ce936a402 1-55,59-113
+go/cmd/pcg/service.go
+  1ca5ee6ce936a402 1-114,118,122-154,158-171,175-177
+Dockerfile
+  1ca5ee6ce936a402 1-2,4,16-19,25,28,30,32-33,36,38,53-54
+go/go.mod
+  1ca5ee6ce936a402 50,63-64
+go/cmd/pcg/analyze.go
+  1ca5ee6ce936a402 1-228
+go/cmd/pcg/main.go
+  1ca5ee6ce936a402 1-16
+go/cmd/pcg/root.go
+  1ca5ee6ce936a402 1-30,32,36,38-60,62-68
+go/cmd/pcg/client.go
+  1ca5ee6ce936a402 1-95,99-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "d44cfd47f5cbc0dbd6ef13aef7867a899b2a57c5",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 2189,
+      "total_deletions": 284,
+      "accepted_lines": 1957,
+      "overriden_lines": 90
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 82,
+      "overriden_lines": 0
+    }
+  }
+}
