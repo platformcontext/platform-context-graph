@@ -49,6 +49,10 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   wrappers around supported lineage-safe expressions, and the key
   unresolved-summary paths in
   `go/internal/parser/dbt_sql_lineage_parity_test.go`.
+- The Go query/content path now also has checked-in proof that dbt-derived
+  `AnalyticsModel` and `DataAsset` content entities survive materialization and
+  show semantic summaries through the normal entity resolve/context fallback
+  surfaces.
 - The checked-in SQL procedural proof now covers `CREATE OR REPLACE FUNCTION`
   bodies plus legacy `EXECUTE PROCEDURE` trigger wiring in
   `go/internal/parser/sql_parity_test.go`.
@@ -71,6 +75,10 @@ service path.
 - dbt compiled-SQL lineage lives in `go/internal/parser/dbt_sql_lineage.go`
 - dbt manifest shaping lives in `go/internal/parser/json_dbt_manifest.go`
 - JSON data-intelligence families live in `go/internal/parser/json_data_intelligence.go`
+- dbt content-entity materialization proof lives in
+  `go/internal/content/shape/materialize_analytics_test.go`
+- dbt entity resolve/context proof lives in
+  `go/internal/query/entity_content_sql_fallback_test.go`
 
 
 ## Known Limitations

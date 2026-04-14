@@ -18,6 +18,31 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 	}
 
 	switch label {
+	case "AnalyticsModel":
+		assetName, _ := metadata["asset_name"].(string)
+		materialization, _ := metadata["materialization"].(string)
+		parseState, _ := metadata["parse_state"].(string)
+		if assetName == "" {
+			return ""
+		}
+		summary := fmt.Sprintf("%s %s compiles to %s", label, name, assetName)
+		if materialization != "" {
+			summary += fmt.Sprintf(" as a %s", materialization)
+		}
+		if parseState != "" {
+			summary += fmt.Sprintf(" and has %s lineage coverage", parseState)
+		}
+		return summary + "."
+	case "DataAsset":
+		kind, _ := metadata["kind"].(string)
+		database, _ := metadata["database"].(string)
+		schema, _ := metadata["schema"].(string)
+		switch {
+		case kind != "" && database != "" && schema != "":
+			return fmt.Sprintf("%s %s is a %s in %s.%s.", label, name, kind, database, schema)
+		case kind != "":
+			return fmt.Sprintf("%s %s is a %s.", label, name, kind)
+		}
 	case "TypeAnnotation":
 		typeName, _ := metadata["type"].(string)
 		if typeName == "" {
