@@ -1,0 +1,33 @@
+go/cmd/ingester/wiring.go
+  1ca5ee6ce936a402 107
+go/internal/collector/git_source_test.go
+  1ca5ee6ce936a402 1013-1125
+go/cmd/collector-git/service.go
+  1ca5ee6ce936a402 34
+go/internal/collector/git_selection_config.go
+  1ca5ee6ce936a402 67,125,392-396,404-405,413-425
+go/cmd/bootstrap-index/wiring.go
+  1ca5ee6ce936a402 56
+go/internal/collector/git_source.go
+  1ca5ee6ce936a402 141-149,232,248-257,280
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "3bf58b28f889349d8aea7dbecd6e9bc80736d608",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 2034,
+      "total_deletions": 3068,
+      "accepted_lines": 327,
+      "overriden_lines": 0
+    }
+  }
+}
