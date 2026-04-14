@@ -72,6 +72,7 @@ type APIRouter struct {
 	Impact       *ImpactHandler
 	Status       *StatusHandler
 	Compare      *CompareHandler
+	Admin        *AdminHandler
 }
 
 // Mount registers all query-layer HTTP routes on the given mux.
@@ -122,5 +123,10 @@ func (a *APIRouter) Mount(mux *http.ServeMux) {
 	// Compare
 	if a.Compare != nil {
 		a.Compare.Mount(mux)
+	}
+
+	// Admin
+	if a.Admin != nil {
+		a.Admin.Mount(mux)
 	}
 }

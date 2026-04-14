@@ -326,7 +326,7 @@ func TestHealth_ViaHTTPMux(t *testing.T) {
 	})
 	httpMux.HandleFunc("GET /sse", s.handleSSE)
 	httpMux.HandleFunc("POST /mcp/message", s.handleHTTPMessage)
-	httpMux.Handle("/api/", s.mux)
+	httpMux.Handle("/api/", s.handler)
 
 	ts := httptest.NewServer(httpMux)
 	defer ts.Close()
@@ -356,7 +356,7 @@ func TestAPI_Passthrough(t *testing.T) {
 
 	httpMux := http.NewServeMux()
 	httpMux.HandleFunc("POST /mcp/message", s.handleHTTPMessage)
-	httpMux.Handle("/api/", s.mux)
+	httpMux.Handle("/api/", s.handler)
 
 	ts := httptest.NewServer(httpMux)
 	defer ts.Close()

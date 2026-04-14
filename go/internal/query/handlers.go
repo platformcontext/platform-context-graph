@@ -9,3 +9,4 @@ package query
 // StatusHandler is implemented in status.go
 
 // CompareHandler is implemented in compare.go
+// AdminHandler is implemented in admin.go and admin_facts.go

@@ -22,14 +22,16 @@ func main() {
 		transport = "http"
 	}
 
-	mux, cleanup, err := wireAPI(ctx, os.Getenv)
+	queryMux, cleanup, err := wireAPI(ctx, os.Getenv)
 	if err != nil {
 		logger.Error("wire api failed", "error", err)
 		os.Exit(1)
 	}
 	defer cleanup()
 
-	server := mcp.NewServer(mux, logger)
+	// Note: MCP server's internal httpMux handles auth for its own endpoints (/sse, /mcp/message, /health).
+	// The query API routes mounted under /api/ are protected by the query mux itself.
+	server := mcp.NewServer(queryMux, logger)
 
 	switch transport {
 	case "stdio":

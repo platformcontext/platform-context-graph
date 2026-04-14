@@ -82,24 +82,24 @@ type sseSession struct {
 
 // Server is the Go MCP server that dispatches tool calls to internal HTTP handlers.
 type Server struct {
-	mux    *http.ServeMux
-	tools  []ToolDefinition
-	logger *slog.Logger
-	mu     sync.Mutex
+	handler http.Handler
+	tools   []ToolDefinition
+	logger  *slog.Logger
+	mu      sync.Mutex
 
 	// SSE session registry: sessionID -> session
 	sessMu   sync.RWMutex
 	sessions map[string]*sseSession
 }
 
-// NewServer creates an MCP server backed by the given HTTP mux.
-// The mux should have all /api/v0/* query routes mounted.
-func NewServer(mux *http.ServeMux, logger *slog.Logger) *Server {
+// NewServer creates an MCP server backed by the given HTTP handler.
+// The handler should have all /api/v0/* query routes mounted.
+func NewServer(handler http.Handler, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	}
 	return &Server{
-		mux:      mux,
+		handler:  handler,
 		tools:    ReadOnlyTools(),
 		logger:   logger,
 		sessions: make(map[string]*sseSession),
@@ -131,7 +131,7 @@ func (s *Server) RunHTTP(ctx context.Context, addr string) error {
 
 	// Mount the query API routes so the MCP service can also serve
 	// direct HTTP queries (single deployment surface in EKS).
-	httpMux.Handle("/api/", s.mux)
+	httpMux.Handle("/api/", s.handler)
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -343,7 +343,7 @@ func (s *Server) handleMessage(ctx context.Context, req *jsonrpcRequest) *jsonrp
 		if err := json.Unmarshal(req.Params, &params); err != nil {
 			return s.errorResponse(req.ID, -32602, "invalid params")
 		}
-		result, err := dispatchTool(ctx, s.mux, params.Name, params.Arguments, s.logger)
+		result, err := dispatchTool(ctx, s.handler, params.Name, params.Arguments, s.logger)
 		if err != nil {
 			return &jsonrpcResponse{
 				JSONRPC: "2.0",

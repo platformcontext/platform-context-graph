@@ -16,8 +16,6 @@ from rich.table import Table
 from platform_context_graph.observability import new_request_id
 from platform_context_graph.cli.helpers.go_index_runtime import run_go_bootstrap_index
 
-from .ecosystem_relationships import register_ecosystem_relationship_commands
-
 
 def _initialize_ecosystem_services(main_module: Any) -> tuple[Any, Any, Any] | None:
     """Return the shared ecosystem service tuple or ``None`` when startup fails."""
@@ -58,8 +56,6 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
         help="Ecosystem-level indexing and querying across multiple repos.",
     )
     app.add_typer(ecosystem_app, name="ecosystem")
-    register_ecosystem_relationship_commands(main_module, ecosystem_app)
-
     @ecosystem_app.command("index")
     def ecosystem_index(
         manifest: str = typer.Argument(
@@ -229,30 +225,6 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
             )
             main_module.console.print(f"Updated: {len(result.get('updated', []))}")
             main_module.console.print(f"Skipped: {len(result.get('skipped', []))}")
-        finally:
-            db_manager.close_driver()
-
-    @ecosystem_app.command("link")
-    def ecosystem_link() -> None:
-        """Build cross-repository relationships after indexing."""
-        from platform_context_graph.relationships.cross_repo_linker import (
-            CrossRepoLinker,
-        )
-
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, graph_builder, _ = services
-        try:
-            linker = CrossRepoLinker(graph_builder.db_manager)
-            stats = linker.link_all()
-
-            table = Table(title="Cross-Repo Relationships Created", box=box.ROUNDED)
-            table.add_column("Relationship", style="cyan")
-            table.add_column("Count", style="green")
-            for relationship_type, count in sorted(stats.items()):
-                table.add_row(relationship_type, str(count))
-            main_module.console.print(table)
         finally:
             db_manager.close_driver()
 

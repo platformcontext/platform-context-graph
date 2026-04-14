@@ -15,7 +15,7 @@ import (
 	pgstatus "github.com/platformcontext/platform-context-graph/go/internal/storage/postgres"
 )
 
-func wireAPI(ctx context.Context, getenv func(string) string) (*http.ServeMux, func(), error) {
+func wireAPI(ctx context.Context, getenv func(string) string) (http.Handler, func(), error) {
 	// Open Neo4j
 	neo4jURI := envOrDefault(getenv, "NEO4J_URI", "bolt://localhost:7687")
 	neo4jUser := envOrDefault(getenv, "NEO4J_USERNAME", "neo4j")
@@ -94,12 +94,16 @@ func wireAPI(ctx context.Context, getenv func(string) string) (*http.ServeMux, f
 	mux := http.NewServeMux()
 	router.Mount(mux)
 
+	// Wrap with auth middleware (protects all /api/v0/* routes when mounted by MCP server)
+	apiKey := strings.TrimSpace(getenv("PCG_API_KEY"))
+	authedHandler := query.AuthMiddleware(apiKey, mux)
+
 	cleanup := func() {
 		_ = db.Close()
 		_ = driver.Close(context.Background())
 	}
 
-	return mux, cleanup, nil
+	return authedHandler, cleanup, nil
 }
 
 func envOrDefault(getenv func(string) string, key, fallback string) string {

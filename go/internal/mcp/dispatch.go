@@ -13,7 +13,7 @@ import (
 )
 
 // dispatchTool routes an MCP tool call to the appropriate internal HTTP endpoint.
-func dispatchTool(ctx context.Context, mux *http.ServeMux, toolName string, args map[string]any, logger *slog.Logger) (any, error) {
+func dispatchTool(ctx context.Context, handler http.Handler, toolName string, args map[string]any, logger *slog.Logger) (any, error) {
 	route, err := resolveRoute(toolName, args)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func dispatchTool(ctx context.Context, mux *http.ServeMux, toolName string, args
 	}
 
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	handler.ServeHTTP(rec, req)
 
 	if rec.Code >= 400 {
 		return nil, fmt.Errorf("HTTP %d: %s", rec.Code, rec.Body.String())
