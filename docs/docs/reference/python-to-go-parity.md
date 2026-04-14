@@ -74,10 +74,10 @@ parity from persisted graph and query-surface parity.
 | --- | --- | --- | --- | --- |
 | SQL core parsing | Go-owned | mostly complete | schema objects, migrations, and embedded SQL hints are native Go | close procedural SQL and DDL edge cases as needed |
 | SQL/dbt lineage and data intelligence | Go-owned | partial | dbt manifest, compiled SQL, and analytics JSON families are in Go; row-level aggregates, simple windows, simple qualified macro wrappers, and nested safe wrappers now resolve in lineage | resolve unresolved references, templated expressions, complex macros, and richer derived expressions that still fall outside the safe wrapper set |
-| JavaScript | Go-owned | partial | core JS parsing is complete | persist or normalize docstrings and fuller method-kind metadata |
-| TypeScript | Go-owned | partial | core TS parsing and framework packs are complete | materialize type aliases, decorators, and generics into the graph/query surface |
-| TypeScript JSX | Go-owned | partial | core TSX parsing and React/Next evidence are complete | add dedicated JSX component-reference semantics and type-alias persistence |
-| Python language parsing | Go-owned | partial | core Python parsing and framework packs are complete | persist decorators, async flags, and type annotations |
+| JavaScript | Go-owned | partial | core JS parsing plus docstring and method-kind metadata extraction/materialization are present | promote docstrings and method-kind metadata into first-class normal query surfaces |
+| TypeScript | Go-owned | partial | core TS parsing plus type-alias materialization and decorator/generic metadata preservation are present | promote type aliases, decorators, and generics into first-class normal query surfaces |
+| TypeScript JSX | Go-owned | partial | core TSX parsing plus type-alias materialization and JSX tag capture are present | add dedicated JSX component/reference query surfacing and close normal-path alias exposure |
+| Python language parsing | Go-owned | partial | core Python parsing plus decorator/async/type-annotation extraction and materialization are present | promote decorators, async flags, and type annotations into first-class normal query surfaces |
 | Java | Go-owned | partial | core Java parsing is complete | persist applied annotation usage |
 | Kotlin | Go-owned | partial | core Kotlin parsing is complete | persist secondary constructor semantics |
 | PHP | Go-owned | partial | core PHP parsing is complete | expand end-to-end proof for static method call graph edges |
@@ -97,10 +97,10 @@ parity from persisted graph and query-surface parity.
 These are the currently documented partial or unsupported graph-surface
 capabilities in the checked-in language pages:
 
-- TypeScript: type aliases, decorators, generics
-- TypeScript JSX: type aliases, JSX component usage
-- Python: decorators, async functions, type annotations
-- JavaScript: JSDoc comments, method kind metadata
+- TypeScript: first-class query surfacing for type aliases, decorators, and generics
+- TypeScript JSX: first-class query surfacing for type aliases and JSX component/reference semantics
+- Python: first-class query surfacing for decorators, async functions, and type annotations
+- JavaScript: first-class query surfacing for JSDoc comments and method kind metadata
 - Java: applied annotations
 - Kotlin: secondary constructors
 - PHP: static method calls end-to-end proof

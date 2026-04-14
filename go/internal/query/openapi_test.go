@@ -110,3 +110,64 @@ func TestAPIRouter_OpenAPIEndpoint(t *testing.T) {
 		t.Errorf("expected openapi version 3.0.3, got %v", spec["openapi"])
 	}
 }
+
+func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
+	var spec map[string]any
+	if err := json.Unmarshal([]byte(OpenAPISpec), &spec); err != nil {
+		t.Fatalf("json.Unmarshal(OpenAPISpec) error = %v, want nil", err)
+	}
+
+	paths := mustMapField(t, spec, "paths")
+	readPath := mustMapField(t, paths, "/api/v0/content/entities/read")
+	readPost := mustMapField(t, readPath, "post")
+	readResponses := mustMapField(t, readPost, "responses")
+	readOK := mustMapField(t, readResponses, "200")
+	readContent := mustMapField(t, mustMapField(t, readOK, "content"), "application/json")
+	readSchema := mustMapField(t, readContent, "schema")
+	if got, want := readSchema["$ref"], "#/components/schemas/EntityContent"; got != want {
+		t.Fatalf("content/entities/read schema ref = %#v, want %#v", got, want)
+	}
+
+	searchPath := mustMapField(t, paths, "/api/v0/content/entities/search")
+	searchPost := mustMapField(t, searchPath, "post")
+	searchResponses := mustMapField(t, searchPost, "responses")
+	searchOK := mustMapField(t, searchResponses, "200")
+	searchContent := mustMapField(t, mustMapField(t, searchOK, "content"), "application/json")
+	searchSchema := mustMapField(t, searchContent, "schema")
+	if got, want := searchSchema["$ref"], "#/components/schemas/EntityContentSearchResponse"; got != want {
+		t.Fatalf("content/entities/search schema ref = %#v, want %#v", got, want)
+	}
+
+	components := mustMapField(t, spec, "components")
+	schemas := mustMapField(t, components, "schemas")
+	entitySchema := mustMapField(t, schemas, "EntityContent")
+	entityProperties := mustMapField(t, entitySchema, "properties")
+	metadata := mustMapField(t, entityProperties, "metadata")
+	if got, want := metadata["type"], "object"; got != want {
+		t.Fatalf("EntityContent.metadata.type = %#v, want %#v", got, want)
+	}
+
+	codeSearchPath := mustMapField(t, paths, "/api/v0/code/search")
+	codeSearchPost := mustMapField(t, codeSearchPath, "post")
+	codeSearchResponses := mustMapField(t, codeSearchPost, "responses")
+	codeSearchOK := mustMapField(t, codeSearchResponses, "200")
+	codeSearchContent := mustMapField(t, mustMapField(t, codeSearchOK, "content"), "application/json")
+	codeSearchSchema := mustMapField(t, codeSearchContent, "schema")
+	if got, want := codeSearchSchema["$ref"], "#/components/schemas/CodeSearchResponse"; got != want {
+		t.Fatalf("code/search schema ref = %#v, want %#v", got, want)
+	}
+}
+
+func mustMapField(t *testing.T, parent map[string]any, key string) map[string]any {
+	t.Helper()
+
+	value, ok := parent[key]
+	if !ok {
+		t.Fatalf("missing key %q", key)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("key %q type = %T, want map[string]any", key, value)
+	}
+	return typed
+}

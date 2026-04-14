@@ -20,22 +20,24 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Imports | `imports` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
 | Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
-| Decorators | `decorators` | unsupported | `functions` | `name, line_number, decorators` | `none:not_persisted` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonDecoratedFunctionsEmitDecoratorMetadata` | Compose-backed fixture verification | The Go parser now emits decorator metadata, but the graph surface does not yet persist decorators as first-class queryable properties. |
-| Async functions | `async-functions` | unsupported | `functions` | `name, line_number, async` | `none:not_persisted` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonAsyncFunctionsEmitAsyncFlag` | Compose-backed fixture verification | The Go parser now emits the async flag, but the graph surface does not yet retain it as a queryable property. |
+| Decorators | `decorators` | partial | `functions` | `name, line_number, decorators` | `content:Entity.metadata.decorators` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonDecoratedFunctionsEmitDecoratorMetadata` | Compose-backed fixture verification | Decorator metadata is emitted and preserved in content entities, but is not yet promoted into the normal query contract. |
+| Async functions | `async-functions` | partial | `functions` | `name, line_number, async` | `content:Entity.metadata.async` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonAsyncFunctionsEmitAsyncFlag` | Compose-backed fixture verification | The async flag is emitted and preserved in content entities, but is not yet first-class on the normal query surface. |
 | Inheritance | `inheritance` | supported | `classes` | `name, line_number, bases` | `relationship:INHERITS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
-| Type annotations | `type-annotations` | unsupported | `type_annotations` | `name, line_number, type` | `none:not_persisted` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonEmitsTypeAnnotationsBucket` | Compose-backed fixture verification | The Go parser emits a dedicated `type_annotations` bucket, but the graph surface does not yet materialize TypeAnnotation nodes end to end. |
+| Type annotations | `type-annotations` | partial | `type_annotations` | `name, line_number, type` | `content:TypeAnnotation entity` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonEmitsTypeAnnotationsBucket` | Compose-backed fixture verification | Type annotations are extracted and materialized as content entities, but are not yet exposed as first-class normal query entities. |
 
 ## Support Maturity
 - Grammar routing: `supported`
 - Normalization: `supported`
 - Framework pack status: `supported`
 - Framework packs: `fastapi-base`, `flask-base`
-- Query surfacing: `supported`
+- Query surfacing: `partial`
 - Real-repo validation: `supported`
 - End-to-end indexing: `supported`
 - Notes:
   - Framework evidence for FastAPI and Flask is carried by the Go parser and
-    surfaced through the current Go-owned query path.
+    indexing path.
+  - Decorators, async flags, and type annotations already survive parse and
+    content materialization, but their normal query surfacing remains partial.
 
 
 ## Known Limitations

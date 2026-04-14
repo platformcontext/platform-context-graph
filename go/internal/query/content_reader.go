@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -132,17 +133,24 @@ func (cr *ContentReader) GetEntityContent(ctx context.Context, entityID string) 
 
 	row := cr.db.QueryRowContext(ctx, `
 		SELECT entity_id, repo_id, relative_path, entity_type, entity_name,
-		       start_line, end_line, coalesce(language, ''), coalesce(source_cache, '')
+		       start_line, end_line, coalesce(language, ''), coalesce(source_cache, ''),
+		       metadata
 		FROM content_entities
 		WHERE entity_id = $1
 	`, entityID)
 
 	var e EntityContent
+	var rawMetadata []byte
 	err := row.Scan(&e.EntityID, &e.RepoID, &e.RelativePath, &e.EntityType,
-		&e.EntityName, &e.StartLine, &e.EndLine, &e.Language, &e.SourceCache)
+		&e.EntityName, &e.StartLine, &e.EndLine, &e.Language, &e.SourceCache, &rawMetadata)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("get entity content: %w", err)
+	}
+	e.Metadata, err = decodeEntityMetadata(rawMetadata)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("get entity content: %w", err)
@@ -214,7 +222,8 @@ func (cr *ContentReader) SearchEntityContent(ctx context.Context, repoID, patter
 
 	query := `
 		SELECT entity_id, repo_id, relative_path, entity_type, entity_name,
-		       start_line, end_line, coalesce(language, ''), coalesce(source_cache, '')
+		       start_line, end_line, coalesce(language, ''), coalesce(source_cache, ''),
+		       metadata
 		FROM content_entities
 		WHERE repo_id = $1 AND source_cache ILIKE '%' || $2 || '%'
 		ORDER BY relative_path, start_line
@@ -230,8 +239,14 @@ func (cr *ContentReader) SearchEntityContent(ctx context.Context, repoID, patter
 	var results []EntityContent
 	for rows.Next() {
 		var e EntityContent
+		var rawMetadata []byte
 		if err := rows.Scan(&e.EntityID, &e.RepoID, &e.RelativePath, &e.EntityType,
-			&e.EntityName, &e.StartLine, &e.EndLine, &e.Language, &e.SourceCache); err != nil {
+			&e.EntityName, &e.StartLine, &e.EndLine, &e.Language, &e.SourceCache, &rawMetadata); err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("scan entity search result: %w", err)
+		}
+		e.Metadata, err = decodeEntityMetadata(rawMetadata)
+		if err != nil {
 			span.RecordError(err)
 			return nil, fmt.Errorf("scan entity search result: %w", err)
 		}
@@ -307,7 +322,8 @@ func (cr *ContentReader) ListRepoEntities(ctx context.Context, repoID string, li
 
 	rows, err := cr.db.QueryContext(ctx, `
 		SELECT entity_id, repo_id, relative_path, entity_type, entity_name,
-		       start_line, end_line, coalesce(language, ''), coalesce(source_cache, '')
+		       start_line, end_line, coalesce(language, ''), coalesce(source_cache, ''),
+		       metadata
 		FROM content_entities
 		WHERE repo_id = $1
 		ORDER BY relative_path, start_line
@@ -322,8 +338,14 @@ func (cr *ContentReader) ListRepoEntities(ctx context.Context, repoID string, li
 	var results []EntityContent
 	for rows.Next() {
 		var e EntityContent
+		var rawMetadata []byte
 		if err := rows.Scan(&e.EntityID, &e.RepoID, &e.RelativePath, &e.EntityType,
-			&e.EntityName, &e.StartLine, &e.EndLine, &e.Language, &e.SourceCache); err != nil {
+			&e.EntityName, &e.StartLine, &e.EndLine, &e.Language, &e.SourceCache, &rawMetadata); err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("scan repo entity: %w", err)
+		}
+		e.Metadata, err = decodeEntityMetadata(rawMetadata)
+		if err != nil {
 			span.RecordError(err)
 			return nil, fmt.Errorf("scan repo entity: %w", err)
 		}
@@ -334,4 +356,19 @@ func (cr *ContentReader) ListRepoEntities(ctx context.Context, repoID string, li
 		return results, err
 	}
 	return results, nil
+}
+
+func decodeEntityMetadata(raw []byte) (map[string]any, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	var metadata map[string]any
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return nil, fmt.Errorf("decode entity metadata: %w", err)
+	}
+	if len(metadata) == 0 {
+		return nil, nil
+	}
+	return metadata, nil
 }

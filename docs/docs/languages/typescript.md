@@ -22,16 +22,16 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathTypeScript` | Compose-backed fixture verification | - |
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathTypeScript` | Compose-backed fixture verification | - |
 | Enums | `enums` | supported | `enums` | `name, line_number` | `node:Enum` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptSemanticsAndTypes` | Compose-backed fixture verification | - |
-| Type aliases | `type-aliases` | partial | `type_aliases` | `name, line_number` | `none:not_persisted` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | Compose-backed fixture verification | Type aliases are extracted into a dedicated parse bucket, but the persistence layer does not currently materialize TypeAlias graph nodes. |
-| Decorators | `decorators` | unsupported | `classes` | `name, line_number` | `none:not_persisted` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | Compose-backed fixture verification | The Go parser now emits decorator metadata, but the graph surface still does not persist decorators as first-class queryable properties. |
-| Generics | `generics` | partial | `type_parameters` | `name, line_number, type_parameters` | `none:not_persisted` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | Compose-backed fixture verification | The Go parser emits type parameter metadata, but the graph surface does not yet promote generic information into a dedicated query model. |
+| Type aliases | `type-aliases` | partial | `type_aliases` | `name, line_number` | `content:TypeAlias entity` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | Compose-backed fixture verification | Type aliases are extracted and materialized as content entities, but they are not yet first-class on the normal graph/language-query/API surfaces. |
+| Decorators | `decorators` | partial | `classes` | `name, line_number` | `content:Entity.metadata.decorators` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | Compose-backed fixture verification | Decorator metadata is emitted and preserved in content entities, but not yet promoted into the normal query contract. |
+| Generics | `generics` | partial | `type_parameters` | `name, line_number, type_parameters` | `content:Entity.metadata.type_parameters` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | Compose-backed fixture verification | Type parameter metadata is preserved in content entities, but not yet surfaced as a first-class normal query model. |
 
 ## Support Maturity
 - Grammar routing: `supported`
 - Normalization: `supported`
 - Framework pack status: `supported`
 - Framework packs: `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base`
-- Query surfacing: `supported`
+- Query surfacing: `partial`
 - Real-repo validation: `supported`
 - End-to-end indexing: `supported`
 - Notes:
@@ -39,12 +39,12 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     TSX-specific framework evidence.
   - TypeScript participates in the same declarative Node HTTP and provider-pack
     program as JavaScript.
-  - Generic type aliases and decorators remain partial or unsupported as
-    documented below.
+  - Type aliases, decorators, and generics are already extracted and
+    materialized, but their normal graph/query surfacing remains partial.
 
 
 ## Known Limitations
-- Type aliases are parsed (`type_aliases` key) but not persisted to the graph — no persistence mapping exists
+- Type aliases are materialized as content entities, but not yet exposed as first-class normal query entities
 - Mapped types and conditional types not fully captured
 - Namespace declarations may be incomplete
 - Declaration merging not tracked

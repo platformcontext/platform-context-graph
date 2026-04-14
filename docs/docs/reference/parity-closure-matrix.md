@@ -40,10 +40,10 @@ the old Python platform feature for feature for that surface.
 | --- | --- | --- | --- | --- | --- |
 | SQL core parsing | `partial` | Mostly complete, but some procedural SQL and DDL edges may remain | no documented SQL-core parity gaps remain | focused parser tests | fold into SQL/dbt wave |
 | SQL/dbt lineage | `fail` | dbt compiled lineage still loses unresolved refs, templated expressions, complex macro expansion, and richer derived expressions outside the safe wrapper set | compiled dbt lineage survives parse, materialization, and query proof | parser tests, real-repo proof, compose proof | dedicated medium/large wave |
-| JavaScript graph parity | `partial` | docstrings and fuller method-kind metadata are incomplete end to end | JS docstrings and method metadata persist and query correctly | parser tests plus query proof | shared JS-family wave |
-| TypeScript graph parity | `fail` | type aliases, decorators, and generics are parsed but not first-class in graph/query surfaces | those semantics persist and query correctly | parser tests, graph tests, API/MCP proof | shared JS-family wave |
-| TSX graph parity | `fail` | JSX component usage model and type-alias persistence are incomplete | JSX component semantics become queryable and proven end to end | parser tests, graph tests, API/MCP proof | shared JS-family wave |
-| Python graph parity | `fail` | decorators, async flags, and type annotations do not fully survive graph/query layers | those semantics persist and query correctly | parser tests, graph tests, API/MCP proof | parallel medium wave |
+| JavaScript graph parity | `partial` | docstrings and method-kind metadata are extracted and materialized, but not yet consistently exposed through normal graph/query surfaces | JS docstrings and method metadata persist and query correctly | parser tests plus query proof | shared JS-family wave |
+| TypeScript graph parity | `partial` | type aliases are materialized and decorator/generic metadata is preserved, but first-class graph/query surfacing remains partial | those semantics persist and query correctly | parser tests, graph tests, API/MCP proof | shared JS-family wave |
+| TSX graph parity | `partial` | type aliases are materialized and JSX tag usage is captured, but dedicated component/reference query surfacing remains partial | JSX component semantics become queryable and proven end to end | parser tests, graph tests, API/MCP proof | shared JS-family wave |
+| Python graph parity | `partial` | decorators, async flags, and type annotations are extracted and materialized, but first-class graph/query surfacing remains partial | those semantics persist and query correctly | parser tests, graph tests, API/MCP proof | parallel medium wave |
 | Java graph parity | `partial` | applied annotation usage is not fully first-class | annotations persist and query correctly | parser tests plus query proof | long-tail wave |
 | Kotlin graph parity | `partial` | secondary constructor semantics are incomplete | constructors persist as first-class semantics | parser tests plus query proof | long-tail wave |
 | PHP graph parity | `partial` | static method call parity is not proven end to end | static call edges are persisted and queryable with proof | parser tests plus end-to-end proof | long-tail wave |
@@ -78,7 +78,7 @@ the old Python platform feature for feature for that surface.
 | --- | --- | --- |
 | Wave 0 | operator/runtime contract rows | independent of parser work and unblocks cleaner operator truth |
 | Wave 1 | SQL/dbt lineage | largest semantic gap and mostly isolated |
-| Wave 2 | JavaScript, TypeScript, TSX, Python | shared parser and graph patterns with high user impact |
+| Wave 2 | JavaScript, TypeScript, TSX, Python | shared query-surface promotion work for already-materialized parser semantics |
 | Wave 3 | Terraform, Terragrunt, Kubernetes, ArgoCD, CloudFormation, Kustomize | shared IaC normalization and query-surface work |
 | Wave 4 | Java, Kotlin, PHP, C, Rust, Elixir | long-tail graph promotions with lower coupling |
 | Wave 5 | final query-surface proof, docs lock, full validation | closes the branch honestly |

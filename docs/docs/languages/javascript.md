@@ -24,20 +24,22 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript` | Compose-backed fixture verification | - |
 | Member call expressions | `member-call-expressions` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript` | Compose-backed fixture verification | - |
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript` | Compose-backed fixture verification | - |
-| JSDoc comments | `jsdoc-comments` | partial | `functions` | `name, line_number, docstring` | `property:Function.docstring` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathJavaScriptDocstringsAndMethodKinds` | Compose-backed fixture verification | The parser still leaves JavaScript `docstring` fields empty, but indexed graph nodes now surface docstrings via content enrichment during ingest. |
-| Method kind (get/set/async) | `method-kind-get-set-async` | partial | `functions` | `name, line_number, type` | `property:Function.type` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathJavaScriptDocstringsAndMethodKinds` | Compose-backed fixture verification | Getter methods are emitted with `type='getter'`, but setter and async metadata are not captured consistently enough to claim full support. |
+| JSDoc comments | `jsdoc-comments` | partial | `functions` | `name, line_number, docstring` | `content:Entity.metadata.docstring` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathJavaScriptDocstringsAndMethodKinds` | Compose-backed fixture verification | The Go parser emits docstring metadata and the content pipeline preserves it in entity metadata. What remains partial is first-class normal query surfacing, not extraction. |
+| Method kind (get/set/async) | `method-kind-get-set-async` | partial | `functions` | `name, line_number, type` | `content:Entity.metadata.type` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathJavaScriptDocstringsAndMethodKinds` | Compose-backed fixture verification | Getter, setter, and async method kinds are captured and preserved in entity metadata, but they are not yet consistently exposed through the normal graph/query contract. |
 
 ## Support Maturity
 - Grammar routing: `supported`
 - Normalization: `supported`
 - Framework pack status: `supported`
 - Framework packs: `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base`
-- Query surfacing: `supported`
+- Query surfacing: `partial`
 - Real-repo validation: `supported`
 - End-to-end indexing: `supported`
 - Notes:
   - Real-repo validation covers React, Next.js, Express, Hapi, and bounded AWS
-    and GCP SDK evidence through the Go-owned parser and query path.
+    and GCP SDK evidence through the Go-owned parser and indexing path.
+  - JSDoc and method-kind semantics already survive parse and content
+    materialization, but their normal query surfacing is still partial.
 
 
 ## Known Limitations

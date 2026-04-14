@@ -149,6 +149,7 @@ func (h *CodeHandler) searchEntityContent(ctx context.Context, repoID, pattern s
 			"end_line":     e.EndLine,
 			"language":     e.Language,
 			"source_cache": e.SourceCache,
+			"metadata":     e.Metadata,
 			"repo_id":      e.RepoID,
 		})
 	}

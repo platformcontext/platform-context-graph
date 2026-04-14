@@ -436,15 +436,7 @@ const OpenAPISpec = `{
             "description": "Search results",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "source": {"type": "string", "enum": ["graph", "content"]},
-                    "query": {"type": "string"},
-                    "repo_id": {"type": "string"},
-                    "results": {"type": "array", "items": {"type": "object"}}
-                  }
-                }
+                "schema": {"$ref": "#/components/schemas/CodeSearchResponse"}
               }
             }
           },
@@ -607,7 +599,7 @@ const OpenAPISpec = `{
             "description": "File content",
             "content": {
               "application/json": {
-                "schema": {"type": "object"}
+                "schema": {"$ref": "#/components/schemas/FileContent"}
               }
             }
           },
@@ -645,7 +637,7 @@ const OpenAPISpec = `{
             "description": "File lines",
             "content": {
               "application/json": {
-                "schema": {"type": "object"}
+                "schema": {"$ref": "#/components/schemas/FileContent"}
               }
             }
           },
@@ -680,7 +672,7 @@ const OpenAPISpec = `{
             "description": "Entity content",
             "content": {
               "application/json": {
-                "schema": {"type": "object"}
+                "schema": {"$ref": "#/components/schemas/EntityContent"}
               }
             }
           },
@@ -720,7 +712,7 @@ const OpenAPISpec = `{
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "results": {"type": "array", "items": {"type": "object"}},
+                    "results": {"type": "array", "items": {"$ref": "#/components/schemas/FileContent"}},
                     "count": {"type": "integer"}
                   }
                 }
@@ -759,13 +751,7 @@ const OpenAPISpec = `{
             "description": "Search results",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "results": {"type": "array", "items": {"type": "object"}},
-                    "count": {"type": "integer"}
-                  }
-                }
+                "schema": {"$ref": "#/components/schemas/EntityContentSearchResponse"}
               }
             }
           },
@@ -1314,6 +1300,81 @@ const OpenAPISpec = `{
           "source_id": {"type": "string"},
           "confidence": {"type": "number"},
           "reason": {"type": "string"}
+        }
+      },
+      "FileContent": {
+        "type": "object",
+        "properties": {
+          "repo_id": {"type": "string"},
+          "relative_path": {"type": "string"},
+          "commit_sha": {"type": "string"},
+          "content": {"type": "string"},
+          "content_hash": {"type": "string"},
+          "line_count": {"type": "integer"},
+          "language": {"type": "string"}
+        }
+      },
+      "EntityContent": {
+        "type": "object",
+        "properties": {
+          "entity_id": {"type": "string"},
+          "repo_id": {"type": "string"},
+          "relative_path": {"type": "string"},
+          "entity_type": {"type": "string"},
+          "entity_name": {"type": "string"},
+          "start_line": {"type": "integer"},
+          "end_line": {"type": "integer"},
+          "language": {"type": "string"},
+          "source_cache": {"type": "string"},
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Language- and entity-specific parser metadata preserved from the Go content pipeline."
+          }
+        }
+      },
+      "EntityContentSearchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/EntityContent"}
+          },
+          "count": {"type": "integer"}
+        }
+      },
+      "CodeSearchResult": {
+        "type": "object",
+        "properties": {
+          "entity_id": {"type": "string"},
+          "entity_name": {"type": "string"},
+          "entity_type": {"type": "string"},
+          "name": {"type": "string"},
+          "labels": {"type": "array", "items": {"type": "string"}},
+          "file_path": {"type": "string"},
+          "start_line": {"type": "integer"},
+          "end_line": {"type": "integer"},
+          "language": {"type": "string"},
+          "source_cache": {"type": "string"},
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Optional parser metadata returned on content-backed fallback results."
+          },
+          "repo_id": {"type": "string"},
+          "repo_name": {"type": "string"}
+        }
+      },
+      "CodeSearchResponse": {
+        "type": "object",
+        "properties": {
+          "source": {"type": "string", "enum": ["graph", "content"]},
+          "query": {"type": "string"},
+          "repo_id": {"type": "string"},
+          "results": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/CodeSearchResult"}
+          }
         }
       },
       "WorkloadContext": {
