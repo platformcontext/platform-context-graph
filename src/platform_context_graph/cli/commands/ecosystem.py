@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
@@ -12,36 +11,6 @@ from urllib.error import URLError, HTTPError
 import typer
 from rich import box
 from rich.table import Table
-
-from platform_context_graph.observability import new_request_id
-from platform_context_graph.cli.helpers.go_index_runtime import run_go_bootstrap_index
-
-
-def _initialize_ecosystem_services(main_module: Any) -> tuple[Any, Any, Any] | None:
-    """Return the shared ecosystem service tuple or ``None`` when startup fails."""
-
-    services = main_module._initialize_services()
-    if not services or len(services) != 3:
-        return None
-    if not all(services):
-        return None
-    return services
-
-
-def _resolve_target_repositories(
-    *,
-    code_finder: Any,
-    explicit_repo_paths: list[str] | None,
-) -> list[Path]:
-    """Resolve repository paths for a relationship resolution run."""
-
-    if explicit_repo_paths:
-        return [Path(repo_path).resolve() for repo_path in explicit_repo_paths]
-    return [
-        Path(repo["path"]).resolve()
-        for repo in code_finder.list_indexed_repositories()
-        if repo.get("path")
-    ]
 
 
 def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
@@ -75,111 +44,16 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
         ),
     ) -> None:
         """Index all repositories in an ecosystem manifest."""
-        resolved_base_path = (
-            base_path
-            or main_module.config_manager.get_config_value("ECOSYSTEM_BASE_PATH")
-            or ""
+        raise typer.Exit(
+            "Ecosystem indexing has migrated to the Go ingester service."
         )
-        if not resolved_base_path:
-            main_module.console.print(
-                "[red]Error: --base-path required (or set ECOSYSTEM_BASE_PATH in config)[/red]"
-            )
-            raise typer.Exit(1)
-
-        from platform_context_graph.core.ecosystem_indexer import EcosystemIndexer
-        from platform_context_graph.core.jobs import JobManager
-
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, graph_builder, _ = services
-        try:
-            job_manager = JobManager()
-            indexer = EcosystemIndexer(
-                graph_builder,
-                job_manager,
-                index_repository=run_go_bootstrap_index,
-            )
-            result = graph_builder.loop.run_until_complete(
-                indexer.index_ecosystem(
-                    manifest_path=manifest,
-                    base_path=resolved_base_path,
-                    force=force,
-                    parallel=parallel,
-                    clone_missing=clone_missing,
-                )
-            )
-            main_module.console.print(
-                f"\n[bold green]Ecosystem: {result.get('ecosystem', 'unknown')}[/bold green]"
-            )
-            main_module.console.print(f"Total repos: {result.get('total_repos', 0)}")
-            main_module.console.print(f"Indexed: {len(result.get('indexed', []))}")
-            main_module.console.print(f"Skipped: {len(result.get('skipped', []))}")
-            main_module.console.print(f"Failed: {len(result.get('failed', []))}")
-
-            if result.get("missing_repos"):
-                main_module.console.print(
-                    f"\n[yellow]Missing repos: {', '.join(result['missing_repos'])}[/yellow]"
-                )
-            if result.get("failed"):
-                for failure in result["failed"]:
-                    main_module.console.print(
-                        f"[red]  Failed: {failure['name']}: {failure['error']}[/red]"
-                    )
-        finally:
-            db_manager.close_driver()
 
     @ecosystem_app.command("status")
     def ecosystem_status() -> None:
         """Show per-repository indexing status."""
-        from platform_context_graph.core.ecosystem_indexer import EcosystemIndexer
-        from platform_context_graph.core.jobs import JobManager
-
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, graph_builder, _ = services
-        try:
-            indexer = EcosystemIndexer(
-                graph_builder,
-                JobManager(),
-                index_repository=run_go_bootstrap_index,
-            )
-            status = indexer.get_status()
-            if not status.get("repos"):
-                main_module.console.print(
-                    "[yellow]No ecosystem repos indexed yet.[/yellow]"
-                )
-                return
-
-            table = Table(title="Ecosystem Indexing Status", box=box.ROUNDED)
-            table.add_column("Repository", style="cyan")
-            table.add_column("Status", style="green")
-            table.add_column("Commit", style="dim")
-            table.add_column("Files")
-            table.add_column("Last Indexed", style="dim")
-
-            for name, info in sorted(status["repos"].items()):
-                status_style = {
-                    "indexed": "green",
-                    "failed": "red",
-                    "pending": "yellow",
-                }.get(info["status"], "white")
-                table.add_row(
-                    name,
-                    f"[{status_style}]{info['status']}[/{status_style}]",
-                    info.get("last_commit", ""),
-                    str(info.get("files", "")),
-                    (
-                        info.get("last_indexed", "")[:19]
-                        if info.get("last_indexed")
-                        else ""
-                    ),
-                )
-
-            main_module.console.print(table)
-        finally:
-            db_manager.close_driver()
+        raise typer.Exit(
+            "Ecosystem indexing has migrated to the Go ingester service."
+        )
 
     @ecosystem_app.command("update")
     def ecosystem_update(
@@ -194,39 +68,9 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
         ),
     ) -> None:
         """Incrementally update only stale repositories."""
-        resolved_base_path = (
-            base_path
-            or main_module.config_manager.get_config_value("ECOSYSTEM_BASE_PATH")
-            or ""
+        raise typer.Exit(
+            "Ecosystem indexing has migrated to the Go ingester service."
         )
-        if not resolved_base_path:
-            main_module.console.print("[red]Error: --base-path required[/red]")
-            raise typer.Exit(1)
-
-        from platform_context_graph.core.ecosystem_indexer import EcosystemIndexer
-        from platform_context_graph.core.jobs import JobManager
-
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, graph_builder, _ = services
-        try:
-            indexer = EcosystemIndexer(
-                graph_builder,
-                JobManager(),
-                index_repository=run_go_bootstrap_index,
-            )
-            result = graph_builder.loop.run_until_complete(
-                indexer.update_ecosystem(
-                    manifest_path=manifest,
-                    base_path=resolved_base_path,
-                    parallel=parallel,
-                )
-            )
-            main_module.console.print(f"Updated: {len(result.get('updated', []))}")
-            main_module.console.print(f"Skipped: {len(result.get('skipped', []))}")
-        finally:
-            db_manager.close_driver()
 
     @ecosystem_app.command("resolve")
     def ecosystem_resolve(
@@ -238,29 +82,9 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
         ),
     ) -> None:
         """Resolve evidence-backed repository dependencies for indexed repositories."""
-
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, graph_builder, code_finder = services
-        try:
-            committed_repo_paths = _resolve_target_repositories(
-                code_finder=code_finder,
-                explicit_repo_paths=repo,
-            )
-            if not committed_repo_paths:
-                typer.echo(
-                    "No indexed repositories available for relationship resolution."
-                )
-                raise typer.Exit(1)
-            run_id = f"adhoc_{new_request_id()}"
-            stats = graph_builder._resolve_repository_relationships(
-                committed_repo_paths,
-                run_id=run_id,
-            )
-            typer.echo(json.dumps(stats, sort_keys=True))
-        finally:
-            db_manager.close_driver()
+        raise typer.Exit(
+            "Ecosystem indexing has migrated to the Go ingester service."
+        )
 
     @ecosystem_app.command("overview")
     def ecosystem_overview() -> None:

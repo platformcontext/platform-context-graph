@@ -17,7 +17,6 @@ from .helpers.indexing import (
     reindex_helper,
     update_helper,
 )
-from .helpers.runtime import _initialize_services, _run_index_with_progress, console
 from .helpers.visualization import (
     _visualize_falkordb,
     _visualize_kuzudb,
@@ -33,9 +32,6 @@ from .helpers.workspace import (
 )
 
 __all__ = [
-    "console",
-    "_initialize_services",
-    "_run_index_with_progress",
     "_visualize_falkordb",
     "_visualize_kuzudb",
     "add_package_helper",

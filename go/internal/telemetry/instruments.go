@@ -3,12 +3,29 @@
 package telemetry
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
+
+// QueueObserver provides queue depth and age readings for observable gauges.
+type QueueObserver interface {
+	// QueueDepths returns the current depth of each queue by status.
+	// Keys: queue name -> status (pending, in_flight, retrying) -> count.
+	QueueDepths(ctx context.Context) (map[string]map[string]int64, error)
+
+	// QueueOldestAge returns the age in seconds of the oldest item per queue.
+	QueueOldestAge(ctx context.Context) (map[string]float64, error)
+}
+
+// WorkerObserver provides active worker counts for observable gauges.
+type WorkerObserver interface {
+	// ActiveWorkers returns the current active count per worker pool.
+	ActiveWorkers(ctx context.Context) (map[string]int64, error)
+}
 
 // Instruments holds all pre-registered OTEL metric instruments for the Go
 // data plane. All instruments use the pcg_dp_ prefix to differentiate from
@@ -34,6 +51,11 @@ type Instruments struct {
 	QueueClaimDuration        metric.Float64Histogram
 	PostgresQueryDuration     metric.Float64Histogram
 	Neo4jQueryDuration        metric.Float64Histogram
+
+	// Observable gauges for autoscaling signals
+	QueueDepth         metric.Int64ObservableGauge
+	QueueOldestAge     metric.Float64ObservableGauge
+	WorkerPoolActive   metric.Int64ObservableGauge
 }
 
 // NewInstruments creates and registers all OTEL metric instruments using the
@@ -202,6 +224,101 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	}
 
 	return inst, nil
+}
+
+// RegisterObservableGauges registers observable gauge instruments with their
+// callback functions. This is separate from NewInstruments because the observer
+// implementations may not be available at instrument creation time.
+func RegisterObservableGauges(
+	inst *Instruments,
+	meter metric.Meter,
+	queueObs QueueObserver,
+	workerObs WorkerObserver,
+) error {
+	if inst == nil {
+		return errors.New("instruments must not be nil")
+	}
+	if meter == nil {
+		return errors.New("meter is required for observable gauges")
+	}
+
+	var err error
+
+	if queueObs != nil {
+		inst.QueueDepth, err = meter.Int64ObservableGauge(
+			"pcg_dp_queue_depth",
+			metric.WithDescription("Current queue depth by queue and status"),
+			metric.WithInt64Callback(func(ctx context.Context, o metric.Int64Observer) error {
+				depths, err := queueObs.QueueDepths(ctx)
+				if err != nil {
+					return err
+				}
+				for queue, statuses := range depths {
+					for status, count := range statuses {
+						o.Observe(count,
+							metric.WithAttributes(
+								attribute.String("queue", queue),
+								attribute.String("status", status),
+							),
+						)
+					}
+				}
+				return nil
+			}),
+		)
+		if err != nil {
+			return fmt.Errorf("register QueueDepth gauge: %w", err)
+		}
+
+		inst.QueueOldestAge, err = meter.Float64ObservableGauge(
+			"pcg_dp_queue_oldest_age_seconds",
+			metric.WithDescription("Age of oldest queue item in seconds"),
+			metric.WithUnit("s"),
+			metric.WithFloat64Callback(func(ctx context.Context, o metric.Float64Observer) error {
+				ages, err := queueObs.QueueOldestAge(ctx)
+				if err != nil {
+					return err
+				}
+				for queue, age := range ages {
+					o.Observe(age,
+						metric.WithAttributes(
+							attribute.String("queue", queue),
+						),
+					)
+				}
+				return nil
+			}),
+		)
+		if err != nil {
+			return fmt.Errorf("register QueueOldestAge gauge: %w", err)
+		}
+	}
+
+	if workerObs != nil {
+		inst.WorkerPoolActive, err = meter.Int64ObservableGauge(
+			"pcg_dp_worker_pool_active",
+			metric.WithDescription("Current active worker count per pool"),
+			metric.WithInt64Callback(func(ctx context.Context, o metric.Int64Observer) error {
+				counts, err := workerObs.ActiveWorkers(ctx)
+				if err != nil {
+					return err
+				}
+				for pool, count := range counts {
+					o.Observe(count,
+						metric.WithAttributes(
+							attribute.String("pool", pool),
+						),
+					)
+				}
+				return nil
+			}),
+		)
+		if err != nil {
+			return fmt.Errorf("register WorkerPoolActive gauge: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // AttrScopeID returns a scope_id attribute for metric recording.

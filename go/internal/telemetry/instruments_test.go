@@ -1,11 +1,13 @@
 package telemetry
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
 func TestNewInstrumentsNoError(t *testing.T) {
@@ -95,4 +97,84 @@ func TestAttrHelpers(t *testing.T) {
 				"Attribute key should match contract constant")
 		})
 	}
+}
+
+func TestRegisterObservableGauges_NilInstruments(t *testing.T) {
+	meter := sdkmetric.NewMeterProvider().Meter("test")
+	err := RegisterObservableGauges(nil, meter, nil, nil)
+	if err == nil {
+		t.Fatal("expected error for nil instruments")
+	}
+}
+
+func TestRegisterObservableGauges_NilMeter(t *testing.T) {
+	inst := &Instruments{}
+	err := RegisterObservableGauges(inst, nil, nil, nil)
+	if err == nil {
+		t.Fatal("expected error for nil meter")
+	}
+}
+
+func TestRegisterObservableGauges_NilObservers(t *testing.T) {
+	meter := sdkmetric.NewMeterProvider().Meter("test")
+	inst := &Instruments{}
+	err := RegisterObservableGauges(inst, meter, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error with nil observers: %v", err)
+	}
+}
+
+func TestRegisterObservableGauges_WithObservers(t *testing.T) {
+	meter := sdkmetric.NewMeterProvider().Meter("test")
+	inst := &Instruments{}
+
+	queueObs := &fakeQueueObserver{
+		depths: map[string]map[string]int64{
+			"projector": {"pending": 5, "in_flight": 2},
+		},
+		ages: map[string]float64{
+			"projector": 30.5,
+		},
+	}
+	workerObs := &fakeWorkerObserver{
+		counts: map[string]int64{
+			"collector": 3,
+			"projector": 2,
+		},
+	}
+
+	err := RegisterObservableGauges(inst, meter, queueObs, workerObs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if inst.QueueDepth == nil {
+		t.Error("expected QueueDepth gauge to be set")
+	}
+	if inst.QueueOldestAge == nil {
+		t.Error("expected QueueOldestAge gauge to be set")
+	}
+	if inst.WorkerPoolActive == nil {
+		t.Error("expected WorkerPoolActive gauge to be set")
+	}
+}
+
+type fakeQueueObserver struct {
+	depths map[string]map[string]int64
+	ages   map[string]float64
+}
+
+func (f *fakeQueueObserver) QueueDepths(_ context.Context) (map[string]map[string]int64, error) {
+	return f.depths, nil
+}
+
+func (f *fakeQueueObserver) QueueOldestAge(_ context.Context) (map[string]float64, error) {
+	return f.ages, nil
+}
+
+type fakeWorkerObserver struct {
+	counts map[string]int64
+}
+
+func (f *fakeWorkerObserver) ActiveWorkers(_ context.Context) (map[string]int64, error) {
+	return f.counts, nil
 }
