@@ -196,7 +196,11 @@ func copyRepositoryTree(sourceRoot string, targetRoot string) error {
 	gitignoreCache := make(map[string]*collectorGitignoreSpec)
 	return filepath.WalkDir(sourceRoot, func(current string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return walkErr
+			// Skip entries we cannot read (permission denied, etc.)
+			if entry != nil && entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if current == sourceRoot {
 			return nil
@@ -226,7 +230,11 @@ func copyRepositoryTree(sourceRoot string, targetRoot string) error {
 		if entry.IsDir() {
 			return os.MkdirAll(targetPath, 0o755)
 		}
-		return copyRepositoryFile(current, targetPath)
+		if err := copyRepositoryFile(current, targetPath); err != nil {
+			// Skip files we cannot read (permission denied, etc.)
+			return nil
+		}
+		return nil
 	})
 }
 
