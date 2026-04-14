@@ -5,17 +5,21 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/platformcontext/platform-context-graph/go/internal/collector/discovery"
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
 	"github.com/platformcontext/platform-context-graph/go/internal/content/shape"
 	"github.com/platformcontext/platform-context-graph/go/internal/parser"
 	"github.com/platformcontext/platform-context-graph/go/internal/repositoryidentity"
+	"github.com/platformcontext/platform-context-graph/go/internal/telemetry"
 )
 
 var snapshotEntityBuckets = []struct {
@@ -83,6 +87,10 @@ type NativeRepositorySnapshotter struct {
 	DiscoveryOptions discovery.Options
 	SCIP             SnapshotSCIPConfig
 	Now              func() time.Time
+	ParseWorkers     int
+	Tracer           trace.Tracer
+	Instruments      *telemetry.Instruments
+	Logger           *slog.Logger
 }
 
 // SnapshotRepository builds one native repository snapshot for the selected repo.

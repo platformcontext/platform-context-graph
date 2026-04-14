@@ -61,6 +61,7 @@ type RepoSyncConfig struct {
 	DependencyLanguage    string
 	FileTargets           []string
 	SnapshotWorkers       int
+	ParseWorkers          int
 }
 
 // LoadRepoSyncConfig parses the repo-sync environment contract for Go runtimes.
@@ -115,6 +116,7 @@ func LoadRepoSyncConfig(component string, getenv func(string) string) (RepoSyncC
 		DependencyName:        strings.TrimSpace(getenv("PCG_BOOTSTRAP_PACKAGE_NAME")),
 		DependencyLanguage:    strings.TrimSpace(getenv("PCG_BOOTSTRAP_PACKAGE_LANGUAGE")),
 		SnapshotWorkers:       snapshotWorkerCount(getenv),
+		ParseWorkers:          parseWorkerCount(getenv),
 	}
 	normalizeFilesystemConfig(&config)
 	return config, nil
@@ -391,6 +393,24 @@ func snapshotWorkerCount(getenv func(string) string) int {
 	n := runtime.NumCPU()
 	if n > 4 {
 		n = 4
+	}
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// parseWorkerCount returns the number of concurrent file parse workers.
+// Reads PCG_PARSE_WORKERS from env; defaults to min(NumCPU, 8).
+func parseWorkerCount(getenv func(string) string) int {
+	if raw := strings.TrimSpace(getenv("PCG_PARSE_WORKERS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	n := runtime.NumCPU()
+	if n > 8 {
+		n = 8
 	}
 	if n < 1 {
 		n = 1

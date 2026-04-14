@@ -5,7 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
+	"sync"
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector/discovery"
 	"github.com/platformcontext/platform-context-graph/go/internal/content/shape"
@@ -86,6 +92,20 @@ func (s NativeRepositorySnapshotter) buildParsedRepositoryFiles(
 		return shapeFiles, parsedFiles, nil
 	}
 
+	if s.ParseWorkers <= 1 {
+		return s.buildParsedRepositoryFilesSequential(ctx, repoPath, fileSet, engine, commitSHA, isDependency)
+	}
+	return s.buildParsedRepositoryFilesConcurrent(ctx, repoPath, fileSet, engine, commitSHA, isDependency)
+}
+
+func (s NativeRepositorySnapshotter) buildParsedRepositoryFilesSequential(
+	ctx context.Context,
+	repoPath string,
+	fileSet discovery.RepoFileSet,
+	engine *parser.Engine,
+	commitSHA string,
+	isDependency bool,
+) ([]shape.File, []map[string]any, error) {
 	shapeFiles := make([]shape.File, 0, len(fileSet.Files))
 	parsedFiles := make([]map[string]any, 0, len(fileSet.Files))
 	for _, filePath := range fileSet.Files {
@@ -93,30 +113,206 @@ func (s NativeRepositorySnapshotter) buildParsedRepositoryFiles(
 			return nil, nil, err
 		}
 
+		startTime := time.Now()
 		parsed, err := engine.ParsePath(repoPath, filePath, isDependency, parser.Options{
 			IndexSource:   true,
 			VariableScope: "all",
 		})
+		duration := time.Since(startTime).Milliseconds()
+
 		if err != nil {
 			// Skip files that cannot be parsed (e.g. malformed JSON,
 			// binary files with recognized extensions). A single bad
 			// file must not prevent the rest of the repository from
 			// being indexed.
+			if s.Instruments != nil {
+				s.Instruments.FilesParsed.Add(ctx, 1, metric.WithAttributes(
+					attribute.String("status", "skipped"),
+				))
+			}
 			continue
 		}
+
 		body, err := os.ReadFile(filePath)
 		if err != nil {
+			if s.Instruments != nil {
+				s.Instruments.FilesParsed.Add(ctx, 1, metric.WithAttributes(
+					attribute.String("status", "skipped"),
+				))
+			}
 			continue
 		}
 
 		relativePath, err := filepath.Rel(repoPath, filePath)
 		if err != nil {
+			if s.Instruments != nil {
+				s.Instruments.FilesParsed.Add(ctx, 1, metric.WithAttributes(
+					attribute.String("status", "skipped"),
+				))
+			}
 			continue
 		}
 		relativePath = filepath.ToSlash(filepath.Clean(relativePath))
 		shapeFiles = append(shapeFiles, shapeFileFromParsed(parsed, relativePath, string(body), commitSHA))
 		parsedFiles = append(parsedFiles, parsed)
+
+		if s.Instruments != nil {
+			language := snapshotPayloadString(parsed, "language", "lang")
+			s.Instruments.FileParseDuration.Record(ctx, float64(duration), metric.WithAttributes(
+				attribute.String("language", language),
+			))
+			s.Instruments.FilesParsed.Add(ctx, 1, metric.WithAttributes(
+				attribute.String("status", "succeeded"),
+			))
+		}
 	}
+	return shapeFiles, parsedFiles, nil
+}
+
+type parseResult struct {
+	index     int
+	shapeFile shape.File
+	parsed    map[string]any
+	skipped   bool
+}
+
+func (s NativeRepositorySnapshotter) buildParsedRepositoryFilesConcurrent(
+	ctx context.Context,
+	repoPath string,
+	fileSet discovery.RepoFileSet,
+	engine *parser.Engine,
+	commitSHA string,
+	isDependency bool,
+) ([]shape.File, []map[string]any, error) {
+	fileCount := len(fileSet.Files)
+	if fileCount == 0 {
+		return nil, nil, nil
+	}
+
+	// Create cancellable context for workers (only cancel on context error, not parse errors)
+	workerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Create channels
+	type fileJob struct {
+		index int
+		path  string
+	}
+	jobs := make(chan fileJob, fileCount)
+	results := make(chan parseResult, fileCount)
+
+	// Start workers
+	var wg sync.WaitGroup
+	for i := 0; i < s.ParseWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				// Check context
+				if err := workerCtx.Err(); err != nil {
+					results <- parseResult{index: job.index, skipped: true}
+					continue
+				}
+
+				startTime := time.Now()
+				parsed, err := engine.ParsePath(repoPath, job.path, isDependency, parser.Options{
+					IndexSource:   true,
+					VariableScope: "all",
+				})
+				duration := time.Since(startTime).Milliseconds()
+
+				if err != nil {
+					// Parse error: skip file but continue processing others
+					if s.Instruments != nil {
+						s.Instruments.FilesParsed.Add(workerCtx, 1, metric.WithAttributes(
+							attribute.String("status", "skipped"),
+						))
+					}
+					results <- parseResult{index: job.index, skipped: true}
+					continue
+				}
+
+				body, err := os.ReadFile(job.path)
+				if err != nil {
+					if s.Instruments != nil {
+						s.Instruments.FilesParsed.Add(workerCtx, 1, metric.WithAttributes(
+							attribute.String("status", "skipped"),
+						))
+					}
+					results <- parseResult{index: job.index, skipped: true}
+					continue
+				}
+
+				relativePath, err := filepath.Rel(repoPath, job.path)
+				if err != nil {
+					if s.Instruments != nil {
+						s.Instruments.FilesParsed.Add(workerCtx, 1, metric.WithAttributes(
+							attribute.String("status", "skipped"),
+						))
+					}
+					results <- parseResult{index: job.index, skipped: true}
+					continue
+				}
+				relativePath = filepath.ToSlash(filepath.Clean(relativePath))
+
+				if s.Instruments != nil {
+					language := snapshotPayloadString(parsed, "language", "lang")
+					s.Instruments.FileParseDuration.Record(workerCtx, float64(duration), metric.WithAttributes(
+						attribute.String("language", language),
+					))
+					s.Instruments.FilesParsed.Add(workerCtx, 1, metric.WithAttributes(
+						attribute.String("status", "succeeded"),
+					))
+				}
+
+				results <- parseResult{
+					index:     job.index,
+					shapeFile: shapeFileFromParsed(parsed, relativePath, string(body), commitSHA),
+					parsed:    parsed,
+					skipped:   false,
+				}
+			}
+		}()
+	}
+
+	// Send jobs
+	for i, filePath := range fileSet.Files {
+		jobs <- fileJob{index: i, path: filePath}
+	}
+	close(jobs)
+
+	// Wait for workers to finish
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	resultSlice := make([]parseResult, 0, fileCount)
+	for result := range results {
+		resultSlice = append(resultSlice, result)
+	}
+
+	// Check for context error
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	// Sort by original index to preserve deterministic order
+	sort.Slice(resultSlice, func(i, j int) bool {
+		return resultSlice[i].index < resultSlice[j].index
+	})
+
+	// Extract successful results in original order
+	shapeFiles := make([]shape.File, 0, fileCount)
+	parsedFiles := make([]map[string]any, 0, fileCount)
+	for _, result := range resultSlice {
+		if !result.skipped {
+			shapeFiles = append(shapeFiles, result.shapeFile)
+			parsedFiles = append(parsedFiles, result.parsed)
+		}
+	}
+
 	return shapeFiles, parsedFiles, nil
 }
 

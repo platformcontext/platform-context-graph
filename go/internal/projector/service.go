@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -59,6 +60,7 @@ type Service struct {
 	Tracer       trace.Tracer           // optional
 	Instruments  *telemetry.Instruments // optional
 	Logger       *slog.Logger           // optional
+	Workers      int                    // concurrent worker count; 0 or 1 means sequential
 }
 
 // Run polls for projector work until the context is canceled.
@@ -67,19 +69,29 @@ func (s Service) Run(ctx context.Context) error {
 		return err
 	}
 
+	if s.Logger != nil {
+		s.Logger.Info("starting projector", slog.Int("workers", s.Workers))
+	}
+
+	if s.Workers <= 1 {
+		return s.runSequential(ctx)
+	}
+	return s.runConcurrent(ctx)
+}
+
+// runSequential processes work one at a time.
+func (s Service) runSequential(ctx context.Context) error {
 	for {
 		claimStart := time.Now()
 		work, ok, err := s.WorkSource.Claim(ctx)
-		if err != nil {
-			return fmt.Errorf("claim projector work: %w", err)
-		}
-
 		if s.Instruments != nil {
 			s.Instruments.QueueClaimDuration.Record(ctx, time.Since(claimStart).Seconds(), metric.WithAttributes(
 				attribute.String("queue", "projector"),
 			))
 		}
-
+		if err != nil {
+			return fmt.Errorf("claim projector work: %w", err)
+		}
 		if !ok {
 			if err := s.wait(ctx, s.pollInterval()); err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
@@ -90,13 +102,80 @@ func (s Service) Run(ctx context.Context) error {
 			continue
 		}
 
-		if err := s.processWork(ctx, work); err != nil {
+		if err := s.processWork(ctx, work, 0); err != nil {
 			return err
 		}
 	}
 }
 
-func (s Service) processWork(ctx context.Context, work ScopeGenerationWork) error {
+// runConcurrent spawns N worker goroutines that compete for projector work.
+// Each worker independently claims, processes, and acknowledges work. On first
+// fatal error (Claim or Ack failure), the shared context is canceled to drain
+// siblings promptly.
+func (s Service) runConcurrent(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		mu   sync.Mutex
+		errs []error
+		wg   sync.WaitGroup
+	)
+
+	for i := 0; i < s.Workers; i++ {
+		workerID := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+
+				claimStart := time.Now()
+				work, ok, err := s.WorkSource.Claim(ctx)
+				if s.Instruments != nil {
+					s.Instruments.QueueClaimDuration.Record(ctx, time.Since(claimStart).Seconds(), metric.WithAttributes(
+						attribute.String("queue", "projector"),
+					))
+				}
+				if err != nil {
+					mu.Lock()
+					errs = append(errs, fmt.Errorf("claim projector work (worker %d): %w", workerID, err))
+					mu.Unlock()
+					cancel()
+					return
+				}
+				if !ok {
+					if err := s.wait(ctx, s.pollInterval()); err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+							return
+						}
+						mu.Lock()
+						errs = append(errs, fmt.Errorf("wait for projector work (worker %d): %w", workerID, err))
+						mu.Unlock()
+						cancel()
+						return
+					}
+					continue
+				}
+
+				if err := s.processWork(ctx, work, workerID); err != nil {
+					mu.Lock()
+					errs = append(errs, err)
+					mu.Unlock()
+					cancel()
+					return
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	return errors.Join(errs...)
+}
+
+func (s Service) processWork(ctx context.Context, work ScopeGenerationWork, workerID int) error {
 	start := time.Now()
 
 	if s.Tracer != nil {
@@ -107,7 +186,7 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork) erro
 
 	factsForGeneration, err := s.FactStore.LoadFacts(ctx, work)
 	if err != nil {
-		s.recordProjectionResult(ctx, work, start, "failed", 0, err)
+		s.recordProjectionResult(ctx, work, start, "failed", 0, err, workerID)
 		if failErr := s.WorkSink.Fail(ctx, work, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail projector work: %w", failErr))
 		}
@@ -116,7 +195,7 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork) erro
 
 	result, err := s.Runner.Project(ctx, work.Scope, work.Generation, factsForGeneration)
 	if err != nil {
-		s.recordProjectionResult(ctx, work, start, "failed", len(factsForGeneration), err)
+		s.recordProjectionResult(ctx, work, start, "failed", len(factsForGeneration), err, workerID)
 		if failErr := s.WorkSink.Fail(ctx, work, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail projector work: %w", failErr))
 		}
@@ -127,11 +206,11 @@ func (s Service) processWork(ctx context.Context, work ScopeGenerationWork) erro
 		return fmt.Errorf("ack projector work: %w", err)
 	}
 
-	s.recordProjectionResult(ctx, work, start, "succeeded", len(factsForGeneration), nil)
+	s.recordProjectionResult(ctx, work, start, "succeeded", len(factsForGeneration), nil, workerID)
 	return nil
 }
 
-func (s Service) recordProjectionResult(ctx context.Context, work ScopeGenerationWork, start time.Time, status string, factCount int, err error) {
+func (s Service) recordProjectionResult(ctx context.Context, work ScopeGenerationWork, start time.Time, status string, factCount int, err error, workerID int) {
 	duration := time.Since(start).Seconds()
 
 	if s.Instruments != nil {
@@ -146,13 +225,14 @@ func (s Service) recordProjectionResult(ctx context.Context, work ScopeGeneratio
 
 	if s.Logger != nil {
 		scopeAttrs := telemetry.ScopeAttrs(work.Scope.ScopeID, work.Generation.GenerationID, work.Scope.SourceSystem)
-		logAttrs := make([]any, 0, len(scopeAttrs)+3)
+		logAttrs := make([]any, 0, len(scopeAttrs)+5)
 		for _, a := range scopeAttrs {
 			logAttrs = append(logAttrs, a)
 		}
 		logAttrs = append(logAttrs, slog.String("status", status))
 		logAttrs = append(logAttrs, slog.Int("fact_count", factCount))
 		logAttrs = append(logAttrs, slog.Float64("duration_seconds", duration))
+		logAttrs = append(logAttrs, slog.Int("worker_id", workerID))
 		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseProjection))
 		if err != nil {
 			logAttrs = append(logAttrs, slog.String("error", err.Error()))

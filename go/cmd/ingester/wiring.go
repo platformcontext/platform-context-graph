@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -90,9 +93,14 @@ func buildIngesterCollectorService(
 
 	return collector.Service{
 		Source: &collector.GitSource{
-			Component:       "ingester",
-			Selector:        collector.NativeRepositorySelector{Config: config},
-			Snapshotter:     collector.NativeRepositorySnapshotter{},
+			Component: "ingester",
+			Selector:  collector.NativeRepositorySelector{Config: config},
+			Snapshotter: collector.NativeRepositorySnapshotter{
+				ParseWorkers: config.ParseWorkers,
+				Tracer:       tracer,
+				Instruments:  instruments,
+				Logger:       logger,
+			},
 			SnapshotWorkers: config.SnapshotWorkers,
 			Tracer:          tracer,
 			Instruments:     instruments,
@@ -136,7 +144,24 @@ func buildIngesterProjectorService(
 		Tracer:       tracer,
 		Instruments:  instruments,
 		Logger:       logger,
+		Workers:      projectorWorkerCount(getenv),
 	}, nil
+}
+
+func projectorWorkerCount(getenv func(string) string) int {
+	if raw := strings.TrimSpace(getenv("PCG_PROJECTOR_WORKERS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	n := runtime.NumCPU()
+	if n > 4 {
+		n = 4
+	}
+	if n < 1 {
+		n = 1
+	}
+	return n
 }
 
 func buildIngesterProjectorRuntime(

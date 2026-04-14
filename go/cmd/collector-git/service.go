@@ -25,7 +25,8 @@ func buildCollectorService(
 			Component: "collector-git",
 			Selector:  collector.NativeRepositorySelector{Config: config},
 			Snapshotter: collector.NativeRepositorySnapshotter{
-				SCIP: collector.LoadSnapshotSCIPConfig(getenv),
+				SCIP:         collector.LoadSnapshotSCIPConfig(getenv),
+				ParseWorkers: config.ParseWorkers,
 			},
 			SnapshotWorkers: config.SnapshotWorkers,
 		},

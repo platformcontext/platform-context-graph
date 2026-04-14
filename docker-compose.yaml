@@ -102,6 +102,7 @@ services:
       OTEL_LOGS_EXPORTER: none
       PCG_PROJECTION_WORKERS: ${PCG_PROJECTION_WORKERS:-}
       PCG_SNAPSHOT_WORKERS: ${PCG_SNAPSHOT_WORKERS:-}
+      PCG_PARSE_WORKERS: ${PCG_PARSE_WORKERS:-}
     volumes:
       - pcg_data:/data
       - ./:/app-src
@@ -225,7 +226,7 @@ services:
       bootstrap-index:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -266,6 +267,8 @@ services:
       PCG_PROMETHEUS_METRICS_ENABLED: "true"
       PCG_PROMETHEUS_METRICS_PORT: "9464"
       PCG_SNAPSHOT_WORKERS: ${PCG_SNAPSHOT_WORKERS:-}
+      PCG_PROJECTOR_WORKERS: ${PCG_PROJECTOR_WORKERS:-}
+      PCG_PARSE_WORKERS: ${PCG_PARSE_WORKERS:-}
     volumes:
       - pcg_data:/data
       - ./:/app-src
@@ -295,7 +298,10 @@ services:
       dockerfile: Dockerfile
     command: ["/usr/local/bin/pcg-reducer"]
     healthcheck:
-      disable: true
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     ports:
       - "${PCG_RESOLUTION_ENGINE_METRICS_PORT:-19466}:9464"
     environment:
