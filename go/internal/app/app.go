@@ -63,7 +63,9 @@ func (a Application) Run(ctx context.Context) error {
 	if err := a.Lifecycle.Start(ctx); err != nil {
 		return err
 	}
-	defer a.Lifecycle.Stop(context.Background())
+	defer func() {
+		_ = a.Lifecycle.Stop(context.Background())
+	}()
 
 	return a.Runner.Run(ctx)
 }

@@ -11,7 +11,7 @@ import (
 
 func TestNewProvidersNoEndpoint(t *testing.T) {
 	// Ensure OTLP endpoint is not set
-	os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
 	b, err := NewBootstrap("test-service")
 	require.NoError(t, err)
@@ -20,7 +20,9 @@ func TestNewProvidersNoEndpoint(t *testing.T) {
 	providers, err := NewProviders(ctx, b)
 	require.NoError(t, err)
 	require.NotNil(t, providers)
-	defer providers.Shutdown(ctx)
+	defer func() {
+		_ = providers.Shutdown(ctx)
+	}()
 
 	assert.NotNil(t, providers.TracerProvider, "trace provider should be created")
 	assert.NotNil(t, providers.MeterProvider, "meter provider should be created")
@@ -29,7 +31,7 @@ func TestNewProvidersNoEndpoint(t *testing.T) {
 }
 
 func TestNewProvidersShutdownIdempotent(t *testing.T) {
-	os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
 	b, err := NewBootstrap("test-service")
 	require.NoError(t, err)
@@ -52,7 +54,7 @@ func TestNewProvidersShutdownIdempotent(t *testing.T) {
 }
 
 func TestNewProvidersResourceAttributes(t *testing.T) {
-	os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
 	b, err := NewBootstrap("my-test-service")
 	require.NoError(t, err)
@@ -61,7 +63,9 @@ func TestNewProvidersResourceAttributes(t *testing.T) {
 	providers, err := NewProviders(ctx, b)
 	require.NoError(t, err)
 	require.NotNil(t, providers)
-	defer providers.Shutdown(ctx)
+	defer func() {
+		_ = providers.Shutdown(ctx)
+	}()
 
 	// Verify resource attributes are set correctly
 	// The providers are created with the resource, but we can't directly inspect
@@ -73,7 +77,7 @@ func TestNewProvidersResourceAttributes(t *testing.T) {
 }
 
 func TestNewProvidersRequiresValidBootstrap(t *testing.T) {
-	os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
 	// Empty service name should fail validation
 	b := Bootstrap{

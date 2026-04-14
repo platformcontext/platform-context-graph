@@ -160,7 +160,7 @@ func OpenPostgres(ctx context.Context, getenv func(string) string) (*sql.DB, err
 	pingCtx, cancel := context.WithTimeout(ctx, cfg.PingTimeout)
 	defer cancel()
 	if err := db.PingContext(pingCtx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 
@@ -257,7 +257,7 @@ func OpenNeo4jDriver(
 	driver, err := neo4jdriver.NewDriverWithContext(
 		cfg.URI,
 		neo4jdriver.BasicAuth(cfg.Username, cfg.Password, ""),
-		func(driverCfg *neo4jdriver.Config) {
+		func(driverCfg *neo4jconfig.Config) {
 			ApplyNeo4jConfig(driverCfg, cfg)
 		},
 	)

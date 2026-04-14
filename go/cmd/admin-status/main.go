@@ -36,7 +36,9 @@ func run(
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	return renderStatus(
 		parent,

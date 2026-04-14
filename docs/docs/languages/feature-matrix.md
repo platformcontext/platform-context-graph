@@ -1,6 +1,6 @@
 # Parser Feature Matrix
 
-This file is auto-generated. Do not edit manually.
+This page tracks the checked-in Go parser contract matrix for this branch.
 
 ## Language Parsers
 

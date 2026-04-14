@@ -14,31 +14,24 @@ is not a valid long-term runtime or bridge layer for the merged platform.
 
 ## Current Truth
 
-The rewrite proof and documentation package is complete, but the full Python-
-to-Go platform conversion is not.
+The rewrite proof and documentation package is complete, and the branch has now
+crossed the runtime-ownership cutover:
 
-The branch still has active Python-owned runtime seams:
+- no deployed or long-running service starts from a Python runtime entrypoint
+- the historical `src/platform_context_graph/**` runtime tree has been deleted
+  from the branch
+- parser-family ownership is Go-owned on the normal path
+- collector, projector, reducer, admin, and recovery ownership are Go-owned on
+  the normal path
+- Terraform provider schemas are packaged and loaded from
+  `go/internal/terraformschema/schemas/*.json.gz`
+- the only Python files still present in the repository are fixture inputs
+  under `tests/fixtures/`
 
-- the deployed API service still starts from the Python runtime command
-  `pcg serve start` in `docker-compose.yaml`, `Dockerfile`, and
-  `src/platform_context_graph/app/service_entrypoints.py`
-- Python API, MCP, and CLI orchestration still survive under
-  `src/platform_context_graph/api/**`,
-  `src/platform_context_graph/mcp/**`, and
-  `src/platform_context_graph/cli/**`; parts of that surface still carry stale
-  imports into already deleted Python package families such as
-  `platform_context_graph.query` and `platform_context_graph.facts`
-- parser-family ownership is complete in the canonical specs/docs and on disk;
-  the remaining parser debt is downstream graph/materialization parity for
-  Go-emitted buckets and metadata
-- the legacy Python `content/ingest.py` helper has now been deleted; Go owns
-  normal-path content shaping under `go/internal/content/shape`, and the
-  remaining Python ownership is concentrated in API/MCP/CLI orchestration plus
-  a smaller set of content-read and relationship seams
-- the Terraform provider-schema relationship seam is now split:
-  Go owns schema loading/classification and schema-driven generic evidence
-  under `go/internal/terraformschema` and `go/internal/relationships`,
-  while Python still owns the outer relationship finalization/runtime boundary
+Remaining work is parity hardening, proof, docs cleanup, and deletion of
+any non-runtime migration leftovers. This document should be read as the
+historical cutover plan that brought the branch here, not as a statement that
+Python runtime seams still exist.
 
 The collector bridge inventory changed during Chunk 2:
 

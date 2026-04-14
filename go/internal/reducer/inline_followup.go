@@ -148,7 +148,7 @@ func drainDomain(
 
 		now := time.Now().UTC()
 		for _, partitionID := range partitionIDs {
-			ProcessPartitionOnce(
+			if _, err := ProcessPartitionOnce(
 				ctx, now,
 				PartitionProcessorConfig{
 					Domain:         domain,
@@ -163,7 +163,9 @@ func drainDomain(
 				reader,
 				edgeWriter,
 				acceptedGen,
-			)
+			); err != nil {
+				return false
+			}
 		}
 
 		count, err := counter.CountPendingGenerationIntents(

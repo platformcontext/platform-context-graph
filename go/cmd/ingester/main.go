@@ -35,7 +35,9 @@ func run(parent context.Context) error {
 	if err != nil {
 		return fmt.Errorf("telemetry providers: %w", err)
 	}
-	defer providers.Shutdown(context.Background())
+	defer func() {
+		_ = providers.Shutdown(context.Background())
+	}()
 
 	logger := telemetry.NewLogger(bootstrap, "collector", "ingester")
 	tracer := providers.TracerProvider.Tracer(telemetry.DefaultSignalName)
@@ -51,13 +53,17 @@ func run(parent context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	graphWriter, graphCloser, err := openIngesterGraphWriter(parent, os.Getenv)
 	if err != nil {
 		return err
 	}
-	defer graphCloser.Close()
+	defer func() {
+		_ = graphCloser.Close()
+	}()
 
 	instrumentedDB := &postgres.InstrumentedDB{
 		Inner:       postgres.SQLDB{DB: db},

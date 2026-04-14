@@ -132,7 +132,9 @@ func (e bootstrapNeo4jExecutor) Execute(ctx context.Context, statement sourceneo
 		AccessMode:   neo4jdriver.AccessModeWrite,
 		DatabaseName: e.DatabaseName,
 	})
-	defer session.Close(ctx)
+	defer func() {
+		_ = session.Close(ctx)
+	}()
 
 	result, err := session.Run(ctx, statement.Cypher, statement.Parameters)
 	if err != nil {

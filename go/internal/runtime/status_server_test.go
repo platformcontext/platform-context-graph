@@ -37,13 +37,17 @@ func TestNewStatusAdminServerServesStatusAndReadyChecks(t *testing.T) {
 	if err := server.Start(context.Background()); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
-	defer server.Stop(context.Background())
+	defer func() {
+		_ = server.Stop(context.Background())
+	}()
 
 	statusResponse, err := http.Get("http://" + server.Addr() + "/admin/status?format=json")
 	if err != nil {
 		t.Fatalf("GET /admin/status error = %v, want nil", err)
 	}
-	defer statusResponse.Body.Close()
+	defer func() {
+		_ = statusResponse.Body.Close()
+	}()
 	if got, want := statusResponse.StatusCode, http.StatusOK; got != want {
 		t.Fatalf("GET /admin/status status = %d, want %d", got, want)
 	}
@@ -52,7 +56,9 @@ func TestNewStatusAdminServerServesStatusAndReadyChecks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /readyz error = %v, want nil", err)
 	}
-	defer readyResponse.Body.Close()
+	defer func() {
+		_ = readyResponse.Body.Close()
+	}()
 	if got, want := readyResponse.StatusCode, http.StatusOK; got != want {
 		t.Fatalf("GET /readyz status = %d, want %d", got, want)
 	}
@@ -88,13 +94,17 @@ func TestNewStatusAdminServerServesMetrics(t *testing.T) {
 	if err := server.Start(context.Background()); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
-	defer server.Stop(context.Background())
+	defer func() {
+		_ = server.Stop(context.Background())
+	}()
 
 	response, err := http.Get("http://" + server.Addr() + "/metrics")
 	if err != nil {
 		t.Fatalf("GET /metrics error = %v, want nil", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		t.Fatalf("ReadAll() error = %v, want nil", err)
@@ -127,13 +137,17 @@ func TestNewStatusAdminServerSurfacesReaderFailureThroughReadyz(t *testing.T) {
 	if err := server.Start(context.Background()); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
-	defer server.Stop(context.Background())
+	defer func() {
+		_ = server.Stop(context.Background())
+	}()
 
 	response, err := http.Get("http://" + server.Addr() + "/readyz")
 	if err != nil {
 		t.Fatalf("GET /readyz error = %v, want nil", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		t.Fatalf("ReadAll() error = %v, want nil", err)
@@ -177,7 +191,9 @@ func TestNewStatusAdminServerWithRecoveryMountsRecoveryRoutes(t *testing.T) {
 	if err := server.Start(context.Background()); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
-	defer server.Stop(context.Background())
+	defer func() {
+		_ = server.Stop(context.Background())
+	}()
 
 	body, _ := json.Marshal(map[string]any{"stage": "projector"})
 	resp, err := http.Post(
@@ -188,7 +204,9 @@ func TestNewStatusAdminServerWithRecoveryMountsRecoveryRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /admin/replay error = %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if got, want := resp.StatusCode, http.StatusOK; got != want {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -236,7 +254,9 @@ func TestNewStatusAdminServerWithRecoveryMountsRefinalizeRoute(t *testing.T) {
 	if err := server.Start(context.Background()); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
-	defer server.Stop(context.Background())
+	defer func() {
+		_ = server.Stop(context.Background())
+	}()
 
 	body, _ := json.Marshal(map[string]any{"scope_ids": []string{"s1", "s2"}})
 	resp, err := http.Post(
@@ -247,7 +267,9 @@ func TestNewStatusAdminServerWithRecoveryMountsRefinalizeRoute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /admin/refinalize error = %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if got, want := resp.StatusCode, http.StatusOK; got != want {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -283,7 +305,9 @@ func TestNewStatusAdminServerWithoutRecoveryReturns404ForRecoveryRoutes(t *testi
 	if err := server.Start(context.Background()); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
-	defer server.Stop(context.Background())
+	defer func() {
+		_ = server.Stop(context.Background())
+	}()
 
 	resp, err := http.Post(
 		"http://"+server.Addr()+"/admin/replay",
@@ -293,7 +317,9 @@ func TestNewStatusAdminServerWithoutRecoveryReturns404ForRecoveryRoutes(t *testi
 	if err != nil {
 		t.Fatalf("POST /admin/replay error = %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if got, want := resp.StatusCode, http.StatusNotFound; got != want {
 		t.Fatalf("POST /admin/replay without recovery status = %d, want %d", got, want)
@@ -432,13 +458,17 @@ func TestWithPrometheusHandlerOption(t *testing.T) {
 	if err := server.Start(context.Background()); err != nil {
 		t.Fatalf("Start() error = %v, want nil", err)
 	}
-	defer server.Stop(context.Background())
+	defer func() {
+		_ = server.Stop(context.Background())
+	}()
 
 	response, err := http.Get("http://" + server.Addr() + "/metrics")
 	if err != nil {
 		t.Fatalf("GET /metrics error = %v, want nil", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		t.Fatalf("ReadAll() error = %v, want nil", err)

@@ -2,41 +2,30 @@
 
 PlatformContextGraph uses a **schema-driven approach** to extract infrastructure relationships from Terraform code. Instead of hand-writing extractors for each resource type, PCG automatically generates extractors from real Terraform provider schemas.
 
-## Migration Status
+## Runtime Ownership
 
-This subsystem still has a **Python-owned outer runtime seam** on the current
-rewrite branch, but the packaged provider schema assets are now owned
-canonically by the Go runtime under:
+Terraform provider-schema support is now Go-owned on this branch.
+
+The canonical packaged schema assets live under:
 
 - `go/internal/terraformschema/schemas/*.json.gz`
 
-The legacy Python-package copy may still exist during cutover work, but it is
-no longer the canonical packaged location.
+The runtime path is:
 
-The live path today is:
+- `go/internal/terraformschema/*` for loading, identity-key inference, and
+  category classification
+- `go/internal/relationships/*` for schema-driven relationship extraction
 
-- `relationships/execution.py`
-- `relationships/file_evidence.py`
-- `relationships/evidence_terraform.py`
-- `relationships/terraform_evidence/__init__.py`
-- `relationships/terraform_evidence/generic.py`
-- `go/internal/terraformschema/categories.go`
-- `go/internal/relationships/terraform_schema.go`
-
-That means Terraform provider schemas are not just an offline packaging detail.
-They currently drive runtime relationship extraction through import-time
-extractor registration, schema loading, identity-key inference, service-
-category classification, and schema-driven generic extractors.
-
-This migration matters because the branch is not honestly mergeable until that
-normal-path runtime ownership moves to Go or is deleted and replaced with an
-equivalent Go-owned flow.
+This matters because the provider schemas are not just an offline packaging
+detail. They are live runtime inputs used to register schema-driven extractors,
+load provider metadata, infer identity keys, classify service families, and
+emit infrastructure relationship evidence.
 
 ## How It Works
 
 1. **Provider schemas** are generated from official Terraform provider binaries using `terraform providers schema -json`
 2. **Schemas are compressed** to `.json.gz` format with version tags (e.g., `aws-5.100.0.json.gz`)
-3. **Schemas ship inside the Go runtime tree** — no runtime downloads, works in Docker, development, and deployed runtimes
+3. **Schemas ship inside the Go runtime tree** — no runtime downloads, works in Docker, local development, and deployed runtimes
 4. **Extractors auto-register** at import time for all resource types with name-like attributes
 5. **Zero manual maintenance** — adding providers or updating versions requires no code changes in the generic extractor flow
 

@@ -21,31 +21,27 @@
 - Milestone 4: complete
 - Milestone 5: complete
 
-The rewrite proof and documentation package is complete on this branch, but
-the full Python-to-Go platform conversion is not complete yet. Future work
-must finish the conversion before any new ingestor work starts.
+The rewrite proof and documentation package is complete on this branch, and the
+runtime-ownership conversion is now effectively complete:
 
-Current remaining ownership seams are narrower than the early milestone labels
-imply:
+- the parser-family runtime cutover is Go-owned on the normal Git path
+- the dead Python discovery shim layer has been deleted from the normal path
+- Terraform provider-schema runtime ownership is Go-owned via
+  `go/internal/terraformschema` and `go/internal/relationships`
+- no deployed runtime or write service starts from a Python runtime entrypoint
+- only fixture Python files remain under `tests/fixtures/`
 
-- the parser-family runtime cutover itself is now Go-owned on the normal Git
-  path
-- the dead Python discovery shim layer under `collectors/git/` has also been
-  deleted from the normal path
-- the remaining parser-related work is parity hardening plus downstream
-  materialization of Go-emitted buckets and metadata
-- Terraform provider-schema relationship extraction is still Python-owned on
-  the normal runtime path and must move to Go or be deleted and replaced
-- the remaining active Python-owned seams are now concentrated in API/MCP/CLI
-  orchestration plus content-read/query helpers; the legacy `content/ingest.py`
-  shaping seam has been deleted from this branch
+The remaining work is proof, parity hardening, docs cleanup, and branch
+completion. No new ingestors should start until those validation and cleanup
+steps are closed.
 
 Hard merge bar for the branch:
 
 - no deployed runtime or write service starts from Python runtime entrypoints
 - no Go runtime service imports `go/internal/compatibility/pythonbridge`
-- no Python bridge modules under `src/platform_context_graph/runtime/ingester/`
-  are required for normal Git ingestion
+- no Python bridge modules under the deleted
+  `src/platform_context_graph/runtime/ingester/` tree are required for normal
+  Git ingestion
 - no normal parser, discovery, snapshot, content-shaping, recovery, refinalize,
   or admin-repair path depends on Python runtime ownership
 - Docker Compose and Helm run the Go-owned platform

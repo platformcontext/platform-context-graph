@@ -1,269 +1,123 @@
 # Source Layout
 
-PlatformContextGraph keeps the importable Python package under `src/platform_context_graph/` and organizes the remaining Python support code by responsibility instead of by transport-specific duplication.
+PlatformContextGraph is now organized around Go-owned runtime and domain
+packages. The historical Python service tree has been deleted from this branch.
+Only fixture inputs under `tests/fixtures/` still use Python source files, and
+those exist solely to exercise parser behavior.
 
-For rewrite-era source families, pair this page with the
-[Collector Authoring Guide](../guides/collector-authoring.md). The guide covers
-service-boundary and traversal rules; this page explains where those decisions
+Pair this page with the [Collector Authoring Guide](../guides/collector-authoring.md).
+That guide explains boundary rules; this page explains where those boundaries
 live in the repository today.
 
-## Top-Level Package Map
+## Top-Level Map
 
-| Package | Responsibility |
+| Path | Responsibility |
 | :--- | :--- |
-| `app/` | service-role entrypoints and startup wiring |
-| `collectors/` | source-specific collection logic such as Git discovery and parse execution |
-| `api/` | FastAPI app wiring, dependencies, and HTTP routers |
-| `cli/` | Typer entrypoints, command registration, setup flows, and visualization helpers |
-| `content/` | content-store providers, content identity helpers, and workspace fallback |
-| `core/` | database adapters, watcher/runtime primitives, and low-level support code |
-| `domain/` | shared typed entities and response models |
-| `graph/` | canonical graph schema and persistence helpers |
-| `mcp/` | MCP server, transport, tool registry, and handler wiring |
-| `observability/` | OTEL bootstrap, runtime state, metrics, and instrumentation helpers |
-| `parsers/` | parser capability metadata, validation, framework-pack specs, and rewrite-era parser support artifacts |
-| `platform/` | Shared platform/runtime primitives such as dependency rules, package resolution, and runtime-family inference |
-| `relationships/` | evidence-backed repo relationship discovery, resolution, persistence, and projection |
-| `runtime/` | repo sync, bootstrap indexing, resolution-engine runtime loops, and long-running runtime helpers |
-| `tools/` | `GraphBuilder`, code-finder/query helpers, cross-repo linking entrypoints, and generated tool-facing artifacts |
-| `utils/` | reusable helper utilities that do not belong to a higher-level subsystem |
-| `viz/` | visualization-serving support code |
+| `go/cmd/` | buildable binaries for API, MCP, CLI, ingester, reducer, bootstrap, and proof runtimes |
+| `go/internal/app/` | runtime composition, configuration, and shared service wiring |
+| `go/internal/collector/` | Git collection, discovery, snapshotting, and fact shaping |
+| `go/internal/content/` | content shaping and content-store persistence |
+| `go/internal/facts/` | durable fact models and queue contracts |
+| `go/internal/graph/` | canonical graph schema and write helpers |
+| `go/internal/mcp/` | MCP transport and tool wiring |
+| `go/internal/parser/` | native parser registry, language adapters, and SCIP support |
+| `go/internal/projector/` | source-local projection stages and failure classification |
+| `go/internal/query/` | HTTP query/admin handlers plus OpenAPI support |
+| `go/internal/recovery/` | replay and repair domain logic |
+| `go/internal/reducer/` | cross-domain reduction and shared projection ownership |
+| `go/internal/relationships/` | infrastructure/deployment evidence extraction and resolution |
+| `go/internal/runtime/` | probes, admin/status surfaces, retry policy, lifecycle hooks |
+| `go/internal/scope/` | repository scope and generation identities |
+| `go/internal/status/` | pipeline lifecycle and request reporting |
+| `go/internal/storage/` | Postgres and Neo4j adapters |
+| `go/internal/telemetry/` | OTEL tracing, metrics, and structured logging |
+| `go/internal/terraformschema/` | packaged Terraform provider schemas and schema loader |
+| `go/internal/truth/` | canonical truth contracts |
+| `deploy/` | Docker, Helm, compose, and manifest assets |
+| `docs/` | operator docs, architecture, ADRs, plans, and language references |
+| `tests/fixtures/` | parser and ecosystem fixture corpora only |
 
-## CLI Package Layout
+## Runtime Binaries
 
-The CLI package is split into focused subpackages:
+The service boundary is explicit in `go/cmd/`:
 
-- `cli/commands/`: command registration grouped by workflow
-- `cli/helpers/`: reusable helper logic for command implementations
-- `cli/registry/`: bundle and registry interactions
-- `cli/setup/`: environment setup, IDE wiring, and local runtime installers
-- `cli/visualization/`: rendering and output helpers for graph visualizations
+- `api/`: HTTP API binary
+- `mcp-server/`: MCP server binary
+- `pcg/`: top-level CLI
+- `bootstrap-index/`: one-shot indexing seed
+- `collector-git/`: local proof collector runtime
+- `ingester/`: deployed ingestion runtime
+- `projector/`: local proof projector runtime
+- `reducer/`: deployed reduction and repair runtime
+- `admin-status/`: local status renderer
 
-`cli/main.py` stays intentionally thin and assembles the Typer application from those packages.
+The normal runtime contract is Go-owned end to end. Do not reintroduce service
+logic in a compatibility shell outside these binaries.
 
-## MCP Package Layout
+## Collector, Parser, And Projection Ownership
 
-The MCP package now owns the transport-facing surface instead of scattering
-those modules at the package root:
+The write path is intentionally split:
 
-- `mcp/server.py`: MCP server orchestration and tool dispatch
-- `mcp/transport.py`: JSON-RPC and stdio transport loops
-- `mcp/repo_access.py`: local-checkout handoff and elicitation support
-- `mcp/tool_registry.py`: aggregated MCP tool definitions
-- `mcp/tools/`: tool manifests grouped by workflow
-- `mcp/tools/handlers/`: callable handlers used by the MCP server
+- `go/internal/collector/` owns Git source acquisition, repository selection,
+  discovery, snapshotting, and fact emission
+- `go/internal/parser/` owns parser registration, per-file parse execution,
+  fixture-matrix language semantics, and SCIP support
+- `go/internal/projector/` owns source-local projection stages for entities,
+  files, relationships, and workloads
+- `go/internal/reducer/` owns cross-domain materialization, shared projection
+  intents, platform materialization, dependency projection, and repair flows
+- `go/internal/relationships/` owns relationship extraction, including
+  Terraform schema-driven evidence backed by the packaged schemas in
+  `go/internal/terraformschema/`
 
-## Observability Package Layout
+This is the normal-path ownership. If a new collector or parser feature is
+added, it belongs under these Go packages.
 
-The observability package is a real subsystem rather than a flat file:
+## Query And Admin Ownership
 
-- `observability/__init__.py`: public observability API
-- `observability/otel.py`: OTEL config, exporters, and context helpers
-- `observability/runtime.py`: runtime object and instrumentation hooks
-- `observability/metrics.py`: metric-recording helpers
-- `observability/fact_resolution_metrics.py`: facts-first queue, emission, and Resolution Engine telemetry helpers
-- `observability/state.py`: global runtime lifecycle and test-exporter hooks
+Read and operator surfaces live under:
 
-This keeps API, MCP, and indexing telemetry consistent.
+- `go/internal/query/`: HTTP handlers, request/response contracts, OpenAPI
+- `go/internal/mcp/`: MCP transport and tool routing
+- `go/internal/runtime/`: `/healthz`, `/readyz`, `/metrics`, `/admin/status`,
+  retry policy, runtime lifecycle
+- `go/internal/status/`: request lifecycle and indexing completeness reporting
 
-Operator-facing telemetry references live under `reference/telemetry/` with
-separate pages for overview, metrics, traces, and logs.
+The CLI delegates to the Go binaries and HTTP/query surfaces rather than
+embedding a second service stack.
 
-## Relationships Package Layout
+## Storage Ownership
 
-The relationships package owns the post-index repo-correlation pipeline:
+All durable state is accessed through Go storage adapters:
 
-- `relationships/models.py`: typed evidence, candidate, assertion, and resolved-relationship models
-- `relationships/file_evidence.py`: raw file-based extractors for Terraform, Helm, Kustomize, and ArgoCD
-- `relationships/execution.py`: checkout discovery, graph-derived evidence, and Neo4j projection
-- `relationships/resolver.py`: evidence dedupe, resolution, and assertion handling
-- `relationships/postgres.py`: canonical Postgres store reads and writes
-- `relationships/postgres_generation.py`: generation persistence helpers
-- `relationships/postgres_support.py`: relationship table schema bootstrap
-- `relationships/state.py`: shared store lifecycle
-- `relationships/cross_repo_linker.py`: cross-repository infrastructure and deployment linking
-- `relationships/cross_repo_linker_support.py`: repository-reference matching helpers
+- `go/internal/storage/postgres/`: facts, queues, content store, recovery,
+  decisions, status, and lifecycle metadata
+- `go/internal/storage/neo4j/`: canonical graph writes and edge helpers
+- `go/internal/content/`: content shaping and persistence helpers layered over
+  the Postgres store
 
-## Content Package Layout
+## Terraform Provider Schemas
 
-The content package owns portable source retrieval and content-store writes:
+Terraform provider schema assets are first-class runtime inputs, not leftover
+artifacts:
 
-- `content/identity.py`: canonical content-entity identifiers
-- `content/postgres.py`: PostgreSQL-backed content provider
-- `content/workspace.py`: workspace fallback provider for shared server checkouts
-- `content/service.py`: provider orchestration and backend preference rules
-- `content/state.py`: shared provider lifecycle
-- `go/internal/content/shape/materialize.go`: Go-owned content-shaping and
-  entity/file materialization for the normal runtime path
+- packaged assets live in `go/internal/terraformschema/schemas/*.json.gz`
+- the loader and classification logic live in `go/internal/terraformschema/`
+- runtime relationship extraction uses those assets through
+  `go/internal/relationships/`
 
-## Collectors, Facts, Parsers, And Graph Layout
+If provider schemas move or change format, update both the runtime code and the
+operator docs so the dependency remains explicit.
 
-The indexing side now separates source collection, parsing, graph persistence,
-and post-index materialization into clearer boundaries:
+## What Is Gone
 
-- `collectors/git/`: repository discovery, `.gitignore`, path indexing handoff,
-  parse snapshot models, and facts-first Git collection support
-- the legacy Python parse/coordinator stack under `collectors/git/` has been
-  deleted from the branch; the remaining parser-platform migration work is no
-  longer the parser-family runtime itself and is now concentrated in downstream
-  materialization plus Python-owned evidence seams such as Terraform provider
-  schemas
-- future `collectors/<source>/` families: source-specific adapters for AWS,
-  Kubernetes, ETL, and other product domains, but only after the Git cutover
-  and parser-platform cutovers finish
-- `parsers/`: parser capability catalog, models, validation, packaged specs,
-  and non-runtime parser-support artifacts that still document or validate the
-  Go-owned parser contract
-- parser registry, raw-text helpers, and the legacy Python language-adapter
-  runtime modules that used to live here are gone from this branch
-- `indexing/coordinator_facts.py` and `indexing/coordinator_facts_support.py`:
-  remaining Git cutover helpers for fact emission, recovery support, and
-  facts-first finalization while the last Python runtime ownership is being
-  removed
-- `parsers/capabilities/`: parser capability catalog, models, validation, and packaged specs
-- `parsers/scip/`: SCIP parser, runtime helpers, and indexing orchestration
-- `go/internal/graph/schema.go`: Go-owned graph schema creation and constraint
-  bootstrap
-- `graph/persistence/`: graph write helpers, batching, content dual-write, commit orchestration, worker support, and call/inheritance relationship persistence
+The following branch-level ownership has been removed:
 
-The legacy Python package families that used to appear in this page have already
-been deleted from the branch. Their former responsibilities now live in Go
-runtime services, Go query handlers, and storage-backed runtime/status helpers.
+- Python runtime entrypoints
+- Python API/MCP/CLI service code
+- Python collector and parser runtime bridges
+- Python finalization and repair bridges
+- Python packaged Terraform runtime ownership
 
-`tools/graph_builder.py` remains the stable public facade, but it is now a thin
-runtime shim instead of the historical "everything index-related lives here"
-surface. Its normal-path ownership is limited to:
-
-- schema bootstrap
-- Go `bootstrap-index` handoff for directory and explicit single-file indexing
-- repository delete/reset helpers
-- repository relationship-resolution handoff
-
-The dead per-file Python persistence helpers, parser-registry bootstrap, parse
-entrypoints, and discovery convenience methods have been removed from the
-facade instead of being kept as compatibility shells. The legacy Python
-post-commit finalization bridge has also been deleted from the branch; Python
-indexing now requires the remaining cutover helpers rather than ad hoc finalize
-helpers. The last `tools/graph_builder_persistence.py` compatibility shim has
-also been deleted; tests and remaining callers now target the canonical
-`graph/persistence/*` modules directly. The dead Python
-`graph/schema/builder.py` module has also been deleted; Go is now the schema
-owner.
-
-The remaining transition risk is now concentrated in Python-owned evidence and
-read/query seams such as Terraform provider-schema extraction and a smaller set
-of CLI/API support modules. `GraphBuilder`
-is still present, but it no longer owns the removed parser bootstrap, discovery,
-or per-file persistence surface. Non-dependency directory indexing now delegates
-from `GraphBuilder` to the Go `bootstrap-index` runtime, and direct single-file
-indexing now uses the same Go-owned runtime contract.
-
-The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
-transport boundary separate from parsing and graph-building internals.
-
-The important rewrite rule is simple:
-
-- add new collector logic under source-specific collection or facts packages
-- add source-local projection under the Go-owned projection/runtime path
-- add shared cross-domain logic under Go-owned reducer/runtime packages
-- do not reintroduce deleted Python finalize-bridge behavior
-- do not add new production behavior under the legacy Python parser/indexing
-  seam or recreate the deleted ingester bridge modules
-
-## Runtime Package Layout
-
-The runtime boundary stays `runtime/`, with repository-ingester source
-acquisition and indexing grouped under its own subpackage:
-
-- `runtime/ingester/config.py`: runtime config and result models
-- `runtime/ingester/bootstrap.py`: bootstrap indexing orchestration
-- `runtime/ingester/sync.py`: steady-state sync loop
-- `runtime/ingester/git.py`: git sync helpers
-- `runtime/ingester/support.py`: shared runtime support functions
-
-The temporary ingester bridge modules have already been deleted from the
-branch. Do not reintroduce them.
-
-The ingester increasingly depends on canonical packages and Go runtime
-services rather than `tools/`:
-
-- `collectors/git/` for repo-scoped collection
-- `parsers/` for parser-platform code
-- `graph/` for canonical graph writes
-- Go runtime services for durable status, replay, and refinalize ownership
-
-## Go Rewrite Package Layout
-
-The in-progress Go rewrite keeps the same ownership boundaries under `go/` so
-the cutover can remove Python runtime ownership instead of recreating it:
-
-- `go/internal/parser/`: parser registry metadata and native parse execution
-  ownership
-- `go/internal/collector/discovery/`: parser-aware file discovery, nested repo
-  grouping, and repo-local `.gitignore` handling
-- `go/internal/content/shape/`: translation from normalized parser payloads
-  into the canonical Go content materialization model
-- `go/internal/collector/`: collector cycle orchestration, repository
-  selection/snapshot ownership, and fact shaping
-
-Current native parser-runtime slice:
-
-- `go/internal/parser/registry.go`: parser-key and extension dispatch
-- `go/internal/parser/runtime.go`: native tree-sitter language bootstrap and
-  parser creation
-- `go/internal/parser/engine.go`: file parse dispatch and prescan fanout
-- `go/internal/parser/python_language.go`: first native Python adapter
-- `go/internal/parser/go_language.go`: first native Go adapter
-- `go/internal/parser/javascript_language.go`: JavaScript/TypeScript/TSX
-  adapter slice
-- `go/internal/parser/json_language.go`: JSON config adapter slice, including
-  package/composer/tsconfig metadata and CloudFormation JSON
-- `go/internal/parser/hcl_language.go`: Terraform and Terragrunt adapter slice
-- `go/internal/parser/yaml_language.go`, `yaml_semantics.go`, and
-  `yaml_helm.go`: infrastructure YAML adapter slice for Kubernetes, Argo CD,
-  Crossplane, Kustomize, Helm, and CloudFormation YAML
-- `go/internal/parser/dockerfile_language.go`: Dockerfile adapter slice
-- `go/internal/parser/sql_language.go`: SQL schema, relationship, migration,
-  and partial-recovery adapter slice
-- `go/internal/parser/raw_text_engine.go`: raw-text fallback for searchable
-  template and config artifacts
-
-These Go packages are the target normal-path runtime ownership. The remaining
-Python ownership debt is no longer the deleted parser/coordinator stack or the
-deleted Python discovery shim layer. It is now centered on GraphBuilder
-facade/orchestration cleanup, downstream evidence/materialization, including
-Terraform provider-schema extraction, plus the remaining CLI/API helpers and
-content-read/query seams that still touch the normal path.
-
-The parser-family runtime cutover is complete on this branch. The remaining
-parser-related work is parity hardening: SCIP depth, specialized
-data-intelligence JSON families, and end-to-end materialization of newer Go
-parser buckets and metadata.
-
-Do not start new ingestor families until the Git write-plane cutover, parser
-platform cutover, and bridge removal are complete.
-
-## Platform Package Layout
-
-The `platform/` boundary is still small in Phase 1, but it now owns shared
-cross-cutting primitives that do not belong to one collector or one runtime:
-
-- `platform/dependency_catalog.py`: built-in dependency and cache directory exclusion rules
-- `platform/package_resolver.py`: local package path discovery across Python, npm, Go, Java, Ruby, PHP, C/C++, and Dart ecosystems
-- `platform/automation_families.py`: shared automation runtime-family inference used by query enrichers
-
-For infrastructure parsing, YAML-family handlers are separated by domain instead of hiding everything in one monolithic file. For example, Kubernetes manifests, Argo CD, Crossplane, Helm, and Kustomize each have their own focused parser module.
-
-## Contributor Standards
-
-- Handwritten Python modules under `src/` must stay at 500 lines or fewer.
-- Handwritten Python modules, classes, methods, and functions under `src/` must have Google-style docstrings.
-- New package directories should include a short `README.md` so contributors can orient themselves quickly.
-- Generated files such as `scip_pb2.py` are explicitly exempt from the handwritten module rule.
-
-Run the repository guards from the root:
-
-```bash
-python3 scripts/check_python_file_lengths.py --max-lines 500
-python3 scripts/check_python_docstrings.py
-```
+Historical references may still exist in ADRs or completed milestone plans, but
+they should not be treated as current architecture.

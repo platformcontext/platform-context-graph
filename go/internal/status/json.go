@@ -93,11 +93,7 @@ func queueJSONFromReport(queue QueueSnapshot) queueJSON {
 }
 
 func scopeActivityJSONFromReport(scopeActivity ScopeActivitySnapshot) scopeActivityJSON {
-	return scopeActivityJSON{
-		Active:    scopeActivity.Active,
-		Changed:   scopeActivity.Changed,
-		Unchanged: scopeActivity.Unchanged,
-	}
+	return scopeActivityJSON(scopeActivity)
 }
 
 func domainBacklogsJSON(rows []DomainBacklog) []domainBacklogJSON {

@@ -187,7 +187,9 @@ func TestHandleSSE_EndpointEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /sse: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
 		t.Errorf("expected text/event-stream, got %s", ct)
@@ -335,7 +337,9 @@ func TestHealth_ViaHTTPMux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /health: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
@@ -365,7 +369,9 @@ func TestAPI_Passthrough(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/v0/repositories: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)

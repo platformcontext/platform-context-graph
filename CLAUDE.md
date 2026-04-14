@@ -1,16 +1,21 @@
 # PlatformContextGraph
 
 Code-to-cloud context graph for CLI, MCP, and HTTP API workflows. The current
-platform shape is a three-service, facts-first system:
+branch is a Go-owned platform runtime:
 
-- **API** for HTTP + MCP reads
-- **Ingester** for repo sync, parse, and fact emission
-- **Resolution Engine** for queued fact projection into the canonical graph
+- **API** serves HTTP reads and admin/query surfaces
+- **MCP Server** serves tool-facing read workflows
+- **Ingester** owns repo sync, discovery, parsing, and fact emission
+- **Reducer** owns queued projection, repair, and shared materialization
+- **Bootstrap Index** owns one-shot local or deployment seeding
+
+There is no Python runtime left on the normal platform path. Python remains
+only inside fixture corpora used to validate parser behavior.
 
 ## Read These First
 
-Before changing runtime, deployment, facts-first flow, or observability behavior,
-read these pages in this order:
+Before changing runtime, deployment, ingestion, parsing, or observability
+behavior, read these pages in this order:
 
 1. `docs/docs/deployment/service-runtimes.md`
 2. `docs/docs/reference/local-testing.md`
@@ -19,72 +24,63 @@ read these pages in this order:
 
 ## Runtime Contract
 
-| Runtime | Responsibility | Command | K8s shape |
+| Runtime | Responsibility | Command | Kubernetes shape |
 | --- | --- | --- | --- |
-| API | HTTP API, MCP, admin endpoints, canonical graph reads | `pcg serve start --host 0.0.0.0 --port 8080` | `Deployment` |
-| Ingester | Repo sync, Git collector, parse, fact emission | `/usr/local/bin/pcg-ingester` | `StatefulSet` + PVC |
-| Resolution Engine | Claim fact work items and project graph state | `/usr/local/bin/pcg-reducer` | `Deployment` |
-| Bootstrap Index | One-shot initial sync/index seed | `/usr/local/bin/pcg-bootstrap-index` | one-shot runtime |
+| API | HTTP API, admin/query reads | `pcg api start --host 0.0.0.0 --port 8080` | `Deployment` |
+| MCP Server | MCP tool server | `pcg mcp start` | `Deployment` or sidecar |
+| Ingester | Repo sync, parse, fact emission | `/usr/local/bin/pcg-ingester` | `StatefulSet` + PVC |
+| Reducer | Queue drain, graph projection, repair flows | `/usr/local/bin/pcg-reducer` | `Deployment` |
+| Bootstrap Index | One-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | job / init step |
 
 Shared backing stores:
 
 - **Neo4j** for the canonical graph
-- **Postgres** for facts, work queue, content store, and runtime metadata
+- **Postgres** for facts, queue state, content store, status, and recovery data
 
 ## Source Layout
 
-### Go Data Plane (write path — owns ingestion, projection, reduction, recovery)
+### Go Runtime And Domain Ownership
 
 ```text
 go/
   cmd/
-    bootstrap-index/  # one-shot initial sync/index seed
-    collector-git/    # local proof: Git collection cycle
-    ingester/         # deployed: composite collector + projector
-    projector/        # local proof: fact-to-graph projection
-    reducer/          # deployed: intent-to-graph reduction
-    admin-status/     # local proof: admin/status surface
+    api/              # HTTP API binary
+    mcp-server/       # MCP server binary
+    pcg/              # user-facing CLI
+    bootstrap-index/  # one-shot seed/index runtime
+    collector-git/    # local proof collector runtime
+    ingester/         # deployed ingestion runtime
+    projector/        # local proof projector runtime
+    reducer/          # deployed reduction/runtime repair ownership
   internal/
-    collector/        # Git source, discovery, snapshot, content shaping
-    content/          # content store writer and shape transforms
-    facts/            # fact envelope model and helpers
-    graph/            # canonical graph record writer (Neo4j)
-    parser/           # native Go parser platform (registry, languages, SCIP)
-    projector/        # projection stages, decisions, failure classification
-    queue/            # generic work queue abstractions
-    recovery/         # replay and refinalize domain model
-    reducer/          # domain handlers, shared projection, platform materialization
-    runtime/          # status server, admin mux, status requests
-    scope/            # ingestion scope and generation model
-    status/           # pipeline status reader with retry policies
+    app/              # runtime composition and config
+    collector/        # git source ownership, discovery, snapshotting
+    content/          # content shaping and persistence
+    facts/            # durable fact models and queue contracts
+    graph/            # canonical graph schema and write helpers
+    mcp/              # MCP transport and tool wiring
+    parser/           # native parser registry, adapters, and SCIP support
+    projector/        # fact-stage projection and failure classification
+    query/            # HTTP API handlers and OpenAPI surfaces
+    recovery/         # replay and repair operations
+    reducer/          # cross-domain materialization and shared projection
+    relationships/    # Terraform/Helm/Kustomize/Argo relationship extraction
+    runtime/          # admin, status, probes, retry policy, lifecycle
+    scope/            # repository scope and generation identity
+    status/           # pipeline and request lifecycle reporting
     storage/
-      neo4j/          # Neo4j executor and edge writer adapters
-      postgres/       # all Postgres stores (facts, queues, intents, decisions, recovery, status)
-    telemetry/        # OTEL metrics and tracing setup
-    truth/            # layered truth and asset identity model
+      neo4j/          # graph adapters
+      postgres/       # facts, queue, status, content, recovery, decisions
+    telemetry/        # OTEL tracing, metrics, and structured logging
+    terraformschema/  # packaged Terraform provider schemas + loader
+    truth/            # canonical truth contracts
 ```
 
-### Python (read path — API, MCP, CLI, query; write modules pending deletion)
+### Python
 
-```text
-src/platform_context_graph/
-  api/            # FastAPI routers
-  app/            # service-role metadata and entrypoint contract
-  cli/            # CLI wiring and config catalog
-  collectors/     # Git collector implementation (pending Chunk 2 migration)
-  content/        # Postgres content store
-  facts/          # durable facts and fact queue (Go owns — pending deletion)
-  graph/          # canonical graph persistence and schema
-  indexing/       # coordinator and indexing orchestration (pending Chunk 2)
-  mcp/            # MCP server and transport
-  observability/  # OTEL metrics, traces, and structured logs
-  parsers/        # parser registry, languages, SCIP
-  query/          # read/query layer
-  relationships/  # relationship helpers and linking
-  resolution/     # fact projection (Go owns — pending deletion)
-  runtime/        # long-running runtime loops (Go owns — pending deletion)
-  tools/          # GraphBuilder facade + remaining tool-facing query/linking surfaces
-```
+The historical Python service tree has been deleted from this branch. The only
+Python files left in the repository are fixture inputs under `tests/fixtures/`
+used to verify parser behavior against real language syntax.
 
 ## Local Development
 
@@ -112,7 +108,7 @@ docker compose ps
 docker compose logs bootstrap-index | tail -50
 docker compose logs ingester | tail -50
 docker compose logs resolution-engine | tail -50
-curl -s http://localhost:8080/health
+curl -s http://localhost:8080/healthz
 ```
 
 ### Direct-command environment
@@ -126,47 +122,39 @@ export NEO4J_PASSWORD=change-me
 export DEFAULT_DATABASE=neo4j
 export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
 export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
-export PYTHONPATH=src
 ```
 
 ## Verification Defaults
 
-Use `docs/docs/reference/local-testing.md` as the source of truth. These are the
-common gates:
+Use `docs/docs/reference/local-testing.md` as the source of truth. The common
+gates are now Go-first:
 
 ```bash
-PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q
-PYTHONPATH=src uv run pytest tests/integration/cli/test_cli_commands.py -q
-PYTHONPATH=src:. uv run pytest \
-  tests/integration/indexing/test_git_facts_end_to_end.py \
-  tests/integration/indexing/test_git_facts_projection_parity.py -q
-PYTHONPATH=src:. uv run pytest \
-  tests/unit/observability/test_fact_resolution_telemetry.py \
-  tests/unit/observability/test_fact_runtime_scaling_telemetry.py \
-  tests/unit/observability/test_resolution_queue_sampler.py \
-  tests/unit/observability/test_facts_first_logging.py -q
-python3 scripts/check_python_file_lengths.py --max-lines 500
-git diff --check
+cd go && go test ./cmd/pcg ./cmd/api ./cmd/mcp-server ./internal/query ./internal/mcp -count=1
+cd go && go test ./internal/parser ./internal/collector/discovery ./internal/content/shape ./internal/collector -count=1
+cd go && go test ./internal/terraformschema ./internal/relationships -count=1
+cd go && go test ./cmd/bootstrap-index ./cmd/ingester ./cmd/reducer ./internal/runtime ./internal/status ./internal/storage/postgres -count=1
 uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
   mkdocs build --strict --clean --config-file docs/mkdocs.yml
+git diff --check
 ```
 
 ## Facts-First Flow
 
-The canonical Git path is now:
+The canonical Git path is:
 
 ```text
-sync -> discover -> parse -> emit facts -> enqueue work -> resolution-engine -> graph/content projection
+sync -> discover -> parse -> emit facts -> enqueue work -> reducer -> graph/content projection
 ```
 
 Important ownership boundaries:
 
-- `app/` decides which runtime starts
-- `collectors/` owns Git collection
-- `facts/` owns durable facts and the work queue
-- `resolution/` owns queued projection
-- `graph/` owns canonical graph writes
-- `query/` owns read surfaces
+- `go/internal/collector/` owns Git collection
+- `go/internal/parser/` owns parser runtime behavior
+- `go/internal/facts/` and `go/internal/storage/postgres/` own durable queue state
+- `go/internal/projector/` owns source-local projection stages
+- `go/internal/reducer/` owns cross-domain materialization
+- `go/internal/query/` owns read/query and admin HTTP surfaces
 
 Do not collapse these boundaries casually. They are the foundation for future
 collectors, scaling, and backend work.
@@ -179,11 +167,12 @@ Build once:
 docker build -t platform-context-graph:dev -f Dockerfile .
 ```
 
-Helm renders the same image into:
+The same image is rendered into:
 
 - API `Deployment`
-- Resolution Engine `Deployment`
+- MCP `Deployment`
 - Ingester `StatefulSet`
+- Reducer `Deployment`
 
-The operator view of that contract lives in
+The operator contract for those runtimes lives in
 `docs/docs/deployment/service-runtimes.md`.

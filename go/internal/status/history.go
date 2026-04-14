@@ -54,14 +54,7 @@ func generationHistoryText(history GenerationHistorySnapshot) string {
 }
 
 func generationHistoryJSONFromReport(history GenerationHistorySnapshot) generationHistoryJSON {
-	return generationHistoryJSON{
-		Active:     history.Active,
-		Pending:    history.Pending,
-		Completed:  history.Completed,
-		Superseded: history.Superseded,
-		Failed:     history.Failed,
-		Other:      history.Other,
-	}
+	return generationHistoryJSON(history)
 }
 
 func scopeUnchangedCount(active, changed int) int {

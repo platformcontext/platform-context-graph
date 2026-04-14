@@ -1,86 +1,31 @@
 # Contributing Parser Support
 
-Parser support in PlatformContextGraph is spec-driven. Each parser has a machine-readable capability spec that defines what it extracts, what the graph surfaces, and which tests prove it.
+Parser support in PlatformContextGraph is now Go-owned. The canonical parser
+contract lives in the checked-in Go runtime:
 
-The canonical source of truth for each language or IaC parser:
-
-```
-src/platform_context_graph/parsers/capabilities/specs/<language>.yaml
-```
-
-Framework semantic packs also have canonical YAML sources:
-
-```
-src/platform_context_graph/parsers/framework_packs/specs/<framework>.yaml
+```text
+go/internal/parser/registry.go
+go/internal/parser/*.go
+go/internal/parser/*_test.go
 ```
 
-Those pack specs are runtime inputs, not only documentation artifacts. They must
-remain package-safe, validated, and bounded because installed wheels load them
-directly at parser runtime.
-
-The generated outputs:
-
-```
-docs/docs/languages/*.md
-docs/docs/languages/feature-matrix.md
-docs/docs/languages/support-maturity.md
-```
-
-Do not hand-edit those generated docs. Update the YAML spec, then regenerate.
+The public parser pages under `docs/docs/languages/`, plus
+`feature-matrix.md` and `support-maturity.md`, are checked-in documentation for
+that Go runtime. Keep them aligned with the implementation and tests when a
+parser contract changes.
 
 ## Contract Model
 
-Every parser has one capability spec that records:
+Every parser contract should remain explicit in three places:
 
-- Parser and language identity
-- Fixture repo used for test coverage
-- The capability checklist
-- Optional support maturity metadata
-- Known limitations
+- registry metadata in `go/internal/parser/registry.go`
+- implementation in the language-specific parser files
+- verification in parser-level and integration tests
 
-Framework semantic packs complement that parser contract. They define the
-bounded semantic rules layered on top of parser output, such as React runtime
-boundaries or Next.js app-router module roles.
-
-Each framework-pack YAML currently declares:
-
-- `framework`
-- `title`
-- `strategy`
-- `compute_order`
-- `surface_order`
-- `config`
-
-Supported strategies today:
-
-- `react_module`
-- `nextjs_app_router`
-- `node_http_routes`
-- `python_web_routes`
-- `provider_sdk_usage`
-
-Duplicate `framework` keys are invalid because the parser runtime uses the
-framework name as the surfaced semantic bucket key.
-
-Each capability entry includes:
-
-- A stable `id`
-- `status`: `supported`, `partial`, or `unsupported`
-- The extracted bucket or key
-- Required extracted fields
-- The graph or query surface exposed
-- One unit-test reference
-- One integration-test reference
-- A rationale (required for `partial` or `unsupported`)
-
-Optional top-level support maturity metadata can also record:
-
-- grammar routing status
-- normalization status
-- framework-pack status and pack names
-- query surfacing status
-- real-repo validation status and examples
-- end-to-end indexing status
+Framework and ecosystem semantics are also Go-owned. When you expand semantic
+coverage, update the relevant parser implementation and tests, then update the
+public language pages to match what the runtime actually emits and what the
+graph surfaces end to end.
 
 ### Status semantics
 
@@ -92,132 +37,53 @@ Parse-only features must not remain `supported`.
 
 ## Workflow
 
-1. **Add or update unit tests first.**
-   Use the smallest parser-level test that proves the capability or regression.
+1. Add or update Go parser tests first.
+2. Implement or adjust the Go parser/runtime behavior.
+3. Add or update integration coverage for the surfaced graph behavior.
+4. Update the affected language page, feature matrix, or support-maturity page.
+5. Run the relevant Go tests and the docs build.
+6. When support-maturity claims change, back them with a real indexing run or
+   compose-backed proof rather than fixture-only evidence.
 
-2. **Implement or adjust the parser.**
-   Keep the parser output and the persisted/queryable graph surface aligned with the claimed capability.
+## Writing Good Parser Docs
 
-   When the change is framework-semantic rather than syntax-extraction, prefer
-   updating the declarative framework pack before adding more hard-coded parser
-   constants.
+A reviewer should be able to answer:
 
-3. **Add or update integration coverage.**
-   The integration test must prove the capability exists end-to-end in the indexed graph or API surface.
-
-4. **Update the capability spec.**
-   Add, remove, or reclassify entries in the YAML spec.
-
-   If the behavior comes from a framework semantic layer, update the
-   corresponding framework-pack YAML too.
-
-   If the change adds a new pack or modifies a pack contract, make sure the
-   spec is included in package data so wheels and sdists can load it at
-   runtime.
-
-5. **Regenerate the docs.**
-
-6. **Run the spec/doc consistency check and the relevant tests.**
-
-7. **When support-maturity claims change, run a graph-backed end-to-end validation.**
-   Use the local indexing path plus the reusable validator so support-maturity updates
-   are backed by a real repository run, not only fixture or parser-unit coverage.
-
-## Writing a Good Capability Spec
-
-One YAML file per parser. Keep it explicit. A reviewer should be able to answer:
-
-- What does the parser claim to extract?
+- What does the Go parser claim to extract?
 - What does the graph actually expose?
-- Which test proves the parser behavior?
-- Which test proves the end-to-end indexed behavior?
+- Which Go test proves the parser behavior?
+- Which integration test proves the end-to-end indexed behavior?
 - What is intentionally partial or unsupported?
 
-Example entry:
+## Verification
 
-```yaml
-- id: type-aliases
-  name: Type aliases
-  status: partial
-  extracted_bucket: type_aliases
-  required_fields:
-    - name
-    - line_number
-  graph_surface:
-    kind: none
-    target: not_persisted
-  unit_test: tests/unit/parsers/test_typescript_parser.py::test_parse_type_aliases
-  integration_test: tests/integration/test_language_graph.py::TestTypeScriptGraph::test_function_nodes_created
-  rationale: Type aliases are extracted into a dedicated parse bucket, but the persistence layer does not currently materialize TypeAlias graph nodes.
-```
-
-## Generating and Checking Docs
-
-Generate:
+Parser changes should normally include:
 
 ```bash
-PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py
+cd go
+go test ./internal/parser ./internal/collector ./internal/content/shape -count=1
+golangci-lint run ./...
 ```
 
-Check for drift:
+Then rebuild the docs:
 
 ```bash
-PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py --check
+uv run --with mkdocs --with mkdocs-material --with pymdown-extensions \
+  mkdocs build --strict --clean --config-file docs/mkdocs.yml
 ```
-
-Graph-backed end-to-end validation example:
-
-```bash
-PYTHONPATH=src uv run python scripts/validate_language_support_e2e.py \
-  --repo-path /Users/allen/repos/services/portal-react-platform \
-  --language javascript \
-  --check \
-  --require-framework-evidence
-```
-
-Python uses the same graph-backed validator:
-
-```bash
-PYTHONPATH=src uv run python scripts/validate_language_support_e2e.py \
-  --repo-path /Users/allen/repos/services/recos-ranker-service \
-  --language python \
-  --check \
-  --require-framework-evidence
-```
-
-The `--check` mode fails when:
-
-- A spec references a missing test or fixture
-- A `partial` or `unsupported` capability is missing a rationale
-- A `supported` capability declares no surfaced graph/query target
-- Generated docs drift from the YAML specs
-
-Framework-pack validation example:
-
-```bash
-PYTHONPATH=src uv run python -m pytest tests/unit/parsers/test_framework_packs.py -q
-```
-
-That suite now verifies:
-
-- built-in framework-pack YAML validates cleanly
-- repo-root override loading works
-- unknown strategies are rejected
-- required fields and field types are enforced
-- duplicate framework keys are rejected
-- framework packs cannot target unsupported language lanes
 
 ## Testing Rules
 
-**For `supported` capabilities:**
+For `supported` capabilities:
 
-- One unit test validates extraction and required fields
-- One integration test validates persisted or queryable end-to-end behavior
+- one Go unit or package test validates extraction and required fields
+- one integration or compose-backed proof validates persisted or queryable
+  end-to-end behavior
 
-**For support-maturity promotions:**
+For support-maturity promotions:
 
-- Use at least one real local repository run to justify `real_repo_validation: supported`
-- Use at least one clean local indexing run plus graph-backed query validation to justify
+- use at least one real repository run or compose-backed indexing proof
+- document the evidence in the relevant language page or migration notes
   `end_to_end_indexing: supported`
 
 **For `partial` capabilities:**

@@ -40,7 +40,9 @@ func TestHTTPServerServesConfiguredHandlerAndShutsDown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /healthz error = %v, want nil", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {

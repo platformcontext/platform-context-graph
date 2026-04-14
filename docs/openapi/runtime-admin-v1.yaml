@@ -5,7 +5,7 @@ info:
   summary: Shared probe and operator-status contract for long-running Go runtimes.
   description: >
     This contract describes the mounted runtime admin surface used by the Go
-    data-plane services. It is separate from the public `/api/v0` FastAPI
+    data-plane services. It is separate from the public `/api/v0` query API
     schema and applies to service-local admin endpoints such as the ingester,
     projector, and reducer runtimes.
 servers:

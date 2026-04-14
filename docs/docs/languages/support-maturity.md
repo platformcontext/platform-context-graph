@@ -1,6 +1,6 @@
 # Parser Support Maturity Matrix
 
-This file is auto-generated. Do not edit manually.
+This page tracks the checked-in Go parser support-maturity matrix for this branch.
 
 This matrix tracks the higher-level support bar for each parser beyond
 the raw capability checklist. `-` means that maturity dimension has not

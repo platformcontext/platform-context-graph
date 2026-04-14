@@ -14,7 +14,7 @@ Each service emits traces with a distinct `service.name` resource attribute:
 
 | Service | service.name | Runtime |
 |---|---|---|
-| API | `platform-context-graph-api` | Python (FastAPI) |
+| API | `platform-context-graph-api` | Go |
 | Ingester | `ingester` | Go |
 | Reducer | `reducer` | Go |
 

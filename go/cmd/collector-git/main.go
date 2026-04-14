@@ -25,7 +25,9 @@ func run(parent context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	runner, err := buildCollectorService(postgres.SQLDB{DB: db}, os.Getenv, os.Getwd, os.Environ)
 	if err != nil {

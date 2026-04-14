@@ -23,7 +23,7 @@ in parallel with Codex's Chunk 2 parser/collector work.
 
 ## Current Truth
 
-The Go write plane has:
+The Go write plane owns the normal runtime path end to end. The branch has:
 
 - projector service loop (`go/internal/projector/service.go`) that claims,
   loads facts, projects, and acks/fails work items
@@ -37,15 +37,10 @@ The Go write plane has:
 - Postgres stores for facts, work queue, projector queue, reducer queue,
   status, and recovery
 
-The Go write plane does NOT have:
-
-- platform materialization (infrastructure/runtime platform edge creation)
-- projection decision recording (confidence, evidence persistence)
-- shared projection intent workers (partition-based cross-domain edge draining)
-- failure classification (exception-to-durable-metadata mapping)
-- full projector fact stages (entity, file, relationship, workload projection)
-- status store request lifecycle (scan/reindex tracking, coverage metrics)
-- Python admin recovery endpoints deleted (Go ingester owns replay/refinalize)
+The original gaps that motivated this plan have now been closed on the branch.
+Read the remaining sections as an execution record for the ownership completion
+work, not as a statement that Python still owns active write-plane runtime
+behavior.
 
 ## Merge Bar Extension
 

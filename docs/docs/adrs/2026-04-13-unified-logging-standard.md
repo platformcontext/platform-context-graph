@@ -89,8 +89,8 @@ the canonical names. No changes are needed.
   now works regardless of which runtime produced the log line.
 - **Consistent Grafana dashboards.** Dashboard variables can use `component`,
   `runtime_role`, and `pipeline_phase` without runtime-specific overrides.
-- **Stable contract.** New Go or Python services inherit the schema
-  automatically through the shared logging constructors.
+- **Stable contract.** New Go services inherit the schema automatically
+  through the shared logging constructors.
 - **Minor migration cost.** Existing Loki queries or Grafana panels that
   reference the old Go field names (`time`, `level`, `msg`) must be updated to
   use the canonical names.

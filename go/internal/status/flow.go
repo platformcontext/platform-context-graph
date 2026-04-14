@@ -72,12 +72,7 @@ func flowSummariesJSON(rows []FlowSummary) []flowSummaryJSON {
 
 	payload := make([]flowSummaryJSON, 0, len(rows))
 	for _, row := range rows {
-		payload = append(payload, flowSummaryJSON{
-			Lane:     row.Lane,
-			Source:   row.Source,
-			Progress: row.Progress,
-			Backlog:  row.Backlog,
-		})
+		payload = append(payload, flowSummaryJSON(row))
 	}
 
 	return payload

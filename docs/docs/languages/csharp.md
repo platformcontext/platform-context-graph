@@ -1,7 +1,7 @@
 # C# Parser
 
-This file is auto-generated. Do not edit manually.
-Canonical source: `src/platform_context_graph/parsers/capabilities/specs/csharp.yaml`
+This page tracks the checked-in Go parser contract for this branch.
+Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint and tests listed below.
 
 ## Parser Contract
 - Language: `csharp`

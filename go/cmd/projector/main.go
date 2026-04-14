@@ -26,13 +26,17 @@ func run(parent context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	graphWriter, graphCloser, err := openProjectorGraphWriter(parent, os.Getenv)
 	if err != nil {
 		return err
 	}
-	defer graphCloser.Close()
+	defer func() {
+		_ = graphCloser.Close()
+	}()
 
 	runner, err := buildProjectorService(postgres.SQLDB{DB: db}, graphWriter, os.Getenv)
 	if err != nil {

@@ -4,55 +4,24 @@ This roadmap is the single public place for forward-looking project direction.
 
 ## Current Phase
 
-PCG is in **Phase 3: resolution maturity**.
+PCG is in **Phase 4: Go platform completion and validation**.
 
-Phase 3 keeps the facts-first runtime stable while we harden the operator
-experience:
+The normal runtime and parser path on this branch are now Go-owned. The active
+work is making that cutover truthful, verifiable, and mergeable:
 
-- durable facts land in Postgres
-- the work queue drives projection, replay, and recovery
-- `resolution-engine` owns canonical graph projection
-- the deployed runtime shape remains `api` + `ingester` + `resolution-engine`
-- telemetry, logs, traces, and admin/status views match that shape
+- finish remaining parity validation for parser and relationship surfaces
+- remove stale Python-oriented packaging, docs, and compatibility references
+- keep Docker Compose, Helm, admin/status, telemetry, and OpenAPI aligned with
+  the Go-owned runtime
+- prove the branch is ready for merge before starting any new ingestor family
 
-The immediate goal is simpler operations, not new product surface:
-
-- classify failures durably
-- expose replay, dead-letter, audit, and backfill controls
-- persist projection decisions with evidence and confidence summaries
-- make admin and CLI inspection surfaces consistent
-
-## Next Phase
-
-### Phase 4: Full Python-to-Go Platform Conversion
-
-Replace the current Python-owned runtime and parser path with a schema-first Go
-platform.
-
-The conversion introduces:
-
-- native Go parser ownership for the Git path
-- scope-first ingestion contracts
-- first-class ingestion scopes and scope generations
-- typed facts and queueable change units
-- source-local projection separated from shared reduction
-- Go-owned runtime, admin, and repair surfaces over canonical state
-
-Why it comes next:
-
-- the current Python-owned runtime path is the main scale bottleneck
-- AWS, Kubernetes, and data/ETL collectors need a non-repository substrate
-- the new design is the right place to lock in accuracy, stability, telemetry,
-  tracing, and logging before collector count grows
-
-The rewrite contract for this phase is captured in:
+The rewrite contract for the current cutover is captured in:
 
 - [Architecture](architecture.md)
 - [Architecture Decision Records](adrs/index.md)
 
-The rewrite proof and documentation package is complete, but the full
-Python-to-Go platform conversion is still in progress. No new ingestors start
-until the full conversion finishes.
+No new ingestors start until the full conversion is validated and the last
+stale Python-oriented ownership claims are removed from the repo.
 
 ## Rewrite Milestones
 
@@ -67,15 +36,6 @@ until the full conversion finishes.
 
 ## Rewrite Status Notes
 
-Milestone 1 on the rewrite branch is now defined by a truthful bounded outcome:
-
-- Go owns parser conversion, collector orchestration, fact commit,
-  projector/reducer runtime proof, and the shared admin/metrics story
-- repository selection, parser dispatch, and per-repo snapshotting are no
-  longer treated as long-term Python ownership on the normal path
-- full parser-bridge retirement is part of the conversion rather than a later
-  optional cleanup
-
 The branch is not done yet. The hard merge bar is still the full
 Python-to-Go conversion:
 
@@ -88,18 +48,13 @@ Python-to-Go conversion:
 - Docker Compose and Helm run the Go-owned platform
 - local and cloud validation prove parity for the Git parser and write path
 
-Current remaining runtime ownership seams are narrower than the earlier parser
-cutover language implied:
+Current remaining work is no longer active Python service ownership on the
+normal path. It is:
 
-- the parser-family runtime itself is now Go-owned on the normal Git path
-- the remaining parser-related work is parity hardening and downstream
-  materialization for Go-emitted buckets and metadata
-- Terraform provider-schema relationship extraction is still Python-owned on
-  the normal runtime path and remains a required migration surface before this
-  branch is honestly mergeable
-- the remaining active Python-owned seams are now concentrated in API/MCP/CLI
-  orchestration plus content-read/query helpers; the legacy `content/ingest.py`
-  shaping seam has been deleted from this branch
+- parity hardening for the Go parser and relationship surfaces
+- validation proof across compose, runtime, telemetry, and admin/status flows
+- deletion of stale Python-specific packaging and contributor scaffolding that
+  no longer reflects the branch reality
 
 No new ingestors before full conversion completes.
 

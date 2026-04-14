@@ -22,28 +22,29 @@ PCG currently has **one** public documentation surface:
 
 1. update or add Markdown under `docs/docs/`
 2. update navigation in `docs/mkdocs.yml`
-3. if you changed parser capability specs under `src/platform_context_graph/parsers/capabilities/specs/`, regenerate the language docs and feature matrix
+3. if you changed parser behavior, update the affected language pages and
+   parser matrices so they match the Go implementation
 4. run the docs tests
 5. build the site locally
 
-## Generated parser capability docs
+## Parser documentation ownership
 
-The language parser pages under `docs/docs/languages/` and the parser feature matrix are generated from canonical YAML specs:
+The canonical parser implementation now lives in:
 
-- `src/platform_context_graph/parsers/capabilities/specs/*.yaml`
+- `go/internal/parser/registry.go`
+- `go/internal/parser/*.go`
+- `go/internal/parser/*_test.go`
 
-Generate them with:
+The public parser pages under `docs/docs/languages/`, plus
+`feature-matrix.md` and `support-maturity.md`, are checked-in documentation for
+that implementation. Update them when the Go parser contract changes.
+
+Common verification:
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py
-```
-
-Check for drift with:
-
-```bash
-cd "$(git rev-parse --show-toplevel)"
-PYTHONPATH=src uv run python scripts/generate_language_capability_docs.py --check
+cd go
+go test ./internal/parser ./internal/collector ./internal/content/shape -count=1
 ```
 
 ## Local verification
@@ -55,7 +56,7 @@ mkdocs serve
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-PYTHONPATH=src uv run python -m pytest tests/integration/docs/test_docs_cleanup_contract.py tests/integration/docs/test_docs_smoke.py -q
+uv run --with mkdocs --with mkdocs-material --with pymdown-extensions mkdocs build --strict --clean --config-file docs/mkdocs.yml
 ```
 
 ## Build

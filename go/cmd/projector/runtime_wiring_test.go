@@ -1,10 +1,6 @@
 package main
 
-import (
-	"testing"
-
-	"github.com/platformcontext/platform-context-graph/go/internal/projector"
-)
+import "testing"
 
 func TestLoadProjectorRetryInjectorBuildsInjectorFromEnv(t *testing.T) {
 	t.Parallel()
@@ -20,9 +16,6 @@ func TestLoadProjectorRetryInjectorBuildsInjectorFromEnv(t *testing.T) {
 	}
 	if injector == nil {
 		t.Fatal("loadProjectorRetryInjector() = nil, want injector")
-	}
-	if _, ok := injector.(projector.RetryInjector); !ok {
-		t.Fatalf("injector type = %T, want projector.RetryInjector", injector)
 	}
 }
 

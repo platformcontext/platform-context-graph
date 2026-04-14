@@ -136,7 +136,8 @@ curl -s 'http://prometheus:9090/api/v1/query?query=rate(pcg_dp_neo4j_query_error
 All metrics referenced in alerts are emitted by:
 
 - **Go services**: `go/internal/telemetry/instruments.go` (pcg_dp_* prefix)
-- **Python services**: `src/platform_context_graph/observability/runtime.py` (pcg_* prefix)
+- **Shared runtime status metrics**: `go/internal/status/*` and mounted
+  `/metrics` handlers (pcg_runtime_* families retained for operator continuity)
 - **Instrumented storage**: `go/internal/storage/{neo4j,postgres}/instrumented.go`
 
 See `docs/docs/reference/telemetry/index.md` for complete metric catalog.

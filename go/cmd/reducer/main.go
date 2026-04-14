@@ -38,7 +38,9 @@ func run(parent context.Context) error {
 	if err != nil {
 		return fmt.Errorf("telemetry providers: %w", err)
 	}
-	defer providers.Shutdown(context.Background())
+	defer func() {
+		_ = providers.Shutdown(context.Background())
+	}()
 
 	logger := telemetry.NewLogger(bootstrap, "reducer", "reducer")
 	tracer := providers.TracerProvider.Tracer(telemetry.DefaultSignalName)

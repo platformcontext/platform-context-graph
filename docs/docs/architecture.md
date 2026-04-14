@@ -18,15 +18,14 @@ partitioned follow-up domains keyed by stable lock identifiers. That preserves
 commit-worker throughput without letting concurrent writers fight over the same
 dense shared nodes.
 
-That runtime is the historical baseline for the current branch. The next
-architecture phase keeps the same correctness goals, but it moves the write
-path into a schema-first Go data plane built around scoped ingestion, snapshot
-generations, source-local projectors, and shared reducers. The goal is to let
-Git, AWS, Kubernetes, SQL, and future collectors all feed one canonical
-knowledge graph without inheriting Git-shaped storage or finalization
-assumptions. Each collector family owns its own service boundary and emits the
-same shared fact contract, so the platform can scale by source instead of
-forcing every update through one generic ingester.
+That runtime is now the active baseline for this branch. The normal platform
+path runs as a schema-first Go data plane built around scoped ingestion,
+snapshot generations, source-local projectors, and shared reducers. The goal
+is to let Git, AWS, Kubernetes, SQL, and future collectors all feed one
+canonical knowledge graph without inheriting Git-shaped storage or
+finalization assumptions. Each collector family owns its own service boundary
+and emits the same shared fact contract, so the platform can scale by source
+instead of forcing every update through one generic ingester.
 
 The rewrite also favors incremental ingestion and reconciliation over full
 re-indexing. Normal updates should touch the affected scope or shard, produce a
@@ -208,12 +207,10 @@ flowchart LR
 8. Query surfaces continue reading the canonical graph and content store.
 
 The legacy Python snapshot/coordinator runtime stack has now been deleted from
-the branch. The remaining conversion work is no longer the parser-family
-runtime itself. It is centered on downstream materialization parity plus the
-last active Python-owned evidence and helper seams that still sit on the normal
-runtime path, especially Terraform provider-schema relationship extraction and
-the remaining content/API orchestration surfaces that still need Go or deletion
-treatment.
+the branch. The remaining conversion work is no longer active Python runtime
+ownership on the normal path. It is centered on parity validation, stale-doc
+cleanup, and removal of leftover Python-oriented scaffolding that no longer
+matches the running system.
 
 That is the current operating baseline. In the target
 architecture:

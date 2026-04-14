@@ -26,32 +26,26 @@ For the Go rewrite, that contract is the same for every long-running service:
 - the CLI and HTTP/admin views should render the same underlying report
 - live-versus-inferred state must be explicit in both views
 
-Current branch caveat:
+Current branch reality:
 
-- the platform is still not fully Go-owned end to end
-- `collector-git`, `ingester`, and `bootstrap-index` now use Go-owned
-  repository selection, repo sync, per-repo snapshot collection, and content
-  shaping on the normal Git runtime path
-- local `pcg index`, `pcg workspace index`, `pcg watch`, MCP
-  `add_code_to_graph`, MCP `watch_directory`, and `pcg ecosystem index/update`
-  now all launch the Go `bootstrap-index` runtime for normal local refresh and
-  bootstrap behavior instead of the legacy Python parser/coordinator path
-- when `SCIP_INDEXER=true`, the Go collector now owns SCIP language detection,
-  external `scip-*` indexer execution, protobuf reduction, and Go tree-sitter
-  supplementation on the collector path instead of bouncing through Python
-- the legacy Python snapshot/coordinator runtime stack has been deleted from
-  the branch
-- the remaining cutover debt is now outside the normal collector hot path:
-  downstream parser/content materialization parity, the last Python helper,
-  content-shaping, API/MCP/CLI orchestration, and admin ownership removals
-- no new ingestor family should start until the Python finalization/recovery
-  ownership is gone and the parser cutover is proven end to end
+- the platform runtime is Go-owned end to end
+- `collector-git`, `ingester`, and `bootstrap-index` own repository selection,
+  repo sync, snapshot collection, parsing, content shaping, and fact emission
+- local `pcg index`, `pcg workspace index`, `pcg watch`, and package indexing
+  all hand off to Go binaries rather than a deleted Python coordinator path
+- when `SCIP_INDEXER=true`, the collector owns SCIP language detection,
+  external `scip-*` execution, protobuf reduction, and Go tree-sitter
+  supplementation without Python delegation
+- Terraform provider-schema assets are packaged and loaded from
+  `go/internal/terraformschema/schemas/*.json.gz`
+- Python no longer owns any deployed or long-running runtime on this branch
 
 ## Runtime Contract
 
 | Runtime | Owns | Default command | Storage access | Metrics exposure | Kubernetes shape |
 | --- | --- | --- | --- | --- | --- |
-| API | HTTP API, MCP, query reads, admin endpoints | `pcg serve start --host 0.0.0.0 --port 8080` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
+| API | HTTP API, query reads, admin endpoints | `pcg api start --host 0.0.0.0 --port 8080` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
+| MCP Server | MCP tool transport | `pcg mcp start` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Ingester | repo sync, parsing, fact emission, workspace ownership | `/usr/local/bin/pcg-ingester` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
 | Resolution Engine | queue draining, projection, retries, replay, recovery | `/usr/local/bin/pcg-reducer` | Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Bootstrap Index | one-shot initial indexing | `/usr/local/bin/pcg-bootstrap-index` | workspace + Postgres + Neo4j | direct `/metrics` in Compose | one-shot local helper |
@@ -85,12 +79,9 @@ but they do follow the same shared admin contract:
 repo sync, durable fact commit, per-repo snapshot collection, content shaping,
 the optional SCIP collector path, and the shared admin surface in Go.
 
-The remaining cutover work is no longer a selector, snapshot, or
-finalization/recovery bridge problem. The parser-family cutover is now
-complete, and the remaining debt is centered on downstream parser/content
-materialization parity plus the remaining Python-owned API/MCP/CLI and
-content-shaping seams that are slated for deletion before merge. The merge
-target is full Go service ownership, not a maintained dual-path runtime.
+The remaining hardening work on this branch is parity and validation, not
+runtime ownership. The merge target remains full Go service ownership with no
+normal-path Python delegation.
 
 ## Admin Contract
 
@@ -122,11 +113,10 @@ Current rewrite status:
 - `collector-git`, `projector`, and `reducer` all mount that shared admin
   surface in their local proof lanes
 - the collector proof lane now uses native Go selection, repo sync, snapshot
-  collection, content shaping, and optional SCIP execution/parsing; the
-  deleted `source_python_bridge.go` entrypoint shims are no longer part of the
-  branch, the Python parser-family directory has been reduced to docs-only
-  stubs, and the remaining non-Go ownership is now centered on the Python
-  API/MCP/CLI and content-shaping seams
+  collection, content shaping, and optional SCIP execution/parsing
+- the deleted Python bridge shims are no longer part of the branch
+- parser, admin, and runtime ownership are Go-owned; remaining work is parity
+  hardening and validation rather than preserving a dual-runtime architecture
 
 ## Incremental Refresh And Reconciliation
 
@@ -147,11 +137,10 @@ normal freshness path.
 
 ## Naming Note
 
-The public runtime name remains `ingester`.
-
-Operators should still scale, monitor, and troubleshoot the `ingester`
-runtime, but the deployed process is now the dedicated Go binary
-`/usr/local/bin/pcg-ingester` instead of a Python CLI shim.
+The public runtime names remain `platform-context-graph`, `mcp-server`,
+`ingester`, and `resolution-engine`. Operators should still scale, monitor, and
+troubleshoot those service identities, but the deployed processes are now Go
+programs rather than Python CLI shims.
 
 ## Deployed Flow
 
