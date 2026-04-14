@@ -10,8 +10,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// unifiedReplaceAttr renames the built-in slog keys to match the unified
-// logging standard shared by the Go and Python runtimes.
+// unifiedReplaceAttr renames the built-in slog keys to match the platform's
+// canonical Go logging schema.
 func unifiedReplaceAttr(_ []string, a slog.Attr) slog.Attr {
 	switch a.Key {
 	case slog.TimeKey:

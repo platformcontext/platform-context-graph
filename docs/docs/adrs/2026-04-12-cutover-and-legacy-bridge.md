@@ -4,19 +4,16 @@
 
 ## Context
 
-PCG currently has Python-heavy write and parser/runtime seams with procedural
-finalization and content-shaping paths. The rewrite must replace those paths
-without allowing two long-lived architectures to grow in parallel. The
-architecture proof package is in place, but the actual Git write-plane and
-parser-platform cutovers are still incomplete on this branch.
+PCG started the Go rewrite with Python-owned write, parser, and recovery
+seams. This ADR recorded the rule that those seams were temporary and could not
+turn into a second long-lived architecture.
 
-At the same time, the rewrite still needs a practical migration path so one
-existing domain can prove the new substrate before the entire platform flips at
-once.
+That bridge work is now finished on this branch. The ADR remains as the record
+of the transition rule that governed the cutover.
 
 ## Decision
 
-PCG will use a narrow bridge and explicit cutover model:
+PCG used a narrow bridge and explicit cutover model:
 
 1. lock the architecture and contracts first
 2. build the Go data-plane substrate
@@ -24,47 +21,44 @@ PCG will use a narrow bridge and explicit cutover model:
 4. flip ownership of that domain to the new path
 5. retire the equivalent legacy finalize and parser bridge paths
 
-The bridge is temporary and intentionally narrow.
+The bridge was temporary and intentionally narrow.
 
 Rules:
 
 - no new product features land on the legacy write seam
-- no new collector work deepens the procedural finalize path or the parser
-  bridge path
+- no new collector work deepens the procedural finalize path or parser bridge
 - no second long-lived queue or orchestration model is introduced as a peer to
   the new data plane
 - once a domain flips, the legacy path stops owning that domain
 
 Current branch status:
 
-- the Go runtime, admin/status, projection, and recovery surfaces are in place
-- the Git write plane no longer uses Python bridge ownership for selection,
-  snapshot collection, local bootstrap indexing, local watch refreshes, or
-  ecosystem manifest indexing on the normal path
-- the parser, discovery, and content-shaping path still has Python ownership on
-  the remaining uncovered portions of the normal runtime path
-- no new ingestor family should start until the Python runtime ownership is
-  fully removed and the cutover is proven end to end
+- the Go runtime, admin/status, projection, parser, and recovery surfaces are
+  in place
+- the Git write plane no longer uses Python bridge ownership on the normal path
+- the legacy finalize, parser, and coordinator bridge paths have been deleted
+- the remaining work on the branch is parity hardening and validation, not
+  preservation of a mixed-runtime design
 
 ## Why This Choice
 
-- It gives the rewrite a real proof path without locking the team into dual
+- It gave the rewrite a real proof path without locking the team into dual
   maintenance.
-- It reduces the risk of endless "temporary" compatibility work.
-- It keeps the architectural direction honest for future collectors.
+- It reduced the risk of endless "temporary" compatibility work.
+- It kept the architectural direction honest for future collectors.
 
 ## Consequences
 
 Positive:
 
 - The branch keeps one clear destination architecture.
-- Migration progress is measurable domain by domain.
-- Future workers know which path is authoritative.
+- Migration progress stayed measurable domain by domain.
+- Future workers can see that temporary bridges must be deleted, not polished.
 
 Tradeoffs:
 
-- Transitional code must stay deliberately small.
-- Cutover criteria must be explicit and enforced.
+- Transitional code had to stay deliberately small and short-lived.
+- Cutover criteria had to be explicit and enforced to prevent drift.
 
 ## Implementation Guidance
 
@@ -77,26 +71,24 @@ Tradeoffs:
 
 ## Git Write-Plane Bridge Inventory
 
-The legacy post-commit bridge is being systematically deleted as Go takes
-ownership. Current status:
+The legacy post-commit bridge has been systematically deleted as Go took
+ownership.
 
-**Go-owned (Python endpoints deleted):**
+Go-owned surfaces:
 
-- Recovery operations (refinalize, replay) are owned by the Go ingester at
-  `/admin/refinalize` and `/admin/replay`. The Python admin endpoints in
-  `api/routers/admin.py` and `api/routers/admin_facts.py` have been deleted.
-- `src/platform_context_graph/cli/helpers/finalize.py` has been deleted. The
-  `pcg finalize` CLI command prints a deprecation message directing operators
-  to the Go ingester admin surface.
+- recovery operations are owned by the Go ingester at `/admin/refinalize` and
+  `/admin/replay`
+- the deprecated `pcg finalize` command no longer routes through a Python
+  helper
+- parser, snapshot, bootstrap, watch-refresh, and ecosystem indexing flows are
+  Go-owned on the normal path
 
-**Deleted on this branch:**
+Deleted bridge families:
 
-- `src/platform_context_graph/indexing/post_commit_writer.py`
-- `src/platform_context_graph/collectors/git/finalize.py`
-- `src/platform_context_graph/indexing/coordinator_finalize.py`
+- Python admin recovery endpoints
+- Python CLI finalize bridge
+- Python post-commit/finalization coordination modules
+- Python parser/coordinator runtime ownership on the normal path
 
 Python indexing now fails closed unless the facts-first runtime is available.
-The remaining ownership blockers have moved forward to parser-matrix
-completion, the surviving Python API/MCP/CLI orchestration surfaces, and the
-remaining Python-owned relationship/content-read seams tracked in the ownership
-completion plan.
+This branch no longer carries Python service ownership on the normal path.

@@ -10,7 +10,7 @@ Read these first before changing runtime, deployment, or observability behavior:
 
 The deployed platform has three long-running runtimes plus one one-shot bootstrap flow:
 
-- **API**: `pcg serve start --host 0.0.0.0 --port 8080`
+- **API**: `pcg api start --host 0.0.0.0 --port 8080`
 - **Ingester**: `/usr/local/bin/pcg-ingester`
 - **Resolution Engine**: `/usr/local/bin/pcg-reducer`
 - **Bootstrap Index**: `/usr/local/bin/pcg-bootstrap-index`

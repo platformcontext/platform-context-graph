@@ -2,8 +2,8 @@
 //
 // EnsureSchema creates all node constraints, performance indexes, and
 // full-text indexes required by the platform context graph. The constraint
-// and index definitions mirror the Python schema builder in
-// src/platform_context_graph/graph/schema/builder.py.
+// and index definitions are the checked-in Go-owned schema contract for the
+// rewritten platform.
 package graph
 
 import (
@@ -13,8 +13,8 @@ import (
 )
 
 // schemaConstraints lists uniqueness and node-key constraints that must exist
-// before any graph writes occur. The order matches the Python builder for
-// parity auditing.
+// before any graph writes occur. The order stays stable so schema diffs remain
+// easy to audit across releases.
 var schemaConstraints = []string{
 	// Repository identity
 	"CREATE CONSTRAINT repository_id IF NOT EXISTS FOR (r:Repository) REQUIRE r.id IS UNIQUE",
@@ -78,8 +78,7 @@ var schemaConstraints = []string{
 }
 
 // uidConstraintLabels lists entity labels that receive a uid uniqueness
-// constraint. These mirror CONTENT_ENTITY_LABELS from the Python content
-// ingest module.
+// constraint. The set is maintained here as part of the Go-owned graph schema.
 var uidConstraintLabels = []string{
 	"AnalyticsModel",
 	"Annotation",

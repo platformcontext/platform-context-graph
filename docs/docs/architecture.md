@@ -207,13 +207,7 @@ flowchart LR
 8. Query surfaces continue reading the canonical graph and content store.
 
 The legacy Python snapshot/coordinator runtime stack has now been deleted from
-the branch. The remaining conversion work is no longer active Python runtime
-ownership on the normal path. It is centered on parity validation, stale-doc
-cleanup, and removal of leftover Python-oriented scaffolding that no longer
-matches the running system.
-
-That is the current operating baseline. In the target
-architecture:
+the branch. That is the operating baseline for this architecture:
 
 - collectors own source discovery and raw normalization
 - the Go data plane owns scoped facts, queueing, and snapshot generations
@@ -221,10 +215,6 @@ architecture:
   materialization
 - reducers own shared cross-source correlation
 - the API, MCP, and CLI stay read-only over canonical state
-
-The remaining Python parser and helper paths are temporary conversion debt
-only. They are not the architectural landing zone for AWS, Kubernetes,
-SQL/data, or any other future collector.
 
 Status surfaces can report `awaiting_shared_projection` while authoritative
 shared follow-up remains pending for an accepted repository generation.

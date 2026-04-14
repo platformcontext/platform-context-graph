@@ -4,34 +4,22 @@
 
 ## Context
 
-PlatformContextGraph runs two runtime stacks that both emit structured JSON
-logs:
+PlatformContextGraph now runs a Go-owned platform end to end, but the logging
+contract still matters because it must stay consistent across API, MCP,
+ingester, bootstrap, and resolution-engine processes.
 
-- **Python (read path)** uses a `StructuredJsonFormatter` that emits fields
-  such as `timestamp`, `severity_text`, `message`, `service_name`, and
-  `event_name`.
-- **Go (write path)** uses `log/slog` with a custom `TraceHandler` that
-  historically emitted the default slog field names: `time`, `level`, and `msg`.
-
-The field-name mismatch (`time` vs `timestamp`, `level` vs `severity_text`,
-`msg` vs `message`) makes cross-service log correlation harder in Grafana/Loki
-and any log aggregation pipeline. Operators writing queries must remember which
-runtime produced a given log line and use the correct field name, which is
-error-prone during incident response.
-
-Both stacks already carry OTEL trace context and pipeline-specific metadata.
-What they lack is a single canonical schema that normalises field names so that
-one Loki query can filter by `severity_text`, `component`, or `pipeline_phase`
-regardless of the originating runtime.
+Before the final cutover, Go and Python emitted similar structured logs with
+different field names. This ADR locked the canonical field names during the
+migration so the rewritten platform could keep one stable operator-facing
+schema instead of carrying runtime-specific query rules forward.
 
 ## Decision
 
-Both the Go and Python runtimes will emit JSON log records that conform to the
-canonical field set defined below. The Go `TraceHandler` will rename its
-built-in slog keys (`time` -> `timestamp`, `level` -> `severity_text`,
-`msg` -> `message`) and inject `component`, `runtime_role`, and
-`severity_number` on every record. The Python `StructuredJsonFormatter` already
-conforms and requires no changes.
+Every Go-owned runtime emits JSON log records that conform to the canonical
+field set defined below. The shared Go `TraceHandler` renames the built-in slog
+keys (`time` -> `timestamp`, `level` -> `severity_text`,
+`msg` -> `message`) and injects `component`, `runtime_role`, and
+`severity_number` on every record.
 
 ### Canonical Schema
 
@@ -67,30 +55,21 @@ conforms and requires no changes.
 
 The Go `TraceHandler` uses `slog.HandlerOptions.ReplaceAttr` to rename the
 three built-in keys and format `timestamp` as RFC3339 with a UTC `Z` suffix.
-The `NewLogger` constructor now accepts `component` and `runtimeRole` as
-required parameters and adds them as base attributes on every log line. A new
-`EventAttr` helper produces `event_name` attributes. The `severity_number`
-field is injected by `TraceHandler.Handle()` when a valid OTEL span context is
-present, mapping slog levels to OTEL severity numbers (DEBUG=5, INFO=9,
-WARN=13, ERROR=17).
-
-Two new pipeline phase constants (`PhaseQuery`, `PhaseServe`) complete the
-phase vocabulary for read-path operations.
-
-### Python Implementation
-
-The existing `StructuredJsonFormatter` already emits all required fields with
-the canonical names. No changes are needed.
+The `NewLogger` constructor accepts `component` and `runtimeRole` as required
+parameters and adds them as base attributes on every log line. The
+`severity_number` field is injected by `TraceHandler.Handle()` when a valid
+OTEL span context is present, mapping slog levels to OTEL severity numbers
+(DEBUG=5, INFO=9, WARN=13, ERROR=17).
 
 ## Consequences
 
 - **Easier cross-service correlation.** A single Loki query like
   `{service_namespace="platform-context-graph"} | json | severity_text="ERROR"`
-  now works regardless of which runtime produced the log line.
+  works across the Go-owned platform without service-specific field mapping.
 - **Consistent Grafana dashboards.** Dashboard variables can use `component`,
   `runtime_role`, and `pipeline_phase` without runtime-specific overrides.
 - **Stable contract.** New Go services inherit the schema automatically
   through the shared logging constructors.
-- **Minor migration cost.** Existing Loki queries or Grafana panels that
-  reference the old Go field names (`time`, `level`, `msg`) must be updated to
-  use the canonical names.
+- **Historical migration note.** This ADR remains the record of the field-name
+  normalization completed during the Python-to-Go cutover. The branch no longer
+  carries a Python runtime implementation of this contract.

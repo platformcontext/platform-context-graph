@@ -51,8 +51,8 @@ The current accepted ADR set establishes the rewrite baseline:
   ownership of resolution domain logic, operational surfaces, and recovery
   endpoint migration.
 - [Unified JSON Logging Standard](2026-04-13-unified-logging-standard.md)
-  defines the canonical JSON log schema that both the Go and Python runtimes
-  must emit, enabling consistent cross-service log correlation in Grafana/Loki.
+  defines the canonical JSON log schema that every Go-owned runtime emits,
+  enabling consistent cross-service log correlation in Grafana/Loki.
 
 Read these records together. They are meant to remove ambiguity before new
 collector or runtime work begins.

@@ -4,149 +4,93 @@
 
 ## Context
 
-The Go data-plane rewrite proof is complete (Milestones 0-5), and the cutover
-plan (`2026-04-13-go-write-plane-conversion-cutover.md`) tracks the five chunks
-needed to remove Python runtime ownership from deployed services. Chunks 1 and
-3 are done. Chunk 2 (native parser/collector) is in progress. Chunks 4 and 5
-have Go handlers and gate tests in place but cannot close until Chunk 2
-finishes.
+The original write-plane cutover plan proved the Go service loops and the
+facts-first runtime shape, but it did not yet make the branch mergeable.
+This ADR captured the follow-on work required to remove the remaining Python
+ownership from runtime, recovery, admin, parser, and resolution surfaces.
 
-However, the cutover plan only tracked the **deployment surface** of the
-conversion. It did not cover the remaining ownership cleanup needed after the
-Go runtime loops landed. This ADR exists to finish the migration, not to
-legitimize a long-lived mixed Python/Go runtime.
+That ownership-completion work is now finished on this branch:
 
-Some package families called out when this ADR was written have already been
-deleted from the branch. The remaining ownership debt is now more specific:
-
-- the deployed API service still starts from the Python runtime command
-  `pcg serve start`, even though a Go API binary exists in `go/cmd/api`
-- Python API, MCP, and CLI orchestration still survive under
-  `src/platform_context_graph/api/**`,
-  `src/platform_context_graph/mcp/**`, and
-  `src/platform_context_graph/cli/**`
-- the legacy Python `content/ingest.py` shaping seam has now been deleted; the
-  remaining Python-owned content work is read/query-side rather than normal
-  runtime shaping
-- parser-family ownership is now finished in the canonical contract and on
-  disk; the remaining parser debt is downstream graph/materialization truth for
-  Go-emitted buckets rather than missing parser scaffolding or Python parser
-  entrypoints
-
-The existing ADRs establish that resolution owns cross-domain truth and that
-reducers are the canonical authority for shared domains. But the Go reducer and
-projector implementations currently delegate all domain-specific logic to Python.
-The write-plane conversion is not honest until Go owns the domain logic, not
-just the service loops.
+- deployed services start from Go runtime entrypoints
+- parser, collector, projection, recovery, and admin ownership are Go-owned
+- the Python runtime tree and compatibility bridges have been deleted
+- the remaining Python files in the repository are fixture inputs used to test
+  parser behavior, not live service code
 
 ## Decision
 
-PCG will extend the write-plane conversion beyond the deployment cutover to
-cover full Go ownership of resolution, projection, and operational surfaces.
-Python ownership remains a deletion target across the branch; it is not an
-acceptable steady-state runtime dependency after merge.
-
-The work is organized into three phases that can proceed independently of the
-parser/collector cutover (Chunk 2):
+PCG treats the cutover as complete only when normal runtime ownership is
+Go-owned end to end. The work recorded in this ADR was organized into three
+phases and is retained here as the completion record.
 
 ### Phase A: Recovery endpoint migration
 
-Delete the Python admin and CLI recovery endpoints (refinalize, replay) and let
-the Go ingester own them directly at `/admin/replay` and `/admin/refinalize`.
-The Go recovery handlers already exist and are wired into the ingester admin
-mux. This is a full migration: Python recovery code is deleted, not wrapped.
-Update documentation to reflect Go-owned recovery.
+Delete the Python admin and CLI recovery endpoints and let the Go ingester own
+`/admin/replay` and `/admin/refinalize` directly. This phase is complete; the
+Python recovery endpoints and CLI finalize bridge were deleted rather than
+wrapped.
 
 ### Phase B: Resolution domain ownership
 
 Finish the remaining domain-ownership cleanup so that the projector and reducer
-service loops own their surviving domain-specific behavior end to end and no
-deleted Python package family is accidentally reintroduced:
+service loops own their domain-specific behavior end to end and no deleted
+Python package family is accidentally reintroduced. This phase is complete.
 
-1. **Platform materialization**: keep Go reducers as the owner of
-   infrastructure and runtime platform edge materialization.
-2. **Projection decision recording**: keep Go projectors as the owner of
-   persisted decision metadata and evidence.
-3. **Shared projection intent workers**: keep Go as the owner of partition-
-   based intent draining and cross-domain edge materialization.
-4. **Failure classification**: keep Go projector and reducer services as the
-   owner of durable failure metadata.
-5. **Projector fact-stage expansion**: keep Go projectors as the owner of the
-   fact-to-graph/content/intent materialization stages and remove any
-   remaining Python-normal-path dependence.
+The completion work covered:
+
+1. platform materialization in Go reducers
+2. projection decision recording in Go projectors
+3. shared projection intent workers in Go
+4. durable failure classification in Go projector and reducer flows
+5. Go-owned fact-to-graph, content, and intent materialization stages
 
 ### Phase C: Operational and validation surfaces
 
-1. **Status store parity**: keep Go status ownership as the source of truth for
-   scan/reindex request lifecycle and repository coverage tracking.
-2. **Test infrastructure**: add build-tag isolation for `storage/postgres` tests
-   so recovery and resolution tests can run independently of in-progress
-   collector work.
-3. **Gate tests**: extend the Chunk 5 ownership gate tests to cover resolution,
-   facts, and status store Python ownership removal.
-4. **Compose verification**: update compose proof scripts and add integration
-   tests for the Go write-plane end-to-end path.
+Move status-store ownership, gate tests, and compose-backed proof to the Go
+runtime surface. This phase is complete.
 
 ## Why This Choice
 
-- The cutover plan tracks the deployment surface but not the remaining
-  ownership debt. Without this extension, the branch would merge with
-  Go-owned runtime loops plus a still-Python API/orchestration layer and an
-  unfinished parser/content seam.
-- Runtime/admin/recovery ownership has already moved much further than the
-  original ADR snapshot assumed, and the parser-family cutover is now also
-  complete, but content/API cleanup is still open.
+- The cutover plan tracked the deployment surface but not the remaining
+  ownership debt. Without this extension, the branch would have shipped with
+  Go service loops but misleadingly incomplete runtime ownership.
 - The existing ADR "Resolution Owns Cross-Domain Truth" still mandates that
-  the canonical runtime path stay Go-owned. The remaining open work has shifted
-  from deleted resolution/facts packages toward parser/content/API ownership
-  closure.
-- Finishing the remaining ownership cleanup before merge keeps the branch
-  honest: no hidden Python delegation behind Go-owned runtime claims.
+  the canonical runtime path stay Go-owned.
+- Recording the ownership-completion work separately keeps the merge bar
+  auditable instead of burying the last runtime deletions inside unrelated
+  parser or deployment notes.
 
 ## Consequences
 
 Positive:
 
-- Go owns the long-running write-plane runtime, recovery, and status logic, not
-  just the service loops.
-- Recovery and admin operations flow through Go immediately.
-- The merge bar is satisfied more honestly: no hidden Python delegation behind
-  Go entrypoints.
-- Future collector families (AWS, Kubernetes) land on Go-owned resolution from
-  day one.
+- Go owns the long-running write-plane runtime, recovery, status, parser, and
+  resolution logic, not just the service loops.
+- Recovery and admin operations now flow through Go immediately.
+- The merge bar is satisfied honestly: no hidden Python delegation behind
+  Go entrypoints remains on the normal path.
+- Future collector families can start from the locked Go-owned runtime model.
 
 Tradeoffs:
 
-- This extends the scope of the conversion beyond the original deployment
-  cutover plan.
-- Content parity and API/MCP/CLI ownership are now the harder migration
-  problems than the already-landed runtime loops and parser-family cutover.
-- Some Python API/MCP/CLI surfaces still need same-branch deletion or
-  replacement so that the branch does not ship with broken imports into already
-  deleted package families.
+- The cutover scope was larger than a simple runtime-entrypoint swap.
+- The branch needed parser, runtime, admin, and validation cleanup to finish
+  before new collector work could start without carrying migration debt
+  forward.
 
 ## Implementation Guidance
 
-- Follow TDD for every Go resolution domain port.
-- Do not preserve Python ownership as a resting state. Delete Python endpoints
-  when Go owns the behavior. If a Python surface must exist briefly for
-  sequencing, it must stay out of the normal runtime path and carry an explicit
-  deletion condition before merge.
-- Use the existing Go projector/reducer service loops as the integration points
-  for new domain logic.
-- Do not expand the Python resolution surface. New domain logic lands in Go.
-- Update the doc set index and SOW when each phase completes.
-- Phases A and B are unblocked. Phase C depends on Phase B for gate test
-  coverage.
+The branch keeps this ADR as a guardrail for future work:
 
-## Dependency Map
+- do not preserve Python ownership as a resting state
+- delete temporary migration seams instead of normalizing them
+- keep new domain logic in Go service boundaries
+- update the doc set and runbooks whenever ownership actually changes
+
+## Completion Map
 
 ```text
-Phase A (recovery migration) ────────────────────────── unblocked
-Phase B (resolution domains) ─────────────────────── unblocked
-Phase C (operational/validation) ──── depends on B ── unblocked after B
-
-Chunk 2 (parser/collector) ───────────────────────── independent (Codex)
-Chunk 4 final deletions ──────────────────────────── blocked on Chunk 2
-Chunk 5 final deletions ──────────────────────────── blocked on Chunk 2 + Phase B
+Phase A (recovery migration) ────────────────────────── complete
+Phase B (resolution domains) ────────────────────────── complete
+Phase C (operational/validation) ───────────────────── complete
 ```
