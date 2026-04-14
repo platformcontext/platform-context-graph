@@ -377,6 +377,49 @@ export function ToolbarButton({ label }: WidgetProps) {
 	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "Typedef", "my_int")
 }
 
+func TestNativeRepositorySnapshotterCarriesRustImplBlockEntities(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(
+		t,
+		filepath.Join(repoRoot, "lib.rs"),
+		`impl Point {
+  fn new() -> Self {
+    Self {}
+  }
+}
+`,
+	)
+
+	engine, err := parser.DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	snapshotter := NativeRepositorySnapshotter{Engine: engine}
+	got, err := snapshotter.SnapshotRepository(
+		context.Background(),
+		SelectedRepository{RepoPath: repoRoot},
+	)
+	if err != nil {
+		t.Fatalf("SnapshotRepository() error = %v, want nil", err)
+	}
+
+	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "ImplBlock", "Point")
+
+	if len(got.FileData) != 1 {
+		t.Fatalf("len(FileData) = %d, want 1", len(got.FileData))
+	}
+	implBlocks, _ := got.FileData[0]["impl_blocks"].([]map[string]any)
+	if len(implBlocks) != 1 {
+		t.Fatalf("len(FileData[0].impl_blocks) = %d, want 1", len(implBlocks))
+	}
+	if uid, _ := implBlocks[0]["uid"].(string); uid == "" {
+		t.Fatal("FileData[0].impl_blocks[0].uid = empty, want canonical content entity id")
+	}
+}
+
 func TestNativeRepositorySnapshotterCarriesTerragruntDependencyAndVariableEntities(t *testing.T) {
 	t.Parallel()
 

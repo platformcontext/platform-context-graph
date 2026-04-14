@@ -284,6 +284,62 @@ func TestMaterializeCarriesExtendedParserEntityBuckets(t *testing.T) {
 	}
 }
 
+func TestMaterializeCarriesRustImplBlockEntities(t *testing.T) {
+	t.Parallel()
+
+	got, err := Materialize(Input{
+		RepoID: "repository:r_12345678",
+		Files: []File{
+			{
+				Path: "src/lib.rs",
+				Body: "impl Point {\n    fn new() -> Self {\n        Self {}\n    }\n}\n",
+				EntityBuckets: map[string][]Entity{
+					"impl_blocks": {
+						{
+							Name:       "Point",
+							LineNumber: 1,
+							EndLine:    5,
+							Metadata: map[string]any{
+								"kind":   "inherent_impl",
+								"target": "Point",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Materialize() error = %v, want nil", err)
+	}
+
+	if got, want := len(got.Entities), 1; got != want {
+		t.Fatalf("len(Materialize().Entities) = %d, want %d", got, want)
+	}
+	entity := got.Entities[0]
+	if got, want := entity.EntityType, "ImplBlock"; got != want {
+		t.Fatalf("entity.EntityType = %q, want %q", got, want)
+	}
+	if got, want := entity.EntityName, "Point"; got != want {
+		t.Fatalf("entity.EntityName = %q, want %q", got, want)
+	}
+	if got, want := entity.StartLine, 1; got != want {
+		t.Fatalf("entity.StartLine = %d, want %d", got, want)
+	}
+	if got, want := entity.EndLine, 5; got != want {
+		t.Fatalf("entity.EndLine = %d, want %d", got, want)
+	}
+	if got, want := entity.SourceCache, "impl Point {\n    fn new() -> Self {\n        Self {}\n    }\n}\n"; got != want {
+		t.Fatalf("entity.SourceCache = %q, want %q", got, want)
+	}
+	if got, want := entity.Metadata["kind"], "inherent_impl"; got != want {
+		t.Fatalf("entity.Metadata[kind] = %#v, want %#v", got, want)
+	}
+	if got, want := entity.Metadata["target"], "Point"; got != want {
+		t.Fatalf("entity.Metadata[target] = %#v, want %#v", got, want)
+	}
+}
+
 type EntityRecordExpectation struct {
 	entityType  string
 	entityName  string

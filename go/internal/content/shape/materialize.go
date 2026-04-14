@@ -107,6 +107,7 @@ var contentEntityBuckets = []entityBucketMapping{
 	{bucket: "data_quality_checks", label: "DataQualityCheck"},
 	{bucket: "data_owners", label: "DataOwner"},
 	{bucket: "data_contracts", label: "DataContract"},
+	{bucket: "impl_blocks", label: "ImplBlock"},
 }
 
 var sourceFieldContainsCode = map[string]struct{}{
@@ -118,6 +119,7 @@ var sourceFieldContainsCode = map[string]struct{}{
 	"Interface":  {},
 	"Macro":      {},
 	"Module":     {},
+	"ImplBlock":  {},
 	"Property":   {},
 	"Protocol":   {},
 	"Record":     {},
@@ -138,6 +140,7 @@ var trailingNewlineLabels = map[string]struct{}{
 	"CloudFormationOutput":    {},
 	"CloudFormationParameter": {},
 	"CloudFormationResource":  {},
+	"ImplBlock":               {},
 	"CrossplaneClaim":         {},
 	"CrossplaneComposition":   {},
 	"CrossplaneXRD":           {},
