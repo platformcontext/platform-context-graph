@@ -36,6 +36,9 @@ func (e *Engine) parseHCL(
 	payload := hclBasePayload(path, isDependency)
 	if strings.EqualFold(filepath.Base(path), "terragrunt.hcl") {
 		appendBucket(payload, "terragrunt_configs", parseTerragruntConfig(body, source, path))
+		for _, row := range parseTerragruntModuleSources(body, source, path) {
+			appendBucket(payload, "terraform_modules", row)
+		}
 		for _, row := range parseTerragruntDependencies(body, source, path) {
 			appendBucket(payload, "terragrunt_dependencies", row)
 		}
@@ -234,6 +237,27 @@ func parseTerragruntConfig(body *hclsyntax.Body, source []byte, path string) map
 	row["locals"] = strings.Join(localNames, ",")
 	row["inputs"] = strings.Join(objectAttributeKeys(body.Attributes["inputs"], source), ",")
 	return row
+}
+
+func parseTerragruntModuleSources(body *hclsyntax.Body, source []byte, path string) []map[string]any {
+	rows := make([]map[string]any, 0, 1)
+	for _, block := range body.Blocks {
+		if block.Type != "terraform" {
+			continue
+		}
+		moduleSource := attributeValue(block.Body.Attributes["source"], source)
+		if moduleSource == "" {
+			continue
+		}
+		rows = append(rows, map[string]any{
+			"name":        strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
+			"line_number": block.TypeRange.Start.Line,
+			"source":      moduleSource,
+			"path":        path,
+			"lang":        "hcl",
+		})
+	}
+	return rows
 }
 
 func parseTerragruntDependencies(body *hclsyntax.Body, source []byte, path string) []map[string]any {

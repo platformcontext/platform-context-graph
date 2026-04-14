@@ -206,7 +206,7 @@ The current mapping and enrichment flow understands these families:
 | Family | What it reads | What it is used for |
 | :--- | :--- | :--- |
 | Terraform | `app_repo`, `app_name`, `api_configuration`, Cloud Map names, config paths, GitHub references, platform metadata | `PROVISIONS_DEPENDENCY_FOR` and platform/runtime context |
-| Terragrunt | Terraform source blocks, dependency blocks, shared inputs, wrapper config | Same semantic family as Terraform, with the same emphasis on truthful direction; the historical parity bar on this branch is the module-source relationship path from `terraform.source`, not static evaluation of `read_terragrunt_config()` |
+| Terragrunt | Terraform source blocks, dependency blocks, shared inputs, wrapper config | Same semantic family as Terraform, with the same emphasis on truthful direction; `terraform.source` now also materializes through the normal `TerraformModule` surface, while `read_terragrunt_config()` remains intentionally opaque |
 | GitHub Actions | reusable workflow calls, checkout targets, deploy steps, command gating | Delivery-path summaries and future deploy-source mappings when the repo link is explicit |
 | Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Delivery-path summaries and automation context |
 | ArgoCD | ApplicationSet discovery targets, deploy-source repo URLs, destination clusters | `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, and `RUNS_ON` |
