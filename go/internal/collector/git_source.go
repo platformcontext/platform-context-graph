@@ -270,25 +270,56 @@ func (s *GitSource) startStream(ctx context.Context) error {
 	}
 
 	workerCtx, cancel := context.WithCancel(streamCtx)
-	repoChan := make(chan SelectedRepository, workers)
 	observedAt := batch.ObservedAt.UTC()
 
-	// Feed repos into work channel
+	// Two-lane channels: discovery classifies repos up front and routes
+	// them to separate channels so workers can prefer small repos. This
+	// prevents head-of-line blocking when large repos cluster together
+	// (the "convoy" problem observed in production).
+	smallCh := make(chan SelectedRepository, workers)
+	largeCh := make(chan SelectedRepository, workers)
+
+	// Discovery goroutine: classify once per repo and route to the
+	// appropriate lane. Classification (isLargeRepository) is a fast
+	// file-count pre-scan that bails immediately on large repos.
 	go func() {
-		defer close(repoChan)
+		defer close(smallCh)
+		defer close(largeCh)
 		for _, repo := range resolved {
+			large := isLargeRepository(repo.RepoPath, largeThreshold)
+
+			// Record size-tier classification.
+			if s.Instruments != nil {
+				tier := "small"
+				if large {
+					tier = "large"
+				}
+				s.Instruments.LargeRepoClassifications.Add(workerCtx, 1,
+					metric.WithAttributes(attribute.String(telemetry.MetricDimensionRepoSizeTier, tier)),
+				)
+			}
+
+			ch := smallCh
+			if large {
+				ch = largeCh
+				if s.Logger != nil {
+					s.Logger.InfoContext(workerCtx, "large repository queued",
+						slog.String("repo_path", repo.RepoPath),
+					)
+				}
+			}
+
 			select {
-			case repoChan <- repo:
+			case ch <- repo:
 			case <-workerCtx.Done():
 				return
 			}
 		}
 	}()
 
-	// Snapshot workers: read repos, snapshot, send generations.
-	// Large repos (above largeThreshold files) acquire the largeSem semaphore
-	// before snapshotting, limiting concurrent large-repo memory pressure.
-	// Small repos bypass the semaphore and run at full worker parallelism.
+	// Snapshot workers with two-lane select: prefer small repos so they
+	// always flow at full parallelism even when large repos hold the
+	// semaphore. Large repos are processed when no small work is available.
 	var wg sync.WaitGroup
 	var errOnce sync.Once
 	var firstErr error
@@ -299,73 +330,68 @@ func (s *GitSource) startStream(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for repo := range repoChan {
+			for {
 				if workerCtx.Err() != nil {
 					return
 				}
 
-				large := isLargeRepository(repo.RepoPath, largeThreshold)
+				var repo SelectedRepository
+				var large bool
+				var ok bool
 
-				// Record size-tier classification.
-				if s.Instruments != nil {
-					tier := "small"
-					if large {
-						tier = "large"
+				// Prefer small repos (non-blocking check).
+				select {
+				case repo, ok = <-smallCh:
+					if !ok {
+						// Small channel closed — drain remaining large repos.
+						for repo = range largeCh {
+							if workerCtx.Err() != nil {
+								return
+							}
+							s.processRepo(workerCtx, repo, true, largeSem,
+								sourceRunID, observedAt, workerID,
+								&errOnce, &firstErr, cancel, &completed)
+						}
+						return
 					}
-					s.Instruments.LargeRepoClassifications.Add(workerCtx, 1,
-						metric.WithAttributes(attribute.String(telemetry.MetricDimensionRepoSizeTier, tier)),
-					)
-				}
-
-				if large {
-					if s.Logger != nil {
-						s.Logger.InfoContext(workerCtx, "large repository detected, acquiring semaphore",
-							slog.String("repo_path", repo.RepoPath),
-							slog.Int("worker_id", workerID),
-							slog.Int("threshold", largeThreshold),
-						)
-					}
-					semWaitStart := time.Now()
+					large = false
+				default:
+					// No small repo ready — try large or block on either.
 					select {
-					case largeSem <- struct{}{}:
+					case repo, ok = <-smallCh:
+						if !ok {
+							for repo = range largeCh {
+								if workerCtx.Err() != nil {
+									return
+								}
+								s.processRepo(workerCtx, repo, true, largeSem,
+									sourceRunID, observedAt, workerID,
+									&errOnce, &firstErr, cancel, &completed)
+							}
+							return
+						}
+						large = false
+					case repo, ok = <-largeCh:
+						if !ok {
+							for repo = range smallCh {
+								if workerCtx.Err() != nil {
+									return
+								}
+								s.processRepo(workerCtx, repo, false, largeSem,
+									sourceRunID, observedAt, workerID,
+									&errOnce, &firstErr, cancel, &completed)
+							}
+							return
+						}
+						large = true
 					case <-workerCtx.Done():
 						return
 					}
-					if s.Instruments != nil {
-						s.Instruments.LargeRepoSemaphoreWait.Record(workerCtx,
-							time.Since(semWaitStart).Seconds(),
-						)
-					}
 				}
 
-				gen, err := s.snapshotOneRepository(
-					workerCtx, repo, sourceRunID, observedAt, workerID,
-				)
-
-				if large {
-					<-largeSem
-				}
-
-				if err != nil {
-					if s.Instruments != nil {
-						s.Instruments.ReposSnapshotted.Add(ctx, 1,
-							metric.WithAttributes(attribute.String("status", "failed")),
-						)
-					}
-					errOnce.Do(func() {
-						firstErr = err
-						cancel()
-					})
-					return
-				}
-
-				completed.Add(1)
-
-				select {
-				case s.stream <- gen:
-				case <-workerCtx.Done():
-					return
-				}
+				s.processRepo(workerCtx, repo, large, largeSem,
+					sourceRunID, observedAt, workerID,
+					&errOnce, &firstErr, cancel, &completed)
 			}
 		}()
 	}
@@ -496,6 +522,63 @@ func (s *GitSource) resolveRepositories(batch SelectionBatch) ([]SelectedReposit
 	)
 
 	return resolved, sourceRunID, nil
+}
+
+// processRepo handles semaphore acquisition for large repos, snapshots a
+// single repository, releases the semaphore, and sends the result downstream.
+// It is the shared body for both lanes of the two-lane worker select.
+func (s *GitSource) processRepo(
+	ctx context.Context,
+	repo SelectedRepository,
+	large bool,
+	largeSem chan struct{},
+	sourceRunID string,
+	observedAt time.Time,
+	workerID int,
+	errOnce *sync.Once,
+	firstErr *error,
+	cancel context.CancelFunc,
+	completed *atomic.Int64,
+) {
+	if large {
+		semWaitStart := time.Now()
+		select {
+		case largeSem <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		if s.Instruments != nil {
+			s.Instruments.LargeRepoSemaphoreWait.Record(ctx,
+				time.Since(semWaitStart).Seconds(),
+			)
+		}
+	}
+
+	gen, err := s.snapshotOneRepository(ctx, repo, sourceRunID, observedAt, workerID)
+
+	if large {
+		<-largeSem
+	}
+
+	if err != nil {
+		if s.Instruments != nil {
+			s.Instruments.ReposSnapshotted.Add(ctx, 1,
+				metric.WithAttributes(attribute.String("status", "failed")),
+			)
+		}
+		errOnce.Do(func() {
+			*firstErr = err
+			cancel()
+		})
+		return
+	}
+
+	completed.Add(1)
+
+	select {
+	case s.stream <- gen:
+	case <-ctx.Done():
+	}
 }
 
 // snapshotOneRepository processes a single repository snapshot and returns a

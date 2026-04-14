@@ -842,6 +842,174 @@ func (s *concurrencyTrackingSnapshotter) SnapshotRepository(
 	return s.inner.SnapshotRepository(ctx, repository)
 }
 
+func TestTwoLaneSmallReposFlowWhileLargeBlocked(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 14, 10, 0, 0, 0, time.UTC)
+
+	// Create 4 large repos (5 files each, threshold=1) interleaved with 4 small
+	// repos (0 files). The large snapshotter sleeps 200ms; small sleeps 10ms.
+	// With sem=1, only 1 large repo parses at a time (4 * 200ms = 800ms minimum).
+	// All 4 small repos should complete in ~10-40ms total — well before large.
+	var repos []SelectedRepository
+	snapshots := make(map[string]RepositorySnapshot)
+	largeDelay := make(map[string]time.Duration)
+
+	for i := 0; i < 4; i++ {
+		// Large repo
+		largeDir := t.TempDir()
+		for j := 0; j < 5; j++ {
+			if err := os.WriteFile(filepath.Join(largeDir, fmt.Sprintf("f_%d.py", j)), []byte("x"), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		repos = append(repos, SelectedRepository{RepoPath: largeDir, RemoteURL: "https://github.com/example/repo"})
+		snapshots[largeDir] = RepositorySnapshot{RepoPath: largeDir, FileCount: 5}
+		largeDelay[largeDir] = 200 * time.Millisecond
+
+		// Small repo (interleaved)
+		smallDir := t.TempDir()
+		repos = append(repos, SelectedRepository{RepoPath: smallDir, RemoteURL: "https://github.com/example/repo"})
+		snapshots[smallDir] = RepositorySnapshot{RepoPath: smallDir, FileCount: 0}
+		largeDelay[smallDir] = 10 * time.Millisecond
+	}
+
+	var completionOrder sync.Mutex
+	var completedPaths []string
+
+	orderSnapshotter := &orderTrackingSnapshotter{
+		inner:      &stubRepositorySnapshotter{snapshots: snapshots},
+		delays:     largeDelay,
+		mu:         &completionOrder,
+		completed:  &completedPaths,
+	}
+
+	source := &GitSource{
+		Component:              "collector-git",
+		SnapshotWorkers:        4,
+		LargeRepoThreshold:    1,  // repos with >1 file are "large"
+		LargeRepoMaxConcurrent: 1, // only 1 large at a time
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{{
+				ObservedAt:   observedAt,
+				Repositories: repos,
+			}},
+		},
+		Snapshotter: orderSnapshotter,
+	}
+
+	for {
+		gen, ok, err := source.Next(context.Background())
+		if err != nil {
+			t.Fatalf("Next() error = %v", err)
+		}
+		if !ok {
+			break
+		}
+		drainFactChannel(gen.Facts)
+	}
+
+	completionOrder.Lock()
+	paths := append([]string(nil), completedPaths...)
+	completionOrder.Unlock()
+
+	if len(paths) != 8 {
+		t.Fatalf("completed %d repos, want 8", len(paths))
+	}
+
+	// All 4 small repos (0 files, 10ms delay) should appear in the first 5
+	// completions. If small repos were blocked behind large repos in a single
+	// channel, they would interleave much later.
+	smallCount := 0
+	for _, p := range paths[:5] {
+		if snapshots[p].FileCount == 0 {
+			smallCount++
+		}
+	}
+	if smallCount < 3 {
+		t.Fatalf("only %d small repos in first 5 completions, want >= 3 (small repos should not be blocked by large)", smallCount)
+	}
+}
+
+func TestTwoLaneDrainsLargeAfterSmallExhausted(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 14, 10, 0, 0, 0, time.UTC)
+
+	// 2 small repos + 3 large repos. All must complete.
+	var repos []SelectedRepository
+	snapshots := make(map[string]RepositorySnapshot)
+
+	for i := 0; i < 2; i++ {
+		dir := t.TempDir()
+		repos = append(repos, SelectedRepository{RepoPath: dir, RemoteURL: "https://github.com/example/repo"})
+		snapshots[dir] = RepositorySnapshot{RepoPath: dir, FileCount: 0}
+	}
+	for i := 0; i < 3; i++ {
+		dir := t.TempDir()
+		for j := 0; j < 5; j++ {
+			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("f_%d.py", j)), []byte("x"), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		repos = append(repos, SelectedRepository{RepoPath: dir, RemoteURL: "https://github.com/example/repo"})
+		snapshots[dir] = RepositorySnapshot{RepoPath: dir, FileCount: 5}
+	}
+
+	source := &GitSource{
+		Component:              "collector-git",
+		SnapshotWorkers:        2,
+		LargeRepoThreshold:    1,
+		LargeRepoMaxConcurrent: 1,
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{{
+				ObservedAt:   observedAt,
+				Repositories: repos,
+			}},
+		},
+		Snapshotter: &stubRepositorySnapshotter{snapshots: snapshots},
+	}
+
+	var count int
+	for {
+		gen, ok, err := source.Next(context.Background())
+		if err != nil {
+			t.Fatalf("Next() error = %v", err)
+		}
+		if !ok {
+			break
+		}
+		drainFactChannel(gen.Facts)
+		count++
+	}
+
+	if count != 5 {
+		t.Fatalf("completed %d repos, want 5 (all repos must drain)", count)
+	}
+}
+
+// orderTrackingSnapshotter applies per-path delays and records completion order.
+type orderTrackingSnapshotter struct {
+	inner     RepositorySnapshotter
+	delays    map[string]time.Duration
+	mu        *sync.Mutex
+	completed *[]string
+}
+
+func (s *orderTrackingSnapshotter) SnapshotRepository(
+	ctx context.Context,
+	repository SelectedRepository,
+) (RepositorySnapshot, error) {
+	if d, ok := s.delays[repository.RepoPath]; ok {
+		time.Sleep(d)
+	}
+	snap, err := s.inner.SnapshotRepository(ctx, repository)
+	s.mu.Lock()
+	*s.completed = append(*s.completed, repository.RepoPath)
+	s.mu.Unlock()
+	return snap, err
+}
+
 func TestGitSourceStreamResetsBetweenBatches(t *testing.T) {
 	t.Parallel()
 
