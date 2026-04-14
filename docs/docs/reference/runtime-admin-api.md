@@ -34,7 +34,11 @@ The shared mounted runtime contract currently covers:
 is provided by that service. The shared runtime metrics families are documented
 in [Telemetry Metrics](telemetry/metrics.md).
 
-Unsupported verbs return `405 Method Not Allowed` with `Allow: GET, HEAD`.
+Unsupported verbs return `405 Method Not Allowed` with an `Allow` header
+listing the methods supported by that endpoint. For GET/HEAD-only endpoints
+(`/healthz`, `/readyz`, `/admin/status`), the header is `Allow: GET, HEAD`.
+For POST-only endpoints (`/admin/replay`, `/admin/refinalize`), the header is
+`Allow: POST`.
 
 ## Response Shape
 

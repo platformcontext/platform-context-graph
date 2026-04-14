@@ -216,25 +216,15 @@ The current mapping and enrichment flow understands these families:
 
 The important constraint is not the tool name itself. The important constraint is whether the tool gives you a truthful, explainable source of repository or platform meaning.
 
-Terraform has one migration-specific caveat on the current rewrite branch:
+Terraform provider-schema support is now Go-owned on this branch:
 
-- the provider-schema-driven Terraform evidence subsystem is now split:
-  schema loading, identity-key inference, category classification, and
-  schema-driven generic Terraform evidence now exist in Go under
+- schema loading, identity-key inference, category classification, and
+  schema-driven generic Terraform evidence live in Go under
   `go/internal/terraformschema` and `go/internal/relationships`
-- Python still owns the remaining Terraform relationship runtime boundary
-  through:
-  `relationships/file_evidence.py`,
-  `relationships/evidence_terraform.py`, and
-  `relationships/terraform_evidence/**`
-- the live path runs through `relationships/file_evidence.py`,
-  `relationships/evidence_terraform.py`, and
-  `relationships/terraform_evidence/**`
-- that code is not just an offline schema packager; it still performs runtime
-  schema loading, identity-key inference, service-category classification, and
-  generic extractor registration for Terraform relationship evidence
-
-Treat that subsystem as active migration scope, not as a retired helper.
+- the packaged schema assets live under
+  `go/internal/terraformschema/schemas/*.json.gz`
+- Python no longer owns any part of the Terraform relationship runtime
+  boundary on this branch
 
 ## Terraform-Managed Runtime Variants
 
