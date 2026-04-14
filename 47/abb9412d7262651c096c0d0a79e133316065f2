@@ -1,0 +1,29 @@
+.github/workflows/e2e-tests.yml
+  1ca5ee6ce936a402 14-15,17-21,23-29,31-35,37-51,53-69,71-89,91-93
+.github/workflows/macos.yml
+  1ca5ee6ce936a402 16-17,19-20,25,28-30,32-34
+.github/workflows/test.yml
+  1ca5ee6ce936a402 10,20-21,23-24,29-31,33-35,37-38,40,42-43,45-46
+.github/workflows/build.yml
+  1ca5ee6ce936a402 19,22-23,26-27,34-35,37-38,40-43,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "47abb9412d7262651c096c0d0a79e133316065f2",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 779,
+      "overriden_lines": 0
+    }
+  }
+}
