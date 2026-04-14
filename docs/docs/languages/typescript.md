@@ -22,7 +22,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathTypeScript` | Compose-backed fixture verification | - |
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathTypeScript` | Compose-backed fixture verification | - |
 | Enums | `enums` | supported | `enums` | `name, line_number` | `node:Enum` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptSemanticsAndTypes` | Compose-backed fixture verification | - |
-| Type aliases | `type-aliases` | partial | `type_aliases` | `name, line_number` | `content:TypeAlias entity` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | Compose-backed fixture verification | Type aliases are extracted and materialized as content entities, but they are not yet first-class on the normal graph/language-query/API surfaces. |
+| Type aliases | `type-aliases` | partial | `type_aliases` | `name, line_number` | `content:TypeAlias entity` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes` | Compose-backed fixture verification | Type aliases are queryable through the Go content-backed language-query and content APIs, but graph/story/context surfacing remains partial. |
 | Decorators | `decorators` | partial | `classes` | `name, line_number` | `content:Entity.metadata.decorators` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | Compose-backed fixture verification | Decorator metadata is emitted and preserved in content entities, but not yet promoted into the normal query contract. |
 | Generics | `generics` | partial | `type_parameters` | `name, line_number, type_parameters` | `content:Entity.metadata.type_parameters` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | Compose-backed fixture verification | Type parameter metadata is preserved in content entities, but not yet surfaced as a first-class normal query model. |
 
@@ -39,12 +39,12 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
     TSX-specific framework evidence.
   - TypeScript participates in the same declarative Node HTTP and provider-pack
     program as JavaScript.
-  - Type aliases, decorators, and generics are already extracted and
-    materialized, but their normal graph/query surfacing remains partial.
+  - Type aliases are now queryable through the Go content-backed APIs, while
+    decorators and generics remain partial on the normal graph/query surfaces.
 
 
 ## Known Limitations
-- Type aliases are materialized as content entities, but not yet exposed as first-class normal query entities
+- Type aliases are queryable through the Go content-backed APIs, but graph/story/context surfacing remains partial
 - Mapped types and conditional types not fully captured
 - Namespace declarations may be incomplete
 - Declaration merging not tracked

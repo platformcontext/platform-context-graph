@@ -23,7 +23,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Decorators | `decorators` | partial | `functions` | `name, line_number, decorators` | `content:Entity.metadata.decorators` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonDecoratedFunctionsEmitDecoratorMetadata` | Compose-backed fixture verification | Decorator metadata is emitted and preserved in content entities, but is not yet promoted into the normal query contract. |
 | Async functions | `async-functions` | partial | `functions` | `name, line_number, async` | `content:Entity.metadata.async` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonAsyncFunctionsEmitAsyncFlag` | Compose-backed fixture verification | The async flag is emitted and preserved in content entities, but is not yet first-class on the normal query surface. |
 | Inheritance | `inheritance` | supported | `classes` | `name, line_number, bases` | `relationship:INHERITS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathPython` | Compose-backed fixture verification | - |
-| Type annotations | `type-annotations` | partial | `type_annotations` | `name, line_number, type` | `content:TypeAnnotation entity` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathPythonEmitsTypeAnnotationsBucket` | Compose-backed fixture verification | Type annotations are extracted and materialized as content entities, but are not yet exposed as first-class normal query entities. |
+| Type annotations | `type-annotations` | partial | `type_annotations` | `name, line_number, type` | `content:TypeAnnotation entity` | `go/internal/query/language_queries_test.go::TestHandleLanguageQuery_ContentBackedEntityTypes` | Compose-backed fixture verification | Type annotations are queryable through the Go content-backed language-query and content APIs, but graph/story/context surfacing remains partial. |
 
 ## Support Maturity
 - Grammar routing: `supported`
@@ -36,8 +36,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Notes:
   - Framework evidence for FastAPI and Flask is carried by the Go parser and
     indexing path.
-  - Decorators, async flags, and type annotations already survive parse and
-    content materialization, but their normal query surfacing remains partial.
+  - Type annotations are now queryable through the Go content-backed APIs,
+    while decorators and async flags remain partial on the normal graph/query
+    surfaces.
 
 
 ## Known Limitations
