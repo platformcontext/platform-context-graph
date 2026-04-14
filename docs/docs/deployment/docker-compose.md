@@ -21,6 +21,14 @@ Run it with:
 docker compose up --build
 ```
 
+For the exact verification matrix around Compose, package tests, and docs
+checks, use the [Local Testing Runbook](../reference/local-testing.md).
+
+Before you start the stack against host repositories, confirm that
+`PCG_FILESYSTEM_HOST_ROOT` points at an absolute real directory. Do not use a
+symlinked path, and do not use macOS `/tmp` because Docker resolves it through
+`/private/tmp`.
+
 This stack cannot run a real Kubernetes `ServiceMonitor`, but it can run the
 same thing a `ServiceMonitor` would scrape:
 
@@ -42,9 +50,6 @@ That script:
 - verifies the returned `run_id` also appears in the API logs
 - prints the Jaeger URL, the failing `run_id`, and the last admin status payload if the flow fails
 - auto-selects free host ports when the usual local defaults are already occupied
-
-The compose refinalize flow is graph-safe only. File-dependent bridge stages
-remain CLI-only until the Go-owned replacement removes the legacy seam.
 
 Set `PCG_KEEP_COMPOSE_STACK=true` if you want the stack left running after the verification completes.
 
@@ -123,8 +128,11 @@ PCG_FILESYSTEM_HOST_ROOT="$HOME/repos/example-org" \
 docker compose up --build
 ```
 
-Use an absolute host path for `PCG_FILESYSTEM_HOST_ROOT`; do not rely on a literal `~` in Compose
-environment values.
+Use an absolute host path for `PCG_FILESYSTEM_HOST_ROOT`; do not rely on a
+literal `~` in Compose environment values.
+
+If you need a disposable workspace copy for Compose, create a real directory
+such as `$HOME/tmp/pcg-compose-repos` rather than a symlinked scratch path.
 
 When Docker runs through Colima, prefer a host path under your home directory
 such as `$HOME/temp-repos-mount` or `$HOME/repos/example-org`. Colima does not

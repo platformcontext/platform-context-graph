@@ -98,6 +98,20 @@ Common causes:
 - Workspace mount permissions
 - Port conflicts — override with `NEO4J_HTTP_PORT`, `NEO4J_BOLT_PORT`, `PCG_HTTP_PORT`
 
+## Docker Compose cannot see mounted repositories
+
+**Cause:** `PCG_FILESYSTEM_HOST_ROOT` points at a symlinked path or an unsafe
+temporary path.
+
+**Fix:**
+
+1. Use an absolute real directory for `PCG_FILESYSTEM_HOST_ROOT`
+2. Do not use `~` in Compose environment values
+3. On macOS, do not use `/tmp`; use a real directory such as
+   `$HOME/tmp/pcg-compose-repos`
+4. If you copied repositories for Compose testing, copy them into that real
+   directory instead of symlinking them there
+
 ## Kubernetes deployment is unhealthy
 
 ```bash

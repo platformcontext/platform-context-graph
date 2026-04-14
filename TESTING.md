@@ -4,6 +4,10 @@ PlatformContextGraph now validates the Go-owned platform directly. The old
 Python service and pytest runtime suites are no longer part of the normal
 verification path on this branch.
 
+For the exact verification matrix, use
+[docs/docs/reference/local-testing.md](docs/docs/reference/local-testing.md).
+This file is the shorter overview.
+
 ## Quick Start
 
 Fast local pass:
@@ -76,6 +80,10 @@ docker compose up --build
 ```
 
 The fixture ecosystems used by the stack live under `tests/fixtures/ecosystems/`.
+
+When you point Compose at host repositories, set `PCG_FILESYSTEM_HOST_ROOT` to
+an absolute real directory. Do not use symlinks, and do not use macOS `/tmp`
+because Docker resolves it through `/private/tmp`.
 
 ## What We Verify
 

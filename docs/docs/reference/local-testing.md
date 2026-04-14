@@ -10,6 +10,16 @@ Use it to answer:
 - how do I run the local full-stack workflow
 - how do I validate metrics, traces, and the facts-first pipeline
 
+## Start Here
+
+Treat this file as the verification source of truth.
+
+Before changing runtime or deployment behavior, also read:
+
+- [Service Runtimes](../deployment/service-runtimes.md)
+- [Docker Compose](../deployment/docker-compose.md)
+- [Telemetry Overview](./telemetry/index.md)
+
 ## Default Rule
 
 Run the smallest test set that proves the change, then run the deployment and
@@ -29,6 +39,18 @@ export DEFAULT_DATABASE=neo4j
 export PCG_CONTENT_STORE_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
 export PCG_POSTGRES_DSN=postgresql://pcg:change-me@localhost:15432/platform_context_graph
 ```
+
+## Compose Host-Path Rules
+
+When you run the stack against host repositories, the bind root must be an
+absolute path to a real directory.
+
+- Do not use a symlinked path.
+- Do not rely on `~` expansion inside Compose files.
+- On macOS, do not use `/tmp` as the host root because Docker Desktop resolves
+  it through `/private/tmp`.
+- If you copied repositories for Compose testing, copy them into a real
+  directory under your home folder and point `PCG_FILESYSTEM_HOST_ROOT` there.
 
 ## Quick Verification Matrix
 
@@ -95,7 +117,8 @@ The migration bar is now structural rather than pytest-based.
 rg --files . -g '*.py' | rg -v '^tests/fixtures/'
 ```
 
-That command should return no runtime Python files.
+That command should return no runtime Python files. Only fixture data under
+`tests/fixtures/` is allowed to remain in Python.
 
 ## Bootstrap Projection Concurrency
 

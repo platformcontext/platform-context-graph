@@ -6,6 +6,15 @@ validate runtime changes honestly on the migration branch.
 
 For general contribution rules, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Canonical Docs
+
+Use these as the primary source of truth while you work:
+
+- [Local Testing Runbook](docs/docs/reference/local-testing.md)
+- [Docker Compose](docs/docs/deployment/docker-compose.md)
+- [Service Runtimes](docs/docs/deployment/service-runtimes.md)
+- [Telemetry Overview](docs/docs/reference/telemetry/index.md)
+
 ## Development Environment
 
 ```bash
@@ -22,6 +31,19 @@ go test ./internal/parser ./internal/collector ./internal/query ./internal/runti
 go test ./internal/terraformschema ./internal/relationships ./internal/storage/postgres -count=1
 golangci-lint run ./...
 ```
+
+## Go Engineering Rules
+
+This repository follows Google-aligned Go engineering defaults:
+
+- start with tests for behavior changes
+- write package and exported-symbol documentation that explains runtime intent,
+  not just mechanics
+- keep files under 500 lines; split modules before they become hard to review
+- run `gofmt`, focused `go test`, and `golangci-lint` before calling work ready
+
+If you change local verification or deployment behavior, update the matching
+runbook in `docs/docs/` in the same slice.
 
 ## Parser Architecture
 
@@ -126,4 +148,5 @@ Use the compose proof scripts for cross-service validation:
 ```
 
 Use `docs/docs/reference/local-testing.md` as the source of truth for when each
-proof is required.
+proof is required. When mounting host repositories into Compose, use an
+absolute non-symlink path for `PCG_FILESYSTEM_HOST_ROOT`.

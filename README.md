@@ -219,6 +219,8 @@ Start with the path that matches what you are doing:
   [System Architecture](docs/docs/architecture.md)
 - Verification:
   [Local Testing Runbook](docs/docs/reference/local-testing.md)
+- Local Compose:
+  [Docker Compose](docs/docs/deployment/docker-compose.md)
 
 ## Project Notes
 

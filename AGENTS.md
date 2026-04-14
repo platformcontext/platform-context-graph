@@ -3,6 +3,7 @@
 Read these first before changing runtime, deployment, or observability behavior:
 
 - `docs/docs/deployment/service-runtimes.md`
+- `docs/docs/deployment/docker-compose.md`
 - `docs/docs/reference/local-testing.md`
 - `docs/docs/reference/telemetry/index.md`
 
@@ -34,6 +35,11 @@ the command, env, and workload shape.
 
 Use `docs/docs/reference/local-testing.md` as the source of truth for the exact
 commands.
+
+If a change affects Docker Compose, also read
+`docs/docs/deployment/docker-compose.md`. Compose host mounts must use absolute
+real directories, not symlinks. On macOS, `/tmp` resolves through a symlink and
+is not a safe default bind root.
 
 ## Service Ownership
 
