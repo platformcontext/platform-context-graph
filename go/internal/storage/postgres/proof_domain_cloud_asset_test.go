@@ -83,20 +83,18 @@ func TestProofDomainCloudAssetResolutionFlowsCollectorToReducerIntent(t *testing
 	defer cancelCollector()
 	collectorService := collector.Service{
 		Source: &proofCollectorSource{
-			collected: []collector.CollectedGeneration{{
-				Scope:      scopeValue,
-				Generation: generation,
-				Facts:      envelopes,
-			}},
+			collected: []collector.CollectedGeneration{
+				collector.FactsFromSlice(scopeValue, generation, envelopes),
+			},
 		},
 		Committer: collectorCommitterFunc(func(
 			ctx context.Context,
 			scopeValue scope.IngestionScope,
 			generationValue scope.ScopeGeneration,
-			envelopes []facts.Envelope,
+			factStream <-chan facts.Envelope,
 		) error {
 			defer cancelCollector()
-			return ingestionStore.CommitScopeGeneration(ctx, scopeValue, generationValue, envelopes)
+			return ingestionStore.CommitScopeGeneration(ctx, scopeValue, generationValue, factStream)
 		}),
 		PollInterval: time.Millisecond,
 	}

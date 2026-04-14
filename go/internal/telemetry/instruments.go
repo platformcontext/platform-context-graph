@@ -58,6 +58,10 @@ type Instruments struct {
 	ReposSnapshotted      metric.Int64Counter
 	FilesParsed           metric.Int64Counter
 
+	// Streaming fact production metrics
+	FactBatchesCommitted metric.Int64Counter
+	GenerationFactCount  metric.Float64Histogram
+
 	// Observable gauges for autoscaling signals
 	QueueDepth         metric.Int64ObservableGauge
 	QueueOldestAge     metric.Float64ObservableGauge
@@ -268,6 +272,25 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 		return nil, fmt.Errorf("register FilesParsed counter: %w", err)
 	}
 
+	inst.FactBatchesCommitted, err = meter.Int64Counter(
+		"pcg_dp_fact_batches_committed_total",
+		metric.WithDescription("Total fact batches committed to Postgres during streaming ingestion"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register FactBatchesCommitted counter: %w", err)
+	}
+
+	// Use wide buckets for fact counts — repos range from 5 to 295k facts
+	generationFactBuckets := []float64{10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000, 300000}
+	inst.GenerationFactCount, err = meter.Float64Histogram(
+		"pcg_dp_generation_fact_count",
+		metric.WithDescription("Fact count per scope generation, for identifying outlier repos"),
+		metric.WithExplicitBucketBoundaries(generationFactBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register GenerationFactCount histogram: %w", err)
+	}
+
 	return inst, nil
 }
 
@@ -399,4 +422,22 @@ func AttrDomain(v string) attribute.KeyValue {
 // AttrPartitionKey returns a partition_key attribute for metric recording.
 func AttrPartitionKey(v string) attribute.KeyValue {
 	return attribute.String(MetricDimensionPartitionKey, v)
+}
+
+// RecordGOMEMLIMIT registers and records the applied GOMEMLIMIT as a gauge.
+// Call once at startup after instruments and memlimit are configured.
+func RecordGOMEMLIMIT(meter metric.Meter, limitBytes int64) error {
+	if meter == nil {
+		return nil
+	}
+	_, err := meter.Int64ObservableGauge(
+		"pcg_dp_gomemlimit_bytes",
+		metric.WithDescription("Configured GOMEMLIMIT in bytes"),
+		metric.WithUnit("By"),
+		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Observer) error {
+			o.Observe(limitBytes)
+			return nil
+		}),
+	)
+	return err
 }

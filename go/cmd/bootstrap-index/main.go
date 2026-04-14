@@ -100,6 +100,10 @@ func run(
 		return fmt.Errorf("telemetry instruments: %w", err)
 	}
 
+	memLimit := runtimecfg.ConfigureMemoryLimit(logger)
+	if err := telemetry.RecordGOMEMLIMIT(meter, memLimit); err != nil {
+		return fmt.Errorf("register gomemlimit gauge: %w", err)
+	}
 	logger.Info("starting bootstrap-index")
 
 	db, err := openDBFn(ctx, getenv)
@@ -210,7 +214,7 @@ func drainCollector(
 			return nil
 		}
 
-		factCount := len(collected.Facts)
+		factCount := collected.FactCount
 		if instruments != nil {
 			instruments.FactsEmitted.Add(cycleCtx, int64(factCount), metric.WithAttributes(
 				telemetry.AttrScopeID(collected.Scope.ScopeID),

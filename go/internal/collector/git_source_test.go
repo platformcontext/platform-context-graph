@@ -101,7 +101,10 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 	if got, want := string(firstCollected.Generation.TriggerKind), "snapshot"; got != want {
 		t.Fatalf("Generation.TriggerKind = %q, want %q", got, want)
 	}
-	if got, want := len(firstCollected.Facts), 5; got != want {
+
+	firstFacts := drainFactChannel(firstCollected.Facts)
+
+	if got, want := len(firstFacts), 5; got != want {
 		t.Fatalf("len(Facts) = %d, want %d", got, want)
 	}
 
@@ -113,12 +116,12 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		"shared_followup",
 	}
 	for i, want := range wantKinds {
-		if got := firstCollected.Facts[i].FactKind; got != want {
+		if got := firstFacts[i].FactKind; got != want {
 			t.Fatalf("Facts[%d].FactKind = %q, want %q", i, got, want)
 		}
 	}
 
-	repositoryFact := firstCollected.Facts[0]
+	repositoryFact := firstFacts[0]
 	importsMap, ok := repositoryFact.Payload["imports_map"].(map[string][]string)
 	if !ok {
 		t.Fatalf("repository fact imports_map = %#v, want map[string][]string", repositoryFact.Payload["imports_map"])
@@ -127,7 +130,7 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		t.Fatalf("repository fact imports_map Worker path = %q, want %q", got, want)
 	}
 
-	fileFact := firstCollected.Facts[1]
+	fileFact := firstFacts[1]
 	if got, want := fileFact.Payload["relative_path"], "app.py"; got != want {
 		t.Fatalf("file fact relative_path = %#v, want %#v", got, want)
 	}
@@ -135,7 +138,7 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		t.Fatal("file fact parsed_file_data missing, want present")
 	}
 
-	entityFact := firstCollected.Facts[3]
+	entityFact := firstFacts[3]
 	if got, want := entityFact.Payload["entity_id"], "content-entity:e_fn123456789"; got != want {
 		t.Fatalf("entity fact entity_id = %#v, want %#v", got, want)
 	}
@@ -163,7 +166,10 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 	if got, want := secondCollected.Scope.Metadata["repo_name"], filepathBase(secondRepoPath); got != want {
 		t.Fatalf("second scope repo_name = %q, want %q", got, want)
 	}
-	if got, want := len(secondCollected.Facts), 2; got != want {
+
+	secondFacts := drainFactChannel(secondCollected.Facts)
+
+	if got, want := len(secondFacts), 2; got != want {
 		t.Fatalf("len(second facts) = %d, want %d", got, want)
 	}
 	if got, want := selector.calls, 1; got != want {
@@ -246,10 +252,13 @@ func TestGitSourceNextEmitsDependencyOwnershipForDependencyRepositories(t *testi
 	if got, want := collected.Scope.Metadata["repo_name"], "@scope/service-lib"; got != want {
 		t.Fatalf("scope repo_name = %q, want %q", got, want)
 	}
-	if got, want := collected.Facts[0].Payload["is_dependency"], true; got != want {
+
+	facts := drainFactChannel(collected.Facts)
+
+	if got, want := facts[0].Payload["is_dependency"], true; got != want {
 		t.Fatalf("repository fact is_dependency = %#v, want %#v", got, want)
 	}
-	if got, want := collected.Facts[1].Payload["is_dependency"], true; got != want {
+	if got, want := facts[1].Payload["is_dependency"], true; got != want {
 		t.Fatalf("file fact is_dependency = %#v, want %#v", got, want)
 	}
 }
@@ -443,8 +452,9 @@ func TestBuildCollectedConcurrent(t *testing.T) {
 		if string(gen.Scope.ScopeKind) != "repository" {
 			t.Errorf("Scope.ScopeKind = %q, want %q", gen.Scope.ScopeKind, "repository")
 		}
-		if len(gen.Facts) < 2 {
-			t.Errorf("Facts count = %d, want >= 2", len(gen.Facts))
+		facts := drainFactChannel(gen.Facts)
+		if len(facts) < 2 {
+			t.Errorf("Facts count = %d, want >= 2", len(facts))
 		}
 	}
 }

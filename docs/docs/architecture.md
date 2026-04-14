@@ -302,6 +302,198 @@ flowchart LR
 | `PCG_SNAPSHOT_WORKERS` | min(NumCPU, 4) | Concurrent repo snapshot workers |
 | `PCG_FILESYSTEM_DIRECT` | false | Read repos in-place without copying |
 
+## Streaming Fact Persistence
+
+Within each repository generation, facts are streamed through a buffered
+channel directly to Postgres in batched multi-row INSERTs. This is the inner
+streaming layer — distinct from the outer collector streaming that delivers
+one generation at a time.
+
+### Problem
+
+A single repository can produce 295,000+ facts. Each content fact carries the
+raw file body as `content_body` in its payload. Accumulating all facts in
+memory before writing means the ingester must hold every file body for every
+repo simultaneously — several gigabytes for large repos, 60+ GiB across 878
+repos.
+
+### Design
+
+```mermaid
+sequenceDiagram
+    participant Builder as buildStreamingGeneration
+    participant Channel as facts channel (buffer=500)
+    participant Stream as streamFacts goroutine
+    participant Consumer as upsertStreamingFacts
+    participant Postgres as Postgres (batched INSERT)
+
+    Builder->>Channel: make(chan Envelope, 500)
+    Builder->>Stream: go streamFacts(ch, &snapshot)
+    Builder-->>Consumer: return CollectedGeneration{Facts: ch}
+
+    loop For each fact category
+        Stream->>Stream: build envelope from snapshot entry
+        Stream->>Channel: send envelope (blocks if full)
+        Stream->>Stream: nil snapshot entry (release for GC)
+    end
+    Stream->>Channel: close
+
+    loop For each batch of 500
+        Consumer->>Channel: receive up to 500 envelopes
+        Consumer->>Consumer: deduplicate within batch
+        Consumer->>Postgres: multi-row INSERT (500 rows, 13 cols)
+        Consumer->>Consumer: zero batch slice entries (release for GC)
+    end
+```
+
+### Progressive Memory Release
+
+The streaming path releases memory at three points:
+
+1. **Producer side** (`streamFacts`): After each fact envelope is sent to the
+   channel, the corresponding snapshot entry is set to `nil` or its zero value.
+   This releases the `ContentFileSnapshot.Body` (raw file source) for GC
+   immediately, not after all facts are built.
+
+2. **Consumer side** (`upsertStreamingFacts`): After each 500-fact batch is
+   committed to Postgres, the batch slice entries are zeroed. This releases
+   the `Payload` maps (which contain `content_body` strings) for GC before
+   the next batch arrives.
+
+3. **Goroutine lifecycle**: The channel is closed by the producer when all
+   facts are emitted. All error paths in the consumer call `drainFacts()` to
+   read and discard remaining channel entries, preventing the producer
+   goroutine from blocking forever on a full channel.
+
+### Memory Impact
+
+| Scenario | Without streaming | With streaming |
+| --- | --- | --- |
+| 295k-fact repo (commit phase) | ~3 GiB (all payloads in memory) | ~10 MiB (500 payloads in memory) |
+| 878 repos total (2 workers) | 60+ GiB peak RSS | 6-12 GiB peak RSS |
+| Per-batch live memory | O(all facts per repo) | O(batch size = 500) |
+
+### Batched Multi-Row INSERT
+
+Facts are written to Postgres using multi-row INSERT statements. Each batch
+inserts up to 500 rows with 13 columns per row (6,500 parameters), well under
+the Postgres limit of 65,535. This reduces 295k facts from 295k round trips
+to ~590 queries.
+
+```text
+INSERT INTO fact_records (
+    fact_id, scope_id, generation_id, fact_kind, stable_fact_key,
+    source_system, source_fact_key, source_uri, source_record_id,
+    observed_at, ingested_at, is_tombstone, payload
+) VALUES ($1..$13), ($14..$26), ... ($6488..$6500)
+ON CONFLICT (fact_id) DO UPDATE SET ...
+```
+
+Per-batch deduplication by `fact_id` prevents Postgres SQLSTATE 21000 errors
+on `ON CONFLICT DO UPDATE` when the same key appears twice in a single
+multi-row INSERT. Cross-batch duplicates are handled naturally by Postgres
+(later batch overwrites earlier).
+
+### JSONB Sanitization
+
+Fact payloads are sanitized before INSERT to handle two Postgres JSONB
+restrictions:
+
+- `\u0000` escape sequences are stripped (Postgres rejects SQLSTATE 22P05)
+- Raw control bytes `0x00-0x1F` (except tab, newline, carriage return) are
+  stripped (Postgres rejects SQLSTATE 22P02)
+
+Source code payloads may contain these bytes when repositories include binary
+files or non-UTF-8 content. A fast-path check avoids allocation for clean
+payloads (the common case).
+
+### Goroutine Leak Prevention
+
+Every error path that abandons the fact channel must drain it to unblock the
+producer goroutine:
+
+| Error path | Drain call |
+| --- | --- |
+| Validation failure (scope/generation mismatch) | `drainFacts(factStream)` before return |
+| Freshness skip (unchanged generation) | `drainFacts(factStream)` before return |
+| Transaction begin failure | `drainFacts(factStream)` before return |
+| Transaction rollback | `drainFacts(factStream)` in deferred cleanup |
+| Nil channel (no facts) | `upsertStreamingFacts` returns nil immediately |
+
+### Configuration
+
+| Parameter | Value | Description |
+| --- | --- | --- |
+| Channel buffer | 500 | Matches Postgres batch size for natural backpressure |
+| Batch size | 500 rows | 6,500 parameters per query |
+| Columns per row | 13 | fact_id through payload |
+| Deduplication | Per-batch | Last occurrence of each fact_id wins |
+
+### Key Files
+
+| File | Role |
+| --- | --- |
+| `go/internal/collector/git_fact_builder.go` | `buildStreamingGeneration`, `streamFacts` — producer |
+| `go/internal/storage/postgres/facts.go` | `upsertStreamingFacts`, `upsertFactBatch` — consumer |
+| `go/internal/storage/postgres/ingestion.go` | `CommitScopeGeneration`, `drainFacts` — transaction boundary |
+| `go/internal/collector/service.go` | `CollectedGeneration` type, `FactsFromSlice` test helper |
+
+## Dynamic Memory Limit (GOMEMLIMIT)
+
+Go data plane binaries automatically configure `GOMEMLIMIT` at startup based
+on the container's available memory. This prevents OOM kills by keeping the GC
+aggressive relative to the actual container size, while allowing full use of
+available memory on larger instances.
+
+### Priority Chain
+
+| Priority | Source | Example |
+| --- | --- | --- |
+| 1 (highest) | `GOMEMLIMIT` env var | `GOMEMLIMIT=8GiB` — operator override |
+| 2 | Container cgroup limit x 70% | 32 GiB container -> 22.4 GiB GOMEMLIMIT |
+| 3 (lowest) | Go default (no limit) | Bare metal dev, no container |
+
+The 70% ratio leaves 30% headroom for non-heap allocations: goroutine stacks,
+mmap'd files, kernel page cache, and the Go runtime itself. The floor is 512
+MiB — GOMEMLIMIT is never set below this regardless of the container size.
+
+### MADV_DONTNEED
+
+All binaries unconditionally set `GODEBUG=madvdontneed=1` at startup. This
+forces the Go runtime to release freed heap pages to the OS immediately via
+`madvise(MADV_DONTNEED)` instead of the default `MADV_FREE` which marks pages
+as reusable but keeps them in RSS. Without this setting, `docker stats` reports
+inflated RSS that never drops, and the kernel OOM killer may target the
+container based on pages that are actually free.
+
+### Cgroup Detection
+
+The binary reads the container memory limit from Linux cgroups:
+
+- **cgroups v2**: `/sys/fs/cgroup/memory.max` (returns `max` when unlimited)
+- **cgroups v1**: `/sys/fs/cgroup/memory/memory.limit_in_bytes` (returns a
+  huge number >2^62 when unlimited)
+
+On macOS or bare metal without cgroup filesystems, detection returns 0 and
+GOMEMLIMIT is left at the Go default.
+
+### Expected Memory Budget
+
+| Machine | Workers | GOMEMLIMIT (70%) | Peak RSS (expected) | Headroom |
+| --- | --- | --- | --- | --- |
+| 8 GiB | 2 | 5.6 GiB | ~6-7 GiB | ~1 GiB |
+| 16 GiB | 2 | 11.2 GiB | ~8-12 GiB | ~4 GiB |
+| 32 GiB | 4 | 22.4 GiB | ~12-20 GiB | ~12 GiB |
+| 64 GiB | 4 | 44.8 GiB | ~15-25 GiB | ~39 GiB |
+
+### Key Files
+
+| File | Role |
+| --- | --- |
+| `go/internal/runtime/memlimit.go` | `ConfigureMemoryLimit`, cgroup detection, MADV_DONTNEED |
+| `go/cmd/bootstrap-index/main.go` | Calls `ConfigureMemoryLimit` at startup |
+| `go/cmd/ingester/main.go` | Calls `ConfigureMemoryLimit` at startup |
+
 ## Deployed Control Plane
 
 ```mermaid

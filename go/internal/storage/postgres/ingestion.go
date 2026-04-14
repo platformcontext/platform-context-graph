@@ -106,22 +106,38 @@ func NewIngestionStore(db ExecQueryer) IngestionStore {
 	return store
 }
 
+// drainFacts reads and discards all remaining facts from the channel.
+// This prevents the producer goroutine from leaking when the consumer
+// must abort early (skip, validation error, rollback).
+func drainFacts(factStream <-chan facts.Envelope) {
+	if factStream == nil {
+		return
+	}
+	for range factStream {
+	}
+}
+
 // CommitScopeGeneration persists one scope generation worth of facts and
-// enqueues one projector work item for the same durable boundary.
+// enqueues one projector work item for the same durable boundary. Facts
+// arrive through a channel and are committed in batched multi-row INSERTs
+// so memory stays proportional to the batch size, not the total fact count.
 func (s IngestionStore) CommitScopeGeneration(
 	ctx context.Context,
 	scopeValue scope.IngestionScope,
 	generation scope.ScopeGeneration,
-	envelopes []facts.Envelope,
+	factStream <-chan facts.Envelope,
 ) error {
-	if err := validateProjectionInput(scopeValue, generation, envelopes); err != nil {
+	if err := validateGenerationInput(scopeValue, generation); err != nil {
+		drainFacts(factStream)
 		return err
 	}
 	skip, err := s.shouldSkipUnchangedGeneration(ctx, scopeValue.ScopeID, generation.FreshnessHint)
 	if err != nil {
+		drainFacts(factStream)
 		return fmt.Errorf("check active generation freshness: %w", err)
 	}
 	if skip {
+		drainFacts(factStream)
 		telemetry.RecordSkippedRefresh()
 		log.Printf(
 			"%s=true %s=%q %s=%q %s=%q %s=%q %s=%q",
@@ -140,17 +156,20 @@ func (s IngestionStore) CommitScopeGeneration(
 		return nil
 	}
 	if s.beginner == nil {
+		drainFacts(factStream)
 		return fmt.Errorf("transaction beginner is required")
 	}
 
 	tx, err := s.beginner.Begin(ctx)
 	if err != nil {
+		drainFacts(factStream)
 		return fmt.Errorf("begin ingestion transaction: %w", err)
 	}
 
 	committed := false
 	defer func() {
 		if !committed {
+			drainFacts(factStream)
 			_ = tx.Rollback()
 		}
 	}()
@@ -161,7 +180,7 @@ func (s IngestionStore) CommitScopeGeneration(
 	if err := upsertScopeGeneration(ctx, tx, generation); err != nil {
 		return fmt.Errorf("upsert scope generation: %w", err)
 	}
-	if err := upsertFacts(ctx, tx, envelopes); err != nil {
+	if err := upsertStreamingFacts(ctx, tx, factStream, scopeValue.ScopeID, generation.GenerationID); err != nil {
 		return err
 	}
 
@@ -223,25 +242,18 @@ func (s IngestionStore) shouldSkipUnchangedGeneration(
 	return strings.TrimSpace(activeFreshnessHint) == strings.TrimSpace(freshnessHint), nil
 }
 
-func validateProjectionInput(
+// validateGenerationInput checks scope/generation preconditions before
+// opening a transaction. Per-fact validation (scope_id, generation_id match)
+// happens inside upsertStreamingFacts as facts arrive from the channel.
+func validateGenerationInput(
 	scopeValue scope.IngestionScope,
 	generation scope.ScopeGeneration,
-	envelopes []facts.Envelope,
 ) error {
 	if err := generation.ValidateForScope(scopeValue); err != nil {
 		return err
 	}
 	if generation.IsTerminal() {
 		return fmt.Errorf("generation %q must not be terminal before projection", generation.GenerationID)
-	}
-
-	for _, envelope := range envelopes {
-		if envelope.ScopeID != scopeValue.ScopeID {
-			return fmt.Errorf("fact %q scope_id %q does not match scope %q", envelope.FactID, envelope.ScopeID, scopeValue.ScopeID)
-		}
-		if envelope.GenerationID != generation.GenerationID {
-			return fmt.Errorf("fact %q generation_id %q does not match generation %q", envelope.FactID, envelope.GenerationID, generation.GenerationID)
-		}
 	}
 
 	return nil

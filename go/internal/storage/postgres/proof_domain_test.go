@@ -14,6 +14,16 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/truth"
 )
 
+// testFactChannel converts a slice of envelopes to a closed channel for testing.
+func testFactChannel(envelopes []facts.Envelope) <-chan facts.Envelope {
+	ch := make(chan facts.Envelope, len(envelopes))
+	for _, e := range envelopes {
+		ch <- e
+	}
+	close(ch)
+	return ch
+}
+
 func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) {
 	t.Parallel()
 
@@ -101,24 +111,22 @@ func TestProofDomainWorkloadIdentityFlowsCollectorToReducerIntent(t *testing.T) 
 	defer cancelCollector()
 	collectorService := collector.Service{
 		Source: &proofCollectorSource{
-			collected: []collector.CollectedGeneration{{
-				Scope:      scopeValue,
-				Generation: generation,
-				Facts:      envelopes,
-			}},
+			collected: []collector.CollectedGeneration{
+				collector.FactsFromSlice(scopeValue, generation, envelopes),
+			},
 		},
 		Committer: collectorCommitterFunc(func(
 			ctx context.Context,
 			scopeValue scope.IngestionScope,
 			generationValue scope.ScopeGeneration,
-			envelopes []facts.Envelope,
+			factStream <-chan facts.Envelope,
 		) error {
 			defer cancelCollector()
 			return ingestionStore.CommitScopeGeneration(
 				ctx,
 				scopeValue,
 				generationValue,
-				envelopes,
+				factStream,
 			)
 		}),
 		PollInterval: time.Millisecond,
@@ -283,7 +291,7 @@ func TestProofDomainIncrementalRefreshLeavesActiveGenerationUnchangedForIdentica
 		context.Background(),
 		scopeValue,
 		generation,
-		proofRepositoryFacts(scopeValue.ScopeID, generation.GenerationID, "fact-1", "digest-aaa", generation.ObservedAt),
+		testFactChannel(proofRepositoryFacts(scopeValue.ScopeID, generation.GenerationID, "fact-1", "digest-aaa", generation.ObservedAt)),
 	); err != nil {
 		t.Fatalf("CommitScopeGeneration() error = %v, want nil", err)
 	}
@@ -299,7 +307,7 @@ func TestProofDomainIncrementalRefreshLeavesActiveGenerationUnchangedForIdentica
 		context.Background(),
 		scopeValue,
 		generation,
-		proofRepositoryFacts(scopeValue.ScopeID, generation.GenerationID, "fact-1", "digest-aaa", generation.ObservedAt),
+		testFactChannel(proofRepositoryFacts(scopeValue.ScopeID, generation.GenerationID, "fact-1", "digest-aaa", generation.ObservedAt)),
 	); err != nil {
 		t.Fatalf("CommitScopeGeneration() rerun error = %v, want nil", err)
 	}
@@ -357,7 +365,7 @@ func TestProofDomainIncrementalRefreshSupersedesActiveGenerationOnChangedRerun(t
 		context.Background(),
 		scopeValue,
 		generationA,
-		proofRepositoryFacts(scopeValue.ScopeID, generationA.GenerationID, "fact-1", "digest-aaa", generationA.ObservedAt),
+		testFactChannel(proofRepositoryFacts(scopeValue.ScopeID, generationA.GenerationID, "fact-1", "digest-aaa", generationA.ObservedAt)),
 	); err != nil {
 		t.Fatalf("CommitScopeGeneration() generation A error = %v, want nil", err)
 	}
@@ -374,7 +382,7 @@ func TestProofDomainIncrementalRefreshSupersedesActiveGenerationOnChangedRerun(t
 		context.Background(),
 		scopeValue,
 		generationB,
-		proofRepositoryFacts(scopeValue.ScopeID, generationB.GenerationID, "fact-2", "digest-bbb", generationB.ObservedAt),
+		testFactChannel(proofRepositoryFacts(scopeValue.ScopeID, generationB.GenerationID, "fact-2", "digest-bbb", generationB.ObservedAt)),
 	); err != nil {
 		t.Fatalf("CommitScopeGeneration() generation B error = %v, want nil", err)
 	}
@@ -416,14 +424,14 @@ type collectorCommitterFunc func(
 	context.Context,
 	scope.IngestionScope,
 	scope.ScopeGeneration,
-	[]facts.Envelope,
+	<-chan facts.Envelope,
 ) error
 
 func (f collectorCommitterFunc) CommitScopeGeneration(
 	ctx context.Context,
 	scopeValue scope.IngestionScope,
 	generationValue scope.ScopeGeneration,
-	envelopes []facts.Envelope,
+	factStream <-chan facts.Envelope,
 ) error {
-	return f(ctx, scopeValue, generationValue, envelopes)
+	return f(ctx, scopeValue, generationValue, factStream)
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 	"github.com/platformcontext/platform-context-graph/go/internal/repositoryidentity"
 )
 
@@ -18,8 +19,8 @@ func TestBuildCollectedGenerationDerivesStableFreshnessHintForEquivalentSnapshot
 	snapshotA := testCollectorSnapshot(repoPath, "def handler():\n    return 1\n", "digest-1")
 	snapshotB := testCollectorSnapshot(repoPath, "def handler():\n    return 1\n", "digest-1")
 
-	collectedA := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA, false)
-	collectedB := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB, false)
+	collectedA := buildStreamingGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA, false)
+	collectedB := buildStreamingGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB, false)
 
 	if got, want := collectedA.Generation.FreshnessHint, collectedB.Generation.FreshnessHint; got != want {
 		t.Fatalf("FreshnessHint mismatch for equivalent snapshots: got %q, want %q", got, want)
@@ -27,7 +28,7 @@ func TestBuildCollectedGenerationDerivesStableFreshnessHintForEquivalentSnapshot
 	if got, want := collectedA.Generation.GenerationID, collectedB.Generation.GenerationID; got != want {
 		t.Fatalf("GenerationID mismatch for equivalent snapshots: got %q, want %q", got, want)
 	}
-	if got, want := len(collectedA.Facts), len(collectedB.Facts); got != want {
+	if got, want := collectedA.FactCount, collectedB.FactCount; got != want {
 		t.Fatalf("Fact count mismatch for equivalent snapshots: got %d, want %d", got, want)
 	}
 }
@@ -42,8 +43,8 @@ func TestBuildCollectedGenerationChangesFreshnessHintForMateriallyDifferentSnaps
 	snapshotA := testCollectorSnapshot(repoPath, "def handler():\n    return 1\n", "digest-1")
 	snapshotB := testCollectorSnapshot(repoPath, "def handler():\n    return 2\n", "digest-2")
 
-	collectedA := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA, false)
-	collectedB := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB, false)
+	collectedA := buildStreamingGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA, false)
+	collectedB := buildStreamingGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB, false)
 
 	if got, want := collectedA.Generation.FreshnessHint, collectedB.Generation.FreshnessHint; got == want {
 		t.Fatalf("FreshnessHint = %q for materially different snapshots, want different values", got)
@@ -66,8 +67,8 @@ func TestBuildCollectedGenerationChangesFreshnessHintWhenImportsMapChanges(t *te
 		"Handler": {repoPath + "/handlers.py"},
 	}
 
-	collectedA := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA, false)
-	collectedB := buildCollectedGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB, false)
+	collectedA := buildStreamingGeneration(repoPath, repo, sourceRunID, observedAt, snapshotA, false)
+	collectedB := buildStreamingGeneration(repoPath, repo, sourceRunID, observedAt, snapshotB, false)
 
 	if got, want := collectedA.Generation.FreshnessHint, collectedB.Generation.FreshnessHint; got == want {
 		t.Fatalf("FreshnessHint = %q for changed imports_map, want different values", got)
@@ -107,19 +108,23 @@ func TestGitSourceNextKeepsGenerationAndFactsStableAcrossSnapshotChanges(t *test
 	if got, want := firstCollected.Generation.FreshnessHint, secondCollected.Generation.FreshnessHint; got == want {
 		t.Fatalf("FreshnessHint = %q for changed snapshot, want different values", got)
 	}
-	if got, want := len(firstCollected.Facts), len(secondCollected.Facts); got != want {
+
+	firstFacts := drainFactChannel(firstCollected.Facts)
+	secondFacts := drainFactChannel(secondCollected.Facts)
+
+	if got, want := len(firstFacts), len(secondFacts); got != want {
 		t.Fatalf("Fact count = %d, want %d", got, want)
 	}
-	if got, want := firstCollected.Facts[0].FactID, secondCollected.Facts[0].FactID; got != want {
+	if got, want := firstFacts[0].FactID, secondFacts[0].FactID; got != want {
 		t.Fatalf("repository fact ID = %q, want %q", got, want)
 	}
-	if got, want := firstCollected.Facts[2].FactID, secondCollected.Facts[2].FactID; got != want {
+	if got, want := firstFacts[2].FactID, secondFacts[2].FactID; got != want {
 		t.Fatalf("content fact ID = %q, want %q", got, want)
 	}
-	if got, want := firstCollected.Facts[2].Payload["content_body"], "def handler():\n    return 1\n"; got != want {
+	if got, want := firstFacts[2].Payload["content_body"], "def handler():\n    return 1\n"; got != want {
 		t.Fatalf("first content body = %#v, want %#v", got, want)
 	}
-	if got, want := secondCollected.Facts[2].Payload["content_body"], "def handler():\n    return 2\n"; got != want {
+	if got, want := secondFacts[2].Payload["content_body"], "def handler():\n    return 2\n"; got != want {
 		t.Fatalf("second content body = %#v, want %#v", got, want)
 	}
 }
@@ -146,6 +151,14 @@ func newTestCollectorGitSource(
 			},
 		},
 	}
+}
+
+func drainFactChannel(ch <-chan facts.Envelope) []facts.Envelope {
+	var result []facts.Envelope
+	for f := range ch {
+		result = append(result, f)
+	}
+	return result
 }
 
 func testCollectorRepositoryMetadata(repoPath string) repositoryidentity.Metadata {

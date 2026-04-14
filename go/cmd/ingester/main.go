@@ -47,6 +47,10 @@ func run(parent context.Context) error {
 		return fmt.Errorf("telemetry instruments: %w", err)
 	}
 
+	memLimit := runtimecfg.ConfigureMemoryLimit(logger)
+	if err := telemetry.RecordGOMEMLIMIT(meter, memLimit); err != nil {
+		return fmt.Errorf("register gomemlimit gauge: %w", err)
+	}
 	logger.Info("starting ingester")
 
 	db, err := runtimecfg.OpenPostgres(parent, os.Getenv)

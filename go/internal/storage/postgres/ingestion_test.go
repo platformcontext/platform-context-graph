@@ -53,7 +53,7 @@ func TestIngestionStoreCommitScopeGenerationPersistsProjectionInput(t *testing.T
 		},
 	}}
 
-	if err := store.CommitScopeGeneration(context.Background(), scopeValue, generation, envelopes); err != nil {
+	if err := store.CommitScopeGeneration(context.Background(), scopeValue, generation, testFactChannel(envelopes)); err != nil {
 		t.Fatalf("CommitScopeGeneration() error = %v, want nil", err)
 	}
 

@@ -260,6 +260,75 @@ ON CONFLICT (fact_id) DO UPDATE SET
     payload = EXCLUDED.payload
 `
 
+// upsertStreamingFacts reads fact envelopes from a channel and persists them
+// in batched multi-row INSERT statements. Each batch inserts up to
+// factBatchSize rows (500), matching the non-streaming path. Envelopes are
+// deduplicated within each batch to avoid Postgres SQLSTATE 21000 on
+// ON CONFLICT DO UPDATE; cross-batch duplicates are handled by Postgres
+// naturally (later batch overwrites earlier).
+//
+// Per-envelope validation ensures scope_id and generation_id match the
+// expected values, replacing the upfront validateProjectionInput check
+// that the slice-based path used.
+//
+// After each batch is committed, the batch slice is zeroed so Payload maps
+// (which contain content_body strings — raw file source) become GC-eligible
+// immediately rather than after the entire generation commits.
+func upsertStreamingFacts(
+	ctx context.Context,
+	db ExecQueryer,
+	factStream <-chan facts.Envelope,
+	scopeID string,
+	generationID string,
+) error {
+	if db == nil {
+		return fmt.Errorf("fact store database is required")
+	}
+	if factStream == nil {
+		return nil
+	}
+
+	batch := make([]facts.Envelope, 0, factBatchSize)
+
+	for envelope := range factStream {
+		if envelope.ScopeID != scopeID {
+			return fmt.Errorf(
+				"fact %q scope_id %q does not match scope %q",
+				envelope.FactID, envelope.ScopeID, scopeID,
+			)
+		}
+		if envelope.GenerationID != generationID {
+			return fmt.Errorf(
+				"fact %q generation_id %q does not match generation %q",
+				envelope.FactID, envelope.GenerationID, generationID,
+			)
+		}
+
+		batch = append(batch, envelope)
+
+		if len(batch) >= factBatchSize {
+			batch = deduplicateEnvelopes(batch)
+			if err := upsertFactBatch(ctx, db, batch); err != nil {
+				return err
+			}
+			for i := range batch {
+				batch[i] = facts.Envelope{}
+			}
+			batch = batch[:0]
+		}
+	}
+
+	// Flush remaining
+	if len(batch) > 0 {
+		batch = deduplicateEnvelopes(batch)
+		if err := upsertFactBatch(ctx, db, batch); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // deduplicateEnvelopes removes duplicate fact_ids, keeping the last occurrence.
 // This preserves the overwrite semantics of the old N+1 INSERT pattern.
 func deduplicateEnvelopes(envelopes []facts.Envelope) []facts.Envelope {

@@ -159,6 +159,67 @@ Important ownership boundaries:
 Do not collapse these boundaries casually. They are the foundation for future
 collectors, scaling, and backend work.
 
+## Observability Contract
+
+Every code change that touches runtime behavior MUST include telemetry. This
+is not optional. The system runs 878+ repos in production and operators need
+to find issues fast, resolve them fast, and tune performance from dashboards
+alone.
+
+### What to instrument
+
+| Change type | Required telemetry |
+| --- | --- |
+| New pipeline stage or worker | OTEL span wrapping the unit of work, duration histogram, success/failure counter |
+| New Postgres or Neo4j query | Duration histogram via `InstrumentedDB`, error counter |
+| New queue consumer | Claim duration histogram, processing duration histogram, depth gauge |
+| New retry/skip path | Counter with reason label, structured log with `failure_class` |
+| Memory or resource tuning | Observable gauge reporting configured limit |
+| Batch processing | Batch size histogram, batches committed counter |
+
+### How to instrument
+
+- **Metrics** go in `go/internal/telemetry/instruments.go`. All metric names
+  use `pcg_dp_` prefix. Register in `NewInstruments()` with explicit bucket
+  boundaries for histograms. Add dimension keys to `contract.go` if new.
+- **Spans** use `tracer.Start(ctx, telemetry.SpanXxx)`. Add span name
+  constants to `contract.go`. Attach `scope_id`, `generation_id`, and
+  `collector_kind` attributes when available.
+- **Structured logs** use `slog` with `telemetry.ScopeAttrs()` for scope
+  context, `telemetry.PhaseAttr()` for pipeline phase, and
+  `telemetry.FailureClassAttr()` for error classification.
+- **Log keys** are frozen in `contract.go`. Use existing keys before adding
+  new ones.
+
+### What NOT to instrument
+
+- Happy-path debug noise (e.g., "processing file X"). Use span events or
+  debug-level logs only if the information aids root-cause analysis.
+- Per-item metrics where per-batch is sufficient. 295k individual fact
+  metrics would overwhelm Prometheus cardinality.
+- High-cardinality label values (file paths, fact IDs) as metric attributes.
+  These belong in span attributes or structured logs, not counters.
+
+### Key dashboards to support
+
+When adding telemetry, consider these operator questions:
+
+1. **Is it stuck?** — Queue depth gauges, oldest item age, worker pool active
+2. **Is it slow?** — Duration histograms per stage, per query, per batch
+3. **Is it failing?** — Error counters with `failure_class`, retry counts
+4. **Is it using too much memory?** — `pcg_dp_gomemlimit_bytes` gauge,
+   `pcg_dp_generation_fact_count` histogram for outlier repos
+5. **Did it finish?** — `pcg_dp_facts_committed_total`, projection/reducer
+   completed counters, status endpoint health report
+
+### Reference files
+
+- `go/internal/telemetry/contract.go` — frozen dimension keys, span names, log keys
+- `go/internal/telemetry/instruments.go` — all metric instruments and registration
+- `go/internal/telemetry/providers.go` — OTEL provider bootstrap
+- `go/internal/telemetry/logger.go` — structured logger factory
+- `docs/docs/reference/telemetry/index.md` — operator-facing telemetry reference
+
 ## Deployment Notes
 
 Build once:

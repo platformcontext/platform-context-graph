@@ -449,7 +449,7 @@ func (s *GitSource) snapshotOneRepository(
 		return CollectedGeneration{}, fmt.Errorf("build repository metadata for %q: %w", repoPath, err)
 	}
 
-	generation := buildCollectedGeneration(
+	generation := buildStreamingGeneration(
 		repoPath,
 		metadata,
 		sourceRunID,
@@ -460,6 +460,7 @@ func (s *GitSource) snapshotOneRepository(
 
 	duration := time.Since(start).Seconds()
 	scopeID := generation.Scope.ScopeID
+	factCount := generation.FactCount
 
 	// Record metrics
 	if s.Instruments != nil {
@@ -476,7 +477,7 @@ func (s *GitSource) snapshotOneRepository(
 				telemetry.AttrScopeID(scopeID),
 			),
 		)
-		s.Instruments.FactsEmitted.Add(ctx, int64(len(generation.Facts)),
+		s.Instruments.FactsEmitted.Add(ctx, int64(factCount),
 			metric.WithAttributes(
 				telemetry.AttrCollectorKind("git"),
 				telemetry.AttrSourceSystem("git"),
@@ -491,7 +492,7 @@ func (s *GitSource) snapshotOneRepository(
 			slog.String("collector_kind", "git"),
 			slog.String("repo_path", repoPath),
 			slog.Int("file_count", snapshot.FileCount),
-			slog.Int("fact_count", len(generation.Facts)),
+			slog.Int("fact_count", factCount),
 		}
 		if workerID > 0 {
 			logAttrs = append(logAttrs, slog.Int("worker_id", workerID))

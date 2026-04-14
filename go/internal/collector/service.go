@@ -21,11 +21,30 @@ type Source interface {
 }
 
 // CollectedGeneration is one repo-scoped source generation gathered by the
-// collector boundary.
+// collector boundary. Facts are streamed through a channel so memory stays
+// proportional to the batch size, not the total number of facts per repo.
 type CollectedGeneration struct {
 	Scope      scope.IngestionScope
 	Generation scope.ScopeGeneration
-	Facts      []facts.Envelope
+	Facts      <-chan facts.Envelope
+	FactCount  int // estimated total for telemetry (may be approximate)
+}
+
+// FactsFromSlice creates a CollectedGeneration with facts from a pre-built
+// slice. The returned channel is pre-filled and closed, so it can be consumed
+// immediately without a background goroutine. Used in tests and for small
+// fact sets where streaming overhead isn't warranted.
+func FactsFromSlice(
+	s scope.IngestionScope,
+	g scope.ScopeGeneration,
+	envs []facts.Envelope,
+) CollectedGeneration {
+	ch := make(chan facts.Envelope, len(envs))
+	for _, e := range envs {
+		ch <- e
+	}
+	close(ch)
+	return CollectedGeneration{Scope: s, Generation: g, Facts: ch, FactCount: len(envs)}
 }
 
 // Committer owns the collector durable write boundary.
@@ -34,7 +53,7 @@ type Committer interface {
 		context.Context,
 		scope.IngestionScope,
 		scope.ScopeGeneration,
-		[]facts.Envelope,
+		<-chan facts.Envelope,
 	) error
 }
 
@@ -91,6 +110,8 @@ func (s Service) commitWithTelemetry(ctx context.Context, collected CollectedGen
 		defer span.End()
 	}
 
+	factCount := int64(collected.FactCount)
+
 	err := s.Committer.CommitScopeGeneration(
 		ctx,
 		collected.Scope,
@@ -107,9 +128,10 @@ func (s Service) commitWithTelemetry(ctx context.Context, collected CollectedGen
 			telemetry.AttrCollectorKind("git"),
 		)
 		s.Instruments.CollectorObserveDuration.Record(ctx, duration, attrs)
-		s.Instruments.FactsEmitted.Add(ctx, int64(len(collected.Facts)), attrs)
+		s.Instruments.FactsEmitted.Add(ctx, factCount, attrs)
+		s.Instruments.GenerationFactCount.Record(ctx, float64(factCount), attrs)
 		if err == nil {
-			s.Instruments.FactsCommitted.Add(ctx, int64(len(collected.Facts)), attrs)
+			s.Instruments.FactsCommitted.Add(ctx, factCount, attrs)
 		}
 	}
 
@@ -123,7 +145,7 @@ func (s Service) commitWithTelemetry(ctx context.Context, collected CollectedGen
 		for _, a := range scopeAttrs {
 			logAttrs = append(logAttrs, a)
 		}
-		logAttrs = append(logAttrs, slog.Int("fact_count", len(collected.Facts)))
+		logAttrs = append(logAttrs, slog.Int("fact_count", collected.FactCount))
 		logAttrs = append(logAttrs, slog.Float64("duration_seconds", duration))
 
 		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseEmission))

@@ -45,7 +45,10 @@ func TestRunAppliesSchemaAndDrainsCollectorAndProjector(t *testing.T) {
 			return collectorDeps{
 				source: &fakeSource{
 					generations: []collector.CollectedGeneration{
-						{Scope: scope.IngestionScope{ScopeID: "s1"}},
+						{
+							Scope:     scope.IngestionScope{ScopeID: "s1"},
+							FactCount: 0,
+						},
 					},
 				},
 				committer: &fakeCommitter{},
@@ -208,11 +211,15 @@ func (f *fakeSource) Next(context.Context) (collector.CollectedGeneration, bool,
 type fakeCommitter struct{}
 
 func (f *fakeCommitter) CommitScopeGeneration(
-	context.Context,
-	scope.IngestionScope,
-	scope.ScopeGeneration,
-	[]facts.Envelope,
+	_ context.Context,
+	_ scope.IngestionScope,
+	_ scope.ScopeGeneration,
+	factStream <-chan facts.Envelope,
 ) error {
+	if factStream != nil {
+		for range factStream {
+		}
+	}
 	return nil
 }
 
@@ -384,8 +391,9 @@ func TestDrainCollectorWithTelemetry(t *testing.T) {
 	source := &fakeSource{
 		generations: []collector.CollectedGeneration{
 			{
-				Scope: scope.IngestionScope{ScopeID: "s1"},
-				Facts: []facts.Envelope{{}, {}},
+				Scope:     scope.IngestionScope{ScopeID: "s1"},
+				Facts:     testFactChannel(facts.Envelope{}, facts.Envelope{}),
+				FactCount: 2,
 			},
 		},
 	}
@@ -398,6 +406,16 @@ func TestDrainCollectorWithTelemetry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("drainCollector() error = %v, want nil", err)
 	}
+}
+
+// testFactChannel creates a pre-filled closed channel for testing.
+func testFactChannel(envelopes ...facts.Envelope) <-chan facts.Envelope {
+	ch := make(chan facts.Envelope, len(envelopes))
+	for _, e := range envelopes {
+		ch <- e
+	}
+	close(ch)
+	return ch
 }
 
 // --- thread-safe fakes for concurrency tests ---

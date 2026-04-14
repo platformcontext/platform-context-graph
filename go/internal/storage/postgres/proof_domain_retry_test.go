@@ -54,7 +54,7 @@ func TestProofDomainReplayRetryReplacesStaleProjectionState(t *testing.T) {
 		context.Background(),
 		scopeValue,
 		generationA,
-		proofReplayFacts(scopeValue.ScopeID, generationA.GenerationID, "fact-1", "initial body", generationA.ObservedAt),
+		testFactChannel(proofReplayFacts(scopeValue.ScopeID, generationA.GenerationID, "fact-1", "initial body", generationA.ObservedAt)),
 	); err != nil {
 		t.Fatalf("CommitScopeGeneration() generation A error = %v, want nil", err)
 	}
@@ -80,7 +80,7 @@ func TestProofDomainReplayRetryReplacesStaleProjectionState(t *testing.T) {
 		context.Background(),
 		scopeValue,
 		generationB,
-		proofReplayFacts(scopeValue.ScopeID, generationB.GenerationID, "fact-2", "changed body", generationB.ObservedAt),
+		testFactChannel(proofReplayFacts(scopeValue.ScopeID, generationB.GenerationID, "fact-2", "changed body", generationB.ObservedAt)),
 	); err != nil {
 		t.Fatalf("CommitScopeGeneration() generation B error = %v, want nil", err)
 	}

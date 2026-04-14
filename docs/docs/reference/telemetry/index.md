@@ -222,6 +222,7 @@ endpoint via a composite handler.
 | `pcg_dp_shared_projection_cycles_total` | Total shared projection partition cycles | `domain`, `partition_key` |
 | `pcg_dp_repos_snapshotted_total` | Total repositories snapshotted | status (`succeeded`/`failed`/`skipped`) |
 | `pcg_dp_files_parsed_total` | Total files parsed | status (`succeeded`/`failed`/`skipped`) |
+| `pcg_dp_fact_batches_committed_total` | Total fact batches committed to Postgres during streaming ingestion | `scope_id`, `source_system` |
 
 #### Histograms
 
@@ -239,6 +240,16 @@ endpoint via a composite handler.
 | `pcg_dp_neo4j_query_duration_seconds` | Neo4j query duration | s | default |
 | `pcg_dp_repo_snapshot_duration_seconds` | Per-repository snapshot duration | s | 0.1 .. 300 |
 | `pcg_dp_file_parse_duration_seconds` | Per-file parse duration | s | 0.001 .. 2.5 |
+| `pcg_dp_generation_fact_count` | Fact count per scope generation | count | 10, 50, 100, 500, 1k, 5k, 10k, 50k, 100k, 300k |
+
+#### Observable Gauges
+
+| Metric | Description | Unit | Dimensions |
+| --- | --- | --- | --- |
+| `pcg_dp_gomemlimit_bytes` | Configured GOMEMLIMIT in bytes, reported at startup | By | `service_name` |
+| `pcg_dp_queue_depth` | Current queue depth by queue and status | count | `queue`, `status` |
+| `pcg_dp_queue_oldest_age_seconds` | Age of oldest queue item | s | `queue` |
+| `pcg_dp_worker_pool_active` | Current active worker count per pool | count | `pool` |
 
 #### Projector Stage Dimensions
 
@@ -347,6 +358,99 @@ Pre-built dashboard JSON definitions are in `docs/dashboards/`:
 Import into Grafana via **Dashboards > Import > Upload JSON**. All dashboards
 use `$service` and `$namespace` template variables matching Helm ServiceMonitor
 labels.
+
+## Streaming Ingestion And Memory Telemetry
+
+The Go data plane streams facts through buffered channels and commits them in
+batched multi-row INSERTs to bound memory during large-scale indexing. The
+following metrics exist specifically to give operators visibility into this
+streaming persistence path and the memory management that supports it.
+
+### Why These Metrics Exist
+
+Without streaming telemetry, operators cannot distinguish between:
+
+- a generation that is slow because it has 295k facts vs one that is stuck
+- memory pressure caused by one outlier repo vs systemic GC misconfiguration
+- a GOMEMLIMIT that is too low (thrashing GC) vs too high (OOM risk)
+
+These metrics close those gaps.
+
+### Fact Batch Commits (`pcg_dp_fact_batches_committed_total`)
+
+**What it tells you:** How many 500-row INSERT batches have been committed to
+Postgres. Each batch corresponds to one multi-row INSERT statement that wrote
+up to 500 fact records.
+
+**How to use it:**
+
+- **Throughput monitoring**: Rate of batch commits shows how fast facts are
+  flowing to Postgres. A drop indicates Postgres contention, slow I/O, or
+  a blocked producer goroutine.
+- **Correlation with snapshot duration**: Compare batch commit rate against
+  `pcg_dp_repo_snapshot_duration_seconds` to identify whether the bottleneck
+  is parsing (producer) or persistence (consumer).
+- **Batch count per generation**: Divide total batches by total generations to
+  understand average repo size. A sudden spike means a new large repo was
+  added to the fleet.
+
+### Generation Fact Count (`pcg_dp_generation_fact_count`)
+
+**What it tells you:** The distribution of fact counts per scope generation.
+Buckets range from 10 to 300,000 to capture the full range from tiny config
+repos to monorepos.
+
+**How to use it:**
+
+- **Outlier detection**: Repos in the 100k+ buckets are memory-intensive
+  outlier repos. If these appear unexpectedly, investigate whether a new repo
+  was added or an existing repo grew significantly.
+- **Capacity planning**: The histogram shape tells you whether the fleet is
+  dominated by small repos (most facts in the 10-500 bucket) or has a long
+  tail of large repos. This informs worker count and GOMEMLIMIT tuning.
+- **Regression detection**: If the median fact count per repo shifts
+  significantly between deployments, a parser change may be emitting
+  duplicate or missing facts.
+
+### GOMEMLIMIT Gauge (`pcg_dp_gomemlimit_bytes`)
+
+**What it tells you:** The GOMEMLIMIT value that the binary configured at
+startup, in bytes. This is the soft memory ceiling that triggers aggressive
+GC before the OOM killer fires.
+
+**How to use it:**
+
+- **Correlate with RSS**: Compare `pcg_dp_gomemlimit_bytes` with container
+  RSS from `container_memory_working_set_bytes` (cAdvisor) or `docker stats`.
+  If RSS consistently approaches GOMEMLIMIT, the container needs more memory
+  or fewer workers.
+- **Verify cgroup detection**: If the gauge reads 0, the binary did not detect
+  a container memory limit — either it is running on bare metal or the cgroup
+  filesystem is not mounted. Check startup logs for the `source` field.
+- **Cross-service comparison**: The gauge carries `service_name` so you can
+  confirm that bootstrap-index, ingester, and other binaries all have
+  appropriate limits for their workload profile.
+
+### Operator Decision Tree
+
+```text
+Is it OOMing?
+  YES -> Check pcg_dp_gomemlimit_bytes
+         Is it 0? -> Binary didn't detect cgroup limit. Set GOMEMLIMIT env var.
+         Is it close to container limit? -> Ratio is too high or container is too small.
+         Is RSS much higher than GOMEMLIMIT? -> Non-heap memory (stacks, mmap). Increase container.
+
+Is ingestion slow?
+  YES -> Check pcg_dp_fact_batches_committed_total rate
+         Dropping? -> Postgres contention. Check pcg_dp_postgres_query_duration_seconds.
+         Steady but slow? -> Check pcg_dp_generation_fact_count for outlier repos.
+         Zero? -> Producer goroutine may be stuck. Check pcg_dp_repo_snapshot_duration_seconds.
+
+Are facts missing after ingestion?
+  YES -> Check pcg_dp_generation_fact_count vs expected
+         Lower than expected? -> Parser may be skipping files. Check pcg_dp_files_parsed_total.
+         Higher than expected? -> Duplicate emission. Check deduplication in batch commits.
+```
 
 ## Prometheus And ServiceMonitor
 

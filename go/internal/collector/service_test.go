@@ -24,18 +24,16 @@ func TestServiceRunCommitsCollectedGenerationViaDurableBoundary(t *testing.T) {
 	defer cancel()
 
 	source := &stubSource{
-		collected: []CollectedGeneration{{
-			Scope:      scopeValue,
-			Generation: generationValue,
-			Facts:      envelopes,
-		}},
+		collected: []CollectedGeneration{
+			FactsFromSlice(scopeValue, generationValue, envelopes),
+		},
 	}
 	committer := &stubCommitter{
 		commit: func(
 			_ context.Context,
 			gotScope scope.IngestionScope,
 			gotGeneration scope.ScopeGeneration,
-			gotFacts []facts.Envelope,
+			gotFactStream <-chan facts.Envelope,
 		) error {
 			cancel()
 
@@ -52,6 +50,11 @@ func TestServiceRunCommitsCollectedGenerationViaDurableBoundary(t *testing.T) {
 					gotGeneration,
 					generationValue,
 				)
+			}
+
+			var gotFacts []facts.Envelope
+			for f := range gotFactStream {
+				gotFacts = append(gotFacts, f)
 			}
 			if len(gotFacts) != len(envelopes) {
 				t.Fatalf(
@@ -87,19 +90,20 @@ func TestServiceRunPropagatesDurableCommitErrors(t *testing.T) {
 
 	service := Service{
 		Source: &stubSource{
-			collected: []CollectedGeneration{{
-				Scope:      scopeValue,
-				Generation: generationValue,
-				Facts:      envelopes,
-			}},
+			collected: []CollectedGeneration{
+				FactsFromSlice(scopeValue, generationValue, envelopes),
+			},
 		},
 		Committer: &stubCommitter{
 			commit: func(
-				context.Context,
-				scope.IngestionScope,
-				scope.ScopeGeneration,
-				[]facts.Envelope,
+				_ context.Context,
+				_ scope.IngestionScope,
+				_ scope.ScopeGeneration,
+				factStream <-chan facts.Envelope,
 			) error {
+				// Drain the channel before returning error
+				for range factStream {
+				}
 				return wantErr
 			},
 		},
@@ -169,20 +173,22 @@ func (s *stubSource) Next(ctx context.Context) (CollectedGeneration, bool, error
 
 type stubCommitter struct {
 	calls  int
-	commit func(context.Context, scope.IngestionScope, scope.ScopeGeneration, []facts.Envelope) error
+	commit func(context.Context, scope.IngestionScope, scope.ScopeGeneration, <-chan facts.Envelope) error
 }
 
 func (s *stubCommitter) CommitScopeGeneration(
 	ctx context.Context,
 	scopeValue scope.IngestionScope,
 	generationValue scope.ScopeGeneration,
-	envelopes []facts.Envelope,
+	factStream <-chan facts.Envelope,
 ) error {
 	s.calls++
 	if s.commit != nil {
-		return s.commit(ctx, scopeValue, generationValue, envelopes)
+		return s.commit(ctx, scopeValue, generationValue, factStream)
 	}
-
+	// Drain the channel to prevent goroutine leaks
+	for range factStream {
+	}
 	return nil
 }
 
@@ -203,18 +209,16 @@ func TestServiceRunWithTelemetry(t *testing.T) {
 	logger := slog.Default()
 
 	source := &stubSource{
-		collected: []CollectedGeneration{{
-			Scope:      scopeValue,
-			Generation: generationValue,
-			Facts:      envelopes,
-		}},
+		collected: []CollectedGeneration{
+			FactsFromSlice(scopeValue, generationValue, envelopes),
+		},
 	}
 	committer := &stubCommitter{
 		commit: func(
 			_ context.Context,
 			gotScope scope.IngestionScope,
 			gotGeneration scope.ScopeGeneration,
-			gotFacts []facts.Envelope,
+			gotFactStream <-chan facts.Envelope,
 		) error {
 			cancel()
 
@@ -231,6 +235,11 @@ func TestServiceRunWithTelemetry(t *testing.T) {
 					gotGeneration,
 					generationValue,
 				)
+			}
+
+			var gotFacts []facts.Envelope
+			for f := range gotFactStream {
+				gotFacts = append(gotFacts, f)
 			}
 			if len(gotFacts) != len(envelopes) {
 				t.Fatalf(
@@ -269,18 +278,16 @@ func TestServiceRunNilTelemetry(t *testing.T) {
 	defer cancel()
 
 	source := &stubSource{
-		collected: []CollectedGeneration{{
-			Scope:      scopeValue,
-			Generation: generationValue,
-			Facts:      envelopes,
-		}},
+		collected: []CollectedGeneration{
+			FactsFromSlice(scopeValue, generationValue, envelopes),
+		},
 	}
 	committer := &stubCommitter{
 		commit: func(
 			_ context.Context,
 			gotScope scope.IngestionScope,
 			gotGeneration scope.ScopeGeneration,
-			gotFacts []facts.Envelope,
+			gotFactStream <-chan facts.Envelope,
 		) error {
 			cancel()
 
@@ -297,6 +304,11 @@ func TestServiceRunNilTelemetry(t *testing.T) {
 					gotGeneration,
 					generationValue,
 				)
+			}
+
+			var gotFacts []facts.Envelope
+			for f := range gotFactStream {
+				gotFacts = append(gotFacts, f)
 			}
 			if len(gotFacts) != len(envelopes) {
 				t.Fatalf(

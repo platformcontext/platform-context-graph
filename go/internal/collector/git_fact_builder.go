@@ -14,7 +14,17 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/repositoryidentity"
 )
 
-func buildCollectedGeneration(
+// factStreamBuffer is the channel buffer size for streaming fact production.
+// Matches the Postgres batch INSERT size so the channel drains at the same
+// rate the producer fills it.
+const factStreamBuffer = 500
+
+// buildStreamingGeneration computes scope/generation metadata from the full
+// snapshot (needed for the freshness hint hash), then launches a background
+// goroutine that streams facts through a channel. Snapshot entries are niled
+// as facts are emitted so file body strings become GC-eligible immediately
+// rather than after the entire generation commits.
+func buildStreamingGeneration(
 	repoPath string,
 	repo repositoryidentity.Metadata,
 	sourceRunID string,
@@ -30,56 +40,64 @@ func buildCollectedGeneration(
 		observedAt,
 		snapshotFreshnessHint(snapshot),
 	)
-	factEnvelopes := make([]facts.Envelope, 0, 1+len(snapshot.FileData)+len(snapshot.ContentFiles)+len(snapshot.ContentEntities)+1)
-	factEnvelopes = append(
-		factEnvelopes,
-		repositoryFactEnvelope(
-			repoPath,
-			repo,
-			scopeValue.ScopeID,
-			generation.GenerationID,
-			observedAt,
-			snapshot.FileCount,
-			snapshot.ImportsMap,
-			isDependency,
-		),
-	)
-	for _, fileData := range snapshot.FileData {
-		factEnvelopes = append(
-			factEnvelopes,
-			fileFactEnvelope(
-				repoPath,
-				repo.ID,
-				scopeValue.ScopeID,
-				generation.GenerationID,
-				observedAt,
-				fileData,
-				isDependency,
-			),
-		)
-	}
-	for _, fileSnapshot := range snapshot.ContentFiles {
-		factEnvelopes = append(
-			factEnvelopes,
-			contentFactEnvelope(repoPath, repo.ID, scopeValue.ScopeID, generation.GenerationID, observedAt, fileSnapshot),
-		)
-	}
-	for _, entitySnapshot := range snapshot.ContentEntities {
-		factEnvelopes = append(
-			factEnvelopes,
-			contentEntityFactEnvelope(repoPath, repo.ID, scopeValue.ScopeID, generation.GenerationID, observedAt, entitySnapshot),
-		)
-	}
-	factEnvelopes = append(
-		factEnvelopes,
-		workloadIdentityFactEnvelope(repoPath, repo.ID, scopeValue.ScopeID, generation.GenerationID, observedAt),
-	)
+	factCount := 1 + len(snapshot.FileData) + len(snapshot.ContentFiles) + len(snapshot.ContentEntities) + 1
+
+	factCh := make(chan facts.Envelope, factStreamBuffer)
+	go streamFacts(factCh, repoPath, repo, scopeValue.ScopeID, generation.GenerationID, observedAt, &snapshot, isDependency)
 
 	return CollectedGeneration{
 		Scope:      scopeValue,
 		Generation: generation,
-		Facts:      factEnvelopes,
+		Facts:      factCh,
+		FactCount:  factCount,
 	}
+}
+
+// streamFacts emits fact envelopes through the channel and progressively
+// releases snapshot data as it goes. Each ContentFileSnapshot.Body (raw file
+// source — the largest memory consumer per fact) becomes GC-eligible as soon
+// as its fact is sent, rather than after all 295k facts are built.
+func streamFacts(
+	ch chan<- facts.Envelope,
+	repoPath string,
+	repo repositoryidentity.Metadata,
+	scopeID string,
+	generationID string,
+	observedAt time.Time,
+	snapshot *RepositorySnapshot,
+	isDependency bool,
+) {
+	defer close(ch)
+
+	// Repository fact
+	ch <- repositoryFactEnvelope(
+		repoPath, repo, scopeID, generationID, observedAt,
+		snapshot.FileCount, snapshot.ImportsMap, isDependency,
+	)
+
+	// File metadata facts
+	for i, fileData := range snapshot.FileData {
+		ch <- fileFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt, fileData, isDependency)
+		snapshot.FileData[i] = nil
+	}
+	snapshot.FileData = nil
+
+	// Content file facts (the large ones — each contains content_body)
+	for i, fileSnapshot := range snapshot.ContentFiles {
+		ch <- contentFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt, fileSnapshot)
+		snapshot.ContentFiles[i] = ContentFileSnapshot{}
+	}
+	snapshot.ContentFiles = nil
+
+	// Content entity facts
+	for i, entitySnapshot := range snapshot.ContentEntities {
+		ch <- contentEntityFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt, entitySnapshot)
+		snapshot.ContentEntities[i] = ContentEntitySnapshot{}
+	}
+	snapshot.ContentEntities = nil
+
+	// Workload identity fact
+	ch <- workloadIdentityFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
 }
 
 func snapshotFreshnessHint(snapshot RepositorySnapshot) string {
