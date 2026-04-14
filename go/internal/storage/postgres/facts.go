@@ -156,10 +156,17 @@ func scanFactEnvelope(rows Rows) (facts.Envelope, error) {
 // Each batch inserts up to factBatchSize rows in a single query, reducing
 // 91k facts from 91k round trips to ~184 queries. This is critical for memory
 // because a slow consumer causes streaming workers to pile up generations.
+//
+// Envelopes are deduplicated by fact_id before batching because Postgres
+// rejects ON CONFLICT DO UPDATE when the same key appears twice in a single
+// multi-row INSERT. The last occurrence of each fact_id wins, matching the
+// overwrite semantics of the old N+1 pattern.
 func upsertFacts(ctx context.Context, db ExecQueryer, envelopes []facts.Envelope) error {
 	if db == nil {
 		return fmt.Errorf("fact store database is required")
 	}
+
+	envelopes = deduplicateEnvelopes(envelopes)
 
 	for i := 0; i < len(envelopes); i += factBatchSize {
 		end := i + factBatchSize
@@ -251,6 +258,28 @@ ON CONFLICT (fact_id) DO UPDATE SET
     is_tombstone = EXCLUDED.is_tombstone,
     payload = EXCLUDED.payload
 `
+
+// deduplicateEnvelopes removes duplicate fact_ids, keeping the last occurrence.
+// This preserves the overwrite semantics of the old N+1 INSERT pattern.
+func deduplicateEnvelopes(envelopes []facts.Envelope) []facts.Envelope {
+	if len(envelopes) == 0 {
+		return envelopes
+	}
+	seen := make(map[string]int, len(envelopes))
+	for i, e := range envelopes {
+		seen[e.FactID] = i
+	}
+	if len(seen) == len(envelopes) {
+		return envelopes // no duplicates
+	}
+	deduped := make([]facts.Envelope, 0, len(seen))
+	for i, e := range envelopes {
+		if seen[e.FactID] == i {
+			deduped = append(deduped, e)
+		}
+	}
+	return deduped
+}
 
 func validateFactEnvelope(envelope facts.Envelope) error {
 	observedAt := envelope.ObservedAt.UTC()

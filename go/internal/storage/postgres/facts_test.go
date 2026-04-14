@@ -146,6 +146,68 @@ func TestUpsertFactsBatchesLargeEnvelopes(t *testing.T) {
 	}
 }
 
+func TestUpsertFactsDeduplicatesByFactID(t *testing.T) {
+	t.Parallel()
+
+	db := &fakeExecQueryer{}
+
+	envelopes := []facts.Envelope{
+		{
+			FactID:        "dup-1",
+			ScopeID:       "scope-123",
+			GenerationID:  "generation-456",
+			FactKind:      "file",
+			StableFactKey: "file:old",
+			ObservedAt:    time.Date(2026, time.April, 14, 0, 0, 0, 0, time.UTC),
+			Payload:       map[string]any{"version": "old"},
+			SourceRef:     facts.Ref{SourceSystem: "git", FactKey: "key-old"},
+		},
+		{
+			FactID:        "unique-1",
+			ScopeID:       "scope-123",
+			GenerationID:  "generation-456",
+			FactKind:      "file",
+			StableFactKey: "file:unique",
+			ObservedAt:    time.Date(2026, time.April, 14, 0, 0, 0, 0, time.UTC),
+			SourceRef:     facts.Ref{SourceSystem: "git", FactKey: "key-unique"},
+		},
+		{
+			FactID:        "dup-1",
+			ScopeID:       "scope-123",
+			GenerationID:  "generation-456",
+			FactKind:      "file",
+			StableFactKey: "file:new",
+			ObservedAt:    time.Date(2026, time.April, 14, 0, 0, 0, 0, time.UTC),
+			Payload:       map[string]any{"version": "new"},
+			SourceRef:     facts.Ref{SourceSystem: "git", FactKey: "key-new"},
+		},
+	}
+
+	if err := upsertFacts(context.Background(), db, envelopes); err != nil {
+		t.Fatalf("upsertFacts() error = %v, want nil", err)
+	}
+
+	// Should produce 1 exec with 2 rows (dup-1 deduplicated, last wins).
+	if got, want := len(db.execs), 1; got != want {
+		t.Fatalf("exec count = %d, want %d", got, want)
+	}
+	if got, want := len(db.execs[0].args), 2*columnsPerFactRow; got != want {
+		t.Fatalf("arg count = %d, want %d (2 deduplicated rows)", got, want)
+	}
+	// First row should be unique-1, second should be dup-1 with "new" payload.
+	if got, want := db.execs[0].args[0].(string), "unique-1"; got != want {
+		t.Fatalf("first row fact_id = %q, want %q", got, want)
+	}
+	if got, want := db.execs[0].args[columnsPerFactRow].(string), "dup-1"; got != want {
+		t.Fatalf("second row fact_id = %q, want %q", got, want)
+	}
+	// Verify "new" payload won (last occurrence).
+	payload := db.execs[0].args[2*columnsPerFactRow-1].([]byte)
+	if !strings.Contains(string(payload), "new") {
+		t.Fatalf("deduped payload = %s, want 'new' version", payload)
+	}
+}
+
 func TestUpsertFactsEmptySliceNoOp(t *testing.T) {
 	t.Parallel()
 
