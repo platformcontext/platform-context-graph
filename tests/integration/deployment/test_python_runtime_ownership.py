@@ -1,16 +1,13 @@
-"""Tests that verify Python write-plane runtime ownership has been removed.
+"""Tests that verify Python write-plane runtime ownership stays removed.
 
 These tests document the complete inventory of Python runtime surfaces that
 must be deleted or quarantined before the Go write-plane conversion is
 complete. Each test targets one category of Python ownership.
 
 When all tests pass, the merge bar condition "no deployed runtime or write
-service starts from Python runtime entrypoints" is satisfied and the remaining
-Python resolution, facts, and status-store ownership surfaces have been
-removed.
-
-These tests are expected to FAIL until Chunk 2 (native collector/parser
-cutover) completes and the final Chunk 5 deletions are applied.
+service starts from Python runtime entrypoints" remains satisfied and the
+remaining Python resolution, facts, and status-store ownership surfaces stay
+deleted.
 """
 
 from __future__ import annotations

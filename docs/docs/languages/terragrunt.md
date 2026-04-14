@@ -6,20 +6,20 @@ Canonical source: `src/platform_context_graph/parsers/capabilities/specs/terragr
 ## Parser Contract
 - Language: `terragrunt`
 - Family: `iac`
-- Parser: `HCLTerraformParser`
-- Entrypoint: `src/platform_context_graph/parsers/languages/hcl_terraform.py`
+- Parser: `DefaultEngine (hcl)`
+- Entrypoint: `go/internal/parser/hcl_language.go`
 - Fixture repo: `tests/fixtures/ecosystems/terragrunt_comprehensive/`
-- Unit test suite: `tests/unit/parsers/test_hcl_terraform_parser.py`
+- Unit test suite: `go/internal/parser/engine_infra_test.go`
 - Integration test suite: `tests/integration/test_iac_graph.py::TestTerragruntGraph`
 
 ## Capability Checklist
 | Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
 |-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
-| Terragrunt config blocks (`include`, `locals`, `inputs`) | `terragrunt-config-blocks-include-locals-inputs` | supported | `terragrunt_configs` | `name, line_number` | `node:TerragruntConfig` | `tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config` | `tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created` | - |
-| Include block labels | `include-block-labels` | supported | `terragrunt_configs` | `name, line_number, includes` | `property:TerragruntConfig.includes` | `tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config` | `tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created` | - |
-| Locals block | `locals-block` | partial | `terragrunt_configs` | `name, line_number, locals` | `property:TerragruntConfig.locals` | `tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config` | `tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created` | Locals are preserved on the Terragrunt config payload, but they are not expanded into independently queryable graph entities. |
-| Inputs block | `inputs-block` | partial | `terragrunt_configs` | `name, line_number, inputs` | `property:TerragruntConfig.inputs` | `tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config` | `tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created` | Inputs are stored on the Terragrunt config node, but they are not normalized into separate variable-like graph nodes today. |
-| Source attribute in `terraform` block | `source-attribute-in-terraform-block` | supported | `source-attribute-in-terraform-block` | `terraform_source` | `property:TerragruntConfig.source` | `tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config` | `tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_has_terraform_source` | - |
+| Terragrunt config blocks (`include`, `locals`, `inputs`) | `terragrunt-config-blocks-include-locals-inputs` | supported | `terragrunt_configs` | `name, line_number` | `node:TerragruntConfig` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt` | `tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created` | - |
+| Include block labels | `include-block-labels` | supported | `terragrunt_configs` | `name, line_number, includes` | `property:TerragruntConfig.includes` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt` | `tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created` | - |
+| Locals block | `locals-block` | partial | `terragrunt_configs` | `name, line_number, locals` | `property:TerragruntConfig.locals` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt` | `tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created` | Locals are preserved on the Terragrunt config payload, but they are not expanded into independently queryable graph entities. |
+| Inputs block | `inputs-block` | partial | `terragrunt_configs` | `name, line_number, inputs` | `property:TerragruntConfig.inputs` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt` | `tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created` | Inputs are stored on the Terragrunt config node, but they are not normalized into separate variable-like graph nodes today. |
+| Source attribute in `terraform` block | `source-attribute-in-terraform-block` | supported | `source-attribute-in-terraform-block` | `terraform_source` | `property:TerragruntConfig.source` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt` | `tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_has_terraform_source` | - |
 
 ## Known Limitations
 - Dependency blocks and their `outputs` references are not modeled as graph edges

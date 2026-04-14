@@ -1,0 +1,248 @@
+package mcp
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+)
+
+// dispatchTool routes an MCP tool call to the appropriate internal HTTP endpoint.
+func dispatchTool(ctx context.Context, mux *http.ServeMux, toolName string, args map[string]any, logger *slog.Logger) (any, error) {
+	route, err := resolveRoute(toolName, args)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Debug("dispatch tool", "tool", toolName, "method", route.method, "path", route.path)
+
+	var body io.Reader
+	if route.body != nil {
+		encoded, err := json.Marshal(route.body)
+		if err != nil {
+			return nil, fmt.Errorf("encode request body: %w", err)
+		}
+		body = bytes.NewReader(encoded)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, route.method, route.path, body)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	// Set query parameters
+	if len(route.query) > 0 {
+		q := req.URL.Query()
+		for k, v := range route.query {
+			q.Set(k, v)
+		}
+		req.URL.RawQuery = q.Encode()
+	}
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code >= 400 {
+		return nil, fmt.Errorf("HTTP %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var result any
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		return rec.Body.String(), nil
+	}
+	return result, nil
+}
+
+type route struct {
+	method string
+	path   string
+	body   any
+	query  map[string]string
+}
+
+func str(args map[string]any, key string) string {
+	v, _ := args[key].(string)
+	return v
+}
+
+func intOr(args map[string]any, key string, def int) int {
+	v, ok := args[key].(float64)
+	if !ok {
+		return def
+	}
+	return int(v)
+}
+
+func boolOr(args map[string]any, key string, def bool) bool {
+	v, ok := args[key].(bool)
+	if !ok {
+		return def
+	}
+	return v
+}
+
+// resolveRoute maps a tool name and its arguments to an internal HTTP route.
+func resolveRoute(toolName string, args map[string]any) (*route, error) {
+	switch toolName {
+	// ── Code ──
+	case "find_code":
+		return &route{method: "POST", path: "/api/v0/code/search", body: map[string]any{
+			"query": str(args, "query"), "repo_id": str(args, "repo_id"),
+			"limit": intOr(args, "limit", 10), "exact": boolOr(args, "exact", false),
+		}}, nil
+	case "analyze_code_relationships":
+		return &route{method: "POST", path: "/api/v0/code/relationships", body: map[string]any{
+			"entity_id": str(args, "target"), "query_type": str(args, "query_type"),
+		}}, nil
+	case "find_dead_code":
+		return &route{method: "POST", path: "/api/v0/code/dead-code", body: map[string]any{
+			"repo_id": str(args, "repo_id"),
+		}}, nil
+	case "calculate_cyclomatic_complexity":
+		return &route{method: "POST", path: "/api/v0/code/complexity", body: map[string]any{
+			"entity_id": str(args, "function_name"), "repo_id": str(args, "repo_id"),
+		}}, nil
+	case "find_most_complex_functions":
+		return &route{method: "POST", path: "/api/v0/code/complexity", body: map[string]any{
+			"repo_id": str(args, "repo_id"), "limit": intOr(args, "limit", 10),
+		}}, nil
+
+	// ── Repositories ──
+	case "list_indexed_repositories":
+		return &route{method: "GET", path: "/api/v0/repositories"}, nil
+	case "get_repository_stats":
+		repoID := str(args, "repo_id")
+		if repoID == "" {
+			return &route{method: "GET", path: "/api/v0/repositories"}, nil
+		}
+		return &route{method: "GET", path: "/api/v0/repositories/" + url.PathEscape(repoID) + "/stats"}, nil
+	case "get_repo_context":
+		return &route{method: "GET", path: "/api/v0/repositories/" + url.PathEscape(str(args, "repo_id")) + "/context"}, nil
+	case "get_repo_story":
+		return &route{method: "GET", path: "/api/v0/repositories/" + url.PathEscape(str(args, "repo_id")) + "/story"}, nil
+	case "get_repo_summary":
+		// repo_summary uses repo_name, map to context endpoint
+		name := str(args, "repo_name")
+		if name == "" {
+			name = str(args, "repo_id")
+		}
+		return &route{method: "GET", path: "/api/v0/repositories/" + url.PathEscape(name) + "/context"}, nil
+	case "get_repository_coverage":
+		q := map[string]string{}
+		if runID := str(args, "run_id"); runID != "" {
+			q["run_id"] = runID
+		}
+		return &route{method: "GET", path: "/api/v0/repositories/" + url.PathEscape(str(args, "repo_id")) + "/coverage", query: q}, nil
+	case "list_repository_coverage":
+		q := map[string]string{}
+		if runID := str(args, "run_id"); runID != "" {
+			q["run_id"] = runID
+		}
+		if boolOr(args, "only_incomplete", false) {
+			q["only_incomplete"] = "true"
+		}
+		return &route{method: "GET", path: "/api/v0/repositories/coverage", query: q}, nil
+
+	// ── Entities ──
+	case "resolve_entity":
+		return &route{method: "POST", path: "/api/v0/entities/resolve", body: args}, nil
+	case "get_entity_context":
+		q := map[string]string{}
+		if env := str(args, "environment"); env != "" {
+			q["environment"] = env
+		}
+		return &route{method: "GET", path: "/api/v0/entities/" + url.PathEscape(str(args, "entity_id")) + "/context", query: q}, nil
+	case "get_workload_context":
+		q := map[string]string{}
+		if env := str(args, "environment"); env != "" {
+			q["environment"] = env
+		}
+		return &route{method: "GET", path: "/api/v0/workloads/" + url.PathEscape(str(args, "workload_id")) + "/context", query: q}, nil
+	case "get_workload_story":
+		q := map[string]string{}
+		if env := str(args, "environment"); env != "" {
+			q["environment"] = env
+		}
+		return &route{method: "GET", path: "/api/v0/workloads/" + url.PathEscape(str(args, "workload_id")) + "/story", query: q}, nil
+	case "get_service_context":
+		q := map[string]string{}
+		if env := str(args, "environment"); env != "" {
+			q["environment"] = env
+		}
+		return &route{method: "GET", path: "/api/v0/services/" + url.PathEscape(str(args, "workload_id")) + "/context", query: q}, nil
+	case "get_service_story":
+		q := map[string]string{}
+		if env := str(args, "environment"); env != "" {
+			q["environment"] = env
+		}
+		return &route{method: "GET", path: "/api/v0/services/" + url.PathEscape(str(args, "workload_id")) + "/story", query: q}, nil
+
+	// ── Content ──
+	case "get_file_content":
+		return &route{method: "POST", path: "/api/v0/content/files/read", body: map[string]any{
+			"repo_id": str(args, "repo_id"), "relative_path": str(args, "relative_path"),
+		}}, nil
+	case "get_file_lines":
+		return &route{method: "POST", path: "/api/v0/content/files/lines", body: args}, nil
+	case "get_entity_content":
+		return &route{method: "POST", path: "/api/v0/content/entities/read", body: map[string]any{
+			"entity_id": str(args, "entity_id"),
+		}}, nil
+	case "search_file_content":
+		return &route{method: "POST", path: "/api/v0/content/files/search", body: args}, nil
+	case "search_entity_content":
+		return &route{method: "POST", path: "/api/v0/content/entities/search", body: args}, nil
+
+	// ── Infra ──
+	case "find_infra_resources":
+		return &route{method: "POST", path: "/api/v0/infra/resources/search", body: map[string]any{
+			"query": str(args, "query"), "category": str(args, "category"),
+		}}, nil
+	case "analyze_infra_relationships":
+		return &route{method: "POST", path: "/api/v0/infra/relationships", body: map[string]any{
+			"entity_id": str(args, "target"), "relationship_type": str(args, "query_type"),
+		}}, nil
+	case "get_ecosystem_overview":
+		return &route{method: "GET", path: "/api/v0/ecosystem/overview"}, nil
+
+	// ── Impact ──
+	case "find_blast_radius":
+		return &route{method: "POST", path: "/api/v0/impact/blast-radius", body: args}, nil
+	case "find_change_surface":
+		return &route{method: "POST", path: "/api/v0/impact/change-surface", body: args}, nil
+	case "trace_resource_to_code":
+		return &route{method: "POST", path: "/api/v0/impact/trace-resource-to-code", body: args}, nil
+	case "explain_dependency_path":
+		return &route{method: "POST", path: "/api/v0/impact/explain-dependency-path", body: args}, nil
+
+	// ── Compare ──
+	case "compare_environments":
+		return &route{method: "POST", path: "/api/v0/compare/environments", body: args}, nil
+
+	// ── Status ──
+	case "list_ingesters":
+		return &route{method: "GET", path: "/api/v0/status/ingesters"}, nil
+	case "get_ingester_status":
+		ingester := str(args, "ingester")
+		if ingester == "" {
+			ingester = "repository"
+		}
+		return &route{method: "GET", path: "/api/v0/status/ingesters/" + url.PathEscape(ingester)}, nil
+	case "get_index_status":
+		q := map[string]string{}
+		if target := str(args, "target"); target != "" {
+			q["target"] = target
+		}
+		return &route{method: "GET", path: "/api/v0/status/index", query: q}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown tool: %s", toolName)
+	}
+}

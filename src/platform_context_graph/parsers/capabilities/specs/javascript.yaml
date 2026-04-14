@@ -1,11 +1,11 @@
 language: javascript
 title: JavaScript Parser
 family: language
-parser: JavascriptTreeSitterParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/javascript.py
+parser: DefaultEngine (javascript)
+parser_entrypoint: go/internal/parser/javascript_language.go
 doc_path: docs/docs/languages/javascript.md
 fixture_repo: tests/fixtures/ecosystems/javascript_comprehensive/
-unit_test_file: tests/unit/parsers/test_javascript_parser.py
+unit_test_file: go/internal/parser/engine_javascript_semantics_test.go
 integration_test_suite: tests/integration/test_language_graph.py::TestJavaScriptGraph
 support_maturity:
   grammar_routing: supported
@@ -43,7 +43,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_simple_declarations
+  unit_test: go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_runtime_surface
 - id: function-expressions
   name: Function expressions
@@ -55,7 +55,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface
+  unit_test: go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_runtime_surface
 - id: arrow-functions-named
   name: Arrow functions (named)
@@ -67,7 +67,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface
+  unit_test: go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_runtime_surface
 - id: method-definitions
   name: Method definitions
@@ -79,7 +79,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface
+  unit_test: go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_runtime_surface
 - id: classes
   name: Classes
@@ -91,7 +91,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface
+  unit_test: go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_runtime_surface
 - id: imports-import-require
   name: Imports (`import`/`require`)
@@ -103,7 +103,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: IMPORTS
-  unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface
+  unit_test: go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_runtime_surface
 - id: function-calls
   name: Function calls
@@ -115,7 +115,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface
+  unit_test: go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_runtime_surface
 - id: member-call-expressions
   name: Member call expressions
@@ -127,7 +127,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface
+  unit_test: go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_runtime_surface
 - id: variables
   name: Variables
@@ -139,7 +139,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface
+  unit_test: go/internal/parser/engine_test.go::TestDefaultEngineParsePathJavaScript
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_runtime_surface
 - id: jsdoc-comments
   name: JSDoc comments
@@ -152,7 +152,7 @@ capabilities:
   graph_surface:
     kind: property
     target: Function.docstring
-  unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface
+  unit_test: go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathJavaScriptDocstringsAndMethodKinds
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_jsdoc_metadata_persisted
   rationale: The parser still leaves JavaScript `docstring` fields empty, but indexed
     graph nodes now surface docstrings via content enrichment during ingest.
@@ -167,7 +167,7 @@ capabilities:
   graph_surface:
     kind: property
     target: Function.type
-  unit_test: tests/unit/parsers/test_javascript_parser.py::test_parse_javascript_runtime_surface
+  unit_test: go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathJavaScriptDocstringsAndMethodKinds
   integration_test: tests/integration/test_language_graph.py::TestJavaScriptGraph::test_getter_metadata_persisted
   rationale: Getter methods are emitted with `type='getter'`, but setter and async
     metadata are not captured consistently enough to claim full support.

@@ -79,6 +79,7 @@ func parseHelmValues(path string, source []byte) map[string]any {
 	if !ok {
 		return nil
 	}
+	delete(document, "__pcg_line_number")
 	return map[string]any{
 		"name":           strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
 		"line_number":    1,

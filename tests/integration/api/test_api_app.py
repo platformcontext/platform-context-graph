@@ -284,7 +284,7 @@ def test_create_app_uses_cli_version_fallback_when_package_metadata_is_missing(
     assert app.version == cli_main.get_version()
 
 
-def test_create_service_app_exposes_http_api_and_mcp_routes() -> None:
+def test_create_service_app_exposes_http_api_routes() -> None:
     pytest.importorskip("httpx")
     from starlette.testclient import TestClient
 
@@ -292,80 +292,58 @@ def test_create_service_app_exposes_http_api_and_mcp_routes() -> None:
 
     app = api_app.create_service_app(
         query_services_dependency=lambda: {"query": "services"},
-        mcp_server_dependency=lambda: None,
     )
 
     route_paths = {route.path for route in app.routes}
-    assert "/mcp/sse" in route_paths
-    assert "/mcp/message" in route_paths
+    # MCP routes are no longer served by Python API - they're handled by Go MCP server
+    assert "/mcp/sse" not in route_paths
+    assert "/mcp/message" not in route_paths
 
     with TestClient(app) as client:
         assert client.get("/health").status_code == 200
         assert client.get("/api/v0/health").status_code == 200
-        assert (
-            client.post(
-                "/mcp/message", json={"jsonrpc": "2.0", "method": "tools/list", "id": 1}
-            ).status_code
-            == 503
-        )
 
 
-def test_create_service_app_requires_bearer_auth_for_http_mcp_routes(
+def test_create_service_app_no_longer_serves_mcp_routes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """MCP routes are now served by the Go MCP server, not the Python API."""
     pytest.importorskip("httpx")
     from starlette.testclient import TestClient
-    from unittest.mock import AsyncMock
 
     api_app = importlib.import_module("platform_context_graph.api.app")
 
     monkeypatch.setenv("PCG_API_KEY", "test-api-key")
-    server = SimpleNamespace(
-        code_watcher=None,
-        shutdown=lambda: None,
-        _handle_jsonrpc_request=AsyncMock(
-            return_value=({"jsonrpc": "2.0", "id": 1, "result": {"tools": []}}, 200)
-        ),
-    )
 
     app = api_app.create_service_app(
         query_services_dependency=lambda: {"query": "services"},
-        mcp_server_dependency=lambda: server,
     )
 
     with TestClient(app) as client:
-        unauthorized_message = client.post(
-            "/mcp/message",
-            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
-        )
-        authorized_message = client.post(
+        # MCP routes should not exist (even with valid auth)
+        mcp_message_response = client.post(
             "/mcp/message",
             json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
             headers={"Authorization": "Bearer test-api-key"},
         )
-        unauthorized_sse = client.get("/mcp/sse")
+        mcp_sse_response = client.get(
+            "/mcp/sse",
+            headers={"Authorization": "Bearer test-api-key"},
+        )
 
-    assert unauthorized_message.status_code == 401
-    assert authorized_message.status_code == 200
-    assert authorized_message.json()["result"] == {"tools": []}
-    assert unauthorized_sse.status_code == 401
+    assert mcp_message_response.status_code == 404
+    assert mcp_sse_response.status_code == 404
 
 
-def test_create_service_app_starts_without_code_watcher_for_api_role() -> None:
+def test_create_service_app_starts_without_mcp_dependency() -> None:
+    """Service app no longer requires MCP server dependency."""
     pytest.importorskip("httpx")
     from starlette.testclient import TestClient
-    from unittest.mock import MagicMock
 
     api_app = importlib.import_module("platform_context_graph.api.app")
 
-    server = SimpleNamespace(
-        code_watcher=None,
-        shutdown=MagicMock(),
-    )
-
     app = api_app.create_service_app(
         query_services_dependency=lambda: {"query": "services"},
-        mcp_server_dependency=lambda: server,
     )
 
     with TestClient(app) as client:
@@ -373,7 +351,6 @@ def test_create_service_app_starts_without_code_watcher_for_api_role() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-    server.shutdown.assert_called_once()
 
 
 def test_create_app_exposes_repository_ingester_status_route() -> None:

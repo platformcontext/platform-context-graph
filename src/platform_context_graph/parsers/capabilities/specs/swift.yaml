@@ -1,11 +1,11 @@
 language: swift
 title: Swift Parser
 family: language
-parser: SwiftTreeSitterParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/swift.py
+parser: DefaultEngine (swift)
+parser_entrypoint: go/internal/parser/swift_language.go
 doc_path: docs/docs/languages/swift.md
 fixture_repo: tests/fixtures/ecosystems/swift_comprehensive/
-unit_test_file: tests/unit/parsers/test_swift_parser.py
+unit_test_file: go/internal/parser/engine_swift_semantics_test.go
 integration_test_suite: tests/integration/test_language_graph.py::TestSwiftGraph
 capabilities:
 - id: functions
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  unit_test: go/internal/parser/engine_swift_semantics_test.go::TestDefaultEngineParsePathSwiftEmitsBasesAndFunctionArgs
   integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
 - id: initializers-init
   name: Initializers (`init`)
@@ -30,7 +30,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_calls_and_initializers_without_protocol_nodes
+  unit_test: go/internal/parser/engine_swift_semantics_test.go::TestDefaultEngineParsePathSwiftEmitsImportAndCallMetadata
   integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
 - id: classes
   name: Classes
@@ -42,7 +42,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathSwiftFixtures
   integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
 - id: structs
   name: Structs
@@ -54,7 +54,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Struct
-  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathSwiftFixtures
   integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
 - id: enums
   name: Enums
@@ -66,22 +66,20 @@ capabilities:
   graph_surface:
     kind: node
     target: Enum
-  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathSwiftFixtures
   integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
 - id: protocols
   name: Protocols
-  status: unsupported
+  status: supported
   extracted_bucket: protocols
   required_fields:
   - name
   - line_number
   graph_surface:
-    kind: none
-    target: not_persisted
-  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_calls_and_initializers_without_protocol_nodes
-  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_protocol_nodes_not_created
-  rationale: The parser leaves the `protocols` bucket empty for the comprehensive fixture
-    set, so protocol definitions are not available as persisted graph nodes.
+    kind: node
+    target: Protocol
+  unit_test: go/internal/parser/engine_swift_semantics_test.go::TestDefaultEngineParsePathSwiftInfersReceiverCallTypesAndEmitsProtocols
+  integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
 - id: actors
   name: Actors
   status: supported
@@ -92,7 +90,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathSwiftFixtures
   integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
 - id: imports
   name: Imports
@@ -104,7 +102,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: IMPORTS
-  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_declarations_with_current_grammar
+  unit_test: go/internal/parser/engine_swift_semantics_test.go::TestDefaultEngineParsePathSwiftEmitsImportAndCallMetadata
   integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
 - id: function-calls
   name: Function calls
@@ -116,7 +114,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_calls_and_initializers_without_protocol_nodes
+  unit_test: go/internal/parser/engine_swift_semantics_test.go::TestDefaultEngineParsePathSwiftEmitsImportAndCallMetadata
   integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
 - id: property-declarations
   name: Property declarations
@@ -128,7 +126,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_swift_parser.py::test_parse_swift_calls_and_initializers_without_protocol_nodes
+  unit_test: go/internal/parser/engine_swift_semantics_test.go::TestDefaultEngineParsePathSwiftEmitsVariableContextAndTypeMetadata
   integration_test: tests/integration/test_language_graph.py::TestSwiftGraph::test_runtime_surface
 known_limitations:
 - Property wrappers are not tracked as distinct decorators

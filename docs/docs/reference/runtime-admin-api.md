@@ -27,6 +27,8 @@ The shared mounted runtime contract currently covers:
 - `GET` and `HEAD` `/healthz`
 - `GET` and `HEAD` `/readyz`
 - `GET` and `HEAD` `/admin/status`
+- `POST` `/admin/replay`
+- `POST` `/admin/refinalize`
 
 `/metrics` remains runtime-specific and is mounted only when a metrics handler
 is provided by that service. The shared runtime metrics families are documented
@@ -95,10 +97,13 @@ Generation transition entries include:
 The shared mounted runtime admin surface is implemented through:
 
 - `go/internal/status/http.go` for report rendering
-- `go/internal/runtime/admin.go` for the shared probe/admin mux
+- `go/internal/runtime/admin.go` for the shared probe/admin mux, including the
+  `/admin/replay` and `/admin/refinalize` recovery endpoints
 - `go/internal/runtime/status_server.go` for mounted status-server wiring
 - `go/internal/runtime/http_server.go` for lifecycle-owned HTTP serving
 
 That means new ingestors should not build bespoke probe or status endpoints.
 They should reuse the shared mounted contract and only provide the service-
-specific backing reader or metrics handler.
+specific backing reader or metrics handler. The Python admin surface is now
+only transitional support where it still exists; the Go runtime is the source
+of truth for mounted recovery and status behavior.

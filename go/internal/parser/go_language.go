@@ -33,6 +33,7 @@ func (e *Engine) parseGo(
 	payload := basePayload(path, "go", isDependency)
 	payload["interfaces"] = []map[string]any{}
 	payload["structs"] = []map[string]any{}
+	payload["embedded_sql_queries"] = extractGoEmbeddedSQLQueries(string(source))
 	scope := options.normalizedVariableScope()
 	root := tree.RootNode()
 

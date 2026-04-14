@@ -39,7 +39,9 @@ RUN cd go && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go
     && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-projector ./cmd/projector \
     && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-collector-git ./cmd/collector-git \
     && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-bootstrap-data-plane ./cmd/bootstrap-data-plane \
-    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-admin-status ./cmd/admin-status
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-admin-status ./cmd/admin-status \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-api ./cmd/api \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /go-bin/pcg-mcp-server ./cmd/mcp-server
 
 # Production stage
 FROM python:3.12-slim

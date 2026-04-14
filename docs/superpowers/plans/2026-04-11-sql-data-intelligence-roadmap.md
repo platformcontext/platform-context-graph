@@ -585,12 +585,12 @@ PYTHONPATH=src uv run pytest \
 
 ```bash
 PYTHONPATH=src uv run pytest \
-  tests/unit/parsers/test_sql_parser.py \
-  tests/unit/parsers/test_python_sql_mappings.py \
-  tests/unit/parsers/test_go_sql_extraction.py \
   tests/unit/relationships/test_sql_links.py \
   tests/unit/query/test_change_surface.py \
   tests/unit/mcp/test_ecosystem_sql_blast_radius.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathSQL|TestDefaultEngineParsePathGoEmbeddedSQLQueries' -count=1
 ```
 
 ### Compiled analytics gate
@@ -600,11 +600,13 @@ PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_plugins.py \
   tests/unit/data_intelligence/test_dbt_sql_lineage.py \
   tests/unit/data_intelligence/test_dbt_compiled_sql.py \
-  tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/query/test_entity_context.py \
   tests/unit/tools/test_graph_builder_schema.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSON(DBTManifest|PreservesDocumentOrderForMetadataAndConfigBuckets|CloudFormation)' -count=1
 ```
 
 ### Warehouse replay gate
@@ -613,11 +615,13 @@ PYTHONPATH=src uv run pytest \
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_plugins.py \
   tests/unit/data_intelligence/test_warehouse_replay.py \
-  tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSONWarehouseReplay' -count=1
 ```
 
 ```bash
@@ -639,11 +643,13 @@ uv run pytest \
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_bi_replay.py \
-  tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSONBIReplay' -count=1
 ```
 
 ```bash
@@ -665,12 +671,14 @@ uv run pytest \
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_semantic_replay.py \
-  tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py \
   tests/unit/query/test_change_surface.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSONSemanticReplay' -count=1
 ```
 
 ```bash
@@ -692,13 +700,15 @@ uv run pytest \
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_governance_replay.py \
-  tests/unit/parsers/test_json_governance_replay.py \
   tests/unit/content/test_data_intelligence_ingest.py \
   tests/unit/relationships/test_data_intelligence_governance_links.py \
   tests/unit/query/test_change_surface_classification.py \
   tests/unit/query/test_repository_context_data_governance.py \
   tests/unit/query/test_story_data_governance.py \
   tests/unit/tools/test_graph_builder_schema.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSONGovernanceReplay' -count=1
 ```
 
 ```bash
@@ -721,13 +731,15 @@ uv run pytest \
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_quality_replay.py \
-  tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/tools/test_graph_builder_schema.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py \
   tests/unit/query/test_change_surface.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSONQualityReplay' -count=1
 ```
 
 ```bash

@@ -1,11 +1,11 @@
 language: php
 title: PHP Parser
 family: language
-parser: PhpTreeSitterParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/php.py
+parser: DefaultEngine (php)
+parser_entrypoint: go/internal/parser/php_language.go
 doc_path: docs/docs/languages/php.md
 fixture_repo: tests/fixtures/ecosystems/php_comprehensive/
-unit_test_file: tests/unit/parsers/test_php_parser.py
+unit_test_file: go/internal/parser/php_language_test.go
 integration_test_suite: tests/integration/test_language_graph.py::TestPhpGraph
 capabilities:
 - id: functions
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_php_parser.py::test_parse_functions
+  unit_test: go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsFunctionParametersSourceAndContext
   integration_test: tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface
 - id: methods
   name: Methods
@@ -30,7 +30,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_php_parser.py::test_parse_functions
+  unit_test: go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsFunctionParametersSourceAndContext
   integration_test: tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface
 - id: classes
   name: Classes
@@ -42,7 +42,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_php_parser.py::test_parse_classes
+  unit_test: go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsInheritanceAndImportMetadata
   integration_test: tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface
 - id: interfaces
   name: Interfaces
@@ -54,7 +54,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Interface
-  unit_test: tests/unit/parsers/test_php_parser.py::test_parse_interfaces
+  unit_test: go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsInheritanceAndImportMetadata
   integration_test: tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface
 - id: traits
   name: Traits
@@ -66,7 +66,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Trait
-  unit_test: tests/unit/parsers/test_php_parser.py::test_parse_traits
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathPHPFixtures
   integration_test: tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface
 - id: use-declarations
   name: Use declarations
@@ -78,7 +78,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: IMPORTS
-  unit_test: tests/unit/parsers/test_php_parser.py::test_parse_imports
+  unit_test: go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsInheritanceAndImportMetadata
   integration_test: tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface
 - id: function-calls
   name: Function calls
@@ -90,7 +90,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_php_parser.py::test_parse_function_calls
+  unit_test: go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsVariableAndCallMetadata
   integration_test: tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface
 - id: member-method-calls
   name: Member method calls
@@ -102,7 +102,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_php_parser.py::test_parse_member_static_and_constructor_calls
+  unit_test: go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsVariableAndCallMetadata
   integration_test: tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface
 - id: static-method-calls
   name: Static method calls
@@ -114,7 +114,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_php_parser.py::test_parse_member_static_and_constructor_calls
+  unit_test: go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsVariableAndCallMetadata
   integration_test: tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface
   rationale: Static call syntax is covered in focused parser tests, but the comprehensive
     fixture repo currently proves only member-call and constructor-call graph edges end
@@ -129,7 +129,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_php_parser.py::test_parse_member_static_and_constructor_calls
+  unit_test: go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsVariableAndCallMetadata
   integration_test: tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface
 - id: variables
   name: Variables
@@ -141,7 +141,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_php_parser.py::test_parse_variables
+  unit_test: go/internal/parser/php_language_test.go::TestDefaultEngineParsePathPHPEmitsVariableAndCallMetadata
   integration_test: tests/integration/test_language_graph.py::TestPhpGraph::test_runtime_surface
 known_limitations:
 - Trait `use` inside class bodies is not linked as an INHERITS relationship

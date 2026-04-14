@@ -1,23 +1,6 @@
-"""Lazy runtime exports for ingestion orchestration helpers."""
+"""Runtime package — write-plane services are now Go-owned.
 
-from __future__ import annotations
-
-from importlib import import_module
-from typing import Any
-
-__all__ = [
-    "RepoSyncConfig",
-    "RepoSyncResult",
-    "run_bootstrap_index",
-    "run_repo_sync_cycle",
-    "run_repo_sync_loop",
-]
-
-
-def __getattr__(name: str) -> Any:
-    """Resolve runtime exports lazily to avoid eager side effects."""
-
-    if name not in __all__:
-        raise AttributeError(name)
-    module = import_module("platform_context_graph.runtime.ingester")
-    return getattr(module, name)
+The deployed ingester, reducer, and bootstrap-index services run as Go
+binaries (``go/cmd/ingester``, ``go/cmd/reducer``, ``go/cmd/bootstrap-index``).
+This package retains only read-path helpers consumed by the CLI and MCP.
+"""

@@ -80,15 +80,173 @@ func parseArgoCDApplicationSet(document map[string]any, metadata map[string]any,
 	spec, _ := document["spec"].(map[string]any)
 	template, _ := spec["template"].(map[string]any)
 	templateSpec, _ := template["spec"].(map[string]any)
+	generatorTypes := make([]string, 0)
+	sourceRepos := make([]string, 0)
+	sourcePaths := make([]string, 0)
+	if generators, ok := spec["generators"].([]any); ok {
+		for _, rawGenerator := range generators {
+			generator, ok := rawGenerator.(map[string]any)
+			if !ok {
+				continue
+			}
+			generatorTypes = append(generatorTypes, sortedMapKeys(generator)...)
+			collectArgoGeneratorSources(generator, &sourceRepos, &sourcePaths)
+		}
+	}
+	templateRepos, templatePaths := extractArgoTemplateSources(templateSpec)
+	sourceRepos = append(sourceRepos, templateRepos...)
+	sourcePaths = append(sourcePaths, templatePaths...)
+	dedupedPaths := dedupeNonEmptyStrings(sourcePaths)
+	sourceRoots := make([]string, 0, len(dedupedPaths))
+	for _, sourcePath := range dedupedPaths {
+		if root := normalizeArgoSourceRoot(sourcePath); root != "" {
+			sourceRoots = append(sourceRoots, root)
+		}
+	}
 	return map[string]any{
 		"name":           strings.TrimSpace(fmt.Sprint(metadata["name"])),
 		"line_number":    lineNumber,
 		"namespace":      strings.TrimSpace(fmt.Sprint(metadata["namespace"])),
+		"generators":     strings.Join(dedupeNonEmptyStrings(generatorTypes), ","),
 		"project":        strings.TrimSpace(fmt.Sprint(templateSpec["project"])),
 		"dest_namespace": strings.TrimSpace(fmt.Sprint(nestedMapValue(templateSpec, "destination", "namespace"))),
+		"source_repos":   strings.Join(dedupeNonEmptyStrings(sourceRepos), ","),
+		"source_paths":   strings.Join(dedupedPaths, ","),
+		"source_roots":   strings.Join(dedupeNonEmptyStrings(sourceRoots), ","),
 		"path":           path,
 		"lang":           "yaml",
 	}
+}
+
+func collectArgoGeneratorSources(generator map[string]any, sourceRepos *[]string, sourcePaths *[]string) {
+	gitGenerator, _ := generator["git"].(map[string]any)
+	if gitGenerator != nil {
+		repoURL := strings.TrimSpace(fmt.Sprint(gitGenerator["repoURL"]))
+		if repoURL != "" && !isTemplateOnlyArgoValue(repoURL) {
+			*sourceRepos = append(*sourceRepos, repoURL)
+		}
+		collectArgoGeneratorPaths(gitGenerator["files"], sourcePaths)
+		collectArgoGeneratorPaths(gitGenerator["directories"], sourcePaths)
+	}
+
+	for _, value := range generator {
+		switch typed := value.(type) {
+		case map[string]any:
+			collectArgoGeneratorSources(typed, sourceRepos, sourcePaths)
+		case []any:
+			for _, item := range typed {
+				nested, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				collectArgoGeneratorSources(nested, sourceRepos, sourcePaths)
+			}
+		}
+	}
+}
+
+func collectArgoGeneratorPaths(raw any, sourcePaths *[]string) {
+	entries, ok := raw.([]any)
+	if !ok {
+		return
+	}
+	for _, entry := range entries {
+		object, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		path := strings.TrimSpace(fmt.Sprint(object["path"]))
+		if path == "" || isTemplateOnlyArgoValue(path) {
+			continue
+		}
+		*sourcePaths = append(*sourcePaths, path)
+	}
+}
+
+func extractArgoTemplateSources(templateSpec map[string]any) ([]string, []string) {
+	sourceRepos := make([]string, 0)
+	sourcePaths := make([]string, 0)
+
+	if source, ok := templateSpec["source"].(map[string]any); ok {
+		repoURL := strings.TrimSpace(fmt.Sprint(source["repoURL"]))
+		sourcePath := strings.TrimSpace(fmt.Sprint(source["path"]))
+		if repoURL != "" && !isTemplateOnlyArgoValue(repoURL) {
+			sourceRepos = append(sourceRepos, repoURL)
+		}
+		if sourcePath != "" && !isTemplateOnlyArgoValue(sourcePath) {
+			sourcePaths = append(sourcePaths, sourcePath)
+		}
+	}
+
+	if sources, ok := templateSpec["sources"].([]any); ok {
+		for _, rawSource := range sources {
+			source, ok := rawSource.(map[string]any)
+			if !ok {
+				continue
+			}
+			repoURL := strings.TrimSpace(fmt.Sprint(source["repoURL"]))
+			sourcePath := strings.TrimSpace(fmt.Sprint(source["path"]))
+			if repoURL != "" && !isTemplateOnlyArgoValue(repoURL) {
+				sourceRepos = append(sourceRepos, repoURL)
+			}
+			if sourcePath != "" && !isTemplateOnlyArgoValue(sourcePath) {
+				sourcePaths = append(sourcePaths, sourcePath)
+			}
+		}
+	}
+
+	return sourceRepos, sourcePaths
+}
+
+func dedupeNonEmptyStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		cleaned := strings.TrimSpace(value)
+		if cleaned == "" {
+			continue
+		}
+		if _, ok := seen[cleaned]; ok {
+			continue
+		}
+		seen[cleaned] = struct{}{}
+		result = append(result, cleaned)
+	}
+	return result
+}
+
+func isTemplateOnlyArgoValue(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	return strings.HasPrefix(trimmed, "{{") && strings.HasSuffix(trimmed, "}}")
+}
+
+func normalizeArgoSourceRoot(rawPath string) string {
+	segments := make([]string, 0)
+	for _, segment := range strings.Split(strings.TrimSpace(rawPath), "/") {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			continue
+		}
+		if segment == "*" || segment == "**" || isTemplateOnlyArgoValue(segment) {
+			break
+		}
+		if strings.HasSuffix(segment, ".yaml") || strings.HasSuffix(segment, ".yml") || strings.HasSuffix(segment, ".json") {
+			break
+		}
+		segments = append(segments, segment)
+	}
+	if len(segments) == 0 {
+		return ""
+	}
+	for index, segment := range segments {
+		if segment == "overlays" || segment == "base" {
+			if index == 0 {
+				return segment + "/"
+			}
+			return strings.Join(segments[:index], "/") + "/"
+		}
+	}
+	return strings.Join(segments, "/") + "/"
 }
 
 func isCrossplaneXRD(apiVersion string, kind string) bool {

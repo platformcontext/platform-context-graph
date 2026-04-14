@@ -37,7 +37,7 @@ export PYTHONPATH=src
 | --- | --- |
 | Docs, `CLAUDE.md`, `AGENTS.md`, or README files | `uv run --with mkdocs --with mkdocs-material --with pymdown-extensions mkdocs build --strict --clean --config-file docs/mkdocs.yml` |
 | CLI/runtime wiring | `PYTHONPATH=src uv run pytest tests/integration/cli/test_cli_commands.py -q` |
-| Parser platform or collector snapshot flow | `PYTHONPATH=src uv run pytest tests/unit/parsers/test_sql_parser.py tests/unit/parsers/test_python_sql_mappings.py tests/unit/parsers/test_go_sql_extraction.py tests/unit/parsers/test_json_parser.py -q` |
+| Parser platform or collector snapshot flow | `cd go && go test ./internal/parser -count=1` and `PYTHONPATH=src uv run pytest tests/unit/relationships/test_sql_links.py -q` |
 | Compose, Helm, or deployable runtime shape | `PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q` and `helm lint deploy/helm/platform-context-graph` |
 | Facts-first indexing, queue, or resolution flow | `PYTHONPATH=src:. uv run pytest tests/integration/indexing/test_git_facts_end_to_end.py tests/integration/indexing/test_git_facts_projection_parity.py -q` |
 | Phase 3 recovery controls | `PYTHONPATH=src:. uv run pytest tests/unit/facts/test_fact_work_queue_recovery.py tests/unit/api/test_admin_facts_recovery_router.py tests/integration/cli/test_remote_cli.py -q` |
@@ -98,7 +98,7 @@ go test ./internal/collector -run 'TestNativeRepositorySnapshotterUsesSCIPWhenEn
 go test ./cmd/collector-git -run 'TestBuildCollectorServiceWiresSCIPEnvironment' -count=1
 ```
 
-Python runtime ownership removal gate:
+Python runtime ownership regression gate:
 
 ```bash
 PYTHONPATH=src uv run pytest tests/integration/deployment/test_python_runtime_ownership.py -q
@@ -118,9 +118,11 @@ compose-backed infrastructure, and tear the stack down automatically unless
 `PCG_KEEP_COMPOSE_STACK=true` is set.
 
 The collector/native-selector cutover now deletes the temporary bridge modules
-instead of proving them in isolation. If the Python ownership gate still fails,
-the remaining debt is in Python runtime commands or recovery/finalization, not
-in the collector selection/snapshot path.
+instead of proving them in isolation. This ownership gate is now a passing
+regression suite, not an expected-failure milestone. If it fails, the
+remaining debt is no longer the collector bridge path. It is now concentrated
+in the Python API/CLI orchestration layer, `content/ingest.py`, and the 10
+remaining parser capability rows that still point at Python ownership.
 
 ## Go Data Plane Proof Domain Gate
 
@@ -307,12 +309,12 @@ PYTHONPATH=src uv run pytest \
 
 ```bash
 PYTHONPATH=src uv run pytest \
-  tests/unit/parsers/test_sql_parser.py \
-  tests/unit/parsers/test_python_sql_mappings.py \
-  tests/unit/parsers/test_go_sql_extraction.py \
   tests/unit/relationships/test_sql_links.py \
   tests/unit/query/test_change_surface.py \
   tests/unit/mcp/test_ecosystem_sql_blast_radius.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathSQL|TestDefaultEngineParsePathGoEmbeddedSQLQueries' -count=1
 ```
 
 ### Compiled analytics replay gate
@@ -321,10 +323,12 @@ PYTHONPATH=src uv run pytest \
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_plugins.py \
   tests/unit/data_intelligence/test_dbt_compiled_sql.py \
-  tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/tools/test_graph_builder_schema.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSON(DBTManifest|PreservesDocumentOrderForMetadataAndConfigBuckets|CloudFormation)' -count=1
 ```
 
 ### Warehouse replay gate
@@ -333,11 +337,13 @@ PYTHONPATH=src uv run pytest \
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_plugins.py \
   tests/unit/data_intelligence/test_warehouse_replay.py \
-  tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSONWarehouseReplay' -count=1
 ```
 
 ```bash
@@ -359,11 +365,13 @@ uv run pytest \
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_bi_replay.py \
-  tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSONBIReplay' -count=1
 ```
 Use the same compose-backed integration smoke command as the warehouse replay gate.
 
@@ -372,12 +380,14 @@ Use the same compose-backed integration smoke command as the warehouse replay ga
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_semantic_replay.py \
-  tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py \
   tests/unit/query/test_change_surface.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSONSemanticReplay' -count=1
 ```
 Use the same compose-backed integration smoke command as the warehouse replay gate.
 
@@ -386,12 +396,14 @@ Use the same compose-backed integration smoke command as the warehouse replay ga
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_governance_replay.py \
-  tests/unit/parsers/test_json_governance_replay.py \
   tests/unit/content/test_data_intelligence_ingest.py \
   tests/unit/relationships/test_data_intelligence_governance_links.py \
   tests/unit/query/test_repository_context_data_governance.py \
   tests/unit/query/test_story_data_governance.py \
   tests/unit/tools/test_graph_builder_schema.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSONGovernanceReplay' -count=1
 ```
 Use the same compose-backed integration smoke command as the warehouse replay gate.
 
@@ -400,13 +412,15 @@ Use the same compose-backed integration smoke command as the warehouse replay ga
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_quality_replay.py \
-  tests/unit/parsers/test_json_parser.py \
   tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/tools/test_graph_builder_schema.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py \
   tests/unit/query/test_change_surface.py -q
+
+cd go
+go test ./internal/parser -run 'TestDefaultEngineParsePathJSONQualityReplay' -count=1
 ```
 Use the same compose-backed integration smoke command as the warehouse replay gate.
 

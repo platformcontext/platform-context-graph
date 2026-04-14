@@ -19,14 +19,20 @@ to-Go platform conversion is not.
 
 The branch still has active Python-owned runtime seams:
 
-- parser, discovery, snapshot, and content-shaping behavior still depend on
-  Python-owned runtime code in
-  `src/platform_context_graph/parsers/registry.py`,
-  `src/platform_context_graph/content/ingest.py`.
-- reducer, facts, and status-store ownership still depend on Python modules in
-  `src/platform_context_graph/resolution/**`,
-  `src/platform_context_graph/facts/**`, and
-  `src/platform_context_graph/runtime/status_store*.py`.
+- the deployed API service still starts from the Python runtime command
+  `pcg serve start` in `docker-compose.yaml`, `Dockerfile`, and
+  `src/platform_context_graph/app/service_entrypoints.py`
+- Python API, MCP, and CLI orchestration still survive under
+  `src/platform_context_graph/api/**`,
+  `src/platform_context_graph/mcp/**`, and
+  `src/platform_context_graph/cli/**`; parts of that surface still carry stale
+  imports into already deleted Python package families such as
+  `platform_context_graph.query` and `platform_context_graph.facts`
+- parser-family ownership is complete in the canonical specs/docs and on disk;
+  the remaining parser debt is downstream graph/materialization parity for
+  Go-emitted buckets and metadata
+- `src/platform_context_graph/content/ingest.py` remains a live Python
+  content-shaping seam on the normal indexing path
 
 The collector bridge inventory changed during Chunk 2:
 
@@ -92,102 +98,71 @@ cutover draft assumed:
   `go/cmd/ingester/source_python_bridge.go` have been deleted from the branch
 - Python `GraphBuilder.build_graph_from_path_async(...)` now delegates
   both directory and explicit single-file indexing to the Go
-  `bootstrap-index` runtime; the remaining Python parser ownership is now
-  concentrated in the parser matrix, content shaping, and any uncovered
-  parser-matrix gaps
+  `bootstrap-index` runtime; parser-family ownership is now Go-owned, and the
+  remaining Python ownership is concentrated in content shaping plus the
+  Python API/MCP/CLI orchestration seams
 - the legacy Python parse/coordinator runtime stack
   (`collectors/git/parse_execution.py`, `collectors/git/parse_worker.py`,
   `indexing/coordinator.py`, `indexing/coordinator_pipeline.py`,
   `indexing/coordinator_async_commit.py`, and `indexing/parse_recovery.py`)
   has been deleted from the branch
 
-The known parser-matrix blockers are no longer in the collector bridge path.
-The normal Go collector path now owns both the standard tree-sitter route and
-the optional SCIP route. The remaining parser blockers are SCIP parity,
-specialized JSON/data-intelligence document coverage, the remaining richer
-language semantics still concentrated in long-tail adapters, and the remaining
-partial capability rows called out by the language capability specs. The Go
-parser foundation now covers the earlier Python decorator/async/type-
-annotation gaps, TypeScript decorator/type-parameter metadata, C typedef
-entities, Swift protocol extraction, and Ruby require/load import extraction;
-the JavaScript family now also emits native JSDoc docstrings plus getter,
-setter, and async method metadata in Go. The latest Go parser-payload parity
-work also covers Elixir guard definitions and module attributes. The remaining
-branch blockers after that are the separate Python-owned finalization/recovery
-seams, the dependency/package indexing cutover, and the end-to-end
-materialization gaps for newer parser buckets and metadata that now exist in
-Go payloads but still need full runtime persistence parity.
+The parser-family blockers are no longer in the collector bridge path because
+the canonical parser contract and the legacy Python parser-family files are now
+Go-owned end to end. The normal Go collector path now owns both the standard
+tree-sitter route and the optional SCIP route. The remaining parser-related
+blockers are downstream parity items: SCIP depth, specialized
+JSON/data-intelligence document coverage, dependency/package indexing
+semantics, and end-to-end materialization for newer parser buckets and
+metadata that now exist in Go payloads but still need full runtime persistence
+parity. The remaining branch blockers after that are the Python API/MCP/CLI
+and `content/ingest.py` seams.
 
-The last live `src/` runtime import into `platform_context_graph.parsers.*`
-has now been removed by moving Kubernetes manifest helpers into
-`src/platform_context_graph/kubernetes_manifest.py`. The remaining Python
-parser package surface is no longer on the normal runtime path; it is now
-concentrated in parser-package modules, capability metadata, and offline/test
-helpers that must be deleted only after Go feature-parity coverage is fully
-proven.
+Already deleted on this branch:
 
-The next parser-package deletion wave removes the dead Python parser registry
-and raw-text registry helpers (`src/platform_context_graph/parsers/registry.py`
-and `src/platform_context_graph/parsers/raw_text.py`) plus the stale parser
-smoke script that still referenced them. Remaining parser-package work after
-that is feature-parity deletion, not normal runtime ownership.
+- `go/internal/compatibility/pythonbridge/**`
+- `src/platform_context_graph/runtime/ingester/go_collector_*bridge.py`
+- the legacy Python parse/coordinator stack:
+  `collectors/git/parse_execution.py`,
+  `collectors/git/parse_worker.py`,
+  `indexing/coordinator.py`,
+  `indexing/coordinator_pipeline.py`,
+  `indexing/coordinator_async_commit.py`, and
+  `indexing/parse_recovery.py`
+- Python facts, resolution, query, and runtime status-store package families
+  that older cutover notes still referenced as live seams
+- Python parser registry/raw-text helpers and the already retired parser
+  facades for Groovy, Dockerfile, Rust, Scala, C#, Perl, Python,
+  JavaScript, TypeScript/TSX, C, Elixir, and PHP
 
-The Python query read surface also no longer imports the deleted
-`resolution.platform_families` module; those label-formatting helpers now come
-from `src/platform_context_graph/relationships/platform_families.py`, which
-keeps the surviving read-path Python package graph aligned with the post-
-resolution deletion layout.
+Current parser-package truth:
 
-The next proven parser-family deletion wave removes the Python Groovy and
-Dockerfile facades (`parsers/languages/groovy.py`,
-`parsers/languages/dockerfile.py`, and
-`parsers/languages/dockerfile_support.py`). Their runtime behavior is already
-owned by `go/internal/parser/groovy_language.go` and
-`go/internal/parser/dockerfile_language.go`, and the capability metadata now
-points at the Go entrypoint/test coverage instead of the deleted Python files.
+- no capability specs still point at Python parser entrypoints or Python parser
+  unit suites
+- `src/platform_context_graph/parsers/languages/` now contains only
+  `README.md` and `__init__.py`; the legacy Python parser-family facades and
+  support files have been deleted
+- the shared YAML infrastructure, HCL/Terraform, and the former single-spec
+  families (C++, Dart, Go, Haskell, Java, JSON, Kotlin, Ruby, SQL, Swift)
+  are now Go-owned in the canonical parser contract and on disk
+- several semantics now exist in Go and the remaining work is downstream
+  graph/materialization parity rather than brand-new parser scaffolding
 
-The next parser-family deletion slice removes the Python Rust facade
-(`parsers/languages/rust.py`). Its runtime behavior is already owned by
-`go/internal/parser/rust_language.go`, and the Rust capability metadata now
-points at `go/internal/parser/engine_systems_test.go` instead of the deleted
-Python parser unit suite.
+Known parser parity blockers to close before honest deletion:
 
-The next parser-family deletion slice removes the Python Scala facades
-(`parsers/languages/scala.py` and `parsers/languages/scala_support.py`). Their
-runtime behavior is already owned by `go/internal/parser/scala_language.go`,
-and the Scala capability metadata now points at
-`go/internal/parser/engine_managed_oo_test.go` instead of the deleted Python
-parser unit suite.
-
-The next parser-family deletion slice removes the Python C# facades
-(`parsers/languages/csharp.py` and `parsers/languages/csharp_support.py`).
-Their runtime behavior is already owned by `go/internal/parser/csharp_language.go`,
-and the C# capability metadata now points at
-`go/internal/parser/engine_managed_oo_test.go` instead of the deleted Python
-parser unit suite. The Go C# parser now also emits base-list metadata in
-`bases` so inheritance edges no longer depend on the deleted Python parser.
-
-The next parser-family deletion slice removes the Python Perl facade
-(`parsers/languages/perl.py`). Its runtime behavior is already owned by
-`go/internal/parser/perl_haskell_language.go`, and the Perl capability
-metadata now points at `go/internal/parser/engine_long_tail_test.go` instead of
-the deleted Python parser unit suite.
-
-Parser extraction ownership already moved further than the generated capability
-matrix currently shows:
-
-- Elixir now emits `defguard` and `defguardp` definitions in `functions`
-- Elixir now emits module attributes in `variables`
-- Ruby now emits `require`, `require_relative`, and `load` into normalized
-  `imports`
-- Swift now emits `protocol` declarations in a dedicated `protocols` bucket
-- the Go snapshot/content path now preserves `Module`, `Protocol`,
-  `TypeAlias`, `TypeAnnotation`, `Typedef`, and `Component` entities instead
-  of dropping those parser buckets during native repository snapshot shaping
-
-Treat any remaining capability-matrix drift for those surfaces as a
-materialization/documentation follow-up, not as a reason to keep Python in the
-normal parser path.
+- Python: decorators, async-function metadata, and type annotations now point
+  at Go-owned specs/docs, but still need full end-to-end graph/content proof
+- TypeScript/TSX: decorators, type aliases, generics, and component/class
+  semantics now point at Go-owned specs/docs, but still need full
+  graph/content parity proof
+- C: typedef extraction now points at Go-owned specs/docs, but integration
+  expectations still lag
+- Elixir: guard/module-attribute/protocol surfaces now point at Go-owned
+  specs/docs, but materialization and integration truth still need full parity
+- PHP: parser ownership is now Go-owned in the specs/docs, but static method
+  call semantics still need end-to-end parity proof
+- JSON and SCIP: specialized data-intelligence coverage and cross-file
+  reference parity remain open work
 
 No new ingestors should start until the milestones in this plan are complete.
 Treat this plan as the active cutover path until the merge bar below is fully

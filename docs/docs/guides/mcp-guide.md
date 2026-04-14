@@ -38,8 +38,8 @@ Use the canonical query and status surfaces first:
 
 Treat repair surfaces as repair surfaces:
 
-- `pcg finalize` and `POST /api/v0/admin/refinalize` are for controlled
-  recovery, not for normal question answering
+- `pcg finalize` and `POST /admin/refinalize` on the Go ingester admin surface
+  are for controlled recovery, not for normal question answering
 - the hosted admin refinalize route is graph-safe only
 - file-dependent bridge stages remain CLI-only until the Go-owned replacement
   exists

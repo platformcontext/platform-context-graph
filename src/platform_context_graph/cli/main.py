@@ -14,7 +14,6 @@ from dotenv import find_dotenv
 from rich.console import Console
 
 from platform_context_graph.core.database import DatabaseManager  # noqa: F401
-from platform_context_graph.mcp import MCPServer
 from platform_context_graph.observability import configure_logging
 from platform_context_graph.versioning import ensure_v_prefix
 
@@ -173,7 +172,7 @@ def start_http_api(
 def start_service(
     *, host: str = "0.0.0.0", port: int = 8080, reload: bool = False
 ) -> None:
-    """Start the combined HTTP API and MCP service.
+    """Start the HTTP API service.
 
     Args:
         host: The interface to bind.
@@ -189,8 +188,7 @@ def start_service(
     os.environ.setdefault("PCG_RUNTIME_ROLE", "api")
     _enable_local_http_auth_bootstrap_if_interactive()
     ensure_http_api_key()
-    mcp_server = MCPServer()
-    service_app = create_service_app(mcp_server_dependency=lambda: mcp_server)
+    service_app = create_service_app()
     uvicorn.run(
         service_app,
         host=host,

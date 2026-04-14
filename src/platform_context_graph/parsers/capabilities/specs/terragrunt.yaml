@@ -1,11 +1,11 @@
 language: terragrunt
 title: Terragrunt Parser
 family: iac
-parser: HCLTerraformParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/hcl_terraform.py
+parser: DefaultEngine (hcl)
+parser_entrypoint: go/internal/parser/hcl_language.go
 doc_path: docs/docs/languages/terragrunt.md
 fixture_repo: tests/fixtures/ecosystems/terragrunt_comprehensive/
-unit_test_file: tests/unit/parsers/test_hcl_terraform_parser.py
+unit_test_file: go/internal/parser/engine_infra_test.go
 integration_test_suite: tests/integration/test_iac_graph.py::TestTerragruntGraph
 capabilities:
 - id: terragrunt-config-blocks-include-locals-inputs
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: TerragruntConfig
-  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt
   integration_test: tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created
 - id: include-block-labels
   name: Include block labels
@@ -31,7 +31,7 @@ capabilities:
   graph_surface:
     kind: property
     target: TerragruntConfig.includes
-  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt
   integration_test: tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created
 - id: locals-block
   name: Locals block
@@ -44,7 +44,7 @@ capabilities:
   graph_surface:
     kind: property
     target: TerragruntConfig.locals
-  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt
   integration_test: tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created
   rationale: Locals are preserved on the Terragrunt config payload, but they are not
     expanded into independently queryable graph entities.
@@ -59,7 +59,7 @@ capabilities:
   graph_surface:
     kind: property
     target: TerragruntConfig.inputs
-  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt
   integration_test: tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_configs_created
   rationale: Inputs are stored on the Terragrunt config node, but they are not normalized
     into separate variable-like graph nodes today.
@@ -72,7 +72,7 @@ capabilities:
   graph_surface:
     kind: property
     target: TerragruntConfig.source
-  unit_test: tests/unit/parsers/test_hcl_terraform_parser.py::TestHCLTerraformParser::test_parse_terragrunt_config
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerragrunt
   integration_test: tests/integration/test_iac_graph.py::TestTerragruntGraph::test_terragrunt_has_terraform_source
 known_limitations:
 - Dependency blocks and their `outputs` references are not modeled as graph edges

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError, version as pkg_version
 import os
@@ -20,7 +19,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
 from ..cli.config_manager import get_config_value
@@ -28,25 +27,11 @@ from ..core.pcg_bundle import PCGBundle
 from ..observability import initialize_observability
 from ..versioning import ensure_v_prefix
 from ..domain.responses import IngesterScanRequestResponse, IngesterStatusResponse
-from ..query import status as status_queries
 from .dependencies import get_database, get_query_services
 from .http_auth import http_auth_middleware
 from .app_openapi import build_openapi_schema
 from .routers import (
-    admin_facts_router,
     admin_router,
-    code_router,
-    content_router,
-    entities_router,
-    environments_router,
-    impact_router,
-    infra_router,
-    investigations_router,
-    paths_router,
-    repositories_router,
-    services_router,
-    traces_router,
-    workloads_router,
 )
 
 API_TITLE = "PlatformContextGraph HTTP API"
@@ -159,6 +144,13 @@ def create_app(
         services: Any = Depends(get_query_services),
     ) -> dict[str, Any]:
         """Return the latest checkpointed index status for a path or run ID."""
+        try:
+            from ..query import status as status_queries
+        except ImportError:
+            raise HTTPException(
+                status_code=503,
+                detail="Index status query has migrated to Go API. Use the Go query endpoints.",
+            )
 
         summary = status_queries.describe_index_status(
             services.database,
@@ -191,6 +183,13 @@ def create_app(
         services: Any = Depends(get_query_services),
     ) -> dict[str, Any]:
         """Return the checkpointed status summary for one run identifier."""
+        try:
+            from ..query import status as status_queries
+        except ImportError:
+            raise HTTPException(
+                status_code=503,
+                detail="Index status query has migrated to Go API. Use the Go query endpoints.",
+            )
 
         summary = status_queries.describe_index_status(
             services.database,
@@ -297,20 +296,7 @@ def create_app(
         )
 
     app.include_router(router)
-    app.include_router(entities_router, prefix=API_V0_PREFIX)
-    app.include_router(workloads_router, prefix=API_V0_PREFIX)
-    app.include_router(services_router, prefix=API_V0_PREFIX)
-    app.include_router(traces_router, prefix=API_V0_PREFIX)
-    app.include_router(paths_router, prefix=API_V0_PREFIX)
-    app.include_router(impact_router, prefix=API_V0_PREFIX)
-    app.include_router(environments_router, prefix=API_V0_PREFIX)
-    app.include_router(code_router, prefix=API_V0_PREFIX)
-    app.include_router(content_router, prefix=API_V0_PREFIX)
-    app.include_router(infra_router, prefix=API_V0_PREFIX)
-    app.include_router(investigations_router, prefix=API_V0_PREFIX)
-    app.include_router(repositories_router, prefix=API_V0_PREFIX)
     app.include_router(admin_router, prefix=API_V0_PREFIX)
-    app.include_router(admin_facts_router, prefix=API_V0_PREFIX)
     app.openapi = lambda: build_openapi_schema(app)
     return app
 
@@ -319,106 +305,25 @@ def create_service_app(
     *,
     database_dependency: Callable[..., Any] | None = None,
     query_services_dependency: Callable[..., Any] | None = None,
-    mcp_server_dependency: Callable[..., Any] | None = None,
 ) -> FastAPI:
-    """Create the combined HTTP API and MCP transport service application.
+    """Create the HTTP API service application.
 
     Args:
         database_dependency: Overrideable database dependency factory.
         query_services_dependency: Overrideable query services dependency factory.
-        mcp_server_dependency: Optional MCP server dependency factory. API-only
-            runtimes may provide an MCP server without a mutation-capable code
-            watcher.
 
     Returns:
-        A configured FastAPI application with the HTTP API and MCP transport.
+        A configured FastAPI application with the HTTP API.
     """
-
-    def _get_mcp_server() -> Any:
-        """Resolve the configured MCP server dependency when present."""
-        if mcp_server_dependency is None:
-            return None
-        return mcp_server_dependency()
-
-    @asynccontextmanager
-    async def lifespan(_app: FastAPI):
-        """Manage optional MCP runtime lifecycle hooks around the app runtime.
-
-        The `api` runtime role does not provision a mutation-capable code
-        watcher, so watcher startup must remain optional even when an MCP server
-        instance exists.
-        """
-        server = _get_mcp_server()
-        watcher = getattr(server, "code_watcher", None) if server is not None else None
-        if watcher is not None:
-            watcher.start()
-        try:
-            yield
-        finally:
-            if server is not None:
-                server.shutdown()
 
     app = create_app(
         database_dependency=database_dependency,
         query_services_dependency=query_services_dependency,
     )
-    app.router.lifespan_context = lifespan
 
     @app.get("/health", tags=["system"])
     async def service_health() -> dict[str, str]:
         """Report service-mode health without forcing database query services."""
         return {"status": "ok"}
-
-    @app.post("/mcp/message", tags=["mcp"])
-    async def mcp_message(request: Request) -> Response:
-        """Handle HTTP-transported JSON-RPC messages for the MCP server.
-
-        Args:
-            request: Incoming FastAPI request containing a JSON-RPC payload.
-
-        Returns:
-            A JSON or streaming response representing the MCP server reply.
-        """
-        server = _get_mcp_server()
-        if server is None:
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "error": "MCP transport is not configured for this service instance."
-                },
-            )
-
-        try:
-            body = await request.json()
-        except (ValueError, TypeError):
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "jsonrpc": "2.0",
-                    "id": None,
-                    "error": {"code": -32700, "message": "Parse error"},
-                },
-            )
-
-        response, status_code = await server._handle_jsonrpc_request(
-            body, transport="jsonrpc-http"
-        )
-        if response is None:
-            return Response(status_code=204)
-        return JSONResponse(content=response, status_code=status_code)
-
-    @app.get("/mcp/sse", tags=["mcp"])
-    async def mcp_sse() -> StreamingResponse:
-        """Expose a simple SSE keepalive transport for MCP-compatible clients."""
-
-        async def event_stream():
-            """Yield periodic keepalive events for the SSE transport."""
-            while True:
-                yield 'data: {"type":"keepalive"}\n\n'
-                import asyncio
-
-                await asyncio.sleep(30)
-
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
 
     return app

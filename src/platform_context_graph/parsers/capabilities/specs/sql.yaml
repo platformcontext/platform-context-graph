@@ -1,11 +1,11 @@
 language: sql
 title: SQL Parser
 family: language
-parser: SQLTreeSitterParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/sql.py
+parser: DefaultEngine (sql)
+parser_entrypoint: go/internal/parser/sql_language.go
 doc_path: docs/docs/languages/sql.md
 fixture_repo: tests/fixtures/ecosystems/sql_comprehensive/
-unit_test_file: tests/unit/parsers/test_sql_parser.py
+unit_test_file: go/internal/parser/engine_sql_test.go
 integration_test_suite: tests/integration/test_sql_graph.py::TestSqlGraph
 support_maturity:
   grammar_routing: supported
@@ -27,7 +27,7 @@ capabilities:
     graph_surface:
       kind: node
       target: SqlTable
-    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    unit_test: go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships
     integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created
   - id: sql-columns
     name: Columns
@@ -39,7 +39,7 @@ capabilities:
     graph_surface:
       kind: node
       target: SqlColumn
-    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    unit_test: go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships
     integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_relationships_are_created
   - id: sql-views
     name: Views
@@ -51,7 +51,7 @@ capabilities:
     graph_surface:
       kind: node
       target: SqlView
-    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    unit_test: go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships
     integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created
   - id: sql-functions
     name: Functions
@@ -63,7 +63,7 @@ capabilities:
     graph_surface:
       kind: node
       target: SqlFunction
-    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    unit_test: go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships
     integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created
   - id: sql-triggers
     name: Triggers
@@ -75,7 +75,7 @@ capabilities:
     graph_surface:
       kind: node
       target: SqlTrigger
-    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    unit_test: go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships
     integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created
   - id: sql-indexes
     name: Indexes
@@ -87,7 +87,7 @@ capabilities:
     graph_surface:
       kind: node
       target: SqlIndex
-    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    unit_test: go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships
     integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created
   - id: sql-relationships
     name: SQL relationships
@@ -101,7 +101,7 @@ capabilities:
     graph_surface:
       kind: relationship
       target: HAS_COLUMN/REFERENCES_TABLE/READS_FROM/TRIGGERS_ON/EXECUTES/INDEXES
-    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_schema_objects_and_relationship_hints
+    unit_test: go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships
     integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_relationships_are_created
   - id: sql-migrations
     name: Migration intelligence
@@ -115,7 +115,7 @@ capabilities:
     graph_surface:
       kind: relationship
       target: MIGRATES
-    unit_test: tests/unit/parsers/test_sql_parser.py::test_parse_migration_metadata_from_common_layouts
+    unit_test: go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLMigrationMetadata
     integration_test: tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_relationships_are_created
 known_limitations:
   - Dialect-specific procedural SQL beyond common Postgres-style bodies may surface only partial table references.

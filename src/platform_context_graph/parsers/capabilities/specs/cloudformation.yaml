@@ -1,11 +1,11 @@
 language: cloudformation
 title: CloudFormation Parser
 family: iac
-parser: InfraYAMLParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/yaml_infra.py
+parser: DefaultEngine (yaml)
+parser_entrypoint: go/internal/parser/yaml_language.go
 doc_path: docs/docs/languages/cloudformation.md
 fixture_repo: tests/fixtures/ecosystems/cloudformation_comprehensive/
-unit_test_file: tests/unit/parsers/test_cloudformation_parser.py
+unit_test_file: go/internal/parser/engine_yaml_semantics_test.go
 integration_test_suite: tests/integration/test_iac_graph.py::TestCloudFormationGraph
 capabilities:
 - id: resources
@@ -19,7 +19,7 @@ capabilities:
   graph_surface:
     kind: node
     target: CloudFormationResource
-  unit_test: tests/unit/parsers/test_cloudformation_parser.py::TestCloudFormationDetection::test_detect_by_aws_resource_type
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCloudFormation
   integration_test: tests/integration/test_iac_graph.py::TestCloudFormationGraph::test_cloudformation_resources_indexed
 - id: parameters
   name: Parameters
@@ -31,7 +31,7 @@ capabilities:
   graph_surface:
     kind: node
     target: CloudFormationParameter
-  unit_test: tests/unit/parsers/test_cloudformation_parser.py::TestCloudFormationParameters::test_parse_simple_parameters
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCloudFormation
   integration_test: tests/integration/test_iac_graph.py::TestCloudFormationGraph::test_cloudformation_parameters_indexed
 - id: outputs
   name: Outputs
@@ -43,12 +43,12 @@ capabilities:
   graph_surface:
     kind: node
     target: CloudFormationOutput
-  unit_test: tests/unit/parsers/test_cloudformation_parser.py::TestCloudFormationOutputs::test_parse_simple_outputs
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCloudFormation
   integration_test: tests/integration/test_iac_graph.py::TestCloudFormationGraph::test_cloudformation_outputs_indexed
 - id: dependson
   name: DependsOn
   status: supported
-  extracted_bucket: variables
+  extracted_bucket: cloudformation_resources
   required_fields:
   - name
   - line_number
@@ -56,12 +56,12 @@ capabilities:
   graph_surface:
     kind: property
     target: depends_on property
-  unit_test: tests/unit/parsers/test_cloudformation_parser.py::TestCloudFormationParameters::test_parse_parameter_with_allowed_values
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCloudFormation
   integration_test: tests/integration/test_iac_graph.py::TestCloudFormationGraph::test_cloudformation_resources_indexed
 - id: conditions
   name: Conditions
   status: supported
-  extracted_bucket: variables
+  extracted_bucket: cloudformation_resources
   required_fields:
   - name
   - line_number
@@ -69,12 +69,12 @@ capabilities:
   graph_surface:
     kind: property
     target: condition property
-  unit_test: tests/unit/parsers/test_cloudformation_parser.py::TestCloudFormationParameters::test_parse_parameter_with_allowed_values
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCloudFormation
   integration_test: tests/integration/test_iac_graph.py::TestCloudFormationGraph::test_cloudformation_resources_indexed
 - id: export-names
   name: Export names
   status: supported
-  extracted_bucket: imports
+  extracted_bucket: cloudformation_outputs
   required_fields:
   - name
   - line_number
@@ -82,12 +82,12 @@ capabilities:
   graph_surface:
     kind: property
     target: export_name property
-  unit_test: tests/unit/parsers/test_cloudformation_parser.py::TestCloudFormationOutputs::test_parse_output_with_export
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCloudFormation
   integration_test: tests/integration/test_iac_graph.py::TestCloudFormationGraph::test_cloudformation_resources_indexed
 - id: allowedvalues
   name: AllowedValues
   status: supported
-  extracted_bucket: variables
+  extracted_bucket: cloudformation_parameters
   required_fields:
   - name
   - line_number
@@ -95,7 +95,7 @@ capabilities:
   graph_surface:
     kind: property
     target: allowed_values property
-  unit_test: tests/unit/parsers/test_cloudformation_parser.py::TestCloudFormationParameters::test_parse_parameter_with_allowed_values
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCloudFormation
   integration_test: tests/integration/test_iac_graph.py::TestCloudFormationGraph::test_cloudformation_resources_indexed
 - id: json-templates
   name: JSON templates
@@ -107,7 +107,7 @@ capabilities:
   graph_surface:
     kind: none
     target: not_persisted
-  unit_test: tests/unit/parsers/test_cloudformation_parser.py::TestCloudFormationDetection::test_detect_by_template_version
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathJSONCloudFormation
   integration_test: tests/integration/test_iac_graph.py::TestCloudFormationGraph::test_cloudformation_resources_indexed
   rationale: JSON-formatted templates are detected at parse time, but the comprehensive
     fixture and end-to-end indexing coverage are still YAML-first.

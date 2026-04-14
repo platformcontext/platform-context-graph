@@ -6,25 +6,25 @@ Canonical source: `src/platform_context_graph/parsers/capabilities/specs/typescr
 ## Parser Contract
 - Language: `typescript`
 - Family: `language`
-- Parser: `TypescriptTreeSitterParser`
-- Entrypoint: `src/platform_context_graph/parsers/languages/typescript.py`
+- Parser: `DefaultEngine (typescript)`
+- Entrypoint: `go/internal/parser/javascript_language.go`
 - Fixture repo: `tests/fixtures/ecosystems/typescript_comprehensive/`
-- Unit test suite: `tests/unit/parsers/test_typescript_parser.py`
+- Unit test suite: `go/internal/parser/engine_javascript_semantics_test.go`
 - Integration test suite: `tests/integration/test_language_graph.py::TestTypeScriptGraph`
 
 ## Capability Checklist
 | Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
 |-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
-| Functions | `functions` | supported | `functions` | `name, line_number` | `node:Function` | `tests/unit/parsers/test_typescript_parser.py::test_parse_functions` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
-| Classes | `classes` | supported | `classes` | `name, line_number` | `node:Class` | `tests/unit/parsers/test_typescript_parser.py::test_parse_classes` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
-| Interfaces | `interfaces` | supported | `interfaces` | `name, line_number` | `node:Interface` | `tests/unit/parsers/test_typescript_parser.py::test_parse_interfaces` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
-| Imports | `imports` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `tests/unit/parsers/test_typescript_parser.py::test_parse_imports` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
-| Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `tests/unit/parsers/test_typescript_parser.py::test_parse_function_calls` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
-| Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `tests/unit/parsers/test_typescript_parser.py::test_parse_variables` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
-| Enums | `enums` | supported | `enums` | `name, line_number` | `node:Enum` | `tests/unit/parsers/test_typescript_parser.py::test_parse_enums` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
-| Type aliases | `type-aliases` | partial | `type_aliases` | `name, line_number` | `none:not_persisted` | `tests/unit/parsers/test_typescript_parser.py::test_parse_type_aliases` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_function_nodes_created` | Type aliases are extracted into a dedicated parse bucket, but the persistence layer does not currently materialize TypeAlias graph nodes. |
-| Decorators | `decorators` | unsupported | `classes` | `name, line_number` | `none:not_persisted` | `tests/unit/parsers/test_typescript_parser.py::test_parse_decorators_do_not_emit_metadata` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_decorator_metadata_not_persisted` | Decorator syntax is accepted by the parser, but decorator metadata is not emitted into the normalized parse result or persisted to graph properties. |
-| Generics | `generics` | partial | `type_parameters` | `name, line_number, type_parameters` | `none:not_persisted` | `tests/unit/parsers/test_typescript_parser.py::test_parse_generics` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_function_nodes_created` | Generic syntax is tolerated in parsed declarations, but type parameter metadata is not promoted into the normalized graph model. |
+| Functions | `functions` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathTypeScript` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
+| Classes | `classes` | supported | `classes` | `name, line_number` | `node:Class` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathTypeScript` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
+| Interfaces | `interfaces` | supported | `interfaces` | `name, line_number` | `node:Interface` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathTypeScript` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
+| Imports | `imports` | supported | `imports` | `name, line_number` | `relationship:IMPORTS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathTypeScript` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
+| Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathTypeScript` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
+| Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathTypeScript` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
+| Enums | `enums` | supported | `enums` | `name, line_number` | `node:Enum` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptSemanticsAndTypes` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_runtime_surface` | - |
+| Type aliases | `type-aliases` | partial | `type_aliases` | `name, line_number` | `none:not_persisted` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_function_nodes_created` | Type aliases are extracted into a dedicated parse bucket, but the persistence layer does not currently materialize TypeAlias graph nodes. |
+| Decorators | `decorators` | unsupported | `classes` | `name, line_number` | `none:not_persisted` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_decorator_metadata_not_persisted` | The Go parser now emits decorator metadata, but the graph surface still does not persist decorators as first-class queryable properties. |
+| Generics | `generics` | partial | `type_parameters` | `name, line_number, type_parameters` | `none:not_persisted` | `go/internal/parser/engine_javascript_semantics_test.go::TestDefaultEngineParsePathTypeScriptDecoratorAndGenericParity` | `tests/integration/test_language_graph.py::TestTypeScriptGraph::test_function_nodes_created` | The Go parser emits type parameter metadata, but the graph surface does not yet promote generic information into a dedicated query model. |
 
 ## Support Maturity
 - Grammar routing: `supported`

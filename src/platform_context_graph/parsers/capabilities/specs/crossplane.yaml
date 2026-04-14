@@ -1,11 +1,11 @@
 language: crossplane
 title: Crossplane Parser
 family: iac
-parser: InfraYAMLParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/yaml_infra.py
+parser: DefaultEngine (yaml)
+parser_entrypoint: go/internal/parser/yaml_language.go
 doc_path: docs/docs/languages/crossplane.md
 fixture_repo: tests/fixtures/ecosystems/crossplane_comprehensive/
-unit_test_file: tests/unit/parsers/test_yaml_infra_parser.py
+unit_test_file: go/internal/parser/engine_yaml_semantics_test.go
 integration_test_suite: tests/integration/test_iac_graph.py::TestCrossplaneGraph
 capabilities:
 - id: composite-resource-definitions-xrds
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: CrossplaneXRD
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_xrd
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources
   integration_test: tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_xrd_indexed
 - id: xrd-group-kind-version
   name: XRD group, kind, version
@@ -29,11 +29,11 @@ capabilities:
   - line_number
   - kind
   - group
-  - version
+  - claim_kind
   graph_surface:
     kind: property
     target: XRD.properties
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_xrd
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources
   integration_test: tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_xrd_indexed
 - id: compositions
   name: Compositions
@@ -45,7 +45,7 @@ capabilities:
   graph_surface:
     kind: node
     target: CrossplaneComposition
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_composition
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources
   integration_test: tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_composition_indexed
 - id: composition-composite-type-ref
   name: Composition composite type ref
@@ -54,24 +54,26 @@ capabilities:
   required_fields:
   - name
   - line_number
-  - composite_type_ref
+  - composite_api_version
+  - composite_kind
   graph_surface:
     kind: property
-    target: Composition.composite_type_ref
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_composition
+    target: Composition.composite_ref
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources
   integration_test: tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_composition_indexed
 - id: composition-resources-list
   name: Composition resources list
   status: supported
-  extracted_bucket: k8s_resources
+  extracted_bucket: crossplane_compositions
   required_fields:
   - name
   - line_number
-  - resources
+  - resource_count
+  - resource_names
   graph_surface:
     kind: property
     target: Composition.resources
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_no_k8s_standalone_resources_without_api_version
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources
   integration_test: tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_composition_indexed
 - id: claims
   name: Claims
@@ -83,20 +85,20 @@ capabilities:
   graph_surface:
     kind: node
     target: CrossplaneClaim
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_claim
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources
   integration_test: tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_claim_indexed
-- id: claim-composite-type-ref
-  name: Claim composite type ref
+- id: claim-api-version
+  name: Claim API version
   status: supported
   extracted_bucket: crossplane_claims
   required_fields:
   - name
   - line_number
-  - composite_type_ref
+  - api_version
   graph_surface:
     kind: property
-    target: Claim.composite_type_ref
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_crossplane_claim
+    target: Claim.api_version
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLCrossplaneResources
   integration_test: tests/integration/test_iac_graph.py::TestCrossplaneGraph::test_crossplane_claim_indexed
 known_limitations:
 - Composition patch transforms are not modeled as graph edges

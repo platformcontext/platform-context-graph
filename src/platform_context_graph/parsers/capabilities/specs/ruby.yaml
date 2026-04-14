@@ -1,11 +1,11 @@
 language: ruby
 title: Ruby Parser
 family: language
-parser: RubyTreeSitterParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/ruby.py
+parser: DefaultEngine (ruby)
+parser_entrypoint: go/internal/parser/ruby_language.go
 doc_path: docs/docs/languages/ruby.md
 fixture_repo: tests/fixtures/ecosystems/ruby_comprehensive/
-unit_test_file: tests/unit/parsers/test_ruby_parser.py
+unit_test_file: go/internal/parser/engine_ruby_semantics_test.go
 integration_test_suite: tests/integration/test_language_graph.py::TestRubyGraph
 capabilities:
 - id: methods-def
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_ruby_parser.py::test_parse_ruby_definitions
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathRubyFixtures
   integration_test: tests/integration/test_language_graph.py::TestRubyGraph::test_runtime_surface
 - id: classes
   name: Classes
@@ -30,7 +30,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_ruby_parser.py::test_parse_ruby_definitions
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathRubyFixtures
   integration_test: tests/integration/test_language_graph.py::TestRubyGraph::test_runtime_surface
 - id: modules
   name: Modules
@@ -42,23 +42,20 @@ capabilities:
   graph_surface:
     kind: node
     target: Module
-  unit_test: tests/unit/parsers/test_ruby_parser.py::test_parse_ruby_definitions
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathRubyFixtures
   integration_test: tests/integration/test_language_graph.py::TestRubyGraph::test_runtime_surface
 - id: require-load-imports
   name: Require/load imports
-  status: unsupported
+  status: supported
   extracted_bucket: imports
   required_fields:
   - name
   - line_number
   graph_surface:
-    kind: none
-    target: not_persisted
-  unit_test: tests/unit/parsers/test_ruby_parser.py::test_parse_ruby_require_relative_stays_out_of_imports
-  integration_test: tests/integration/test_language_graph.py::TestRubyGraph::test_require_relative_imports_not_persisted
-  rationale: Ruby `require` and `require_relative` statements stay in the pre-scan import
-    surface, but the normalized parser result does not emit persisted IMPORTS edges for
-    the comprehensive fixture set.
+    kind: relationship
+    target: IMPORTS
+  unit_test: go/internal/parser/engine_ruby_semantics_test.go::TestDefaultEngineParsePathRubyEmitsRequireAndLoadImports
+  integration_test: tests/integration/test_language_graph.py::TestRubyGraph::test_runtime_surface
 - id: method-calls
   name: Method calls
   status: supported
@@ -69,7 +66,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_ruby_parser.py::test_parse_ruby_runtime_surface
+  unit_test: go/internal/parser/engine_ruby_semantics_test.go::TestDefaultEngineParsePathRubyCapturesGenericDslAndMethodCalls
   integration_test: tests/integration/test_language_graph.py::TestRubyGraph::test_runtime_surface
 - id: instance-variable-assignments
   name: Instance variable assignments
@@ -81,7 +78,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_ruby_parser.py::test_parse_ruby_runtime_surface
+  unit_test: go/internal/parser/engine_ruby_semantics_test.go::TestDefaultEngineParsePathRubyCapturesLocalAndInstanceAssignments
   integration_test: tests/integration/test_language_graph.py::TestRubyGraph::test_runtime_surface
 - id: local-variable-assignments
   name: Local variable assignments
@@ -93,7 +90,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_ruby_parser.py::test_parse_ruby_runtime_surface
+  unit_test: go/internal/parser/engine_ruby_semantics_test.go::TestDefaultEngineParsePathRubyCapturesLocalAndInstanceAssignments
   integration_test: tests/integration/test_language_graph.py::TestRubyGraph::test_runtime_surface
 - id: module-inclusions-include-extend
   name: Module inclusions (`include`/`extend`)
@@ -106,7 +103,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: INCLUDES
-  unit_test: tests/unit/parsers/test_ruby_parser.py::test_parse_ruby_runtime_surface
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathRubyFixtures
   integration_test: tests/integration/test_language_graph.py::TestRubyGraph::test_runtime_surface
 - id: parent-context-class-module
   name: Parent context (class/module)
@@ -119,7 +116,7 @@ capabilities:
   graph_surface:
     kind: property
     target: Function.class_context
-  unit_test: tests/unit/parsers/test_ruby_parser.py::test_parse_ruby_runtime_surface
+  unit_test: go/internal/parser/engine_ruby_semantics_test.go::TestDefaultEngineParsePathRubyEmitsFunctionArgsAndContext
   integration_test: tests/integration/test_language_graph.py::TestRubyGraph::test_runtime_surface
 known_limitations:
 - Singleton methods (defined on specific objects) are not separated from instance

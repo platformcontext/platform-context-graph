@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 
 import typer
 from rich import box
@@ -290,14 +293,15 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
     @ecosystem_app.command("overview")
     def ecosystem_overview() -> None:
         """Show ecosystem overview statistics."""
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, graph_builder, _ = services
-        try:
-            from platform_context_graph.mcp.tools.handlers import ecosystem
+        api_url = os.getenv("PCG_API_URL", "http://localhost:8080")
+        url = f"{api_url}/api/v0/ecosystem/overview"
 
-            result = ecosystem.get_ecosystem_overview(graph_builder.db_manager)
+        try:
+            req = Request(url)
+            req.add_header("Content-Type", "application/json")
+            with urlopen(req, timeout=30) as response:
+                result = json.loads(response.read().decode("utf-8"))
+
             eco = result.get("ecosystem", {})
             main_module.console.print(
                 f"\n[bold cyan]Ecosystem: {eco.get('name', 'N/A')}[/bold cyan]"
@@ -322,8 +326,9 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
                 main_module.console.print("\n[bold]Infrastructure Counts:[/bold]")
                 for key, value in infra.items():
                     main_module.console.print(f"  {key}: {value}")
-        finally:
-            db_manager.close_driver()
+        except (URLError, HTTPError) as e:
+            main_module.console.print(f"[red]Error calling Go API: {e}[/red]")
+            raise typer.Exit(1)
 
     @ecosystem_app.command("query")
     def ecosystem_query(
@@ -342,42 +347,54 @@ def register_ecosystem_commands(main_module: Any, app: typer.Typer) -> None:
         ),
     ) -> None:
         """Run ecosystem-level queries."""
-        services = _initialize_ecosystem_services(main_module)
-        if services is None:
-            raise typer.Exit(1)
-        db_manager, graph_builder, _ = services
-        try:
-            from platform_context_graph.mcp.tools.handlers import ecosystem
+        api_url = os.getenv("PCG_API_URL", "http://localhost:8080")
 
+        try:
             if query_type == "trace":
-                result = ecosystem.trace_deployment_chain(
-                    graph_builder.db_manager, target
-                )
+                url = f"{api_url}/api/v0/impact/trace-resource-to-code"
+                body = json.dumps({"target": target}).encode("utf-8")
+                req = Request(url, data=body, method="POST")
+                req.add_header("Content-Type", "application/json")
+
             elif query_type in ("blast-radius", "blast_radius"):
-                result = ecosystem.find_blast_radius(
-                    graph_builder.db_manager, target, target_type
-                )
+                url = f"{api_url}/api/v0/impact/blast-radius"
+                body = json.dumps({"target": target, "target_type": target_type}).encode("utf-8")
+                req = Request(url, data=body, method="POST")
+                req.add_header("Content-Type", "application/json")
+
             elif query_type == "search":
-                result = ecosystem.find_infra_resources(
-                    graph_builder.db_manager, target, category
-                )
+                url = f"{api_url}/api/v0/infra/resources/search"
+                body = json.dumps({"query": target, "category": category}).encode("utf-8")
+                req = Request(url, data=body, method="POST")
+                req.add_header("Content-Type", "application/json")
+
             elif query_type == "relationships":
                 if not rel_query:
                     main_module.console.print(
                         "[red]--rel required for relationships query[/red]"
                     )
                     raise typer.Exit(1)
-                result = ecosystem.analyze_infra_relationships(
-                    graph_builder.db_manager, rel_query, target
-                )
+                url = f"{api_url}/api/v0/infra/relationships"
+                body = json.dumps({"entity_id": target, "relationship_type": rel_query}).encode("utf-8")
+                req = Request(url, data=body, method="POST")
+                req.add_header("Content-Type", "application/json")
+
             elif query_type == "summary":
-                result = ecosystem.get_repo_summary(graph_builder.db_manager, target)
+                url = f"{api_url}/api/v0/repositories/{target}/context"
+                req = Request(url)
+                req.add_header("Content-Type", "application/json")
+
             else:
                 main_module.console.print(
                     f"[red]Unknown query type: {query_type}[/red]"
                 )
                 raise typer.Exit(1)
 
+            with urlopen(req, timeout=30) as response:
+                result = json.loads(response.read().decode("utf-8"))
+
             main_module.console.print_json(json.dumps(result, indent=2, default=str))
-        finally:
-            db_manager.close_driver()
+
+        except (URLError, HTTPError) as e:
+            main_module.console.print(f"[red]Error calling Go API: {e}[/red]")
+            raise typer.Exit(1)

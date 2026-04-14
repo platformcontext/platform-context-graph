@@ -345,6 +345,43 @@ export function WidgetPage() {
 	assertNamedBucketContains(t, got, "function_calls", "ToolbarButton")
 }
 
+func TestDefaultEngineParsePathTSXClassComponentParity(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "src", "LegacyWidget.tsx")
+	writeTestFile(
+		t,
+		filePath,
+		`import React from "react";
+
+type LegacyWidgetProps = {
+  title: string;
+};
+
+export class LegacyWidget extends React.Component<LegacyWidgetProps> {
+  render() {
+    return <section>{this.props.title}</section>;
+  }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "classes", "LegacyWidget")
+	assertNamedBucketContains(t, got, "functions", "render")
+	assertNamedBucketContains(t, got, "type_aliases", "LegacyWidgetProps")
+}
+
 func findNamedBucketItem(t *testing.T, payload map[string]any, key string, name string) map[string]any {
 	t.Helper()
 
@@ -426,7 +463,6 @@ func assertNestedStringSliceEqual(
 		t.Fatalf("framework_semantics.%s.%s = %#v, want %#v", section, key, got, want)
 	}
 }
-
 
 func frameworkSemanticsMap(t *testing.T, payload map[string]any) map[string]any {
 	t.Helper()

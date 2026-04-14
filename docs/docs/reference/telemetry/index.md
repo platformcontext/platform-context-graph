@@ -137,9 +137,11 @@ For shared-write debugging specifically:
   different mental model for collector, projector, reducer, or future Go
   services.
 - Use the report before restarting a service or forcing a broader re-index.
-- The collector proof lane still has remaining Python-owned parser/runtime seams
-  to delete, so it is not the final Go-owned runtime state yet. The target is
-  full Go ownership, not a lasting mixed runtime.
+- The collector proof lane still has remaining Python-owned content/API seams
+  to delete, but the parser-family cutover itself is now Go-owned. The
+  remaining parser work is downstream materialization parity for Go-emitted
+  buckets, not Python parser-family ownership. The target is full Go
+  ownership, not a lasting mixed runtime.
 
 Shared-write-specific gauges:
 

@@ -11,28 +11,26 @@ needed to remove Python runtime ownership from deployed services. Chunks 1 and
 have Go handlers and gate tests in place but cannot close until Chunk 2
 finishes.
 
-However, the cutover plan only tracks the **deployment surface** of the
-conversion. It does not cover the deeper Python write-plane modules that still
-own critical resolution, projection, and operational behavior. This ADR exists
-to finish the migration, not to legitimize a long-lived mixed Python/Go
-runtime:
+However, the cutover plan only tracked the **deployment surface** of the
+conversion. It did not cover the remaining ownership cleanup needed after the
+Go runtime loops landed. This ADR exists to finish the migration, not to
+legitimize a long-lived mixed Python/Go runtime.
 
-- `src/platform_context_graph/resolution/` (38 files) owns projection
-  orchestration, platform materialization, shared projection intent processing,
-  failure classification, and decision recording. Go covers only the core
-  projector/reducer service loops (~20% of the resolution surface).
-- `src/platform_context_graph/facts/` (26 files) owns fact storage, work queue
-  lifecycle, dead-letter recovery, and replay. Go has partial equivalents in
-  `go/internal/storage/postgres/` but the Python module still owns emission
-  orchestration and the full claim/complete/fail lifecycle surface.
-- `src/platform_context_graph/runtime/status_store*.py` (5 files) owns runtime
-  status tracking, scan/reindex request lifecycle, and repository coverage
-  metrics. Go has a partial equivalent in `go/internal/storage/postgres/status.go`
-  but does not cover the full request lifecycle or coverage tracking.
-- `src/platform_context_graph/indexing/` (23 files) owns the coordinator
-  pipeline, checkpoint persistence, facts-first emission orchestration, and
-  performance telemetry. This module is tightly coupled to the collector and
-  cannot be ported independently of Chunk 2.
+Some package families called out when this ADR was written have already been
+deleted from the branch. The remaining ownership debt is now more specific:
+
+- the deployed API service still starts from the Python runtime command
+  `pcg serve start`, even though a Go API binary exists in `go/cmd/api`
+- Python API, MCP, and CLI orchestration still survive under
+  `src/platform_context_graph/api/**`,
+  `src/platform_context_graph/mcp/**`, and
+  `src/platform_context_graph/cli/**`
+- `src/platform_context_graph/content/ingest.py` still owns a live
+  content-shaping seam
+- parser-family ownership is now finished in the canonical contract and on
+  disk; the remaining parser debt is downstream graph/materialization truth for
+  Go-emitted buckets rather than missing parser scaffolding or Python parser
+  entrypoints
 
 The existing ADRs establish that resolution owns cross-domain truth and that
 reducers are the canonical authority for shared domains. But the Go reducer and
@@ -60,30 +58,26 @@ Update documentation to reflect Go-owned recovery.
 
 ### Phase B: Resolution domain ownership
 
-Port the Python resolution domain logic to Go so that the projector and reducer
-service loops own their domain-specific behavior end to end:
+Finish the remaining domain-ownership cleanup so that the projector and reducer
+service loops own their surviving domain-specific behavior end to end and no
+deleted Python package family is accidentally reintroduced:
 
-1. **Platform materialization**: port `resolution/platforms.py` and
-   `resolution/platform_families.py` so Go reducers own infrastructure and
-   runtime platform edge materialization.
-2. **Projection decision recording**: port `resolution/decisions/` so Go
-   projectors persist decision metadata and evidence natively.
-3. **Shared projection intent workers**: port
-   `resolution/shared_projection/runtime.py`, `emission.py`, and
-   `partitioning.py` so Go owns partition-based intent draining and cross-domain
-   edge materialization.
-4. **Failure classification**: port
-   `resolution/orchestration/failure_classification.py` so Go projector and
-   reducer services own durable failure metadata.
-5. **Projector fact-stage expansion**: port
-   `resolution/projection/{entities,files,relationships,workloads}.py` so Go
-   projectors own the full fact-to-graph/content/intent materialization for
-   every projection stage.
+1. **Platform materialization**: keep Go reducers as the owner of
+   infrastructure and runtime platform edge materialization.
+2. **Projection decision recording**: keep Go projectors as the owner of
+   persisted decision metadata and evidence.
+3. **Shared projection intent workers**: keep Go as the owner of partition-
+   based intent draining and cross-domain edge materialization.
+4. **Failure classification**: keep Go projector and reducer services as the
+   owner of durable failure metadata.
+5. **Projector fact-stage expansion**: keep Go projectors as the owner of the
+   fact-to-graph/content/intent materialization stages and remove any
+   remaining Python-normal-path dependence.
 
 ### Phase C: Operational and validation surfaces
 
-1. **Status store parity**: port `runtime/status_store_runtime.py` surfaces so
-   Go owns scan/reindex request lifecycle and repository coverage tracking.
+1. **Status store parity**: keep Go status ownership as the source of truth for
+   scan/reindex request lifecycle and repository coverage tracking.
 2. **Test infrastructure**: add build-tag isolation for `storage/postgres` tests
    so recovery and resolution tests can run independently of in-progress
    collector work.
@@ -94,25 +88,26 @@ service loops own their domain-specific behavior end to end:
 
 ## Why This Choice
 
-- The cutover plan tracks the deployment surface but not the domain logic.
-  Without this extension, the branch would merge with Go service loops that
-  delegate all real work to Python.
-- Resolution domain logic has no dependency on Chunk 2 (parser/collector). It
-  can proceed in parallel.
-- The existing ADR "Resolution Owns Cross-Domain Truth" mandates that reducers
-  own canonical truth. Go reducer domain handlers exist for workload identity
-  and cloud asset resolution, but the platform materialization, decision
-  recording, and shared projection surfaces are still Python-only.
-- Porting resolution logic to Go before the final deletion phase means
-  Chunks 4/5 closures will be simpler: fewer Python surfaces to rewire when
-  the collector bridge is removed.
+- The cutover plan tracks the deployment surface but not the remaining
+  ownership debt. Without this extension, the branch would merge with
+  Go-owned runtime loops plus a still-Python API/orchestration layer and an
+  unfinished parser/content seam.
+- Runtime/admin/recovery ownership has already moved much further than the
+  original ADR snapshot assumed, and the parser-family cutover is now also
+  complete, but content/API cleanup is still open.
+- The existing ADR "Resolution Owns Cross-Domain Truth" still mandates that
+  the canonical runtime path stay Go-owned. The remaining open work has shifted
+  from deleted resolution/facts packages toward parser/content/API ownership
+  closure.
+- Finishing the remaining ownership cleanup before merge keeps the branch
+  honest: no hidden Python delegation behind Go-owned runtime claims.
 
 ## Consequences
 
 Positive:
 
-- Go owns domain-specific projection and reduction logic, not just service
-  loops.
+- Go owns the long-running write-plane runtime, recovery, and status logic, not
+  just the service loops.
 - Recovery and admin operations flow through Go immediately.
 - The merge bar is satisfied more honestly: no hidden Python delegation behind
   Go entrypoints.
@@ -121,13 +116,13 @@ Positive:
 
 Tradeoffs:
 
-- This extends the scope of the conversion beyond the original cutover plan.
-- Resolution domain logic is complex; the platform materialization and shared
-  projection intent workers in particular require careful parity validation.
-- Some Python resolution surfaces are consumed by read-plane queries today, so
-  the branch may need narrow same-branch sequencing adapters while those
-  consumers are ported. Those adapters must stay out of the normal runtime path
-  and must be removed or explicitly quarantined before merge.
+- This extends the scope of the conversion beyond the original deployment
+  cutover plan.
+- Content parity and API/MCP/CLI ownership are now the harder migration
+  problems than the already-landed runtime loops and parser-family cutover.
+- Some Python API/MCP/CLI surfaces still need same-branch deletion or
+  replacement so that the branch does not ship with broken imports into already
+  deleted package families.
 
 ## Implementation Guidance
 

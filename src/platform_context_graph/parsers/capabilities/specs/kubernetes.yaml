@@ -1,11 +1,11 @@
 language: kubernetes
 title: Kubernetes Parser
 family: iac
-parser: InfraYAMLParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/yaml_infra.py
+parser: DefaultEngine (yaml)
+parser_entrypoint: go/internal/parser/yaml_language.go
 doc_path: docs/docs/languages/kubernetes.md
 fixture_repo: tests/fixtures/ecosystems/kubernetes_comprehensive/
-unit_test_file: tests/unit/parsers/test_yaml_infra_parser.py
+unit_test_file: go/internal/parser/engine_infra_test.go
 integration_test_suite: tests/integration/test_iac_graph.py::TestKubernetesGraph
 capabilities:
 - id: kubernetes-resources-any-apiversion-kind
@@ -16,12 +16,11 @@ capabilities:
   - name
   - line_number
   - kind
-  - version
-  - resources
+  - api_version
   graph_surface:
     kind: node
     target: K8sResource
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_no_k8s_standalone_resources_without_api_version
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes
   integration_test: tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds
 - id: api-version
   name: API version
@@ -31,11 +30,10 @@ capabilities:
   - name
   - line_number
   - api_version
-  - version
   graph_surface:
     kind: property
     target: K8sResource.api_version
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_no_k8s_standalone_resources_without_api_version
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes
   integration_test: tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds
 - id: kind
   name: Kind
@@ -48,7 +46,7 @@ capabilities:
   graph_surface:
     kind: property
     target: K8sResource.kind
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_custom_domain_claim_indexed_as_k8s_resource
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes
   integration_test: tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds
 - id: name-metadata-name
   name: Name (`metadata.name`)
@@ -60,7 +58,7 @@ capabilities:
   graph_surface:
     kind: property
     target: K8sResource.name
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_custom_domain_claim_indexed_as_k8s_resource
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes
   integration_test: tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds
 - id: namespace-metadata-namespace
   name: Namespace (`metadata.namespace`)
@@ -73,21 +71,22 @@ capabilities:
   graph_surface:
     kind: property
     target: K8sResource.namespace
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_custom_domain_claim_indexed_as_k8s_resource
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes
   integration_test: tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds
 - id: labels
   name: Labels
-  status: supported
+  status: partial
   extracted_bucket: k8s_resources
   required_fields:
   - name
   - line_number
-  - labels
   graph_surface:
-    kind: property
-    target: K8sResource.labels
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_custom_domain_claim_indexed_as_k8s_resource
+    kind: none
+    target: not_persisted
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes
   integration_test: tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds
+  rationale: The native YAML parser does not yet normalize `metadata.labels`
+    onto the generic Kubernetes payload.
 - id: multi-document-yaml-support
   name: Multi-document YAML support
   status: supported
@@ -98,7 +97,7 @@ capabilities:
   graph_surface:
     kind: node
     target: multi-document-yaml-support
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_k8s_multi_document
+  unit_test: go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes
   integration_test: tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds
 known_limitations:
 - Container image references within Pod specs are not extracted as separate nodes

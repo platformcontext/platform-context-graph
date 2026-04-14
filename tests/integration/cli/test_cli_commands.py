@@ -90,19 +90,15 @@ class TestCLICommands:
             reload=False,
         )
 
-    @patch("platform_context_graph.cli.main.start_http_api")
-    @patch("platform_context_graph.cli.main.MCPServer")
-    @patch("platform_context_graph.cli.main._load_credentials")
-    def test_mcp_start_sse_stays_on_mcp_transport_path(
+    @patch("platform_context_graph.cli.commands.runtime.shutil.which")
+    @patch("platform_context_graph.cli.commands.runtime.os.execvp")
+    def test_mcp_start_sse_execs_go_binary(
         self,
-        mock_load_credentials,
-        mock_mcp_server_cls,
-        mock_start_http_api,
+        mock_execvp,
+        mock_which,
     ):
-        """Test that `pcg mcp start --transport sse` stays on the MCP path."""
-        mock_server = mock_mcp_server_cls.return_value
-        mock_server.run_sse = AsyncMock(return_value=None)
-        mock_server.shutdown = MagicMock()
+        """Test that `pcg mcp start --transport sse` execs the Go binary."""
+        mock_which.return_value = "/usr/local/bin/pcg-mcp-server"
 
         result = runner.invoke(
             app,
@@ -118,12 +114,41 @@ class TestCLICommands:
             ],
         )
 
-        assert result.exit_code == 0
-        mock_load_credentials.assert_called_once()
-        mock_start_http_api.assert_not_called()
-        mock_mcp_server_cls.assert_called_once()
-        mock_server.run_sse.assert_awaited_once_with(host="127.0.0.1", port=8123)
-        mock_server.shutdown.assert_called_once()
+        # execvp replaces the process, so we won't reach a normal exit
+        # The test should verify the call was made with correct args
+        mock_which.assert_called_once_with("pcg-mcp-server")
+        mock_execvp.assert_called_once_with("pcg-mcp-server", ["pcg-mcp-server"])
+        # Check environment variables were set
+        assert os.environ.get("PCG_MCP_TRANSPORT") == "sse"
+        assert os.environ.get("PCG_MCP_ADDR") == "127.0.0.1:8123"
+
+    @patch("platform_context_graph.cli.commands.runtime.shutil.which")
+    @patch("platform_context_graph.cli.main.console")
+    def test_mcp_start_stdio_fails_when_binary_not_found(
+        self,
+        mock_console,
+        mock_which,
+    ):
+        """Test that `pcg mcp start` fails gracefully when Go binary is missing."""
+        mock_which.return_value = None
+
+        result = runner.invoke(
+            app,
+            [
+                "mcp",
+                "start",
+                "--transport",
+                "stdio",
+            ],
+        )
+
+        assert result.exit_code == 1
+        # Check that error messages were printed via console
+        assert mock_console.print.called
+        print_calls = [str(call) for call in mock_console.print.call_args_list]
+        error_output = " ".join(print_calls)
+        assert "pcg-mcp-server" in error_output or "binary not found" in error_output
+        mock_which.assert_called_once_with("pcg-mcp-server")
 
     def test_start_http_api_uses_factory_mode_for_reload(self, monkeypatch):
         """Test the HTTP startup helper uses Uvicorn factory mode."""

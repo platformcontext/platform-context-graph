@@ -1,11 +1,11 @@
 language: java
 title: Java Parser
 family: language
-parser: JavaTreeSitterParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/java.py
+parser: DefaultEngine (java)
+parser_entrypoint: go/internal/parser/java_language.go
 doc_path: docs/docs/languages/java.md
 fixture_repo: tests/fixtures/ecosystems/java_comprehensive/
-unit_test_file: tests/unit/parsers/test_java_parser.py
+unit_test_file: go/internal/parser/engine_managed_oo_test.go
 integration_test_suite: tests/integration/test_language_graph.py::TestJavaGraph
 capabilities:
 - id: methods
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_methods
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_runtime_surface
 - id: constructors
   name: Constructors
@@ -30,7 +30,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_class
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_runtime_surface
 - id: classes
   name: Classes
@@ -42,7 +42,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_inner_classes
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_runtime_surface
 - id: interfaces
   name: Interfaces
@@ -54,7 +54,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Interface
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_interface
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_runtime_surface
 - id: enums
   name: Enums
@@ -66,7 +66,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_enum
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_runtime_surface
 - id: annotation-types
   name: Annotation types
@@ -78,7 +78,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Annotation
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_annotations
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJavaAnnotationMetadata
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_runtime_surface
 - id: imports
   name: Imports
@@ -90,7 +90,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: IMPORTS
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_imports
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_runtime_surface
 - id: method-invocations
   name: Method invocations
@@ -102,7 +102,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_function_calls
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_runtime_surface
 - id: object-creation
   name: Object creation
@@ -114,7 +114,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_object_creation_calls
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_runtime_surface
 - id: local-variables
   name: Local variables
@@ -126,7 +126,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_variables_and_fields
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_runtime_surface
 - id: field-declarations
   name: Field declarations
@@ -138,7 +138,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_variables_and_fields
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJava
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_runtime_surface
 - id: annotations-applied
   name: Annotations (applied)
@@ -150,7 +150,7 @@ capabilities:
   graph_surface:
     kind: none
     target: not_persisted
-  unit_test: tests/unit/parsers/test_java_parser.py::test_parse_annotations
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathJavaAnnotationMetadata
   integration_test: tests/integration/test_language_graph.py::TestJavaGraph::test_class_nodes_created
   rationale: Annotation declarations are indexed, but annotation usage on classes,
     methods, and fields is not persisted as a first-class graph surface.

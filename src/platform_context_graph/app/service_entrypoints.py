@@ -31,16 +31,13 @@ _SERVICE_ENTRYPOINTS = {
     SERVICE_ROLE_GIT_COLLECTOR: ServiceEntrypointSpec(
         service_role=SERVICE_ROLE_GIT_COLLECTOR,
         runtime_role="ingester",
-        import_path="platform_context_graph.runtime.ingester:run_repo_sync_loop",
+        import_path="go:cmd/ingester",
         implemented=True,
     ),
     SERVICE_ROLE_RESOLUTION_ENGINE: ServiceEntrypointSpec(
         service_role=SERVICE_ROLE_RESOLUTION_ENGINE,
         runtime_role="resolution-engine",
-        import_path=(
-            "platform_context_graph.resolution.orchestration.runtime:"
-            "start_resolution_engine"
-        ),
+        import_path="go:cmd/reducer",
         implemented=True,
     ),
 }

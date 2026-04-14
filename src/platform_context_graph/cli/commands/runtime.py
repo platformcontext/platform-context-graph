@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 from typing import Any
 
 import typer
@@ -79,71 +80,64 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
             help="Port for SSE server (only used with --transport sse)",
         ),
     ) -> None:
-        """Start the PlatformContextGraph MCP server."""
+        """Start the PlatformContextGraph MCP server (Go binary)."""
         normalized_transport = transport.lower()
         if normalized_transport not in ("stdio", "sse"):
             raise typer.BadParameter(
                 f"Unknown transport '{transport}'. Must be 'stdio' or 'sse'."
             )
 
-        main_module.console.print(
-            f"[bold green]Starting PlatformContextGraph Server ({normalized_transport} transport)...[/bold green]"
-        )
-        main_module._load_credentials()
+        # Check if Go binary exists
+        binary_path = shutil.which("pcg-mcp-server")
+        if not binary_path:
+            main_module.console.print(
+                "[bold red]Error:[/bold red] pcg-mcp-server binary not found in PATH."
+            )
+            main_module.console.print(
+                "\nThe MCP server is now implemented as a Go binary. Please ensure:"
+            )
+            main_module.console.print("  1. The Go binaries are built: cd go && make build")
+            main_module.console.print(
+                "  2. The binary is in your PATH or run: export PATH=$PATH:$(pwd)/go/bin"
+            )
+            raise typer.Exit(1)
 
-        server = None
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        main_module.console.print(
+            f"[bold green]Starting PlatformContextGraph MCP Server ({normalized_transport} transport)...[/bold green]"
+        )
+
+        # Set environment variables for the Go binary
+        os.environ["PCG_MCP_TRANSPORT"] = normalized_transport
+        if normalized_transport == "sse":
+            os.environ["PCG_MCP_ADDR"] = f"{host}:{port}"
+
+        # Exec the Go binary (replaces current process)
         try:
-            server = main_module.MCPServer(loop=loop)
-            if normalized_transport == "sse":
-                loop.run_until_complete(server.run_sse(host=host, port=port))
-            else:
-                loop.run_until_complete(server.run())
-        except ValueError as exc:
+            os.execvp("pcg-mcp-server", ["pcg-mcp-server"])
+        except Exception as exc:
             main_module.console.print(
-                f"[bold red]Configuration Error:[/bold red] {exc}"
+                f"[bold red]Failed to start MCP server:[/bold red] {exc}"
             )
-            main_module.console.print(
-                "Please run `pcg neo4j setup` or use FalkorDB (default)."
-            )
-        except KeyboardInterrupt:
-            main_module.console.print(
-                "\n[bold yellow]Server stopped by user.[/bold yellow]"
-            )
-        finally:
-            if server:
-                server.shutdown()
-            loop.close()
+            raise typer.Exit(1)
 
     @mcp_app.command("tools")
     def mcp_tools() -> None:
-        """List all available MCP tools."""
-        main_module._load_credentials()
-        main_module.console.print("[bold green]Available MCP Tools:[/bold green]")
-        try:
-            server = main_module.MCPServer()
-            tools = server.tools.values()
-
-            table = Table(show_header=True, header_style="bold magenta")
-            table.add_column("Tool Name", style="dim", width=30)
-            table.add_column("Description")
-
-            for tool in sorted(tools, key=lambda item: item["name"]):
-                table.add_row(tool["name"], tool["description"])
-
-            main_module.console.print(table)
-        except ValueError as exc:
-            main_module.console.print(
-                f"[bold red]Error loading tools:[/bold red] {exc}"
-            )
-            main_module.console.print(
-                "Please ensure your database is configured correctly."
-            )
-        except Exception as exc:
-            main_module.console.print(
-                f"[bold red]An unexpected error occurred:[/bold red] {exc}"
-            )
+        """List all available MCP tools (now served by Go MCP server)."""
+        main_module.console.print(
+            "[bold yellow]The MCP server is now implemented in Go.[/bold yellow]\n"
+        )
+        main_module.console.print(
+            "To inspect available MCP tools, use your MCP client's introspection features or:"
+        )
+        main_module.console.print(
+            "  1. Start the server: [cyan]pcg mcp start[/cyan]"
+        )
+        main_module.console.print(
+            "  2. Connect via your IDE (VS Code, Claude Desktop, etc.)\n"
+        )
+        main_module.console.print(
+            "The Go MCP server provides the same tools as the Python implementation."
+        )
 
     @api_app.command("start")
     def api_start(
@@ -268,9 +262,10 @@ def register_runtime_commands(main_module: Any, app: typer.Typer) -> None:
 
     @internal_app.command("repo-sync", hidden=True)
     def internal_repo_sync() -> None:
-        """Run one repo sync cycle and re-index if needed."""
-        main_module.run_repo_sync_cycle(
-            main_module.RepoSyncConfig.from_env(component="repo-sync")
+        """Run one repo sync cycle (now handled by Go ingester)."""
+        main_module.console.print(
+            "[bold yellow]repo-sync is now handled by the Go ingester "
+            "(pcg-ingester).[/bold yellow]"
         )
 
     @app.command("m", rich_help_panel="Shortcuts")

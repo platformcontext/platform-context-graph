@@ -1,11 +1,11 @@
 language: haskell
 title: Haskell Parser
 family: language
-parser: HaskellTreeSitterParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/haskell.py
+parser: DefaultEngine (haskell)
+parser_entrypoint: go/internal/parser/perl_haskell_language.go
 doc_path: docs/docs/languages/haskell.md
 fixture_repo: tests/fixtures/ecosystems/haskell_comprehensive/
-unit_test_file: tests/unit/parsers/test_haskell_parser.py
+unit_test_file: go/internal/parser/engine_long_tail_test.go
 integration_test_suite: tests/integration/test_language_graph.py::TestHaskellGraph
 capabilities:
 - id: function-declarations
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_haskell_parser.py::test_parse_functions
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathHaskellFixtures
   integration_test: tests/integration/test_language_graph.py::TestHaskellGraph::test_runtime_surface
 - id: initializer-declarations
   name: Initializer declarations
@@ -30,7 +30,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_haskell_parser.py::test_parse_functions
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathHaskellFixtures
   integration_test: tests/integration/test_language_graph.py::TestHaskellGraph::test_runtime_surface
 - id: type-classes
   name: Type classes
@@ -42,7 +42,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_haskell_parser.py::test_parse_type_classes
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathHaskellFixtures
   integration_test: tests/integration/test_language_graph.py::TestHaskellGraph::test_runtime_surface
 - id: data-types-struct-like
   name: Data types (struct-like)
@@ -54,7 +54,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_haskell_parser.py::test_parse_data_types
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathHaskellFixtures
   integration_test: tests/integration/test_language_graph.py::TestHaskellGraph::test_runtime_surface
 - id: enumerations
   name: Enumerations
@@ -66,7 +66,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_haskell_parser.py::test_parse_data_types
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathHaskellFixtures
   integration_test: tests/integration/test_language_graph.py::TestHaskellGraph::test_runtime_surface
 - id: protocols-typeclasses
   name: Protocols/typeclasses
@@ -78,7 +78,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_haskell_parser.py::test_parse_type_classes
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathHaskellFixtures
   integration_test: tests/integration/test_language_graph.py::TestHaskellGraph::test_runtime_surface
 - id: import-declarations
   name: Import declarations
@@ -90,7 +90,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: IMPORTS
-  unit_test: tests/unit/parsers/test_haskell_parser.py::test_parse_imports
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathHaskellFixtures
   integration_test: tests/integration/test_language_graph.py::TestHaskellGraph::test_runtime_surface
 - id: function-call-expressions
   name: Function call expressions
@@ -102,7 +102,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_haskell_parser.py::test_parse_function_calls
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathHaskellFixtures
   integration_test: tests/integration/test_language_graph.py::TestHaskellGraph::test_runtime_surface
 - id: property-binding-declarations
   name: Property/binding declarations
@@ -114,7 +114,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_haskell_parser.py::test_parse_variables
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathHaskellFixtures
   integration_test: tests/integration/test_language_graph.py::TestHaskellGraph::test_runtime_surface
 known_limitations:
 - Type class instances are not modeled as inheritance relationships

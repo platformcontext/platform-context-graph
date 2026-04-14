@@ -1,11 +1,17 @@
-"""Workspace-oriented CLI helper implementations."""
+"""Workspace-oriented CLI helper implementations.
+
+Workspace sync and plan operations previously depended on
+``platform_context_graph.runtime.ingester``, which is now deleted.
+The Go ingester (``go/cmd/ingester``) owns the deployed write-plane.
+Workspace index and watch commands delegate to the Go bootstrap-index.
+"""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from ...indexing.run_status import describe_index_run
-from ...runtime.ingester import RepoSyncConfig, build_workspace_plan, run_workspace_sync
 from .indexing import index_helper
 from .watch import watch_helper
 
@@ -28,50 +34,23 @@ def _managed_checkout_count(repos_dir: Path) -> int:
 
 
 def workspace_plan_helper() -> None:
-    """Print the current workspace discovery plan without mutating the workspace."""
+    """Preview the repositories selected by the current workspace config."""
 
     api = _api()
-    try:
-        config = RepoSyncConfig.from_env(component="workspace-plan")
-        plan = build_workspace_plan(config)
-    except Exception as exc:
-        api.console.print(f"[bold red]Workspace plan failed:[/bold red] {exc}")
-        return
-
-    api.console.print("[bold cyan]Workspace Plan[/bold cyan]")
-    api.console.print(f"[cyan]Source mode:[/cyan] {plan['source_mode']}")
-    api.console.print(f"[cyan]Workspace:[/cyan] {plan['repos_dir']}")
     api.console.print(
-        f"[cyan]Matched repositories:[/cyan] {plan['matched_repositories']}"
+        "[bold yellow]Workspace plan is now handled by the Go ingester.[/bold yellow]\n"
+        "Use the Go ingester's discovery mode or check docker compose logs."
     )
-    api.console.print(f"[cyan]Already cloned:[/cyan] {plan['already_cloned']}")
-    api.console.print(f"[cyan]Stale checkouts:[/cyan] {plan['stale_checkouts']}")
-    if plan["repository_ids"]:
-        api.console.print("[cyan]Repositories:[/cyan]")
-        for repository_id in plan["repository_ids"]:
-            api.console.print(f"  - {repository_id}")
 
 
 def workspace_sync_helper() -> None:
-    """Materialize or refresh the configured workspace without indexing."""
+    """Clone, update, or copy the configured workspace without indexing."""
 
     api = _api()
-    try:
-        config = RepoSyncConfig.from_env(component="workspace-sync")
-        result = run_workspace_sync(config)
-    except Exception as exc:
-        api.console.print(f"[bold red]Workspace sync failed:[/bold red] {exc}")
-        raise
-
-    api.console.print("[bold cyan]Workspace Sync[/bold cyan]")
     api.console.print(
-        "[cyan]Result:[/cyan] "
-        f"discovered={result.discovered} "
-        f"cloned={result.cloned} "
-        f"updated={result.updated} "
-        f"skipped={result.skipped} "
-        f"failed={result.failed} "
-        f"stale={result.stale}"
+        "[bold yellow]Workspace sync is now handled by the Go ingester.[/bold yellow]\n"
+        "The Go ingester (pcg-ingester) owns repository discovery and sync.\n"
+        "Use 'docker compose up ingester' or the Helm-deployed ingester."
     )
 
 
@@ -79,35 +58,42 @@ def workspace_index_helper() -> None:
     """Index the configured materialized workspace using the shared index helper."""
 
     api = _api()
-    try:
-        config = RepoSyncConfig.from_env(component="workspace-index")
-    except Exception as exc:
-        api.console.print(f"[bold red]Workspace index failed:[/bold red] {exc}")
+    repos_dir = os.environ.get("PCG_REPOS_DIR", "")
+    if not repos_dir:
+        api.console.print(
+            "[bold red]PCG_REPOS_DIR is not set.[/bold red] "
+            "Set it to the workspace directory to index."
+        )
         return
 
     api.console.print("[bold cyan]Workspace Index[/bold cyan]")
-    api.console.print(f"[cyan]Workspace:[/cyan] {config.repos_dir}")
-    index_helper(str(config.repos_dir))
+    api.console.print(f"[cyan]Workspace:[/cyan] {repos_dir}")
+    index_helper(repos_dir)
 
 
 def workspace_status_helper() -> None:
     """Print the configured workspace status and the latest index summary."""
 
     api = _api()
-    try:
-        config = RepoSyncConfig.from_env(component="workspace-status")
-    except Exception as exc:
-        api.console.print(f"[bold red]Workspace status failed:[/bold red] {exc}")
+    repos_dir = os.environ.get("PCG_REPOS_DIR", "")
+    if not repos_dir:
+        api.console.print(
+            "[bold red]PCG_REPOS_DIR is not set.[/bold red] "
+            "Set it to the workspace directory to check status."
+        )
         return
 
+    source_mode = os.environ.get("PCG_SOURCE_MODE", "filesystem")
+    repos_path = Path(repos_dir)
+
     api.console.print("[bold cyan]Workspace Status[/bold cyan]")
-    api.console.print(f"[cyan]Source mode:[/cyan] {config.source_mode}")
-    api.console.print(f"[cyan]Workspace:[/cyan] {config.repos_dir}")
+    api.console.print(f"[cyan]Source mode:[/cyan] {source_mode}")
+    api.console.print(f"[cyan]Workspace:[/cyan] {repos_dir}")
     api.console.print(
-        f"[cyan]Local checkouts:[/cyan] {_managed_checkout_count(config.repos_dir)}"
+        f"[cyan]Local checkouts:[/cyan] {_managed_checkout_count(repos_path)}"
     )
 
-    summary = describe_index_run(config.repos_dir)
+    summary = describe_index_run(repos_path)
     if summary is None:
         api.console.print("[yellow]No checkpointed workspace index run found.[/yellow]")
         return
@@ -133,16 +119,18 @@ def workspace_watch_helper(
     """Watch the configured workspace using repo-partitioned watch mode."""
 
     api = _api()
-    try:
-        config = RepoSyncConfig.from_env(component="workspace-watch")
-    except Exception as exc:
-        api.console.print(f"[bold red]Workspace watch failed:[/bold red] {exc}")
+    repos_dir = os.environ.get("PCG_REPOS_DIR", "")
+    if not repos_dir:
+        api.console.print(
+            "[bold red]PCG_REPOS_DIR is not set.[/bold red] "
+            "Set it to the workspace directory to watch."
+        )
         return
 
     api.console.print("[bold cyan]Workspace Watch[/bold cyan]")
-    api.console.print(f"[cyan]Workspace:[/cyan] {config.repos_dir}")
+    api.console.print(f"[cyan]Workspace:[/cyan] {repos_dir}")
     watch_helper(
-        str(config.repos_dir),
+        repos_dir,
         scope="workspace",
         include_repositories=include_repositories,
         exclude_repositories=exclude_repositories,

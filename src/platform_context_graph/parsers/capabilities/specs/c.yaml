@@ -1,11 +1,11 @@
 language: c
 title: C Parser
 family: language
-parser: CTreeSitterParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/c.py
+parser: DefaultEngine (c)
+parser_entrypoint: go/internal/parser/c_language.go
 doc_path: docs/docs/languages/c.md
 fixture_repo: tests/fixtures/ecosystems/c_comprehensive/
-unit_test_file: tests/unit/parsers/test_c_parser.py
+unit_test_file: go/internal/parser/engine_systems_test.go
 integration_test_suite: tests/integration/test_language_graph.py::TestCGraph
 capabilities:
 - id: functions
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_c_parser.py::test_parse_functions
+  unit_test: go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathC
   integration_test: tests/integration/test_language_graph.py::TestCGraph::test_runtime_surface
 - id: pointer-returning-functions
   name: Pointer-returning functions
@@ -30,7 +30,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_c_parser.py::test_parse_functions
+  unit_test: go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathC
   integration_test: tests/integration/test_language_graph.py::TestCGraph::test_runtime_surface
 - id: structs
   name: Structs
@@ -42,7 +42,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_c_parser.py::test_parse_structs
+  unit_test: go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathC
   integration_test: tests/integration/test_language_graph.py::TestCGraph::test_runtime_surface
 - id: unions
   name: Unions
@@ -54,7 +54,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_c_parser.py::test_parse_unions
+  unit_test: go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathCTypedefAliases
   integration_test: tests/integration/test_language_graph.py::TestCGraph::test_runtime_surface
 - id: enums
   name: Enums
@@ -66,11 +66,11 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_c_parser.py::test_parse_enums
+  unit_test: go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathC
   integration_test: tests/integration/test_language_graph.py::TestCGraph::test_runtime_surface
 - id: typedefs
   name: Typedefs
-  status: unsupported
+  status: partial
   extracted_bucket: typedefs
   required_fields:
   - name
@@ -78,11 +78,10 @@ capabilities:
   graph_surface:
     kind: none
     target: not_persisted
-  unit_test: tests/unit/parsers/test_c_parser.py::test_parse_typedefs_do_not_emit_dedicated_entities
+  unit_test: go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathCTypedefAliasEmitsDedicatedEntities
   integration_test: tests/integration/test_language_graph.py::TestCGraph::test_typedef_nodes_not_created
-  rationale: Typedef syntax is tolerated during parsing, but the normalized parser output
-    does not emit dedicated typedef entities and the graph layer has no Typedef node
-    surface.
+  rationale: The Go parser emits dedicated typedef entities, but the graph layer does
+    not yet materialize Typedef nodes end to end.
 - id: includes
   name: Includes
   status: supported
@@ -93,7 +92,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: IMPORTS
-  unit_test: tests/unit/parsers/test_c_parser.py::test_parse_includes
+  unit_test: go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathC
   integration_test: tests/integration/test_language_graph.py::TestCGraph::test_runtime_surface
 - id: function-calls
   name: Function calls
@@ -105,7 +104,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_c_parser.py::test_parse_function_calls
+  unit_test: go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathC
   integration_test: tests/integration/test_language_graph.py::TestCGraph::test_runtime_surface
 - id: variables-initialized-declarations
   name: Variables (initialized declarations)
@@ -117,7 +116,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_c_parser.py::test_parse_initialized_variables
+  unit_test: go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathC
   integration_test: tests/integration/test_language_graph.py::TestCGraph::test_runtime_surface
 - id: macros-define
   name: Macros (`#define`)
@@ -129,7 +128,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Macro
-  unit_test: tests/unit/parsers/test_c_parser.py::test_parse_macros
+  unit_test: go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathC
   integration_test: tests/integration/test_language_graph.py::TestCGraph::test_runtime_surface
 known_limitations:
 - Function pointer declarations are not modeled as callable entities

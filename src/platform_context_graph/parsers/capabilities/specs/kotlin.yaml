@@ -1,11 +1,11 @@
 language: kotlin
 title: Kotlin Parser
 family: language
-parser: KotlinTreeSitterParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/kotlin.py
+parser: DefaultEngine (kotlin)
+parser_entrypoint: go/internal/parser/kotlin_language.go
 doc_path: docs/docs/languages/kotlin.md
 fixture_repo: tests/fixtures/ecosystems/kotlin_comprehensive/
-unit_test_file: tests/unit/parsers/test_kotlin_parser.py
+unit_test_file: go/internal/parser/engine_managed_oo_test.go
 integration_test_suite: tests/integration/test_language_graph.py::TestKotlinGraph
 capabilities:
 - id: functions
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_kotlin_parser.py::test_parse_kotlin_simple_declarations
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathKotlinFixtures
   integration_test: tests/integration/test_language_graph.py::TestKotlinGraph::test_runtime_surface
 - id: classes
   name: Classes
@@ -30,7 +30,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_kotlin_parser.py::test_parse_kotlin_simple_declarations
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathKotlinFixtures
   integration_test: tests/integration/test_language_graph.py::TestKotlinGraph::test_runtime_surface
 - id: objects-object
   name: Objects (`object`)
@@ -42,7 +42,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_kotlin_parser.py::test_parse_kotlin_extended_surface
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathKotlinFixtures
   integration_test: tests/integration/test_language_graph.py::TestKotlinGraph::test_runtime_surface
 - id: companion-objects
   name: Companion objects
@@ -54,7 +54,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_kotlin_parser.py::test_parse_kotlin_extended_surface
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathKotlinFixtures
   integration_test: tests/integration/test_language_graph.py::TestKotlinGraph::test_runtime_surface
 - id: imports
   name: Imports
@@ -66,7 +66,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: IMPORTS
-  unit_test: tests/unit/parsers/test_kotlin_parser.py::test_pre_scan_kotlin_keeps_public_import_surface
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathKotlinFixtures
   integration_test: tests/integration/test_language_graph.py::TestKotlinGraph::test_runtime_surface
 - id: function-calls
   name: Function calls
@@ -78,7 +78,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_kotlin_parser.py::test_parse_kotlin_extended_surface
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathKotlinFixtures
   integration_test: tests/integration/test_language_graph.py::TestKotlinGraph::test_runtime_surface
 - id: property-declarations
   name: Property declarations
@@ -90,7 +90,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Variable
-  unit_test: tests/unit/parsers/test_kotlin_parser.py::test_parse_kotlin_extended_surface
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathKotlinFixtures
   integration_test: tests/integration/test_language_graph.py::TestKotlinGraph::test_runtime_surface
 - id: class-context-on-functions
   name: Class context on functions
@@ -103,7 +103,7 @@ capabilities:
   graph_surface:
     kind: property
     target: Function.class_context
-  unit_test: tests/unit/parsers/test_kotlin_parser.py::test_parse_kotlin_extended_surface
+  unit_test: go/internal/parser/engine_long_tail_test.go::TestDefaultEngineParsePathKotlinFixtures
   integration_test: tests/integration/test_language_graph.py::TestKotlinGraph::test_runtime_surface
 - id: secondary-constructors
   name: Secondary constructors
@@ -115,7 +115,7 @@ capabilities:
   graph_surface:
     kind: none
     target: not_persisted
-  unit_test: tests/unit/parsers/test_kotlin_parser.py::test_parse_kotlin_extended_surface
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathKotlinSecondaryConstructors
   integration_test: tests/integration/test_language_graph.py::TestKotlinGraph::test_class_nodes
   rationale: Secondary constructor syntax is parsed as part of class structure, but
     constructor-specific graph nodes or relationships are not persisted yet.

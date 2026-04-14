@@ -42,8 +42,8 @@ Current branch caveat:
 - the legacy Python snapshot/coordinator runtime stack has been deleted from
   the branch
 - the remaining cutover debt is now outside the normal collector hot path:
-  parser-matrix completion plus the last Python helper, finalization,
-  recovery, and admin ownership removals
+  downstream parser/content materialization parity, the last Python helper,
+  content-shaping, API/MCP/CLI orchestration, and admin ownership removals
 - no new ingestor family should start until the Python finalization/recovery
   ownership is gone and the parser cutover is proven end to end
 
@@ -85,9 +85,11 @@ but they do follow the same shared admin contract:
 repo sync, durable fact commit, per-repo snapshot collection, content shaping,
 the optional SCIP collector path, and the shared admin surface in Go.
 
-The remaining cutover work is no longer a selector or snapshot bridge problem.
-It is now centered on parser-matrix completion plus the separate Python-owned
-runtime/finalization seams that are slated for deletion before merge. The merge
+The remaining cutover work is no longer a selector, snapshot, or
+finalization/recovery bridge problem. The parser-family cutover is now
+complete, and the remaining debt is centered on downstream parser/content
+materialization parity plus the remaining Python-owned API/MCP/CLI and
+content-shaping seams that are slated for deletion before merge. The merge
 target is full Go service ownership, not a maintained dual-path runtime.
 
 ## Admin Contract
@@ -122,8 +124,9 @@ Current rewrite status:
 - the collector proof lane now uses native Go selection, repo sync, snapshot
   collection, content shaping, and optional SCIP execution/parsing; the
   deleted `source_python_bridge.go` entrypoint shims are no longer part of the
-  branch, and the remaining non-Go ownership is now centered on parser-matrix
-  completion plus Python runtime and recovery/finalization seams
+  branch, the Python parser-family directory has been reduced to docs-only
+  stubs, and the remaining non-Go ownership is now centered on the Python
+  API/MCP/CLI and content-shaping seams
 
 ## Incremental Refresh And Reconciliation
 

@@ -1,11 +1,11 @@
 language: helm
 title: Helm Parser
 family: iac
-parser: InfraYAMLParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/yaml_infra.py
+parser: DefaultEngine (yaml)
+parser_entrypoint: go/internal/parser/yaml_language.go
 doc_path: docs/docs/languages/helm.md
 fixture_repo: tests/fixtures/ecosystems/helm_comprehensive/
-unit_test_file: tests/unit/parsers/test_yaml_infra_parser.py
+unit_test_file: go/internal/parser/engine_yaml_semantics_test.go
 integration_test_suite: tests/integration/test_iac_graph.py::TestHelmGraph
 capabilities:
 - id: helm-charts-chart-yaml
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: HelmChart
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_helm_chart
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm
   integration_test: tests/integration/test_iac_graph.py::TestHelmGraph::test_helm_chart_indexed
 - id: chart-name-version-app-version
   name: Chart name, version, app version
@@ -32,7 +32,7 @@ capabilities:
   graph_surface:
     kind: property
     target: HelmChart.properties
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_argocd_application
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm
   integration_test: tests/integration/test_iac_graph.py::TestHelmGraph::test_helm_chart_has_properties
 - id: chart-dependencies
   name: Chart dependencies
@@ -45,7 +45,7 @@ capabilities:
   graph_surface:
     kind: property
     target: HelmChart.list
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_helm_chart
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm
   integration_test: tests/integration/test_iac_graph.py::TestHelmGraph::test_helm_chart_indexed
 - id: values-files-values-yaml
   name: Values files (`values*.yaml`)
@@ -57,7 +57,7 @@ capabilities:
   graph_surface:
     kind: node
     target: HelmValues
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_helm_values
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm
   integration_test: tests/integration/test_iac_graph.py::TestHelmGraph::test_helm_values_indexed
 - id: values-top-level-keys
   name: Values top-level keys
@@ -66,11 +66,11 @@ capabilities:
   required_fields:
   - name
   - line_number
-  - key_count
+  - top_level_keys
   graph_surface:
     kind: property
-    target: HelmValues.key_count
-  unit_test: tests/unit/parsers/test_yaml_infra_parser.py::TestInfraYAMLParser::test_parse_helm_values
+    target: HelmValues.top_level_keys
+  unit_test: go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm
   integration_test: tests/integration/test_iac_graph.py::TestHelmGraph::test_helm_values_indexed
 known_limitations:
 - Helm template files (`.yaml` in `templates/`) are not parsed for resource definitions

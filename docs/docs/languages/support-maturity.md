@@ -8,33 +8,33 @@ yet been explicitly assessed in the parser maturity program.
 
 | Parser | Parser Class | Grammar Routing | Normalization | Framework Packs | Pack Names | Query Surfacing | Real-Repo Validation | End-to-End Indexing |
 |--------|--------------|-----------------|---------------|-----------------|------------|-----------------|----------------------|---------------------|
-| ArgoCD | `InfraYAMLParser` | - | - | - | - | - | - | - |
-| C | `CTreeSitterParser` | - | - | - | - | - | - | - |
-| CloudFormation | `InfraYAMLParser` | - | - | - | - | - | - | - |
-| C++ | `CppTreeSitterParser` | - | - | - | - | - | - | - |
-| Crossplane | `InfraYAMLParser` | - | - | - | - | - | - | - |
+| ArgoCD | `DefaultEngine (yaml)` | - | - | - | - | - | - | - |
+| C | `DefaultEngine (c)` | - | - | - | - | - | - | - |
+| CloudFormation | `DefaultEngine (yaml)` | - | - | - | - | - | - | - |
+| C++ | `DefaultEngine (cpp)` | - | - | - | - | - | - | - |
+| Crossplane | `DefaultEngine (yaml)` | - | - | - | - | - | - | - |
 | C# | `DefaultEngine (c_sharp)` | - | - | - | - | - | - | - |
-| Dart | `DartTreeSitterParser` | - | - | - | - | - | - | - |
-| Elixir | `ElixirTreeSitterParser` | - | - | - | - | - | - | - |
-| Go | `GoTreeSitterParser` | - | - | - | - | - | - | - |
+| Dart | `DefaultEngine (dart)` | - | - | - | - | - | - | - |
+| Elixir | `DefaultEngine (elixir)` | - | - | - | - | - | - | - |
+| Go | `DefaultEngine (go)` | - | - | - | - | - | - | - |
 | Groovy | `DefaultEngine (groovy)` | - | - | - | - | - | - | - |
-| Haskell | `HaskellTreeSitterParser` | - | - | - | - | - | - | - |
-| Helm | `InfraYAMLParser` | - | - | - | - | - | - | - |
-| Java | `JavaTreeSitterParser` | - | - | - | - | - | - | - |
-| JavaScript | `JavascriptTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base` | supported | supported | supported |
-| JSON Config | `JSONConfigTreeSitterParser` | - | - | - | - | - | - | - |
-| Kotlin | `KotlinTreeSitterParser` | - | - | - | - | - | - | - |
-| Kubernetes | `InfraYAMLParser` | - | - | - | - | - | - | - |
-| Kustomize | `InfraYAMLParser` | - | - | - | - | - | - | - |
+| Haskell | `DefaultEngine (haskell)` | - | - | - | - | - | - | - |
+| Helm | `DefaultEngine (yaml)` | - | - | - | - | - | - | - |
+| Java | `DefaultEngine (java)` | - | - | - | - | - | - | - |
+| JavaScript | `DefaultEngine (javascript)` | supported | supported | supported | `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base` | supported | supported | supported |
+| JSON Config | `DefaultEngine (json)` | - | - | - | - | - | - | - |
+| Kotlin | `DefaultEngine (kotlin)` | - | - | - | - | - | - | - |
+| Kubernetes | `DefaultEngine (yaml)` | - | - | - | - | - | - | - |
+| Kustomize | `DefaultEngine (yaml)` | - | - | - | - | - | - | - |
 | Perl | `DefaultEngine (perl)` | - | - | - | - | - | - | - |
-| PHP | `PhpTreeSitterParser` | - | - | - | - | - | - | - |
-| Python | `PythonTreeSitterParser` | supported | supported | supported | `fastapi-base`, `flask-base` | supported | supported | supported |
-| Ruby | `RubyTreeSitterParser` | - | - | - | - | - | - | - |
+| PHP | `DefaultEngine (php)` | - | - | - | - | - | - | - |
+| Python | `DefaultEngine (python)` | supported | supported | supported | `fastapi-base`, `flask-base` | supported | supported | supported |
+| Ruby | `DefaultEngine (ruby)` | - | - | - | - | - | - | - |
 | Rust | `DefaultEngine (rust)` | - | - | - | - | - | - | - |
 | Scala | `DefaultEngine (scala)` | - | - | - | - | - | - | - |
-| SQL | `SQLTreeSitterParser` | supported | supported | unsupported | - | supported | partial | partial |
-| Swift | `SwiftTreeSitterParser` | - | - | - | - | - | - | - |
-| Terraform | `HCLTerraformParser` | - | - | - | - | - | - | - |
-| Terragrunt | `HCLTerraformParser` | - | - | - | - | - | - | - |
-| TypeScript | `TypescriptTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base` | supported | supported | supported |
-| TypeScript JSX | `TypescriptJSXTreeSitterParser` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | supported | supported |
+| SQL | `DefaultEngine (sql)` | supported | supported | unsupported | - | supported | partial | partial |
+| Swift | `DefaultEngine (swift)` | - | - | - | - | - | - | - |
+| Terraform | `DefaultEngine (hcl)` | - | - | - | - | - | - | - |
+| Terragrunt | `DefaultEngine (hcl)` | - | - | - | - | - | - | - |
+| TypeScript | `DefaultEngine (typescript)` | supported | supported | supported | `react-base`, `nextjs-app-router-base`, `express-base`, `hapi-base`, `aws-sdk-base`, `gcp-sdk-base` | supported | supported | supported |
+| TypeScript JSX | `DefaultEngine (tsx)` | supported | supported | supported | `react-base`, `nextjs-app-router-base` | supported | supported | supported |

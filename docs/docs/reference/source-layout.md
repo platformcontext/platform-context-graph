@@ -1,6 +1,6 @@
 # Source Layout
 
-PlatformContextGraph keeps the importable Python package under `src/platform_context_graph/` and organizes it by responsibility instead of by transport-specific duplication.
+PlatformContextGraph keeps the importable Python package under `src/platform_context_graph/` and organizes the remaining Python support code by responsibility instead of by transport-specific duplication.
 
 For rewrite-era source families, pair this page with the
 [Collector Authoring Guide](../guides/collector-authoring.md). The guide covers
@@ -18,14 +18,11 @@ live in the repository today.
 | `content/` | content-store providers, content identity helpers, and workspace fallback |
 | `core/` | database adapters, watcher/runtime primitives, and low-level support code |
 | `domain/` | shared typed entities and response models |
-| `facts/` | typed fact models, Postgres fact storage, fact emission, queue state, and facts-first runtime helpers |
 | `graph/` | canonical graph schema and persistence helpers |
 | `mcp/` | MCP server, transport, tool registry, and handler wiring |
 | `observability/` | OTEL bootstrap, runtime state, metrics, and instrumentation helpers |
 | `parsers/` | parser registry, raw-text parsing, parser capabilities, language parsers, and SCIP |
 | `platform/` | Shared platform/runtime primitives such as dependency rules, package resolution, and runtime-family inference |
-| `query/` | shared read/query services used by CLI, MCP, and HTTP |
-| `resolution/` | Resolution Engine orchestration, fact projection, workload/platform materialization, and future shared resolution logic |
 | `relationships/` | evidence-backed repo relationship discovery, resolution, persistence, and projection |
 | `runtime/` | repo sync, bootstrap indexing, resolution-engine runtime loops, and long-running runtime helpers |
 | `tools/` | `GraphBuilder`, code-finder/query helpers, cross-repo linking entrypoints, and generated tool-facing artifacts |
@@ -101,8 +98,7 @@ The content package owns portable source retrieval and content-store writes:
 ## Collectors, Facts, Parsers, And Graph Layout
 
 The indexing side now separates source collection, parsing, graph persistence,
-facts, graph persistence, and post-index materialization into clearer
-boundaries:
+and post-index materialization into clearer boundaries:
 
 - `collectors/git/`: repository discovery, `.gitignore`, path indexing handoff,
   parse snapshot models, and facts-first Git collection support
@@ -113,39 +109,36 @@ boundaries:
 - future `collectors/<source>/` families: source-specific adapters for AWS,
   Kubernetes, ETL, and other product domains, but only after the Git cutover
   and parser-platform cutovers finish
-- `facts/models/`: typed fact contracts for repository/file/entity observations
-- `facts/storage/`: Postgres-backed fact storage
-- `facts/work_queue/`: Postgres-backed work item queue used by the Resolution Engine
-- `facts/emission/`: source-specific fact emission from parsed snapshots
-- `facts/state.py`: shared fact store and queue lifecycle for deployed runtimes
+- `parsers/`: parser capability catalog, models, validation, packaged specs,
+  and the remaining Python language adapters still being retired language by
+  language
+- parser registry and raw-text helper modules that used to live here are gone
+  from this branch
 - `indexing/coordinator_facts.py` and `indexing/coordinator_facts_support.py`:
   remaining Git cutover helpers for fact emission, recovery support, and
   facts-first finalization while the last Python runtime ownership is being
   removed
-- `parsers/registry.py`: canonical parser registry and worker-friendly parse entrypoints
-- `parsers/raw_text.py`: raw-text parser support for searchable non-code artifacts
-- `parsers/languages/`: canonical language parser entrypoints and support modules
 - `parsers/capabilities/`: parser capability catalog, models, validation, and packaged specs
 - `parsers/scip/`: SCIP parser, runtime helpers, and indexing orchestration
 - `graph/schema/`: graph schema creation
 - `graph/persistence/`: graph write helpers, batching, content dual-write, commit orchestration, worker support, and call/inheritance relationship persistence
-- `resolution/orchestration/`: Resolution Engine claim/process loops and the
-  shared work-item projection path used by the Go-owned runtime
-- `resolution/projection/`: repository/file/entity/relationship/workload/platform projection from stored facts
-- `resolution/workloads/` and `resolution/platforms.py`: workload and platform materialization after graph writes
+
+The legacy Python package families that used to appear in this page have already
+been deleted from the branch. Their former responsibilities now live in Go
+runtime services, Go query handlers, and storage-backed runtime/status helpers.
 
 `tools/graph_builder.py` remains the stable public facade while the underlying
 source-of-truth modules move into these canonical packages. The legacy Python
 post-commit finalization bridge has been deleted from the branch; Python
-indexing now requires the facts-first runtime instead of falling back to
-ad hoc finalize helpers.
+indexing now requires the remaining cutover helpers rather than ad hoc finalize
+helpers.
 
-The remaining transition risk is now concentrated in the Python parser matrix
-and a smaller set of cutover helpers, not in the deleted post-commit bridge,
-the deleted `runtime/ingester/*bridge.py` modules, or the deleted legacy
-snapshot/coordinator stack. Non-dependency directory indexing now delegates
-from `GraphBuilder` to the Go `bootstrap-index` runtime, and direct single-file
-indexing now uses the same Go-owned runtime contract.
+The remaining transition risk is now concentrated in the Python parser matrix,
+`content/ingest.py`, and a smaller set of CLI/API support modules, not in the
+deleted post-commit bridge, the deleted ingester bridge modules, or the deleted
+legacy snapshot/coordinator stack. Non-dependency directory indexing now
+delegates from `GraphBuilder` to the Go `bootstrap-index` runtime, and direct
+single-file indexing now uses the same Go-owned runtime contract.
 
 The MCP-facing handlers now live under `mcp/tools/handlers/`, which keeps the
 transport boundary separate from parsing and graph-building internals.
@@ -153,25 +146,11 @@ transport boundary separate from parsing and graph-building internals.
 The important rewrite rule is simple:
 
 - add new collector logic under source-specific collection or facts packages
-- add source-local projection under `resolution/`
-- add shared cross-domain logic under reducer-owned resolution packages
+- add source-local projection under the Go-owned projection/runtime path
+- add shared cross-domain logic under Go-owned reducer/runtime packages
 - do not reintroduce deleted Python finalize-bridge behavior
 - do not add new production behavior under the legacy Python parser/indexing
-  seam or recreate `runtime/ingester/*bridge.py`
-
-## Query Package Layout
-
-The query layer keeps the top-level `query/` boundary, but groups larger
-read-side concerns into real subpackages:
-
-- `query/code.py`: code search, relationships, and complexity queries
-- `query/compare.py`: environment comparisons
-- `query/entity_resolution.py`: canonical entity matching
-- `query/infra.py`: infrastructure search and relationship views
-- `query/context/`: workload and entity context assembly
-- `query/impact/`: dependency-path and change-surface queries
-- `query/repositories/`: repository listing, context, and statistics
-- `query/content.py`: file/entity content retrieval and indexed content search
+  seam or recreate the deleted ingester bridge modules
 
 ## Runtime Package Layout
 
@@ -184,16 +163,16 @@ acquisition and indexing grouped under its own subpackage:
 - `runtime/ingester/git.py`: git sync helpers
 - `runtime/ingester/support.py`: shared runtime support functions
 
-The temporary `runtime/ingester/*bridge.py` modules have already been deleted
-from the branch. Do not reintroduce them.
+The temporary ingester bridge modules have already been deleted from the
+branch. Do not reintroduce them.
 
-The ingester increasingly depends on canonical packages rather than `tools/`:
+The ingester increasingly depends on canonical packages and Go runtime
+services rather than `tools/`:
 
 - `collectors/git/` for repo-scoped collection
-- `facts/` for durable source observations and queue state
 - `parsers/` for parser-platform code
 - `graph/` for canonical graph writes
-- `resolution/` for Resolution Engine orchestration and workload/platform materialization
+- Go runtime services for durable status, replay, and refinalize ownership
 
 ## Go Rewrite Package Layout
 
@@ -234,7 +213,7 @@ Current native parser-runtime slice:
 These Go packages are the target normal-path runtime ownership. The remaining
 Python ownership debt is the local parser/indexing path under
 `collectors/git/`, `indexing/`, `parsers/`, and `tools/graph_builder.py`, not
-the already-deleted `runtime/ingester/*bridge.py` modules.
+the already-deleted ingester bridge modules.
 
 The parser cutover is still in progress. SCIP parity, specialized
 data-intelligence JSON families, and the remaining long-tail language adapters
