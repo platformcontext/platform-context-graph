@@ -1,0 +1,35 @@
+docs/docs/languages/elixir.md
+  1ca5ee6ce936a402 20,23-24,28
+go/internal/parser/elixir_dart_language.go
+  1ca5ee6ce936a402 10-12,14-15,188-193
+docs/docs/languages/php.md
+  1ca5ee6ce936a402 26
+go/internal/parser/engine_elixir_semantics_test.go
+  1ca5ee6ce936a402 46-50,95,103,110,117,280,286
+go/internal/parser/engine_long_tail_test.go
+  1ca5ee6ce936a402 82-115
+go/internal/parser/php_language.go
+  1ca5ee6ce936a402 183,190,196-202,209,211,221,264,274-280,282-285,303-318
+go/internal/parser/php_language_test.go
+  1ca5ee6ce936a402 159,170-212,401-418,420-421
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "94a89f22f29e27616418c24b992a83330637dac6",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 171,
+      "total_deletions": 30,
+      "accepted_lines": 171,
+      "overriden_lines": 0
+    }
+  }
+}
