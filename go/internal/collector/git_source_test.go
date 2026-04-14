@@ -3,8 +3,12 @@ package collector
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -614,6 +618,228 @@ func TestGitSourceStreamingCancellation(t *testing.T) {
 			break
 		}
 	}
+}
+
+func TestIsLargeRepositoryReturnsTrueAboveThreshold(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for i := 0; i < 600; i++ {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("file_%d.py", i)), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if !isLargeRepository(dir, 500) {
+		t.Fatal("isLargeRepository = false, want true for 600 files with threshold 500")
+	}
+}
+
+func TestIsLargeRepositoryReturnsFalseAtOrBelowThreshold(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for i := 0; i < 100; i++ {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("file_%d.py", i)), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if isLargeRepository(dir, 500) {
+		t.Fatal("isLargeRepository = true, want false for 100 files with threshold 500")
+	}
+}
+
+func TestIsLargeRepositorySkipsGitDirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// 10 real files
+	for i := 0; i < 10; i++ {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("file_%d.py", i)), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// .git dir with 1000 files — should be skipped
+	gitDir := filepath.Join(dir, ".git")
+	if err := os.Mkdir(gitDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 1000; i++ {
+		if err := os.WriteFile(filepath.Join(gitDir, fmt.Sprintf("obj_%d", i)), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if isLargeRepository(dir, 500) {
+		t.Fatal("isLargeRepository = true, want false — .git directory should be skipped")
+	}
+}
+
+func TestIsLargeRepositorySkipsNodeModules(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for i := 0; i < 5; i++ {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("file_%d.js", i)), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	nmDir := filepath.Join(dir, "node_modules")
+	if err := os.Mkdir(nmDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2000; i++ {
+		if err := os.WriteFile(filepath.Join(nmDir, fmt.Sprintf("dep_%d.js", i)), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if isLargeRepository(dir, 500) {
+		t.Fatal("isLargeRepository = true, want false — node_modules should be skipped")
+	}
+}
+
+func TestLargeRepoSemaphoreLimitsConcurrency(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 14, 10, 0, 0, 0, time.UTC)
+
+	// Create 4 repos, each with enough files to be "large" at threshold=1.
+	repos := make([]SelectedRepository, 4)
+	snapshots := make(map[string]RepositorySnapshot)
+	for i := range repos {
+		dir := t.TempDir()
+		// Write 5 files so each repo exceeds threshold=1.
+		for j := 0; j < 5; j++ {
+			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("f_%d.py", j)), []byte("x"), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		repos[i] = SelectedRepository{RepoPath: dir, RemoteURL: "https://github.com/example/repo"}
+		snapshots[dir] = RepositorySnapshot{RepoPath: dir, FileCount: 5}
+	}
+
+	var maxConcurrent atomic.Int64
+	var current atomic.Int64
+
+	trackingSnapshotter := &concurrencyTrackingSnapshotter{
+		inner:         &stubRepositorySnapshotter{snapshots: snapshots},
+		current:       &current,
+		maxConcurrent: &maxConcurrent,
+		delay:         50 * time.Millisecond,
+	}
+
+	source := &GitSource{
+		Component:              "collector-git",
+		SnapshotWorkers:        4,
+		LargeRepoThreshold:    1, // all repos are "large"
+		LargeRepoMaxConcurrent: 2,
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{{
+				ObservedAt:   observedAt,
+				Repositories: repos,
+			}},
+		},
+		Snapshotter: trackingSnapshotter,
+	}
+
+	for {
+		gen, ok, err := source.Next(context.Background())
+		if err != nil {
+			t.Fatalf("Next() error = %v", err)
+		}
+		if !ok {
+			break
+		}
+		drainFactChannel(gen.Facts)
+	}
+
+	if got := maxConcurrent.Load(); got > 2 {
+		t.Fatalf("max concurrent large repo snapshots = %d, want <= 2", got)
+	}
+}
+
+func TestSmallReposBypassSemaphore(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 14, 10, 0, 0, 0, time.UTC)
+
+	// Create 4 repos, each with 0 files — all small (below any threshold).
+	repos := make([]SelectedRepository, 4)
+	snapshots := make(map[string]RepositorySnapshot)
+	for i := range repos {
+		dir := t.TempDir()
+		repos[i] = SelectedRepository{RepoPath: dir, RemoteURL: "https://github.com/example/repo"}
+		snapshots[dir] = RepositorySnapshot{RepoPath: dir, FileCount: 0}
+	}
+
+	var maxConcurrent atomic.Int64
+	var current atomic.Int64
+
+	trackingSnapshotter := &concurrencyTrackingSnapshotter{
+		inner:         &stubRepositorySnapshotter{snapshots: snapshots},
+		current:       &current,
+		maxConcurrent: &maxConcurrent,
+		delay:         50 * time.Millisecond,
+	}
+
+	source := &GitSource{
+		Component:              "collector-git",
+		SnapshotWorkers:        4,
+		LargeRepoThreshold:    500, // all repos are small
+		LargeRepoMaxConcurrent: 1,  // sem=1, but small repos should bypass
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{{
+				ObservedAt:   observedAt,
+				Repositories: repos,
+			}},
+		},
+		Snapshotter: trackingSnapshotter,
+	}
+
+	for {
+		gen, ok, err := source.Next(context.Background())
+		if err != nil {
+			t.Fatalf("Next() error = %v", err)
+		}
+		if !ok {
+			break
+		}
+		drainFactChannel(gen.Facts)
+	}
+
+	// With 4 workers and 50ms delay, all 4 small repos should run concurrently.
+	if got := maxConcurrent.Load(); got < 2 {
+		t.Fatalf("max concurrent small repo snapshots = %d, want >= 2 (semaphore should not block)", got)
+	}
+}
+
+// concurrencyTrackingSnapshotter wraps a snapshotter and tracks the maximum
+// number of concurrent SnapshotRepository calls.
+type concurrencyTrackingSnapshotter struct {
+	inner         RepositorySnapshotter
+	current       *atomic.Int64
+	maxConcurrent *atomic.Int64
+	delay         time.Duration
+}
+
+func (s *concurrencyTrackingSnapshotter) SnapshotRepository(
+	ctx context.Context,
+	repository SelectedRepository,
+) (RepositorySnapshot, error) {
+	cur := s.current.Add(1)
+	for {
+		old := s.maxConcurrent.Load()
+		if cur <= old || s.maxConcurrent.CompareAndSwap(old, cur) {
+			break
+		}
+	}
+
+	time.Sleep(s.delay)
+
+	s.current.Add(-1)
+	return s.inner.SnapshotRepository(ctx, repository)
 }
 
 func TestGitSourceStreamResetsBetweenBatches(t *testing.T) {

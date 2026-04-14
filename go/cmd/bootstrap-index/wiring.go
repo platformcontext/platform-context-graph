@@ -50,10 +50,12 @@ func buildBootstrapCollector(
 			Instruments:  instruments,
 			Logger:       logger,
 		},
-		SnapshotWorkers: config.SnapshotWorkers,
-		Tracer:          tracer,
-		Instruments:     instruments,
-		Logger:          logger,
+		SnapshotWorkers:        config.SnapshotWorkers,
+		LargeRepoThreshold:     config.LargeRepoThreshold,
+		LargeRepoMaxConcurrent: config.LargeRepoMaxConcurrent,
+		Tracer:                 tracer,
+		Instruments:            instruments,
+		Logger:                 logger,
 	}
 
 	return collectorDeps{

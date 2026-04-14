@@ -59,9 +59,11 @@ type RepoSyncConfig struct {
 	DependencyMode        bool
 	DependencyName        string
 	DependencyLanguage    string
-	FileTargets           []string
-	SnapshotWorkers       int
-	ParseWorkers          int
+	FileTargets            []string
+	SnapshotWorkers        int
+	ParseWorkers           int
+	LargeRepoThreshold     int
+	LargeRepoMaxConcurrent int
 }
 
 // LoadRepoSyncConfig parses the repo-sync environment contract for Go runtimes.
@@ -115,8 +117,10 @@ func LoadRepoSyncConfig(component string, getenv func(string) string) (RepoSyncC
 		DependencyMode:        boolFromEnv(getenv("PCG_BOOTSTRAP_IS_DEPENDENCY")),
 		DependencyName:        strings.TrimSpace(getenv("PCG_BOOTSTRAP_PACKAGE_NAME")),
 		DependencyLanguage:    strings.TrimSpace(getenv("PCG_BOOTSTRAP_PACKAGE_LANGUAGE")),
-		SnapshotWorkers:       snapshotWorkerCount(getenv),
-		ParseWorkers:          parseWorkerCount(getenv),
+		SnapshotWorkers:        snapshotWorkerCount(getenv),
+		ParseWorkers:           parseWorkerCount(getenv),
+		LargeRepoThreshold:     largeRepoThreshold(getenv),
+		LargeRepoMaxConcurrent: largeRepoMaxConcurrent(getenv),
 	}
 	normalizeFilesystemConfig(&config)
 	return config, nil
@@ -416,4 +420,38 @@ func parseWorkerCount(getenv func(string) string) int {
 		n = 1
 	}
 	return n
+}
+
+// largeRepoThreshold returns the file-count threshold above which a repository
+// is classified as "large" for concurrency limiting.
+// Reads PCG_LARGE_REPO_FILE_THRESHOLD from env; defaults to 1000.
+//
+// Production data (895 repos, Apr 2026) shows 34 repos above 1000 files
+// producing 66.8% of all facts. Repos in the 501–1000 range (40 repos)
+// are busy but not memory-dangerous and benefit from full parallelism.
+func largeRepoThreshold(getenv func(string) string) int {
+	if raw := strings.TrimSpace(getenv("PCG_LARGE_REPO_FILE_THRESHOLD")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 1000
+}
+
+// largeRepoMaxConcurrent returns the maximum number of large repositories that
+// can be snapshotted concurrently.
+// Reads PCG_LARGE_REPO_MAX_CONCURRENT from env; defaults to 2.
+//
+// Tuning guide:
+//
+//	1 = safest for memory; only one large parse at a time
+//	2 = good balance; two large repos + remaining workers on small repos
+//	4 = aggressive; requires more RAM but faster on large-heavy workloads
+func largeRepoMaxConcurrent(getenv func(string) string) int {
+	if raw := strings.TrimSpace(getenv("PCG_LARGE_REPO_MAX_CONCURRENT")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 2
 }

@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -121,6 +122,22 @@ type GitSource struct {
 	Logger          *slog.Logger
 	SnapshotWorkers int
 
+	// LargeRepoThreshold is the file-count threshold above which a repository
+	// is classified as "large" and must acquire the large-repo semaphore before
+	// snapshotting. Default: 500.
+	LargeRepoThreshold int
+	// LargeRepoMaxConcurrent is the maximum number of large repositories that
+	// can be snapshotted concurrently. Small repositories bypass this limit
+	// entirely. Default: 2.
+	//
+	// Tuning guide:
+	//   1 = safest for memory; only one large parse at a time
+	//   2 = good balance; two large repos + remaining workers on small repos
+	//   4 = aggressive; requires more RAM but faster on large-heavy workloads
+	//
+	// Set via PCG_LARGE_REPO_MAX_CONCURRENT environment variable.
+	LargeRepoMaxConcurrent int
+
 	// Streaming state, lazily initialized on first Next call.
 	// The channel carries one CollectedGeneration at a time; the coordinator
 	// goroutine closes it when all workers finish or on first error.
@@ -205,6 +222,20 @@ func (s *GitSource) startStream(ctx context.Context) error {
 	if workers <= 0 {
 		workers = 4 // conservative default; two-phase snapshotting makes 8 safe
 	}
+
+	// Size-tiered scheduling: large repos acquire a semaphore before
+	// snapshotting so at most N large repos parse concurrently. Small repos
+	// bypass the semaphore entirely and use all available workers.
+	largeThreshold := s.LargeRepoThreshold
+	if largeThreshold <= 0 {
+		largeThreshold = 500
+	}
+	largeMaxConcurrent := s.LargeRepoMaxConcurrent
+	if largeMaxConcurrent <= 0 {
+		largeMaxConcurrent = 2
+	}
+	largeSem := make(chan struct{}, largeMaxConcurrent)
+
 	// Buffer of 1: only one completed generation waits while the consumer
 	// commits the previous one. This bounds memory to at most
 	// (1 buffer + workers in-flight + 1 consuming) generations instead of
@@ -232,6 +263,8 @@ func (s *GitSource) startStream(ctx context.Context) error {
 			slog.String("component", s.componentName()),
 			slog.Int("repository_count", len(resolved)),
 			slog.Int("snapshot_workers", workers),
+			slog.Int("large_repo_threshold", largeThreshold),
+			slog.Int("large_repo_max_concurrent", largeMaxConcurrent),
 			telemetry.PhaseAttr(telemetry.PhaseEmission),
 		)
 	}
@@ -252,7 +285,10 @@ func (s *GitSource) startStream(ctx context.Context) error {
 		}
 	}()
 
-	// Snapshot workers: read repos, snapshot, send generations
+	// Snapshot workers: read repos, snapshot, send generations.
+	// Large repos (above largeThreshold files) acquire the largeSem semaphore
+	// before snapshotting, limiting concurrent large-repo memory pressure.
+	// Small repos bypass the semaphore and run at full worker parallelism.
 	var wg sync.WaitGroup
 	var errOnce sync.Once
 	var firstErr error
@@ -268,9 +304,48 @@ func (s *GitSource) startStream(ctx context.Context) error {
 					return
 				}
 
+				large := isLargeRepository(repo.RepoPath, largeThreshold)
+
+				// Record size-tier classification.
+				if s.Instruments != nil {
+					tier := "small"
+					if large {
+						tier = "large"
+					}
+					s.Instruments.LargeRepoClassifications.Add(workerCtx, 1,
+						metric.WithAttributes(attribute.String(telemetry.MetricDimensionRepoSizeTier, tier)),
+					)
+				}
+
+				if large {
+					if s.Logger != nil {
+						s.Logger.InfoContext(workerCtx, "large repository detected, acquiring semaphore",
+							slog.String("repo_path", repo.RepoPath),
+							slog.Int("worker_id", workerID),
+							slog.Int("threshold", largeThreshold),
+						)
+					}
+					semWaitStart := time.Now()
+					select {
+					case largeSem <- struct{}{}:
+					case <-workerCtx.Done():
+						return
+					}
+					if s.Instruments != nil {
+						s.Instruments.LargeRepoSemaphoreWait.Record(workerCtx,
+							time.Since(semWaitStart).Seconds(),
+						)
+					}
+				}
+
 				gen, err := s.snapshotOneRepository(
 					workerCtx, repo, sourceRunID, observedAt, workerID,
 				)
+
+				if large {
+					<-largeSem
+				}
+
 				if err != nil {
 					if s.Instruments != nil {
 						s.Instruments.ReposSnapshotted.Add(ctx, 1,
@@ -552,6 +627,33 @@ func buildScope(repo repositoryidentity.Metadata) scope.IngestionScope {
 		PartitionKey:  repo.ID,
 		Metadata:      metadata,
 	}
+}
+
+// isLargeRepository performs a lightweight file count to classify a repository
+// as "large" (above the threshold). It walks the directory tree counting
+// regular files and bails early once the threshold is exceeded. Directories
+// that don't contribute to the real parse (.git, node_modules, vendor, etc.)
+// are skipped for speed.
+func isLargeRepository(repoPath string, threshold int) bool {
+	count := 0
+	_ = filepath.WalkDir(repoPath, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "node_modules", "vendor", ".venv", "__pycache__":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		count++
+		if count > threshold {
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return count > threshold
 }
 
 func buildGeneration(

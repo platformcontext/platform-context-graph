@@ -64,6 +64,10 @@ type Instruments struct {
 	ContentReReads        metric.Int64Counter
 	ContentReReadSkips    metric.Int64Counter
 
+	// Size-tiered scheduling metrics
+	LargeRepoClassifications metric.Int64Counter
+	LargeRepoSemaphoreWait   metric.Float64Histogram
+
 	// Observable gauges for autoscaling signals
 	QueueDepth         metric.Int64ObservableGauge
 	QueueOldestAge     metric.Float64ObservableGauge
@@ -309,6 +313,25 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 		return nil, fmt.Errorf("register ContentReReadSkips counter: %w", err)
 	}
 
+	inst.LargeRepoClassifications, err = meter.Int64Counter(
+		"pcg_dp_large_repo_classifications_total",
+		metric.WithDescription("Repositories classified by size tier (small or large)"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register LargeRepoClassifications counter: %w", err)
+	}
+
+	semWaitBuckets := []float64{0, 0.1, 0.5, 1, 5, 10, 30, 60, 120, 300}
+	inst.LargeRepoSemaphoreWait, err = meter.Float64Histogram(
+		"pcg_dp_large_repo_semaphore_wait_seconds",
+		metric.WithDescription("Time spent waiting for the large-repo semaphore before snapshotting"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(semWaitBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register LargeRepoSemaphoreWait histogram: %w", err)
+	}
+
 	return inst, nil
 }
 
@@ -440,6 +463,11 @@ func AttrDomain(v string) attribute.KeyValue {
 // AttrPartitionKey returns a partition_key attribute for metric recording.
 func AttrPartitionKey(v string) attribute.KeyValue {
 	return attribute.String(MetricDimensionPartitionKey, v)
+}
+
+// AttrRepoSizeTier returns a repo_size_tier attribute for metric recording.
+func AttrRepoSizeTier(v string) attribute.KeyValue {
+	return attribute.String(MetricDimensionRepoSizeTier, v)
 }
 
 // RecordGOMEMLIMIT registers and records the applied GOMEMLIMIT as a gauge.
