@@ -298,7 +298,7 @@ services:
         if [ -s /tmp/pcgignore-source ]; then cp /tmp/pcgignore-source /data/repos/.pcgignore; fi && \
         exec /usr/local/bin/pcg-ingester
     depends_on:
-      db-migrate:
+      bootstrap-index:
         condition: service_completed_successfully
       otel-collector:
         condition: service_started
