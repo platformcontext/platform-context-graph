@@ -66,7 +66,8 @@ func wireAPI(ctx context.Context, getenv func(string) string) (http.Handler, fun
 			Content: contentReader,
 		},
 		Entities: &query.EntityHandler{
-			Neo4j: neo4jReader,
+			Neo4j:   neo4jReader,
+			Content: contentReader,
 		},
 		Code: &query.CodeHandler{
 			Neo4j:   neo4jReader,

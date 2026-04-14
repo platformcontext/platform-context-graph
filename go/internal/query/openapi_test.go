@@ -148,6 +148,13 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 		t.Fatalf("EntityContent.metadata.type = %#v, want %#v", got, want)
 	}
 
+	entityRefSchema := mustMapField(t, schemas, "EntityRef")
+	entityRefProperties := mustMapField(t, entityRefSchema, "properties")
+	entityRefMetadata := mustMapField(t, entityRefProperties, "metadata")
+	if got, want := entityRefMetadata["type"], "object"; got != want {
+		t.Fatalf("EntityRef.metadata.type = %#v, want %#v", got, want)
+	}
+
 	codeSearchPath := mustMapField(t, paths, "/api/v0/code/search")
 	codeSearchPost := mustMapField(t, codeSearchPath, "post")
 	codeSearchResponses := mustMapField(t, codeSearchPost, "responses")

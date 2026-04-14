@@ -62,6 +62,14 @@ const openAPIComponents = `  "components": {
           "name": {"type": "string"},
           "labels": {"type": "array", "items": {"type": "string"}},
           "file_path": {"type": "string"},
+          "language": {"type": "string"},
+          "start_line": {"type": "integer"},
+          "end_line": {"type": "integer"},
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Optional parser metadata enriched from the Go content pipeline for graph-backed entity results."
+          },
           "repo_id": {"type": "string"},
           "repo_name": {"type": "string"}
         }

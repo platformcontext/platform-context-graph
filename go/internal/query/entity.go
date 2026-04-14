@@ -8,7 +8,8 @@ import (
 
 // EntityHandler exposes HTTP routes for entity queries.
 type EntityHandler struct {
-	Neo4j *Neo4jReader
+	Neo4j   *Neo4jReader
+	Content *ContentReader
 }
 
 // Mount registers all entity routes on the given mux.
@@ -63,7 +64,10 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
 		RETURN e.id as id, labels(e) as labels, e.name as name,
 		       f.relative_path as file_path,
-		       r.id as repo_id, r.name as repo_name
+		       r.id as repo_id, r.name as repo_name,
+		       coalesce(e.language, f.language) as language,
+		       e.start_line as start_line,
+		       e.end_line as end_line
 		ORDER BY e.name
 		LIMIT 20
 	`
@@ -77,13 +81,21 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 	entities := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		entities = append(entities, map[string]any{
-			"id":        StringVal(row, "id"),
-			"labels":    StringSliceVal(row, "labels"),
-			"name":      StringVal(row, "name"),
-			"file_path": StringVal(row, "file_path"),
-			"repo_id":   StringVal(row, "repo_id"),
-			"repo_name": StringVal(row, "repo_name"),
+			"id":         StringVal(row, "id"),
+			"labels":     StringSliceVal(row, "labels"),
+			"name":       StringVal(row, "name"),
+			"file_path":  StringVal(row, "file_path"),
+			"repo_id":    StringVal(row, "repo_id"),
+			"repo_name":  StringVal(row, "repo_name"),
+			"language":   StringVal(row, "language"),
+			"start_line": IntVal(row, "start_line"),
+			"end_line":   IntVal(row, "end_line"),
 		})
+	}
+	entities, err = h.enrichEntityResultsWithContentMetadata(r.Context(), entities, req.RepoID, req.Name, 20)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich entities: %v", err))
+		return
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{
@@ -106,6 +118,9 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 		OPTIONAL MATCH (e)-[rel]->(target)
 		RETURN e.id as id, labels(e) as labels, e.name as name,
 		       f.relative_path as file_path,
+		       coalesce(e.language, f.language) as language,
+		       e.start_line as start_line,
+		       e.end_line as end_line,
 		       r.id as repo_id, r.name as repo_name,
 		       collect(DISTINCT {type: type(rel), target_name: target.name, target_id: target.id}) as relationships
 	`
@@ -129,8 +144,17 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 		"file_path":     StringVal(row, "file_path"),
 		"repo_id":       StringVal(row, "repo_id"),
 		"repo_name":     StringVal(row, "repo_name"),
+		"language":      StringVal(row, "language"),
+		"start_line":    IntVal(row, "start_line"),
+		"end_line":      IntVal(row, "end_line"),
 		"relationships": extractRelationships(row),
 	}
+	enriched, err := h.enrichEntityResultsWithContentMetadata(r.Context(), []map[string]any{response}, StringVal(row, "repo_id"), StringVal(row, "name"), 1)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich entity context: %v", err))
+		return
+	}
+	response = enriched[0]
 
 	WriteJSON(w, http.StatusOK, response)
 }
