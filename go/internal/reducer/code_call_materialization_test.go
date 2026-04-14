@@ -79,6 +79,126 @@ func TestExtractCodeCallRowsBuildsCanonicalEntityPairs(t *testing.T) {
 	}
 }
 
+func TestExtractCodeCallRowsBuildsCanonicalEntityPairsFromGenericCalls(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-payments",
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-payments",
+				"relative_path": "service.py",
+				"parsed_file_data": map[string]any{
+					"path": "service.py",
+					"functions": []any{
+						map[string]any{
+							"name":        "handle",
+							"line_number": 3,
+							"end_line":    6,
+							"uid":         "content-entity:handle",
+						},
+						map[string]any{
+							"name":        "helper",
+							"line_number": 8,
+							"end_line":    10,
+							"uid":         "content-entity:helper",
+						},
+					},
+					"function_calls": []any{
+						map[string]any{
+							"name":        "helper",
+							"line_number": 4,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	repoIDs, rows := ExtractCodeCallRows(envelopes)
+	if len(repoIDs) != 1 || repoIDs[0] != "repo-payments" {
+		t.Fatalf("repoIDs = %v, want [repo-payments]", repoIDs)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if got, want := rows[0]["caller_entity_id"], "content-entity:handle"; got != want {
+		t.Fatalf("caller_entity_id = %#v, want %#v", got, want)
+	}
+	if got, want := rows[0]["callee_entity_id"], "content-entity:helper"; got != want {
+		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
+	}
+	if got, want := rows[0]["caller_file"], "service.py"; got != want {
+		t.Fatalf("caller_file = %#v, want %#v", got, want)
+	}
+	if got, want := rows[0]["callee_file"], "service.py"; got != want {
+		t.Fatalf("callee_file = %#v, want %#v", got, want)
+	}
+	if got, want := rows[0]["ref_line"], 4; got != want {
+		t.Fatalf("ref_line = %#v, want %#v", got, want)
+	}
+}
+
+func TestExtractCodeCallRowsSkipsAmbiguousGenericCalls(t *testing.T) {
+	t.Parallel()
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-payments",
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-payments",
+				"relative_path": "service.py",
+				"parsed_file_data": map[string]any{
+					"path": "service.py",
+					"functions": []any{
+						map[string]any{
+							"name":        "handle",
+							"line_number": 3,
+							"end_line":    6,
+							"uid":         "content-entity:handle",
+						},
+						map[string]any{
+							"name":        "helper",
+							"line_number": 8,
+							"end_line":    10,
+							"uid":         "content-entity:helper-a",
+						},
+						map[string]any{
+							"name":        "helper",
+							"line_number": 12,
+							"end_line":    14,
+							"uid":         "content-entity:helper-b",
+						},
+					},
+					"function_calls": []any{
+						map[string]any{
+							"name":        "helper",
+							"line_number": 4,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, rows := ExtractCodeCallRows(envelopes)
+	if len(rows) != 0 {
+		t.Fatalf("len(rows) = %d, want 0 for ambiguous generic call", len(rows))
+	}
+}
+
 func TestCodeCallMaterializationHandlerWritesCanonicalCalls(t *testing.T) {
 	t.Parallel()
 

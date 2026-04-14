@@ -82,9 +82,9 @@ application languages.
 - TypeScript JSX: JSX component usage model, type aliases
 - Python: decorators, async flags, type annotations
 - JavaScript: docstrings and fuller method-kind metadata
-- Canonical call edges: broaden the new Go-owned SCIP-backed `CALLS`
-  materialization path to the remaining required parser families and prove it
-  end to end
+- Canonical call edges: broaden the new Go-owned `CALLS` materialization path
+  from SCIP-backed edges into the remaining required generic and long-tail
+  parser families, then prove it end to end
 
 ### Validation
 
