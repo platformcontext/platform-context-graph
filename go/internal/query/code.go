@@ -182,9 +182,15 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 
 	cypher := `
 		MATCH (e) WHERE e.id = $entity_id
+		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
 		OPTIONAL MATCH (e)-[r]->(target)
 		OPTIONAL MATCH (source)-[r2]->(e)
-		RETURN e.id as id, e.name as name,
+		RETURN e.id as id, e.name as name, labels(e) as labels,
+		       f.relative_path as file_path,
+		       r.id as repo_id, r.name as repo_name,
+		       coalesce(e.language, f.language) as language,
+		       e.start_line as start_line,
+		       e.end_line as end_line,
 		       collect(DISTINCT {direction: 'outgoing', type: type(r), target_name: target.name, target_id: target.id}) as outgoing,
 		       collect(DISTINCT {direction: 'incoming', type: type(r2), source_name: source.name, source_id: source.id}) as incoming
 	`
@@ -203,12 +209,32 @@ func (h *CodeHandler) handleRelationships(w http.ResponseWriter, r *http.Request
 	outgoing := filterNullRelationships(row["outgoing"])
 	incoming := filterNullRelationships(row["incoming"])
 
-	WriteJSON(w, http.StatusOK, map[string]any{
-		"entity_id": StringVal(row, "id"),
-		"name":      StringVal(row, "name"),
-		"outgoing":  outgoing,
-		"incoming":  incoming,
-	})
+	response := map[string]any{
+		"entity_id":  StringVal(row, "id"),
+		"name":       StringVal(row, "name"),
+		"labels":     StringSliceVal(row, "labels"),
+		"file_path":  StringVal(row, "file_path"),
+		"repo_id":    StringVal(row, "repo_id"),
+		"repo_name":  StringVal(row, "repo_name"),
+		"language":   StringVal(row, "language"),
+		"start_line": IntVal(row, "start_line"),
+		"end_line":   IntVal(row, "end_line"),
+		"outgoing":   outgoing,
+		"incoming":   incoming,
+	}
+	enriched, err := h.enrichGraphSearchResultsWithContentMetadata(
+		ctx,
+		[]map[string]any{response},
+		StringVal(row, "repo_id"),
+		StringVal(row, "name"),
+		1,
+	)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, enriched[0])
 }
 
 // handleDeadCode finds entities with no incoming references.
@@ -232,7 +258,11 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 		MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
 		WHERE r.id = $repo_id AND NOT ()-[:CALLS|IMPORTS|REFERENCES]->(e)
 		RETURN e.id as entity_id, e.name as name, labels(e) as labels,
-		       f.relative_path as file_path
+		       f.relative_path as file_path,
+		       r.id as repo_id, r.name as repo_name,
+		       coalesce(e.language, f.language) as language,
+		       e.start_line as start_line,
+		       e.end_line as end_line
 		ORDER BY f.relative_path, e.name
 		LIMIT 100
 	`
@@ -246,11 +276,21 @@ func (h *CodeHandler) handleDeadCode(w http.ResponseWriter, r *http.Request) {
 	results := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		results = append(results, map[string]any{
-			"entity_id": StringVal(row, "entity_id"),
-			"name":      StringVal(row, "name"),
-			"labels":    StringSliceVal(row, "labels"),
-			"file_path": StringVal(row, "file_path"),
+			"entity_id":  StringVal(row, "entity_id"),
+			"name":       StringVal(row, "name"),
+			"labels":     StringSliceVal(row, "labels"),
+			"file_path":  StringVal(row, "file_path"),
+			"repo_id":    StringVal(row, "repo_id"),
+			"repo_name":  StringVal(row, "repo_name"),
+			"language":   StringVal(row, "language"),
+			"start_line": IntVal(row, "start_line"),
+			"end_line":   IntVal(row, "end_line"),
 		})
+	}
+	results, err = h.enrichGraphSearchResultsWithContentMetadata(ctx, results, req.RepoID, "", 100)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{
@@ -344,9 +384,15 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 
 	cypher := `
 		MATCH (e) WHERE e.id = $entity_id
+		OPTIONAL MATCH (e)<-[:CONTAINS]-(f:File)<-[:REPO_CONTAINS]-(r:Repository)
 		OPTIONAL MATCH (e)-[r]->()
 		OPTIONAL MATCH ()-[r2]->(e)
-		RETURN e.id as id, e.name as name,
+		RETURN e.id as id, e.name as name, labels(e) as labels,
+		       f.relative_path as file_path,
+		       r.id as repo_id, r.name as repo_name,
+		       coalesce(e.language, f.language) as language,
+		       e.start_line as start_line,
+		       e.end_line as end_line,
 		       count(DISTINCT r) as outgoing_count,
 		       count(DISTINCT r2) as incoming_count,
 		       count(DISTINCT r) + count(DISTINCT r2) as total_relationships
@@ -362,11 +408,31 @@ func (h *CodeHandler) handleComplexity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]any{
+	response := map[string]any{
 		"entity_id":           StringVal(row, "id"),
 		"name":                StringVal(row, "name"),
+		"labels":              StringSliceVal(row, "labels"),
+		"file_path":           StringVal(row, "file_path"),
+		"repo_id":             StringVal(row, "repo_id"),
+		"repo_name":           StringVal(row, "repo_name"),
+		"language":            StringVal(row, "language"),
+		"start_line":          IntVal(row, "start_line"),
+		"end_line":            IntVal(row, "end_line"),
 		"outgoing_count":      IntVal(row, "outgoing_count"),
 		"incoming_count":      IntVal(row, "incoming_count"),
 		"total_relationships": IntVal(row, "total_relationships"),
-	})
+	}
+	enriched, err := h.enrichGraphSearchResultsWithContentMetadata(
+		ctx,
+		[]map[string]any{response},
+		StringVal(row, "repo_id"),
+		StringVal(row, "name"),
+		1,
+	)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, enriched[0])
 }

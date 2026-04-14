@@ -128,6 +128,14 @@ const openAPIPathsCode = `
                   "properties": {
                     "entity_id": {"type": "string"},
                     "name": {"type": "string"},
+                    "labels": {"type": "array", "items": {"type": "string"}},
+                    "file_path": {"type": "string"},
+                    "repo_id": {"type": "string"},
+                    "repo_name": {"type": "string"},
+                    "language": {"type": "string"},
+                    "start_line": {"type": "integer"},
+                    "end_line": {"type": "integer"},
+                    "metadata": {"type": "object", "additionalProperties": true},
                     "outgoing": {"type": "array", "items": {"$ref": "#/components/schemas/Relationship"}},
                     "incoming": {"type": "array", "items": {"$ref": "#/components/schemas/Relationship"}}
                   }
@@ -212,6 +220,14 @@ const openAPIPathsCode = `
                   "properties": {
                     "entity_id": {"type": "string"},
                     "name": {"type": "string"},
+                    "labels": {"type": "array", "items": {"type": "string"}},
+                    "file_path": {"type": "string"},
+                    "repo_id": {"type": "string"},
+                    "repo_name": {"type": "string"},
+                    "language": {"type": "string"},
+                    "start_line": {"type": "integer"},
+                    "end_line": {"type": "integer"},
+                    "metadata": {"type": "object", "additionalProperties": true},
                     "outgoing_count": {"type": "integer"},
                     "incoming_count": {"type": "integer"},
                     "total_relationships": {"type": "integer"}
