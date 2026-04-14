@@ -187,7 +187,11 @@ func (s *GitSource) startStream(ctx context.Context) error {
 	if workers <= 0 {
 		workers = 1
 	}
-	s.stream = make(chan CollectedGeneration, workers)
+	// Buffer of 1: only one completed generation waits while the consumer
+	// commits the previous one. This bounds memory to at most
+	// (1 buffer + workers in-flight + 1 consuming) generations instead of
+	// (workers buffer + workers in-flight + 1 consuming).
+	s.stream = make(chan CollectedGeneration, 1)
 	s.streamErr = nil
 
 	// Start the parent stream span — kept open until coordinator closes it
