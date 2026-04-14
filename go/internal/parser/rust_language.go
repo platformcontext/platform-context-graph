@@ -30,11 +30,14 @@ func (e *Engine) parseRust(
 	defer tree.Close()
 
 	payload := basePayload(path, "rust", isDependency)
+	payload["impl_blocks"] = []map[string]any{}
 	payload["traits"] = []map[string]any{}
 	root := tree.RootNode()
 
 	walkNamed(root, func(node *tree_sitter.Node) {
 		switch node.Kind() {
+		case "impl_item":
+			appendRustImplBlock(payload, node, source)
 		case "function_item", "function_signature_item":
 			appendRustFunction(payload, node, source, options)
 		case "struct_item", "enum_item", "union_item":
@@ -78,7 +81,7 @@ func (e *Engine) parseRust(
 		}
 	})
 
-	sortSystemsPayload(payload, "functions", "classes", "traits", "imports", "function_calls")
+	sortSystemsPayload(payload, "functions", "classes", "traits", "imports", "function_calls", "impl_blocks")
 	payload["framework_semantics"] = map[string]any{"frameworks": []string{}}
 
 	return payload, nil
@@ -89,9 +92,44 @@ func (e *Engine) preScanRust(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	names := collectBucketNames(payload, "functions", "classes", "traits")
+	names := collectBucketNames(payload, "functions", "classes", "traits", "impl_blocks")
 	slices.Sort(names)
 	return names, nil
+}
+
+func appendRustImplBlock(payload map[string]any, node *tree_sitter.Node, source []byte) {
+	header := strings.TrimSpace(nodeText(node, source))
+	if idx := strings.Index(header, "{"); idx >= 0 {
+		header = header[:idx]
+	}
+	header = strings.TrimSpace(strings.TrimPrefix(header, "impl"))
+	header = strings.TrimSpace(rustStripTypeParameters(header))
+
+	kind := "inherent_impl"
+	traitName := ""
+	targetName := header
+
+	if idx := strings.Index(header, " for "); idx >= 0 {
+		kind = "trait_impl"
+		traitName = strings.TrimSpace(header[:idx])
+		targetName = strings.TrimSpace(header[idx+len(" for "):])
+	}
+	if idx := strings.Index(targetName, " where "); idx >= 0 {
+		targetName = strings.TrimSpace(targetName[:idx])
+	}
+
+	item := map[string]any{
+		"name":        rustBaseTypeName(targetName),
+		"target":      targetName,
+		"line_number": nodeLine(node),
+		"end_line":    nodeEndLine(node),
+		"kind":        kind,
+		"lang":        "rust",
+	}
+	if traitName != "" {
+		item["trait"] = rustBaseTypeName(traitName)
+	}
+	appendBucket(payload, "impl_blocks", item)
 }
 
 func appendRustFunction(payload map[string]any, node *tree_sitter.Node, source []byte, options Options) {
@@ -139,6 +177,31 @@ func rustImplContext(node *tree_sitter.Node, source []byte) string {
 		return strings.TrimSpace(implContext)
 	}
 	return ""
+}
+
+func rustStripTypeParameters(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if !strings.HasPrefix(trimmed, "<") {
+		return trimmed
+	}
+	if end := strings.Index(trimmed, ">"); end >= 0 {
+		return strings.TrimSpace(trimmed[end+1:])
+	}
+	return trimmed
+}
+
+func rustBaseTypeName(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return ""
+	}
+	if idx := strings.Index(trimmed, "<"); idx >= 0 {
+		trimmed = trimmed[:idx]
+	}
+	if idx := strings.LastIndex(trimmed, "::"); idx >= 0 {
+		trimmed = trimmed[idx+2:]
+	}
+	return strings.TrimSpace(trimmed)
 }
 
 func rustCallNameNode(node *tree_sitter.Node) *tree_sitter.Node {

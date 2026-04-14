@@ -196,6 +196,40 @@ func TestDefaultEngineParsePathRustImplOwnership(t *testing.T) {
 	assertBucketContainsFieldValue(t, got, "functions", "impl_context", "VecContainer")
 }
 
+func TestDefaultEngineParsePathRustImplBlocks(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := repoFixturePath("ecosystems", "rust_comprehensive")
+	filePath := filepath.Join(repoRoot, "impl_blocks.rs")
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	blocks, ok := got["impl_blocks"].([]map[string]any)
+	if !ok {
+		t.Fatalf("impl_blocks = %T, want []map[string]any", got["impl_blocks"])
+	}
+	if len(blocks) != 5 {
+		t.Fatalf("impl_blocks = %#v, want 5 entries", blocks)
+	}
+
+	assertNamedBucketContains(t, got, "impl_blocks", "Point")
+	assertNamedBucketContains(t, got, "impl_blocks", "Shape")
+	assertNamedBucketContains(t, got, "impl_blocks", "NamedItem")
+	assertNamedBucketContains(t, got, "impl_blocks", "VecContainer")
+	assertBucketContainsFieldValue(t, got, "impl_blocks", "kind", "trait_impl")
+	assertBucketContainsFieldValue(t, got, "impl_blocks", "trait", "Describable")
+	assertBucketContainsFieldValue(t, got, "impl_blocks", "trait", "Container")
+	assertBucketContainsFieldValue(t, got, "impl_blocks", "target", "VecContainer<T>")
+}
+
 func TestDefaultEnginePreScanPathsSystems(t *testing.T) {
 	t.Parallel()
 

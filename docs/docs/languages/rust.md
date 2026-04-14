@@ -23,9 +23,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Function calls | `function-calls` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathRust` | Compose-backed fixture verification | - |
 | Method calls (field expressions) | `method-calls-field-expressions` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathRust` | Compose-backed fixture verification | - |
 | Scoped calls (path::fn) | `scoped-calls-path-fn` | supported | `function_calls` | `name, line_number` | `relationship:CALLS` | `go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathRust` | Compose-backed fixture verification | - |
-| Impl blocks | `impl-blocks` | partial | `impl_context` | `name, line_number` | `property:Function.context` | `go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathRustImplOwnership` | Compose-backed fixture verification | Impl ownership is attached as function context, but impl blocks are not persisted as dedicated graph nodes or explicit implementation edges. |
+| Impl blocks | `impl-blocks` | partial | `impl_blocks` | `name, line_number, kind` | `none:not_persisted` | `go/internal/parser/engine_systems_test.go::TestDefaultEngineParsePathRustImplBlocks` | Compose-backed fixture verification | The Go parser now emits dedicated impl block records and preserves function `impl_context`, but the graph layer still does not persist explicit implementation edges end to end. |
 
 ## Known Limitations
-- `impl Trait for Type` implementations are not tracked as distinct graph edges
+- `impl Trait for Type` implementations are emitted into `impl_blocks`, but the graph layer does not yet persist explicit implementation edges
 - Lifetime annotations are not captured
 - Macro-generated code is not traversed
