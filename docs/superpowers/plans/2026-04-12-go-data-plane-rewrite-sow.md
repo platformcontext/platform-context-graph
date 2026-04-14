@@ -31,9 +31,9 @@ runtime-ownership conversion is now effectively complete:
 - no deployed runtime or write service starts from a Python runtime entrypoint
 - only fixture Python files remain under `tests/fixtures/`
 
-The remaining work is proof, parity hardening, docs cleanup, and branch
-completion. No new ingestors should start until those validation and cleanup
-steps are closed.
+The remaining work is feature-for-feature parity closure, proof hardening, docs
+cleanup, and branch completion. No new ingestors should start until those
+parity and validation steps are closed.
 
 Hard merge bar for the branch:
 
@@ -46,6 +46,9 @@ Hard merge bar for the branch:
   or admin-repair path depends on Python runtime ownership
 - Docker Compose and Helm run the Go-owned platform
 - local and cloud validation prove parity for the Git parser and write path
+- the branch-level parity audit no longer lists unresolved feature families that
+  were previously available through the Python implementation, unless they are
+  explicitly accepted non-goals
 
 No new ingestors before the full Python-to-Go conversion completes.
 
@@ -54,6 +57,8 @@ No new ingestors before the full Python-to-Go conversion completes.
 Use these documents together with this SOW before parallel implementation begins:
 
 - [Rewrite Documentation Index](2026-04-12-go-data-plane-doc-set-index.md)
+- [Python-To-Go Parity Audit](../../docs/reference/python-to-go-parity.md)
+- [Go Parity Closure Plan](2026-04-14-go-parity-closure-plan.md)
 - [Service Boundaries And Ownership](2026-04-12-go-data-plane-service-boundaries-and-ownership.md)
 - [ADR Index](../../docs/adrs/index.md)
 - [Local Testing Runbook](../../docs/reference/local-testing.md)

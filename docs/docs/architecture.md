@@ -430,25 +430,30 @@ Target-state ownership after the rewrite:
 
 ### Current Implementation Status
 
-The Go data plane owns the full write path for the following domains:
+The Go data plane now owns normal platform operation end to end.
 
-| Component | Go Status | Python Status |
+| Component | Current state | Remaining work |
 | --- | --- | --- |
-| Projector stages (entities, files, relationships, workloads) | Implemented | Pending deletion |
-| Projection decision recording | Implemented | Pending deletion |
-| Failure classification | Implemented | Pending deletion |
-| Reducer: workload identity | Implemented | Pending deletion |
-| Reducer: cloud asset resolution | Implemented | Pending deletion |
-| Reducer: deployment mapping / platform materialization | Implemented | Pending deletion |
-| Reducer: workload materialization | Implemented | Pending deletion |
-| Shared projection (platform_infra, repo_dependency, workload_dependency) | Implemented | Pending deletion |
-| Recovery (replay, refinalize) | Implemented | Deleted |
-| Status request lifecycle (scan, reindex) | Implemented | Pending deletion |
-| Native parser platform | Implemented (~85%) | Still active (collector bridge) |
-| Native collector selection and snapshot | Pending (Chunk 2) | Still active |
+| Runtime services (API, ingester, reducer, bootstrap) | Go-owned and deployed from `go/cmd/` | none for ownership |
+| Projector stages (entities, files, relationships, workloads) | Go-owned | feature-parity closure only |
+| Projection decision recording | Go-owned | validate parity breadth |
+| Failure classification | Go-owned | validate parity breadth |
+| Reducer domains (workload identity, cloud assets, deployment mapping, workload materialization) | Go-owned | feature-parity closure only |
+| Shared projection (platform, repo dependency, workload dependency) | Go-owned | feature-parity closure only |
+| Recovery and refinalize | Go-owned | broaden replay and recovery proof as needed |
+| Status request lifecycle (scan, reindex, repair visibility) | Go-owned | close remaining operator-surface gaps |
+| Parser runtime ownership | Go-owned | none for ownership |
+| Parser feature parity | Partial across several language families | close graph/query-surface and end-to-end gaps |
+| Deployment assets (Dockerfile, Compose, Helm) | Go-owned | keep docs and validation current |
 
-The remaining migration work is native collector integration (Chunk 2) and
-deletion of the 85+ Python write-plane modules that Go now owns.
+There is no normal-path Python runtime left in the branch. The remaining work
+is parity closure, not runtime cutover.
+
+The biggest open buckets are:
+
+- parser and graph-surface parity for several language families
+- a few operator-surface gaps in the Go API and CLI contract
+- end-to-end validation breadth for features that already parse in Go
 
 The content store is owned by the projection path, not by the raw parser.
 Source-specific collectors emit facts; the resolution-engine turns those facts

@@ -68,6 +68,7 @@ nav:
     - Graph Model: concepts/graph-model.md
     - Modes: concepts/modes.md
     - Architecture: architecture.md
+    - Python-To-Go Parity Audit: reference/python-to-go-parity.md
     - Relationship Mapping: reference/relationship-mapping.md
     - Relationship Mapping Observability: reference/relationship-mapping-observability.md
     - ".pcgignore": reference/pcgignore.md

@@ -11,11 +11,10 @@ AWS and Kubernetes collectors will be credentialed, partitioned, and
 continuously refreshed. Data-plane orchestration must therefore scale by source
 family without forcing one procedural ingest path to carry every concern.
 
-The current repository still contains Python write-side seams that work for the
-existing runtime, but they are not the right long-term substrate for a cloud
-service that must remain accurate, stable, and observable under load. The next
-collector wave also needs contract discipline that is easy to version and share
-across services.
+The rewrite began while the repository still contained Python write-side seams
+and runtime bridges. Those seams have now been removed from normal platform
+operation. The remaining branch work is feature-for-feature parity closure
+inside the Go-owned platform, not continued mixed-runtime migration.
 
 ## Decision
 
@@ -114,7 +113,7 @@ Tradeoffs:
   surface as separate deployables.
 - Define a Buf module for versioned contracts before adding more collectors.
 - Prefer explicit package boundaries over hidden shared helpers.
-- Treat the existing Python write path as transitional, not as the architecture
-  target.
+- Treat any historical Python write path as migration history, not as a current
+  architecture option.
 - Preserve canonical-first query behavior in the public surfaces while exposing
   evidence and raw views as explicit modes.

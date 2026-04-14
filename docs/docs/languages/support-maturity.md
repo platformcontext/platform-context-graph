@@ -2,6 +2,16 @@
 
 This page tracks the checked-in Go parser support-maturity matrix for this branch.
 
+This matrix is intentionally coarse. It does not replace the branch-level parity
+audit or the per-language capability pages.
+
+Use:
+
+- [Python-To-Go Parity Audit](../reference/python-to-go-parity.md) for the
+  current branch closure bar
+- the language pages under `docs/docs/languages/` for exact partial or
+  unsupported capability details
+
 This matrix tracks the higher-level support bar for each parser beyond
 the raw capability checklist. `-` means that maturity dimension has not
 yet been explicitly assessed in the parser maturity program.

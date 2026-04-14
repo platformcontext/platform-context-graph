@@ -8,8 +8,8 @@ touching the same paths or re-litigating where new code belongs.
 
 ## Target Repository Layout
 
-The rewrite will introduce a dedicated Go subtree and a root-level schema
-contract layer:
+The rewrite introduced a dedicated Go subtree and a root-level schema contract
+layer:
 
 ```text
 buf.yaml
@@ -75,43 +75,19 @@ schema/
   into canonical content materialization inputs; it is part of the source-local
   write path, not a read-side concern.
 - `go/internal/status/` owns the storage-agnostic operator-status reader/report
-  seam shared by CLI now and HTTP/admin handlers later.
+  seam shared by CLI and HTTP/admin handlers.
 - `go/internal/storage/postgres/` may implement the status reader against SQL,
   but it must not absorb report projection, rendering, or future transport
   concerns.
-- `go/internal/compatibility/pythonbridge/` is temporary removal-debt only.
-  During the remaining conversion it is the only allowed home for bridge code,
-  but the branch is not complete until that package is deleted.
 
-## Legacy Post-Commit Bridge
-
-While the GraphBuilder family still owns a small recovery-only relationship
-surface, the remaining Python bridge must stay explicit and narrow until it is
-fully removed:
-
-```mermaid
-flowchart LR
-  A["Checkpointed coordinator or admin refinalize"] --> B["indexing.post_commit_writer"]
-  B --> C["collectors.git.finalize compatibility adapter"]
-  C --> D["Legacy GraphBuilder stage runners"]
-```
-
-Rules for this bridge:
-
-- new collector or reducer behavior must not be added to
-  `collectors/git/finalize.py`
-- `indexing/post_commit_writer.py` is the only allowed contract point for the
-  remaining Python post-commit seam
-- callers may consume structured stage timings and details from the bridge, but
-  they must not read `GraphBuilder` attributes as an implicit side channel
-- the bridge exists only for checkpointed finalization recovery and admin/CLI
-  refinalize flows until equivalent Go-owned ownership is proven
+No Python compatibility bridge remains in the normal runtime path. New work
+must extend the Go packages directly rather than reintroducing transitional
+ownership seams.
 
 ## Reserved Areas
 
-These areas should stay stable during early implementation:
+These areas should stay stable unless parity closure explicitly requires them:
 
-- existing Python read-plane packages
 - existing MCP query surfaces, except for narrow compatibility work
 - unrelated parser and feature work
 
@@ -126,7 +102,6 @@ These areas should stay stable during early implementation:
 | Operator status | `go/internal/status/`, `go/cmd/admin-status/`, storage-specific readers under `go/internal/storage/` |
 | Projector | `go/internal/projector/`, `go/internal/graph/`, `go/internal/content/` |
 | Reducer | `go/internal/reducer/`, reducer-domain packages under `go/internal/reducer/` |
-| Compatibility bridge | `go/internal/compatibility/pythonbridge/` and minimal touched bridge points in Python until deletion |
 | Validation | tests, fixtures, runbooks, and documentation updates tied to the active slice |
 
 ## Ownership Rules
@@ -136,8 +111,6 @@ These areas should stay stable during early implementation:
   coordinated and landed in small commits.
 - No worker should place collector-specific logic in shared graph or reducer
   packages.
-- No worker should add new long-lived code to legacy finalize paths without an
-  explicit cutover exception.
 - Operator-status work should prepare `go/internal/status` as the shared
   reader/report seam before any future API/admin transport is added, not create
   a second transport-specific status path.
@@ -173,4 +146,4 @@ Every slice must leave behind:
 
 - updated docs for any changed boundary
 - a clear validation command
-- a note on whether the change is final architecture or temporary bridge code
+- a note on whether the change is final architecture or a bounded parity gap

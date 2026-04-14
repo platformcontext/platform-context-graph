@@ -4,19 +4,23 @@ This roadmap is the single public place for forward-looking project direction.
 
 ## Current Phase
 
-PCG has completed **Phase 4: Go platform completion**.
+PCG has completed the **runtime migration** portion of Go platform completion.
 
-The entire runtime, parser, CLI, and deployment surface are Go-owned. There is
-no Python runtime code left in the repository — only Python fixture files used
-as parser test data under `tests/fixtures/`. The Dockerfile builds a single
-Go-only image and docker-compose runs exclusively Go binaries.
+The entire runtime, parser ownership boundary, CLI, and deployment surface are
+Go-owned. There is no Python runtime code left in the repository — only Python
+fixture files used as parser test data under `tests/fixtures/`. The Dockerfile
+builds a single Go-only image and docker-compose runs exclusively Go binaries.
+
+Feature-for-feature parity is still closing. The current branch must finish the
+remaining graph-surface and end-to-end parity gaps before any new collector
+expansion starts.
 
 The rewrite contract for the completed cutover is captured in:
 
 - [Architecture](architecture.md)
 - [Architecture Decision Records](adrs/index.md)
 
-The project is now ready for Phase 5: Multi-Collector Expansion.
+The project is now in **Phase 5: Parity Closure**.
 
 ## Rewrite Milestones
 
@@ -31,7 +35,10 @@ The project is now ready for Phase 5: Multi-Collector Expansion.
 
 ## Rewrite Status Notes
 
-The Python-to-Go conversion is complete. All merge bar conditions are met:
+The Python-to-Go runtime conversion is complete, but full feature parity is not
+yet complete.
+
+The branch has met the runtime ownership bar:
 
 - no deployed runtime or write service starts from Python runtime entrypoints
 - no Go runtime service imports `go/internal/compatibility/pythonbridge`
@@ -42,9 +49,24 @@ The Python-to-Go conversion is complete. All merge bar conditions are met:
 - the Dockerfile is a single Go-only multi-stage build
 - the CLI (`pcg`) is a native Go binary using Cobra
 
+The remaining work is tracked in the parity audit and parity-closure plan:
+
+- [Python-To-Go Parity Audit](reference/python-to-go-parity.md)
+- `docs/superpowers/plans/2026-04-14-go-parity-closure-plan.md`
+
 ## After That
 
-### Phase 5: Multi-Collector Expansion
+### Phase 5: Parity Closure
+
+Before new collectors begin, close the remaining feature-for-feature parity
+gaps in the Go graph and query surfaces.
+
+- finish SQL/dbt lineage maturity
+- close language-family graph-surface gaps
+- close IaC normalization gaps
+- update the docs to reflect the final parity state
+
+### Phase 6: Multi-Collector Expansion
 
 After the Go platform conversion is in place, add new collectors without
 changing the core platform contract.
@@ -58,7 +80,7 @@ That phase should start from the locked rewrite docs, not from fresh design
 debates. Future collector work should reuse the scope/generation/fact/reducer
 model and the shared operator/admin contract documented in this branch.
 
-### Phase 6: Backend And Scale Validation
+### Phase 7: Backend And Scale Validation
 
 Use the rewritten data plane and the first multi-collector workloads to measure
 what actually limits scale.
@@ -69,7 +91,7 @@ what actually limits scale.
 - decide whether the backend mix still fits the workload
 - evaluate alternatives only with real performance evidence
 
-### Phase 7: Collector Framework Maturity
+### Phase 8: Collector Framework Maturity
 
 After the first multi-collector proof is stable, harden the collector
 framework itself.

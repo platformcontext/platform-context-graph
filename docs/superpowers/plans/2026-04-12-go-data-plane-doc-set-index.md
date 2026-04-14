@@ -18,13 +18,15 @@ Read these documents in order before implementation work begins:
 2. [Go Data Plane Rewrite Statement Of Work](2026-04-12-go-data-plane-rewrite-sow.md)
 3. [ADR Index](../../docs/adrs/index.md)
 4. [Service Boundaries And Ownership](2026-04-12-go-data-plane-service-boundaries-and-ownership.md)
-5. [Local Testing Runbook](../../docs/reference/local-testing.md)
-6. [Cloud Validation Runbook](../../docs/reference/cloud-validation.md)
-7. [Service Runtimes](../../docs/deployment/service-runtimes.md)
-8. [System Architecture](../../docs/architecture.md)
-9. [Relationship Mapping](../../docs/reference/relationship-mapping.md)
-10. [Relationship Mapping Observability And Examples](../../docs/reference/relationship-mapping-observability.md)
-11. [Collector Authoring Guide](../../docs/guides/collector-authoring.md)
+5. [Python-To-Go Parity Audit](../../docs/reference/python-to-go-parity.md)
+6. [Go Parity Closure Plan](2026-04-14-go-parity-closure-plan.md)
+7. [Local Testing Runbook](../../docs/reference/local-testing.md)
+8. [Cloud Validation Runbook](../../docs/reference/cloud-validation.md)
+9. [Service Runtimes](../../docs/deployment/service-runtimes.md)
+10. [System Architecture](../../docs/architecture.md)
+11. [Relationship Mapping](../../docs/reference/relationship-mapping.md)
+12. [Relationship Mapping Observability And Examples](../../docs/reference/relationship-mapping-observability.md)
+13. [Collector Authoring Guide](../../docs/guides/collector-authoring.md)
 
 ## Canonical Roles
 
@@ -32,6 +34,8 @@ Read these documents in order before implementation work begins:
 | --- | --- |
 | PRD | Product and architecture destination |
 | SOW | Milestones, gates, and execution rules |
+| Parity audit | Branch truth for runtime ownership versus feature-for-feature parity |
+| Parity closure plan | Remaining milestone-sized work to finish feature parity before expansion |
 | ADRs | Locked design decisions and rationale |
 | Service boundaries plan | Directory ownership, runtime boundaries, and allowed write scopes |
 | Local testing runbook | Default local verification matrix and Compose proof rules |

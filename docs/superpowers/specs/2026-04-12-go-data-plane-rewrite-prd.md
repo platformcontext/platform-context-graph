@@ -1,5 +1,14 @@
 # Go Data Plane Rewrite PRD
 
+This document is the locked design baseline for the Go rewrite.
+
+Current branch truth now lives in:
+
+- `docs/docs/reference/python-to-go-parity.md`
+- `docs/superpowers/plans/2026-04-14-go-parity-closure-plan.md`
+
+Those documents track what remains after runtime migration completed.
+
 **Status:** Locked for rewrite branch
 
 **Date:** April 12, 2026
@@ -39,13 +48,13 @@ This PRD locks down the target shape so implementation can proceed with less amb
 
 ## Companion Documents
 
-This PRD is the top-level design contract for the rewrite. It is paired with:
+This PRD is the top-level design contract for the rewrite. The current active
+companions are:
 
 - [Rewrite Documentation Index](../plans/2026-04-12-go-data-plane-doc-set-index.md)
 - [Service Boundaries And Ownership](../plans/2026-04-12-go-data-plane-service-boundaries-and-ownership.md)
-- [Contract Freeze Plan](../plans/2026-04-12-go-data-plane-contract-freeze-plan.md)
-- [Parallel Execution Plan](../plans/2026-04-12-go-data-plane-parallel-execution-plan.md)
-- [Validation And Cutover Plan](../plans/2026-04-12-go-data-plane-validation-and-cutover-plan.md)
+- [Python-To-Go Parity Audit](../../docs/reference/python-to-go-parity.md)
+- [Go Parity Closure Plan](../plans/2026-04-14-go-parity-closure-plan.md)
 - [ADR Index](../../docs/adrs/index.md)
 
 ## Why This Rewrite Happens Now
@@ -200,6 +209,12 @@ seam that the CLI renders now and the API/admin transport can mount later.
 The same principle applies to every long-running Go runtime: collector,
 projector, reducer, and future background services should present the same
 operator/admin status shape even when the counters differ by role.
+
+## Current Branch Note
+
+The runtime migration described by this PRD is now complete on the active
+rewrite branch. The remaining work is feature-for-feature parity closure across
+parser families, graph materialization, query surfaces, and operator breadth.
 
 ## Resiliency And Concurrency Model
 
