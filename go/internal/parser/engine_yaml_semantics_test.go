@@ -72,12 +72,20 @@ metadata:
   namespace: argocd
 spec:
   generators:
-    - matrix:
+    - merge:
         generators:
-          - git:
-              repoURL: https://github.com/boatsgroup/helm-charts
-              files:
-                - path: argocd/api-node-search/overlays/*/config.yaml
+          - matrix:
+              generators:
+                - git:
+                    repoURL: https://github.com/boatsgroup/helm-charts
+                    files:
+                      - path: argocd/api-node-search/overlays/*/config.yaml
+                - list:
+                    elements:
+                      - cluster: prod
+          - plugin:
+              configMapRef:
+                name: argocd-generator-plugin
   template:
     spec:
       project: "{{.argocd.project}}"
@@ -103,7 +111,7 @@ spec:
 	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "source_repos", "https://github.com/boatsgroup/helm-charts")
 	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "source_paths", "argocd/api-node-search/overlays/*/config.yaml,argocd/api-node-search/overlays/{{.environment}}")
 	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "source_roots", "argocd/api-node-search/")
-	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "generators", "matrix")
+	assertBucketContainsFieldValue(t, got, "argocd_applicationsets", "generators", "git,list,matrix,merge,plugin")
 }
 
 func TestDefaultEngineParsePathYAMLCrossplaneResources(t *testing.T) {

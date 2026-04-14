@@ -114,7 +114,7 @@ Close the remaining infrastructure-language normalization gaps.
 - Terraform: `terraform {}` block materialization if parity requires it
 - Terragrunt: locals and inputs as queryable entities
 - Kubernetes: labels
-- ArgoCD: sync policy
+- ArgoCD: sync policy and ApplicationSet generator normalization
 - CloudFormation: JSON-template parity
 - Kustomize: base references
 

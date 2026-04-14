@@ -26,5 +26,5 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 ## Known Limitations
 - Helm-specific source parameters (`helm.valueFiles`, `helm.parameters`) are not extracted as structured nodes
-- ApplicationSet matrix generators are traversed for git sources, but merge and plugin generator variants are not normalized yet
+- ApplicationSet generator wrappers such as matrix, merge, and plugin are normalized for git source and path summaries, but plugin-specific parameters are not modeled
 - `ignoreDifferences` and custom health checks are not modeled
