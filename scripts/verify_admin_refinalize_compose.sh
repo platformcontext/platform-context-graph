@@ -6,13 +6,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 API_PORT="${PCG_HTTP_PORT:-8080}"
 JAEGER_PORT="${JAEGER_UI_PORT:-16686}"
-API_BASE_URL="http://localhost:${API_PORT}/api/v0"
 JAEGER_URL="http://localhost:${JAEGER_PORT}"
-TIMEOUT_SECONDS="${PCG_E2E_TIMEOUT_SECONDS:-180}"
 TMP_DIR="$(mktemp -d)"
-RUN_ID_FILE="$TMP_DIR/run_id.txt"
 STATUS_FILE="$TMP_DIR/status.json"
-API_KEY_FILE="$TMP_DIR/api_key.txt"
+RESPONSE_FILE="$TMP_DIR/refinalize-response.json"
+SCOPE_ID_FILE="$TMP_DIR/scope_id.txt"
 KEEP_STACK="${PCG_KEEP_COMPOSE_STACK:-false}"
 COMPOSE_CMD=()
 COMPOSE_DISPLAY=""
@@ -20,25 +18,27 @@ COMPOSE_DISPLAY=""
 cleanup() {
     local exit_code=$?
     if [[ "$exit_code" -ne 0 ]]; then
-        local run_id=""
-        if [[ -f "$RUN_ID_FILE" ]]; then
-            run_id="$(<"$RUN_ID_FILE")"
+        local scope_id=""
+        if [[ -f "$SCOPE_ID_FILE" ]]; then
+            scope_id="$(<"$SCOPE_ID_FILE")"
         fi
         echo
         echo "Admin refinalize compose verification failed."
-        if [[ -n "$run_id" ]]; then
-            echo "Failing run_id: $run_id"
-            echo "Run-specific logs:"
-            echo "  $COMPOSE_DISPLAY logs platform-context-graph | rg '$run_id'"
+        if [[ -n "$scope_id" ]]; then
+            echo "Selected scope_id: $scope_id"
         fi
         echo "Useful logs:"
         echo "  $COMPOSE_DISPLAY logs --tail=200 platform-context-graph"
-        echo "  $COMPOSE_DISPLAY logs --tail=200 bootstrap-index"
-        echo "  $COMPOSE_DISPLAY logs --tail=200 repo-sync"
+        echo "  $COMPOSE_DISPLAY logs --tail=200 ingester"
+        echo "  $COMPOSE_DISPLAY logs --tail=200 resolution-engine"
         echo "Jaeger UI: $JAEGER_URL"
         if [[ -f "$STATUS_FILE" ]]; then
             echo "Last admin status payload:"
             cat "$STATUS_FILE"
+        fi
+        if [[ -f "$RESPONSE_FILE" ]]; then
+            echo "Refinalize response:"
+            cat "$RESPONSE_FILE"
         fi
     fi
 
@@ -63,7 +63,7 @@ wait_for_http() {
     local attempts="$2"
     local sleep_seconds="$3"
 
-    for ((attempt=1; attempt<=attempts; attempt++)); do
+    for ((attempt = 1; attempt <= attempts; attempt++)); do
         if curl -fsS "$url" >/dev/null 2>&1; then
             return 0
         fi
@@ -102,24 +102,36 @@ wait_for_bootstrap_exit() {
     return 1
 }
 
-read_api_key() {
-    "${COMPOSE_CMD[@]}" exec -T platform-context-graph sh -lc \
-        "grep '^PCG_API_KEY=' /data/.platform-context-graph/.env | cut -d= -f2-"
+pick_port() {
+    local start_port="$1"
+    local port
+    for ((port = start_port; port < start_port + 200; port++)); do
+        if ! nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
+            echo "$port"
+            return 0
+        fi
+    done
+    echo "no free port found near $start_port" >&2
+    return 1
 }
 
 logs_contain() {
     local pattern="$1"
     local logs_output
 
-    logs_output="$("${COMPOSE_CMD[@]}" logs platform-context-graph 2>&1 || true)"
+    logs_output="$("${COMPOSE_CMD[@]}" logs ingester 2>&1 || true)"
     printf '%s\n' "$logs_output" | rg -q --fixed-strings "$pattern"
+}
+
+read_scope_id() {
+    "${COMPOSE_CMD[@]}" exec -T postgres sh -lc \
+        "psql -U pcg -d platform_context_graph -Atc \"SELECT scope_id FROM ingestion_scopes WHERE active_generation_id IS NOT NULL ORDER BY observed_at DESC LIMIT 1\""
 }
 
 require_tool docker
 require_tool curl
 require_tool rg
-require_tool uv
-require_tool python3
+require_tool nc
 
 if docker compose version >/dev/null 2>&1; then
     COMPOSE_CMD=(docker compose)
@@ -131,28 +143,6 @@ else
     echo "Missing required compose command: docker compose or docker-compose" >&2
     exit 1
 fi
-
-pick_port() {
-    local start_port="$1"
-    python3 - "$start_port" <<'PY'
-import socket
-import sys
-
-start = int(sys.argv[1])
-for port in range(start, start + 200):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        sock.bind(("0.0.0.0", port))
-    except OSError:
-        sock.close()
-        continue
-    sock.close()
-    print(port)
-    break
-else:
-    raise SystemExit(f"no free port found near {start}")
-PY
-}
 
 configure_ports() {
     export NEO4J_HTTP_PORT="$(pick_port "${NEO4J_HTTP_PORT:-17474}")"
@@ -166,7 +156,6 @@ configure_ports() {
 
     API_PORT="$PCG_HTTP_PORT"
     JAEGER_PORT="$JAEGER_UI_PORT"
-    API_BASE_URL="http://localhost:${API_PORT}/api/v0"
     JAEGER_URL="http://localhost:${JAEGER_PORT}"
 }
 
@@ -201,35 +190,36 @@ wait_for_bootstrap_exit 600
 echo "Waiting for API health..."
 wait_for_http "http://localhost:${API_PORT}/health" 60 2
 
-echo "Reading generated API key..."
-read_api_key >"$API_KEY_FILE"
-if [[ ! -s "$API_KEY_FILE" ]]; then
-    echo "Could not read PCG_API_KEY from the compose service" >&2
+echo "Waiting for ingester health..."
+"${COMPOSE_CMD[@]}" exec -T ingester curl -fsS http://localhost:8080/healthz >/dev/null
+
+echo "Selecting a live scope from the compose Postgres state..."
+read_scope_id >"$SCOPE_ID_FILE"
+if [[ ! -s "$SCOPE_ID_FILE" ]]; then
+    echo "Could not read an active scope_id from Postgres" >&2
     exit 1
 fi
+SCOPE_ID="$(<"$SCOPE_ID_FILE")"
 
-echo "Running compose-backed admin refinalize pytest..."
-PCG_E2E_API_BASE_URL="$API_BASE_URL" \
-PCG_E2E_API_KEY="$(<"$API_KEY_FILE")" \
-PCG_E2E_TIMEOUT_SECONDS="$TIMEOUT_SECONDS" \
-PCG_E2E_RUN_ID_FILE="$RUN_ID_FILE" \
-PCG_E2E_STATUS_FILE="$STATUS_FILE" \
-PYTHONPATH=src \
-uv run pytest tests/e2e/test_admin_refinalize_compose.py -q
+echo "Capturing ingester admin status before refinalize..."
+"${COMPOSE_CMD[@]}" exec -T ingester curl -fsS http://localhost:8080/admin/status >"$STATUS_FILE"
 
-RUN_ID="$(<"$RUN_ID_FILE")"
-if [[ -z "$RUN_ID" ]]; then
-    echo "Pytest completed without writing a run_id artifact" >&2
-    exit 1
-fi
+echo "Calling Go-owned ingester /admin/refinalize for scope_id=$SCOPE_ID ..."
+"${COMPOSE_CMD[@]}" exec -T ingester sh -lc \
+    "curl -fsS -X POST http://localhost:8080/admin/refinalize -H 'content-type: application/json' -d '{\"scope_ids\":[\"$SCOPE_ID\"]}'" \
+    >"$RESPONSE_FILE"
 
-echo "Verifying API logs contain the run_id and workload stage progress..."
-logs_contain "$RUN_ID"
-logs_contain "Re-finalization stage update: workloads"
-logs_contain "admin.refinalize.completed"
+rg -q '"status"[[:space:]]*:[[:space:]]*"enqueued"' "$RESPONSE_FILE"
+rg -q "\"$SCOPE_ID\"" "$RESPONSE_FILE"
+
+echo "Capturing ingester admin status after refinalize..."
+"${COMPOSE_CMD[@]}" exec -T ingester curl -fsS http://localhost:8080/admin/status >"$STATUS_FILE"
+
+echo "Verifying ingester logs mention the refinalized scope..."
+logs_contain "$SCOPE_ID"
 
 echo
 echo "Admin refinalize compose verification passed."
-echo "run_id: $RUN_ID"
+echo "scope_id: $SCOPE_ID"
 echo "Jaeger UI: $JAEGER_URL"
 echo "Stack teardown: $COMPOSE_DISPLAY down -v"

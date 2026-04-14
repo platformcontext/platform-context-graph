@@ -54,15 +54,13 @@ No new ingestors before the full Python-to-Go conversion completes.
 Use these documents together with this SOW before parallel implementation begins:
 
 - [Rewrite Documentation Index](2026-04-12-go-data-plane-doc-set-index.md)
+- [Service Boundaries And Ownership](2026-04-12-go-data-plane-service-boundaries-and-ownership.md)
+- [ADR Index](../../docs/adrs/index.md)
+- [Local Testing Runbook](../../docs/reference/local-testing.md)
+- [Cloud Validation Runbook](../../docs/reference/cloud-validation.md)
+- [Service Runtimes](../../docs/deployment/service-runtimes.md)
 - [Collector Authoring Guide](../../docs/guides/collector-authoring.md)
 - [Relationship Mapping Observability And Examples](../../docs/reference/relationship-mapping-observability.md)
-- [Service Boundaries And Ownership](2026-04-12-go-data-plane-service-boundaries-and-ownership.md)
-- [Contract Freeze Plan](2026-04-12-go-data-plane-contract-freeze-plan.md)
-- [Milestone Operating Model](2026-04-12-go-data-plane-milestone-operating-model.md)
-- [Milestone 1: Native Git Cutover And Operability](2026-04-12-go-data-plane-milestone-01-native-git-cutover.md)
-- [Parallel Execution Plan](2026-04-12-go-data-plane-parallel-execution-plan.md)
-- [Validation And Cutover Plan](2026-04-12-go-data-plane-validation-and-cutover-plan.md)
-- [ADR Index](../../docs/adrs/index.md)
 
 ---
 

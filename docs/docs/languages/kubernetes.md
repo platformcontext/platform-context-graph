@@ -10,18 +10,18 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Entrypoint: `go/internal/parser/yaml_language.go`
 - Fixture repo: `tests/fixtures/ecosystems/kubernetes_comprehensive/`
 - Unit test suite: `go/internal/parser/engine_infra_test.go`
-- Integration test suite: `tests/integration/test_iac_graph.py::TestKubernetesGraph`
+- Integration validation: compose-backed fixture verification (see [Local Testing Runbook](../reference/local-testing.md))
 
 ## Capability Checklist
 | Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
 |-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
-| Kubernetes resources (any `apiVersion`/`kind`) | `kubernetes-resources-any-apiversion-kind` | supported | `k8s_resources` | `name, line_number, kind, api_version` | `node:K8sResource` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | `tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds` | - |
-| API version | `api-version` | supported | `k8s_resources` | `name, line_number, api_version` | `property:K8sResource.api_version` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | `tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds` | - |
-| Kind | `kind` | supported | `k8s_resources` | `name, line_number, kind` | `property:K8sResource.kind` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | `tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds` | - |
-| Name (`metadata.name`) | `name-metadata-name` | supported | `k8s_resources` | `name, line_number` | `property:K8sResource.name` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | `tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds` | - |
-| Namespace (`metadata.namespace`) | `namespace-metadata-namespace` | supported | `k8s_resources` | `name, line_number, namespace` | `property:K8sResource.namespace` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | `tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds` | - |
-| Labels | `labels` | partial | `k8s_resources` | `name, line_number` | `none:not_persisted` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | `tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds` | The native YAML parser does not yet normalize `metadata.labels` onto the generic Kubernetes payload. |
-| Multi-document YAML support | `multi-document-yaml-support` | supported | `multi-document-yaml-support` | `name, line_number` | `node:multi-document-yaml-support` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | `tests/integration/test_iac_graph.py::TestKubernetesGraph::test_all_resource_kinds` | - |
+| Kubernetes resources (any `apiVersion`/`kind`) | `kubernetes-resources-any-apiversion-kind` | supported | `k8s_resources` | `name, line_number, kind, api_version` | `node:K8sResource` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | Compose-backed fixture verification | - |
+| API version | `api-version` | supported | `k8s_resources` | `name, line_number, api_version` | `property:K8sResource.api_version` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | Compose-backed fixture verification | - |
+| Kind | `kind` | supported | `k8s_resources` | `name, line_number, kind` | `property:K8sResource.kind` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | Compose-backed fixture verification | - |
+| Name (`metadata.name`) | `name-metadata-name` | supported | `k8s_resources` | `name, line_number` | `property:K8sResource.name` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | Compose-backed fixture verification | - |
+| Namespace (`metadata.namespace`) | `namespace-metadata-namespace` | supported | `k8s_resources` | `name, line_number, namespace` | `property:K8sResource.namespace` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | Compose-backed fixture verification | - |
+| Labels | `labels` | partial | `k8s_resources` | `name, line_number` | `none:not_persisted` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | Compose-backed fixture verification | The native YAML parser does not yet normalize `metadata.labels` onto the generic Kubernetes payload. |
+| Multi-document YAML support | `multi-document-yaml-support` | supported | `multi-document-yaml-support` | `name, line_number` | `node:multi-document-yaml-support` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathYAMLKubernetes` | Compose-backed fixture verification | - |
 
 ## Known Limitations
 - Container image references within Pod specs are not extracted as separate nodes

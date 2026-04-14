@@ -33,14 +33,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Query surfacing: `supported`
 - Real-repo validation: `supported`
 - End-to-end indexing: `supported`
-- Local repo validation evidence:
-  - `recos-ranker-service (clean end-to-end validation with FastAPI framework evidence)`
-  - `lambda-python-s3-proxy (clean end-to-end validation with Flask framework evidence)`
-  - `lambda-python-lb-s3-files (discovery-aware parser validation with Flask route evidence)`
 - Notes:
-  - recos-ranker-service completed a clean local end-to-end indexing run (run 1cfe41a63cb2bd4a)
-  - lambda-python-s3-proxy completed a clean local end-to-end indexing run (run 6a792e3bb05f5c69)
-  - repo context, repo summary, and repo story all surfaced FastAPI or Flask framework evidence through the default FalkorDB backend
+  - Framework evidence for FastAPI and Flask is carried by the Go parser and
+    surfaced through the current Go-owned query path.
 
 
 ## Known Limitations

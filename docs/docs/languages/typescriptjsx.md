@@ -32,15 +32,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Query surfacing: `supported`
 - Real-repo validation: `supported`
 - End-to-end indexing: `supported`
-- Local repo validation evidence:
-  - `portal-nextjs-platform (612 indexed TSX files, 0 parser issues)`
-  - `portal-java-ycm (358 indexed TSX files, 0 parser issues)`
-  - `webapp-node-fsbo (177 indexed TSX files, 0 parser issues)`
-  - `boats-chatgpt-app (local regression fixture plus clean TSX smoke check)`
 - Notes:
-  - portal-nextjs-platform completed a clean local end-to-end indexing run (run 01e7ca696a30df95)
-  - repo context, repo summary, and repo story surfaced React/Next.js framework evidence through the default FalkorDB backend
-  - the validation fixed two backend-compatibility gaps in repository graph counts and indexed file discovery
+  - Real-repo validation covers React and Next.js evidence through the
+    Go-owned parser and query path.
 
 
 ## Known Limitations

@@ -69,8 +69,7 @@ Use the operator surface that matches the question you are trying to answer:
 - `GET /api/v0/index-status` and `GET /api/v0/index-runs/{run_id}` are the
   deployed completeness views exposed by the public API service.
 - `GET /admin/status` is the live runtime-health and backlog surface for Go
-  proof runtimes and other services that mount the shared runtime admin
-  contract.
+  runtimes and other services that mount the shared runtime admin contract.
 
 Keep the distinction explicit:
 
@@ -78,9 +77,9 @@ Keep the distinction explicit:
   whether a scope, repository, or generation has finished indexing.
 - `index-status` answers checkpointed run completeness, not whether a runtime
   is currently healthy.
-- `pcg finalize` and `/admin/refinalize` are repair surfaces. The mounted admin
-  refinalize path is graph-safe only; file-dependent post-commit bridge stages
-  remain CLI-only until the projector/reducer replacement path exists.
+- `POST /admin/refinalize` and `POST /admin/replay` are Go-owned repair
+  surfaces. Use them for controlled recovery and backlog repair, not as part of
+  the normal indexing path.
 
 ## Spans
 
@@ -114,11 +113,11 @@ Useful span attributes:
 - `pcg.index.source`
 - `pcg.index.file_parse_strategy`
 
-The `pcg.index.finalize*` spans are transitional bridge signals for the
-remaining Python post-commit recovery path. Treat them as repair-path evidence,
-not as the canonical telemetry family for new architecture work. New
-projector or reducer behavior should emit queue, projector, or reducer spans
-instead of extending the finalization family.
+The `pcg.index.finalize*` spans now describe Go-owned repair and reconciliation
+work, not an active Python bridge. Treat them as repair-path evidence, not as
+the canonical telemetry family for new architecture work. New projector or
+reducer behavior should emit queue, projector, or reducer spans instead of
+extending the finalization family.
 
 ## Metrics
 
@@ -186,8 +185,8 @@ During rollout you may also see `index.parse.multiprocess_skeleton.enabled`.
 Treat that as compatibility noise, not a dashboard baseline.
 
 Treat `index.finalization.*` the same way for new architecture work: these
-events remain important for legacy repair and bridge visibility, but they are
-not the target event family for future collector, projector, or reducer logic.
+events remain important for repair visibility, but they are not the target
+event family for future collector, projector, or reducer logic.
 
 When an operator needs to answer "is the service alive?" versus "did the data
 plane finish the work?", pair the log family with the matching status surface:

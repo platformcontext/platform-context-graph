@@ -2,6 +2,11 @@
 
 This page tracks the checked-in Go parser contract matrix for this branch.
 
+Coverage counts on this page describe checked-in fixture contract coverage, not
+blanket parity claims for every end-to-end graph surface. Use each
+language-specific page as the source of truth for current limitations, partial
+real-repo validation, and end-to-end indexing status.
+
 ## Language Parsers
 
 | Parser | Parser Class | Functions | Classes | Interfaces | Traits | Imports | Calls | Variables | Structs | Enums | Macros | Unit Coverage | Integration Coverage | Fixture |

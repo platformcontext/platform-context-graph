@@ -35,17 +35,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Query surfacing: `supported`
 - Real-repo validation: `supported`
 - End-to-end indexing: `supported`
-- Local repo validation evidence:
-  - `portal-react-platform (1145 indexed JS files, clean end-to-end validation with framework evidence)`
-  - `api-node-search-api (real repo validation with Hapi route evidence)`
-  - `api-node-datastore (real repo validation with Express route evidence)`
-  - `lambda-node-search-price-tiers-processor (discovery-aware parser validation with AWS S3 client evidence)`
-  - `api-node-poc-nlp-search (discovery-aware parser validation with GCP Vision client evidence)`
 - Notes:
-  - portal-react-platform completed a clean local end-to-end indexing run (run 773c75cb105c8879)
-  - repo context, repo summary, and repo story all surfaced React framework evidence on the default FalkorDB backend
-  - Node HTTP packs now persist and surface Express and Hapi route evidence through repo summary, repo story, and investigation responses
-  - Provider packs now surface bounded AWS and GCP SDK evidence at file, repo summary, story, and investigation layers
+  - Real-repo validation covers React, Next.js, Express, Hapi, and bounded AWS
+    and GCP SDK evidence through the Go-owned parser and query path.
 
 
 ## Known Limitations

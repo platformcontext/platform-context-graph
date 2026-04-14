@@ -56,8 +56,9 @@ Every new mapping family should come with:
 
 For this slice, the important relationship tests are in:
 
-- `tests/unit/relationships/test_file_evidence.py`
-- `tests/unit/relationships/test_resolver.py`
+- `go/internal/relationships/evidence_test.go`
+- `go/internal/relationships/resolver_test.go`
+- `go/internal/storage/postgres/relationship_store_test.go`
 
 ## Example Multi-Chain
 

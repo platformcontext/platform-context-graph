@@ -119,5 +119,5 @@ The following branch-level ownership has been removed:
 - Python finalization and repair bridges
 - Python packaged Terraform runtime ownership
 
-Historical references may still exist in ADRs or completed milestone plans, but
+Historical references may still exist in preserved rewrite SOW documents, but
 they should not be treated as current architecture.

@@ -138,8 +138,9 @@ Why it matters:
   paths, so their breadcrumbs usually come from the HTTP request log plus the
   underlying finalization events
 - graph-safe admin refinalize should emit the admin.refinalize family only
-- file-dependent bridge stages remain CLI-only, so they should show up in the
-  legacy bridge/finalization logs instead of the admin.refinalize family
+- unexpected `index.finalization.*` activity without a matching admin repair
+  request should be treated as a runtime investigation signal, not a fallback
+  bridge path
 
 ### Admin and operator workflow
 

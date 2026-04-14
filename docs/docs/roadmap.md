@@ -76,7 +76,7 @@ framework itself.
 
 - standardize collector onboarding and telemetry
 - keep collector families additive instead of special-case
-- remove transitional bridge paths once parity is proven
+- keep new collectors on the same Go-owned service and data-plane contract
 - make new source families follow the same scope/generation/fact/reducer shape
 
 ## Longer-term

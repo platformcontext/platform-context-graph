@@ -42,7 +42,6 @@ nav:
     - Argo CD: deployment/argocd.md
     - Local Testing: reference/local-testing.md
     - Cloud Validation: reference/cloud-validation.md
-    - Baseline Performance: reference/baseline-performance.md
   - Guides:
     - Starter Prompts: guides/starter-prompts.md
     - Connect an MCP Client: guides/mcp-guide.md

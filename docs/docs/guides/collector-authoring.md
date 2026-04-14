@@ -152,6 +152,7 @@ Avoid these patterns even if they look faster in the short term:
 - using full re-index as the normal freshness path
 - hiding source gaps or partial coverage behind optimistic status output
 - creating a second admin or metrics shape that only one collector uses
-- extending the Python bridge path for new production behavior
+- reintroducing compatibility shims or alternate runtime paths for new
+  production behavior
 
 Those patterns all increase coupling and make the next collector harder to add.

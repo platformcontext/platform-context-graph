@@ -23,7 +23,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Variables | `variables` | supported | `variables` | `name, line_number` | `node:Variable` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathGo` | Compose-backed fixture verification | - |
 | Methods (receivers) | `methods-receivers` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/engine_test.go::TestDefaultEngineParsePathGo` | Compose-backed fixture verification | - |
 | Generics | `generics` | supported | `functions` | `name, line_number` | `node:Function` | `go/internal/parser/engine_python_semantics_test.go::TestDefaultEngineParsePathGoRichSemanticMetadata` | Compose-backed fixture verification | - |
-| Embedded SQL queries | `embedded-sql-queries` | supported | `embedded_sql_queries` | `function_name, function_line_number, table_name, operation, line_number, api` | `relationship:SQL link hints consumed by sql_links materialization` | `go/internal/parser/go_embedded_sql_test.go::TestDefaultEngineParsePathGoEmbeddedSQLQueries` | `tests/unit/relationships/test_sql_links.py::test_create_all_sql_links_materializes_sql_edges` | - |
+| Embedded SQL queries | `embedded-sql-queries` | supported | `embedded_sql_queries` | `function_name, function_line_number, table_name, operation, line_number, api` | `relationship:SQL link hints consumed by sql_links materialization` | `go/internal/parser/go_embedded_sql_test.go::TestDefaultEngineParsePathGoEmbeddedSQLQueries` | Compose-backed fixture verification | - |
 
 ## Known Limitations
 - Generic type constraints may not be fully captured

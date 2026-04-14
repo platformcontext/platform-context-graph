@@ -10,19 +10,19 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Entrypoint: `go/internal/parser/sql_language.go`
 - Fixture repo: `tests/fixtures/ecosystems/sql_comprehensive/`
 - Unit test suite: `go/internal/parser/engine_sql_test.go`
-- Integration test suite: `tests/integration/test_sql_graph.py::TestSqlGraph`
+- Integration validation: compose-backed fixture verification (see [Local Testing Runbook](../reference/local-testing.md))
 
 ## Capability Checklist
 | Capability | ID | Status | Extracted Bucket/Key | Required Fields | Graph Surface | Unit Coverage | Integration Coverage | Rationale |
 |-----------|----|--------|------------------------|-----------------|---------------|---------------|----------------------|-----------|
-| Tables | `sql-tables` | supported | `sql_tables` | `name, line_number` | `node:SqlTable` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | `tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created` | - |
-| Columns | `sql-columns` | supported | `sql_columns` | `name, line_number` | `node:SqlColumn` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | `tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_relationships_are_created` | - |
-| Views | `sql-views` | supported | `sql_views` | `name, line_number` | `node:SqlView` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | `tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created` | - |
-| Functions | `sql-functions` | supported | `sql_functions` | `name, line_number` | `node:SqlFunction` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | `tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created` | - |
-| Triggers | `sql-triggers` | supported | `sql_triggers` | `name, line_number` | `node:SqlTrigger` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | `tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created` | - |
-| Indexes | `sql-indexes` | supported | `sql_indexes` | `name, line_number` | `node:SqlIndex` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | `tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_nodes_are_created` | - |
-| SQL relationships | `sql-relationships` | supported | `sql_relationships` | `type, source_name, target_name, line_number` | `relationship:HAS_COLUMN/REFERENCES_TABLE/READS_FROM/TRIGGERS_ON/EXECUTES/INDEXES` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | `tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_relationships_are_created` | - |
-| Migration intelligence | `sql-migrations` | supported | `sql_migrations` | `tool, target_kind, target_name, line_number` | `relationship:MIGRATES` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLMigrationMetadata` | `tests/integration/test_sql_graph.py::TestSqlGraph::test_sql_relationships_are_created` | - |
+| Tables | `sql-tables` | supported | `sql_tables` | `name, line_number` | `node:SqlTable` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
+| Columns | `sql-columns` | supported | `sql_columns` | `name, line_number` | `node:SqlColumn` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
+| Views | `sql-views` | supported | `sql_views` | `name, line_number` | `node:SqlView` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
+| Functions | `sql-functions` | supported | `sql_functions` | `name, line_number` | `node:SqlFunction` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
+| Triggers | `sql-triggers` | supported | `sql_triggers` | `name, line_number` | `node:SqlTrigger` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
+| Indexes | `sql-indexes` | supported | `sql_indexes` | `name, line_number` | `node:SqlIndex` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
+| SQL relationships | `sql-relationships` | supported | `sql_relationships` | `type, source_name, target_name, line_number` | `relationship:HAS_COLUMN/REFERENCES_TABLE/READS_FROM/TRIGGERS_ON/EXECUTES/INDEXES` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLSchemaObjectsAndRelationships` | Compose-backed fixture verification | - |
+| Migration intelligence | `sql-migrations` | supported | `sql_migrations` | `tool, target_kind, target_name, line_number` | `relationship:MIGRATES` | `go/internal/parser/engine_sql_test.go::TestDefaultEngineParsePathSQLMigrationMetadata` | Compose-backed fixture verification | - |
 
 ## Support Maturity
 - Grammar routing: `supported`
@@ -33,9 +33,25 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Real-repo validation: `partial`
 - End-to-end indexing: `partial`
 - Notes:
-  - SQL support is validated through local service repositories with checked-in SQL corpus plus targeted external ORM and Go examples.
+  - SQL support is Go-owned end to end for native SQL parsing, migration extraction, embedded SQL link hints, and the JSON-backed dbt and data-intelligence families.
+  - Real-repo and end-to-end status remain partial because compiled dbt lineage still carries explicit unresolved-reference and derived-expression limits in the current Go implementation.
+
+## Go-Owned Data-Intelligence Path
+
+The SQL and analytics runtime on this branch is no longer split with a Python
+service path.
+
+- Native SQL parsing and schema-object extraction live in `go/internal/parser/sql_language.go`
+- Migration intelligence lives in `go/internal/parser/sql_migrations.go`
+- Embedded SQL extraction for Go code lives in `go/internal/parser/go_embedded_sql.go`
+- dbt compiled-SQL lineage lives in `go/internal/parser/dbt_sql_lineage.go`
+- dbt manifest shaping lives in `go/internal/parser/json_dbt_manifest.go`
+- JSON data-intelligence families live in `go/internal/parser/json_data_intelligence.go`
 
 
 ## Known Limitations
 - Dialect-specific procedural SQL beyond common Postgres-style bodies may surface only partial table references.
 - ALTER/DDL mutation parsing currently prioritizes affected object names over full clause normalization.
+- Compiled dbt lineage still records partial coverage for unresolved references,
+  macros, templated expressions, window semantics, and some multi-input
+  derived expressions.

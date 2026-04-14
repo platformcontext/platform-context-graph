@@ -230,15 +230,14 @@ local filesystem convenience wrappers. `pcg index` now shells into the Go
 while `pcg watch` remains the local incremental convenience surface. They do not
 replace the canonical workspace source model.
 
-## Repair And Bridge Commands
+## Recovery Commands
 
-Some CLI and admin commands still exist to preserve safe recovery during the
-rewrite. Treat them as repair surfaces, not as the default long-running
-ownership model.
+Recovery surfaces still exist for operator use, but they are Go-owned repair
+endpoints rather than a separate runtime model.
 
-- `pcg finalize` is deprecated. Recovery is owned by the Go ingester at
+- `pcg finalize` has been removed. Recovery is owned by the Go ingester at
   `/admin/refinalize` and `/admin/replay`.
-- Recovery no longer depends on Python post-commit bridge stages.
+- Recovery no longer depends on bridge stages or Python post-commit ownership.
 - `pcg workspace index` and `pcg workspace watch` remain valuable for local
   proof and workstation workflows, but the canonical deployed write plane is
   still the split `ingester` plus `resolution-engine` runtime model.

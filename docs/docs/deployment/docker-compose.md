@@ -36,7 +36,8 @@ same thing a `ServiceMonitor` would scrape:
 - a Prometheus-format `/metrics` endpoint on `ingester`
 - a Prometheus-format `/metrics` endpoint on `resolution-engine`
 
-For the admin re-finalize flow specifically, use the compose-backed verification wrapper:
+For the admin re-finalize flow specifically, use the compose-backed verification
+wrapper:
 
 ```bash
 ./scripts/verify_admin_refinalize_compose.sh
@@ -44,11 +45,12 @@ For the admin re-finalize flow specifically, use the compose-backed verification
 
 That script:
 - starts the local compose stack from a clean state
-- waits for bootstrap indexing and API health
-- reads the generated API key from the running service
-- runs `tests/e2e/test_admin_refinalize_compose.py` against the live API
-- verifies the returned `run_id` also appears in the API logs
-- prints the Jaeger URL, the failing `run_id`, and the last admin status payload if the flow fails
+- waits for bootstrap indexing plus API and ingester health
+- selects a live scope from the compose Postgres state
+- calls the Go-owned ingester `/admin/refinalize` endpoint from inside the
+  compose network
+- captures the before/after admin status payload when the flow fails
+- prints the Jaeger URL, selected `scope_id`, and useful logs for debugging
 - auto-selects free host ports when the usual local defaults are already occupied
 
 Set `PCG_KEEP_COMPOSE_STACK=true` if you want the stack left running after the verification completes.

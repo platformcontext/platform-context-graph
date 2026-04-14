@@ -34,13 +34,13 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Query surfacing: `supported`
 - Real-repo validation: `supported`
 - End-to-end indexing: `supported`
-- Local repo validation evidence:
-  - `api-node-platform (109 indexed TS files, clean end-to-end validation on a zero-TSX repo)`
 - Notes:
-  - api-node-platform completed a clean local end-to-end indexing run (run ef02081cb9874275)
-  - repo context, repo summary, and repo story all returned successfully on a pure TypeScript repo without requiring framework evidence
-  - TypeScript now participates in the same declarative Node HTTP and provider-pack program as JavaScript
-  - generic type aliases and decorators remain partial or unsupported as documented below
+  - Real-repo validation covers pure TypeScript repositories without requiring
+    TSX-specific framework evidence.
+  - TypeScript participates in the same declarative Node HTTP and provider-pack
+    program as JavaScript.
+  - Generic type aliases and decorators remain partial or unsupported as
+    documented below.
 
 
 ## Known Limitations

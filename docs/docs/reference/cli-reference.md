@@ -55,7 +55,7 @@ These options apply at the root command level.
 | `pcg doctor` | Run local diagnostics. | No |
 | `pcg index [path]` | Index a local path by launching the Go `bootstrap-index` runtime. | No |
 | `pcg index-status [target]` | Show checkpointed index status for a local path, local run, or remote run. This is the completeness signal, not process health. | Yes |
-| `pcg finalize` | **Deprecated.** Recovery is owned by the Go ingester at `/admin/refinalize` and `/admin/replay`. | No |
+| `pcg finalize` | **Removed.** Use the Go ingester admin recovery endpoints `/admin/refinalize` and `/admin/replay`. | No |
 | `pcg clean` | Remove orphaned nodes and relationships. | No |
 | `pcg stats [path]` | Show indexing statistics. | No |
 | `pcg delete <path>` | Delete one indexed repository. | No |

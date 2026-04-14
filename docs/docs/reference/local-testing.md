@@ -109,9 +109,9 @@ The canonical packaged schemas live under:
 If this gate fails, fix the Go loader or the Go relationship extraction path.
 Do not reintroduce a Python wrapper.
 
-## Python Runtime Regression Gate
+## No-Python Runtime Gate
 
-The migration bar is now structural rather than pytest-based.
+The runtime-ownership bar is now structural rather than pytest-based.
 
 ```bash
 rg --files . -g '*.py' | rg -v '^tests/fixtures/'
