@@ -1,0 +1,25 @@
+go/internal/runtime/memlimit_test.go
+  1ca5ee6ce936a402 207-209,211-213,217-219,248-250,252-254,257-259,261-263,267-272
+go/internal/query/entity_content_iac_fallback_test.go
+  1ca5ee6ce936a402 1-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "d9bfa7e89f22e39225be531e3fa25571ee47d94c",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 27,
+      "total_deletions": 9,
+      "accepted_lines": 193,
+      "overriden_lines": 0
+    }
+  }
+}
