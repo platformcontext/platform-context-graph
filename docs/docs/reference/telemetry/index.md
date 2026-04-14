@@ -220,6 +220,8 @@ endpoint via a composite handler.
 | `pcg_dp_reducer_executions_total` | Total reducer intent executions | `domain`, status (`succeeded`/`failed`) |
 | `pcg_dp_canonical_writes_total` | Total canonical graph write batches | `domain` |
 | `pcg_dp_shared_projection_cycles_total` | Total shared projection partition cycles | `domain`, `partition_key` |
+| `pcg_dp_repos_snapshotted_total` | Total repositories snapshotted | status (`succeeded`/`failed`/`skipped`) |
+| `pcg_dp_files_parsed_total` | Total files parsed | status (`succeeded`/`failed`/`skipped`) |
 
 #### Histograms
 
@@ -235,6 +237,19 @@ endpoint via a composite handler.
 | `pcg_dp_queue_claim_duration_seconds` | Queue work item claim duration | s | default |
 | `pcg_dp_postgres_query_duration_seconds` | Postgres query duration | s | 0.001 .. 2.5 |
 | `pcg_dp_neo4j_query_duration_seconds` | Neo4j query duration | s | default |
+| `pcg_dp_repo_snapshot_duration_seconds` | Per-repository snapshot duration | s | 0.1 .. 300 |
+| `pcg_dp_file_parse_duration_seconds` | Per-file parse duration | s | 0.001 .. 2.5 |
+
+#### Projector Stage Dimensions
+
+The `pcg_dp_projector_stage_duration_seconds` histogram carries a `stage` attribute:
+
+| Stage | Description |
+| --- | --- |
+| `build_projection` | Fact-to-record transformation |
+| `graph_write` | Neo4j canonical graph write |
+| `content_write` | Postgres content store write |
+| `intent_enqueue` | Reducer intent queue write |
 
 ### Metric Dimension Keys
 
@@ -247,6 +262,10 @@ endpoint via a composite handler.
 | `collector_kind` | Collector type (e.g. git) |
 | `domain` | Reducer or projection domain |
 | `partition_key` | Shared projection partition |
+| `stage` | Projector stage (build_projection, graph_write, content_write, intent_enqueue) |
+| `status` | Operation outcome (succeeded/failed) |
+| `queue` | Queue name for claim duration (projector/reducer) |
+| `worker_id` | Worker goroutine identifier (in structured logs) |
 
 ### Span Names
 

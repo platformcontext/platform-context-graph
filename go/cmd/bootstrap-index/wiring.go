@@ -42,12 +42,13 @@ func buildBootstrapCollector(
 	}
 
 	source := &collector.GitSource{
-		Component:   "bootstrap-index",
-		Selector:    collector.NativeRepositorySelector{Config: config},
-		Snapshotter: collector.NativeRepositorySnapshotter{},
-		Tracer:      tracer,
-		Instruments: instruments,
-		Logger:      logger,
+		Component:       "bootstrap-index",
+		Selector:        collector.NativeRepositorySelector{Config: config},
+		Snapshotter:     collector.NativeRepositorySnapshotter{},
+		SnapshotWorkers: config.SnapshotWorkers,
+		Tracer:          tracer,
+		Instruments:     instruments,
+		Logger:          logger,
 	}
 
 	return collectorDeps{

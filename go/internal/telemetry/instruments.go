@@ -52,6 +52,12 @@ type Instruments struct {
 	PostgresQueryDuration     metric.Float64Histogram
 	Neo4jQueryDuration        metric.Float64Histogram
 
+	// Collector concurrency histograms and counters
+	RepoSnapshotDuration  metric.Float64Histogram
+	FileParseDuration     metric.Float64Histogram
+	ReposSnapshotted      metric.Int64Counter
+	FilesParsed           metric.Int64Counter
+
 	// Observable gauges for autoscaling signals
 	QueueDepth         metric.Int64ObservableGauge
 	QueueOldestAge     metric.Float64ObservableGauge
@@ -221,6 +227,45 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register Neo4jQueryDuration histogram: %w", err)
+	}
+
+	// Collector concurrency instruments
+	repoSnapshotBuckets := []float64{0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300}
+	inst.RepoSnapshotDuration, err = meter.Float64Histogram(
+		"pcg_dp_repo_snapshot_duration_seconds",
+		metric.WithDescription("Per-repository snapshot duration including discovery, parsing, and materialization"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(repoSnapshotBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register RepoSnapshotDuration histogram: %w", err)
+	}
+
+	fileParseBuckets := []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5}
+	inst.FileParseDuration, err = meter.Float64Histogram(
+		"pcg_dp_file_parse_duration_seconds",
+		metric.WithDescription("Per-file parse duration"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(fileParseBuckets...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register FileParseDuration histogram: %w", err)
+	}
+
+	inst.ReposSnapshotted, err = meter.Int64Counter(
+		"pcg_dp_repos_snapshotted_total",
+		metric.WithDescription("Total repositories snapshotted by status"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register ReposSnapshotted counter: %w", err)
+	}
+
+	inst.FilesParsed, err = meter.Int64Counter(
+		"pcg_dp_files_parsed_total",
+		metric.WithDescription("Total files parsed by status"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register FilesParsed counter: %w", err)
 	}
 
 	return inst, nil

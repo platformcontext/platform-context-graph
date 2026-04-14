@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -167,11 +168,14 @@ func TestServiceRunWorksWithoutSharedProjectionRunner(t *testing.T) {
 }
 
 type stubReducerWorkSource struct {
+	mu         sync.Mutex
 	claimCalls int
 	intents    []Intent
 }
 
 func (s *stubReducerWorkSource) Claim(context.Context) (Intent, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.claimCalls++
 	if len(s.intents) == 0 {
 		return Intent{}, false, nil
@@ -183,28 +187,36 @@ func (s *stubReducerWorkSource) Claim(context.Context) (Intent, bool, error) {
 }
 
 type stubReducerExecutor struct {
+	mu           sync.Mutex
 	executeCalls int
 	result       Result
 	executeErr   error
 }
 
 func (s *stubReducerExecutor) Execute(context.Context, Intent) (Result, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.executeCalls++
 	return s.result, s.executeErr
 }
 
 type stubReducerWorkSink struct {
+	mu         sync.Mutex
 	ackCalls   int
 	failCalls  int
 	failedWith error
 }
 
 func (s *stubReducerWorkSink) Ack(context.Context, Intent, Result) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.ackCalls++
 	return nil
 }
 
 func (s *stubReducerWorkSink) Fail(_ context.Context, _ Intent, err error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.failCalls++
 	s.failedWith = err
 	return nil

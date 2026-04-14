@@ -230,6 +230,13 @@ PVC in Kubernetes.
 Scale or tune the ingester when parsing is the bottleneck or workspace pressure
 is rising.
 
+### Concurrency tuning
+
+The ingester collector uses a goroutine worker pool for concurrent repository
+snapshots. Set `PCG_SNAPSHOT_WORKERS` to control parallelism (default:
+`min(NumCPU, 4)`). In Kubernetes, align CPU requests with the worker count to
+avoid CPU throttling under concurrent parsing load.
+
 ## Resolution Engine
 
 ### Responsibilities
@@ -259,6 +266,24 @@ is rising.
 Scale the resolution-engine when queue age rises and workers remain busy. If
 queue age rises together with Postgres contention, fix database pressure before
 adding more workers.
+
+### Concurrency tuning
+
+The reducer supports concurrent intent execution (`PCG_REDUCER_WORKERS`,
+default 1) and concurrent shared projection partition processing
+(`PCG_SHARED_PROJECTION_WORKERS`, default 1). Increase these when queue age
+rises and single-worker CPU is not saturated.
+
+Additional shared projection config:
+
+- `PCG_SHARED_PROJECTION_PARTITION_COUNT` (default 8) — partitions per domain
+- `PCG_SHARED_PROJECTION_BATCH_LIMIT` (default 100) — intents per batch
+- `PCG_SHARED_PROJECTION_POLL_INTERVAL` (default 5s) — cycle poll interval
+- `PCG_SHARED_PROJECTION_LEASE_TTL` (default 60s) — partition lease TTL
+
+In Kubernetes, size the Postgres connection pool to accommodate the total
+concurrent workers across all reducer replicas. Each worker holds one
+connection during claim/execute/ack.
 
 ## Bootstrap Index
 

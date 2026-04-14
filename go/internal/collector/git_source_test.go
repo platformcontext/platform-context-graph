@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -312,13 +313,17 @@ type stubRepositorySnapshotter struct {
 	snapshots      map[string]RepositorySnapshot
 	errForRepoPath map[string]error
 	calls          []string
+	mu             sync.Mutex
 }
 
 func (s *stubRepositorySnapshotter) SnapshotRepository(
 	_ context.Context,
 	repository SelectedRepository,
 ) (RepositorySnapshot, error) {
+	s.mu.Lock()
 	s.calls = append(s.calls, repository.RepoPath)
+	s.mu.Unlock()
+
 	if err := s.errForRepoPath[repository.RepoPath]; err != nil {
 		return RepositorySnapshot{}, err
 	}
@@ -352,4 +357,131 @@ func filepathBase(path string) string {
 		return path
 	}
 	return path[lastSlash+1:]
+}
+
+func TestBuildCollectedConcurrent(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 14, 10, 0, 0, 0, time.UTC)
+	repo1 := t.TempDir()
+	repo2 := t.TempDir()
+	repo3 := t.TempDir()
+
+	snapshotter := &stubRepositorySnapshotter{
+		snapshots: map[string]RepositorySnapshot{
+			repo1: {
+				RepoPath:  repo1,
+				RemoteURL: "https://github.com/example/repo1",
+				FileCount: 5,
+			},
+			repo2: {
+				RepoPath:  repo2,
+				RemoteURL: "https://github.com/example/repo2",
+				FileCount: 3,
+			},
+			repo3: {
+				RepoPath:  repo3,
+				RemoteURL: "https://github.com/example/repo3",
+				FileCount: 7,
+			},
+		},
+	}
+
+	source := &GitSource{
+		Component:       "collector-git",
+		SnapshotWorkers: 2,
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{{
+				ObservedAt: observedAt,
+				Repositories: []SelectedRepository{
+					{RepoPath: repo1, RemoteURL: "https://github.com/example/repo1"},
+					{RepoPath: repo2, RemoteURL: "https://github.com/example/repo2"},
+					{RepoPath: repo3, RemoteURL: "https://github.com/example/repo3"},
+				},
+			}},
+		},
+		Snapshotter: snapshotter,
+	}
+
+	// Collect all generations
+	var collected []CollectedGeneration
+	for {
+		gen, ok, err := source.Next(context.Background())
+		if err != nil {
+			t.Fatalf("Next() error = %v, want nil", err)
+		}
+		if !ok {
+			break
+		}
+		collected = append(collected, gen)
+	}
+
+	if got, want := len(collected), 3; got != want {
+		t.Fatalf("collected count = %d, want %d", got, want)
+	}
+
+	// Verify all repos were snapshotted
+	snapshotter.mu.Lock()
+	snapshotCalls := len(snapshotter.calls)
+	snapshotter.mu.Unlock()
+
+	if got, want := snapshotCalls, 3; got != want {
+		t.Fatalf("snapshot calls = %d, want %d", got, want)
+	}
+
+	// Verify each generation has the expected structure
+	for _, gen := range collected {
+		if gen.Scope.SourceSystem != "git" {
+			t.Errorf("Scope.SourceSystem = %q, want %q", gen.Scope.SourceSystem, "git")
+		}
+		if string(gen.Scope.ScopeKind) != "repository" {
+			t.Errorf("Scope.ScopeKind = %q, want %q", gen.Scope.ScopeKind, "repository")
+		}
+		if len(gen.Facts) < 2 {
+			t.Errorf("Facts count = %d, want >= 2", len(gen.Facts))
+		}
+	}
+}
+
+func TestBuildCollectedConcurrentHandlesErrors(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 14, 10, 0, 0, 0, time.UTC)
+	repo1 := t.TempDir()
+	repo2 := t.TempDir()
+
+	snapshotter := &stubRepositorySnapshotter{
+		snapshots: map[string]RepositorySnapshot{
+			repo1: {RepoPath: repo1, FileCount: 1},
+		},
+		errForRepoPath: map[string]error{
+			repo2: errors.New("snapshot failed"),
+		},
+	}
+
+	source := &GitSource{
+		Component:       "collector-git",
+		SnapshotWorkers: 2,
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{{
+				ObservedAt: observedAt,
+				Repositories: []SelectedRepository{
+					{RepoPath: repo1},
+					{RepoPath: repo2},
+				},
+			}},
+		},
+		Snapshotter: snapshotter,
+	}
+
+	_, ok, err := source.Next(context.Background())
+	if err == nil {
+		t.Fatal("Next() error = nil, want non-nil")
+	}
+	if ok {
+		t.Fatal("Next() ok = true, want false")
+	}
+	if len(source.pending) != 0 {
+		t.Fatalf("pending generations = %d, want 0", len(source.pending))
+	}
 }

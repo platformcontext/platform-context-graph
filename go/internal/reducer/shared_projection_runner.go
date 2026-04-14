@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/metric"
@@ -38,6 +41,7 @@ type SharedProjectionRunnerConfig struct {
 	LeaseOwner     string
 	BatchLimit     int
 	EvidenceSource string
+	Workers        int // concurrent partition workers; 0 or 1 means sequential
 }
 
 func (c SharedProjectionRunnerConfig) partitionCount() int {
@@ -128,6 +132,14 @@ func (r *SharedProjectionRunner) Run(ctx context.Context) error {
 // runOneCycle iterates all domains and partitions, returning true if any
 // partition processed work.
 func (r *SharedProjectionRunner) runOneCycle(ctx context.Context) bool {
+	if r.Config.Workers <= 1 {
+		return r.runOneCycleSequential(ctx)
+	}
+	return r.runOneCycleConcurrent(ctx)
+}
+
+// runOneCycleSequential processes partitions one at a time.
+func (r *SharedProjectionRunner) runOneCycleSequential(ctx context.Context) bool {
 	now := time.Now().UTC()
 	partitionCount := r.Config.partitionCount()
 	didWork := false
@@ -154,6 +166,69 @@ func (r *SharedProjectionRunner) runOneCycle(ctx context.Context) bool {
 		}
 	}
 
+	return didWork
+}
+
+// partitionWork represents a single domain/partition combination to process.
+type partitionWork struct {
+	domain      string
+	partitionID int
+}
+
+// runOneCycleConcurrent processes partitions across N concurrent workers.
+func (r *SharedProjectionRunner) runOneCycleConcurrent(ctx context.Context) bool {
+	now := time.Now().UTC()
+	partitionCount := r.Config.partitionCount()
+
+	// Build work queue
+	var work []partitionWork
+	for _, domain := range sharedProjectionDomains {
+		for partitionID := 0; partitionID < partitionCount; partitionID++ {
+			work = append(work, partitionWork{domain: domain, partitionID: partitionID})
+		}
+	}
+
+	workChan := make(chan partitionWork, len(work))
+	for _, w := range work {
+		workChan <- w
+	}
+	close(workChan)
+
+	var (
+		wg      sync.WaitGroup
+		didWork bool
+		mu      sync.Mutex
+	)
+
+	for i := 0; i < r.Config.Workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for w := range workChan {
+				if ctx.Err() != nil {
+					return
+				}
+
+				result, err := r.processPartitionWithTelemetry(
+					ctx,
+					now,
+					w.domain,
+					w.partitionID,
+					partitionCount,
+				)
+				if err != nil {
+					continue
+				}
+				if result.ProcessedIntents > 0 {
+					mu.Lock()
+					didWork = true
+					mu.Unlock()
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 	return didWork
 }
 
@@ -247,4 +322,39 @@ func (r *SharedProjectionRunner) wait(ctx context.Context, interval time.Duratio
 	case <-timer.C:
 		return nil
 	}
+}
+
+// LoadSharedProjectionConfig parses shared projection env vars.
+func LoadSharedProjectionConfig(getenv func(string) string) SharedProjectionRunnerConfig {
+	return SharedProjectionRunnerConfig{
+		PartitionCount: intFromEnvDefault(getenv, "PCG_SHARED_PROJECTION_PARTITION_COUNT", defaultPartitionCount),
+		PollInterval:   durationFromEnv(getenv, "PCG_SHARED_PROJECTION_POLL_INTERVAL", defaultSharedPollInterval),
+		LeaseTTL:       durationFromEnv(getenv, "PCG_SHARED_PROJECTION_LEASE_TTL", defaultLeaseTTL),
+		BatchLimit:     intFromEnvDefault(getenv, "PCG_SHARED_PROJECTION_BATCH_LIMIT", defaultBatchLimit),
+		Workers:        intFromEnvDefault(getenv, "PCG_SHARED_PROJECTION_WORKERS", 1),
+	}
+}
+
+func intFromEnvDefault(getenv func(string) string, key string, defaultValue int) int {
+	raw := strings.TrimSpace(getenv(key))
+	if raw == "" {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return defaultValue
+	}
+	return value
+}
+
+func durationFromEnv(getenv func(string) string, key string, defaultValue time.Duration) time.Duration {
+	raw := strings.TrimSpace(getenv(key))
+	if raw == "" {
+		return defaultValue
+	}
+	value, err := time.ParseDuration(raw)
+	if err != nil || value <= 0 {
+		return defaultValue
+	}
+	return value
 }

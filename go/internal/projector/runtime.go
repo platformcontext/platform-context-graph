@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -79,9 +80,16 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 		return Result{}, err
 	}
 
+	buildStart := time.Now()
 	projection, err := buildProjection(scopeValue, generation, inputFacts)
 	if err != nil {
 		return Result{}, err
+	}
+	if r.Instruments != nil {
+		r.Instruments.ProjectorStageDuration.Record(ctx, time.Since(buildStart).Seconds(), metric.WithAttributes(
+			telemetry.AttrScopeID(scopeValue.ScopeID),
+			attribute.String("stage", "build_projection"),
+		))
 	}
 
 	result := Result{
@@ -119,6 +127,10 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 			r.Instruments.CanonicalWrites.Add(ctx, 1, metric.WithAttributes(
 				telemetry.AttrScopeID(scopeValue.ScopeID),
 			))
+			r.Instruments.ProjectorStageDuration.Record(ctx, time.Since(writeStart).Seconds(), metric.WithAttributes(
+				telemetry.AttrScopeID(scopeValue.ScopeID),
+				attribute.String("stage", "graph_write"),
+			))
 		}
 
 		result.Graph = graphResult
@@ -128,10 +140,19 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 		if r.ContentWriter == nil {
 			return Result{}, errors.New("content writer is required when content rows are present")
 		}
+
+		contentStart := time.Now()
 		contentResult, err := r.ContentWriter.Write(ctx, projection.contentMaterialization)
 		if err != nil {
 			return Result{}, fmt.Errorf("write content materialization: %w", err)
 		}
+		if r.Instruments != nil {
+			r.Instruments.ProjectorStageDuration.Record(ctx, time.Since(contentStart).Seconds(), metric.WithAttributes(
+				telemetry.AttrScopeID(scopeValue.ScopeID),
+				attribute.String("stage", "content_write"),
+			))
+		}
+
 		result.Content = contentResult
 	}
 
@@ -156,6 +177,7 @@ func (r Runtime) Project(ctx context.Context, scopeValue scope.IngestionScope, g
 			duration := time.Since(enqueueStart).Seconds()
 			r.Instruments.ProjectorStageDuration.Record(ctx, duration, metric.WithAttributes(
 				telemetry.AttrScopeID(scopeValue.ScopeID),
+				attribute.String("stage", "intent_enqueue"),
 			))
 			r.Instruments.ReducerIntentsEnqueued.Add(ctx, int64(len(projection.reducerIntents)), metric.WithAttributes(
 				telemetry.AttrScopeID(scopeValue.ScopeID),

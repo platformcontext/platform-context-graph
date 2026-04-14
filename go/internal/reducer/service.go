@@ -53,6 +53,7 @@ type Service struct {
 	Tracer      trace.Tracer
 	Instruments *telemetry.Instruments
 	Logger      *slog.Logger
+	Workers     int // concurrent worker count; 0 or 1 means sequential
 }
 
 // Run polls for reducer work until the context is canceled. If a
@@ -60,6 +61,10 @@ type Service struct {
 func (s Service) Run(ctx context.Context) error {
 	if err := s.validate(); err != nil {
 		return err
+	}
+
+	if s.Logger != nil {
+		s.Logger.Info("starting reducer", slog.Int("workers", s.Workers))
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -92,8 +97,22 @@ func (s Service) Run(ctx context.Context) error {
 
 // runMainLoop is the main claim/execute/ack loop extracted for concurrent use.
 func (s Service) runMainLoop(ctx context.Context) error {
+	if s.Workers <= 1 {
+		return s.runSequential(ctx)
+	}
+	return s.runConcurrent(ctx)
+}
+
+// runSequential processes intents one at a time.
+func (s Service) runSequential(ctx context.Context) error {
 	for {
+		claimStart := time.Now()
 		intent, ok, err := s.WorkSource.Claim(ctx)
+		if s.Instruments != nil {
+			s.Instruments.QueueClaimDuration.Record(ctx, time.Since(claimStart).Seconds(), metric.WithAttributes(
+				attribute.String("queue", "reducer"),
+			))
+		}
 		if err != nil {
 			return fmt.Errorf("claim reducer work: %w", err)
 		}
@@ -107,10 +126,77 @@ func (s Service) runMainLoop(ctx context.Context) error {
 			continue
 		}
 
-		if err := s.executeWithTelemetry(ctx, intent); err != nil {
+		if err := s.executeWithTelemetry(ctx, intent, 0); err != nil {
 			return err
 		}
 	}
+}
+
+// runConcurrent spawns N worker goroutines that compete for reducer intents.
+// Each worker independently claims, executes, and acknowledges work. On first
+// fatal error (Claim or Ack failure), the shared context is canceled to drain
+// siblings promptly.
+func (s Service) runConcurrent(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		mu   sync.Mutex
+		errs []error
+		wg   sync.WaitGroup
+	)
+
+	for i := 0; i < s.Workers; i++ {
+		workerID := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+
+				claimStart := time.Now()
+				intent, ok, err := s.WorkSource.Claim(ctx)
+				if s.Instruments != nil {
+					s.Instruments.QueueClaimDuration.Record(ctx, time.Since(claimStart).Seconds(), metric.WithAttributes(
+						attribute.String("queue", "reducer"),
+					))
+				}
+				if err != nil {
+					mu.Lock()
+					errs = append(errs, fmt.Errorf("claim reducer work (worker %d): %w", workerID, err))
+					mu.Unlock()
+					cancel()
+					return
+				}
+				if !ok {
+					if err := s.wait(ctx, s.pollInterval()); err != nil {
+						if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+							return
+						}
+						mu.Lock()
+						errs = append(errs, fmt.Errorf("wait for reducer work (worker %d): %w", workerID, err))
+						mu.Unlock()
+						cancel()
+						return
+					}
+					continue
+				}
+
+				if err := s.executeWithTelemetry(ctx, intent, workerID); err != nil {
+					mu.Lock()
+					errs = append(errs, err)
+					mu.Unlock()
+					cancel()
+					return
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 func (s Service) validate() error {
@@ -151,7 +237,7 @@ func (s Service) wait(ctx context.Context, interval time.Duration) error {
 	}
 }
 
-func (s Service) executeWithTelemetry(ctx context.Context, intent Intent) error {
+func (s Service) executeWithTelemetry(ctx context.Context, intent Intent, workerID int) error {
 	start := time.Now()
 
 	if s.Tracer != nil {
@@ -166,7 +252,7 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent) error 
 
 	if err != nil {
 		status = "failed"
-		s.recordReducerResult(ctx, intent, duration, status)
+		s.recordReducerResult(ctx, intent, duration, status, workerID)
 		if failErr := s.WorkSink.Fail(ctx, intent, err); failErr != nil {
 			return errors.Join(err, fmt.Errorf("fail reducer work: %w", failErr))
 		}
@@ -177,11 +263,11 @@ func (s Service) executeWithTelemetry(ctx context.Context, intent Intent) error 
 		return fmt.Errorf("ack reducer work: %w", err)
 	}
 
-	s.recordReducerResult(ctx, intent, duration, status)
+	s.recordReducerResult(ctx, intent, duration, status, workerID)
 	return nil
 }
 
-func (s Service) recordReducerResult(ctx context.Context, intent Intent, duration float64, status string) {
+func (s Service) recordReducerResult(ctx context.Context, intent Intent, duration float64, status string, workerID int) {
 	if s.Instruments != nil {
 		attrs := metric.WithAttributes(
 			telemetry.AttrDomain(string(intent.Domain)),
@@ -199,13 +285,14 @@ func (s Service) recordReducerResult(ctx context.Context, intent Intent, duratio
 			partitionKey = intent.EntityKeys[0]
 		}
 		domainAttrs := telemetry.DomainAttrs(string(intent.Domain), partitionKey)
-		logAttrs := make([]any, 0, len(domainAttrs)+3)
+		logAttrs := make([]any, 0, len(domainAttrs)+4)
 		for _, a := range domainAttrs {
 			logAttrs = append(logAttrs, a)
 		}
 		logAttrs = append(logAttrs, slog.String("intent_id", intent.IntentID))
 		logAttrs = append(logAttrs, slog.String("status", status))
 		logAttrs = append(logAttrs, slog.Float64("duration_seconds", duration))
+		logAttrs = append(logAttrs, slog.Int("worker_id", workerID))
 		logAttrs = append(logAttrs, telemetry.PhaseAttr(telemetry.PhaseReduction))
 		if status == "failed" {
 			logAttrs = append(logAttrs, telemetry.FailureClassAttr("reducer_failure"))

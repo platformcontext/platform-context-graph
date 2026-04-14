@@ -153,6 +153,54 @@ main goroutine
         On first error: cancel shared context -> all workers drain -> errors.Join
 ```
 
+## Concurrency Tuning Reference
+
+All Go data plane services support environment-driven concurrency tuning.
+Set any variable to `1` to force sequential processing (useful for debugging).
+
+| Env Var | Default | Service | What It Controls |
+| --- | --- | --- | --- |
+| `PCG_PROJECTION_WORKERS` | `min(NumCPU, 8)` | Bootstrap-Index | Concurrent bootstrap projection goroutines |
+| `PCG_SNAPSHOT_WORKERS` | `min(NumCPU, 4)` | Ingester / Bootstrap | Concurrent repository snapshot goroutines |
+| `PCG_REDUCER_WORKERS` | 1 (sequential) | Reducer | Concurrent reducer intent execution goroutines |
+| `PCG_SHARED_PROJECTION_WORKERS` | 1 (sequential) | Reducer | Concurrent shared projection partition goroutines |
+| `PCG_SHARED_PROJECTION_PARTITION_COUNT` | 8 | Reducer | Number of partitions per shared projection domain |
+| `PCG_SHARED_PROJECTION_BATCH_LIMIT` | 100 | Reducer | Max intents processed per partition batch |
+| `PCG_SHARED_PROJECTION_POLL_INTERVAL` | 5s | Reducer | Shared projection cycle poll interval |
+| `PCG_SHARED_PROJECTION_LEASE_TTL` | 60s | Reducer | Partition lease time-to-live |
+
+### Collector Concurrency Model
+
+```text
+ingester / bootstrap-index
+  |
+  |-- GitSource.buildCollected (N snapshot workers)
+        |-- worker 0: SnapshotRepository -> buildFacts -> collect (loop)
+        |-- worker 1: SnapshotRepository -> buildFacts -> collect (loop)
+        |-- ...
+        |-- worker N-1: SnapshotRepository -> buildFacts -> collect (loop)
+        |
+        On first error: cancel shared context -> all workers drain
+```
+
+### Reducer Concurrency Model
+
+```text
+reducer service
+  |
+  |-- runMainLoop (N reducer workers)
+  |     |-- worker 0: Claim -> Execute -> Ack/Fail (loop)
+  |     |-- worker 1: Claim -> Execute -> Ack/Fail (loop)
+  |     |-- ...
+  |
+  |-- SharedProjectionRunner (M partition workers)
+        |-- worker 0: lease -> batch select -> edge write -> release (loop)
+        |-- worker 1: lease -> batch select -> edge write -> release (loop)
+        |-- ...
+        |
+        3 domains × K partitions = 3K work items per cycle
+```
+
 ## Live Runtime Proof Gates
 
 These scripts allocate their own local ports, start only the required

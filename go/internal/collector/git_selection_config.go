@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -59,6 +60,7 @@ type RepoSyncConfig struct {
 	DependencyName        string
 	DependencyLanguage    string
 	FileTargets           []string
+	SnapshotWorkers       int
 }
 
 // LoadRepoSyncConfig parses the repo-sync environment contract for Go runtimes.
@@ -112,6 +114,7 @@ func LoadRepoSyncConfig(component string, getenv func(string) string) (RepoSyncC
 		DependencyMode:        boolFromEnv(getenv("PCG_BOOTSTRAP_IS_DEPENDENCY")),
 		DependencyName:        strings.TrimSpace(getenv("PCG_BOOTSTRAP_PACKAGE_NAME")),
 		DependencyLanguage:    strings.TrimSpace(getenv("PCG_BOOTSTRAP_PACKAGE_LANGUAGE")),
+		SnapshotWorkers:       snapshotWorkerCount(getenv),
 	}
 	normalizeFilesystemConfig(&config)
 	return config, nil
@@ -375,4 +378,22 @@ func sortUniqueStrings(values []string) []string {
 	}
 	sort.Strings(result)
 	return result
+}
+
+// snapshotWorkerCount returns the number of concurrent snapshot workers.
+// Reads PCG_SNAPSHOT_WORKERS from env; defaults to min(NumCPU, 4).
+func snapshotWorkerCount(getenv func(string) string) int {
+	if raw := strings.TrimSpace(getenv("PCG_SNAPSHOT_WORKERS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	n := runtime.NumCPU()
+	if n > 4 {
+		n = 4
+	}
+	if n < 1 {
+		n = 1
+	}
+	return n
 }

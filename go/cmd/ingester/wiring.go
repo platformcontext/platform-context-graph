@@ -90,12 +90,13 @@ func buildIngesterCollectorService(
 
 	return collector.Service{
 		Source: &collector.GitSource{
-			Component:   "ingester",
-			Selector:    collector.NativeRepositorySelector{Config: config},
-			Snapshotter: collector.NativeRepositorySnapshotter{},
-			Tracer:      tracer,
-			Instruments: instruments,
-			Logger:      logger,
+			Component:       "ingester",
+			Selector:        collector.NativeRepositorySelector{Config: config},
+			Snapshotter:     collector.NativeRepositorySnapshotter{},
+			SnapshotWorkers: config.SnapshotWorkers,
+			Tracer:          tracer,
+			Instruments:     instruments,
+			Logger:          logger,
 		},
 		Committer:    postgres.NewIngestionStore(database),
 		PollInterval: ingesterCollectorPollInterval,

@@ -27,6 +27,7 @@ func buildCollectorService(
 			Snapshotter: collector.NativeRepositorySnapshotter{
 				SCIP: collector.LoadSnapshotSCIPConfig(getenv),
 			},
+			SnapshotWorkers: config.SnapshotWorkers,
 		},
 		Committer:    postgres.NewIngestionStore(database),
 		PollInterval: defaultCollectorPollInterval,
