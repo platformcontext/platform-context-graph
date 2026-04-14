@@ -1,0 +1,54 @@
+go/cmd/bootstrap-index/wiring.go
+  1ca5ee6ce936a402 45-52
+go/internal/projector/service.go
+  1ca5ee6ce936a402 8,63,72-74,76-77,79,82-83,92-94,105,111-178,189,198,209,213,228,235
+go/cmd/collector-git/service.go
+  1ca5ee6ce936a402 28-29
+go/internal/projector/service_test.go
+  1ca5ee6ce936a402 7,136,142-143,155,161-162,170-175,179-180,182-184,189,193-194,198-199,201-204,208-209,293-576
+Dockerfile
+  1ca5ee6ce936a402 51
+go/internal/collector/git_selection_config.go
+  1ca5ee6ce936a402 64,119,402-419
+go/internal/collector/git_snapshot_native.go
+  1ca5ee6ce936a402 8,15-16,22,90-93
+go/internal/collector/git_snapshot_scip.go
+  1ca5ee6ce936a402 8,10-14,95-108,116,121-122,128-132,135,138-142,148-152,158-298,300-313,315
+go/cmd/ingester/wiring.go
+  1ca5ee6ce936a402 8-10,96-103,147,151-164
+docker-compose.yaml
+  1ca5ee6ce936a402 105,229,270-271,301-304
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "6e5b6b76f81181e763ea1564c675a64f2982eb31",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 701,
+      "total_deletions": 2747,
+      "accepted_lines": 1356,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 75,
+      "overriden_lines": 0
+    }
+  }
+}
