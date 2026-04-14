@@ -1,0 +1,43 @@
+go/internal/parser/kotlin_language.go
+  1ca5ee6ce936a402 19,175-186,189-210,213,222-223,228-234
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 82,85,88,90,105,108,111,113
+go/internal/relationships/models.go
+  1ca5ee6ce936a402 25-30,45-48
+go/internal/relationships/evidence_test.go
+  1ca5ee6ce936a402 171-207,244-279,281-286,464-478,480
+go/internal/relationships/evidence.go
+  1ca5ee6ce936a402 211-215,235-237
+go/internal/relationships/yaml_iac_evidence.go
+  1ca5ee6ce936a402 1-365
+go/internal/reducer/code_call_materialization_rust_test.go
+  1ca5ee6ce936a402 1-87
+go/internal/reducer/code_call_materialization_helpers.go
+  1ca5ee6ce936a402 149-151,166-172
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 49,52,62,64
+go/internal/reducer/code_call_materialization_kotlin_test.go
+  1ca5ee6ce936a402 1-100
+go/internal/parser/engine_kotlin_call_metadata_test.go
+  1ca5ee6ce936a402 1-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "a7f6c764568a681522bf6ee2f73f9a079d6905f0",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 793,
+      "total_deletions": 33,
+      "accepted_lines": 794,
+      "overriden_lines": 0
+    }
+  }
+}
