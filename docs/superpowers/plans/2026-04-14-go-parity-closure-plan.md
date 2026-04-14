@@ -83,8 +83,8 @@ application languages.
 - Python: decorators, async flags, type annotations
 - JavaScript: docstrings and fuller method-kind metadata
 - Canonical call edges: broaden the new Go-owned `CALLS` materialization path
-  from SCIP-backed edges into the remaining required generic and long-tail
-  parser families, then prove it end to end
+  from SCIP-backed edges and same-file generic-call proof into the remaining
+  cross-file generic and long-tail parser families, then prove it end to end
 
 ### Validation
 

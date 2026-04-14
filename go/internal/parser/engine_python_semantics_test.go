@@ -258,6 +258,37 @@ func TestDefaultEngineParsePathPythonAsyncFunctionsEmitAsyncFlag(t *testing.T) {
 	}
 }
 
+func TestDefaultEngineParsePathPythonEmitsDottedCallMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "dotted_calls.py")
+	writeTestFile(
+		t,
+		filePath,
+		`class Client:
+    def service(self):
+        return self
+
+client = Client()
+client.service.request()
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	call := assertBucketItemByName(t, got, "function_calls", "request")
+	assertStringFieldValue(t, call, "full_name", "client.service.request")
+}
+
 func TestDefaultEngineParsePathPythonEmitsTypeAnnotationsBucket(t *testing.T) {
 	t.Parallel()
 

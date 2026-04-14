@@ -143,11 +143,15 @@ func (e *Engine) parsePython(
 			if strings.TrimSpace(name) == "" {
 				return
 			}
-			appendBucket(payload, "function_calls", map[string]any{
+			item := map[string]any{
 				"name":        name,
 				"line_number": nodeLine(node),
 				"lang":        "python",
-			})
+			}
+			if fullName := pythonCallFullName(function, source); fullName != "" {
+				item["full_name"] = fullName
+			}
+			appendBucket(payload, "function_calls", item)
 		}
 	})
 
@@ -196,6 +200,30 @@ func pythonCallName(node *tree_sitter.Node, source []byte) string {
 		return nodeText(attribute, source)
 	default:
 		return ""
+	}
+}
+
+func pythonCallFullName(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	switch node.Kind() {
+	case "identifier":
+		return nodeText(node, source)
+	case "attribute":
+		object := node.ChildByFieldName("object")
+		attribute := node.ChildByFieldName("attribute")
+		objectName := pythonCallFullName(object, source)
+		attributeName := nodeText(attribute, source)
+		if strings.TrimSpace(objectName) == "" {
+			return attributeName
+		}
+		if strings.TrimSpace(attributeName) == "" {
+			return objectName
+		}
+		return objectName + "." + attributeName
+	default:
+		return nodeText(node, source)
 	}
 }
 

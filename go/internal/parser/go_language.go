@@ -105,11 +105,13 @@ func (e *Engine) parseGo(
 			if strings.TrimSpace(name) == "" {
 				return
 			}
-			appendBucket(payload, "function_calls", map[string]any{
+			item := map[string]any{
 				"name":        name,
+				"full_name":   strings.TrimSpace(nodeText(functionNode, source)),
 				"line_number": nodeLine(node),
 				"lang":        "go",
-			})
+			}
+			appendBucket(payload, "function_calls", item)
 		case "var_spec", "const_spec":
 			if scope == "module" && goInsideFunction(node) {
 				return

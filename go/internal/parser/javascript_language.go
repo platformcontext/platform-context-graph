@@ -150,6 +150,8 @@ func (e *Engine) parseJavaScriptLike(
 			}
 			appendBucket(payload, "function_calls", map[string]any{
 				"name":        name,
+				"full_name":   javaScriptCallFullName(functionNode, source),
+				"call_kind":   "function_call",
 				"line_number": nodeLine(node),
 				"lang":        outputLanguage,
 			})
@@ -157,12 +159,15 @@ func (e *Engine) parseJavaScriptLike(
 			if outputLanguage != "tsx" {
 				return
 			}
+			nameNode := node.ChildByFieldName("name")
 			name := javaScriptJSXComponentName(node, source)
 			if !isPascalIdentifier(name) {
 				return
 			}
 			appendBucket(payload, "function_calls", map[string]any{
 				"name":        name,
+				"full_name":   javaScriptCallFullName(nameNode, source),
+				"call_kind":   "jsx_component",
 				"line_number": nodeLine(node),
 				"lang":        outputLanguage,
 			})
@@ -435,6 +440,13 @@ func javaScriptCallName(node *tree_sitter.Node, source []byte) string {
 	default:
 		return ""
 	}
+}
+
+func javaScriptCallFullName(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	return strings.TrimSpace(nodeText(node, source))
 }
 
 func javaScriptJSXComponentName(node *tree_sitter.Node, source []byte) string {
