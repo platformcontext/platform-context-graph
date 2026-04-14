@@ -67,6 +67,10 @@ const openAPIPathsEntities = `
                     "labels": {"type": "array", "items": {"type": "string"}},
                     "name": {"type": "string"},
                     "file_path": {"type": "string"},
+                    "language": {"type": "string"},
+                    "start_line": {"type": "integer"},
+                    "end_line": {"type": "integer"},
+                    "metadata": {"type": "object", "additionalProperties": true},
                     "repo_id": {"type": "string"},
                     "repo_name": {"type": "string"},
                     "relationships": {"type": "array", "items": {"$ref": "#/components/schemas/Relationship"}}

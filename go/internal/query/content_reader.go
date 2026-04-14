@@ -259,6 +259,82 @@ func (cr *ContentReader) SearchEntityContent(ctx context.Context, repoID, patter
 	return results, nil
 }
 
+// SearchEntitiesByName returns entities whose materialized name matches the
+// requested pattern, optionally restricted to one entity type.
+func (cr *ContentReader) SearchEntitiesByName(
+	ctx context.Context,
+	repoID string,
+	entityType string,
+	name string,
+	limit int,
+) ([]EntityContent, error) {
+	ctx, span := cr.tracer.Start(ctx, "postgres.query",
+		trace.WithAttributes(
+			attribute.String("db.system", "postgresql"),
+			attribute.String("db.operation", "search_entities_by_name"),
+			attribute.String("db.sql.table", "content_entities"),
+		),
+	)
+	defer span.End()
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	query := `
+		SELECT entity_id, repo_id, relative_path, entity_type, entity_name,
+		       start_line, end_line, coalesce(language, ''), coalesce(source_cache, ''),
+		       metadata
+		FROM content_entities
+		WHERE repo_id = $1 AND entity_name ILIKE '%' || $2 || '%'
+	`
+	args := []any{repoID, name}
+	if entityType != "" {
+		query += ` AND entity_type = $3`
+		args = append(args, entityType)
+		query += `
+			ORDER BY relative_path, start_line
+			LIMIT $4
+		`
+		args = append(args, limit)
+	} else {
+		query += `
+			ORDER BY relative_path, start_line
+			LIMIT $3
+		`
+		args = append(args, limit)
+	}
+
+	rows, err := cr.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("search entities by name: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []EntityContent
+	for rows.Next() {
+		var e EntityContent
+		var rawMetadata []byte
+		if err := rows.Scan(&e.EntityID, &e.RepoID, &e.RelativePath, &e.EntityType,
+			&e.EntityName, &e.StartLine, &e.EndLine, &e.Language, &e.SourceCache, &rawMetadata); err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("scan entity name result: %w", err)
+		}
+		e.Metadata, err = decodeEntityMetadata(rawMetadata)
+		if err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("scan entity name result: %w", err)
+		}
+		results = append(results, e)
+	}
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		return results, err
+	}
+	return results, nil
+}
+
 // ListRepoFiles returns all indexed files for one repository.
 func (cr *ContentReader) ListRepoFiles(ctx context.Context, repoID string, limit int) ([]FileContent, error) {
 	ctx, span := cr.tracer.Start(ctx, "postgres.query",

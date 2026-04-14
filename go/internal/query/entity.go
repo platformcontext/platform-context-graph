@@ -72,10 +72,14 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 		LIMIT 20
 	`
 
-	rows, err := h.Neo4j.Run(r.Context(), cypher, params)
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
-		return
+	var rows []map[string]any
+	var err error
+	if h.Neo4j != nil {
+		rows, err = h.Neo4j.Run(r.Context(), cypher, params)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
+			return
+		}
 	}
 
 	entities := make([]map[string]any, 0, len(rows))
@@ -96,6 +100,13 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich entities: %v", err))
 		return
+	}
+	if len(entities) == 0 {
+		entities, err = h.resolveEntityFromContent(r.Context(), req.Name, req.Type, req.RepoID, 20)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("resolve content entities: %v", err))
+			return
+		}
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]any{
@@ -126,14 +137,27 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 	`
 
 	params := map[string]any{"entity_id": entityID}
-	row, err := h.Neo4j.RunSingle(r.Context(), cypher, params)
-	if err != nil {
-		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
-		return
+	var row map[string]any
+	var err error
+	if h.Neo4j != nil {
+		row, err = h.Neo4j.RunSingle(r.Context(), cypher, params)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", err))
+			return
+		}
 	}
 
 	if row == nil {
-		WriteError(w, http.StatusNotFound, "entity not found")
+		response, fallbackErr := h.getEntityContextFromContent(r.Context(), entityID)
+		if fallbackErr != nil {
+			WriteError(w, http.StatusInternalServerError, fmt.Sprintf("query failed: %v", fallbackErr))
+			return
+		}
+		if response == nil {
+			WriteError(w, http.StatusNotFound, "entity not found")
+			return
+		}
+		WriteJSON(w, http.StatusOK, response)
 		return
 	}
 
@@ -157,6 +181,73 @@ func (h *EntityHandler) getEntityContext(w http.ResponseWriter, r *http.Request)
 	response = enriched[0]
 
 	WriteJSON(w, http.StatusOK, response)
+}
+
+func (h *EntityHandler) resolveEntityFromContent(
+	ctx context.Context,
+	name string,
+	typeName string,
+	repoID string,
+	limit int,
+) ([]map[string]any, error) {
+	if h == nil || h.Content == nil || repoID == "" || name == "" {
+		return nil, nil
+	}
+
+	entityType := contentEntityTypeForResolve(typeName)
+	rows, err := h.Content.SearchEntitiesByName(ctx, repoID, entityType, name, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, contentEntityToMap(row))
+	}
+	return results, nil
+}
+
+func (h *EntityHandler) getEntityContextFromContent(ctx context.Context, entityID string) (map[string]any, error) {
+	if h == nil || h.Content == nil || entityID == "" {
+		return nil, nil
+	}
+
+	entity, err := h.Content.GetEntityContent(ctx, entityID)
+	if err != nil || entity == nil {
+		return nil, err
+	}
+
+	response := contentEntityToMap(*entity)
+	response["relationships"] = []map[string]any{}
+	return response, nil
+}
+
+func contentEntityTypeForResolve(typeName string) string {
+	if typeName == "" {
+		return ""
+	}
+	if entityType, ok := contentBackedEntityTypes[typeName]; ok {
+		return entityType
+	}
+	if entityType, ok := graphBackedEntityTypes[typeName]; ok {
+		return entityType
+	}
+	return typeName
+}
+
+func contentEntityToMap(entity EntityContent) map[string]any {
+	return map[string]any{
+		"id":         entity.EntityID,
+		"entity_id":  entity.EntityID,
+		"name":       entity.EntityName,
+		"labels":     []string{entity.EntityType},
+		"file_path":  entity.RelativePath,
+		"repo_id":    entity.RepoID,
+		"language":   entity.Language,
+		"start_line": entity.StartLine,
+		"end_line":   entity.EndLine,
+		"metadata":   entity.Metadata,
+	}
 }
 
 // getWorkloadContext retrieves the context for a specific workload.
