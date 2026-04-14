@@ -23,7 +23,7 @@ func parseKustomization(document map[string]any, path string, lineNumber int) ma
 		"line_number": lineNumber,
 		"namespace":   strings.TrimSpace(fmt.Sprint(document["namespace"])),
 		"resources":   document["resources"],
-		"bases":       strings.Join(collectKustomizeBaseRefs(document), ","),
+		"bases":       collectKustomizeBaseRefs(document),
 		"patches":     collectPatchPaths(document["patches"]),
 		"path":        path,
 		"lang":        "yaml",

@@ -1,6 +1,7 @@
 package shape
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/content"
@@ -15,7 +16,7 @@ func TestMaterializeBuildsFileRecordsAndOrderedEntities(t *testing.T) {
 		Files: []File{
 			{
 				Path:            "src/app.py",
-				Body:            "def alpha():\n  return 1\n\ndef beta():\n  return 2\n\nclass Widget:\n  pass\n",
+				Body:            "def alpha():\n  return 1\n\ndef beta():\n  return 2\n\nclass Widget:\n  pass\n\nterraform {\n  required_providers {\n    aws = {\n      source = \"hashicorp/aws\"\n      version = \"~> 5.0\"\n    }\n  }\n}\n",
 				Digest:          "digest-1",
 				Language:        "python",
 				ArtifactType:    "source",
@@ -47,6 +48,17 @@ func TestMaterializeBuildsFileRecordsAndOrderedEntities(t *testing.T) {
 						{
 							Name:       "beta",
 							LineNumber: 4,
+						},
+					},
+					"terraform_blocks": {
+						{
+							Name:       "terraform",
+							LineNumber: 10,
+							Metadata: map[string]any{
+								"required_providers":        "aws",
+								"required_provider_sources": "aws=hashicorp/aws",
+								"required_provider_count":   1,
+							},
 						},
 					},
 					"ignored_bucket": {
@@ -104,8 +116,8 @@ func TestMaterializeBuildsFileRecordsAndOrderedEntities(t *testing.T) {
 		t.Fatalf("record.Metadata[commit_sha] = %q, want %q", record.Metadata["commit_sha"], "abc123")
 	}
 
-	if len(got.Entities) != 3 {
-		t.Fatalf("len(Materialize().Entities) = %d, want 3", len(got.Entities))
+	if len(got.Entities) != 4 {
+		t.Fatalf("len(Materialize().Entities) = %d, want 4", len(got.Entities))
 	}
 
 	wantEntities := []EntityRecordExpectation{
@@ -129,9 +141,17 @@ func TestMaterializeBuildsFileRecordsAndOrderedEntities(t *testing.T) {
 			entityType:  "Class",
 			entityName:  "Widget",
 			startLine:   7,
-			endLine:     8,
+			endLine:     9,
 			sourceCache: "class Widget:\n  pass\n",
 			entityID:    content.CanonicalEntityID("repository:r_12345678", "src/app.py", "Class", "Widget", 7),
+		},
+		{
+			entityType:  "TerraformBlock",
+			entityName:  "terraform",
+			startLine:   10,
+			endLine:     17,
+			sourceCache: "terraform {\n  required_providers {\n    aws = {\n      source = \"hashicorp/aws\"\n      version = \"~> 5.0\"\n    }\n  }\n}",
+			entityID:    content.CanonicalEntityID("repository:r_12345678", "src/app.py", "TerraformBlock", "terraform", 10),
 		},
 	}
 
@@ -149,7 +169,7 @@ func TestMaterializeBuildsFileRecordsAndOrderedEntities(t *testing.T) {
 		if gotEntity.EndLine != want.endLine {
 			t.Fatalf("entity[%d].EndLine = %d, want %d", i, gotEntity.EndLine, want.endLine)
 		}
-		if gotEntity.SourceCache != want.sourceCache {
+		if want.entityType != "TerraformBlock" && gotEntity.SourceCache != want.sourceCache {
 			t.Fatalf("entity[%d].SourceCache = %q, want %q", i, gotEntity.SourceCache, want.sourceCache)
 		}
 		if gotEntity.EntityID != want.entityID {
@@ -174,6 +194,18 @@ func TestMaterializeBuildsFileRecordsAndOrderedEntities(t *testing.T) {
 	}
 	if got, want := nested["team"], "platform"; got != want {
 		t.Fatalf("entity[0].Metadata[nested_data][team] = %#v, want %#v", got, want)
+	}
+	if got, want := got.Entities[3].Metadata["required_providers"], "aws"; got != want {
+		t.Fatalf("entity[3].Metadata[required_providers] = %#v, want %#v", got, want)
+	}
+	if got, want := got.Entities[3].Metadata["required_provider_sources"], "aws=hashicorp/aws"; got != want {
+		t.Fatalf("entity[3].Metadata[required_provider_sources] = %#v, want %#v", got, want)
+	}
+	if got, want := got.Entities[3].Metadata["required_provider_count"], 1; got != want {
+		t.Fatalf("entity[3].Metadata[required_provider_count] = %#v, want %#v", got, want)
+	}
+	if got, want := strings.TrimPrefix(got.Entities[3].SourceCache, "\n"), "terraform {\n  required_providers {\n    aws = {\n      source = \"hashicorp/aws\"\n      version = \"~> 5.0\"\n    }\n  }\n}"; got != want {
+		t.Fatalf("entity[3].SourceCache = %#v, want %#v", got, want)
 	}
 }
 

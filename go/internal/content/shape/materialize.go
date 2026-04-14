@@ -79,6 +79,7 @@ var contentEntityBuckets = []entityBucketMapping{
 	{bucket: "kustomize_overlays", label: "KustomizeOverlay"},
 	{bucket: "helm_charts", label: "HelmChart"},
 	{bucket: "helm_values", label: "HelmValues"},
+	{bucket: "terraform_blocks", label: "TerraformBlock"},
 	{bucket: "terraform_resources", label: "TerraformResource"},
 	{bucket: "terraform_variables", label: "TerraformVariable"},
 	{bucket: "terraform_outputs", label: "TerraformOutput"},

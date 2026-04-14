@@ -211,7 +211,7 @@ The current mapping and enrichment flow understands these families:
 | Jenkins / Groovy | Jenkinsfile metadata, stage and command hints, reusable pipeline metadata | Delivery-path summaries and automation context |
 | ArgoCD | ApplicationSet discovery targets, deploy-source repo URLs, destination clusters | `DISCOVERS_CONFIG_IN`, `DEPLOYS_FROM`, and `RUNS_ON` |
 | Helm | chart metadata, values files, chart dependency references | `DEPLOYS_FROM` |
-| Kustomize | `resources`, Helm blocks, image references, overlays | `DEPLOYS_FROM` |
+| Kustomize | `resources`, base references, Helm blocks, image references, overlays | `DEPLOYS_FROM` |
 | Platform / runtime context | workload and platform modeling resolved through mixed entity ids | `PROVISIONS_PLATFORM` and `RUNS_ON` |
 
 The important constraint is not the tool name itself. The important constraint is whether the tool gives you a truthful, explainable source of repository or platform meaning.
@@ -335,7 +335,7 @@ Examples include:
 - Helm chart references and chart sources
 - image repositories and tags
 - service ports and gateway hints
-- Kustomize resources and patches
+- Kustomize resources, base references, and patches
 - shared config paths across multiple deployment sources
 - consumer-only repositories that call or reference the service without deploying it
 - workflow refs that help explain the delivery path

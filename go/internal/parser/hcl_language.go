@@ -52,6 +52,7 @@ func (e *Engine) parseHCL(
 		parseTerraformBlocks(payload, body, source, path)
 	}
 
+	sortNamedBucket(payload, "terraform_blocks")
 	sortNamedBucket(payload, "terraform_resources")
 	sortNamedBucket(payload, "terraform_variables")
 	sortNamedBucket(payload, "terraform_outputs")
@@ -71,6 +72,7 @@ func (e *Engine) parseHCL(
 
 func hclBasePayload(path string, isDependency bool) map[string]any {
 	payload := basePayload(path, "hcl", isDependency)
+	payload["terraform_blocks"] = []map[string]any{}
 	payload["terraform_resources"] = []map[string]any{}
 	payload["terraform_variables"] = []map[string]any{}
 	payload["terraform_outputs"] = []map[string]any{}
@@ -187,6 +189,17 @@ func parseTerraformBlocks(payload map[string]any, body *hclsyntax.Body, source [
 					"lang":        "hcl",
 				})
 			}
+		case "terraform":
+			requiredProviders, requiredProviderSources, requiredProviderCount := collectRequiredProviderSummaries(providerMetadata)
+			appendBucket(payload, "terraform_blocks", map[string]any{
+				"name":                      "terraform",
+				"line_number":               block.TypeRange.Start.Line,
+				"required_providers":        requiredProviders,
+				"required_provider_sources": requiredProviderSources,
+				"required_provider_count":   requiredProviderCount,
+				"path":                      path,
+				"lang":                      "hcl",
+			})
 		}
 	}
 }
@@ -207,6 +220,24 @@ func collectRequiredProviders(body *hclsyntax.Body, source []byte) map[string]ma
 		}
 	}
 	return result
+}
+
+func collectRequiredProviderSummaries(metadata map[string]map[string]string) (string, string, int) {
+	if len(metadata) == 0 {
+		return "", "", 0
+	}
+
+	names := make([]string, 0, len(metadata))
+	sources := make([]string, 0, len(metadata))
+	for name, provider := range metadata {
+		names = append(names, name)
+		if source := strings.TrimSpace(provider["source"]); source != "" {
+			sources = append(sources, fmt.Sprintf("%s=%s", name, source))
+		}
+	}
+	sort.Strings(names)
+	sort.Strings(sources)
+	return strings.Join(names, ","), strings.Join(sources, ","), len(metadata)
 }
 
 func parseTerragruntConfig(body *hclsyntax.Body, source []byte, path string) map[string]any {

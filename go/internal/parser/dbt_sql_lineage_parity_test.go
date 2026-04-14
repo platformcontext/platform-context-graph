@@ -187,6 +187,17 @@ from raw.public.orders o`,
 			reason:     dbtMacroExpressionReason,
 		},
 		{
+			name: "templated opaque macro",
+			sql: `select
+  {{ dbt_utils.generate_surrogate_key(md5('static-value')) }} as surrogate_key
+from raw.public.orders o`,
+			relations: map[string][]string{
+				"raw.public.orders": {"id"},
+			},
+			expression: "{{ dbt_utils.generate_surrogate_key(md5('static-value')) }}",
+			reason:     dbtTemplatedExpressionReason,
+		},
+		{
 			name: "ambiguous unqualified reference",
 			sql: `select
   id as record_id

@@ -55,6 +55,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Compiled-model lineage still carries explicit unresolved limits for
   unresolved references, truly opaque templated expressions, complex macros,
   and some derived expressions.
+- Templated wrappers around opaque macro bodies stay unresolved on purpose;
+  they are reported as `templated_expression_not_resolved` instead of being
+  guessed into lineage.
 
 ## Go-Owned Data-Intelligence Path
 
@@ -75,3 +78,5 @@ service path.
 - Compiled dbt lineage still records partial coverage for unresolved references,
   templated expressions, complex macro expansion, and some derived
   expressions.
+- Templated wrappers around opaque macro bodies remain an intentional non-goal
+  and are surfaced as `templated_expression_not_resolved`.

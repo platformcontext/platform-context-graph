@@ -225,7 +225,17 @@ image:
 	}
 	assertNamedBucketContains(t, kustomizePayload, "kustomize_overlays", "kustomization")
 	assertBucketContainsFieldValue(t, kustomizePayload, "kustomize_overlays", "namespace", "production")
-	assertBucketContainsFieldValue(t, kustomizePayload, "kustomize_overlays", "bases", "../app,../base")
+	kustomizeOverlays := kustomizePayload["kustomize_overlays"].([]map[string]any)
+	if len(kustomizeOverlays) != 1 {
+		t.Fatalf("kustomize_overlays = %#v, want one overlay", kustomizeOverlays)
+	}
+	bases, ok := kustomizeOverlays[0]["bases"].([]string)
+	if !ok {
+		t.Fatalf("kustomize_overlays[0].bases = %T, want []string", kustomizeOverlays[0]["bases"])
+	}
+	if len(bases) != 2 || bases[0] != "../app" || bases[1] != "../base" {
+		t.Fatalf("kustomize_overlays[0].bases = %#v, want [../app ../base]", bases)
+	}
 
 	chartPayload, err := engine.ParsePath(repoRoot, chartPath, false, Options{})
 	if err != nil {
