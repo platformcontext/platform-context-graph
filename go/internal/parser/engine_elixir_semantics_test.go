@@ -43,6 +43,11 @@ end
 	assertBucketContainsFieldValue(t, got, "modules", "type", "defmodule")
 	assertBucketContainsFieldValue(t, got, "modules", "type", "defprotocol")
 	assertBucketContainsFieldValue(t, got, "modules", "type", "defimpl")
+	assertBucketContainsFieldValue(t, got, "modules", "module_kind", "module")
+	assertBucketContainsFieldValue(t, got, "modules", "module_kind", "protocol")
+	assertBucketContainsFieldValue(t, got, "modules", "module_kind", "protocol_implementation")
+	assertBucketContainsFieldValue(t, got, "modules", "protocol", "Demo.Serializable")
+	assertBucketContainsFieldValue(t, got, "modules", "implemented_for", "Demo.Worker")
 	assertBucketContainsFieldValue(t, got, "functions", "type", "def")
 }
 
@@ -87,6 +92,7 @@ end
 
 	expand := assertBucketItemByName(t, got, "functions", "expand")
 	assertStringFieldValue(t, expand, "type", "defmacro")
+	assertStringFieldValue(t, expand, "semantic_kind", "macro")
 	assertStringFieldValue(t, expand, "visibility", "public")
 	assertStringFieldValue(t, expand, "class_context", "Demo.Macros")
 	assertStringFieldValue(t, expand, "docstring", `@doc "Macro docs."`)
@@ -94,18 +100,21 @@ end
 
 	reduce := assertBucketItemByName(t, got, "functions", "reduce")
 	assertStringFieldValue(t, reduce, "type", "defmacrop")
+	assertStringFieldValue(t, reduce, "semantic_kind", "macro")
 	assertStringFieldValue(t, reduce, "visibility", "private")
 	assertStringFieldValue(t, reduce, "class_context", "Demo.Macros")
 	assertStringSliceFieldValue(t, reduce, "args", []string{"expr"})
 
 	size := assertBucketItemByName(t, got, "functions", "size")
 	assertStringFieldValue(t, size, "type", "defdelegate")
+	assertStringFieldValue(t, size, "semantic_kind", "delegate")
 	assertStringFieldValue(t, size, "visibility", "public")
 	assertStringFieldValue(t, size, "class_context", "Demo.Macros")
 	assertStringSliceFieldValue(t, size, "args", []string{"values"})
 
 	isEven := assertBucketItemByName(t, got, "functions", "is_even")
 	assertStringFieldValue(t, isEven, "type", "defguard")
+	assertStringFieldValue(t, isEven, "semantic_kind", "guard")
 	assertStringFieldValue(t, isEven, "visibility", "public")
 	assertStringFieldValue(t, isEven, "class_context", "Demo.Macros")
 	assertStringSliceFieldValue(t, isEven, "args", []string{"value"})
@@ -268,11 +277,13 @@ end
 	timeout := assertBucketItemByName(t, got, "variables", "@timeout")
 	assertStringFieldValue(t, timeout, "class_context", "Demo.Attributes")
 	assertStringFieldValue(t, timeout, "context_type", "module")
+	assertStringFieldValue(t, timeout, "attribute_kind", "module_attribute")
 	assertStringFieldValue(t, timeout, "value", "5_000")
 
 	serviceName := assertBucketItemByName(t, got, "variables", "@service_name")
 	assertStringFieldValue(t, serviceName, "class_context", "Demo.Attributes")
 	assertStringFieldValue(t, serviceName, "context_type", "module")
+	assertStringFieldValue(t, serviceName, "attribute_kind", "module_attribute")
 	assertStringFieldValue(t, serviceName, "value", `"worker"`)
 }
 

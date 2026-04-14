@@ -7,12 +7,12 @@ import (
 )
 
 var (
-	elixirModulePattern   = regexp.MustCompile(`^\s*(defmodule|defprotocol|defimpl)\s+(.+)$`)
-	elixirFunctionPattern = regexp.MustCompile(`^\s*(def|defp|defmacro|defmacrop|defdelegate|defguard|defguardp)\s+(.+)$`)
-	elixirImportPattern   = regexp.MustCompile(`^\s*(use|import|alias|require)\s+(.+)$`)
+	elixirModulePattern    = regexp.MustCompile(`^\s*(defmodule|defprotocol|defimpl)\s+(.+)$`)
+	elixirFunctionPattern  = regexp.MustCompile(`^\s*(def|defp|defmacro|defmacrop|defdelegate|defguard|defguardp)\s+(.+)$`)
+	elixirImportPattern    = regexp.MustCompile(`^\s*(use|import|alias|require)\s+(.+)$`)
 	elixirAttributePattern = regexp.MustCompile(`^\s*(@[a-z_]\w*)\s+(.+)$`)
-	elixirScopedCall      = regexp.MustCompile(`([A-Z][A-Za-z0-9_.]+)\.([a-z_]\w*[!?]?)\(`)
-	elixirCallPattern     = regexp.MustCompile(`\b([a-z_]\w*[!?]?)\(`)
+	elixirScopedCall       = regexp.MustCompile(`([A-Z][A-Za-z0-9_.]+)\.([a-z_]\w*[!?]?)\(`)
+	elixirCallPattern      = regexp.MustCompile(`\b([a-z_]\w*[!?]?)\(`)
 
 	dartImportPattern    = regexp.MustCompile(`^\s*(?:import|export)\s+'([^']+)'`)
 	dartClassPattern     = regexp.MustCompile(`^\s*class\s+([A-Za-z_]\w*)`)
@@ -55,7 +55,7 @@ func (e *Engine) parseElixir(path string, isDependency bool, options Options) (m
 			continue
 		}
 
-		if keyword, name, ok := parseElixirModuleLine(trimmed); ok {
+		if keyword, name, tail, ok := parseElixirModuleLine(trimmed); ok {
 			item := map[string]any{
 				"name":          name,
 				"line_number":   lineNumber,
@@ -63,6 +63,13 @@ func (e *Engine) parseElixir(path string, isDependency bool, options Options) (m
 				"lang":          "elixir",
 				"is_dependency": isDependency,
 				"type":          keyword,
+				"module_kind":   elixirModuleKind(keyword),
+			}
+			if keyword == "defimpl" {
+				item["protocol"] = name
+				if implementedFor := parseElixirDefImplTarget(tail); implementedFor != "" {
+					item["implemented_for"] = implementedFor
+				}
 			}
 			if options.IndexSource {
 				item["source"] = rawLine
@@ -91,6 +98,7 @@ func (e *Engine) parseElixir(path string, isDependency bool, options Options) (m
 				"visibility":    "public",
 				"type":          keyword,
 				"decorators":    []string{},
+				"semantic_kind": elixirFunctionSemanticKind(keyword),
 			}
 			if strings.HasSuffix(keyword, "p") {
 				item["visibility"] = "private"
@@ -177,12 +185,13 @@ func (e *Engine) parseElixir(path string, isDependency bool, options Options) (m
 			attributeName := strings.TrimSpace(matches[1])
 			if attributeName != "@doc" && attributeName != "@moduledoc" {
 				item := map[string]any{
-					"name":          attributeName,
-					"line_number":   lineNumber,
-					"end_line":      lineNumber,
-					"lang":          "elixir",
-					"is_dependency": isDependency,
-					"value":         strings.TrimSpace(matches[2]),
+					"name":           attributeName,
+					"line_number":    lineNumber,
+					"end_line":       lineNumber,
+					"lang":           "elixir",
+					"is_dependency":  isDependency,
+					"value":          strings.TrimSpace(matches[2]),
+					"attribute_kind": "module_attribute",
 				}
 				if moduleName, moduleLine := currentElixirModule(scopes); moduleName != "" {
 					item["context"] = []any{moduleName, "module", moduleLine}
@@ -386,27 +395,74 @@ type elixirScope struct {
 	item       map[string]any
 }
 
-func parseElixirModuleLine(trimmed string) (string, string, bool) {
+func parseElixirModuleLine(trimmed string) (string, string, string, bool) {
 	matches := elixirModulePattern.FindStringSubmatch(trimmed)
 	if len(matches) != 3 {
-		return "", "", false
+		return "", "", "", false
 	}
 	keyword := matches[1]
 	remainder := strings.TrimSpace(matches[2])
 	if remainder == "" {
-		return "", "", false
-	}
-	if index := strings.Index(remainder, ","); index >= 0 {
-		remainder = strings.TrimSpace(remainder[:index])
+		return "", "", "", false
 	}
 	if index := strings.Index(remainder, " do"); index >= 0 {
 		remainder = strings.TrimSpace(remainder[:index])
 	}
+	tail := ""
+	if index := strings.Index(remainder, ","); index >= 0 {
+		tail = strings.TrimSpace(remainder[index+1:])
+		remainder = strings.TrimSpace(remainder[:index])
+	}
 	fields := strings.Fields(remainder)
 	if len(fields) == 0 {
-		return "", "", false
+		return "", "", "", false
 	}
-	return keyword, fields[0], true
+	return keyword, fields[0], tail, true
+}
+
+func elixirModuleKind(keyword string) string {
+	switch keyword {
+	case "defprotocol":
+		return "protocol"
+	case "defimpl":
+		return "protocol_implementation"
+	default:
+		return "module"
+	}
+}
+
+func elixirFunctionSemanticKind(keyword string) string {
+	switch keyword {
+	case "defmacro", "defmacrop":
+		return "macro"
+	case "defdelegate":
+		return "delegate"
+	case "defguard", "defguardp":
+		return "guard"
+	default:
+		return "function"
+	}
+}
+
+func parseElixirDefImplTarget(tail string) string {
+	trimmed := strings.TrimSpace(tail)
+	if trimmed == "" {
+		return ""
+	}
+	if index := strings.Index(trimmed, "for:"); index >= 0 {
+		trimmed = strings.TrimSpace(trimmed[index+len("for:"):])
+	}
+	if index := strings.Index(trimmed, " do"); index >= 0 {
+		trimmed = strings.TrimSpace(trimmed[:index])
+	}
+	if trimmed == "" {
+		return ""
+	}
+	fields := strings.Fields(trimmed)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.TrimSuffix(fields[0], ",")
 }
 
 func parseElixirFunctionLine(trimmed string) (string, string, []string, bool, bool) {

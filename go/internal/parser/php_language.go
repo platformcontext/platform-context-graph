@@ -180,29 +180,35 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 		}
 
 		contextName, contextKind, contextLine := currentPHPContext(stack)
+		currentClassContext := currentPHPScopedName(stack, "class_declaration", "interface_declaration", "trait_declaration")
 		for _, match := range phpMethodCallPattern.FindAllStringSubmatch(trimmed, -1) {
 			if len(match) != 2 {
 				continue
 			}
 			callName := lastPathSegment(match[1], "->")
 			fullName := normalizePHPMethodCall(match[1])
-			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine)
+			appendUniquePHPCall(payload, seenCalls, callName, fullName, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine, "")
 		}
 		for _, match := range phpStaticCallPattern.FindAllStringSubmatch(trimmed, -1) {
 			if len(match) != 3 {
 				continue
 			}
-			fullName := strings.TrimSpace(match[1]) + "." + strings.TrimSpace(match[2])
-			appendUniquePHPCall(payload, seenCalls, strings.TrimSpace(match[2]), fullName, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine)
+			receiver := normalizePHPStaticReceiver(match[1], currentClassContext)
+			if receiver == "" {
+				continue
+			}
+			methodName := strings.TrimSpace(match[2])
+			fullName := receiver + "." + methodName
+			appendUniquePHPCall(payload, seenCalls, methodName, fullName, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine, receiver)
 		}
 		for _, match := range phpNewCallPattern.FindAllStringSubmatch(trimmed, -1) {
 			if len(match) != 2 {
 				continue
 			}
 			className := lastPathSegment(match[1], `\`)
-			appendUniquePHPCall(payload, seenCalls, className, className, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine)
+			appendUniquePHPCall(payload, seenCalls, className, className, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine, "")
 		}
-		if !strings.Contains(trimmed, "->") && !strings.Contains(trimmed, "::") && !strings.Contains(trimmed, "new ") {
+		if !strings.Contains(trimmed, "->") && !strings.Contains(trimmed, "::") && !strings.Contains(trimmed, "new ") && !phpFunctionPattern.MatchString(trimmed) {
 			for _, match := range phpFunctionCallPattern.FindAllStringSubmatch(trimmed, -1) {
 				if len(match) != 2 {
 					continue
@@ -212,7 +218,7 @@ func (e *Engine) parsePHP(path string, isDependency bool, options Options) (map[
 				case "function", "if", "foreach", "for", "switch", "echo", "require_once":
 					continue
 				}
-				appendUniquePHPCall(payload, seenCalls, name, name, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine)
+				appendUniquePHPCall(payload, seenCalls, name, name, lineNumber, extractPHPCallArgs(lines, index, rawLine, match[0]), contextName, contextKind, contextLine, "")
 			}
 		}
 
@@ -255,6 +261,7 @@ func appendUniquePHPCall(
 	contextName string,
 	contextKind string,
 	contextLine int,
+	inferredObjType string,
 ) {
 	if strings.TrimSpace(fullName) == "" {
 		return
@@ -264,14 +271,18 @@ func appendUniquePHPCall(
 	}
 	seen[fullName] = struct{}{}
 	item := map[string]any{
-		"name":              name,
-		"full_name":         fullName,
-		"line_number":       lineNumber,
-		"args":              args,
-		"context":           []any{contextName, contextKind, contextLine},
-		"inferred_obj_type": nil,
-		"lang":              "php",
-		"is_dependency":     false,
+		"name":          name,
+		"full_name":     fullName,
+		"line_number":   lineNumber,
+		"args":          args,
+		"context":       []any{contextName, contextKind, contextLine},
+		"lang":          "php",
+		"is_dependency": false,
+	}
+	if inferredObjType != "" {
+		item["inferred_obj_type"] = inferredObjType
+	} else {
+		item["inferred_obj_type"] = nil
 	}
 	if contextKind == "class_declaration" || contextKind == "interface_declaration" || contextKind == "trait_declaration" {
 		item["class_context"] = []any{contextName, contextLine}
@@ -287,6 +298,24 @@ func normalizePHPMethodCall(raw string) string {
 		return raw
 	}
 	return strings.Join(parts[:len(parts)-1], "->") + "." + parts[len(parts)-1]
+}
+
+func normalizePHPStaticReceiver(raw string, classContext string) string {
+	receiver := strings.TrimSpace(raw)
+	if receiver == "" {
+		return ""
+	}
+
+	switch receiver {
+	case "self", "static":
+		if classContext != "" {
+			return classContext
+		}
+	case "parent":
+		return receiver
+	}
+
+	return strings.TrimPrefix(receiver, `\`)
 }
 
 func parsePHPImport(raw string) (string, string) {

@@ -79,6 +79,40 @@ func TestDefaultEngineParsePathPHPFixtures(t *testing.T) {
 	assertNamedBucketContains(t, traitsPayload, "functions", "info")
 }
 
+func TestDefaultEngineParsePathPHPResolvesSelfStaticReceiverMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "self_static.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+class Config {
+    public static function emit(string $message): void {}
+
+    public function run(): void {
+        self::emit("hello");
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	call := assertBucketItemByName(t, got, "function_calls", "emit")
+	assertStringFieldValue(t, call, "full_name", "Config.emit")
+	assertStringFieldValue(t, call, "inferred_obj_type", "Config")
+}
+
 func TestDefaultEngineParsePathKotlinFixtures(t *testing.T) {
 	t.Parallel()
 

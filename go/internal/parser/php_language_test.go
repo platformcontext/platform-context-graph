@@ -156,6 +156,7 @@ class Config {
 	warnCall := assertBucketItemByName(t, got, "function_calls", "warn")
 	phpAssertStringFieldValue(t, warnCall, "full_name", "Logger.warn")
 	phpAssertStringSliceFieldValue(t, warnCall, "args", []string{"\"warn\""})
+	phpAssertStringFieldValue(t, warnCall, "inferred_obj_type", "Logger")
 	assertCallContextTuple(t, warnCall, "run", "method_declaration", 8)
 	phpAssertAnySliceFieldValue(t, warnCall, "class_context", []any{nil, nil})
 
@@ -164,6 +165,49 @@ class Config {
 	phpAssertStringSliceFieldValue(t, newCall, "args", []string{"\"main\""})
 	assertCallContextTuple(t, newCall, "run", "method_declaration", 8)
 	phpAssertAnySliceFieldValue(t, newCall, "class_context", []any{nil, nil})
+}
+
+func TestDefaultEngineParsePathPHPEmitsStaticMethodReceiverMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "static_calls.php")
+	writeTestFile(
+		t,
+		filePath,
+		`<?php
+namespace Demo;
+
+class Logger {
+    public static function warn(string $message): void {}
+}
+
+class Config {
+    public function run(): void {
+        Logger::warn("warn");
+        \Demo\Logger::warn("namespaced");
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	warnCall := assertBucketItemByName(t, got, "function_calls", "warn")
+	phpAssertStringFieldValue(t, warnCall, "full_name", "Logger.warn")
+	phpAssertStringFieldValue(t, warnCall, "inferred_obj_type", "Logger")
+
+	namespacedCall := assertBucketItemByFieldValue(t, got, "function_calls", "full_name", "Demo\\Logger.warn")
+	phpAssertStringFieldValue(t, namespacedCall, "name", "warn")
+	phpAssertStringFieldValue(t, namespacedCall, "inferred_obj_type", "Demo\\Logger")
 }
 
 func TestDefaultEngineParsePathPHPEmitsPropertyTypeInferenceFromDeclaration(t *testing.T) {
@@ -352,6 +396,29 @@ func phpAssertNilField(t *testing.T, item map[string]any, field string) {
 	if value, ok := item[field]; ok && value != nil {
 		t.Fatalf("%s = %#v, want nil", field, value)
 	}
+}
+
+func assertBucketItemByFieldValue(
+	t *testing.T,
+	payload map[string]any,
+	bucket string,
+	field string,
+	want string,
+) map[string]any {
+	t.Helper()
+
+	items, ok := payload[bucket].([]map[string]any)
+	if !ok {
+		t.Fatalf("%s = %T, want []map[string]any", bucket, payload[bucket])
+	}
+	for _, item := range items {
+		value, _ := item[field].(string)
+		if value == want {
+			return item
+		}
+	}
+	t.Fatalf("%s missing %s=%q in %#v", bucket, field, want, items)
+	return nil
 }
 
 func assertCallContextTuple(
