@@ -10,6 +10,8 @@ type codeEntityIndex struct {
 	entitiesByPathLine map[string]string
 	spansByPath        map[string][]codeFunctionSpan
 	uniqueNameByPath   map[string]map[string]string
+	uniqueNameByRepo   map[string]map[string]string
+	entityFileByID     map[string]string
 }
 
 type codeFunctionSpan struct {
@@ -23,8 +25,11 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 		entitiesByPathLine: make(map[string]string),
 		spansByPath:        make(map[string][]codeFunctionSpan),
 		uniqueNameByPath:   make(map[string]map[string]string),
+		uniqueNameByRepo:   make(map[string]map[string]string),
+		entityFileByID:     make(map[string]string),
 	}
 	nameCandidates := make(map[string]map[string]map[string]struct{})
+	repoNameCandidates := make(map[string]map[string]map[string]struct{})
 
 	for _, env := range envelopes {
 		if env.FactKind != "file" {
@@ -38,6 +43,8 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 
 		relativePath := payloadStr(env.Payload, "relative_path")
 		rawPath := anyToString(fileData["path"])
+		repositoryID := payloadStr(env.Payload, "repo_id")
+		preferredPath := codeCallPreferredPath(rawPath, relativePath)
 		for _, item := range mapSlice(fileData["functions"]) {
 			entityID := anyToString(item["uid"])
 			startLine := codeCallInt(item["line_number"], item["start_line"])
@@ -47,6 +54,9 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 			}
 			if endLine < startLine {
 				endLine = startLine
+			}
+			if preferredPath != "" {
+				index.entityFileByID[entityID] = preferredPath
 			}
 			for _, pathKey := range codeCallPathKeys(rawPath, relativePath) {
 				index.entitiesByPathLine[codeCallPathLineKey(pathKey, startLine)] = entityID
@@ -63,6 +73,15 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 						nameCandidates[pathKey][candidateName] = make(map[string]struct{})
 					}
 					nameCandidates[pathKey][candidateName][entityID] = struct{}{}
+					if repositoryID != "" {
+						if _, ok := repoNameCandidates[repositoryID]; !ok {
+							repoNameCandidates[repositoryID] = make(map[string]map[string]struct{})
+						}
+						if _, ok := repoNameCandidates[repositoryID][candidateName]; !ok {
+							repoNameCandidates[repositoryID][candidateName] = make(map[string]struct{})
+						}
+						repoNameCandidates[repositoryID][candidateName][entityID] = struct{}{}
+					}
 				}
 			}
 		}
@@ -85,6 +104,17 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 			}
 			for entityID := range entityIDs {
 				index.uniqueNameByPath[pathKey][name] = entityID
+			}
+		}
+	}
+	for repositoryID, names := range repoNameCandidates {
+		index.uniqueNameByRepo[repositoryID] = make(map[string]string, len(names))
+		for name, entityIDs := range names {
+			if len(entityIDs) != 1 {
+				continue
+			}
+			for entityID := range entityIDs {
+				index.uniqueNameByRepo[repositoryID][name] = entityID
 			}
 		}
 	}
@@ -146,11 +176,12 @@ func extractGenericCodeCallRows(
 	relativePath string,
 	rawPath string,
 	entityIndex codeEntityIndex,
+	repositoryImports map[string][]string,
 	seenRows map[string]struct{},
 	fileData map[string]any,
 ) []map[string]any {
 	rows := make([]map[string]any, 0)
-	filePath := codeCallPreferredPath(rawPath, relativePath)
+	callerFilePath := codeCallPreferredPath(rawPath, relativePath)
 	for _, edge := range mapSlice(fileData["function_calls"]) {
 		callLine := codeCallInt(edge["line_number"], edge["ref_line"])
 		if callLine <= 0 {
@@ -160,7 +191,15 @@ func extractGenericCodeCallRows(
 		if callerID == "" {
 			continue
 		}
-		calleeID := resolveSameFileCalleeEntityID(entityIndex, rawPath, relativePath, edge)
+		calleeID, calleeFilePath := resolveGenericCallee(
+			entityIndex,
+			repositoryID,
+			repositoryImports,
+			rawPath,
+			relativePath,
+			fileData,
+			edge,
+		)
 		if calleeID == "" {
 			continue
 		}
@@ -175,8 +214,8 @@ func extractGenericCodeCallRows(
 			"repo_id":          repositoryID,
 			"caller_entity_id": callerID,
 			"callee_entity_id": calleeID,
-			"caller_file":      filePath,
-			"callee_file":      filePath,
+			"caller_file":      callerFilePath,
+			"callee_file":      calleeFilePath,
 			"ref_line":         callLine,
 			"action":           IntentActionUpsert,
 		}

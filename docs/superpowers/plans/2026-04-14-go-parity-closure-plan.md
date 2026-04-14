@@ -88,7 +88,10 @@ application languages.
   The current same-file reducer proof now includes family-safe disambiguation
   for Swift receiver types, Ruby module/class scope, PHP receiver-qualified
   calls without unsafe bare-name fallback, and exact-only qualified Elixir
-  matching
+  matching. The current cross-file reducer proof now also covers JS/TS/TSX
+  import-driven generic calls plus exact-qualified Swift/Ruby/Elixir/PHP
+  static-style calls; Python cross-file generic calls still need parser
+  import-source identity before they can close honestly
 
 ### Validation
 

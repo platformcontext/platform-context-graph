@@ -1,0 +1,297 @@
+package reducer
+
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/platformcontext/platform-context-graph/go/internal/facts"
+)
+
+func TestExtractCodeCallRowsResolvesCrossFileSwiftQualifiedCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	callerPath := filepath.Join(repoRoot, "worker.swift")
+	calleePath := filepath.Join(repoRoot, "logger.swift")
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-swift",
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-swift",
+				"relative_path": "worker.swift",
+				"parsed_file_data": map[string]any{
+					"path": callerPath,
+					"functions": []any{
+						map[string]any{
+							"name":        "run",
+							"line_number": 3,
+							"end_line":    5,
+							"uid":         "content-entity:swift-run",
+						},
+					},
+					"function_calls": []any{
+						map[string]any{
+							"name":              "info",
+							"full_name":         "logger.info",
+							"inferred_obj_type": "Logger",
+							"line_number":       4,
+							"lang":              "swift",
+						},
+					},
+				},
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-swift",
+				"relative_path": "logger.swift",
+				"parsed_file_data": map[string]any{
+					"path": calleePath,
+					"functions": []any{
+						map[string]any{
+							"name":          "info",
+							"class_context": "Logger",
+							"line_number":   1,
+							"end_line":      2,
+							"uid":           "content-entity:swift-logger-info",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, rows := ExtractCodeCallRows(envelopes)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if got, want := rows[0]["callee_entity_id"], "content-entity:swift-logger-info"; got != want {
+		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
+	}
+}
+
+func TestExtractCodeCallRowsResolvesCrossFileRubyModuleScopedCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	callerPath := filepath.Join(repoRoot, "worker.rb")
+	calleePath := filepath.Join(repoRoot, "basic.rb")
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-ruby",
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-ruby",
+				"relative_path": "worker.rb",
+				"parsed_file_data": map[string]any{
+					"path": callerPath,
+					"functions": []any{
+						map[string]any{
+							"name":         "run",
+							"context":      "Comprehensive",
+							"context_type": "module",
+							"line_number":  3,
+							"end_line":     5,
+							"uid":          "content-entity:ruby-run",
+						},
+					},
+					"function_calls": []any{
+						map[string]any{
+							"name":         "greet",
+							"full_name":    "greet",
+							"context":      "Comprehensive",
+							"context_type": "module",
+							"line_number":  4,
+							"lang":         "ruby",
+						},
+					},
+				},
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-ruby",
+				"relative_path": "basic.rb",
+				"parsed_file_data": map[string]any{
+					"path": calleePath,
+					"functions": []any{
+						map[string]any{
+							"name":         "greet",
+							"context":      "Comprehensive",
+							"context_type": "module",
+							"line_number":  1,
+							"end_line":     2,
+							"uid":          "content-entity:ruby-greet",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, rows := ExtractCodeCallRows(envelopes)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if got, want := rows[0]["callee_entity_id"], "content-entity:ruby-greet"; got != want {
+		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
+	}
+}
+
+func TestExtractCodeCallRowsResolvesCrossFileElixirQualifiedCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	callerPath := filepath.Join(repoRoot, "worker.ex")
+	calleePath := filepath.Join(repoRoot, "basic.ex")
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-elixir",
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-elixir",
+				"relative_path": "worker.ex",
+				"parsed_file_data": map[string]any{
+					"path": callerPath,
+					"functions": []any{
+						map[string]any{
+							"name":          "run",
+							"class_context": "Demo.Worker",
+							"line_number":   3,
+							"end_line":      5,
+							"uid":           "content-entity:elixir-run",
+						},
+					},
+					"function_calls": []any{
+						map[string]any{
+							"name":              "greet",
+							"full_name":         "Demo.Basic.greet",
+							"inferred_obj_type": "Demo.Basic",
+							"line_number":       4,
+							"lang":              "elixir",
+						},
+					},
+				},
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-elixir",
+				"relative_path": "basic.ex",
+				"parsed_file_data": map[string]any{
+					"path": calleePath,
+					"functions": []any{
+						map[string]any{
+							"name":          "greet",
+							"class_context": "Demo.Basic",
+							"line_number":   1,
+							"end_line":      2,
+							"uid":           "content-entity:elixir-greet",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, rows := ExtractCodeCallRows(envelopes)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if got, want := rows[0]["callee_entity_id"], "content-entity:elixir-greet"; got != want {
+		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
+	}
+}
+
+func TestExtractCodeCallRowsResolvesCrossFilePHPStaticCalls(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	callerPath := filepath.Join(repoRoot, "app.php")
+	calleePath := filepath.Join(repoRoot, "logger.php")
+
+	envelopes := []facts.Envelope{
+		{
+			FactKind: "repository",
+			Payload: map[string]any{
+				"repo_id": "repo-php",
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-php",
+				"relative_path": "app.php",
+				"parsed_file_data": map[string]any{
+					"path": callerPath,
+					"functions": []any{
+						map[string]any{
+							"name":        "run",
+							"line_number": 3,
+							"end_line":    5,
+							"uid":         "content-entity:php-run",
+						},
+					},
+					"function_calls": []any{
+						map[string]any{
+							"name":              "warn",
+							"full_name":         "Logger.warn",
+							"inferred_obj_type": "Logger",
+							"line_number":       4,
+							"lang":              "php",
+						},
+					},
+				},
+			},
+		},
+		{
+			FactKind: "file",
+			Payload: map[string]any{
+				"repo_id":       "repo-php",
+				"relative_path": "logger.php",
+				"parsed_file_data": map[string]any{
+					"path": calleePath,
+					"functions": []any{
+						map[string]any{
+							"name":          "warn",
+							"class_context": "Logger",
+							"line_number":   1,
+							"end_line":      2,
+							"uid":           "content-entity:php-warn",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, rows := ExtractCodeCallRows(envelopes)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if got, want := rows[0]["callee_entity_id"], "content-entity:php-warn"; got != want {
+		t.Fatalf("callee_entity_id = %#v, want %#v", got, want)
+	}
+}

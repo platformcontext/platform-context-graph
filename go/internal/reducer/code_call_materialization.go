@@ -97,6 +97,7 @@ func ExtractCodeCallRows(envelopes []facts.Envelope) ([]string, []map[string]any
 	}
 
 	entityIndex := buildCodeEntityIndex(envelopes)
+	repositoryImports := collectCodeCallRepositoryImports(envelopes)
 	seenRows := make(map[string]struct{})
 	rows := make([]map[string]any, 0)
 
@@ -124,6 +125,7 @@ func ExtractCodeCallRows(envelopes []facts.Envelope) ([]string, []map[string]any
 				relativePath,
 				anyToString(fileData["path"]),
 				entityIndex,
+				repositoryImports[repositoryID],
 				seenRows,
 				fileData,
 			)...,
