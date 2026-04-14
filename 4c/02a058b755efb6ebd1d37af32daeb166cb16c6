@@ -1,0 +1,33 @@
+go/internal/telemetry/contract_test.go
+  1ca5ee6ce936a402 37
+go/internal/projector/service_test.go
+  1ca5ee6ce936a402 174
+go/internal/telemetry/contract.go
+  1ca5ee6ce936a402 41,83
+docs/docs/architecture.md
+  1ca5ee6ce936a402 166-304
+go/internal/collector/git_source.go
+  1ca5ee6ce936a402 93-96,105-111,114-120,122,126-127,129-148,150-228,230-231,233-247,249-250,252-271,273-274,276-295,297-324,326-328,332-354,356-361,363-364,367,370-374,376-377,379,381-389,391,397,401
+go/internal/collector/git_source_test.go
+  1ca5ee6ce936a402 284-295,297-298,483-493,495-496,499-634,637-643,645-650
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "4c02a058b755efb6ebd1d37af32daeb166cb16c6",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1065,
+      "total_deletions": 189,
+      "accepted_lines": 1258,
+      "overriden_lines": 0
+    }
+  }
+}
