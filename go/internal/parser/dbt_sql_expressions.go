@@ -43,6 +43,12 @@ func expressionHonestyGapReason(expression string) string {
 	if normalized == "" {
 		return ""
 	}
+	if inner, ok := unwrapTemplatedExpression(normalized); ok && !dbtBareIdentifierRe.MatchString(inner) {
+		if expressionPartialReason(inner) != "" {
+			return dbtTemplatedExpressionReason
+		}
+		normalized = inner
+	}
 	if strings.Contains(normalized, "{{") || strings.Contains(normalized, "}}") || strings.Contains(normalized, "{%") || strings.Contains(normalized, "%}") {
 		return dbtTemplatedExpressionReason
 	}
@@ -77,6 +83,12 @@ func expressionPartialReason(expression string) string {
 	normalized := stripWrappingParentheses(strings.TrimSpace(expression))
 	if normalized == "" {
 		return ""
+	}
+	if inner, ok := unwrapTemplatedExpression(normalized); ok && !dbtBareIdentifierRe.MatchString(inner) {
+		if expressionPartialReason(inner) != "" {
+			return dbtTemplatedExpressionReason
+		}
+		normalized = inner
 	}
 	if reason := expressionHonestyGapReason(normalized); reason != "" {
 		return reason

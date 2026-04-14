@@ -35,8 +35,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Notes:
   - SQL support is Go-owned end to end for native SQL parsing, migration extraction, embedded SQL link hints, and the JSON-backed dbt and data-intelligence families.
 - Real-repo and end-to-end status remain partial because compiled dbt lineage
-  still carries explicit unresolved-reference, templated-expression, complex
-  macro, and derived-expression limits in the current Go implementation.
+  still carries explicit unresolved-reference, truly opaque
+  templated-expression, complex macro, and derived-expression limits in the
+  current Go implementation.
 - Row-level aggregate lineage, simple windowed expressions, and simple
   qualified macro wrappers such as `dbt_utils.identity(source.amount)` are now
   tracked in the Go dbt path.
@@ -44,15 +45,16 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   `upper(coalesce(source.segment, 'unknown'))`, are also tracked in the Go dbt
   path.
 - The checked-in dbt parity matrix now explicitly proves cast, `date_trunc`,
-  `concat`, multi-source `case`, multi-source arithmetic, and the key
+  `concat`, multi-source `case`, multi-source arithmetic, top-level Jinja
+  wrappers around supported lineage-safe expressions, and the key
   unresolved-summary paths in
   `go/internal/parser/dbt_sql_lineage_parity_test.go`.
 - The checked-in SQL procedural proof now covers `CREATE OR REPLACE FUNCTION`
   bodies plus legacy `EXECUTE PROCEDURE` trigger wiring in
   `go/internal/parser/sql_parity_test.go`.
 - Compiled-model lineage still carries explicit unresolved limits for
-  unresolved references, templated expressions, complex macros, and some
-  derived expressions.
+  unresolved references, truly opaque templated expressions, complex macros,
+  and some derived expressions.
 
 ## Go-Owned Data-Intelligence Path
 

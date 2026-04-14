@@ -81,6 +81,21 @@ from raw.public.orders o`,
 			},
 		},
 		{
+			name: "templated macro wrapper",
+			sql: `select
+  {{ dbt_utils.generate_surrogate_key(md5(o.id)) }} as surrogate_key
+from raw.public.orders o`,
+			relations: map[string][]string{
+				"raw.public.orders": {"id"},
+			},
+			want: []ColumnLineage{
+				{
+					OutputColumn:  "surrogate_key",
+					SourceColumns: []string{"raw.public.orders.id"},
+				},
+			},
+		},
+		{
 			name: "case with multiple sources",
 			sql: `select
   case when o.amount > 100 then c.segment else 'standard' end as customer_segment

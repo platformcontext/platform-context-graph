@@ -309,11 +309,27 @@ func lineageForProjection(selectItem string, bindings map[string]*relationBindin
 }
 
 func referenceScanExpression(expression string) string {
-	matches := dbtQualifiedMacroCallRe.FindStringSubmatch(strings.TrimSpace(expression))
-	if matches == nil || (!isSupportedQualifiedMacroExpression(strings.TrimSpace(expression)) && !macroExpressionHasLineage(strings.TrimSpace(expression))) {
-		return expression
+	normalized := stripWrappingParentheses(strings.TrimSpace(expression))
+	if inner, ok := unwrapTemplatedExpression(normalized); ok && !dbtBareIdentifierRe.MatchString(inner) && expressionPartialReason(inner) == "" {
+		normalized = inner
+	}
+	matches := dbtQualifiedMacroCallRe.FindStringSubmatch(normalized)
+	if matches == nil || (!isSupportedQualifiedMacroExpression(normalized) && !macroExpressionHasLineage(normalized)) {
+		return normalized
 	}
 	return matches[2]
+}
+
+func unwrapTemplatedExpression(expression string) (string, bool) {
+	normalized := strings.TrimSpace(expression)
+	if !strings.HasPrefix(normalized, "{{") || !strings.HasSuffix(normalized, "}}") {
+		return "", false
+	}
+	inner := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(normalized, "{{"), "}}"))
+	if inner == "" {
+		return "", false
+	}
+	return inner, true
 }
 
 func resolveQualifiedReference(binding *relationBinding, alias string, column string, modelName string) ([]string, []ColumnLineage, map[string]string) {
