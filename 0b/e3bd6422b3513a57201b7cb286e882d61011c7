@@ -1,0 +1,35 @@
+docs/docs/roadmap.md
+  1ca5ee6ce936a402 7,9-12,14-16,23,38-39,41,52,54-56,59-67,69,83,94
+docs/docs/languages/support-maturity.md
+  1ca5ee6ce936a402 5-14
+docs/superpowers/plans/2026-04-12-go-data-plane-doc-set-index.md
+  1ca5ee6ce936a402 21-29,37-38
+docs/superpowers/plans/2026-04-12-go-data-plane-rewrite-sow.md
+  1ca5ee6ce936a402 34-36,49-51,60-61
+docs/mkdocs.yml
+  1ca5ee6ce936a402 71
+docs/superpowers/plans/2026-04-14-go-parity-closure-plan.md
+  1ca5ee6ce936a402 1-176
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 1-25,30-55,68-117,128-146,151,154-159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "0be3bd6422b3513a57201b7cb286e882d61011c7",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 374,
+      "total_deletions": 20,
+      "accepted_lines": 1028,
+      "overriden_lines": 10
+    }
+  }
+}
