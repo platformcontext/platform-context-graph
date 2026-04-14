@@ -73,24 +73,11 @@ func (e *Engine) parseJava(
 				appendBucket(payload, "variables", item)
 			}
 		case "import_declaration":
-			name := javaImportName(node, source)
-			if strings.TrimSpace(name) == "" {
-				return
-			}
-			appendBucket(payload, "imports", map[string]any{
-				"name":        name,
-				"line_number": nodeLine(node),
-				"lang":        "java",
-			})
+			appendJavaImport(payload, node, source)
 		case "method_invocation":
-			nameNode := node.ChildByFieldName("name")
-			appendCall(payload, nameNode, source, "java")
+			appendJavaCall(payload, node, source)
 		case "object_creation_expression":
-			nameNode := node.ChildByFieldName("type")
-			if nameNode == nil {
-				nameNode = javaFirstTypeIdentifier(node)
-			}
-			appendCall(payload, nameNode, source, "java")
+			appendJavaCall(payload, node, source)
 		}
 	})
 
@@ -151,6 +138,112 @@ func javaImportName(node *tree_sitter.Node, source []byte) string {
 		return nodeText(&child, source)
 	}
 	return ""
+}
+
+func appendJavaImport(payload map[string]any, node *tree_sitter.Node, source []byte) {
+	name := strings.TrimSpace(javaImportName(node, source))
+	if name == "" {
+		return
+	}
+
+	raw := strings.TrimSpace(nodeText(node, source))
+	importPath := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(raw, "import"), ";"))
+	importType := "import"
+	if strings.HasPrefix(importPath, "static ") {
+		importType = "static"
+		importPath = strings.TrimSpace(strings.TrimPrefix(importPath, "static "))
+	}
+
+	appendBucket(payload, "imports", map[string]any{
+		"name":             name,
+		"source":           importPath,
+		"alias":            javaImportAlias(importPath),
+		"full_import_name": raw,
+		"import_type":      importType,
+		"line_number":      nodeLine(node),
+		"lang":             "java",
+	})
+}
+
+func javaImportAlias(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(trimmed, "."); idx >= 0 {
+		return strings.TrimSpace(trimmed[idx+1:])
+	}
+	return trimmed
+}
+
+func appendJavaCall(payload map[string]any, node *tree_sitter.Node, source []byte) {
+	if node == nil {
+		return
+	}
+
+	var nameNode *tree_sitter.Node
+	switch node.Kind() {
+	case "method_invocation":
+		nameNode = node.ChildByFieldName("name")
+		if nameNode == nil {
+			nameNode = javaFirstTypeIdentifier(node)
+		}
+	case "object_creation_expression":
+		nameNode = node.ChildByFieldName("type")
+		if nameNode == nil {
+			nameNode = javaFirstTypeIdentifier(node)
+		}
+	}
+	if nameNode == nil {
+		return
+	}
+
+	name := strings.TrimSpace(nodeText(nameNode, source))
+	if name == "" {
+		return
+	}
+
+	item := map[string]any{
+		"name":        name,
+		"line_number": nodeLine(nameNode),
+		"lang":        "java",
+	}
+	if fullName := javaCallFullName(node, source); fullName != "" {
+		item["full_name"] = fullName
+	}
+	appendBucket(payload, "function_calls", item)
+}
+
+func javaCallFullName(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+
+	switch node.Kind() {
+	case "method_invocation":
+		nameNode := node.ChildByFieldName("name")
+		if nameNode == nil {
+			return ""
+		}
+		name := strings.TrimSpace(nodeText(nameNode, source))
+		if name == "" {
+			return ""
+		}
+		if objectNode := node.ChildByFieldName("object"); objectNode != nil {
+			object := strings.TrimSpace(nodeText(objectNode, source))
+			if object != "" {
+				return object + "." + name
+			}
+		}
+		return name
+	case "object_creation_expression":
+		if typeNode := node.ChildByFieldName("type"); typeNode != nil {
+			return strings.TrimSpace(nodeText(typeNode, source))
+		}
+		return ""
+	default:
+		return strings.TrimSpace(nodeText(node, source))
+	}
 }
 
 func javaFirstTypeIdentifier(node *tree_sitter.Node) *tree_sitter.Node {

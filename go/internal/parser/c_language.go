@@ -42,7 +42,7 @@ func (e *Engine) parseC(
 	walkNamed(root, func(node *tree_sitter.Node) {
 		switch node.Kind() {
 		case "preproc_include":
-			appendImportFromNode(payload, firstNamedDescendant(node, "system_lib_string", "string_literal"), source, "c")
+			appendCImportMetadata(payload, node, source)
 		case "preproc_def", "preproc_function_def":
 			appendMacro(payload, node, source, "c")
 		case "struct_specifier":
@@ -65,7 +65,7 @@ func (e *Engine) parseC(
 			}
 			appendCDeclarationVariables(payload, node, source, "c")
 		case "call_expression":
-			appendCall(payload, cLikeCallNameNode(node.ChildByFieldName("function")), source, "c")
+			appendCCall(payload, node, source)
 		}
 	})
 	appendCTypedefAliasesFromSource(payload, string(source), "c")
@@ -118,6 +118,31 @@ func appendCFunction(payload map[string]any, node *tree_sitter.Node, source []by
 		item["source"] = nodeText(node, source)
 	}
 	appendBucket(payload, "functions", item)
+}
+
+func appendCImportMetadata(payload map[string]any, node *tree_sitter.Node, source []byte) {
+	nameNode := firstNamedDescendant(node, "system_lib_string", "string_literal")
+	if nameNode == nil {
+		return
+	}
+	name := strings.Trim(nodeText(nameNode, source), `<>"`)
+	if name == "" {
+		return
+	}
+
+	includeKind := "local"
+	if nameNode.Kind() == "system_lib_string" {
+		includeKind = "system"
+	}
+
+	appendBucket(payload, "imports", map[string]any{
+		"name":             name,
+		"source":           name,
+		"full_import_name": strings.TrimSpace(nodeText(node, source)),
+		"include_kind":     includeKind,
+		"line_number":      nodeLine(node),
+		"lang":             "c",
+	})
 }
 
 func appendCTypedefAliases(payload map[string]any, node *tree_sitter.Node, source []byte, lang string) {
@@ -291,6 +316,29 @@ func appendCTypedefAliasesFromSource(payload map[string]any, source string, lang
 	}
 }
 
+func appendCCall(payload map[string]any, node *tree_sitter.Node, source []byte) {
+	functionNode := node.ChildByFieldName("function")
+	nameNode := cLikeCallNameNode(functionNode)
+	if nameNode == nil {
+		return
+	}
+
+	name := strings.TrimSpace(nodeText(nameNode, source))
+	if name == "" {
+		return
+	}
+
+	item := map[string]any{
+		"name":        name,
+		"line_number": nodeLine(nameNode),
+		"lang":        "c",
+	}
+	if fullName := cCallFullName(node, source); fullName != "" {
+		item["full_name"] = fullName
+	}
+	appendBucket(payload, "function_calls", item)
+}
+
 func bucketContainsName(payload map[string]any, bucket string, name string) bool {
 	items, _ := payload[bucket].([]map[string]any)
 	for _, item := range items {
@@ -330,6 +378,17 @@ func cTypedefUnderlyingType(node *tree_sitter.Node, source []byte) string {
 		return ""
 	}
 	return strings.TrimSpace(nodeText(typeNode, source))
+}
+
+func cCallFullName(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	functionNode := node.ChildByFieldName("function")
+	if functionNode == nil {
+		return ""
+	}
+	return strings.TrimSpace(nodeText(functionNode, source))
 }
 
 func cTypedefUnderlyingTypeFromBlock(block string) string {

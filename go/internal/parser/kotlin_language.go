@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	kotlinImportPattern      = regexp.MustCompile(`^\s*import\s+([^\s]+)`)
+	kotlinImportPattern      = regexp.MustCompile(`^\s*import\s+([^\s]+)(?:\s+as\s+([A-Za-z_]\w*))?`)
 	kotlinClassPattern       = regexp.MustCompile(`^\s*(?:data\s+|sealed\s+|abstract\s+|open\s+)?class\s+([A-Za-z_]\w*)`)
 	kotlinObjectPattern      = regexp.MustCompile(`^\s*object\s+([A-Za-z_]\w*)`)
 	kotlinCompanionPattern   = regexp.MustCompile(`^\s*companion\s+object(?:\s+([A-Za-z_]\w*))?`)
@@ -16,7 +16,7 @@ var (
 	kotlinFunctionPattern    = regexp.MustCompile(`\bfun\s+(?:<[^>]+>\s*)?(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)\s*\(`)
 	kotlinConstructorPattern = regexp.MustCompile(`^\s*(?:(?:public|private|protected|internal)\s+)?constructor\s*\(`)
 	kotlinVariablePattern    = regexp.MustCompile(`^\s*(?:private|public|protected|internal)?\s*(?:const\s+)?(?:val|var)\s+([A-Za-z_]\w*)`)
-	kotlinCallPattern        = regexp.MustCompile(`\b([A-Za-z_]\w*)\s*\(`)
+	kotlinCallPattern        = regexp.MustCompile(`\b((?:[A-Za-z_]\w*\.)*)([A-Za-z_]\w*)\s*\(`)
 )
 
 func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (map[string]any, error) {
@@ -43,11 +43,27 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			continue
 		}
 
-		if matches := kotlinImportPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
+		if matches := kotlinImportPattern.FindStringSubmatch(trimmed); len(matches) >= 2 {
+			importedName := strings.TrimSpace(matches[1])
+			if importedName == "" {
+				braceDepth += braceDelta(rawLine)
+				stack = popCompletedScopes(stack, braceDepth)
+				continue
+			}
+			alias := kotlinImportAlias(importedName)
+			importType := "import"
+			if len(matches) == 3 && strings.TrimSpace(matches[2]) != "" {
+				alias = strings.TrimSpace(matches[2])
+				importType = "alias"
+			}
 			appendBucket(payload, "imports", map[string]any{
-				"name":        strings.TrimSpace(matches[1]),
-				"line_number": lineNumber,
-				"lang":        "kotlin",
+				"name":             importedName,
+				"source":           importedName,
+				"alias":            alias,
+				"full_import_name": strings.TrimSpace(rawLine),
+				"import_type":      importType,
+				"line_number":      lineNumber,
+				"lang":             "kotlin",
 			})
 		}
 
@@ -156,10 +172,10 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		}
 
 		for _, match := range kotlinCallPattern.FindAllStringSubmatch(trimmed, -1) {
-			if len(match) != 2 {
+			if len(match) != 3 {
 				continue
 			}
-			name := match[1]
+			name := match[2]
 			switch name {
 			case "fun", "if", "for", "while", "when", "return", "class", "interface":
 				continue
@@ -168,9 +184,10 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 				continue
 			}
 			seenCalls[name] = struct{}{}
+			fullName := strings.TrimSpace(match[1] + match[2])
 			appendBucket(payload, "function_calls", map[string]any{
 				"name":        name,
-				"full_name":   name,
+				"full_name":   fullName,
 				"line_number": lineNumber,
 				"lang":        "kotlin",
 			})
@@ -198,4 +215,15 @@ func (e *Engine) preScanKotlin(path string) ([]string, error) {
 	names := collectBucketNames(payload, "functions", "classes", "interfaces")
 	slices.Sort(names)
 	return names, nil
+}
+
+func kotlinImportAlias(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(trimmed, "."); idx >= 0 {
+		return strings.TrimSpace(trimmed[idx+1:])
+	}
+	return trimmed
 }

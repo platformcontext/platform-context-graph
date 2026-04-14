@@ -65,19 +65,11 @@ func (e *Engine) parseRust(
 				"lang":        "rust",
 			})
 		case "use_declaration":
-			name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(nodeText(node, source), "use "), ";"))
-			if name == "" {
-				return
-			}
-			appendBucket(payload, "imports", map[string]any{
-				"name":        name,
-				"line_number": nodeLine(node),
-				"lang":        "rust",
-			})
+			appendRustImportMetadata(payload, node, source)
 		case "call_expression":
-			appendCall(payload, rustCallNameNode(node), source, "rust")
+			appendRustCall(payload, node, source)
 		case "macro_invocation":
-			appendCall(payload, firstNamedDescendant(node, "identifier"), source, "rust")
+			appendRustCall(payload, node, source)
 		}
 	})
 
@@ -155,6 +147,36 @@ func appendRustFunction(payload map[string]any, node *tree_sitter.Node, source [
 	appendBucket(payload, "functions", item)
 }
 
+func appendRustImportMetadata(payload map[string]any, node *tree_sitter.Node, source []byte) {
+	raw := strings.TrimSpace(nodeText(node, source))
+	if raw == "" {
+		return
+	}
+
+	importText := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(raw, "use "), ";"))
+	if importText == "" {
+		return
+	}
+
+	importType := "use"
+	alias := rustImportAlias(importText)
+	if aliasIndex := strings.Index(importText, " as "); aliasIndex >= 0 {
+		importType = "alias"
+		alias = strings.TrimSpace(importText[aliasIndex+len(" as "):])
+		importText = strings.TrimSpace(importText[:aliasIndex])
+	}
+
+	appendBucket(payload, "imports", map[string]any{
+		"name":             importText,
+		"source":           importText,
+		"alias":            alias,
+		"full_import_name": raw,
+		"import_type":      importType,
+		"line_number":      nodeLine(node),
+		"lang":             "rust",
+	})
+}
+
 func rustImplContext(node *tree_sitter.Node, source []byte) string {
 	for current := node.Parent(); current != nil; current = current.Parent() {
 		if current.Kind() != "impl_item" {
@@ -190,6 +212,20 @@ func rustStripTypeParameters(text string) string {
 	return trimmed
 }
 
+func rustImportAlias(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return ""
+	}
+	if strings.Contains(trimmed, "{") || strings.HasSuffix(trimmed, "::*") {
+		return ""
+	}
+	if idx := strings.LastIndex(trimmed, "::"); idx >= 0 {
+		return strings.TrimSpace(trimmed[idx+2:])
+	}
+	return trimmed
+}
+
 func rustBaseTypeName(text string) string {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
@@ -212,6 +248,40 @@ func rustCallNameNode(node *tree_sitter.Node) *tree_sitter.Node {
 		return firstNamedDescendant(functionNode, "identifier", "field_identifier")
 	}
 	return firstNamedDescendant(node, "identifier", "field_identifier")
+}
+
+func appendRustCall(payload map[string]any, node *tree_sitter.Node, source []byte) {
+	nameNode := rustCallNameNode(node)
+	if nameNode == nil {
+		return
+	}
+	name := strings.TrimSpace(nodeText(nameNode, source))
+	if name == "" {
+		return
+	}
+
+	item := map[string]any{
+		"name":        name,
+		"line_number": nodeLine(nameNode),
+		"lang":        "rust",
+	}
+	if fullName := rustCallFullName(node, source); fullName != "" {
+		item["full_name"] = fullName
+	}
+	appendBucket(payload, "function_calls", item)
+}
+
+func rustCallFullName(node *tree_sitter.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	if functionNode := node.ChildByFieldName("function"); functionNode != nil {
+		return strings.TrimSpace(nodeText(functionNode, source))
+	}
+	if nameNode := firstNamedDescendant(node, "identifier", "field_identifier"); nameNode != nil {
+		return strings.TrimSpace(nodeText(nameNode, source))
+	}
+	return ""
 }
 
 func cLikeInsideFunction(node *tree_sitter.Node) bool {

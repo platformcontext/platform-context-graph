@@ -52,8 +52,12 @@ int add(int a, int b) {
 	assertNamedBucketContains(t, got, "functions", "add")
 	assertNamedBucketContains(t, got, "structs", "Point")
 	assertNamedBucketContains(t, got, "enums", "StatusCode")
-	assertNamedBucketContains(t, got, "imports", "stdio.h")
-	assertNamedBucketContains(t, got, "function_calls", "printf")
+	importItem := assertBucketItemByName(t, got, "imports", "stdio.h")
+	assertStringFieldValue(t, importItem, "source", "stdio.h")
+	assertStringFieldValue(t, importItem, "full_import_name", "#include <stdio.h>")
+	assertStringFieldValue(t, importItem, "include_kind", "system")
+	callItem := assertBucketItemByName(t, got, "function_calls", "printf")
+	assertStringFieldValue(t, callItem, "full_name", "printf")
 	assertNamedBucketContains(t, got, "variables", "total")
 	assertNamedBucketContains(t, got, "macros", "MAX_SIZE")
 }
@@ -148,7 +152,8 @@ impl Point {
 }
 
 fn main() {
-    println!("{}", Point::new(1.0).x);
+    let point = Point::new(1.0);
+    println!("{}", point.x);
 }
 `,
 	)
@@ -172,8 +177,12 @@ fn main() {
 	assertNamedBucketContains(t, got, "classes", "Point")
 	assertNamedBucketContains(t, got, "classes", "Shape")
 	assertNamedBucketContains(t, got, "traits", "Describable")
-	assertNamedBucketContains(t, got, "imports", "std::fmt")
-	assertNamedBucketContains(t, got, "function_calls", "println")
+	importItem := assertBucketItemByName(t, got, "imports", "std::fmt")
+	assertStringFieldValue(t, importItem, "source", "std::fmt")
+	assertStringFieldValue(t, importItem, "alias", "fmt")
+	assertStringFieldValue(t, importItem, "full_import_name", "use std::fmt;")
+	assertBucketContainsFieldValue(t, got, "function_calls", "full_name", "Point::new")
+	assertBucketContainsFieldValue(t, got, "function_calls", "full_name", "println")
 }
 
 func TestDefaultEngineParsePathRustImplOwnership(t *testing.T) {

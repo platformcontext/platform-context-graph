@@ -53,8 +53,12 @@ interface Runner {
 	assertNamedBucketContains(t, got, "interfaces", "Runner")
 	assertNamedBucketContains(t, got, "functions", "greet")
 	assertNamedBucketContains(t, got, "variables", "name")
-	assertNamedBucketContains(t, got, "imports", "java.util.List")
-	assertNamedBucketContains(t, got, "function_calls", "println")
+	importItem := assertBucketItemByName(t, got, "imports", "java.util.List")
+	assertStringFieldValue(t, importItem, "source", "java.util.List")
+	assertStringFieldValue(t, importItem, "alias", "List")
+	assertStringFieldValue(t, importItem, "full_import_name", "import java.util.List;")
+	callItem := assertBucketItemByName(t, got, "function_calls", "println")
+	assertStringFieldValue(t, callItem, "full_name", "System.out.println")
 }
 
 func TestDefaultEngineParsePathJavaAnnotationMetadata(t *testing.T) {
@@ -318,6 +322,47 @@ class Greeter private constructor(private val prefix: String) {
 	assertNamedBucketContains(t, got, "functions", "constructor")
 	assertBucketContainsFieldValue(t, got, "functions", "class_context", "Greeter")
 	assertBucketContainsFieldValue(t, got, "functions", "constructor_kind", "secondary")
+}
+
+func TestDefaultEngineParsePathKotlinImportMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "Metadata.kt")
+	writeTestFile(
+		t,
+		filePath,
+		`package demo
+
+import kotlin.collections.List
+import demo.shared.Widget as SharedWidget
+
+class Sample {
+    fun run(items: List<String>): SharedWidget = SharedWidget()
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	listImport := assertBucketItemByName(t, got, "imports", "kotlin.collections.List")
+	assertStringFieldValue(t, listImport, "source", "kotlin.collections.List")
+	assertStringFieldValue(t, listImport, "alias", "List")
+	assertStringFieldValue(t, listImport, "full_import_name", "import kotlin.collections.List")
+
+	widgetImport := assertBucketItemByName(t, got, "imports", "demo.shared.Widget")
+	assertStringFieldValue(t, widgetImport, "source", "demo.shared.Widget")
+	assertStringFieldValue(t, widgetImport, "alias", "SharedWidget")
+	assertStringFieldValue(t, widgetImport, "full_import_name", "import demo.shared.Widget as SharedWidget")
+	assertBucketContainsFieldValue(t, got, "function_calls", "full_name", "SharedWidget")
 }
 
 func TestDefaultEnginePreScanPathsManagedOO(t *testing.T) {
