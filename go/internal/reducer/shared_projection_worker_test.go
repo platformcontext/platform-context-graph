@@ -391,6 +391,64 @@ func TestProcessPartitionOnceFiltersDeleteAction(t *testing.T) {
 	}
 }
 
+func TestProcessPartitionOnceCodeCallsDomain(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 13, 14, 0, 0, 0, time.UTC)
+	t0 := now.Add(-time.Minute)
+
+	reader := &stubSharedIntentReader{
+		pending: []SharedProjectionIntentRow{
+			{
+				IntentID:         "intent-1",
+				ProjectionDomain: DomainCodeCalls,
+				PartitionKey:     "entity:function:caller",
+				RepositoryID:     "repo-a",
+				SourceRunID:      "run-1",
+				GenerationID:     "gen-1",
+				Payload: map[string]any{
+					"repo_id":          "repo-a",
+					"caller_entity_id": "entity:function:caller",
+					"callee_entity_id": "entity:function:callee",
+					"action":           "upsert",
+				},
+				CreatedAt: t0,
+			},
+		},
+	}
+
+	lease := &stubLeaseManager{claimResult: true}
+	edges := &stubEdgeWriter{}
+	lookup := func(_, _ string) (string, bool) { return "gen-1", true }
+
+	cfg := PartitionProcessorConfig{
+		Domain:         DomainCodeCalls,
+		PartitionID:    0,
+		PartitionCount: 1,
+		LeaseOwner:     "worker-1",
+		LeaseTTL:       30 * time.Second,
+		BatchLimit:     100,
+		EvidenceSource: "parser/code-calls",
+	}
+
+	result, err := ProcessPartitionOnce(context.Background(), now, cfg, lease, reader, edges, lookup)
+	if err != nil {
+		t.Fatalf("ProcessPartitionOnce() error = %v", err)
+	}
+	if result.UpsertedRows != 1 {
+		t.Fatalf("UpsertedRows = %d, want 1", result.UpsertedRows)
+	}
+	if result.RetractedRows != 1 {
+		t.Fatalf("RetractedRows = %d, want 1", result.RetractedRows)
+	}
+	if got := len(edges.writeCalls); got != 1 {
+		t.Fatalf("writeCalls = %d, want 1", got)
+	}
+	if got := len(edges.retractCalls); got != 1 {
+		t.Fatalf("retractCalls = %d, want 1", got)
+	}
+}
+
 // --- Test stubs ---
 
 type stubSharedIntentReader struct {

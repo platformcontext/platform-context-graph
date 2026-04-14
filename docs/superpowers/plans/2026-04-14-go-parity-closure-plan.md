@@ -82,11 +82,16 @@ application languages.
 - TypeScript JSX: JSX component usage model, type aliases
 - Python: decorators, async flags, type annotations
 - JavaScript: docstrings and fuller method-kind metadata
+- Canonical call edges: broaden the new Go-owned SCIP-backed `CALLS`
+  materialization path to the remaining required parser families and prove it
+  end to end
 
 ### Validation
 
 - focused parser and persistence tests
 - API/MCP/query proof where the old Python behavior surfaced these features
+- reducer/collector proof for canonical `CALLS` materialization where the old
+  Python behavior produced call-graph edges
 - updated language pages and parity audit
 
 ## Phase 3: IaC And Deployment Semantics Parity

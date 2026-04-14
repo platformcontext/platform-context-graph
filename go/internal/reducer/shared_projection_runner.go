@@ -24,12 +24,13 @@ const (
 	defaultEvidenceSource     = "finalization/workloads"
 )
 
-// sharedProjectionDomains lists the three shared projection domains processed
+// sharedProjectionDomains lists the shared projection domains processed
 // by the partition worker.
 var sharedProjectionDomains = []string{
 	DomainPlatformInfra,
 	DomainRepoDependency,
 	DomainWorkloadDependency,
+	DomainCodeCalls,
 }
 
 // SharedProjectionRunnerConfig holds configuration for the shared projection

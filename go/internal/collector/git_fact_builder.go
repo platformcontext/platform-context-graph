@@ -43,10 +43,20 @@ func buildStreamingGeneration(
 	if len(snapshot.ContentFileMetas) > 0 {
 		contentFileCount = len(snapshot.ContentFileMetas)
 	}
-	factCount := 1 + len(snapshot.FileData) + contentFileCount + len(snapshot.ContentEntities) + 1
+	factCount := 1 + len(snapshot.FileData) + contentFileCount + len(snapshot.ContentEntities) + 2
 
 	factCh := make(chan facts.Envelope, factStreamBuffer)
-	go streamFacts(factCh, repoPath, repo, scopeValue.ScopeID, generation.GenerationID, observedAt, &snapshot, isDependency)
+	go streamFacts(
+		factCh,
+		repoPath,
+		repo,
+		sourceRunID,
+		scopeValue.ScopeID,
+		generation.GenerationID,
+		observedAt,
+		&snapshot,
+		isDependency,
+	)
 
 	return CollectedGeneration{
 		Scope:      scopeValue,
@@ -69,6 +79,7 @@ func streamFacts(
 	ch chan<- facts.Envelope,
 	repoPath string,
 	repo repositoryidentity.Metadata,
+	sourceRunID string,
 	scopeID string,
 	generationID string,
 	observedAt time.Time,
@@ -79,7 +90,7 @@ func streamFacts(
 
 	// Repository fact
 	ch <- repositoryFactEnvelope(
-		repoPath, repo, scopeID, generationID, observedAt,
+		repoPath, repo, sourceRunID, scopeID, generationID, observedAt,
 		snapshot.FileCount, snapshot.ImportsMap, isDependency,
 	)
 
@@ -100,7 +111,6 @@ func streamFacts(
 				continue
 			}
 			bodyStr := string(body)
-			body = nil // release []byte immediately
 
 			ch <- contentFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt, ContentFileSnapshot{
 				RelativePath:    meta.RelativePath,
@@ -132,6 +142,7 @@ func streamFacts(
 
 	// Workload identity fact
 	ch <- workloadIdentityFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
+	ch <- codeCallMaterializationFactEnvelope(repoPath, repo.ID, scopeID, generationID, observedAt)
 }
 
 // snapshotFreshnessHint computes a deterministic hash from file digests and
@@ -140,24 +151,24 @@ func streamFacts(
 // temporary allocation for large repos.
 func snapshotFreshnessHint(snapshot RepositorySnapshot) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "v2:file_count=%d\n", snapshot.FileCount)
+	writeFreshnessHashf(h, "v2:file_count=%d\n", snapshot.FileCount)
 
 	// Hash file digests — already computed during materialization.
 	// ContentFileMetas is the two-phase path; ContentFiles is the legacy path.
 	if len(snapshot.ContentFileMetas) > 0 {
 		for _, meta := range snapshot.ContentFileMetas {
-			fmt.Fprintf(h, "file:%s:%s\n", meta.RelativePath, meta.Digest)
+			writeFreshnessHashf(h, "file:%s:%s\n", meta.RelativePath, meta.Digest)
 		}
 	} else {
 		for _, cf := range snapshot.ContentFiles {
-			fmt.Fprintf(h, "file:%s:%s\n", cf.RelativePath, cf.Digest)
+			writeFreshnessHashf(h, "file:%s:%s\n", cf.RelativePath, cf.Digest)
 		}
 	}
 
 	// Hash entity count and identity (lightweight).
-	fmt.Fprintf(h, "entities=%d\n", len(snapshot.ContentEntities))
+	writeFreshnessHashf(h, "entities=%d\n", len(snapshot.ContentEntities))
 	for _, e := range snapshot.ContentEntities {
-		fmt.Fprintf(h, "entity:%s:%s:%d\n", e.RelativePath, e.EntityType, e.StartLine)
+		writeFreshnessHashf(h, "entity:%s:%s:%d\n", e.RelativePath, e.EntityType, e.StartLine)
 	}
 
 	// Hash imports map keys (sorted for determinism).
@@ -167,23 +178,28 @@ func snapshotFreshnessHint(snapshot RepositorySnapshot) string {
 	}
 	sort.Strings(importKeys)
 	for _, k := range importKeys {
-		fmt.Fprintf(h, "import:%s:", k)
+		writeFreshnessHashf(h, "import:%s:", k)
 		targets := snapshot.ImportsMap[k]
 		sorted := make([]string, len(targets))
 		copy(sorted, targets)
 		sort.Strings(sorted)
 		for _, v := range sorted {
-			fmt.Fprintf(h, "%s,", v)
+			writeFreshnessHashf(h, "%s,", v)
 		}
-		h.Write([]byte("\n"))
+		_, _ = h.Write([]byte("\n"))
 	}
 
 	return fmt.Sprintf("snapshot:%x", h.Sum(nil))
 }
 
+func writeFreshnessHashf(h interface{ Write([]byte) (int, error) }, format string, args ...any) {
+	_, _ = fmt.Fprintf(h, format, args...)
+}
+
 func repositoryFactEnvelope(
 	repoPath string,
 	repo repositoryidentity.Metadata,
+	sourceRunID string,
 	scopeID string,
 	generationID string,
 	observedAt time.Time,
@@ -210,6 +226,9 @@ func repositoryFactEnvelope(
 	}
 	if len(importsMap) > 0 {
 		payload["imports_map"] = importsMap
+	}
+	if strings.TrimSpace(sourceRunID) != "" {
+		payload["source_run_id"] = sourceRunID
 	}
 
 	return factEnvelope("repository", scopeID, generationID, observedAt, "repository:"+repo.ID, payload, repoPath)
@@ -354,6 +373,31 @@ func workloadIdentityFactEnvelope(
 		generationID,
 		observedAt,
 		"shared_followup:"+repoID+":workload_identity",
+		payload,
+		repoPath,
+	)
+}
+
+func codeCallMaterializationFactEnvelope(
+	repoPath string,
+	repoID string,
+	scopeID string,
+	generationID string,
+	observedAt time.Time,
+) facts.Envelope {
+	payload := map[string]any{
+		"reducer_domain": "code_call_materialization",
+		"entity_key":     "repo:" + filepath.Base(repoPath),
+		"reason":         "repository snapshot emitted code-call materialization follow-up",
+		"repo_id":        repoID,
+	}
+
+	return factEnvelope(
+		"shared_followup",
+		scopeID,
+		generationID,
+		observedAt,
+		"shared_followup:"+repoID+":code_call_materialization",
 		payload,
 		repoPath,
 	)

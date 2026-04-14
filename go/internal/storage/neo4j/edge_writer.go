@@ -109,6 +109,15 @@ func buildWriteStatement(
 			evidenceSource,
 		), nil
 
+	case reducer.DomainCodeCalls:
+		return BuildCanonicalCodeCallUpsert(
+			CanonicalCodeCallParams{
+				CallerEntityID: payloadString(row.Payload, "caller_entity_id"),
+				CalleeEntityID: payloadString(row.Payload, "callee_entity_id"),
+			},
+			evidenceSource,
+		), nil
+
 	default:
 		return Statement{}, fmt.Errorf("unsupported domain for write: %q", domain)
 	}
@@ -126,6 +135,8 @@ func buildRetractStatement(
 		return BuildRetractRepoDependencyEdges(repoIDs, evidenceSource), nil
 	case reducer.DomainWorkloadDependency:
 		return BuildRetractWorkloadDependencyEdges(repoIDs, evidenceSource), nil
+	case reducer.DomainCodeCalls:
+		return BuildRetractCodeCallEdges(repoIDs, evidenceSource), nil
 	default:
 		return Statement{}, fmt.Errorf("unsupported domain for retract: %q", domain)
 	}

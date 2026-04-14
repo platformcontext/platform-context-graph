@@ -365,23 +365,6 @@ func annotateParsedFilesWithEntityIDs(
 	}
 }
 
-func materializationRecordsToSnapshots(records []content.Record) []ContentFileSnapshot {
-	snapshots := make([]ContentFileSnapshot, 0, len(records))
-	for _, record := range records {
-		snapshots = append(snapshots, ContentFileSnapshot{
-			RelativePath:    record.Path,
-			Body:            record.Body,
-			Digest:          record.Digest,
-			Language:        record.Metadata["language"],
-			ArtifactType:    record.Metadata["artifact_type"],
-			TemplateDialect: record.Metadata["template_dialect"],
-			IACRelevant:     snapshotMetadataBoolPtr(record.Metadata, "iac_relevant"),
-			CommitSHA:       record.Metadata["commit_sha"],
-		})
-	}
-	return snapshots
-}
-
 func materializationRecordsToMetas(records []content.Record) []ContentFileMeta {
 	metas := make([]ContentFileMeta, 0, len(records))
 	for _, record := range records {

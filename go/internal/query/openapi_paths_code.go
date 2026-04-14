@@ -153,6 +153,61 @@ const openAPIPathsCode = `
         }
       }
     },
+    "/api/v0/code/call-chain": {
+      "post": {
+        "tags": ["code"],
+        "summary": "Find transitive call chains",
+        "description": "Finds shortest call chains between two functions by following canonical CALLS edges.",
+        "operationId": "getCodeCallChain",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["start", "end"],
+                "properties": {
+                  "start": {"type": "string", "description": "Caller function name or fragment"},
+                  "end": {"type": "string", "description": "Callee function name or fragment"},
+                  "max_depth": {"type": "integer", "description": "Maximum traversal depth (default 5, max 10)", "default": 5}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Call chain results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "start": {"type": "string"},
+                    "end": {"type": "string"},
+                    "chains": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "depth": {"type": "integer"},
+                          "chain": {
+                            "type": "array",
+                            "items": {"$ref": "#/components/schemas/EntityRef"}
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
     "/api/v0/code/dead-code": {
       "post": {
         "tags": ["code"],

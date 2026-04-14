@@ -28,6 +28,8 @@ const (
 	DomainGovernance Domain = "governance"
 	// DomainWorkloadMaterialization materializes canonical workload graph nodes.
 	DomainWorkloadMaterialization Domain = "workload_materialization"
+	// DomainCodeCallMaterialization materializes canonical code call edges.
+	DomainCodeCallMaterialization Domain = "code_call_materialization"
 )
 
 // IntentStatus captures the durable reducer intent lifecycle state.

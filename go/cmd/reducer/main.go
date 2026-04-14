@@ -128,6 +128,7 @@ func buildReducerService(
 		WorkloadMaterializer:               reducer.NewWorkloadMaterializer(cypherExec),
 		InfrastructurePlatformMaterializer: reducer.NewInfrastructurePlatformMaterializer(cypherExec),
 		FactLoader:                         postgres.NewFactStore(database),
+		CodeCallEdgeWriter:                 sourceneo4j.NewEdgeWriter(neo4jExec),
 	})
 	if err != nil {
 		return reducer.Service{}, err

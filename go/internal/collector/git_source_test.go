@@ -107,21 +107,21 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 	facts1 := drainFactChannel(collected1.Facts)
 	facts2 := drainFactChannel(collected2.Facts)
 
-	// Identify which result is the full repo (5 facts) vs empty repo (2 facts).
+	// Identify which result is the full repo (6 facts) vs empty repo (3 facts).
 	var fullCollected CollectedGeneration
 	var fullFacts []facts.Envelope
 	var emptyFacts []facts.Envelope
 	switch {
-	case len(facts1) == 5 && len(facts2) == 2:
+	case len(facts1) == 6 && len(facts2) == 3:
 		fullCollected = collected1
 		fullFacts = facts1
 		emptyFacts = facts2
-	case len(facts1) == 2 && len(facts2) == 5:
+	case len(facts1) == 3 && len(facts2) == 6:
 		fullCollected = collected2
 		fullFacts = facts2
 		emptyFacts = facts1
 	default:
-		t.Fatalf("unexpected fact counts: %d and %d, want 5 and 2", len(facts1), len(facts2))
+		t.Fatalf("unexpected fact counts: %d and %d, want 6 and 3", len(facts1), len(facts2))
 	}
 
 	// Validate common scope/generation fields on the full repo.
@@ -141,6 +141,7 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		"content",
 		"content_entity",
 		"shared_followup",
+		"shared_followup",
 	}
 	for i, want := range wantKinds {
 		if got := fullFacts[i].FactKind; got != want {
@@ -149,6 +150,9 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 	}
 
 	repositoryFact := fullFacts[0]
+	if _, ok := repositoryFact.Payload["source_run_id"].(string); !ok {
+		t.Fatalf("repository fact source_run_id = %#v, want non-empty string", repositoryFact.Payload["source_run_id"])
+	}
 	importsMap, ok := repositoryFact.Payload["imports_map"].(map[string][]string)
 	if !ok {
 		t.Fatalf("repository fact imports_map = %#v, want map[string][]string", repositoryFact.Payload["imports_map"])
@@ -183,8 +187,13 @@ func TestGitSourceNextBuildsCollectedGenerationFromSelectionAndPerRepoSnapshots(
 		t.Fatalf("entity fact entity_metadata[docstring] = %#v, want %#v", got, want)
 	}
 
-	// Validate empty repo has just repo + workload facts.
-	if got, want := len(emptyFacts), 2; got != want {
+	sharedFollowupKinds := []string{emptyFacts[1].FactKind, emptyFacts[2].FactKind}
+	if sharedFollowupKinds[0] != "shared_followup" || sharedFollowupKinds[1] != "shared_followup" {
+		t.Fatalf("empty repo followup kinds = %v, want both shared_followup", sharedFollowupKinds)
+	}
+
+	// Validate empty repo has repo + workload/code-call followups.
+	if got, want := len(emptyFacts), 3; got != want {
 		t.Fatalf("len(empty facts) = %d, want %d", got, want)
 	}
 
@@ -380,19 +389,6 @@ func equalStrings(got, want []string) bool {
 		}
 	}
 	return true
-}
-
-func filepathBase(path string) string {
-	lastSlash := -1
-	for i := range path {
-		if path[i] == '/' {
-			lastSlash = i
-		}
-	}
-	if lastSlash < 0 {
-		return path
-	}
-	return path[lastSlash+1:]
 }
 
 func TestBuildCollectedConcurrent(t *testing.T) {

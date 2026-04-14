@@ -112,6 +112,39 @@ func TestEdgeWriterWriteEdgesWorkloadDependencyDispatch(t *testing.T) {
 	}
 }
 
+func TestEdgeWriterWriteEdgesCodeCallDispatch(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	writer := NewEdgeWriter(executor)
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{
+			IntentID:     "i1",
+			RepositoryID: "repo-a",
+			Payload: map[string]any{
+				"repo_id":          "repo-a",
+				"caller_entity_id": "entity:function:caller",
+				"callee_entity_id": "entity:function:callee",
+			},
+		},
+	}
+
+	err := writer.WriteEdges(context.Background(), reducer.DomainCodeCalls, rows, "parser/code-calls")
+	if err != nil {
+		t.Fatalf("WriteEdges() error = %v", err)
+	}
+	if got, want := len(executor.calls), 1; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "CALLS") {
+		t.Fatalf("cypher missing CALLS: %s", executor.calls[0].Cypher)
+	}
+	if got, want := executor.calls[0].Parameters["caller_entity_id"], "entity:function:caller"; got != want {
+		t.Fatalf("caller_entity_id = %v, want %v", got, want)
+	}
+}
+
 func TestEdgeWriterWriteEdgesMultipleRows(t *testing.T) {
 	t.Parallel()
 
@@ -252,6 +285,31 @@ func TestEdgeWriterRetractEdgesWorkloadDependencyDispatch(t *testing.T) {
 	}
 	if !strings.Contains(executor.calls[0].Cypher, "source:Workload") {
 		t.Fatalf("cypher missing Workload match: %s", executor.calls[0].Cypher)
+	}
+}
+
+func TestEdgeWriterRetractEdgesCodeCallDispatch(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingExecutor{}
+	writer := NewEdgeWriter(executor)
+
+	rows := []reducer.SharedProjectionIntentRow{
+		{IntentID: "i1", RepositoryID: "repo-a", Payload: map[string]any{"repo_id": "repo-a"}},
+	}
+
+	err := writer.RetractEdges(context.Background(), reducer.DomainCodeCalls, rows, "parser/code-calls")
+	if err != nil {
+		t.Fatalf("RetractEdges() error = %v", err)
+	}
+	if got, want := len(executor.calls), 1; got != want {
+		t.Fatalf("executor calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "CALLS") {
+		t.Fatalf("cypher missing CALLS: %s", executor.calls[0].Cypher)
+	}
+	if !strings.Contains(executor.calls[0].Cypher, "source.repo_id IN $repo_ids") {
+		t.Fatalf("cypher missing repo_id filter: %s", executor.calls[0].Cypher)
 	}
 }
 

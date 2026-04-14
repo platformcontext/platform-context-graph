@@ -53,6 +53,7 @@ func TestServeOpenAPI(t *testing.T) {
 		"/api/v0/repositories",
 		"/api/v0/entities/resolve",
 		"/api/v0/code/search",
+		"/api/v0/code/call-chain",
 		"/api/v0/code/language-query",
 		"/api/v0/content/files/read",
 		"/api/v0/infra/resources/search",
@@ -175,6 +176,21 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 	codeSearchSchema := mustMapField(t, codeSearchContent, "schema")
 	if got, want := codeSearchSchema["$ref"], "#/components/schemas/CodeSearchResponse"; got != want {
 		t.Fatalf("code/search schema ref = %#v, want %#v", got, want)
+	}
+
+	callChainPath := mustMapField(t, paths, "/api/v0/code/call-chain")
+	callChainPost := mustMapField(t, callChainPath, "post")
+	callChainBody := mustMapField(t, mustMapField(t, callChainPost, "requestBody"), "content")
+	callChainJSON := mustMapField(t, callChainBody, "application/json")
+	callChainSchema := mustMapField(t, mustMapField(t, callChainJSON, "schema"), "properties")
+	if _, ok := callChainSchema["start"]; !ok {
+		t.Fatal("code/call-chain request schema missing start")
+	}
+	if _, ok := callChainSchema["end"]; !ok {
+		t.Fatal("code/call-chain request schema missing end")
+	}
+	if _, ok := callChainSchema["max_depth"]; !ok {
+		t.Fatal("code/call-chain request schema missing max_depth")
 	}
 
 	languageQueryPath := mustMapField(t, paths, "/api/v0/code/language-query")

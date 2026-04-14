@@ -184,6 +184,21 @@ func DefaultDomainDefinitions() []DomainDefinition {
 			},
 		},
 		{
+			Domain:  DomainCodeCallMaterialization,
+			Summary: "materialize canonical code call edges from parser facts",
+			Ownership: OwnershipShape{
+				CrossSource:    true,
+				CrossScope:     true,
+				CanonicalWrite: true,
+			},
+			TruthContract: truth.Contract{
+				CanonicalKind: "code_call_materialization",
+				SourceLayers: []truth.Layer{
+					truth.LayerSourceDeclaration,
+				},
+			},
+		},
+		{
 			Domain:  DomainWorkloadMaterialization,
 			Summary: "materialize canonical workload graph from content store facts",
 			Ownership: OwnershipShape{

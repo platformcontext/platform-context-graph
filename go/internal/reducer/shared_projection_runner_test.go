@@ -205,9 +205,9 @@ func TestSharedProjectionRunnerIteratesAllDomains(t *testing.T) {
 	claims := leaseManager.claims
 	leaseManager.mu.Unlock()
 
-	// 3 domains * 2 partitions = 6 lease claims per cycle, should have at least one full cycle
-	if claims < 6 {
-		t.Fatalf("expected at least 6 lease claims (3 domains * 2 partitions), got %d", claims)
+	wantPerCycle := len(sharedProjectionDomains) * 2
+	if claims < wantPerCycle {
+		t.Fatalf("expected at least %d lease claims (%d domains * 2 partitions), got %d", wantPerCycle, len(sharedProjectionDomains), claims)
 	}
 }
 

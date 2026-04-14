@@ -114,6 +114,9 @@ Current rewrite status:
   surface in their local proof lanes
 - the collector proof lane now uses native Go selection, repo sync, snapshot
   collection, content shaping, and optional SCIP execution/parsing
+- the collector now emits Go-owned parser follow-up facts for workload identity
+  and canonical code-call materialization, and the reducer owns the resulting
+  `CALLS` edge reconciliation path
 - the deleted Python bridge shims are no longer part of the branch
 - parser, admin, and runtime ownership are Go-owned; remaining work is parity
   hardening and validation rather than preserving a dual-runtime architecture

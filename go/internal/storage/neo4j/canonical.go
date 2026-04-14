@@ -94,6 +94,13 @@ SET rel.confidence = 0.9,
     rel.reason = 'Runtime services list declares workload dependency',
     rel.evidence_source = $evidence_source`
 
+const canonicalCodeCallUpsertCypher = `MATCH (source {id: $caller_entity_id})
+MATCH (target {id: $callee_entity_id})
+MERGE (source)-[rel:CALLS]->(target)
+SET rel.confidence = 0.95,
+    rel.reason = 'Parser and symbol analysis resolved a code call edge',
+    rel.evidence_source = $evidence_source`
+
 // --- Retraction Cypher ---
 
 const retractInfrastructurePlatformEdgesCypher = `MATCH (repo:Repository)-[rel:PROVISIONS_PLATFORM]->(:Platform)
@@ -107,6 +114,11 @@ WHERE source_repo.id IN $repo_ids
 DELETE rel`
 
 const retractWorkloadDependencyEdgesCypher = `MATCH (source:Workload)-[rel:DEPENDS_ON]->(:Workload)
+WHERE source.repo_id IN $repo_ids
+  AND rel.evidence_source = $evidence_source
+DELETE rel`
+
+const retractCodeCallEdgesCypher = `MATCH (source)-[rel:CALLS]->()
 WHERE source.repo_id IN $repo_ids
   AND rel.evidence_source = $evidence_source
 DELETE rel`
@@ -182,6 +194,13 @@ type CanonicalRepoDependencyParams struct {
 type CanonicalWorkloadDependencyParams struct {
 	WorkloadID       string
 	TargetWorkloadID string
+}
+
+// CanonicalCodeCallParams holds the parameters for a code-level CALLS edge
+// upsert between two canonical entities.
+type CanonicalCodeCallParams struct {
+	CallerEntityID string
+	CalleeEntityID string
 }
 
 // --- Builders ---
@@ -301,6 +320,20 @@ func BuildCanonicalWorkloadDependencyUpsert(p CanonicalWorkloadDependencyParams,
 	}
 }
 
+// BuildCanonicalCodeCallUpsert builds a CALLS edge statement between two
+// canonical code entities.
+func BuildCanonicalCodeCallUpsert(p CanonicalCodeCallParams, evidenceSource string) Statement {
+	return Statement{
+		Operation: OperationCanonicalUpsert,
+		Cypher:    canonicalCodeCallUpsertCypher,
+		Parameters: map[string]any{
+			"caller_entity_id": p.CallerEntityID,
+			"callee_entity_id": p.CalleeEntityID,
+			"evidence_source":  evidenceSource,
+		},
+	}
+}
+
 // --- Retraction builders ---
 
 // BuildRetractInfrastructurePlatformEdges builds a PROVISIONS_PLATFORM edge
@@ -335,6 +368,19 @@ func BuildRetractWorkloadDependencyEdges(repoIDs []string, evidenceSource string
 	return Statement{
 		Operation: OperationCanonicalRetract,
 		Cypher:    retractWorkloadDependencyEdgesCypher,
+		Parameters: map[string]any{
+			"repo_ids":        repoIDs,
+			"evidence_source": evidenceSource,
+		},
+	}
+}
+
+// BuildRetractCodeCallEdges builds a batched CALLS edge retraction statement
+// for all source entities owned by the given repositories.
+func BuildRetractCodeCallEdges(repoIDs []string, evidenceSource string) Statement {
+	return Statement{
+		Operation: OperationCanonicalRetract,
+		Cypher:    retractCodeCallEdgesCypher,
 		Parameters: map[string]any{
 			"repo_ids":        repoIDs,
 			"evidence_source": evidenceSource,

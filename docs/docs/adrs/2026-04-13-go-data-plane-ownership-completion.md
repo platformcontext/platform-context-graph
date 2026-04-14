@@ -43,6 +43,7 @@ The completion work covered:
 3. shared projection intent workers in Go
 4. durable failure classification in Go projector and reducer flows
 5. Go-owned fact-to-graph, content, and intent materialization stages
+6. Go-owned parser follow-up materialization for canonical code-call edges
 
 ### Phase C: Operational and validation surfaces
 
@@ -67,6 +68,8 @@ Positive:
 - Go owns the long-running write-plane runtime, recovery, status, parser, and
   resolution logic, not just the service loops.
 - Recovery and admin operations now flow through Go immediately.
+- Parser-originated canonical `CALLS` edge writes now flow through Go collector
+  and reducer ownership instead of any legacy runtime seam.
 - The merge bar is satisfied honestly: no hidden Python delegation behind
   Go entrypoints remains on the normal path.
 - Future collector families can start from the locked Go-owned runtime model.

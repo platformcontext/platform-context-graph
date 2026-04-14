@@ -7,11 +7,12 @@ import (
 	"time"
 )
 
-// SharedProjectionDomain constants for the three projection domains.
+// SharedProjectionDomain constants for the shared projection domains.
 const (
 	DomainPlatformInfra      = "platform_infra"
 	DomainRepoDependency     = "repo_dependency"
 	DomainWorkloadDependency = "workload_dependency"
+	DomainCodeCalls          = "code_calls"
 )
 
 // SharedProjectionIntentRow is one durable shared-domain projection intent.

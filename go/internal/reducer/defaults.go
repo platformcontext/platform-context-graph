@@ -14,6 +14,10 @@ type DefaultHandlers struct {
 	// FactLoader loads fact envelopes for workload and infrastructure
 	// platform materialization.
 	FactLoader FactLoader
+
+	// CodeCallEdgeWriter writes canonical CALLS edges from reducer-owned parser
+	// follow-ups.
+	CodeCallEdgeWriter SharedProjectionEdgeWriter
 }
 
 // NewDefaultRegistry constructs the canonical reducer catalog for the domains
@@ -61,6 +65,11 @@ func implementedDefaultDomainDefinitions(handlers DefaultHandlers) []DomainDefin
 			def.Handler = WorkloadMaterializationHandler{
 				FactLoader:   handlers.FactLoader,
 				Materializer: handlers.WorkloadMaterializer,
+			}
+		case DomainCodeCallMaterialization:
+			def.Handler = CodeCallMaterializationHandler{
+				FactLoader: handlers.FactLoader,
+				EdgeWriter: handlers.CodeCallEdgeWriter,
 			}
 		default:
 			continue

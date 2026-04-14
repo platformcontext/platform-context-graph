@@ -180,6 +180,28 @@ func TestBuildCanonicalWorkloadDependencyUpsertStatement(t *testing.T) {
 	}
 }
 
+func TestBuildCanonicalCodeCallUpsertStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildCanonicalCodeCallUpsert(CanonicalCodeCallParams{
+		CallerEntityID: "entity:function:caller",
+		CalleeEntityID: "entity:function:callee",
+	}, "parser/code-calls")
+
+	if stmt.Operation != OperationCanonicalUpsert {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalUpsert)
+	}
+	if !strings.Contains(stmt.Cypher, "MERGE (source)-[rel:CALLS]->(target)") {
+		t.Fatalf("Cypher missing CALLS edge: %s", stmt.Cypher)
+	}
+	if stmt.Parameters["caller_entity_id"] != "entity:function:caller" {
+		t.Fatalf("caller_entity_id = %v, want entity:function:caller", stmt.Parameters["caller_entity_id"])
+	}
+	if stmt.Parameters["callee_entity_id"] != "entity:function:callee" {
+		t.Fatalf("callee_entity_id = %v, want entity:function:callee", stmt.Parameters["callee_entity_id"])
+	}
+}
+
 func TestBuildRetractInfrastructurePlatformEdgesStatement(t *testing.T) {
 	t.Parallel()
 
@@ -232,6 +254,22 @@ func TestBuildRetractWorkloadDependencyEdgesStatement(t *testing.T) {
 	}
 	if !strings.Contains(stmt.Cypher, "source:Workload") {
 		t.Fatalf("Cypher missing Workload match: %s", stmt.Cypher)
+	}
+}
+
+func TestBuildRetractCodeCallEdgesStatement(t *testing.T) {
+	t.Parallel()
+
+	stmt := BuildRetractCodeCallEdges([]string{"repo-1"}, "parser/code-calls")
+
+	if stmt.Operation != OperationCanonicalRetract {
+		t.Fatalf("Operation = %q, want %q", stmt.Operation, OperationCanonicalRetract)
+	}
+	if !strings.Contains(stmt.Cypher, "CALLS") {
+		t.Fatalf("Cypher missing CALLS: %s", stmt.Cypher)
+	}
+	if !strings.Contains(stmt.Cypher, "source.repo_id IN $repo_ids") {
+		t.Fatalf("Cypher missing repo_id filter: %s", stmt.Cypher)
 	}
 }
 
