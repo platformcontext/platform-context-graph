@@ -21,6 +21,8 @@ Current Python runtime path:
 
 - load both plain JSON and `.json.gz` Terraform provider schema files
 - support `PCG_TERRAFORM_SCHEMA_DIR` override before bundled schema lookup
+- use `go/internal/terraformschema/schemas/*.json.gz` as the canonical bundled
+  schema location
 - parse provider/resource metadata from `provider_schemas`
 - infer identity keys using the same ordered fallback rules
 - classify service category using the same longest-prefix resource matching

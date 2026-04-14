@@ -12,8 +12,8 @@
 # Output:
 #   schemas/<provider>.json  (raw, gitignored)
 #
-# The generated JSON is consumed by the Python schema loader at
-# src/platform_context_graph/relationships/terraform_evidence/provider_schema.py
+# The generated JSON is packaged for the Go-owned Terraform schema runtime
+# under go/internal/terraformschema/schemas.
 
 set -euo pipefail
 
@@ -85,4 +85,4 @@ echo ""
 echo "Next steps:"
 echo "  1. Verify: python3 -c \"import json; s=json.load(open('schemas/aws.json')); print(len(list(s['provider_schemas'].values())[0]['resource_schemas']), 'resource types')\""
 echo "  2. Package for distribution: ./scripts/package_terraform_schemas.sh"
-echo "  3. Run tests: PYTHONPATH=src uv run python -m pytest tests/unit/relationships/test_terraform_provider_schema.py -v"
+echo "  3. Run tests: (cd go && go test ./internal/terraformschema ./internal/relationships -count=1)"

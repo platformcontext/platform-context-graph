@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -210,24 +209,7 @@ func makeTerraformSchemaExtractor(
 }
 
 func defaultTerraformSchemaDir() string {
-	if envDir := strings.TrimSpace(os.Getenv("PCG_TERRAFORM_SCHEMA_DIR")); envDir != "" {
-		return envDir
-	}
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return ""
-	}
-	return filepath.Clean(filepath.Join(
-		filepath.Dir(file),
-		"..",
-		"..",
-		"..",
-		"src",
-		"platform_context_graph",
-		"relationships",
-		"terraform_evidence",
-		"schemas",
-	))
+	return terraformschema.DefaultSchemaDir()
 }
 
 func normalizeResourceType(resourceType string) string {

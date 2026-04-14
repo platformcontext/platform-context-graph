@@ -76,7 +76,6 @@ platform_context_graph = [
     "viz/dist/**/*",
     "parsers/capabilities/specs/*.yaml",
     "parsers/framework_packs/specs/*.yaml",
-    "relationships/terraform_evidence/schemas/*.json.gz",
 ]
 
 [tool.setuptools.packages.find]

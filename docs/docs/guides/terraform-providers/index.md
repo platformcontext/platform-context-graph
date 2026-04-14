@@ -4,8 +4,14 @@ PlatformContextGraph uses a **schema-driven approach** to extract infrastructure
 
 ## Migration Status
 
-This subsystem is still **Python-owned on the normal runtime path** on the
-current rewrite branch.
+This subsystem still has a **Python-owned outer runtime seam** on the current
+rewrite branch, but the packaged provider schema assets are now owned
+canonically by the Go runtime under:
+
+- `go/internal/terraformschema/schemas/*.json.gz`
+
+The legacy Python-package copy may still exist during cutover work, but it is
+no longer the canonical packaged location.
 
 The live path today is:
 
@@ -14,7 +20,8 @@ The live path today is:
 - `relationships/evidence_terraform.py`
 - `relationships/terraform_evidence/__init__.py`
 - `relationships/terraform_evidence/generic.py`
-- `relationships/terraform_evidence/provider_schema.py`
+- `go/internal/terraformschema/categories.go`
+- `go/internal/relationships/terraform_schema.go`
 
 That means Terraform provider schemas are not just an offline packaging detail.
 They currently drive runtime relationship extraction through import-time
@@ -29,7 +36,7 @@ equivalent Go-owned flow.
 
 1. **Provider schemas** are generated from official Terraform provider binaries using `terraform providers schema -json`
 2. **Schemas are compressed** to `.json.gz` format with version tags (e.g., `aws-5.100.0.json.gz`)
-3. **Schemas ship inside the package** — no runtime downloads, works in Docker, development, and deployed runtimes
+3. **Schemas ship inside the Go runtime tree** — no runtime downloads, works in Docker, development, and deployed runtimes
 4. **Extractors auto-register** at import time for all resource types with name-like attributes
 5. **Zero manual maintenance** — adding providers or updating versions requires no code changes in the generic extractor flow
 
@@ -109,7 +116,7 @@ PCG automatically infers which attribute to use as the resource identifier:
    - `cluster_name`
    - `queue_name`
    - `topic_name`
-   - ... (see full list in `provider_schema.py`)
+   - ... (see current canonical list in `go/internal/terraformschema/categories.go`)
 
 2. **Fallback patterns**:
    - Any string attribute ending in `_name` (e.g., `db_name`, `role_name`)

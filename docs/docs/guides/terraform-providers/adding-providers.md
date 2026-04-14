@@ -86,7 +86,7 @@ Compress and version the schema for distribution:
 1. Reads `schemas/<provider>.json`
 2. Extracts the provider version
 3. Compresses to `.json.gz`
-4. Writes versioned file to `src/platform_context_graph/relationships/terraform_evidence/schemas/<provider>-<version>.json.gz`
+4. Writes versioned file to `go/internal/terraformschema/schemas/<provider>-<version>.json.gz`
 5. Removes the old unversioned schema (if it exists)
 
 **Expected output:**
@@ -95,26 +95,29 @@ Compress and version the schema for distribution:
 Packaging schema for provider: datadog
 Found schema: schemas/datadog.json
 Detected version: 3.47.0
-Packaged: src/platform_context_graph/relationships/terraform_evidence/schemas/datadog-3.47.0.json.gz (142.3 KB)
+Packaged: go/internal/terraformschema/schemas/datadog-3.47.0.json.gz (142.3 KB)
 ```
 
 ### 4. Add Service Category Mappings (Optional)
 
-If the provider has resource types that should be classified into specific service categories (compute, storage, data, networking, security, etc.), add mappings to `provider_schema.py`.
+If the provider has resource types that should be classified into specific
+service categories (compute, storage, data, networking, security, etc.), add
+mappings to `go/internal/terraformschema/categories.go`.
 
 **Example:** Datadog resources
 
-```python title="src/platform_context_graph/relationships/terraform_evidence/provider_schema.py"
-SERVICE_CATEGORIES: dict[str, str] = {
-    # ... existing mappings ...
+```go title="go/internal/terraformschema/categories.go"
+var serviceCategories = map[string]string{
+    // ... existing mappings ...
 
-    # --- Datadog (datadog_ prefix) ---
+    // --- Datadog (datadog_ prefix) ---
     "monitor": "monitoring",
     "dashboard": "monitoring",
     "synthetics": "monitoring",
     "logs": "monitoring",
     "integration": "monitoring",
     "downtime": "monitoring",
+}
 }
 ```
 
@@ -126,38 +129,12 @@ SERVICE_CATEGORIES: dict[str, str] = {
 
 ### 5. Verify Registration
 
-Check that the new provider's resource types are registered:
+Check that the Go loader and relationship registry accept the new packaged
+schema:
 
 ```bash
-PYTHONPATH=src uv run python3 -c "
-from platform_context_graph.relationships.terraform_evidence._base import get_registered_resource_types
-
-registered = get_registered_resource_types()
-datadog_types = [rt for rt in registered if rt.startswith('datadog_')]
-
-print(f'Registered {len(datadog_types)} Datadog resource types:')
-for rt in sorted(datadog_types)[:10]:
-    print(f'  {rt}')
-if len(datadog_types) > 10:
-    print(f'  ... and {len(datadog_types) - 10} more')
-"
-```
-
-**Expected output:**
-
-```
-Registered 47 Datadog resource types:
-  datadog_api_key
-  datadog_dashboard
-  datadog_dashboard_json
-  datadog_dashboard_list
-  datadog_downtime
-  datadog_integration_aws
-  datadog_integration_gcp
-  datadog_logs_archive
-  datadog_logs_custom_pipeline
-  datadog_logs_index
-  ... and 37 more
+cd go
+go test ./internal/terraformschema ./internal/relationships -count=1
 ```
 
 ### 6. Run Tests
@@ -165,19 +142,18 @@ Registered 47 Datadog resource types:
 Verify the schema loads correctly:
 
 ```bash
-PYTHONPATH=src uv run python -m pytest tests/unit/relationships/test_terraform_provider_schema.py -v
+cd go
+go test ./internal/terraformschema ./internal/relationships -count=1
 ```
-
-All 37 schema tests should pass.
 
 ### 7. Commit the Schema
 
 Commit the versioned schema and provider configuration:
 
 ```bash
-git add src/platform_context_graph/relationships/terraform_evidence/schemas/datadog-3.47.0.json.gz
+git add go/internal/terraformschema/schemas/datadog-3.47.0.json.gz
 git add terraform_providers/datadog/versions.tf
-git add src/platform_context_graph/relationships/terraform_evidence/provider_schema.py  # if you added mappings
+git add go/internal/terraformschema/categories.go  # if you added mappings
 git commit -m "feat: add Datadog provider schema (3.47.0, 47 resource types)"
 ```
 

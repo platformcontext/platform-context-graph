@@ -26,7 +26,7 @@ until this seam is moved or deleted.
 
 Supporting artifacts:
 
-- `src/platform_context_graph/relationships/terraform_evidence/schemas/*.json.gz`
+- `go/internal/terraformschema/schemas/*.json.gz` (canonical packaged path)
 - `scripts/generate_terraform_provider_schema.sh`
 - `scripts/package_terraform_schemas.sh`
 
@@ -104,6 +104,8 @@ Status: partially done.
 - current truth:
   - Go `internal/relationships` now performs schema-driven extractor bootstrap
     and emits schema-driven Terraform evidence during `DiscoverEvidence(...)`
+  - packaged provider schemas now live canonically under
+    `go/internal/terraformschema/schemas/*.json.gz`
   - the remaining runtime cutover is the outer Python relationship execution
     and finalization boundary, not the inner schema semantics
 

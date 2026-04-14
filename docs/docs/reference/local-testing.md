@@ -38,7 +38,7 @@ export PYTHONPATH=src
 | Docs, `CLAUDE.md`, `AGENTS.md`, or README files | `uv run --with mkdocs --with mkdocs-material --with pymdown-extensions mkdocs build --strict --clean --config-file docs/mkdocs.yml` |
 | CLI/runtime wiring | `PYTHONPATH=src uv run pytest tests/integration/cli/test_cli_commands.py -q` |
 | Parser platform or collector snapshot flow | `cd go && go test ./internal/parser -count=1` and `PYTHONPATH=src uv run pytest tests/unit/relationships/test_sql_links.py -q` |
-| Terraform provider-schema evidence or relationship extraction | `PYTHONPATH=src uv run python -m pytest tests/unit/relationships/test_terraform_provider_schema.py tests/unit/relationships/test_terraform_evidence_registry.py tests/unit/relationships/test_terraform_evidence_integration.py -q` |
+| Terraform provider-schema evidence or relationship extraction | `cd go && go test ./internal/terraformschema ./internal/relationships -count=1` and `PYTHONPATH=src uv run python -m pytest tests/unit/relationships/test_terraform_provider_schema.py tests/unit/relationships/test_terraform_evidence_registry.py tests/unit/relationships/test_terraform_evidence_integration.py -q` |
 | Compose, Helm, or deployable runtime shape | `PYTHONPATH=src uv run pytest tests/integration/deployment/test_public_deployment_assets.py -q` and `helm lint deploy/helm/platform-context-graph` |
 | Facts-first indexing, queue, or resolution flow | `PYTHONPATH=src:. uv run pytest tests/integration/indexing/test_git_facts_end_to_end.py tests/integration/indexing/test_git_facts_projection_parity.py -q` |
 | Phase 3 recovery controls | `PYTHONPATH=src:. uv run pytest tests/unit/facts/test_fact_work_queue_recovery.py tests/unit/api/test_admin_facts_recovery_router.py tests/integration/cli/test_remote_cli.py -q` |
@@ -129,11 +129,15 @@ emitted parser buckets.
 ## Terraform Provider-Schema Parity Gate
 
 Use this gate when touching the Terraform provider-schema runtime path or the
-schema-driven relationship extractors. This subsystem is still Python-owned on
-the normal runtime path today, so it needs its own explicit parity suite until
-the Go replacement lands.
+schema-driven relationship extractors. The canonical packaged schemas and Go
+loader now live under `go/internal/terraformschema`, but the outer runtime seam
+still needs its explicit parity suite until the Python relationship path is
+deleted.
 
 ```bash
+cd go
+go test ./internal/terraformschema ./internal/relationships -count=1
+
 PYTHONPATH=src uv run python -m pytest \
   tests/unit/relationships/test_terraform_provider_schema.py \
   tests/unit/relationships/test_terraform_evidence_registry.py \
