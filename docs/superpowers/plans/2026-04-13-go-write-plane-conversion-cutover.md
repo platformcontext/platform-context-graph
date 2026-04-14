@@ -31,8 +31,10 @@ The branch still has active Python-owned runtime seams:
 - parser-family ownership is complete in the canonical specs/docs and on disk;
   the remaining parser debt is downstream graph/materialization parity for
   Go-emitted buckets and metadata
-- `src/platform_context_graph/content/ingest.py` remains a live Python
-  content-shaping seam on the normal indexing path
+- the legacy Python `content/ingest.py` helper has now been deleted; Go owns
+  normal-path content shaping under `go/internal/content/shape`, and the
+  remaining Python ownership is concentrated in API/MCP/CLI orchestration plus
+  a smaller set of content-read and relationship seams
 - the Terraform provider-schema relationship seam is now split:
   Go owns schema loading/classification and schema-driven generic evidence
   under `go/internal/terraformschema` and `go/internal/relationships`,
@@ -125,7 +127,7 @@ JSON/data-intelligence document coverage, dependency/package indexing
 semantics, and end-to-end materialization for newer parser buckets and
 metadata that now exist in Go payloads but still need full runtime persistence
 parity. The remaining branch blockers after that are the Python API/MCP/CLI
-and `content/ingest.py` seams.
+and the remaining Python API/MCP/CLI orchestration plus relationship seams.
 
 Already deleted on this branch:
 

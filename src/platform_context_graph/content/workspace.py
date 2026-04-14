@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from ..core.records import record_to_dict as _record_to_dict
-from .ingest import CONTENT_ENTITY_LABELS
 from ..repository_identity import (
     build_repo_access,
     canonical_repository_id,
@@ -19,6 +18,56 @@ from ..platform.dependency_catalog import dependency_ignore_enabled, is_dependen
 __all__ = [
     "WorkspaceContentProvider",
 ]
+
+_CONTENT_ENTITY_LABELS = frozenset(
+    {
+        "AnalyticsModel",
+        "Annotation",
+        "ArgoCDApplication",
+        "ArgoCDApplicationSet",
+        "Class",
+        "CloudFormationOutput",
+        "CloudFormationParameter",
+        "CloudFormationResource",
+        "CrossplaneClaim",
+        "CrossplaneComposition",
+        "CrossplaneXRD",
+        "DashboardAsset",
+        "DataAsset",
+        "DataColumn",
+        "DataContract",
+        "DataOwner",
+        "DataQualityCheck",
+        "Enum",
+        "Function",
+        "HelmChart",
+        "HelmValues",
+        "Interface",
+        "KustomizeOverlay",
+        "Macro",
+        "Property",
+        "QueryExecution",
+        "Record",
+        "SqlColumn",
+        "SqlFunction",
+        "SqlIndex",
+        "SqlTable",
+        "SqlTrigger",
+        "SqlView",
+        "Struct",
+        "TerraformDataSource",
+        "TerraformLocal",
+        "TerraformModule",
+        "TerraformOutput",
+        "TerraformProvider",
+        "TerraformResource",
+        "TerraformVariable",
+        "TerragruntConfig",
+        "Trait",
+        "Union",
+        "Variable",
+    }
+)
 
 
 class WorkspaceContentProvider:
@@ -314,7 +363,7 @@ class WorkspaceContentProvider:
         """
 
         with self._database.get_driver().session() as session:
-            for label in CONTENT_ENTITY_LABELS:
+            for label in _CONTENT_ENTITY_LABELS:
                 row = session.run(
                     f"""
                     MATCH (n:{label})

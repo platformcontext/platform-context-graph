@@ -25,8 +25,9 @@ deleted from the branch. The remaining ownership debt is now more specific:
   `src/platform_context_graph/api/**`,
   `src/platform_context_graph/mcp/**`, and
   `src/platform_context_graph/cli/**`
-- `src/platform_context_graph/content/ingest.py` still owns a live
-  content-shaping seam
+- the legacy Python `content/ingest.py` shaping seam has now been deleted; the
+  remaining Python-owned content work is read/query-side rather than normal
+  runtime shaping
 - parser-family ownership is now finished in the canonical contract and on
   disk; the remaining parser debt is downstream graph/materialization truth for
   Go-emitted buckets rather than missing parser scaffolding or Python parser

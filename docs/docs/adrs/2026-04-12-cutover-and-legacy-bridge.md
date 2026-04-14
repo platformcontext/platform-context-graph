@@ -97,6 +97,6 @@ ownership. Current status:
 
 Python indexing now fails closed unless the facts-first runtime is available.
 The remaining ownership blockers have moved forward to parser-matrix
-completion, the surviving Python `content/ingest.py` seam, and the still-live
-Python API/MCP/CLI orchestration surfaces tracked in the ownership completion
-plan.
+completion, the surviving Python API/MCP/CLI orchestration surfaces, and the
+remaining Python-owned relationship/content-read seams tracked in the ownership
+completion plan.

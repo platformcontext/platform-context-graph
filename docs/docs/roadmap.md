@@ -97,8 +97,9 @@ cutover language implied:
 - Terraform provider-schema relationship extraction is still Python-owned on
   the normal runtime path and remains a required migration surface before this
   branch is honestly mergeable
-- `content/ingest.py` and the remaining API/MCP/CLI orchestration helpers are
-  still active Python-owned seams that need Go replacement or deletion
+- the remaining active Python-owned seams are now concentrated in API/MCP/CLI
+  orchestration plus content-read/query helpers; the legacy `content/ingest.py`
+  shaping seam has been deleted from this branch
 
 No new ingestors before full conversion completes.
 

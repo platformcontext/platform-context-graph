@@ -122,9 +122,9 @@ The collector/native-selector cutover now deletes the temporary bridge modules
 instead of proving them in isolation. This ownership gate is now a passing
 regression suite, not an expected-failure milestone. If it fails, the
 remaining debt is no longer the collector bridge path. It is now concentrated
-in the Python API/CLI orchestration layer, `content/ingest.py`, the Terraform
-provider-schema evidence subsystem, and downstream parity hardening for Go-
-emitted parser buckets.
+in the Python API/CLI orchestration layer, the Terraform provider-schema
+evidence subsystem, and downstream parity hardening for Go-emitted parser
+buckets plus the remaining content-read seams.
 
 ## Terraform Provider-Schema Parity Gate
 
@@ -343,7 +343,6 @@ go test ./internal/parser -run 'TestDefaultEngineParsePathSQL|TestDefaultEngineP
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_plugins.py \
   tests/unit/data_intelligence/test_dbt_compiled_sql.py \
-  tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/tools/test_graph_builder_schema.py -q
 
@@ -357,7 +356,6 @@ go test ./internal/parser -run 'TestDefaultEngineParsePathJSON(DBTManifest|Prese
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_plugins.py \
   tests/unit/data_intelligence/test_warehouse_replay.py \
-  tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py -q
@@ -385,7 +383,6 @@ uv run pytest \
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_bi_replay.py \
-  tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py -q
@@ -400,7 +397,6 @@ Use the same compose-backed integration smoke command as the warehouse replay ga
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_semantic_replay.py \
-  tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py \
@@ -416,7 +412,6 @@ Use the same compose-backed integration smoke command as the warehouse replay ga
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_governance_replay.py \
-  tests/unit/content/test_data_intelligence_ingest.py \
   tests/unit/relationships/test_data_intelligence_governance_links.py \
   tests/unit/query/test_repository_context_data_governance.py \
   tests/unit/query/test_story_data_governance.py \
@@ -432,7 +427,6 @@ Use the same compose-backed integration smoke command as the warehouse replay ga
 ```bash
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_quality_replay.py \
-  tests/unit/content/test_ingest.py \
   tests/unit/relationships/test_data_intelligence_links.py \
   tests/unit/tools/test_graph_builder_schema.py \
   tests/unit/query/test_repository_context_data_intelligence.py \

@@ -4,13 +4,58 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...content.ingest import CONTENT_ENTITY_LABELS
 from ...core.database import (
     GraphStoreCapabilities,
     graph_store_capabilities_for_backend,
 )
 
-_UID_SCHEMA_LABELS = tuple(sorted(CONTENT_ENTITY_LABELS))
+_UID_SCHEMA_LABELS = (
+    "AnalyticsModel",
+    "Annotation",
+    "ArgoCDApplication",
+    "ArgoCDApplicationSet",
+    "Class",
+    "CloudFormationOutput",
+    "CloudFormationParameter",
+    "CloudFormationResource",
+    "CrossplaneClaim",
+    "CrossplaneComposition",
+    "CrossplaneXRD",
+    "DashboardAsset",
+    "DataAsset",
+    "DataColumn",
+    "DataContract",
+    "DataOwner",
+    "DataQualityCheck",
+    "Enum",
+    "Function",
+    "HelmChart",
+    "HelmValues",
+    "Interface",
+    "KustomizeOverlay",
+    "Macro",
+    "Property",
+    "QueryExecution",
+    "Record",
+    "SqlColumn",
+    "SqlFunction",
+    "SqlIndex",
+    "SqlTable",
+    "SqlTrigger",
+    "SqlView",
+    "Struct",
+    "TerraformDataSource",
+    "TerraformLocal",
+    "TerraformModule",
+    "TerraformOutput",
+    "TerraformProvider",
+    "TerraformResource",
+    "TerraformVariable",
+    "TerragruntConfig",
+    "Trait",
+    "Union",
+    "Variable",
+)
 _UID_CONSTRAINT_STATEMENTS = tuple(
     (
         "CREATE CONSTRAINT "

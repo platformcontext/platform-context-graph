@@ -89,11 +89,12 @@ The relationships package owns the post-index repo-correlation pipeline:
 The content package owns portable source retrieval and content-store writes:
 
 - `content/identity.py`: canonical content-entity identifiers
-- `content/ingest.py`: dual-write helpers used during indexing
 - `content/postgres.py`: PostgreSQL-backed content provider
 - `content/workspace.py`: workspace fallback provider for shared server checkouts
 - `content/service.py`: provider orchestration and backend preference rules
 - `content/state.py`: shared provider lifecycle
+- `go/internal/content/shape/materialize.go`: Go-owned content-shaping and
+  entity/file materialization for the normal runtime path
 
 ## Collectors, Facts, Parsers, And Graph Layout
 
@@ -147,8 +148,8 @@ also been deleted; tests and remaining callers now target the canonical
 `graph/persistence/*` modules directly.
 
 The remaining transition risk is now concentrated in Python-owned evidence and
-materialization seams such as Terraform provider-schema extraction,
-`content/ingest.py`, and a smaller set of CLI/API support modules. `GraphBuilder`
+read/query seams such as Terraform provider-schema extraction and a smaller set
+of CLI/API support modules. `GraphBuilder`
 is still present, but it no longer owns the removed parser bootstrap, discovery,
 or per-file persistence surface. Non-dependency directory indexing now delegates
 from `GraphBuilder` to the Go `bootstrap-index` runtime, and direct single-file
@@ -228,8 +229,8 @@ These Go packages are the target normal-path runtime ownership. The remaining
 Python ownership debt is no longer the deleted parser/coordinator stack or the
 deleted Python discovery shim layer. It is now centered on GraphBuilder
 facade/orchestration cleanup, downstream evidence/materialization, including
-Terraform provider-schema extraction and `content/ingest.py`, plus the
-remaining CLI/API helpers that still touch the normal path.
+Terraform provider-schema extraction, plus the remaining CLI/API helpers and
+content-read/query seams that still touch the normal path.
 
 The parser-family runtime cutover is complete on this branch. The remaining
 parser-related work is parity hardening: SCIP depth, specialized
