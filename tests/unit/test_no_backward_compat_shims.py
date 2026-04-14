@@ -105,6 +105,7 @@ def test_deleted_compatibility_shim_paths_are_absent() -> None:
         "src/platform_context_graph/indexing/coordinator_async_commit.py",
         "src/platform_context_graph/indexing/parse_recovery.py",
         "src/platform_context_graph/content/ingest.py",
+        "src/platform_context_graph/graph/schema/builder.py",
     )
 
     existing = [

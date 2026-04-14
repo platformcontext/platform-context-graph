@@ -344,7 +344,7 @@ PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_plugins.py \
   tests/unit/data_intelligence/test_dbt_compiled_sql.py \
   tests/unit/relationships/test_data_intelligence_links.py \
-  tests/unit/tools/test_graph_builder_schema.py -q
+  tests/unit/test_no_backward_compat_shims.py -q
 
 cd go
 go test ./internal/parser -run 'TestDefaultEngineParsePathJSON(DBTManifest|PreservesDocumentOrderForMetadataAndConfigBuckets|CloudFormation)' -count=1
@@ -415,7 +415,7 @@ PYTHONPATH=src uv run pytest \
   tests/unit/relationships/test_data_intelligence_governance_links.py \
   tests/unit/query/test_repository_context_data_governance.py \
   tests/unit/query/test_story_data_governance.py \
-  tests/unit/tools/test_graph_builder_schema.py -q
+  tests/unit/test_no_backward_compat_shims.py -q
 
 cd go
 go test ./internal/parser -run 'TestDefaultEngineParsePathJSONGovernanceReplay' -count=1
@@ -428,7 +428,7 @@ Use the same compose-backed integration smoke command as the warehouse replay ga
 PYTHONPATH=src uv run pytest \
   tests/unit/data_intelligence/test_quality_replay.py \
   tests/unit/relationships/test_data_intelligence_links.py \
-  tests/unit/tools/test_graph_builder_schema.py \
+  tests/unit/test_no_backward_compat_shims.py \
   tests/unit/query/test_repository_context_data_intelligence.py \
   tests/unit/query/test_story_data_intelligence.py \
   tests/unit/query/test_change_surface.py -q

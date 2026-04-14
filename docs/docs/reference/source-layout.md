@@ -122,7 +122,8 @@ and post-index materialization into clearer boundaries:
   removed
 - `parsers/capabilities/`: parser capability catalog, models, validation, and packaged specs
 - `parsers/scip/`: SCIP parser, runtime helpers, and indexing orchestration
-- `graph/schema/`: graph schema creation
+- `go/internal/graph/schema.go`: Go-owned graph schema creation and constraint
+  bootstrap
 - `graph/persistence/`: graph write helpers, batching, content dual-write, commit orchestration, worker support, and call/inheritance relationship persistence
 
 The legacy Python package families that used to appear in this page have already
@@ -145,7 +146,9 @@ post-commit finalization bridge has also been deleted from the branch; Python
 indexing now requires the remaining cutover helpers rather than ad hoc finalize
 helpers. The last `tools/graph_builder_persistence.py` compatibility shim has
 also been deleted; tests and remaining callers now target the canonical
-`graph/persistence/*` modules directly.
+`graph/persistence/*` modules directly. The dead Python
+`graph/schema/builder.py` module has also been deleted; Go is now the schema
+owner.
 
 The remaining transition risk is now concentrated in Python-owned evidence and
 read/query seams such as Terraform provider-schema extraction and a smaller set
