@@ -1,0 +1,27 @@
+go/internal/collector/git_selection_discovery.go
+  1ca5ee6ce936a402 163
+go/internal/collector/git_selection_discovery_test.go
+  1ca5ee6ce936a402 1-102
+docker-compose.yaml
+  1ca5ee6ce936a402 94,257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "a0ece1cc44873f38edc8380754a6afbf937d6e25",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 207,
+      "total_deletions": 1,
+      "accepted_lines": 766,
+      "overriden_lines": 0
+    }
+  }
+}
