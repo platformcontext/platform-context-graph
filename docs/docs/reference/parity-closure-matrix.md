@@ -38,7 +38,7 @@ the old Python platform feature for feature for that surface.
 
 | Workstream | Status | Gap now | Done means | Validation gate | Recommended split |
 | --- | --- | --- | --- | --- | --- |
-| SQL core parsing | `partial` | Mostly complete, but some procedural SQL and DDL edges may remain | no documented SQL-core parity gaps remain | focused parser tests | fold into SQL/dbt wave |
+| SQL core parsing | `partial` | Mostly complete, with checked-in proof for `CREATE OR REPLACE FUNCTION` bodies and legacy `EXECUTE PROCEDURE` trigger wiring, but some procedural SQL and DDL edges may still remain | no documented SQL-core parity gaps remain | focused parser tests | fold into SQL/dbt wave |
 | SQL/dbt lineage | `fail` | dbt compiled lineage still loses unresolved refs, templated expressions, complex macro expansion, and richer derived expressions outside the safe wrapper set, even though the safe-wrapper transform matrix now has checked-in Go proof | compiled dbt lineage survives parse, materialization, and query proof | parser tests, real-repo proof, compose proof | dedicated medium/large wave |
 | JavaScript graph parity | `partial` | docstrings and method-kind metadata are extracted and materialized, but not yet consistently exposed through normal graph/query surfaces | JS docstrings and method metadata persist and query correctly | parser tests plus query proof | shared JS-family wave |
 | TypeScript graph parity | `partial` | decorator and generic metadata are preserved, while type aliases are already queryable through Go content-backed APIs but graph/story/context surfacing remains partial | those semantics persist and query correctly | parser tests, graph tests, API/MCP proof | shared JS-family wave |

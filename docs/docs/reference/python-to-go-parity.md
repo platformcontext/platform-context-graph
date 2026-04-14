@@ -72,7 +72,7 @@ parity from persisted graph and query-surface parity.
 
 | Area | Ownership | Parity status | Current truth | Remaining work |
 | --- | --- | --- | --- | --- |
-| SQL core parsing | Go-owned | mostly complete | schema objects, migrations, and embedded SQL hints are native Go | close procedural SQL and DDL edge cases as needed |
+| SQL core parsing | Go-owned | mostly complete | schema objects, migrations, embedded SQL hints, `CREATE OR REPLACE FUNCTION` bodies, and legacy `EXECUTE PROCEDURE` trigger wiring are natively covered in Go | close the remaining procedural SQL and richer DDL edge cases as needed |
 | SQL/dbt lineage and data intelligence | Go-owned | partial | dbt manifest, compiled SQL, and analytics JSON families are in Go; row-level aggregates, simple windows, simple qualified macro wrappers, nested safe wrappers, cast/date_trunc/concat transforms, and multi-source case/arithmetic lineage now have checked-in Go proof | resolve unresolved references, templated expressions, complex macros, and richer derived expressions that still fall outside the safe wrapper set |
 | JavaScript | Go-owned | partial | core JS parsing plus docstring and method-kind metadata extraction/materialization are present | promote docstrings and method-kind metadata into first-class normal query surfaces |
 | TypeScript | Go-owned | partial | core TS parsing plus decorator/generic metadata preservation are present; type aliases are queryable through Go content-backed APIs | promote decorators and generics into first-class normal graph/story/context surfaces |

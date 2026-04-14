@@ -9,8 +9,8 @@ import (
 var (
 	createTableHeaderPattern = regexp.MustCompile(`(?is)\bCREATE\s+TABLE\s+(?P<name>` + sqlNamePattern + `)\s*\(`)
 	createViewPattern        = regexp.MustCompile(`(?is)\bCREATE\s+VIEW\s+(?P<name>` + sqlNamePattern + `)\s+AS\s+(?P<body>.*?)(?:;|$)`)
-	createFuncPattern        = regexp.MustCompile(`(?is)\bCREATE\s+FUNCTION\s+(?P<name>` + sqlNamePattern + `)\s*\([^)]*\)\s+RETURNS\b.*?\bAS\s+\$\$(?P<body>.*?)\$\$\s+LANGUAGE\s+(?P<language>[A-Za-z_][\w$]*)`)
-	createTrigPattern        = regexp.MustCompile(`(?is)\bCREATE\s+TRIGGER\s+(?P<trigger>` + sqlNamePattern + `)\b.*?\bON\s+(?P<table>` + sqlNamePattern + `)\b.*?\bEXECUTE\s+FUNCTION\s+(?P<function>` + sqlNamePattern + `)\s*\(`)
+	createFuncPattern        = regexp.MustCompile(`(?is)\bCREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\s+(?P<name>` + sqlNamePattern + `)\s*\([^)]*\)\s+RETURNS\b.*?\bAS\s+\$\$(?P<body>.*?)\$\$\s+LANGUAGE\s+(?P<language>[A-Za-z_][\w$]*)`)
+	createTrigPattern        = regexp.MustCompile(`(?is)\bCREATE\s+TRIGGER\s+(?P<trigger>` + sqlNamePattern + `)\b.*?\bON\s+(?P<table>` + sqlNamePattern + `)\b.*?\bEXECUTE\s+(?:FUNCTION|PROCEDURE)\s+(?P<function>` + sqlNamePattern + `)\s*\(`)
 	createIndexPattern       = regexp.MustCompile(`(?is)\bCREATE\s+INDEX\s+(?P<name>` + sqlNamePattern + `)\s+\bON\s+(?P<table>` + sqlNamePattern + `)\b`)
 	columnPattern            = regexp.MustCompile(`(?is)^\s*(?P<name>"[^"]+"|` + "`[^`]+`" + `|\[[^\]]+\]|[A-Za-z_][\w$]*)\s+(?P<type>[A-Za-z_][\w$]*(?:\s*\([^)]*\))?)`)
 	nextCreatePattern        = regexp.MustCompile(`(?is)\bCREATE\s+(?:TABLE|VIEW|FUNCTION|TRIGGER|INDEX)\b`)

@@ -47,6 +47,9 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   `concat`, multi-source `case`, multi-source arithmetic, and the key
   unresolved-summary paths in
   `go/internal/parser/dbt_sql_lineage_parity_test.go`.
+- The checked-in SQL procedural proof now covers `CREATE OR REPLACE FUNCTION`
+  bodies plus legacy `EXECUTE PROCEDURE` trigger wiring in
+  `go/internal/parser/sql_parity_test.go`.
 - Compiled-model lineage still carries explicit unresolved limits for
   unresolved references, templated expressions, complex macros, and some
   derived expressions.
