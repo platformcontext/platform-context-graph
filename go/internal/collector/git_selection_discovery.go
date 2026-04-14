@@ -160,7 +160,7 @@ func repositoryRootLike(path string) bool {
 			childDirectories++
 			continue
 		}
-		if entry.Name() == ".DS_Store" {
+		if strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
 		return true
