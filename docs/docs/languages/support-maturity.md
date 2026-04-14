@@ -13,7 +13,7 @@ yet been explicitly assessed in the parser maturity program.
 | CloudFormation | `InfraYAMLParser` | - | - | - | - | - | - | - |
 | C++ | `CppTreeSitterParser` | - | - | - | - | - | - | - |
 | Crossplane | `InfraYAMLParser` | - | - | - | - | - | - | - |
-| C# | `CSharpTreeSitterParser` | - | - | - | - | - | - | - |
+| C# | `DefaultEngine (c_sharp)` | - | - | - | - | - | - | - |
 | Dart | `DartTreeSitterParser` | - | - | - | - | - | - | - |
 | Elixir | `ElixirTreeSitterParser` | - | - | - | - | - | - | - |
 | Go | `GoTreeSitterParser` | - | - | - | - | - | - | - |

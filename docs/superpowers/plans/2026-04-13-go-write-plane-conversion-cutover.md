@@ -159,6 +159,14 @@ and the Scala capability metadata now points at
 `go/internal/parser/engine_managed_oo_test.go` instead of the deleted Python
 parser unit suite.
 
+The next parser-family deletion slice removes the Python C# facades
+(`parsers/languages/csharp.py` and `parsers/languages/csharp_support.py`).
+Their runtime behavior is already owned by `go/internal/parser/csharp_language.go`,
+and the C# capability metadata now points at
+`go/internal/parser/engine_managed_oo_test.go` instead of the deleted Python
+parser unit suite. The Go C# parser now also emits base-list metadata in
+`bases` so inheritance edges no longer depend on the deleted Python parser.
+
 Parser extraction ownership already moved further than the generated capability
 matrix currently shows:
 

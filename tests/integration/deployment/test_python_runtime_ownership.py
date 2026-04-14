@@ -289,6 +289,8 @@ class TestPythonParserRuntimeOwnershipRemoved:
     @pytest.mark.parametrize(
         "relative_path",
         [
+            "parsers/languages/csharp.py",
+            "parsers/languages/csharp_support.py",
             "parsers/languages/dockerfile.py",
             "parsers/languages/dockerfile_support.py",
             "parsers/languages/groovy.py",

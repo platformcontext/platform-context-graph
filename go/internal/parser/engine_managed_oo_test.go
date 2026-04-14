@@ -128,6 +128,58 @@ public class Service : IService {
 	assertNamedBucketContains(t, got, "imports", "System")
 	assertNamedBucketContains(t, got, "function_calls", "WriteLine")
 	assertNamedBucketContains(t, got, "function_calls", "Request")
+	assertBucketItemStringSliceContains(t, got, "classes", "Service", "IService")
+}
+
+func TestDefaultEngineParsePathCSharpLocalTypes(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	filePath := filepath.Join(repoRoot, "Domain.cs")
+	writeTestFile(
+		t,
+		filePath,
+		`using System;
+
+public struct Color {
+    public byte R;
+    public byte G;
+    public byte B;
+}
+
+public enum Status {
+    Active,
+    Disabled,
+}
+
+public class Runner {
+    public int Execute(int input) {
+        int Local(int value) {
+            return value + 1;
+        }
+
+        Console.WriteLine(input);
+        return Local(input);
+    }
+}
+`,
+	)
+
+	engine, err := DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	got, err := engine.ParsePath(repoRoot, filePath, false, Options{})
+	if err != nil {
+		t.Fatalf("ParsePath() error = %v, want nil", err)
+	}
+
+	assertNamedBucketContains(t, got, "structs", "Color")
+	assertNamedBucketContains(t, got, "enums", "Status")
+	assertNamedBucketContains(t, got, "functions", "Local")
+	assertNamedBucketContains(t, got, "function_calls", "WriteLine")
+	assertBucketContainsFieldValue(t, got, "functions", "class_context", "Runner")
 }
 
 func TestDefaultEngineParsePathScala(t *testing.T) {

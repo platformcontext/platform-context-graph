@@ -1,11 +1,11 @@
 language: csharp
 title: C# Parser
 family: language
-parser: CSharpTreeSitterParser
-parser_entrypoint: src/platform_context_graph/parsers/languages/csharp.py
+parser: DefaultEngine (c_sharp)
+parser_entrypoint: go/internal/parser/csharp_language.go
 doc_path: docs/docs/languages/csharp.md
 fixture_repo: tests/fixtures/ecosystems/csharp_comprehensive/
-unit_test_file: tests/unit/parsers/test_csharp_parser.py
+unit_test_file: go/internal/parser/engine_managed_oo_test.go
 integration_test_suite: tests/integration/test_language_graph.py::TestCSharpGraph
 capabilities:
 - id: methods
@@ -18,7 +18,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_methods
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface
 - id: constructors
   name: Constructors
@@ -30,7 +30,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_class
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface
 - id: local-functions
   name: Local functions
@@ -42,7 +42,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Function
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_local_functions
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharpLocalTypes
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface
 - id: classes
   name: Classes
@@ -54,7 +54,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Class
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_class
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface
 - id: interfaces
   name: Interfaces
@@ -66,7 +66,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Interface
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_interface
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface
 - id: structs
   name: Structs
@@ -78,7 +78,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Struct
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_struct
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharpLocalTypes
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface
 - id: records
   name: Records
@@ -90,7 +90,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Record
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_record
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface
 - id: enums
   name: Enums
@@ -102,7 +102,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Enum
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_enum
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharpLocalTypes
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface
 - id: properties
   name: Properties
@@ -114,7 +114,7 @@ capabilities:
   graph_surface:
     kind: node
     target: Property
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_properties_and_object_creation
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_property_nodes
 - id: using-directives
   name: Using directives
@@ -126,7 +126,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: IMPORTS
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_imports
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface
 - id: method-invocations
   name: Method invocations
@@ -138,7 +138,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_properties_and_object_creation
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_runtime_surface
 - id: object-creation
   name: Object creation
@@ -150,7 +150,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: CALLS
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_properties_and_object_creation
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_object_creation_calls
 - id: inheritance-base-list
   name: Inheritance (`base_list`)
@@ -163,7 +163,7 @@ capabilities:
   graph_surface:
     kind: relationship
     target: INHERITS
-  unit_test: tests/unit/parsers/test_csharp_parser.py::test_parse_inheritance
+  unit_test: go/internal/parser/engine_managed_oo_test.go::TestDefaultEngineParsePathCSharp
   integration_test: tests/integration/test_language_graph.py::TestCSharpGraph::test_inheritance_edges
 known_limitations:
 - Extension methods are not tagged as extensions in the graph

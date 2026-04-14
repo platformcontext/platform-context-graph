@@ -40,15 +40,15 @@ func (e *Engine) parseCSharp(
 	walkNamed(root, func(node *tree_sitter.Node) {
 		switch node.Kind() {
 		case "class_declaration":
-			appendNamedType(payload, "classes", node, source, "c_sharp")
+			appendCSharpNamedType(payload, "classes", node, source)
 		case "interface_declaration":
-			appendNamedType(payload, "interfaces", node, source, "c_sharp")
+			appendCSharpNamedType(payload, "interfaces", node, source)
 		case "struct_declaration":
-			appendNamedType(payload, "structs", node, source, "c_sharp")
+			appendCSharpNamedType(payload, "structs", node, source)
 		case "enum_declaration":
-			appendNamedType(payload, "enums", node, source, "c_sharp")
+			appendCSharpNamedType(payload, "enums", node, source)
 		case "record_declaration":
-			appendNamedType(payload, "records", node, source, "c_sharp")
+			appendCSharpNamedType(payload, "records", node, source)
 		case "property_declaration":
 			appendNamedType(payload, "properties", node, source, "c_sharp")
 		case "method_declaration", "constructor_declaration", "local_function_statement":
@@ -152,4 +152,75 @@ func csharpFirstIdentifier(node *tree_sitter.Node) *tree_sitter.Node {
 		}
 	})
 	return result
+}
+
+func appendCSharpNamedType(
+	payload map[string]any,
+	bucket string,
+	node *tree_sitter.Node,
+	source []byte,
+) {
+	nameNode := node.ChildByFieldName("name")
+	name := nodeText(nameNode, source)
+	if strings.TrimSpace(name) == "" {
+		return
+	}
+
+	item := map[string]any{
+		"name":        name,
+		"line_number": nodeLine(nameNode),
+		"end_line":    nodeEndLine(node),
+		"lang":        "c_sharp",
+	}
+	if bases := csharpBaseNames(node, source); len(bases) > 0 {
+		item["bases"] = bases
+	}
+	appendBucket(payload, bucket, item)
+}
+
+func csharpBaseNames(node *tree_sitter.Node, source []byte) []string {
+	baseListNode := csharpBaseListNode(node)
+	if baseListNode == nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var bases []string
+	walkNamed(baseListNode, func(child *tree_sitter.Node) {
+		switch child.Kind() {
+		case "identifier", "qualified_name", "generic_name":
+		default:
+			return
+		}
+		name := strings.TrimSpace(nodeText(child, source))
+		if name == "" {
+			return
+		}
+		if _, ok := seen[name]; ok {
+			return
+		}
+		seen[name] = struct{}{}
+		bases = append(bases, name)
+	})
+	slices.Sort(bases)
+	return bases
+}
+
+func csharpBaseListNode(node *tree_sitter.Node) *tree_sitter.Node {
+	if node == nil {
+		return nil
+	}
+	if baseListNode := node.ChildByFieldName("bases"); baseListNode != nil {
+		return baseListNode
+	}
+
+	cursor := node.Walk()
+	defer cursor.Close()
+	for _, child := range node.NamedChildren(cursor) {
+		child := child
+		if child.Kind() == "base_list" {
+			return cloneNode(&child)
+		}
+	}
+	return nil
 }
