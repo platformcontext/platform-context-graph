@@ -109,7 +109,16 @@ func fingerprintTree(root string) (string, error) {
 	files := make([]string, 0)
 	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return walkErr
+			// Skip entries we cannot read (permission denied, etc.)
+			if entry != nil && entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Skip hidden directories (e.g. .git, .claude) — they are not
+		// part of the source fingerprint and may have restricted perms.
+		if entry.IsDir() && path != root && strings.HasPrefix(entry.Name(), ".") {
+			return filepath.SkipDir
 		}
 		if entry.IsDir() {
 			return nil
@@ -125,11 +134,11 @@ func fingerprintTree(root string) (string, error) {
 	for _, filePath := range files {
 		rel, err := filepath.Rel(root, filePath)
 		if err != nil {
-			return "", err
+			continue
 		}
 		info, err := os.Stat(filePath)
 		if err != nil {
-			return "", err
+			continue
 		}
 		_, _ = digest.Write([]byte(filepath.ToSlash(rel)))
 		_, _ = fmt.Fprintf(digest, "%d:%d", info.ModTime().UnixNano(), info.Size())
