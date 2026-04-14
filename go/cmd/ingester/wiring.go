@@ -104,6 +104,7 @@ func buildIngesterCollectorService(
 			SnapshotWorkers:        config.SnapshotWorkers,
 			LargeRepoThreshold:     config.LargeRepoThreshold,
 			LargeRepoMaxConcurrent: config.LargeRepoMaxConcurrent,
+			StreamBuffer:           config.StreamBuffer,
 			Tracer:                 tracer,
 			Instruments:            instruments,
 			Logger:                 logger,

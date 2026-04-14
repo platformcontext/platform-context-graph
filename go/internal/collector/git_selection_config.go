@@ -64,6 +64,7 @@ type RepoSyncConfig struct {
 	ParseWorkers           int
 	LargeRepoThreshold     int
 	LargeRepoMaxConcurrent int
+	StreamBuffer           int
 }
 
 // LoadRepoSyncConfig parses the repo-sync environment contract for Go runtimes.
@@ -121,6 +122,7 @@ func LoadRepoSyncConfig(component string, getenv func(string) string) (RepoSyncC
 		ParseWorkers:           parseWorkerCount(getenv),
 		LargeRepoThreshold:     largeRepoThreshold(getenv),
 		LargeRepoMaxConcurrent: largeRepoMaxConcurrent(getenv),
+		StreamBuffer:           streamBufferSize(getenv),
 	}
 	normalizeFilesystemConfig(&config)
 	return config, nil
@@ -387,7 +389,11 @@ func sortUniqueStrings(values []string) []string {
 }
 
 // snapshotWorkerCount returns the number of concurrent snapshot workers.
-// Reads PCG_SNAPSHOT_WORKERS from env; defaults to min(NumCPU, 4).
+// Reads PCG_SNAPSHOT_WORKERS from env; defaults to min(NumCPU, 8).
+//
+// With two-lane scheduling and the large-repo semaphore, extra workers
+// safely process small repos while large repos hold semaphore slots.
+// The two-phase streaming design keeps per-snapshot memory at O(single_file).
 func snapshotWorkerCount(getenv func(string) string) int {
 	if raw := strings.TrimSpace(getenv("PCG_SNAPSHOT_WORKERS")); raw != "" {
 		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
@@ -395,13 +401,28 @@ func snapshotWorkerCount(getenv func(string) string) int {
 		}
 	}
 	n := runtime.NumCPU()
-	if n > 4 {
-		n = 4
+	if n > 8 {
+		n = 8
 	}
 	if n < 1 {
 		n = 1
 	}
 	return n
+}
+
+// streamBufferSize returns the stream channel buffer size.
+// Reads PCG_STREAM_BUFFER from env; defaults to 0 (use worker count).
+//
+// Each buffered CollectedGeneration holds metadata and a fact channel
+// reference — file bodies are re-read from disk on demand via two-phase
+// streaming, so the per-slot memory cost is negligible.
+func streamBufferSize(getenv func(string) string) int {
+	if raw := strings.TrimSpace(getenv("PCG_STREAM_BUFFER")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 0
 }
 
 // parseWorkerCount returns the number of concurrent file parse workers.

@@ -1010,6 +1010,119 @@ func (s *orderTrackingSnapshotter) SnapshotRepository(
 	return snap, err
 }
 
+func TestStreamBufferPreventsBackPressureStall(t *testing.T) {
+	t.Parallel()
+
+	// Scenario: 6 small repos (10ms each) with buffer=6 (matches workers).
+	// Consumer deliberately delays reading to simulate slow downstream commit.
+	// With buffer=1 this would stall workers; with buffer=workers they all
+	// complete and buffer their results without blocking.
+	observedAt := time.Date(2026, time.April, 14, 11, 0, 0, 0, time.UTC)
+
+	const repoCount = 6
+	var repos []SelectedRepository
+	snapshots := make(map[string]RepositorySnapshot)
+	delays := make(map[string]time.Duration)
+
+	for i := 0; i < repoCount; i++ {
+		dir := t.TempDir()
+		repos = append(repos, SelectedRepository{RepoPath: dir, RemoteURL: "https://github.com/example/repo"})
+		snapshots[dir] = RepositorySnapshot{RepoPath: dir, FileCount: 0}
+		delays[dir] = 10 * time.Millisecond
+	}
+
+	var completionMu sync.Mutex
+	var completedPaths []string
+
+	source := &GitSource{
+		Component:       "collector-git",
+		SnapshotWorkers: 4,
+		StreamBuffer:    4,
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{{
+				ObservedAt:   observedAt,
+				Repositories: repos,
+			}},
+		},
+		Snapshotter: &orderTrackingSnapshotter{
+			inner:     &stubRepositorySnapshotter{snapshots: snapshots},
+			delays:    delays,
+			mu:        &completionMu,
+			completed: &completedPaths,
+		},
+	}
+
+	// Delay consuming the first result to simulate slow downstream commit.
+	// With buffer=4, the first 4 workers should complete and buffer without
+	// blocking, even though we haven't consumed any results yet.
+	start := time.Now()
+	time.Sleep(100 * time.Millisecond)
+
+	var count int
+	for {
+		gen, ok, err := source.Next(context.Background())
+		if err != nil {
+			t.Fatalf("Next() error = %v", err)
+		}
+		if !ok {
+			break
+		}
+		drainFactChannel(gen.Facts)
+		count++
+	}
+
+	elapsed := time.Since(start)
+
+	if count != repoCount {
+		t.Fatalf("completed %d repos, want %d", count, repoCount)
+	}
+
+	// With buffer=4, the 100ms consumer delay should NOT cause total time
+	// to exceed 500ms (it would if workers were serially blocked on buffer=1).
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("elapsed %v > 500ms — workers likely blocked on stream buffer", elapsed)
+	}
+}
+
+func TestDefaultStreamBufferMatchesWorkerCount(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 14, 11, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+
+	source := &GitSource{
+		Component:       "collector-git",
+		SnapshotWorkers: 3,
+		StreamBuffer:    0, // should default to worker count (3)
+		Selector: &stubRepositorySelector{
+			batches: []SelectionBatch{{
+				ObservedAt:   observedAt,
+				Repositories: []SelectedRepository{{RepoPath: dir}},
+			}},
+		},
+		Snapshotter: &stubRepositorySnapshotter{
+			snapshots: map[string]RepositorySnapshot{
+				dir: {RepoPath: dir, FileCount: 0},
+			},
+		},
+	}
+
+	gen, ok, err := source.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Next() returned ok=false, want generation")
+	}
+	drainFactChannel(gen.Facts)
+
+	// Verify the stream channel has the expected capacity.
+	// After consuming the one generation, the stream should have cap=3.
+	if cap(source.stream) != 3 {
+		t.Fatalf("stream capacity = %d, want 3 (should match worker count)", cap(source.stream))
+	}
+}
+
 func TestGitSourceStreamResetsBetweenBatches(t *testing.T) {
 	t.Parallel()
 

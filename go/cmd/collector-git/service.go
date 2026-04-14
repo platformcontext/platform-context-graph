@@ -31,6 +31,7 @@ func buildCollectorService(
 			SnapshotWorkers:        config.SnapshotWorkers,
 			LargeRepoThreshold:     config.LargeRepoThreshold,
 			LargeRepoMaxConcurrent: config.LargeRepoMaxConcurrent,
+			StreamBuffer:           config.StreamBuffer,
 		},
 		Committer:    postgres.NewIngestionStore(database),
 		PollInterval: defaultCollectorPollInterval,

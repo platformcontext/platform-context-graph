@@ -138,6 +138,15 @@ type GitSource struct {
 	// Set via PCG_LARGE_REPO_MAX_CONCURRENT environment variable.
 	LargeRepoMaxConcurrent int
 
+	// StreamBuffer controls the generation stream channel buffer size.
+	// When 0 (default), the buffer equals the worker count so completed
+	// small-repo snapshots don't block behind slow large-repo commits.
+	// Each buffered generation holds metadata and a fact channel reference;
+	// file bodies are re-read from disk via two-phase streaming.
+	//
+	// Set via PCG_STREAM_BUFFER environment variable.
+	StreamBuffer int
+
 	// Streaming state, lazily initialized on first Next call.
 	// The channel carries one CollectedGeneration at a time; the coordinator
 	// goroutine closes it when all workers finish or on first error.
@@ -220,7 +229,7 @@ func (s *GitSource) startStream(ctx context.Context) error {
 	// Phase 3: Launch background snapshot workers
 	workers := s.SnapshotWorkers
 	if workers <= 0 {
-		workers = 4 // conservative default; two-phase snapshotting makes 8 safe
+		workers = 8
 	}
 
 	// Size-tiered scheduling: large repos acquire a semaphore before
@@ -236,11 +245,16 @@ func (s *GitSource) startStream(ctx context.Context) error {
 	}
 	largeSem := make(chan struct{}, largeMaxConcurrent)
 
-	// Buffer of 1: only one completed generation waits while the consumer
-	// commits the previous one. This bounds memory to at most
-	// (1 buffer + workers in-flight + 1 consuming) generations instead of
-	// (workers buffer + workers in-flight + 1 consuming).
-	s.stream = make(chan CollectedGeneration, 1)
+	// Stream buffer: sized to the worker count by default so completed
+	// small-repo snapshots don't block behind slow large-repo commits.
+	// Each buffered generation holds metadata + a fact channel reference;
+	// file bodies are re-read from disk via two-phase streaming, so the
+	// per-slot memory cost is negligible.
+	streamBuf := s.StreamBuffer
+	if streamBuf <= 0 {
+		streamBuf = workers
+	}
+	s.stream = make(chan CollectedGeneration, streamBuf)
 	s.streamErr = nil
 
 	// Start the parent stream span — kept open until coordinator closes it
@@ -263,6 +277,7 @@ func (s *GitSource) startStream(ctx context.Context) error {
 			slog.String("component", s.componentName()),
 			slog.Int("repository_count", len(resolved)),
 			slog.Int("snapshot_workers", workers),
+			slog.Int("stream_buffer", streamBuf),
 			slog.Int("large_repo_threshold", largeThreshold),
 			slog.Int("large_repo_max_concurrent", largeMaxConcurrent),
 			telemetry.PhaseAttr(telemetry.PhaseEmission),
