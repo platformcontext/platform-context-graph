@@ -44,6 +44,7 @@ Current branch reality:
 
 | Runtime | Owns | Default command | Storage access | Metrics exposure | Kubernetes shape |
 | --- | --- | --- | --- | --- | --- |
+| DB Migrate | Postgres + Neo4j schema DDL | `/usr/local/bin/pcg-bootstrap-data-plane` | Postgres DDL + Neo4j DDL | none (exits immediately) | `initContainer` |
 | API | HTTP API, query reads, admin endpoints | `pcg api start --host 0.0.0.0 --port 8080` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | MCP Server | MCP tool transport | `pcg mcp start` | graph + content reads only | direct `/metrics`, optional `ServiceMonitor` | `Deployment` |
 | Ingester | repo sync, parsing, fact emission, workspace ownership | `/usr/local/bin/pcg-ingester` | workspace PVC + Postgres + Neo4j | direct `/metrics`, optional `ServiceMonitor` | `StatefulSet` |
@@ -287,6 +288,131 @@ Additional shared projection config:
 In Kubernetes, size the Postgres connection pool to accommodate the total
 concurrent workers across all reducer replicas. Each worker holds one
 connection during claim/execute/ack.
+
+## DB Migrate (Schema Init Container)
+
+`pcg-bootstrap-data-plane` applies all Postgres and Neo4j schema DDL then
+exits. It uses `CREATE TABLE IF NOT EXISTS` and `CREATE CONSTRAINT IF NOT
+EXISTS` so it is safe to run repeatedly (idempotent).
+
+### What it does
+
+1. Connects to Postgres and runs `ApplyBootstrap` — creates all tables and
+   indexes for facts, scopes, generations, content store, work queue, audit,
+   relationships, shared intents, and projection decisions.
+2. Connects to Neo4j and runs `EnsureSchema` — creates all node constraints,
+   uniqueness indexes, performance indexes, and full-text indexes.
+3. Exits with code 0 on success.
+
+### Why it exists
+
+Without this service, downstream runtimes (API, MCP, ingester, reducer)
+had to wait for `bootstrap-index` to finish its full data population run
+(50+ minutes on 895 repos) before starting. The schema init container
+decouples DDL from data: services come up within seconds and serve traffic
+on an empty-but-valid schema while bootstrap-index populates data in the
+background.
+
+### Docker Compose
+
+In Compose, `db-migrate` is a short-lived service that exits after applying
+schemas. All other services depend on it with
+`condition: service_completed_successfully`:
+
+```yaml
+db-migrate:
+  image: platform-context-graph:dev
+  command: ["/usr/local/bin/pcg-bootstrap-data-plane"]
+  environment:
+    DEFAULT_DATABASE: neo4j
+    NEO4J_URI: bolt://neo4j:7687
+    NEO4J_USERNAME: neo4j
+    NEO4J_PASSWORD: change-me
+    PCG_POSTGRES_DSN: postgresql://pcg:change-me@postgres:5432/platform_context_graph
+  depends_on:
+    neo4j:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+```
+
+### EKS / Kubernetes Init Container
+
+In EKS, add `pcg-bootstrap-data-plane` as an `initContainer` on every
+Deployment and StatefulSet that needs database access. The init container
+runs before the main container starts, ensuring schemas exist.
+
+```yaml
+# Example: API Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-context-graph
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: db-migrate
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          command: ["/usr/local/bin/pcg-bootstrap-data-plane"]
+          env:
+            - name: PCG_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: pcg-db-credentials
+                  key: dsn
+            - name: NEO4J_URI
+              value: bolt://neo4j:7687
+            - name: NEO4J_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: pcg-neo4j-credentials
+                  key: username
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pcg-neo4j-credentials
+                  key: password
+            - name: DEFAULT_DATABASE
+              value: neo4j
+      containers:
+        - name: api
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          command: ["/usr/local/bin/pcg-api"]
+          # ...
+```
+
+Apply the same init container to:
+
+| Workload | Kind | Why |
+| --- | --- | --- |
+| `platform-context-graph` (API) | `Deployment` | Reads from Postgres + Neo4j |
+| `mcp-server` | `Deployment` | Reads from Postgres + Neo4j |
+| `ingester` | `StatefulSet` | Writes facts to Postgres |
+| `resolution-engine` (reducer) | `Deployment` | Writes to Postgres + Neo4j |
+
+### Environment variables
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `PCG_POSTGRES_DSN` | Yes | Postgres connection string |
+| `NEO4J_URI` | Yes | Neo4j Bolt URI |
+| `NEO4J_USERNAME` | Yes | Neo4j auth username |
+| `NEO4J_PASSWORD` | Yes | Neo4j auth password |
+| `DEFAULT_DATABASE` | No | Neo4j database name (default: `neo4j`) |
+
+### Operational notes
+
+- **Idempotent**: safe to run on every pod start — all DDL uses `IF NOT EXISTS`.
+- **Fast**: completes in under 5 seconds on a warm database.
+- **No data dependency**: does not populate any data, only creates empty tables
+  and indexes. Data is populated by `bootstrap-index` or `ingester`.
+- **Failure handling**: if the init container fails (database unreachable),
+  Kubernetes will retry the pod according to `restartPolicy`. The main
+  container will not start until schema migration succeeds.
+- **Rolling updates**: when deploying a new version with schema changes, the
+  init container on the first pod to roll applies the new DDL. Subsequent pods
+  see it already applied (idempotent).
 
 ## Bootstrap Index
 
