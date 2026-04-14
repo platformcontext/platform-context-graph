@@ -57,7 +57,8 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
   and some derived expressions.
 - Templated wrappers around opaque macro bodies stay unresolved on purpose;
   they are reported as `templated_expression_not_resolved` instead of being
-  guessed into lineage.
+  guessed into lineage. That behavior is historically accurate for the old
+  Python path too.
 
 ## Go-Owned Data-Intelligence Path
 
@@ -79,4 +80,6 @@ service path.
   templated expressions, complex macro expansion, and some derived
   expressions.
 - Templated wrappers around opaque macro bodies remain an intentional non-goal
-  and are surfaced as `templated_expression_not_resolved`.
+  and are surfaced as `templated_expression_not_resolved`. Non-templated
+  opaque wrappers historically behaved inconsistently in Python and should not
+  be described as one clean inherited unresolved category.

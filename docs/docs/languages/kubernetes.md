@@ -26,5 +26,5 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 
 ## Known Limitations
 - Container image references within Pod specs are not extracted as separate nodes
-- `selector` and `matchLabels` relationships between resources are not resolved
+- The historical Python-era `Service -> Deployment` name/namespace heuristic is not yet ported on the Go relationship side; neither Python nor Go performs real `selector` / `matchLabels` resolution
 - Custom Resource Definitions (CRDs) are parsed as generic K8s resources without schema awareness

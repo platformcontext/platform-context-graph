@@ -93,7 +93,14 @@ func configureMADVDONTNEED(logger *slog.Logger) {
 	} else {
 		godebug = godebug + ",madvdontneed=1"
 	}
-	os.Setenv("GODEBUG", godebug)
+	if err := os.Setenv("GODEBUG", godebug); err != nil {
+		if logger != nil {
+			logger.Error("failed to configure GODEBUG for immediate RSS release",
+				slog.Any("error", err),
+			)
+		}
+		return
+	}
 	if logger != nil {
 		logger.Info("GODEBUG configured for immediate RSS release",
 			slog.String("godebug", godebug),

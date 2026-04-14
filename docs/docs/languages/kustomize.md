@@ -25,3 +25,4 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 - Strategic merge patches are not parsed for the target resource they modify
 - `components` and `configurations` sections are not extracted
 - Inline patch bodies within `kustomization.yaml` are not traversed for field-level details
+- The parser payload is ahead of Python, but the Go relationship/evidence layer still lacks the old Python typed Kustomize evidence split for resources vs Helm vs images and the historical patch-link heuristic

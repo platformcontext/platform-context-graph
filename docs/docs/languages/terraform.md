@@ -24,6 +24,10 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Provider blocks | `provider-blocks` | supported | `terraform_providers` | `name, line_number` | `node:TerraformProvider` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerraform` | Compose-backed fixture verification | - |
 | Locals blocks | `locals-blocks` | supported | `terraform_locals` | `name, line_number, value` | `node:TerraformLocal` | `go/internal/parser/engine_infra_test.go::TestDefaultEngineParsePathHCLTerraform` | Compose-backed fixture verification | - |
 
+## Parity Notes
+- Python-era Terraform parser parity is already met on this branch.
+- The first-class `terraform_blocks` surface is a Go-only improvement. The old Python parser used `required_providers` metadata to enrich provider rows, but it did not persist a standalone `terraform {}` entity.
+
 ## Known Limitations
 - `count` and `for_each` meta-arguments are not expanded to model multiple resource instances
 - `dynamic` blocks within resources are not traversed for nested attribute extraction

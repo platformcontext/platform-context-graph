@@ -63,20 +63,32 @@ func TestConfigureMemoryLimitRespectsGOMEMLIMITEnv(t *testing.T) {
 	origGODEBUG := os.Getenv("GODEBUG")
 	defer func() {
 		if origGOMEMLIMIT != "" {
-			os.Setenv("GOMEMLIMIT", origGOMEMLIMIT)
+			if err := os.Setenv("GOMEMLIMIT", origGOMEMLIMIT); err != nil {
+				t.Fatalf("restore GOMEMLIMIT: %v", err)
+			}
 		} else {
-			os.Unsetenv("GOMEMLIMIT")
+			if err := os.Unsetenv("GOMEMLIMIT"); err != nil {
+				t.Fatalf("restore GOMEMLIMIT unset: %v", err)
+			}
 		}
 		if origGODEBUG != "" {
-			os.Setenv("GODEBUG", origGODEBUG)
+			if err := os.Setenv("GODEBUG", origGODEBUG); err != nil {
+				t.Fatalf("restore GODEBUG: %v", err)
+			}
 		} else {
-			os.Unsetenv("GODEBUG")
+			if err := os.Unsetenv("GODEBUG"); err != nil {
+				t.Fatalf("restore GODEBUG unset: %v", err)
+			}
 		}
 	}()
 
 	// Set GOMEMLIMIT explicitly
-	os.Setenv("GOMEMLIMIT", "2GiB")
-	os.Unsetenv("GODEBUG")
+	if err := os.Setenv("GOMEMLIMIT", "2GiB"); err != nil {
+		t.Fatalf("set GOMEMLIMIT: %v", err)
+	}
+	if err := os.Unsetenv("GODEBUG"); err != nil {
+		t.Fatalf("unset GODEBUG: %v", err)
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	result := ConfigureMemoryLimit(logger)
@@ -92,19 +104,31 @@ func TestConfigureMemoryLimitNoCgroup(t *testing.T) {
 	origGODEBUG := os.Getenv("GODEBUG")
 	defer func() {
 		if origGOMEMLIMIT != "" {
-			os.Setenv("GOMEMLIMIT", origGOMEMLIMIT)
+			if err := os.Setenv("GOMEMLIMIT", origGOMEMLIMIT); err != nil {
+				t.Fatalf("restore GOMEMLIMIT: %v", err)
+			}
 		} else {
-			os.Unsetenv("GOMEMLIMIT")
+			if err := os.Unsetenv("GOMEMLIMIT"); err != nil {
+				t.Fatalf("restore GOMEMLIMIT unset: %v", err)
+			}
 		}
 		if origGODEBUG != "" {
-			os.Setenv("GODEBUG", origGODEBUG)
+			if err := os.Setenv("GODEBUG", origGODEBUG); err != nil {
+				t.Fatalf("restore GODEBUG: %v", err)
+			}
 		} else {
-			os.Unsetenv("GODEBUG")
+			if err := os.Unsetenv("GODEBUG"); err != nil {
+				t.Fatalf("restore GODEBUG unset: %v", err)
+			}
 		}
 	}()
 
-	os.Unsetenv("GOMEMLIMIT")
-	os.Unsetenv("GODEBUG")
+	if err := os.Unsetenv("GOMEMLIMIT"); err != nil {
+		t.Fatalf("unset GOMEMLIMIT: %v", err)
+	}
+	if err := os.Unsetenv("GODEBUG"); err != nil {
+		t.Fatalf("unset GODEBUG: %v", err)
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	result := ConfigureMemoryLimit(logger)
@@ -121,13 +145,19 @@ func TestConfigureMADVDONTNEED(t *testing.T) {
 	origGODEBUG := os.Getenv("GODEBUG")
 	defer func() {
 		if origGODEBUG != "" {
-			os.Setenv("GODEBUG", origGODEBUG)
+			if err := os.Setenv("GODEBUG", origGODEBUG); err != nil {
+				t.Fatalf("restore GODEBUG: %v", err)
+			}
 		} else {
-			os.Unsetenv("GODEBUG")
+			if err := os.Unsetenv("GODEBUG"); err != nil {
+				t.Fatalf("restore GODEBUG unset: %v", err)
+			}
 		}
 	}()
 
-	os.Unsetenv("GODEBUG")
+	if err := os.Unsetenv("GODEBUG"); err != nil {
+		t.Fatalf("unset GODEBUG: %v", err)
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	configureMADVDONTNEED(logger)
@@ -143,13 +173,19 @@ func TestConfigureMADVDONTNEEDPreservesExisting(t *testing.T) {
 	origGODEBUG := os.Getenv("GODEBUG")
 	defer func() {
 		if origGODEBUG != "" {
-			os.Setenv("GODEBUG", origGODEBUG)
+			if err := os.Setenv("GODEBUG", origGODEBUG); err != nil {
+				t.Fatalf("restore GODEBUG: %v", err)
+			}
 		} else {
-			os.Unsetenv("GODEBUG")
+			if err := os.Unsetenv("GODEBUG"); err != nil {
+				t.Fatalf("restore GODEBUG unset: %v", err)
+			}
 		}
 	}()
 
-	os.Setenv("GODEBUG", "gctrace=1")
+	if err := os.Setenv("GODEBUG", "gctrace=1"); err != nil {
+		t.Fatalf("set GODEBUG: %v", err)
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	configureMADVDONTNEED(logger)
@@ -168,13 +204,19 @@ func TestConfigureMADVDONTNEEDSkipsIfAlreadySet(t *testing.T) {
 	origGODEBUG := os.Getenv("GODEBUG")
 	defer func() {
 		if origGODEBUG != "" {
-			os.Setenv("GODEBUG", origGODEBUG)
+			if err := os.Setenv("GODEBUG", origGODEBUG); err != nil {
+				t.Fatalf("restore GODEBUG: %v", err)
+			}
 		} else {
-			os.Unsetenv("GODEBUG")
+			if err := os.Unsetenv("GODEBUG"); err != nil {
+				t.Fatalf("restore GODEBUG unset: %v", err)
+			}
 		}
 	}()
 
-	os.Setenv("GODEBUG", "madvdontneed=1,gctrace=1")
+	if err := os.Setenv("GODEBUG", "madvdontneed=1,gctrace=1"); err != nil {
+		t.Fatalf("set GODEBUG: %v", err)
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	configureMADVDONTNEED(logger)
@@ -203,19 +245,31 @@ func TestConfigureMemoryLimitAppliesMinLimit(t *testing.T) {
 	defer func() {
 		debug.SetMemoryLimit(origLimit)
 		if origGOMEMLIMIT != "" {
-			os.Setenv("GOMEMLIMIT", origGOMEMLIMIT)
+			if err := os.Setenv("GOMEMLIMIT", origGOMEMLIMIT); err != nil {
+				t.Fatalf("restore GOMEMLIMIT: %v", err)
+			}
 		} else {
-			os.Unsetenv("GOMEMLIMIT")
+			if err := os.Unsetenv("GOMEMLIMIT"); err != nil {
+				t.Fatalf("restore GOMEMLIMIT unset: %v", err)
+			}
 		}
 		if origGODEBUG != "" {
-			os.Setenv("GODEBUG", origGODEBUG)
+			if err := os.Setenv("GODEBUG", origGODEBUG); err != nil {
+				t.Fatalf("restore GODEBUG: %v", err)
+			}
 		} else {
-			os.Unsetenv("GODEBUG")
+			if err := os.Unsetenv("GODEBUG"); err != nil {
+				t.Fatalf("restore GODEBUG unset: %v", err)
+			}
 		}
 	}()
 
-	os.Unsetenv("GOMEMLIMIT")
-	os.Unsetenv("GODEBUG")
+	if err := os.Unsetenv("GOMEMLIMIT"); err != nil {
+		t.Fatalf("unset GOMEMLIMIT: %v", err)
+	}
+	if err := os.Unsetenv("GODEBUG"); err != nil {
+		t.Fatalf("unset GODEBUG: %v", err)
+	}
 
 	// This test documents that when a cgroup limit is detected but the
 	// computed limit (70% of container) is below MinMemLimit, we floor at

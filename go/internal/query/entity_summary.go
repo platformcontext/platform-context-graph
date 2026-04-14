@@ -24,6 +24,12 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 			return ""
 		}
 		return fmt.Sprintf("%s %s is annotated as %s.", label, name, typeName)
+	case "TerraformBlock":
+		requiredProviders, _ := metadata["required_providers"].(string)
+		if requiredProviders == "" {
+			return ""
+		}
+		return fmt.Sprintf("%s %s requires providers %s.", label, name, requiredProviders)
 	case "Typedef":
 		typeName, _ := metadata["type"].(string)
 		if typeName == "" {
@@ -61,6 +67,21 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 			return ""
 		}
 		return fmt.Sprintf("%s %s is associated with the %s framework.", label, name, framework)
+	case "KustomizeOverlay":
+		bases := metadataStringSlice(metadata, "bases")
+		if len(bases) == 0 {
+			return ""
+		}
+		return fmt.Sprintf("%s %s references bases %s.", label, name, strings.Join(bases, ", "))
+	case "K8sResource":
+		qualifiedName, _ := metadata["qualified_name"].(string)
+		labels, _ := metadata["labels"].(string)
+		switch {
+		case qualifiedName != "" && labels != "":
+			return fmt.Sprintf("%s %s is identified as %s and carries labels %s.", label, name, qualifiedName, labels)
+		case qualifiedName != "":
+			return fmt.Sprintf("%s %s is identified as %s.", label, name, qualifiedName)
+		}
 	}
 
 	fragments := make([]string, 0, 4)
