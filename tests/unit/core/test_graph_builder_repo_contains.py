@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from platform_context_graph.tools.graph_builder_persistence import add_file_to_graph
+from platform_context_graph.graph.persistence.files import add_file_to_graph
 
 
 class _Result:
@@ -100,11 +100,6 @@ def test_add_file_to_graph_creates_repo_contains_for_nested_files(
     file_path.write_text("def process():\n    return True\n", encoding="utf-8")
 
     builder, session = _builder_for_repo(repo_path)
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: None,
-    )
-
     add_file_to_graph(
         builder,
         {
@@ -119,6 +114,7 @@ def test_add_file_to_graph_creates_repo_contains_for_nested_files(
         debug_log_fn=lambda *_args, **_kwargs: None,
         info_logger_fn=lambda *_args, **_kwargs: None,
         warning_logger_fn=lambda *_args, **_kwargs: None,
+        content_dual_write_fn=lambda *_args, **_kwargs: None,
     )
 
     tx_queries = [call[0] for call in session.tx.calls]
@@ -136,11 +132,6 @@ def test_add_file_to_graph_creates_repo_contains_for_root_files(
     file_path.write_text("# docs\n", encoding="utf-8")
 
     builder, session = _builder_for_repo(repo_path)
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: None,
-    )
-
     add_file_to_graph(
         builder,
         {
@@ -155,6 +146,7 @@ def test_add_file_to_graph_creates_repo_contains_for_root_files(
         debug_log_fn=lambda *_args, **_kwargs: None,
         info_logger_fn=lambda *_args, **_kwargs: None,
         warning_logger_fn=lambda *_args, **_kwargs: None,
+        content_dual_write_fn=lambda *_args, **_kwargs: None,
     )
 
     tx_queries = [call[0] for call in session.tx.calls]

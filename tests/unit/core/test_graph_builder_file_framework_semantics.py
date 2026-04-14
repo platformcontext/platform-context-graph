@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from platform_context_graph.tools.graph_builder_persistence import add_file_to_graph
+from platform_context_graph.graph.persistence.files import add_file_to_graph
 
 
 class _Result:
@@ -113,11 +113,6 @@ def test_add_file_to_graph_persists_framework_semantics_on_file_nodes(
         driver=SimpleNamespace(session=MagicMock(return_value=session)),
         db_manager=SimpleNamespace(get_backend_type=lambda: "neo4j"),
     )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: None,
-    )
-
     add_file_to_graph(
         builder,
         {
@@ -176,6 +171,7 @@ def test_add_file_to_graph_persists_framework_semantics_on_file_nodes(
         debug_log_fn=lambda *_args, **_kwargs: None,
         info_logger_fn=lambda *_args, **_kwargs: None,
         warning_logger_fn=lambda *_args, **_kwargs: None,
+        content_dual_write_fn=lambda *_args, **_kwargs: None,
     )
 
     tx_calls = session.tx.calls

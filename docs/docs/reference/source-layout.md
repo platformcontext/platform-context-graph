@@ -142,7 +142,9 @@ entrypoints, and discovery convenience methods have been removed from the
 facade instead of being kept as compatibility shells. The legacy Python
 post-commit finalization bridge has also been deleted from the branch; Python
 indexing now requires the remaining cutover helpers rather than ad hoc finalize
-helpers.
+helpers. The last `tools/graph_builder_persistence.py` compatibility shim has
+also been deleted; tests and remaining callers now target the canonical
+`graph/persistence/*` modules directly.
 
 The remaining transition risk is now concentrated in Python-owned evidence and
 materialization seams such as Terraform provider-schema extraction,

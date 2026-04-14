@@ -11,11 +11,11 @@ from unittest.mock import MagicMock, Mock, call, patch
 
 import pytest
 
-from platform_context_graph.tools.graph_builder_persistence import BatchCommitResult
 from platform_context_graph.graph.persistence.worker import (
     commit_batch_in_process,
     get_commit_worker_connection_params,
 )
+from platform_context_graph.graph.persistence.types import BatchCommitResult
 
 # Reset process-level cached driver between tests to ensure isolation.
 import platform_context_graph.graph.persistence.worker as _worker_mod

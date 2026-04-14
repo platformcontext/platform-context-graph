@@ -132,6 +132,7 @@ Already deleted on this branch:
 - `go/internal/compatibility/pythonbridge/**`
 - `src/platform_context_graph/runtime/ingester/go_collector_*bridge.py`
 - `src/platform_context_graph/tools/graph_builder_relationships.py`
+- `src/platform_context_graph/tools/graph_builder_persistence.py`
 - the legacy Python parse/coordinator stack:
   `collectors/git/parse_execution.py`,
   `collectors/git/parse_worker.py`,

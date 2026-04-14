@@ -46,6 +46,7 @@ def test_deleted_compatibility_shim_paths_are_absent() -> None:
         "src/platform_context_graph/tools/graph_builder_workload_projection.py",
         "src/platform_context_graph/tools/graph_builder_workloads.py",
         "src/platform_context_graph/tools/graph_builder_platforms.py",
+        "src/platform_context_graph/tools/graph_builder_persistence.py",
         "src/platform_context_graph/tools/graph_builder_persistence_helpers.py",
         "src/platform_context_graph/tools/graph_builder_persistence_unwind.py",
         "src/platform_context_graph/tools/graph_builder_persistence_worker.py",

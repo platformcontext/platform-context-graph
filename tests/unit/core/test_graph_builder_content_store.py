@@ -6,12 +6,33 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from platform_context_graph.tools.graph_builder_persistence import (
-    BatchCommitResult,
-    _begin_transaction,
-    add_file_to_graph,
+from platform_context_graph.graph.persistence.commit import (
     commit_file_batch_to_graph,
 )
+from platform_context_graph.graph.persistence.content_store import (
+    content_dual_write,
+)
+from platform_context_graph.graph.persistence.files import (
+    add_file_to_graph,
+)
+from platform_context_graph.graph.persistence.session import (
+    begin_transaction as _begin_transaction,
+)
+from platform_context_graph.graph.persistence.types import (
+    BatchCommitResult,
+)
+
+
+def _dual_write_with_provider(content_provider):
+    """Return one content dual-write callback bound to a test provider."""
+
+    return lambda file_data, file_name, repository, warning_logger_fn: content_dual_write(
+        file_data,
+        file_name,
+        repository,
+        warning_logger_fn,
+        get_content_provider=lambda: content_provider,
+    )
 
 
 def test_add_file_to_graph_dual_writes_content_and_uses_uid_merges(
@@ -54,10 +75,6 @@ def test_add_file_to_graph_dual_writes_content_and_uses_uid_merges(
         db_manager=SimpleNamespace(get_backend_type=lambda: "neo4j"),
     )
     content_provider = MagicMock(enabled=True)
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: content_provider,
-    )
 
     add_file_to_graph(
         builder,
@@ -82,6 +99,7 @@ def test_add_file_to_graph_dual_writes_content_and_uses_uid_merges(
         debug_log_fn=lambda *_args, **_kwargs: None,
         info_logger_fn=lambda *_args, **_kwargs: None,
         warning_logger_fn=lambda *_args, **_kwargs: None,
+        content_dual_write_fn=_dual_write_with_provider(content_provider),
     )
 
     content_provider.upsert_file.assert_called_once()
@@ -169,11 +187,6 @@ def test_add_file_to_graph_passes_reserved_parameter_names_as_mapping(
         driver=SimpleNamespace(session=MagicMock(return_value=session)),
         db_manager=SimpleNamespace(get_backend_type=lambda: "neo4j"),
     )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: None,
-    )
-
     add_file_to_graph(
         builder,
         {
@@ -197,6 +210,7 @@ def test_add_file_to_graph_passes_reserved_parameter_names_as_mapping(
         debug_log_fn=lambda *_args, **_kwargs: None,
         info_logger_fn=lambda *_args, **_kwargs: None,
         warning_logger_fn=lambda *_args, **_kwargs: None,
+        content_dual_write_fn=lambda *_args, **_kwargs: None,
     )
 
     # Entity writes go through tx.run via UNWIND; the rows list contains the entity props.
@@ -297,10 +311,6 @@ def test_commit_file_batch_uses_single_transaction_with_unwind(
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session)),
     )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: None,
-    )
     monkeypatch.setenv("PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE", "100")
 
     commit_file_batch_to_graph(
@@ -310,6 +320,7 @@ def test_commit_file_batch_uses_single_transaction_with_unwind(
         debug_log_fn=lambda *_a, **_kw: None,
         info_logger_fn=lambda *_a, **_kw: None,
         warning_logger_fn=lambda *_a, **_kw: None,
+        content_dual_write_batch_fn=lambda *_args, **_kwargs: None,
     )
 
     # Single transaction for the whole batch
@@ -411,10 +422,6 @@ def test_commit_file_batch_splits_large_batches_into_multiple_transactions(
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session)),
     )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: None,
-    )
     monkeypatch.setenv("PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE", "2")
 
     commit_file_batch_to_graph(
@@ -424,6 +431,7 @@ def test_commit_file_batch_splits_large_batches_into_multiple_transactions(
         debug_log_fn=lambda *_a, **_kw: None,
         info_logger_fn=lambda *_a, **_kw: None,
         warning_logger_fn=lambda *_a, **_kw: None,
+        content_dual_write_batch_fn=lambda *_args, **_kwargs: None,
     )
 
     assert len(session.transactions) == 2
@@ -509,11 +517,6 @@ def test_commit_file_batch_logs_top_files_for_large_variable_batches(
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session)),
     )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: None,
-    )
-
     def _fake_collect_file_write_data(file_data, file_path_str, **_kwargs):
         if file_path_str.endswith("heavy.php"):
             variable_count = 800
@@ -543,15 +546,6 @@ def test_commit_file_batch_logs_top_files_for_large_variable_batches(
             "generic_import_rows": [],
         }
 
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.collect_file_write_data",
-        _fake_collect_file_write_data,
-    )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.flush_write_batches",
-        lambda *_args, **_kwargs: {},
-    )
-
     info_logs: list[str] = []
     debug_logs: list[str] = []
     commit_file_batch_to_graph(
@@ -561,6 +555,16 @@ def test_commit_file_batch_logs_top_files_for_large_variable_batches(
         debug_log_fn=debug_logs.append,
         info_logger_fn=info_logs.append,
         warning_logger_fn=lambda *_a, **_kw: None,
+        content_dual_write_batch_fn=lambda *_args, **_kwargs: None,
+        write_one_file_graph_fn=lambda tx, file_data, **kwargs: (
+            str(Path(file_data["path"]).resolve()),
+            _fake_collect_file_write_data(
+                file_data,
+                str(Path(file_data["path"]).resolve()),
+                **kwargs,
+            ),
+        ),
+        flush_write_batches_fn=lambda *_args, **_kwargs: {},
     )
 
     assert any(
@@ -701,10 +705,6 @@ def test_commit_file_batch_returns_partial_result_after_single_file_fallback(
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session)),
     )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: None,
-    )
     monkeypatch.setenv("PCG_GRAPH_WRITE_TX_FILE_BATCH_SIZE", "3")
 
     warnings: list[str] = []
@@ -715,6 +715,7 @@ def test_commit_file_batch_returns_partial_result_after_single_file_fallback(
         debug_log_fn=lambda *_a, **_kw: None,
         info_logger_fn=lambda *_a, **_kw: None,
         warning_logger_fn=warnings.append,
+        content_dual_write_batch_fn=lambda *_args, **_kwargs: None,
     )
 
     assert result == BatchCommitResult(

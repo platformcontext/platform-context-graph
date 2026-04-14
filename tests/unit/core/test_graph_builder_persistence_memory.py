@@ -4,9 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from platform_context_graph.tools.graph_builder_persistence import (
-    commit_file_batch_to_graph,
-)
+from platform_context_graph.graph.persistence.commit import commit_file_batch_to_graph
 
 
 def test_commit_file_batch_to_graph_flushes_incrementally_when_buffer_grows(
@@ -79,11 +77,6 @@ def test_commit_file_batch_to_graph_flushes_incrementally_when_buffer_grows(
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session)),
     )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: None,
-    )
-
     def _fake_collect_file_write_data(file_data, file_path_str, **_kwargs):
         return {
             "entities_by_label": {
@@ -108,10 +101,6 @@ def test_commit_file_batch_to_graph_flushes_incrementally_when_buffer_grows(
         }
 
     monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.collect_file_write_data",
-        _fake_collect_file_write_data,
-    )
-    monkeypatch.setattr(
         "platform_context_graph.graph.persistence.batch_support._WRITE_BATCH_FLUSH_ROW_THRESHOLD",
         3,
     )
@@ -122,11 +111,6 @@ def test_commit_file_batch_to_graph_flushes_incrementally_when_buffer_grows(
         observed_flush_sizes.append(len(batches["entities_by_label"]["Variable"]))
         return {}
 
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.flush_write_batches",
-        _fake_flush_write_batches,
-    )
-
     commit_file_batch_to_graph(
         builder,
         files,
@@ -134,6 +118,16 @@ def test_commit_file_batch_to_graph_flushes_incrementally_when_buffer_grows(
         debug_log_fn=lambda *_a, **_kw: None,
         info_logger_fn=lambda *_a, **_kw: None,
         warning_logger_fn=lambda *_a, **_kw: None,
+        content_dual_write_batch_fn=lambda *_args, **_kwargs: None,
+        write_one_file_graph_fn=lambda tx, file_data, **kwargs: (
+            str(Path(file_data["path"]).resolve()),
+            _fake_collect_file_write_data(
+                file_data,
+                str(Path(file_data["path"]).resolve()),
+                **kwargs,
+            ),
+        ),
+        flush_write_batches_fn=_fake_flush_write_batches,
     )
 
     assert observed_flush_sizes == [4, 2]
@@ -220,11 +214,6 @@ def test_commit_file_batch_to_graph_consumes_write_results(monkeypatch) -> None:
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session)),
     )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: None,
-    )
-
     commit_file_batch_to_graph(
         builder,
         files,
@@ -232,6 +221,7 @@ def test_commit_file_batch_to_graph_consumes_write_results(monkeypatch) -> None:
         debug_log_fn=lambda *_a, **_kw: None,
         info_logger_fn=lambda *_a, **_kw: None,
         warning_logger_fn=lambda *_a, **_kw: None,
+        content_dual_write_batch_fn=lambda *_args, **_kwargs: None,
     )
 
     assert session.tx.run_calls > 0

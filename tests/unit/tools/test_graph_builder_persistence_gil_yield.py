@@ -1,4 +1,4 @@
-"""Tests for GIL yield points in graph_builder_persistence."""
+"""Tests for GIL yield points in graph persistence commits."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ class TestGilYieldFlag:
     def test_gil_yield_enabled_by_default(self, monkeypatch):
         """GIL yield should be enabled when env var is unset."""
         monkeypatch.delenv("PCG_COMMIT_GIL_YIELD_ENABLED", raising=False)
-        import platform_context_graph.tools.graph_builder_persistence as mod
+        import platform_context_graph.graph.persistence.commit as mod
 
         reloaded = importlib.reload(mod)
         assert reloaded._GIL_YIELD_ENABLED is True
@@ -22,7 +22,7 @@ class TestGilYieldFlag:
     def test_gil_yield_disabled_by_env(self, monkeypatch):
         """GIL yield should be disabled when env var is 'false'."""
         monkeypatch.setenv("PCG_COMMIT_GIL_YIELD_ENABLED", "false")
-        import platform_context_graph.tools.graph_builder_persistence as mod
+        import platform_context_graph.graph.persistence.commit as mod
 
         reloaded = importlib.reload(mod)
         assert reloaded._GIL_YIELD_ENABLED is False
@@ -30,7 +30,7 @@ class TestGilYieldFlag:
     def test_gil_yield_enabled_by_explicit_true(self, monkeypatch):
         """GIL yield should be enabled when env var is 'true'."""
         monkeypatch.setenv("PCG_COMMIT_GIL_YIELD_ENABLED", "true")
-        import platform_context_graph.tools.graph_builder_persistence as mod
+        import platform_context_graph.graph.persistence.commit as mod
 
         reloaded = importlib.reload(mod)
         assert reloaded._GIL_YIELD_ENABLED is True

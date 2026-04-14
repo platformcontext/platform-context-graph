@@ -29,10 +29,10 @@ class TestContentDualWriteAcceptsOverride:
     """Verify content dual-write functions accept batch size override."""
 
     def test_content_dual_write_batch_accepts_content_batch_size(self):
-        """_content_dual_write_batch should accept content_batch_size."""
-        from platform_context_graph.tools.graph_builder_persistence import (
-            _content_dual_write_batch,
+        """content_dual_write_batch should accept content_batch_size."""
+        from platform_context_graph.graph.persistence.content_store import (
+            content_dual_write_batch,
         )
 
-        sig = inspect.signature(_content_dual_write_batch)
+        sig = inspect.signature(content_dual_write_batch)
         assert "content_batch_size" in sig.parameters

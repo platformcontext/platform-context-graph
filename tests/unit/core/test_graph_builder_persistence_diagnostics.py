@@ -8,9 +8,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_context_graph.tools.graph_builder_persistence import (
-    _merge_directory_chain,
+from platform_context_graph.graph.persistence.files import (
     add_file_to_graph,
+)
+from platform_context_graph.graph.persistence.repositories import (
+    _merge_directory_chain,
 )
 
 
@@ -87,11 +89,6 @@ def test_add_file_to_graph_warns_when_relative_path_falls_back_to_basename(
     builder = SimpleNamespace(
         driver=SimpleNamespace(session=MagicMock(return_value=session)),
     )
-    monkeypatch.setattr(
-        "platform_context_graph.tools.graph_builder_persistence.get_postgres_content_provider",
-        lambda: None,
-    )
-
     warning_logs: list[str] = []
     add_file_to_graph(
         builder,
@@ -107,6 +104,7 @@ def test_add_file_to_graph_warns_when_relative_path_falls_back_to_basename(
         debug_log_fn=lambda *_args, **_kwargs: None,
         info_logger_fn=lambda *_args, **_kwargs: None,
         warning_logger_fn=warning_logs.append,
+        content_dual_write_fn=lambda *_args, **_kwargs: None,
     )
 
     assert warning_logs
