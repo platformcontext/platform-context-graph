@@ -433,6 +433,9 @@ kind: Deployment
 metadata:
   name: demo
   namespace: prod
+  labels:
+    tier: backend
+    app: demo
 spec:
   template:
     spec:
@@ -459,6 +462,7 @@ spec:
 	assertNamedBucketContains(t, got, "k8s_resources", "demo")
 	assertBucketContainsFieldValue(t, got, "k8s_resources", "kind", "Deployment")
 	assertBucketContainsFieldValue(t, got, "k8s_resources", "container_images", "ghcr.io/example/app:1.0.0")
+	assertBucketContainsFieldValue(t, got, "k8s_resources", "labels", "app=demo,tier=backend")
 }
 
 func assertJSONTopLevelKeysContain(

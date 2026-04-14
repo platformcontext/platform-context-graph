@@ -19,7 +19,7 @@ Canonical implementation: `go/internal/parser/registry.go` plus the entrypoint a
 | Namespace | `namespace` | supported | `variables` | `name, line_number, namespace` | `property:Overlay.property` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm` | Compose-backed fixture verification | - |
 | Resources list | `resources-list` | supported | `kustomize_overlays` | `name, line_number, resources` | `property:Overlay.resources` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm` | Compose-backed fixture verification | - |
 | Patches list | `patches-list` | supported | `kustomize_overlays` | `name, line_number, patches` | `property:Overlay.patches` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm` | Compose-backed fixture verification | - |
-| Base references | `base-references` | partial | `kustomize_overlays` | `name, line_number, resources` | `none:not_persisted` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm` | Compose-backed fixture verification | Base references remain part of the normalized `resources` list instead of a separate `bases` field in the native YAML payload. |
+| Base references | `base-references` | supported | `kustomize_overlays` | `name, line_number, bases` | `property:KustomizeOverlay.bases` | `go/internal/parser/engine_yaml_semantics_test.go::TestDefaultEngineParsePathYAMLKustomizeAndHelm` | Compose-backed fixture verification | `bases` is normalized into a stable, sorted list of base paths on the Kustomize payload. |
 
 ## Known Limitations
 - Strategic merge patches are not parsed for the target resource they modify

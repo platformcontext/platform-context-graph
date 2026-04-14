@@ -23,6 +23,7 @@ func parseKustomization(document map[string]any, path string, lineNumber int) ma
 		"line_number": lineNumber,
 		"namespace":   strings.TrimSpace(fmt.Sprint(document["namespace"])),
 		"resources":   document["resources"],
+		"bases":       strings.Join(collectKustomizeBaseRefs(document), ","),
 		"patches":     collectPatchPaths(document["patches"]),
 		"path":        path,
 		"lang":        "yaml",
@@ -49,6 +50,35 @@ func collectPatchPaths(value any) []string {
 	return paths
 }
 
+func collectKustomizeBaseRefs(document map[string]any) []string {
+	values := make([]string, 0)
+	if bases, ok := document["bases"].([]any); ok {
+		values = append(values, collectKustomizePathRefs(bases)...)
+	}
+	if resources, ok := document["resources"].([]any); ok {
+		values = append(values, collectKustomizePathRefs(resources)...)
+	}
+	bases := dedupeNonEmptyStrings(values)
+	sort.Strings(bases)
+	return bases
+}
+
+func collectKustomizePathRefs(values []any) []string {
+	refs := make([]string, 0, len(values))
+	for _, value := range values {
+		path := strings.TrimSpace(fmt.Sprint(value))
+		if path == "" || path == "<nil>" {
+			continue
+		}
+		lower := strings.ToLower(path)
+		if strings.HasSuffix(lower, ".yaml") || strings.HasSuffix(lower, ".yml") || strings.HasSuffix(lower, ".json") {
+			continue
+		}
+		refs = append(refs, path)
+	}
+	return refs
+}
+
 func isArgoCDApplication(apiVersion string, kind string) bool {
 	return strings.HasPrefix(apiVersion, "argoproj.io/") && kind == "Application"
 }
@@ -57,7 +87,8 @@ func parseArgoCDApplication(document map[string]any, metadata map[string]any, pa
 	spec, _ := document["spec"].(map[string]any)
 	source, _ := spec["source"].(map[string]any)
 	destination, _ := spec["destination"].(map[string]any)
-	return map[string]any{
+	syncPolicy, syncOptions := collectArgoSyncPolicy(spec["syncPolicy"])
+	row := map[string]any{
 		"name":            strings.TrimSpace(fmt.Sprint(metadata["name"])),
 		"line_number":     lineNumber,
 		"namespace":       strings.TrimSpace(fmt.Sprint(metadata["namespace"])),
@@ -70,6 +101,16 @@ func parseArgoCDApplication(document map[string]any, metadata map[string]any, pa
 		"path":            path,
 		"lang":            "yaml",
 	}
+	if labels := collectMetadataLabels(metadata); labels != "" {
+		row["labels"] = labels
+	}
+	if syncPolicy != "" {
+		row["sync_policy"] = syncPolicy
+	}
+	if syncOptions != "" {
+		row["sync_policy_options"] = syncOptions
+	}
+	return row
 }
 
 func isArgoCDApplicationSet(apiVersion string, kind string) bool {
@@ -249,6 +290,93 @@ func normalizeArgoSourceRoot(rawPath string) string {
 	return strings.Join(segments, "/") + "/"
 }
 
+func collectMetadataLabels(metadata map[string]any) string {
+	labels, ok := metadata["labels"].(map[string]any)
+	if !ok || len(labels) == 0 {
+		return ""
+	}
+	keys := sortedMapKeysAny(labels)
+	pairs := make([]string, 0, len(keys))
+	for _, key := range keys {
+		value := strings.TrimSpace(fmt.Sprint(labels[key]))
+		if value == "" || value == "<nil>" {
+			continue
+		}
+		pairs = append(pairs, key+"="+value)
+	}
+	return strings.Join(pairs, ",")
+}
+
+func collectArgoSyncPolicy(value any) (string, string) {
+	syncPolicy, ok := value.(map[string]any)
+	if !ok || len(syncPolicy) == 0 {
+		return "", ""
+	}
+
+	summaryParts := make([]string, 0, 2)
+	if automated, ok := syncPolicy["automated"].(map[string]any); ok {
+		automatedParts := make([]string, 0, 3)
+		if boolValue(automated["prune"]) {
+			automatedParts = append(automatedParts, "prune=true")
+		}
+		if boolValue(automated["selfHeal"]) {
+			automatedParts = append(automatedParts, "selfHeal=true")
+		}
+		if boolValue(automated["allowEmpty"]) {
+			automatedParts = append(automatedParts, "allowEmpty=true")
+		}
+		if len(automatedParts) == 0 {
+			summaryParts = append(summaryParts, "automated")
+		} else {
+			summaryParts = append(summaryParts, "automated("+strings.Join(automatedParts, ",")+")")
+		}
+	}
+
+	options := collectArgoSyncOptions(syncPolicy["syncOptions"])
+	if len(options) > 0 {
+		summaryParts = append(summaryParts, "syncOptions="+strings.Join(options, "|"))
+	}
+
+	return strings.Join(summaryParts, ","), strings.Join(options, "|")
+}
+
+func collectArgoSyncOptions(value any) []string {
+	items, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	options := make([]string, 0, len(items))
+	for _, item := range items {
+		option := strings.TrimSpace(fmt.Sprint(item))
+		if option == "" || option == "<nil>" {
+			continue
+		}
+		options = append(options, option)
+	}
+	sort.Strings(options)
+	return options
+}
+
+func sortedMapKeysAny(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func boolValue(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
+	}
+}
+
 func isCrossplaneXRD(apiVersion string, kind string) bool {
 	return strings.HasPrefix(apiVersion, "apiextensions.crossplane.io/") && kind == "CompositeResourceDefinition"
 }
@@ -334,6 +462,9 @@ func parseK8sResource(document map[string]any, metadata map[string]any, apiVersi
 		"namespace":   strings.TrimSpace(fmt.Sprint(metadata["namespace"])),
 		"path":        path,
 		"lang":        "yaml",
+	}
+	if labels := collectMetadataLabels(metadata); labels != "" {
+		row["labels"] = labels
 	}
 	if images := collectContainerImages(document); len(images) > 0 {
 		row["container_images"] = strings.Join(images, ",")

@@ -24,6 +24,14 @@ spec:
     repoURL: https://github.com/myorg/iac-eks-argocd.git
     path: overlays/production/addons/cert-manager
     targetRevision: main
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager
@@ -45,6 +53,8 @@ spec:
 	assertBucketContainsFieldValue(t, got, "argocd_applications", "source_path", "overlays/production/addons/cert-manager")
 	assertBucketContainsFieldValue(t, got, "argocd_applications", "dest_server", "https://kubernetes.default.svc")
 	assertBucketContainsFieldValue(t, got, "argocd_applications", "dest_namespace", "cert-manager")
+	assertBucketContainsFieldValue(t, got, "argocd_applications", "sync_policy", "automated(prune=true,selfHeal=true,allowEmpty=true),syncOptions=CreateNamespace=true|PruneLast=true")
+	assertBucketContainsFieldValue(t, got, "argocd_applications", "sync_policy_options", "CreateNamespace=true|PruneLast=true")
 }
 
 func TestDefaultEngineParsePathYAMLArgoCDApplicationSetNestedSources(t *testing.T) {
@@ -168,6 +178,7 @@ kind: Kustomization
 namespace: production
 resources:
   - ../base
+  - ../app
 patches:
   - path: patches/replicas.yaml
 `,
@@ -206,6 +217,7 @@ image:
 	}
 	assertNamedBucketContains(t, kustomizePayload, "kustomize_overlays", "kustomization")
 	assertBucketContainsFieldValue(t, kustomizePayload, "kustomize_overlays", "namespace", "production")
+	assertBucketContainsFieldValue(t, kustomizePayload, "kustomize_overlays", "bases", "../app,../base")
 
 	chartPayload, err := engine.ParsePath(repoRoot, chartPath, false, Options{})
 	if err != nil {
