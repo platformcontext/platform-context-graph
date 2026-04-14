@@ -114,7 +114,20 @@ based on inflated RSS.
 | 2 | 8 | 8 (channel) | none | none | 73 GiB | ~350 | OOM exit 137 |
 | 3 | 8 | 8 | 8GiB | none | 37 GiB | 315 | continued |
 | 4 | 8 | 8 | 8GiB | madvdontneed=1 | 100 GiB | 413 | killed (trending OOM) |
-| 5 | 2 | 1 | 64GiB | madvdontneed=1 | TBD | TBD | **in progress** |
+| 5 | 2 | 1 | 64GiB | madvdontneed=1 | 42 GiB | 146 | exit 1: SQLSTATE 22P05 |
+| 6 | 2 | 1 | 64GiB | madvdontneed=1 | TBD | TBD | **in progress** |
+
+### Cause 6: Null Unicode Escapes in JSONB (SQLSTATE 22P05)
+
+Attempt 5 showed memory behavior was correct (20 GiB at 136 scopes, GC
+reclaiming normally, CPU at 125% vs 1100% before). However, a repo with
+295,347 facts contained `\u0000` (null byte) Unicode escape sequences in
+source code content payloads. Postgres JSONB rejects these with SQLSTATE
+22P05 ("unsupported Unicode escape sequence").
+
+**Fix:** Added `sanitizeJSONBNullEscapes()` in `marshalPayload()` to strip
+`\u0000` sequences before insertion. This is a safe transformation since null
+bytes in JSON strings have no meaningful representation in Postgres JSONB.
 
 ## Decision
 

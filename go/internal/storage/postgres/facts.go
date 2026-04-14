@@ -301,21 +301,51 @@ func marshalPayload(payload map[string]any) ([]byte, error) {
 		return nil, err
 	}
 
-	// Postgres JSONB rejects \u0000 (null byte) Unicode escape sequences
-	// (SQLSTATE 22P05). Source code files may contain these in raw content
-	// or metadata. Strip them before insertion.
-	data = sanitizeJSONBNullEscapes(data)
+	data = sanitizeJSONB(data)
+
+	// Final guard: if sanitization produced invalid JSON, return empty object.
+	if !json.Valid(data) {
+		return []byte("{}"), nil
+	}
 
 	return data, nil
 }
 
-// sanitizeJSONBNullEscapes removes \u0000 escape sequences that Postgres JSONB
-// rejects with SQLSTATE 22P05 ("unsupported Unicode escape sequence").
-func sanitizeJSONBNullEscapes(data []byte) []byte {
-	if !bytes.Contains(data, []byte(`\u0000`)) {
+// sanitizeJSONB cleans marshaled JSON bytes for Postgres JSONB compatibility.
+//
+// Postgres JSONB is stricter than the JSON spec in two ways:
+//   - Rejects \u0000 null-byte escape sequences (SQLSTATE 22P05)
+//   - Rejects raw control bytes 0x00-0x1F that aren't JSON-escaped (SQLSTATE 22P02)
+//
+// Source code payloads (file content, entity source_cache) may contain these
+// bytes when repositories include binary files or non-UTF-8 content.
+func sanitizeJSONB(data []byte) []byte {
+	// Fast path: most payloads are clean.
+	needsSanitize := false
+	for _, b := range data {
+		if b < 0x20 && b != '\t' && b != '\n' && b != '\r' {
+			needsSanitize = true
+			break
+		}
+	}
+	if !needsSanitize && !bytes.Contains(data, []byte(`\u0000`)) {
 		return data
 	}
-	return bytes.ReplaceAll(data, []byte(`\u0000`), nil)
+
+	// Strip \u0000 escape sequences (Postgres JSONB rejects them).
+	data = bytes.ReplaceAll(data, []byte(`\u0000`), nil)
+
+	// Strip raw control bytes except tab, newline, carriage return
+	// (which json.Marshal already escapes properly).
+	cleaned := make([]byte, 0, len(data))
+	for _, b := range data {
+		if b < 0x20 && b != '\t' && b != '\n' && b != '\r' {
+			continue
+		}
+		cleaned = append(cleaned, b)
+	}
+
+	return cleaned
 }
 
 func unmarshalPayload(raw []byte) (map[string]any, error) {
