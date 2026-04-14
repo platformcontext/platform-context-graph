@@ -151,6 +151,10 @@ func TestOpenAPISpec_ContentEntitySchemasExposeMetadata(t *testing.T) {
 
 	entityRefSchema := mustMapField(t, schemas, "EntityRef")
 	entityRefProperties := mustMapField(t, entityRefSchema, "properties")
+	entityRefSemanticSummary := mustMapField(t, entityRefProperties, "semantic_summary")
+	if got, want := entityRefSemanticSummary["type"], "string"; got != want {
+		t.Fatalf("EntityRef.semantic_summary.type = %#v, want %#v", got, want)
+	}
 	entityRefMetadata := mustMapField(t, entityRefProperties, "metadata")
 	if got, want := entityRefMetadata["type"], "object"; got != want {
 		t.Fatalf("EntityRef.metadata.type = %#v, want %#v", got, want)

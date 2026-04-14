@@ -65,6 +65,10 @@ const openAPIComponents = `  "components": {
           "language": {"type": "string"},
           "start_line": {"type": "integer"},
           "end_line": {"type": "integer"},
+          "semantic_summary": {
+            "type": "string",
+            "description": "Optional first-class semantic summary synthesized from parser metadata."
+          },
           "metadata": {
             "type": "object",
             "additionalProperties": true,

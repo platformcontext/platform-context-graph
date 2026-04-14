@@ -101,6 +101,9 @@ func (h *EntityHandler) resolveEntity(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusInternalServerError, fmt.Sprintf("enrich entities: %v", err))
 		return
 	}
+	for i := range entities {
+		attachSemanticSummary(entities[i])
+	}
 	if len(entities) == 0 {
 		entities, err = h.resolveEntityFromContent(r.Context(), req.Name, req.Type, req.RepoID, 20)
 		if err != nil {
@@ -248,7 +251,7 @@ func contentEntityTypeForResolve(typeName string) string {
 }
 
 func contentEntityToMap(entity EntityContent) map[string]any {
-	return map[string]any{
+	result := map[string]any{
 		"id":         entity.EntityID,
 		"entity_id":  entity.EntityID,
 		"name":       entity.EntityName,
@@ -260,6 +263,8 @@ func contentEntityToMap(entity EntityContent) map[string]any {
 		"end_line":   entity.EndLine,
 		"metadata":   entity.Metadata,
 	}
+	attachSemanticSummary(result)
+	return result
 }
 
 // getWorkloadContext retrieves the context for a specific workload.

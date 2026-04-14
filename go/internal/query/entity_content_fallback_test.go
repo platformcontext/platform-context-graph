@@ -70,6 +70,57 @@ func TestResolveEntityFallsBackToContentEntities(t *testing.T) {
 	}
 }
 
+func TestResolveEntityFallsBackToContentEntitiesWithSemanticSummary(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"impl-1", "repo-1", "src/point.rs", "ImplBlock", "Point",
+					int64(1), int64(18), "rust", "impl Display for Point {}", []byte(`{"kind":"trait_impl","trait":"Display","target":"Point"}`),
+				},
+			},
+		},
+	})
+
+	handler := &EntityHandler{Content: NewContentReader(db)}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/entities/resolve",
+		bytes.NewBufferString(`{"name":"Point","type":"impl_block","repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+	entities, ok := resp["entities"].([]any)
+	if !ok || len(entities) != 1 {
+		t.Fatalf("entities = %#v, want one content-backed entity", resp["entities"])
+	}
+	entity, ok := entities[0].(map[string]any)
+	if !ok {
+		t.Fatalf("entity type = %T, want map[string]any", entities[0])
+	}
+	if got, want := entity["semantic_summary"], "ImplBlock Point implements Display for Point."; got != want {
+		t.Fatalf("entity[semantic_summary] = %#v, want %#v", got, want)
+	}
+}
+
 func TestGetEntityContextFallsBackToContentEntities(t *testing.T) {
 	t.Parallel()
 

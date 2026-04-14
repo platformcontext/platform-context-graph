@@ -82,14 +82,14 @@ parity from persisted graph and query-surface parity.
 | Kotlin | Go-owned | partial | core Kotlin parsing is complete, and secondary constructor metadata now surfaces through normal Go query/context semantic summaries on function entities | persist constructor semantics as first-class graph/story behavior beyond metadata enrichment |
 | PHP | Go-owned | partial | core PHP parsing is complete | expand end-to-end proof for static method call graph edges |
 | C | Go-owned | partial | core C parsing is complete; typedefs are queryable through the Go content-backed `code/language-query` surface and now carry semantic summaries in normal query/context responses | materialize typedefs as full graph entities and relationships end to end |
-| Rust | Go-owned | partial | core Rust parsing is complete, and impl blocks now persist as `ImplBlock` content entities that the normal Go `code/language-query` surface can return | persist explicit impl-block graph semantics and relationships end to end |
+| Rust | Go-owned | partial | core Rust parsing is complete, and impl blocks now persist as `ImplBlock` content entities that the normal Go `code/language-query` surface can return; normal entity resolve/context fallbacks now surface semantic summaries too | persist explicit impl-block graph semantics and relationships end to end |
 | Elixir | Go-owned | partial | core Elixir parsing is complete, and module/function semantic kinds now surface through normal Go query/context semantic summaries on `Module` and `Function` entities | persist guards, protocols, protocol implementations, and module attributes as first-class graph semantics rather than generic metadata |
 | Kubernetes | Go-owned | partial | YAML resource parsing is complete | normalize and persist labels |
 | ArgoCD | Go-owned | partial | Applications and ApplicationSets parse in Go | normalize and persist sync policy |
 | CloudFormation | Go-owned | partial | YAML and JSON detection are native Go; JSON CloudFormation rows now persist `file_format` and share the same parser path as YAML | nested stack references and condition evaluation remain partial |
 | Kustomize | Go-owned | partial | overlays and resources parse in Go | model base references explicitly |
 | Terraform | Go-owned | partial | HCL parser and provider schema support are Go-owned | materialize `terraform {}` block metadata as a first-class graph surface if parity requires it |
-| Terragrunt | Go-owned | partial | core Terragrunt parsing is complete and dependency/local/input semantics are queryable through Go content entities; this already exceeds the historical Python content surface | restore the historical module-source relationship path from `terraform.source` on the normal graph surface |
+| Terragrunt | Go-owned | complete | core Terragrunt parsing is complete, dependency/local/input semantics are queryable through Go content entities, and `terraform.source` now also materializes through the normal `TerraformModule` surface | none; historical module-source semantics are now restored |
 | Generic JSON | Go-owned | intentionally partial | arbitrary JSON stays quiet to avoid graph noise | confirm whether Python-era behavior needs any targeted JSON families promoted |
 
 ## Documented Gap Inventory
@@ -105,14 +105,14 @@ capabilities in the checked-in language pages:
 - Kotlin: secondary constructors now surface through semantic summaries on normal query/context responses, but graph/story promotion is still partial
 - PHP: static method calls end-to-end proof
 - C: typedef graph-first materialization beyond the now-supported content-backed `code/language-query` plus semantic-summary surface
-- Rust: impl blocks now persist as `ImplBlock` content entities and are queryable through `code/language-query`, but graph implementation edges remain partial
+- Rust: impl blocks now persist as `ImplBlock` content entities and are queryable through `code/language-query`, plus normal entity resolve/context fallbacks now surface semantic summaries, but graph implementation edges remain partial
 - Elixir: guards, protocols, protocol implementations, and module attributes now appear in semantic summaries on normal query/context responses, but the graph still stores them as generic modules/functions/variables
 - Kubernetes: labels
 - ArgoCD: sync policy
 - CloudFormation: nested stack references and condition evaluation
 - Kustomize: base references
 - Terraform: `terraform {}` block metadata
-- Terragrunt: restore the historical module-source relationship path from `terraform.source`
+- Terragrunt: module-source semantics from `terraform.source` are now restored through the normal `TerraformModule` surface
 - JSON: generic JSON intentionally remains partial
 - SQL/dbt: compiled lineage maturity remains partial even though the runtime is Go-owned; remaining gaps are unresolved refs, templated expressions, complex macros, and richer derived expressions
 
