@@ -35,8 +35,8 @@ type SemanticEntityWriteResult struct {
 }
 
 // SemanticEntityWriter persists Annotation, Typedef, TypeAlias, Component,
-// ImplBlock, Protocol, ProtocolImplementation, and JavaScript callable
-// Function semantic nodes into Neo4j.
+// Module, ImplBlock, Protocol, ProtocolImplementation, and callable Function
+// semantic nodes into Neo4j.
 type SemanticEntityWriter interface {
 	WriteSemanticEntities(context.Context, SemanticEntityWrite) (SemanticEntityWriteResult, error)
 }
@@ -196,10 +196,16 @@ func collectSemanticMetadata(payload map[string]any) map[string]any {
 			metadata[key] = value
 		}
 	}
-	for _, key := range []string{"docstring", "method_kind", "semantic_kind"} {
+	for _, key := range []string{"docstring", "method_kind", "semantic_kind", "module_kind", "declaration_merge_group"} {
 		if value := semanticPayloadMetadataString(payload, key); value != "" {
 			metadata[key] = value
 		}
+	}
+	if count := semanticPayloadMetadataInt(payload, "declaration_merge_count"); count > 0 {
+		metadata["declaration_merge_count"] = count
+	}
+	if kinds := semanticPayloadMetadataStringSlice(payload, "declaration_merge_kinds"); len(kinds) > 0 {
+		metadata["declaration_merge_kinds"] = kinds
 	}
 	if decorators := semanticPayloadMetadataStringSlice(payload, "decorators"); len(decorators) > 0 {
 		metadata["decorators"] = decorators
@@ -275,6 +281,41 @@ func semanticPayloadMetadataBool(payload map[string]any, key string) bool {
 	return ok && typed
 }
 
+func semanticPayloadMetadataInt(payload map[string]any, key string) int {
+	if value, ok := payload[key]; ok {
+		switch typed := value.(type) {
+		case int:
+			return typed
+		case int32:
+			return int(typed)
+		case int64:
+			return int(typed)
+		case float64:
+			return int(typed)
+		}
+	}
+	metadata := payloadMap(payload, "entity_metadata")
+	if metadata == nil {
+		return 0
+	}
+	value, ok := metadata[key]
+	if !ok {
+		return 0
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
+}
+
 func semanticPayloadStringSlice(payload map[string]any, key string) []string {
 	if payload == nil {
 		return nil
@@ -317,7 +358,7 @@ func semanticPayloadStringSlice(payload map[string]any, key string) []string {
 
 func isSemanticEntityType(payload map[string]any, entityType string) bool {
 	switch entityType {
-	case "Annotation", "Typedef", "TypeAlias", "Component", "ImplBlock", "Protocol", "ProtocolImplementation":
+	case "Annotation", "Typedef", "TypeAlias", "Component", "Module", "ImplBlock", "Protocol", "ProtocolImplementation":
 		return true
 	case "Function":
 		return isJavaScriptCallableSemanticEntity(payload) || isPythonSemanticFunction(payload) || isRustSemanticFunction(payload)

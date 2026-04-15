@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 )
@@ -146,6 +145,27 @@ SET n.id = row.entity_id,
     n.evidence_source = row.evidence_source
 MERGE (f)-[:CONTAINS]->(n)`
 
+	semanticModuleUpsertCypher = `UNWIND $rows AS row
+MATCH (f:File {path: row.file_path})
+MERGE (n:Module {uid: row.entity_id})
+SET n.id = row.entity_id,
+    n.name = row.entity_name,
+    n.path = row.file_path,
+    n.relative_path = row.relative_path,
+    n.line_number = row.start_line,
+    n.start_line = row.start_line,
+    n.end_line = row.end_line,
+    n.repo_id = row.repo_id,
+    n.language = row.language,
+    n.lang = row.language,
+    n.module_kind = row.module_kind,
+    n.declaration_merge_group = row.declaration_merge_group,
+    n.declaration_merge_count = row.declaration_merge_count,
+    n.declaration_merge_kinds = row.declaration_merge_kinds,
+    n.semantic_kind = coalesce(row.semantic_kind, row.entity_type),
+    n.evidence_source = row.evidence_source
+MERGE (f)-[:CONTAINS]->(n)`
+
 	semanticFunctionUpsertCypher = `UNWIND $rows AS row
 MATCH (f:File {path: row.file_path})
 MERGE (n:Function {uid: row.entity_id})
@@ -173,7 +193,7 @@ MATCH (impl:ImplBlock {uid: row.impl_block_id})
 MATCH (fn:Function {uid: row.function_id})
 MERGE (impl)-[:CONTAINS]->(fn)`
 
-	semanticEntityRetractCypher = `MATCH (n:Annotation|Typedef|TypeAlias|Component|ImplBlock|Protocol|ProtocolImplementation|Function)
+	semanticEntityRetractCypher = `MATCH (n:Annotation|Typedef|TypeAlias|Component|Module|ImplBlock|Protocol|ProtocolImplementation|Function)
 WHERE n.repo_id IN $repo_ids
   AND n.evidence_source = $evidence_source
 DETACH DELETE n`
@@ -227,6 +247,7 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 		"Typedef":                nil,
 		"TypeAlias":              nil,
 		"Component":              nil,
+		"Module":                 nil,
 		"ImplBlock":              nil,
 		"Protocol":               nil,
 		"ProtocolImplementation": nil,
@@ -249,6 +270,7 @@ func (w *SemanticEntityWriter) WriteSemanticEntities(
 		{label: "Typedef", cypher: semanticTypedefUpsertCypher},
 		{label: "TypeAlias", cypher: semanticTypeAliasUpsertCypher},
 		{label: "Component", cypher: semanticComponentUpsertCypher},
+		{label: "Module", cypher: semanticModuleUpsertCypher},
 		{label: "ImplBlock", cypher: semanticImplBlockUpsertCypher},
 		{label: "Protocol", cypher: semanticProtocolUpsertCypher},
 		{label: "ProtocolImplementation", cypher: semanticProtocolImplementationUpsertCypher},
@@ -296,7 +318,7 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		return nil, false
 	}
 	if row.EntityType != "Annotation" && row.EntityType != "Typedef" && row.EntityType != "TypeAlias" &&
-		row.EntityType != "Component" && row.EntityType != "ImplBlock" &&
+		row.EntityType != "Component" && row.EntityType != "Module" && row.EntityType != "ImplBlock" &&
 		row.EntityType != "Protocol" && row.EntityType != "ProtocolImplementation" &&
 		row.EntityType != "Function" {
 		return nil, false
@@ -338,6 +360,15 @@ func buildSemanticEntityRowMap(row reducer.SemanticEntityRow) (map[string]any, b
 		}
 		if moduleKind := semanticMetadataString(row.Metadata, "module_kind"); moduleKind != "" {
 			rowMap["module_kind"] = moduleKind
+		}
+		if declarationMergeGroup := semanticMetadataString(row.Metadata, "declaration_merge_group"); declarationMergeGroup != "" {
+			rowMap["declaration_merge_group"] = declarationMergeGroup
+		}
+		if declarationMergeCount := semanticMetadataInt(row.Metadata, "declaration_merge_count"); declarationMergeCount > 0 {
+			rowMap["declaration_merge_count"] = declarationMergeCount
+		}
+		if declarationMergeKinds := semanticMetadataStringSlice(row.Metadata, "declaration_merge_kinds"); len(declarationMergeKinds) > 0 {
+			rowMap["declaration_merge_kinds"] = declarationMergeKinds
 		}
 		if jsxFragment := semanticMetadataBool(row.Metadata, "jsx_fragment_shorthand"); jsxFragment {
 			rowMap["jsx_fragment_shorthand"] = true
@@ -418,73 +449,6 @@ func buildRustImplBlockOwnershipRows(rows []reducer.SemanticEntityRow) []map[str
 	}
 
 	return ownershipRows
-}
-
-func semanticMetadataString(metadata map[string]any, key string) string {
-	if metadata == nil {
-		return ""
-	}
-	value, ok := metadata[key]
-	if !ok || value == nil {
-		return ""
-	}
-	str, ok := value.(string)
-	if !ok {
-		return ""
-	}
-	return str
-}
-
-func semanticMetadataStringSlice(metadata map[string]any, key string) []string {
-	if metadata == nil {
-		return nil
-	}
-	value, ok := metadata[key]
-	if !ok || value == nil {
-		return nil
-	}
-	switch typed := value.(type) {
-	case []string:
-		out := make([]string, 0, len(typed))
-		for _, item := range typed {
-			if trimmed := strings.TrimSpace(item); trimmed != "" {
-				out = append(out, trimmed)
-			}
-		}
-		if len(out) == 0 {
-			return nil
-		}
-		return out
-	case []any:
-		out := make([]string, 0, len(typed))
-		for _, item := range typed {
-			text, ok := item.(string)
-			if !ok {
-				continue
-			}
-			if trimmed := strings.TrimSpace(text); trimmed != "" {
-				out = append(out, trimmed)
-			}
-		}
-		if len(out) == 0 {
-			return nil
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
-func semanticMetadataBool(metadata map[string]any, key string) bool {
-	if metadata == nil {
-		return false
-	}
-	value, ok := metadata[key]
-	if !ok {
-		return false
-	}
-	typed, ok := value.(bool)
-	return ok && typed
 }
 
 func uniqueSemanticRepoIDs(repoIDs []string) []string {

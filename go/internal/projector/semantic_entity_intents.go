@@ -14,6 +14,7 @@ var semanticEntityReducerTypes = map[string]struct{}{
 	"Typedef":                {},
 	"TypeAlias":              {},
 	"Component":              {},
+	"Module":                 {},
 	"ImplBlock":              {},
 	"Protocol":               {},
 	"ProtocolImplementation": {},
@@ -29,7 +30,7 @@ func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool)
 		return ReducerIntent{}, false
 	}
 	if _, ok := semanticEntityReducerTypes[entityType]; !ok {
-		if !isJavaScriptCallableSemanticEntity(fact.Payload, entityType) && !isPythonCallableSemanticEntity(fact.Payload, entityType) {
+		if !isJavaScriptCallableSemanticEntity(fact.Payload, entityType) && !isPythonCallableSemanticEntity(fact.Payload, entityType) && !isTypeScriptModuleSemanticEntity(fact.Payload, entityType) {
 			return ReducerIntent{}, false
 		}
 	}
@@ -59,6 +60,22 @@ func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool)
 		FactID:       fact.FactID,
 		SourceSystem: fact.SourceRef.SourceSystem,
 	}, true
+}
+
+func isTypeScriptModuleSemanticEntity(payload map[string]any, entityType string) bool {
+	if entityType != "Module" {
+		return false
+	}
+	if payloadMetadataString(payload, "language") != "typescript" {
+		return false
+	}
+	if payloadMetadataString(payload, "module_kind") == "namespace" {
+		return true
+	}
+	if payloadMetadataString(payload, "declaration_merge_group") != "" {
+		return true
+	}
+	return len(payloadMetadataStringSlice(payload, "declaration_merge_kinds")) > 0
 }
 
 func isJavaScriptCallableSemanticEntity(payload map[string]any, entityType string) bool {

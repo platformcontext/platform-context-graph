@@ -70,3 +70,64 @@ func TestBuildSemanticEntityReducerIntentQueuesPythonFunctionSemanticEntities(t 
 		t.Fatalf("intent.EntityKey = %q, want %q", got, want)
 	}
 }
+
+func TestBuildSemanticEntityReducerIntentQueuesTypeScriptModuleSemanticEntities(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		payload map[string]any
+	}{
+		{
+			name: "namespace",
+			payload: map[string]any{
+				"entity_type":   "Module",
+				"entity_id":     "module-1",
+				"entity_name":   "API",
+				"relative_path": "src/types.ts",
+				"repo_id":       "repo-1",
+				"language":      "typescript",
+				"module_kind":   "namespace",
+			},
+		},
+		{
+			name: "declaration merging",
+			payload: map[string]any{
+				"entity_type":             "Module",
+				"entity_id":               "module-2",
+				"entity_name":             "Service",
+				"relative_path":           "src/merge.ts",
+				"repo_id":                 "repo-1",
+				"language":                "typescript",
+				"declaration_merge_group": "Service",
+				"declaration_merge_count": 2,
+				"declaration_merge_kinds": []any{"class", "namespace"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			intent, ok := buildSemanticEntityReducerIntent(facts.Envelope{
+				FactID:       "fact-module",
+				ScopeID:      "scope-123",
+				GenerationID: "generation-456",
+				FactKind:     "content_entity",
+				Payload:      tt.payload,
+			})
+			if !ok {
+				t.Fatal("buildSemanticEntityReducerIntent() ok = false, want true")
+			}
+			if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
+				t.Fatalf("intent.Domain = %q, want %q", got, want)
+			}
+			want := tt.payload["entity_id"].(string)
+			if got := intent.EntityKey; got != want {
+				t.Fatalf("intent.EntityKey = %q, want %q", got, want)
+			}
+		})
+	}
+}
