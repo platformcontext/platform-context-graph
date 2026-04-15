@@ -62,7 +62,7 @@ These options apply at the root command level.
 | `pcg delete --all` | Delete every indexed repository. | No |
 | `pcg visualize` | Launch the interactive Playground UI. | No |
 | `pcg list` | List indexed repositories. | No |
-| `pcg add-package` | Add a package dependency node. | No |
+| `pcg add-package` | Add a package dependency node via the Go `bootstrap-index` runtime. | No |
 | `pcg watch [path]` | Watch a local path and keep the graph updated. | No |
 | `pcg unwatch <path>` | Stop watching a path. | No |
 | `pcg watching` | List active watchers. | No |
