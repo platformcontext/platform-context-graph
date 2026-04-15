@@ -1,0 +1,39 @@
+go/internal/query/impact_trace_deployment_test.go
+  1ca5ee6ce936a402 49-55,199-200,211-216,231-232
+go/internal/query/impact_trace_deployment.go
+  1ca5ee6ce936a402 71,95,98,237,239,270-277
+docs/docs/languages/argocd.md
+  1ca5ee6ce936a402 29,32
+go/internal/query/openapi_paths_impact.go
+  1ca5ee6ce936a402 48
+go/internal/query/impact_trace_deployment_k8s.go
+  1ca5ee6ce936a402 1-61
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 62
+go/internal/query/openapi_test.go
+  1ca5ee6ce936a402 252
+docs/docs/reference/mcp-reference.md
+  1ca5ee6ce936a402 77-79
+docs/docs/reference/http-api.md
+  1ca5ee6ce936a402 160-162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "5c37f4ba1521a803b55ad37795c2d8f4280b2a3b",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 1175,
+      "total_deletions": 1319,
+      "accepted_lines": 107,
+      "overriden_lines": 0
+    }
+  }
+}
