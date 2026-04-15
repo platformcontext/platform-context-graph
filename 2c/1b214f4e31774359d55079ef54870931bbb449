@@ -1,0 +1,46 @@
+docs/docs/guides/terraform-providers/index.md
+  1ca5ee6ce936a402 24-28
+go/internal/storage/postgres/proof_domain_terraform_support_test.go
+  1ca5ee6ce936a402 1-68
+go/internal/storage/postgres/facts.go
+  1ca5ee6ce936a402 304,336-340,354-357
+go/internal/storage/postgres/proof_domain_harness_test.go
+  1ca5ee6ce936a402 49,80,95,406-420,426-432
+go/internal/storage/postgres/ingestion.go
+  1ca5ee6ce936a402 5,12,17-23,192-216,295-388
+go/internal/storage/postgres/ingestion_test.go
+  1ca5ee6ce936a402 279-284,298-308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "2c1b214f4e31774359d55079ef54870931bbb449",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 565,
+      "total_deletions": 229,
+      "accepted_lines": 903,
+      "overriden_lines": 0
+    },
+    "24fa16add0b956d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019d7c7f-4ec4-7380-ac65-48b23e0cc0aa",
+        "model": "gpt-5.4"
+      },
+      "human_author": null,
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 84,
+      "overriden_lines": 0
+    }
+  }
+}
