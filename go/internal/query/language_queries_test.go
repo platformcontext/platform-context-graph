@@ -290,7 +290,7 @@ func TestHandleLanguageQuery_ContentBackedEntityTypes(t *testing.T) {
 			entityType: "protocol_implementation",
 			query:      "Demo.Serializable",
 			row: []driver.Value{
-				"impl-1", "repo-1", "lib/demo/serializable.ex", "Module", "Demo.Serializable",
+				"impl-1", "repo-1", "lib/demo/serializable.ex", "ProtocolImplementation", "Demo.Serializable",
 				int64(1), int64(4), "elixir", "defimpl Demo.Serializable, for: Demo.Worker do\nend", []byte(`{"module_kind":"protocol_implementation","protocol":"Demo.Serializable","implemented_for":"Demo.Worker"}`),
 			},
 			wantName:  "Demo.Serializable",
@@ -403,6 +403,15 @@ func TestHandleLanguageQuery_ContentBackedEntityTypes(t *testing.T) {
 			}
 			if got, want := result["name"], tt.wantName; got != want {
 				t.Fatalf("result[name] = %#v, want %#v", got, want)
+			}
+			if tt.entityType == "protocol_implementation" {
+				labels, ok := result["labels"].([]any)
+				if !ok || len(labels) != 1 {
+					t.Fatalf("result[labels] = %#v, want one label", result["labels"])
+				}
+				if got, want := labels[0], "ProtocolImplementation"; got != want {
+					t.Fatalf("result[labels][0] = %#v, want %#v", got, want)
+				}
 			}
 			metadata, ok := result["metadata"].(map[string]any)
 			if !ok {

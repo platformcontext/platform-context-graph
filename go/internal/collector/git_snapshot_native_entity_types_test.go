@@ -81,6 +81,14 @@ export function ToolbarButton({ label }: WidgetProps) {
 	)
 	writeCollectorTestFile(
 		t,
+		filepath.Join(repoRoot, "implementations.ex"),
+		`defimpl Demo.Serializable, for: Demo.Worker do
+  def serialize(worker), do: worker
+end
+`,
+	)
+	writeCollectorTestFile(
+		t,
 		filepath.Join(repoRoot, "types.c"),
 		`typedef int my_int;
 `,
@@ -103,6 +111,7 @@ export function ToolbarButton({ label }: WidgetProps) {
 	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "TypeAlias", "WidgetProps")
 	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "Component", "ToolbarButton")
 	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "Protocol", "Runnable")
+	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "ProtocolImplementation", "Demo.Serializable")
 	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "Typedef", "my_int")
 }
 
@@ -188,6 +197,36 @@ end
 	if uid, _ := protocols[0]["uid"].(string); uid == "" {
 		t.Fatal("FileData[0].protocols[0].uid = empty, want canonical content entity id")
 	}
+}
+
+func TestNativeRepositorySnapshotterCarriesElixirProtocolImplementationEntities(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeCollectorTestFile(
+		t,
+		filepath.Join(repoRoot, "implementation.ex"),
+		`defimpl Demo.Serializable, for: Demo.Worker do
+  def serialize(worker), do: worker
+end
+`,
+	)
+
+	engine, err := parser.DefaultEngine()
+	if err != nil {
+		t.Fatalf("DefaultEngine() error = %v, want nil", err)
+	}
+
+	snapshotter := NativeRepositorySnapshotter{Engine: engine}
+	got, err := snapshotter.SnapshotRepository(
+		context.Background(),
+		SelectedRepository{RepoPath: repoRoot},
+	)
+	if err != nil {
+		t.Fatalf("SnapshotRepository() error = %v, want nil", err)
+	}
+
+	assertSnapshotEntityTypeAndName(t, got.ContentEntities, "ProtocolImplementation", "Demo.Serializable")
 }
 
 func TestNativeRepositorySnapshotterCarriesTerragruntDependencyAndVariableEntities(t *testing.T) {

@@ -372,6 +372,65 @@ func TestMaterializeCarriesRustImplBlockEntities(t *testing.T) {
 	}
 }
 
+func TestMaterializePromotesElixirDefimplToProtocolImplementation(t *testing.T) {
+	t.Parallel()
+
+	got, err := Materialize(Input{
+		RepoID: "repository:r_12345678",
+		Files: []File{
+			{
+				Path: "lib/demo/serializable.ex",
+				Body: "defimpl Demo.Serializable, for: Demo.Worker do\n  def serialize(worker), do: worker\nend\n",
+				EntityBuckets: map[string][]Entity{
+					"modules": {
+						{
+							Name:       "Demo.Serializable",
+							LineNumber: 1,
+							EndLine:    3,
+							Source:     "defimpl Demo.Serializable, for: Demo.Worker do\n  def serialize(worker), do: worker\nend",
+							Metadata: map[string]any{
+								"module_kind":     "protocol_implementation",
+								"protocol":        "Demo.Serializable",
+								"implemented_for": "Demo.Worker",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Materialize() error = %v, want nil", err)
+	}
+
+	if len(got.Entities) != 1 {
+		t.Fatalf("len(Materialize().Entities) = %d, want 1", len(got.Entities))
+	}
+
+	entity := got.Entities[0]
+	if got, want := entity.EntityType, "ProtocolImplementation"; got != want {
+		t.Fatalf("entity.EntityType = %q, want %q", got, want)
+	}
+	if got, want := entity.EntityName, "Demo.Serializable"; got != want {
+		t.Fatalf("entity.EntityName = %q, want %q", got, want)
+	}
+	if got, want := entity.StartLine, 1; got != want {
+		t.Fatalf("entity.StartLine = %d, want %d", got, want)
+	}
+	if got, want := entity.EndLine, 3; got != want {
+		t.Fatalf("entity.EndLine = %d, want %d", got, want)
+	}
+	if got, want := entity.Metadata["module_kind"], "protocol_implementation"; got != want {
+		t.Fatalf("entity.Metadata[module_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := entity.Metadata["protocol"], "Demo.Serializable"; got != want {
+		t.Fatalf("entity.Metadata[protocol] = %#v, want %#v", got, want)
+	}
+	if got, want := entity.Metadata["implemented_for"], "Demo.Worker"; got != want {
+		t.Fatalf("entity.Metadata[implemented_for] = %#v, want %#v", got, want)
+	}
+}
+
 func TestMaterializeCarriesCloudFormationExtendedBuckets(t *testing.T) {
 	t.Parallel()
 
@@ -413,49 +472,4 @@ func TestMaterializeCarriesCloudFormationExtendedBuckets(t *testing.T) {
 			t.Fatalf("entity[%d].EntityType = %q, want %q", index, got.Entities[index].EntityType, want)
 		}
 	}
-}
-
-type EntityRecordExpectation struct {
-	entityType  string
-	entityName  string
-	startLine   int
-	endLine     int
-	sourceCache string
-	entityID    string
-}
-
-func boolPtr(value bool) *bool {
-	return &value
-}
-
-func toStringSlice(value any) []string {
-	items, ok := value.([]string)
-	if ok {
-		return items
-	}
-	rawItems, ok := value.([]any)
-	if !ok {
-		return nil
-	}
-	converted := make([]string, 0, len(rawItems))
-	for _, item := range rawItems {
-		text, ok := item.(string)
-		if !ok {
-			return nil
-		}
-		converted = append(converted, text)
-	}
-	return converted
-}
-
-func stringSlicesEqual(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
 }

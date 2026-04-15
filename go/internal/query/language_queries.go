@@ -46,7 +46,7 @@ var contentBackedEntityTypes = map[string]string{
 	"terragrunt_local":        "TerragruntLocal",
 	"terragrunt_input":        "TerragruntInput",
 	"guard":                   "guard",
-	"protocol_implementation": "protocol_implementation",
+	"protocol_implementation": "ProtocolImplementation",
 	"module_attribute":        "module_attribute",
 }
 
@@ -91,6 +91,49 @@ func (h *LanguageQueryHandler) handleLanguageQuery(w http.ResponseWriter, r *htt
 
 	if req.Limit <= 0 {
 		req.Limit = 50
+	}
+
+	if req.EntityType == "annotation" {
+		var (
+			results []map[string]any
+			err     error
+		)
+		if h.Neo4j != nil {
+			results, err = h.queryByLanguage(
+				r.Context(),
+				req.Language,
+				contentBackedEntityTypes[req.EntityType],
+				req.Query,
+				req.RepoID,
+				req.Limit,
+			)
+			if err != nil {
+				WriteError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+		}
+		if len(results) == 0 {
+			results, err = h.queryContentByLanguage(
+				r.Context(),
+				req.Language,
+				contentBackedEntityTypes[req.EntityType],
+				req.Query,
+				req.RepoID,
+				req.Limit,
+			)
+			if err != nil {
+				WriteError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+		}
+
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"language":    req.Language,
+			"entity_type": req.EntityType,
+			"query":       req.Query,
+			"results":     results,
+		})
+		return
 	}
 
 	if label, ok := graphBackedEntityTypes[req.EntityType]; ok {

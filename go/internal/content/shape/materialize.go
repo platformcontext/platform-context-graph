@@ -63,6 +63,7 @@ var contentEntityBuckets = []entityBucketMapping{
 	{bucket: "structs", label: "Struct"},
 	{bucket: "enums", label: "Enum"},
 	{bucket: "protocols", label: "Protocol"},
+	{bucket: "protocol_implementations", label: "ProtocolImplementation"},
 	{bucket: "unions", label: "Union"},
 	{bucket: "typedefs", label: "Typedef"},
 	{bucket: "type_aliases", label: "TypeAlias"},
@@ -115,24 +116,25 @@ var contentEntityBuckets = []entityBucketMapping{
 }
 
 var sourceFieldContainsCode = map[string]struct{}{
-	"Annotation": {},
-	"Class":      {},
-	"Component":  {},
-	"Enum":       {},
-	"Function":   {},
-	"Interface":  {},
-	"Macro":      {},
-	"Module":     {},
-	"ImplBlock":  {},
-	"Property":   {},
-	"Protocol":   {},
-	"Record":     {},
-	"Struct":     {},
-	"Trait":      {},
-	"TypeAlias":  {},
-	"Typedef":    {},
-	"Union":      {},
-	"Variable":   {},
+	"Annotation":             {},
+	"Class":                  {},
+	"Component":              {},
+	"Enum":                   {},
+	"Function":               {},
+	"Interface":              {},
+	"Macro":                  {},
+	"Module":                 {},
+	"ImplBlock":              {},
+	"Property":               {},
+	"Protocol":               {},
+	"ProtocolImplementation": {},
+	"Record":                 {},
+	"Struct":                 {},
+	"Trait":                  {},
+	"TypeAlias":              {},
+	"Typedef":                {},
+	"Union":                  {},
+	"Variable":               {},
 }
 
 var trailingNewlineLabels = map[string]struct{}{
@@ -159,6 +161,7 @@ var trailingNewlineLabels = map[string]struct{}{
 	"Macro":                   {},
 	"Property":                {},
 	"Protocol":                {},
+	"ProtocolImplementation":  {},
 	"Record":                  {},
 	"SqlColumn":               {},
 	"SqlFunction":             {},
@@ -256,8 +259,9 @@ func materializeEntities(repoID string, path string, file File) ([]content.Entit
 	for _, bucket := range contentEntityBuckets {
 		items := file.EntityBuckets[bucket.bucket]
 		for _, item := range items {
+			label := entityLabelForBucket(bucket.label, item)
 			indexedItems = append(indexedItems, indexedEntity{
-				label: bucket.label,
+				label: label,
 				item:  item,
 			})
 		}
@@ -300,18 +304,6 @@ func materializeEntities(repoID string, path string, file File) ([]content.Entit
 	}
 
 	return entities, nil
-}
-
-type indexedEntity struct {
-	label string
-	item  Entity
-}
-
-func (e indexedEntity) lineNumber() int {
-	if e.item.LineNumber >= 1 {
-		return e.item.LineNumber
-	}
-	return 1
 }
 
 func entityEndLine(items []indexedEntity, index int, body string, startLine int) int {

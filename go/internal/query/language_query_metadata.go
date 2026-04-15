@@ -68,6 +68,8 @@ func (h *LanguageQueryHandler) enrichLanguageResultsWithContentMetadata(
 
 func graphLabelToContentEntityType(label string) string {
 	switch label {
+	case "Annotation":
+		return "Annotation"
 	case "Function", "Class", "Module", "Variable", "Struct", "Enum", "Union", "Macro":
 		return label
 	default:

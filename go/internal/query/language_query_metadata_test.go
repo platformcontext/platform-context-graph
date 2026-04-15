@@ -1,10 +1,29 @@
 package query
 
 import (
+	"bytes"
 	"context"
 	"database/sql/driver"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
+
+type mockLanguageQueryGraphReader struct {
+	rows []map[string]any
+}
+
+func (m *mockLanguageQueryGraphReader) Run(context.Context, string, map[string]any) ([]map[string]any, error) {
+	return m.rows, nil
+}
+
+func (m *mockLanguageQueryGraphReader) RunSingle(context.Context, string, map[string]any) (map[string]any, error) {
+	if len(m.rows) == 0 {
+		return nil, nil
+	}
+	return m.rows[0], nil
+}
 
 func TestEnrichLanguageResultsWithContentMetadata(t *testing.T) {
 	t.Parallel()
@@ -139,5 +158,198 @@ func TestEnrichLanguageResultsWithContentMetadataSkipsUnmatchedRows(t *testing.T
 	}
 	if _, ok := got[0]["semantic_profile"]; ok {
 		t.Fatalf("results[0][semantic_profile] = %#v, want semantic profile to remain absent", got[0]["semantic_profile"])
+	}
+}
+
+func TestEnrichLanguageResultsWithContentMetadataAnnotation(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"annotation-1", "repo-1", "src/Logged.java", "Annotation", "Logged",
+					int64(2), int64(2), "java", "@Logged", []byte(`{"kind":"applied","target_kind":"method_declaration"}`),
+				},
+			},
+		},
+	})
+
+	handler := &LanguageQueryHandler{Content: NewContentReader(db)}
+	graphResults := []map[string]any{
+		{
+			"entity_id":  "graph-1",
+			"name":       "Logged",
+			"labels":     []string{"Annotation"},
+			"file_path":  "src/Logged.java",
+			"repo_id":    "repo-1",
+			"language":   "java",
+			"start_line": 2,
+			"end_line":   2,
+		},
+	}
+
+	got, err := handler.enrichLanguageResultsWithContentMetadata(
+		context.Background(),
+		graphResults,
+		"java",
+		"Annotation",
+		"Logged",
+		"repo-1",
+		10,
+	)
+	if err != nil {
+		t.Fatalf("enrichLanguageResultsWithContentMetadata() error = %v, want nil", err)
+	}
+
+	metadata, ok := got[0]["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][metadata] type = %T, want map[string]any", got[0]["metadata"])
+	}
+	if gotValue, want := metadata["kind"], "applied"; gotValue != want {
+		t.Fatalf("metadata[kind] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := got[0]["semantic_summary"], "Annotation Logged is applied to a method declaration."; gotValue != want {
+		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", gotValue, want)
+	}
+	semanticProfile, ok := got[0]["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][semantic_profile] type = %T, want map[string]any", got[0]["semantic_profile"])
+	}
+	if gotValue, want := semanticProfile["surface_kind"], "applied_annotation"; gotValue != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", gotValue, want)
+	}
+}
+
+func TestHandleLanguageQuery_AnnotationPrefersGraphPathAndEnrichesMetadata(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"annotation-1", "repo-1", "src/Logged.java", "Annotation", "Logged",
+					int64(2), int64(2), "java", "@Logged", []byte(`{"kind":"applied","target_kind":"method_declaration"}`),
+				},
+			},
+		},
+	})
+
+	handler := &LanguageQueryHandler{
+		Neo4j: &mockLanguageQueryGraphReader{rows: []map[string]any{
+			{
+				"entity_id":  "graph-1",
+				"name":       "Logged",
+				"labels":     []string{"Annotation"},
+				"file_path":  "src/Logged.java",
+				"repo_id":    "repo-1",
+				"repo_name":  "repo-1",
+				"language":   "java",
+				"start_line": int64(2),
+				"end_line":   int64(2),
+			},
+		}},
+		Content: NewContentReader(db),
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/code/language-query",
+		bytes.NewBufferString(`{"language":"java","entity_type":"annotation","query":"Logged","repo_id":"repo-1"}`))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one graph-backed annotation", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["entity_id"], "graph-1"; got != want {
+		t.Fatalf("result[entity_id] = %#v, want %#v", got, want)
+	}
+	if got, want := result["semantic_summary"], "Annotation Logged is applied to a method declaration."; got != want {
+		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[semantic_profile] type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "applied_annotation"; got != want {
+		t.Fatalf("result[semantic_profile][surface_kind] = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleLanguageQuery_AnnotationFallsBackToContentWhenGraphMissing(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"annotation-1", "repo-1", "src/Logged.java", "Annotation", "Logged",
+					int64(2), int64(2), "java", "@Logged", []byte(`{"kind":"applied","target_kind":"method_declaration"}`),
+				},
+			},
+		},
+	})
+
+	handler := &LanguageQueryHandler{
+		Neo4j:   &mockLanguageQueryGraphReader{},
+		Content: NewContentReader(db),
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/code/language-query",
+		bytes.NewBufferString(`{"language":"java","entity_type":"annotation","query":"Logged","repo_id":"repo-1"}`))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one content-backed annotation", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["entity_id"], "annotation-1"; got != want {
+		t.Fatalf("result[entity_id] = %#v, want %#v", got, want)
+	}
+	if got, want := result["semantic_summary"], "Annotation Logged is applied to a method declaration."; got != want {
+		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
 	}
 }
