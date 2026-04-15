@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"database/sql/driver"
+	"reflect"
 	"testing"
 )
 
@@ -108,5 +109,65 @@ func TestEnrichEntityResultsWithContentMetadataTypeScriptNamespaceModule(t *test
 	}
 	if gotValue, want := semanticProfile["surface_kind"], "namespace_module"; gotValue != want {
 		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", gotValue, want)
+	}
+}
+
+func TestEnrichEntityResultsWithContentMetadataTypeScriptDeclarationMerging(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"content-1", "repo-1", "src/merge.ts", "Class", "Service",
+					int64(1), int64(6), "typescript", "class Service {}", []byte(`{"declaration_merge_group":"Service","declaration_merge_count":2,"declaration_merge_kinds":["class","namespace"]}`),
+				},
+			},
+		},
+	})
+
+	handler := &EntityHandler{Content: NewContentReader(db)}
+	results := []map[string]any{
+		{
+			"id":         "graph-1",
+			"name":       "Service",
+			"labels":     []string{"Class"},
+			"file_path":  "src/merge.ts",
+			"repo_id":    "repo-1",
+			"language":   "typescript",
+			"start_line": 1,
+			"end_line":   6,
+		},
+	}
+
+	got, err := handler.enrichEntityResultsWithContentMetadata(context.Background(), results, "repo-1", "Service", 20)
+	if err != nil {
+		t.Fatalf("enrichEntityResultsWithContentMetadata() error = %v, want nil", err)
+	}
+
+	if gotValue, want := got[0]["semantic_summary"], "Class Service participates in TypeScript declaration merging with namespace Service."; gotValue != want {
+		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", gotValue, want)
+	}
+
+	semanticProfile, ok := got[0]["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][semantic_profile] type = %T, want map[string]any", got[0]["semantic_profile"])
+	}
+	if gotValue, want := semanticProfile["surface_kind"], "declaration_merge"; gotValue != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := semanticProfile["declaration_merge_count"], 2; gotValue != want {
+		t.Fatalf("semantic_profile[declaration_merge_count] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := semanticProfile["declaration_merge_kinds"], []string{"class", "namespace"}; !reflect.DeepEqual(gotValue, want) {
+		t.Fatalf("semantic_profile[declaration_merge_kinds] = %#v, want %#v", gotValue, want)
+	}
+
+	if gotValue, want := got[0]["story"], "Class Service participates in TypeScript declaration merging with namespace Service. Defined in src/merge.ts (typescript)."; gotValue != want {
+		t.Fatalf("results[0][story] = %#v, want %#v", gotValue, want)
 	}
 }

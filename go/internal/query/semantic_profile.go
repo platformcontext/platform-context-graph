@@ -42,6 +42,15 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 		profile["component_type_assertion"] = componentAssertion
 		signals = append(signals, "component_type_assertion")
 	}
+	if mergeGroup, _ := metadata["declaration_merge_group"].(string); mergeGroup != "" {
+		if mergeCount := IntVal(metadata, "declaration_merge_count"); mergeCount > 1 {
+			profile["declaration_merge"] = true
+			profile["declaration_merge_group"] = mergeGroup
+			profile["declaration_merge_count"] = mergeCount
+			profile["declaration_merge_kinds"] = metadataStringSlice(metadata, "declaration_merge_kinds")
+			signals = append(signals, "declaration_merge")
+		}
+	}
 
 	jsSemantics := ExtractJavaScriptSemantics(metadata)
 	if jsSemantics.MethodKind != "" {
@@ -132,6 +141,9 @@ func semanticSurfaceKind(
 	}
 	if _, ok := profile["namespace"].(bool); ok && label == "Module" {
 		return "namespace_module"
+	}
+	if _, ok := profile["declaration_merge"].(bool); ok {
+		return "declaration_merge"
 	}
 	if _, ok := profile["protocol"].(bool); ok {
 		return "protocol"

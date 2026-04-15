@@ -38,6 +38,18 @@ func TestBuildRepositorySemanticOverviewCountsTypeScriptAdvancedSignals(t *testi
 				"module_kind": "namespace",
 			},
 		},
+		{
+			EntityID:   "class-1",
+			RepoID:     "repo-1",
+			EntityType: "Class",
+			EntityName: "Service",
+			Language:   "typescript",
+			Metadata: map[string]any{
+				"declaration_merge_group": "Service",
+				"declaration_merge_count": 2,
+				"declaration_merge_kinds": []any{"class", "namespace"},
+			},
+		},
 	})
 
 	if overview == nil {
@@ -57,6 +69,9 @@ func TestBuildRepositorySemanticOverviewCountsTypeScriptAdvancedSignals(t *testi
 	if got, want := signalCounts["namespace"], 1; got != want {
 		t.Fatalf("signal_counts[namespace] = %d, want %d", got, want)
 	}
+	if got, want := signalCounts["declaration_merge"], 1; got != want {
+		t.Fatalf("signal_counts[declaration_merge] = %d, want %d", got, want)
+	}
 
 	surfaceKinds, ok := overview["surface_kind_counts"].(map[string]int)
 	if !ok {
@@ -70,5 +85,8 @@ func TestBuildRepositorySemanticOverviewCountsTypeScriptAdvancedSignals(t *testi
 	}
 	if got, want := surfaceKinds["namespace_module"], 1; got != want {
 		t.Fatalf("surface_kind_counts[namespace_module] = %d, want %d", got, want)
+	}
+	if got, want := surfaceKinds["declaration_merge"], 1; got != want {
+		t.Fatalf("surface_kind_counts[declaration_merge] = %d, want %d", got, want)
 	}
 }

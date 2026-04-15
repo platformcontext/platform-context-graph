@@ -17,6 +17,10 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 		return ""
 	}
 
+	if mergeSummary := typeScriptDeclarationMergeSummary(label, name, metadata); mergeSummary != "" {
+		return mergeSummary
+	}
+
 	switch label {
 	case "AnalyticsModel":
 		assetName, _ := metadata["asset_name"].(string)

@@ -181,6 +181,7 @@ func (e *Engine) parseJavaScriptLike(
 		}
 	})
 
+	annotateTypeScriptDeclarationMerges(payload, outputLanguage)
 	sortNamedBucket(payload, "functions")
 	sortNamedBucket(payload, "classes")
 	sortNamedBucket(payload, "variables")
