@@ -76,6 +76,8 @@ func TestSchemaStatementsContainsUIDConstraints(t *testing.T) {
 		"class_uid_unique",
 		"variable_uid_unique",
 		"typedef_uid_unique",
+		"type_alias_uid_unique",
+		"component_uid_unique",
 		"terraform_resource_uid_unique",
 	}
 	for _, want := range expected {

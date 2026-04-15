@@ -311,11 +311,11 @@ func TestRuntimeProjectMaterializesExplicitEntityRecords(t *testing.T) {
 	}
 }
 
-func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationAndTypedef(t *testing.T) {
+func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationTypedefTypeAliasAndComponent(t *testing.T) {
 	t.Parallel()
 
 	contentWriter := &recordingContentWriter{result: content.Result{EntityCount: 2}}
-	intentWriter := &recordingIntentWriter{result: IntentResult{Count: 2}}
+	intentWriter := &recordingIntentWriter{result: IntentResult{Count: 4}}
 	runtime := Runtime{
 		ContentWriter: contentWriter,
 		IntentWriter:  intentWriter,
@@ -384,6 +384,40 @@ func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationAndType
 				SourceSystem: "git",
 			},
 			Payload: map[string]any{
+				"entity_id":     "typealias-1",
+				"entity_type":   "TypeAlias",
+				"entity_name":   "UserID",
+				"relative_path": "src/types.ts",
+				"repo_id":       "repository:r_12345678",
+				"language":      "typescript",
+			},
+		},
+		{
+			FactID:       "fact-4",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "content_entity",
+			SourceRef: facts.Ref{
+				SourceSystem: "git",
+			},
+			Payload: map[string]any{
+				"entity_id":     "component-1",
+				"entity_type":   "Component",
+				"entity_name":   "Button",
+				"relative_path": "src/Button.tsx",
+				"repo_id":       "repository:r_12345678",
+				"language":      "tsx",
+			},
+		},
+		{
+			FactID:       "fact-5",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "content_entity",
+			SourceRef: facts.Ref{
+				SourceSystem: "git",
+			},
+			Payload: map[string]any{
 				"entity_id":     "function-1",
 				"entity_type":   "Function",
 				"entity_name":   "Helper",
@@ -397,7 +431,7 @@ func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationAndType
 		t.Fatalf("Project() error = %v, want nil", err)
 	}
 
-	if got, want := result.Intents.Count, 2; got != want {
+	if got, want := result.Intents.Count, 4; got != want {
 		t.Fatalf("result.Intents.Count = %d, want %d", got, want)
 	}
 	if got, want := result.Content.EntityCount, 2; got != want {
@@ -407,20 +441,25 @@ func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationAndType
 		t.Fatalf("intent writer call count = %d, want %d", got, want)
 	}
 	intents := intentWriter.calls[0]
-	if got, want := len(intents), 2; got != want {
+	if got, want := len(intents), 4; got != want {
 		t.Fatalf("len(intents) = %d, want %d", got, want)
 	}
-	if got, want := intents[0].Domain, reducer.DomainSemanticEntityMaterialization; got != want {
-		t.Fatalf("intents[0].Domain = %q, want %q", got, want)
-	}
-	if got, want := intents[1].Domain, reducer.DomainSemanticEntityMaterialization; got != want {
-		t.Fatalf("intents[1].Domain = %q, want %q", got, want)
+	for i, intent := range intents {
+		if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
+			t.Fatalf("intents[%d].Domain = %q, want %q", i, got, want)
+		}
 	}
 	if got, want := intents[0].EntityKey, "annotation-1"; got != want {
 		t.Fatalf("intents[0].EntityKey = %q, want %q", got, want)
 	}
-	if got, want := intents[1].EntityKey, "typedef-1"; got != want {
+	if got, want := intents[1].EntityKey, "component-1"; got != want {
 		t.Fatalf("intents[1].EntityKey = %q, want %q", got, want)
+	}
+	if got, want := intents[2].EntityKey, "typealias-1"; got != want {
+		t.Fatalf("intents[2].EntityKey = %q, want %q", got, want)
+	}
+	if got, want := intents[3].EntityKey, "typedef-1"; got != want {
+		t.Fatalf("intents[3].EntityKey = %q, want %q", got, want)
 	}
 }
 

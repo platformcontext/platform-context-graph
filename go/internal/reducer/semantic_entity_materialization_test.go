@@ -8,7 +8,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 )
 
-func TestExtractSemanticEntityRowsFiltersAnnotationAndTypedefFacts(t *testing.T) {
+func TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasAndComponentFacts(t *testing.T) {
 	t.Parallel()
 
 	envelopes := []facts.Envelope{
@@ -68,6 +68,30 @@ func TestExtractSemanticEntityRowsFiltersAnnotationAndTypedefFacts(t *testing.T)
 				"relative_path": "src/types.ts",
 				"entity_type":   "TypeAlias",
 				"entity_name":   "UserID",
+				"language":      "typescript",
+				"entity_metadata": map[string]any{
+					"type_alias_kind": "mapped_type",
+					"type_parameters": []any{"T"},
+				},
+			},
+		},
+		{
+			FactKind: "content_entity",
+			SourceRef: facts.Ref{
+				SourceURI: "/repo/src/Button.tsx",
+			},
+			Payload: map[string]any{
+				"repo_id":       "repo-1",
+				"entity_id":     "component-1",
+				"relative_path": "src/Button.tsx",
+				"entity_type":   "Component",
+				"entity_name":   "Button",
+				"language":      "tsx",
+				"entity_metadata": map[string]any{
+					"framework":                "react",
+					"jsx_fragment_shorthand":   true,
+					"component_type_assertion": "ComponentType",
+				},
 			},
 		},
 	}
@@ -77,33 +101,67 @@ func TestExtractSemanticEntityRowsFiltersAnnotationAndTypedefFacts(t *testing.T)
 	if got, want := repoIDs, []string{"repo-1"}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("ExtractSemanticEntityRows() repoIDs = %v, want %v", got, want)
 	}
-	if got, want := len(rows), 2; got != want {
+	if got, want := len(rows), 4; got != want {
 		t.Fatalf("ExtractSemanticEntityRows() rows = %d, want %d", got, want)
 	}
 
-	annotation := rows[0]
-	if annotation.EntityType != "Annotation" {
-		t.Fatalf("rows[0].EntityType = %q, want Annotation", annotation.EntityType)
-	}
-	if annotation.EntityID != "annotation-1" {
-		t.Fatalf("rows[0].EntityID = %q, want annotation-1", annotation.EntityID)
-	}
-	if annotation.FilePath != "/repo/src/Logged.java" {
-		t.Fatalf("rows[0].FilePath = %q, want /repo/src/Logged.java", annotation.FilePath)
-	}
-	if got, want := annotation.Metadata["kind"], "applied"; got != want {
-		t.Fatalf("rows[0].Metadata[kind] = %v, want %v", got, want)
+	rowsByType := make(map[string]SemanticEntityRow, len(rows))
+	for _, row := range rows {
+		rowsByType[row.EntityType] = row
 	}
 
-	typedef := rows[1]
+	annotation := rowsByType["Annotation"]
+	if annotation.EntityType != "Annotation" {
+		t.Fatalf("Annotation row missing")
+	}
+	if annotation.EntityID != "annotation-1" {
+		t.Fatalf("Annotation.EntityID = %q, want annotation-1", annotation.EntityID)
+	}
+	if annotation.FilePath != "/repo/src/Logged.java" {
+		t.Fatalf("Annotation.FilePath = %q, want /repo/src/Logged.java", annotation.FilePath)
+	}
+	if got, want := annotation.Metadata["kind"], "applied"; got != want {
+		t.Fatalf("Annotation.Metadata[kind] = %v, want %v", got, want)
+	}
+
+	typedef := rowsByType["Typedef"]
 	if typedef.EntityType != "Typedef" {
-		t.Fatalf("rows[1].EntityType = %q, want Typedef", typedef.EntityType)
+		t.Fatalf("Typedef row missing")
 	}
 	if typedef.EntityID != "typedef-1" {
-		t.Fatalf("rows[1].EntityID = %q, want typedef-1", typedef.EntityID)
+		t.Fatalf("Typedef.EntityID = %q, want typedef-1", typedef.EntityID)
 	}
 	if got, want := typedef.Metadata["type"], "int"; got != want {
-		t.Fatalf("rows[1].Metadata[type] = %v, want %v", got, want)
+		t.Fatalf("Typedef.Metadata[type] = %v, want %v", got, want)
+	}
+
+	typeAlias := rowsByType["TypeAlias"]
+	if typeAlias.EntityType != "TypeAlias" {
+		t.Fatalf("TypeAlias row missing")
+	}
+	if got, want := typeAlias.Metadata["type_alias_kind"], "mapped_type"; got != want {
+		t.Fatalf("TypeAlias.Metadata[type_alias_kind] = %v, want %v", got, want)
+	}
+	typeParameters, ok := typeAlias.Metadata["type_parameters"].([]any)
+	if !ok {
+		t.Fatalf("TypeAlias.Metadata[type_parameters] type = %T, want []any", typeAlias.Metadata["type_parameters"])
+	}
+	if got, want := len(typeParameters), 1; got != want || typeParameters[0] != "T" {
+		t.Fatalf("TypeAlias.Metadata[type_parameters] = %#v, want [T]", typeParameters)
+	}
+
+	component := rowsByType["Component"]
+	if component.EntityType != "Component" {
+		t.Fatalf("Component row missing")
+	}
+	if got, want := component.Metadata["framework"], "react"; got != want {
+		t.Fatalf("Component.Metadata[framework] = %v, want %v", got, want)
+	}
+	if got, want := component.Metadata["jsx_fragment_shorthand"], true; got != want {
+		t.Fatalf("Component.Metadata[jsx_fragment_shorthand] = %v, want %v", got, want)
+	}
+	if got, want := component.Metadata["component_type_assertion"], "ComponentType"; got != want {
+		t.Fatalf("Component.Metadata[component_type_assertion] = %v, want %v", got, want)
 	}
 }
 
@@ -157,11 +215,48 @@ func TestSemanticEntityMaterializationHandlerWritesAndRetracts(t *testing.T) {
 					},
 				},
 			},
+			{
+				FactKind: "content_entity",
+				SourceRef: facts.Ref{
+					SourceURI: "/repo/src/types.ts",
+				},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "alias-1",
+					"relative_path": "src/types.ts",
+					"entity_type":   "TypeAlias",
+					"entity_name":   "UserID",
+					"language":      "typescript",
+					"entity_metadata": map[string]any{
+						"type_alias_kind": "mapped_type",
+						"type_parameters": []any{"T"},
+					},
+				},
+			},
+			{
+				FactKind: "content_entity",
+				SourceRef: facts.Ref{
+					SourceURI: "/repo/src/Button.tsx",
+				},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "component-1",
+					"relative_path": "src/Button.tsx",
+					"entity_type":   "Component",
+					"entity_name":   "Button",
+					"language":      "tsx",
+					"entity_metadata": map[string]any{
+						"framework":                "react",
+						"jsx_fragment_shorthand":   true,
+						"component_type_assertion": "ComponentType",
+					},
+				},
+			},
 		},
 	}
 	writer := &recordingSemanticEntityWriter{
 		result: SemanticEntityWriteResult{
-			CanonicalWrites: 2,
+			CanonicalWrites: 4,
 		},
 	}
 
@@ -193,7 +288,7 @@ func TestSemanticEntityMaterializationHandlerWritesAndRetracts(t *testing.T) {
 	if got, want := len(writer.writes[0].RepoIDs), 1; got != want {
 		t.Fatalf("writer RepoIDs = %v, want 1 repo", writer.writes[0].RepoIDs)
 	}
-	if got, want := len(writer.writes[0].Rows), 2; got != want {
+	if got, want := len(writer.writes[0].Rows), 4; got != want {
 		t.Fatalf("writer Rows = %d, want %d", got, want)
 	}
 }
@@ -212,14 +307,14 @@ func TestSemanticEntityMaterializationHandlerRetractsWhenNoTargetRowsRemain(t *t
 			{
 				FactKind: "content_entity",
 				SourceRef: facts.Ref{
-					SourceURI: "/repo/src/types.ts",
+					SourceURI: "/repo/src/helper.go",
 				},
 				Payload: map[string]any{
 					"repo_id":       "repo-1",
-					"entity_id":     "alias-1",
-					"relative_path": "src/types.ts",
-					"entity_type":   "TypeAlias",
-					"entity_name":   "UserID",
+					"entity_id":     "function-1",
+					"relative_path": "src/helper.go",
+					"entity_type":   "Function",
+					"entity_name":   "Helper",
 				},
 			},
 		},

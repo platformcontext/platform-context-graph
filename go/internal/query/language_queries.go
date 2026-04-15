@@ -54,6 +54,7 @@ var graphFirstContentBackedEntityTypes = map[string]string{
 	"annotation": "Annotation",
 	"component":  "Component",
 	"impl_block": "ImplBlock",
+	"type_alias": "TypeAlias",
 	"typedef":    "Typedef",
 }
 
@@ -482,6 +483,25 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	}
 	if v := StringVal(row, "method_kind"); v != "" {
 		metadata["method_kind"] = v
+	}
+	if values := StringSliceVal(row, "type_parameters"); len(values) > 0 {
+		typeParameters := make([]any, 0, len(values))
+		for _, value := range values {
+			typeParameters = append(typeParameters, value)
+		}
+		metadata["type_parameters"] = typeParameters
+	}
+	if v := StringVal(row, "type_alias_kind"); v != "" {
+		metadata["type_alias_kind"] = v
+	}
+	if v := StringVal(row, "framework"); v != "" {
+		metadata["framework"] = v
+	}
+	if v, ok := row["jsx_fragment_shorthand"].(bool); ok {
+		metadata["jsx_fragment_shorthand"] = v
+	}
+	if v := StringVal(row, "component_type_assertion"); v != "" {
+		metadata["component_type_assertion"] = v
 	}
 	if v := StringVal(row, "kind"); v != "" {
 		metadata["kind"] = v

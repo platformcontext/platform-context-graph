@@ -130,10 +130,12 @@ var uidConstraintLabels = []string{
 	"TerraformResource",
 	"TerraformVariable",
 	"TerragruntConfig",
+	"TypeAlias",
 	"Typedef",
 	"Trait",
 	"Union",
 	"Variable",
+	"Component",
 }
 
 // schemaPerformanceIndexes lists secondary indexes that improve query

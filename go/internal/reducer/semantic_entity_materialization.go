@@ -9,7 +9,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 )
 
-// SemanticEntityRow holds one canonical Annotation or Typedef materialization row.
+// SemanticEntityRow holds one canonical semantic-entity materialization row.
 type SemanticEntityRow struct {
 	RepoID       string
 	EntityID     string
@@ -34,14 +34,15 @@ type SemanticEntityWriteResult struct {
 	CanonicalWrites int
 }
 
-// SemanticEntityWriter persists Annotation and Typedef semantic nodes into Neo4j.
+// SemanticEntityWriter persists Annotation, Typedef, TypeAlias, and Component
+// semantic nodes into Neo4j.
 type SemanticEntityWriter interface {
 	WriteSemanticEntities(context.Context, SemanticEntityWrite) (SemanticEntityWriteResult, error)
 }
 
 // SemanticEntityMaterializationHandler reduces one semantic-entity follow-up
-// into canonical graph writes. It loads parser facts, extracts Annotation and
-// Typedef rows, and writes them through the canonical Neo4j adapter.
+// into canonical graph writes. It loads parser facts, extracts canonical
+// semantic rows, and writes them through the Neo4j adapter.
 type SemanticEntityMaterializationHandler struct {
 	FactLoader FactLoader
 	Writer     SemanticEntityWriter
@@ -103,7 +104,7 @@ func (h SemanticEntityMaterializationHandler) Handle(
 }
 
 // ExtractSemanticEntityRows returns the touched repository IDs and canonical
-// Annotation/Typedef rows extracted from fact envelopes.
+// semantic rows extracted from fact envelopes.
 func ExtractSemanticEntityRows(envelopes []facts.Envelope) ([]string, []SemanticEntityRow) {
 	if len(envelopes) == 0 {
 		return nil, nil
@@ -118,7 +119,7 @@ func ExtractSemanticEntityRows(envelopes []facts.Envelope) ([]string, []Semantic
 
 		repoID := semanticPayloadString(env.Payload, "repo_id")
 		entityType := semanticPayloadString(env.Payload, "entity_type")
-		if repoID == "" || (entityType != "Annotation" && entityType != "Typedef") {
+		if repoID == "" || (entityType != "Annotation" && entityType != "Typedef" && entityType != "TypeAlias" && entityType != "Component") {
 			continue
 		}
 

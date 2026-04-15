@@ -145,3 +145,123 @@ func TestHandleLanguageQuery_CTypedefUsesGraphMetadataWithoutContent(t *testing.
 		t.Fatalf("metadata[type] = %#v, want %#v", got, want)
 	}
 }
+
+func TestHandleLanguageQuery_TypeAliasPrefersGraphPathAndUsesGraphMetadataWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &LanguageQueryHandler{
+		Neo4j: &mockLanguageQueryGraphReader{rows: []map[string]any{
+			{
+				"entity_id":       "graph-typealias-1",
+				"name":            "ReadonlyMap",
+				"labels":          []any{"TypeAlias"},
+				"file_path":       "src/types.ts",
+				"repo_id":         "repo-1",
+				"repo_name":       "repo-1",
+				"language":        "typescript",
+				"start_line":      int64(2),
+				"end_line":        int64(4),
+				"type_alias_kind": "mapped_type",
+				"type_parameters": []any{"T"},
+			},
+		}},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/language-query",
+		bytes.NewBufferString(`{"language":"typescript","entity_type":"type_alias","query":"ReadonlyMap","repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one graph-backed type alias", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["semantic_summary"], "TypeAlias ReadonlyMap is a mapped type and declares type parameters T."; got != want {
+		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[semantic_profile] type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "mapped_type_alias"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+}
+
+func TestHandleLanguageQuery_TSXComponentUsesGraphMetadataWithoutContent(t *testing.T) {
+	t.Parallel()
+
+	handler := &LanguageQueryHandler{
+		Neo4j: &mockLanguageQueryGraphReader{rows: []map[string]any{
+			{
+				"entity_id":              "graph-component-1",
+				"name":                   "Screen",
+				"labels":                 []any{"Component"},
+				"file_path":              "src/Screen.tsx",
+				"repo_id":                "repo-1",
+				"repo_name":              "repo-1",
+				"language":               "tsx",
+				"start_line":             int64(7),
+				"end_line":               int64(14),
+				"framework":              "react",
+				"jsx_fragment_shorthand": true,
+			},
+		}},
+	}
+	mux := http.NewServeMux()
+	handler.Mount(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/code/language-query",
+		bytes.NewBufferString(`{"language":"tsx","entity_type":"component","query":"Screen","repo_id":"repo-1"}`),
+	)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+	}
+
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one graph-backed component", resp["results"])
+	}
+	result, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T, want map[string]any", results[0])
+	}
+	if got, want := result["semantic_summary"], "Component Screen is associated with the react framework and uses JSX fragment shorthand."; got != want {
+		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("result[semantic_profile] type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "framework_component"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+}

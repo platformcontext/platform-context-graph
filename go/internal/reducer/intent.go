@@ -30,8 +30,8 @@ const (
 	DomainWorkloadMaterialization Domain = "workload_materialization"
 	// DomainCodeCallMaterialization materializes canonical code call edges.
 	DomainCodeCallMaterialization Domain = "code_call_materialization"
-	// DomainSemanticEntityMaterialization materializes Annotation and
-	// Typedef semantic nodes.
+	// DomainSemanticEntityMaterialization materializes Annotation, Typedef,
+	// TypeAlias, and Component semantic nodes.
 	DomainSemanticEntityMaterialization Domain = "semantic_entity_materialization"
 )
 

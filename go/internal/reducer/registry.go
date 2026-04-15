@@ -215,7 +215,7 @@ func DefaultDomainDefinitions() []DomainDefinition {
 		},
 		{
 			Domain:  DomainSemanticEntityMaterialization,
-			Summary: "materialize annotation and typedef semantic nodes from parser facts",
+			Summary: "materialize annotation, typedef, type alias, and component semantic nodes from parser facts",
 			Ownership: OwnershipShape{
 				CrossSource:    true,
 				CrossScope:     true,
