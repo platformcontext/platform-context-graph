@@ -105,6 +105,10 @@ func buildEntitySemanticProfile(entity map[string]any) map[string]any {
 		profile["lambda"] = true
 		signals = append(signals, "lambda")
 	}
+	if pythonProfile.Metaclass != "" {
+		profile["metaclass"] = pythonProfile.Metaclass
+		signals = append(signals, "metaclass")
+	}
 	if pythonProfile.TypeAnnotation {
 		profile["type_annotation"] = true
 		signals = append(signals, "type_annotation")

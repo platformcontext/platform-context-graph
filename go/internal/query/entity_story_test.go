@@ -72,6 +72,19 @@ func TestAttachSemanticSummaryAddsStoryForSemanticEntities(t *testing.T) {
 			want: "Function handler is async and uses decorators @route. Defined in src/app.py (python).",
 		},
 		{
+			name: "python class metaclass",
+			entity: map[string]any{
+				"labels":    []string{"Class"},
+				"name":      "Logged",
+				"language":  "python",
+				"file_path": "src/models.py",
+				"metadata": map[string]any{
+					"metaclass": "MetaLogger",
+				},
+			},
+			want: "Class Logged uses metaclass MetaLogger. Defined in src/models.py (python).",
+		},
+		{
 			name: "java applied annotation",
 			entity: map[string]any{
 				"labels":    []string{"Annotation"},

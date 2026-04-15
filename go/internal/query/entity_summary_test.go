@@ -59,6 +59,24 @@ func TestBuildEntitySemanticSummaryPythonLambdaFunction(t *testing.T) {
 	}
 }
 
+func TestBuildEntitySemanticSummaryPythonMetaclassClass(t *testing.T) {
+	t.Parallel()
+
+	entity := map[string]any{
+		"labels": []string{"Class"},
+		"name":   "Logged",
+		"metadata": map[string]any{
+			"metaclass": "MetaLogger",
+		},
+	}
+
+	got := buildEntitySemanticSummary(entity)
+	want := "Class Logged uses metaclass MetaLogger."
+	if got != want {
+		t.Fatalf("buildEntitySemanticSummary() = %q, want %q", got, want)
+	}
+}
+
 func TestBuildEntitySemanticSummaryTypeAnnotation(t *testing.T) {
 	t.Parallel()
 

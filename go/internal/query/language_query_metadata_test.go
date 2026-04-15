@@ -490,3 +490,80 @@ func TestHandleLanguageQuery_AnnotationFallsBackToContentWhenGraphMissing(t *tes
 		t.Fatalf("result[semantic_summary] = %#v, want %#v", got, want)
 	}
 }
+
+func TestEnrichLanguageResultsWithContentMetadataPreservesPythonGraphMetadata(t *testing.T) {
+	t.Parallel()
+
+	db := openContentReaderTestDB(t, []contentReaderQueryResult{
+		{
+			columns: []string{
+				"entity_id", "repo_id", "relative_path", "entity_type", "entity_name",
+				"start_line", "end_line", "language", "source_cache", "metadata",
+			},
+			rows: [][]driver.Value{
+				{
+					"content-1", "repo-1", "src/models.py", "Class", "Logged",
+					int64(4), int64(8), "python", "class Logged(metaclass=FallbackMeta): pass", []byte(`{"decorators":["@tracked"],"metaclass":"FallbackMeta"}`),
+				},
+			},
+		},
+	})
+
+	handler := &LanguageQueryHandler{Content: NewContentReader(db)}
+	graphResults := []map[string]any{
+		{
+			"entity_id":  "graph-1",
+			"name":       "Logged",
+			"labels":     []string{"Class"},
+			"file_path":  "src/models.py",
+			"repo_id":    "repo-1",
+			"language":   "python",
+			"start_line": 4,
+			"end_line":   8,
+			"metadata": map[string]any{
+				"metaclass": "MetaLogger",
+			},
+		},
+	}
+
+	got, err := handler.enrichLanguageResultsWithContentMetadata(
+		context.Background(),
+		graphResults,
+		"python",
+		"Class",
+		"Logged",
+		"repo-1",
+		10,
+	)
+	if err != nil {
+		t.Fatalf("enrichLanguageResultsWithContentMetadata() error = %v, want nil", err)
+	}
+
+	metadata, ok := got[0]["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][metadata] type = %T, want map[string]any", got[0]["metadata"])
+	}
+	if gotValue, want := metadata["metaclass"], "MetaLogger"; gotValue != want {
+		t.Fatalf("metadata[metaclass] = %#v, want %#v", gotValue, want)
+	}
+	decorators, ok := metadata["decorators"].([]any)
+	if !ok {
+		t.Fatalf("metadata[decorators] type = %T, want []any", metadata["decorators"])
+	}
+	if len(decorators) != 1 || decorators[0] != "@tracked" {
+		t.Fatalf("metadata[decorators] = %#v, want [@tracked]", decorators)
+	}
+	if gotValue, want := got[0]["semantic_summary"], "Class Logged uses decorators @tracked and uses metaclass MetaLogger."; gotValue != want {
+		t.Fatalf("results[0][semantic_summary] = %#v, want %#v", gotValue, want)
+	}
+	profile, ok := got[0]["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0][semantic_profile] type = %T, want map[string]any", got[0]["semantic_profile"])
+	}
+	if gotValue, want := profile["surface_kind"], "decorated_class"; gotValue != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", gotValue, want)
+	}
+	if gotValue, want := profile["metaclass"], "MetaLogger"; gotValue != want {
+		t.Fatalf("semantic_profile[metaclass] = %#v, want %#v", gotValue, want)
+	}
+}

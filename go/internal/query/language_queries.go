@@ -399,7 +399,11 @@ func buildEntityCypher(language, label, extFilter, query, repoID string, params 
 		       coalesce(e.language, f.language) as language,
 		       e.start_line as start_line, e.end_line as end_line,
 		       e.docstring as docstring,
-		       e.method_kind as method_kind
+		       e.method_kind as method_kind,
+		       e.decorators as decorators,
+		       e.async as async,
+		       e.semantic_kind as semantic_kind,
+		       e.metaclass as metaclass
 		ORDER BY f.relative_path, e.name
 		LIMIT $limit
 	`
@@ -475,6 +479,22 @@ func graphResultMetadata(row map[string]any) map[string]any {
 	}
 	if v := StringVal(row, "method_kind"); v != "" {
 		metadata["method_kind"] = v
+	}
+	if values := StringSliceVal(row, "decorators"); len(values) > 0 {
+		decorators := make([]any, 0, len(values))
+		for _, value := range values {
+			decorators = append(decorators, value)
+		}
+		metadata["decorators"] = decorators
+	}
+	if v, ok := row["async"].(bool); ok {
+		metadata["async"] = v
+	}
+	if v := StringVal(row, "semantic_kind"); v != "" {
+		metadata["semantic_kind"] = v
+	}
+	if v := StringVal(row, "metaclass"); v != "" {
+		metadata["metaclass"] = v
 	}
 	if len(metadata) == 0 {
 		return nil

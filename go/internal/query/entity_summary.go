@@ -209,6 +209,9 @@ func buildEntitySemanticSummary(entity map[string]any) string {
 	if len(pythonProfile.Decorators) > 0 {
 		fragments = append(fragments, "uses decorators "+strings.Join(pythonProfile.Decorators, ", "))
 	}
+	if pythonProfile.Metaclass != "" {
+		fragments = append(fragments, "uses metaclass "+pythonProfile.Metaclass)
+	}
 	if params := metadataStringSlice(metadata, "type_parameters"); len(params) > 0 {
 		fragments = append(fragments, "declares type parameters "+strings.Join(params, ", "))
 	}

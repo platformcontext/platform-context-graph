@@ -86,3 +86,51 @@ func TestBuildLanguageResult_AttachesGraphMetadataAndSemanticSummary(t *testing.
 		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
 	}
 }
+
+func TestBuildLanguageResult_AttachesPythonGraphMetadataAndSemanticSummary(t *testing.T) {
+	row := map[string]any{
+		"entity_id":     "class:py:Logged",
+		"name":          "Logged",
+		"labels":        []any{"Class"},
+		"file_path":     "src/models.py",
+		"repo_id":       "repo:py",
+		"repo_name":     "service",
+		"language":      "python",
+		"start_line":    int64(4),
+		"end_line":      int64(8),
+		"decorators":    []any{"@tracked"},
+		"async":         false,
+		"semantic_kind": "",
+		"metaclass":     "MetaLogger",
+	}
+
+	result := buildLanguageResult(row, "Class")
+
+	metadata, ok := result["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata type = %T, want map[string]any", result["metadata"])
+	}
+	decorators, ok := metadata["decorators"].([]any)
+	if !ok {
+		t.Fatalf("metadata[decorators] type = %T, want []any", metadata["decorators"])
+	}
+	if len(decorators) != 1 || decorators[0] != "@tracked" {
+		t.Fatalf("metadata[decorators] = %#v, want [@tracked]", decorators)
+	}
+	if got, want := metadata["metaclass"], "MetaLogger"; got != want {
+		t.Fatalf("metadata[metaclass] = %#v, want %#v", got, want)
+	}
+	if got, want := result["semantic_summary"], "Class Logged uses decorators @tracked and uses metaclass MetaLogger."; got != want {
+		t.Fatalf("semantic_summary = %#v, want %#v", got, want)
+	}
+	profile, ok := result["semantic_profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("semantic_profile type = %T, want map[string]any", result["semantic_profile"])
+	}
+	if got, want := profile["surface_kind"], "decorated_class"; got != want {
+		t.Fatalf("semantic_profile[surface_kind] = %#v, want %#v", got, want)
+	}
+	if got, want := profile["metaclass"], "MetaLogger"; got != want {
+		t.Fatalf("semantic_profile[metaclass] = %#v, want %#v", got, want)
+	}
+}

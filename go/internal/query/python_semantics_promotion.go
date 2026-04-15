@@ -13,6 +13,8 @@ const (
 	PythonSemanticSignalAsync PythonSemanticSignal = "async"
 	// PythonSemanticSignalLambda marks lambda-assignment behavior.
 	PythonSemanticSignalLambda PythonSemanticSignal = "lambda"
+	// PythonSemanticSignalMetaclass marks class metaclass ownership.
+	PythonSemanticSignalMetaclass PythonSemanticSignal = "metaclass"
 	// PythonSemanticSignalTypeAnnotation marks type annotation behavior.
 	PythonSemanticSignalTypeAnnotation PythonSemanticSignal = "type_annotation"
 )
@@ -24,6 +26,7 @@ type PythonSemanticProfile struct {
 	Decorators     []string
 	Async          bool
 	Lambda         bool
+	Metaclass      string
 	TypeAnnotation bool
 }
 
@@ -38,6 +41,7 @@ func PythonSemanticProfileFromMetadata(entityType string, metadata map[string]an
 	profile.Decorators = stringSliceFromAny(metadata["decorators"])
 	profile.Async = boolValue(metadata["async"])
 	profile.Lambda = metadataString(metadata, "semantic_kind") == "lambda"
+	profile.Metaclass = metadataString(metadata, "metaclass")
 	profile.TypeAnnotation = entityType == "TypeAnnotation" || hasValues(metadata["type_annotations"])
 	return profile
 }
@@ -58,7 +62,7 @@ func (p PythonSemanticProfile) PrimarySignal() PythonSemanticSignal {
 
 // Signals returns the profile signals in promotion priority order.
 func (p PythonSemanticProfile) Signals() []PythonSemanticSignal {
-	signals := make([]PythonSemanticSignal, 0, 3)
+	signals := make([]PythonSemanticSignal, 0, 5)
 	if len(p.Decorators) > 0 {
 		signals = append(signals, PythonSemanticSignalDecorator)
 	}
@@ -67,6 +71,9 @@ func (p PythonSemanticProfile) Signals() []PythonSemanticSignal {
 	}
 	if p.Lambda {
 		signals = append(signals, PythonSemanticSignalLambda)
+	}
+	if p.Metaclass != "" {
+		signals = append(signals, PythonSemanticSignalMetaclass)
 	}
 	if p.TypeAnnotation {
 		signals = append(signals, PythonSemanticSignalTypeAnnotation)
@@ -81,6 +88,8 @@ func (p PythonSemanticProfile) Signals() []PythonSemanticSignal {
 // promoting Python semantics into story or context surfaces.
 func (p PythonSemanticProfile) SurfaceKind() string {
 	switch {
+	case p.EntityType == "Class" && len(p.Decorators) > 0:
+		return "decorated_class"
 	case len(p.Decorators) > 0 && p.Async:
 		return "decorated_async_function"
 	case len(p.Decorators) > 0:
@@ -89,6 +98,8 @@ func (p PythonSemanticProfile) SurfaceKind() string {
 		return "async_function"
 	case p.Lambda:
 		return "lambda_function"
+	case p.EntityType == "Class" && p.Metaclass != "":
+		return "metaclass_class"
 	case p.TypeAnnotation:
 		return "type_annotation"
 	default:

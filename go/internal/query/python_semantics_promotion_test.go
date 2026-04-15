@@ -54,6 +54,17 @@ func TestPythonSemanticProfileFromMetadata(t *testing.T) {
 			wantKind: "lambda_function",
 		},
 		{
+			name:       "class with metaclass",
+			entityType: "Class",
+			metadata: map[string]any{
+				"metaclass": "MetaLogger",
+			},
+			wantSignals: []PythonSemanticSignal{
+				PythonSemanticSignalMetaclass,
+			},
+			wantKind: "metaclass_class",
+		},
+		{
 			name:        "plain python function",
 			entityType:  "Function",
 			metadata:    map[string]any{},
