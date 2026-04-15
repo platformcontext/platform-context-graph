@@ -1,0 +1,33 @@
+docs/docs/reference/http-api.md
+  1ca5ee6ce936a402 146-147
+go/internal/query/impact_trace_deployment_test.go
+  1ca5ee6ce936a402 176-191
+go/internal/query/impact_trace_deployment.go
+  1ca5ee6ce936a402 80-87,201-233
+go/internal/query/openapi_paths_impact.go
+  1ca5ee6ce936a402 47-48
+go/internal/query/openapi_test.go
+  1ca5ee6ce936a402 251-252
+docs/docs/reference/mcp-reference.md
+  1ca5ee6ce936a402 78-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "0e3efcca15dddb741a5344ba47817a82dd2ddfe0",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 67,
+      "total_deletions": 6,
+      "accepted_lines": 67,
+      "overriden_lines": 0
+    }
+  }
+}
