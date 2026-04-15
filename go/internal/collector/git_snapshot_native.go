@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/platformcontext/platform-context-graph/go/internal/collector/discovery"
@@ -115,13 +116,15 @@ func (s NativeRepositorySnapshotter) SnapshotRepository(
 		return RepositorySnapshot{}, err
 	}
 	registry := s.registry()
-	fileSet, err := resolveNativeSnapshotFileSet(repoPath, registry, s.discoveryOptions())
+	fileSet, discoveryStats, err := resolveNativeSnapshotFileSet(repoPath, registry, s.discoveryOptions())
 	if len(repository.FileTargets) > 0 {
 		fileSet, err = resolveNativeSnapshotFileSetForTargets(repoPath, repository.FileTargets, registry)
 	}
 	if err != nil {
 		return RepositorySnapshot{}, err
 	}
+	s.logDiscoveryStats(ctx, repoPath, discoveryStats)
+	s.recordDiscoveryMetrics(ctx, discoveryStats)
 
 	snapshot := RepositorySnapshot{
 		RepoPath:        repoPath,
@@ -202,16 +205,182 @@ func (s NativeRepositorySnapshotter) registry() parser.Registry {
 	return parser.DefaultRegistry()
 }
 
+// defaultIgnoredDirs lists directories that are always pruned during discovery.
+// This matches the Python-era default exclusion list plus additional coverage
+// for every language the parser registry supports.
+var defaultIgnoredDirs = []string{
+	// VCS
+	".git",
+	".svn",
+	".hg",
+	// Infrastructure / IaC caches
+	".terraform",
+	".terragrunt-cache",
+	".tox",
+	".mypy_cache",
+	".pytest_cache",
+	".aws-sam",
+	"cdk.out",
+	".serverless",
+	// JavaScript / TypeScript
+	"node_modules",
+	"bower_components",
+	"jspm_packages",
+	".next",
+	".nuxt",
+	// Python
+	"site-packages",
+	"dist-packages",
+	"__pypackages__",
+	"__pycache__",
+	".venv",
+	"venv",
+	".eggs",
+	// PHP
+	"vendor",
+	// Go
+	// (vendor already listed under PHP)
+	// Ruby
+	"bundle",
+	// Elixir
+	"deps",
+	"_build",
+	// Swift ecosystem
+	"Pods",
+	".build",
+	"Carthage",
+	// Java / Kotlin / Scala / Groovy
+	".gradle",
+	".m2",
+	".ivy2",
+	// Rust
+	// (target already listed below under build output)
+	// Haskell
+	".stack-work",
+	".cabal-sandbox",
+	"dist-newstyle",
+	// Dart
+	".dart_tool",
+	".pub-cache",
+	// Perl
+	"blib",
+	"local",
+	// C / C#
+	"packages",
+	"obj",
+	"bin",
+	// Ansible
+	".ansible",
+	"ansible_collections",
+	// Jenkins
+	".jenkins",
+	// Common build and distribution output
+	"dist",
+	"build",
+	"target",
+	"out",
+	// Coverage and test output
+	"coverage",
+	".nyc_output",
+	"htmlcov",
+}
+
+// defaultIgnoredExtensions lists file suffixes that are always skipped during
+// discovery. These cover log/output artifacts, minified/bundled assets, and
+// other non-source files that should never be parsed.
+var defaultIgnoredExtensions = []string{
+	// Logs and output
+	".log",
+	".out",
+	// Minified and bundled assets
+	".min.js",
+	".min.css",
+	".bundle.js",
+	".chunk.js",
+	".min.map",
+	// Source maps
+	".map",
+	// Compiled / binary artifacts commonly checked in
+	".pyc",
+	".pyo",
+	".class",
+	".dll",
+	".so",
+	".dylib",
+	".exe",
+	".o",
+	".a",
+	".wasm",
+}
+
 func (s NativeRepositorySnapshotter) discoveryOptions() discovery.Options {
 	if len(s.DiscoveryOptions.IgnoredDirs) > 0 ||
+		len(s.DiscoveryOptions.IgnoredExtensions) > 0 ||
 		s.DiscoveryOptions.IgnoreHidden ||
 		len(s.DiscoveryOptions.PreservedHiddenPrefixes) > 0 ||
 		s.DiscoveryOptions.HonorGitignore {
 		return s.DiscoveryOptions
 	}
 	return discovery.Options{
-		IgnoredDirs:    []string{".git"},
-		HonorGitignore: true,
+		IgnoredDirs:       defaultIgnoredDirs,
+		IgnoredExtensions: defaultIgnoredExtensions,
+		HonorGitignore:    true,
+	}
+}
+
+func (s NativeRepositorySnapshotter) logDiscoveryStats(ctx context.Context, repoPath string, stats discovery.DiscoveryStats) {
+	logger := s.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	attrs := []any{
+		slog.String("repo_path", filepath.Base(repoPath)),
+		slog.Int("dirs_skipped_total", stats.TotalDirsSkipped()),
+		slog.Int("files_skipped_total", stats.TotalFilesSkipped()),
+	}
+
+	// Log per-directory-name breakdown for operator tuning visibility.
+	for name, count := range stats.DirsSkippedByName {
+		attrs = append(attrs, slog.Int("dirs_skipped."+name, count))
+	}
+	for ext, count := range stats.FilesSkippedByExtension {
+		attrs = append(attrs, slog.Int("files_skipped.ext"+ext, count))
+	}
+	if stats.FilesSkippedHidden > 0 {
+		attrs = append(attrs, slog.Int("files_skipped.hidden", stats.FilesSkippedHidden))
+	}
+	if stats.FilesSkippedGitignore > 0 {
+		attrs = append(attrs, slog.Int("files_skipped.gitignore", stats.FilesSkippedGitignore))
+	}
+
+	logger.InfoContext(ctx, "discovery stats", attrs...)
+}
+
+func (s NativeRepositorySnapshotter) recordDiscoveryMetrics(ctx context.Context, stats discovery.DiscoveryStats) {
+	if s.Instruments == nil {
+		return
+	}
+
+	for name, count := range stats.DirsSkippedByName {
+		s.Instruments.DiscoveryDirsSkipped.Add(ctx, int64(count),
+			metric.WithAttributes(telemetry.AttrSkipReason(name)),
+		)
+	}
+	for ext, count := range stats.FilesSkippedByExtension {
+		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(count),
+			metric.WithAttributes(telemetry.AttrSkipReason("ext:"+ext)),
+		)
+	}
+	if stats.FilesSkippedHidden > 0 {
+		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(stats.FilesSkippedHidden),
+			metric.WithAttributes(telemetry.AttrSkipReason("hidden")),
+		)
+	}
+	if stats.FilesSkippedGitignore > 0 {
+		s.Instruments.DiscoveryFilesSkipped.Add(ctx, int64(stats.FilesSkippedGitignore),
+			metric.WithAttributes(telemetry.AttrSkipReason("gitignore")),
+		)
 	}
 }
 
@@ -226,8 +395,8 @@ func resolveNativeSnapshotFileSet(
 	repoPath string,
 	registry parser.Registry,
 	opts discovery.Options,
-) (discovery.RepoFileSet, error) {
-	fileSets, err := discovery.ResolveRepositoryFileSets(
+) (discovery.RepoFileSet, discovery.DiscoveryStats, error) {
+	stats, fileSets, err := discovery.ResolveRepositoryFileSetsWithStats(
 		repoPath,
 		func(path string) bool {
 			_, ok := registry.LookupByPath(path)
@@ -236,14 +405,14 @@ func resolveNativeSnapshotFileSet(
 		opts,
 	)
 	if err != nil {
-		return discovery.RepoFileSet{}, fmt.Errorf("resolve repository file sets: %w", err)
+		return discovery.RepoFileSet{}, stats, fmt.Errorf("resolve repository file sets: %w", err)
 	}
 	for _, fileSet := range fileSets {
 		if fileSet.RepoRoot == repoPath {
-			return fileSet, nil
+			return fileSet, stats, nil
 		}
 	}
-	return discovery.RepoFileSet{RepoRoot: repoPath}, nil
+	return discovery.RepoFileSet{RepoRoot: repoPath}, stats, nil
 }
 
 func resolveNativeSnapshotFileSetForTargets(

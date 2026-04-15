@@ -20,6 +20,9 @@ type SupportedFileMatcher func(path string) bool
 type Options struct {
 	// IgnoredDirs is compared case-insensitively against directory names.
 	IgnoredDirs []string
+	// IgnoredExtensions lists file suffixes (e.g. ".log", ".min.js") that are
+	// always skipped. Matching is case-insensitive against the full file name.
+	IgnoredExtensions []string
 	// IgnoreHidden skips dot-prefixed files and directories unless their paths
 	// are covered by PreservedHiddenPrefixes.
 	IgnoreHidden bool
@@ -28,6 +31,42 @@ type Options struct {
 	PreservedHiddenPrefixes []string
 	// HonorGitignore enables repo-local .gitignore filtering.
 	HonorGitignore bool
+}
+
+// DiscoveryStats tracks how many files and directories were skipped during
+// discovery, broken down by the specific name that triggered the skip.
+// These stats support operator telemetry for understanding what the indexer
+// excludes across 878+ repos.
+type DiscoveryStats struct {
+	// DirsSkippedByName maps each ignored directory name (e.g. "node_modules",
+	// "vendor") to the number of times it was pruned.
+	DirsSkippedByName map[string]int
+	// FilesSkippedByExtension maps each ignored extension (e.g. ".min.js",
+	// ".pyc") to the number of files skipped.
+	FilesSkippedByExtension map[string]int
+	// FilesSkippedHidden counts files skipped because they are hidden (dot-prefixed).
+	FilesSkippedHidden int
+	// FilesSkippedGitignore counts files filtered by repo-local .gitignore rules.
+	FilesSkippedGitignore int
+}
+
+// TotalDirsSkipped returns the aggregate count of pruned directories.
+func (s DiscoveryStats) TotalDirsSkipped() int {
+	total := 0
+	for _, n := range s.DirsSkippedByName {
+		total += n
+	}
+	return total
+}
+
+// TotalFilesSkipped returns the aggregate count of skipped files across all
+// skip reasons.
+func (s DiscoveryStats) TotalFilesSkipped() int {
+	total := s.FilesSkippedHidden + s.FilesSkippedGitignore
+	for _, n := range s.FilesSkippedByExtension {
+		total += n
+	}
+	return total
 }
 
 // RepoFileSet groups one repo root with its discovered supported files.
@@ -45,20 +84,31 @@ func ResolveRepositoryFileSets(
 	supported SupportedFileMatcher,
 	opts Options,
 ) ([]RepoFileSet, error) {
+	_, fileSets, err := ResolveRepositoryFileSetsWithStats(root, supported, opts)
+	return fileSets, err
+}
+
+// ResolveRepositoryFileSetsWithStats is like ResolveRepositoryFileSets but
+// also returns discovery statistics for telemetry.
+func ResolveRepositoryFileSetsWithStats(
+	root string,
+	supported SupportedFileMatcher,
+	opts Options,
+) (DiscoveryStats, []RepoFileSet, error) {
 	scanRoot, err := normalizeScanRoot(root)
 	if err != nil {
-		return nil, err
+		return DiscoveryStats{}, nil, err
 	}
 	if supported == nil {
-		return nil, errors.New("supported file matcher is required")
+		return DiscoveryStats{}, nil, errors.New("supported file matcher is required")
 	}
 
-	candidates, err := collectSupportedFiles(scanRoot, supported, opts)
+	candidates, stats, err := collectSupportedFiles(scanRoot, supported, opts)
 	if err != nil {
-		return nil, err
+		return stats, nil, err
 	}
 	if len(candidates) == 0 {
-		return []RepoFileSet{{RepoRoot: scanRoot}}, nil
+		return stats, []RepoFileSet{{RepoRoot: scanRoot}}, nil
 	}
 
 	groups := groupFilesByRepository(scanRoot, candidates)
@@ -73,14 +123,16 @@ func ResolveRepositoryFileSets(
 		files := append([]string(nil), groups[repoRoot]...)
 		sort.Strings(files)
 		if opts.HonorGitignore {
+			before := len(files)
 			files = filterRepoFilesByGitignore(repoRoot, files)
+			stats.FilesSkippedGitignore += before - len(files)
 		}
 		result = append(result, RepoFileSet{
 			RepoRoot: repoRoot,
 			Files:    files,
 		})
 	}
-	return result, nil
+	return stats, result, nil
 }
 
 func normalizeScanRoot(root string) (string, error) {
@@ -111,10 +163,15 @@ func collectSupportedFiles(
 	scanRoot string,
 	supported SupportedFileMatcher,
 	opts Options,
-) ([]string, error) {
+) ([]string, DiscoveryStats, error) {
 	ignoredDirs := normalizeIgnoredDirs(opts.IgnoredDirs)
+	ignoredExts := normalizeExtensions(opts.IgnoredExtensions)
 	preservedHidden := normalizePrefixes(opts.PreservedHiddenPrefixes)
 
+	stats := DiscoveryStats{
+		DirsSkippedByName:       make(map[string]int),
+		FilesSkippedByExtension: make(map[string]int),
+	}
 	files := make([]string, 0)
 	if err := filepath.WalkDir(scanRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -131,13 +188,23 @@ func collectSupportedFiles(
 		rel = filepath.ToSlash(filepath.Clean(rel))
 
 		if entry.IsDir() {
-			if shouldSkipDirectory(entry.Name(), rel, ignoredDirs, opts.IgnoreHidden, preservedHidden) {
+			if isIgnoredDir(entry.Name(), ignoredDirs) {
+				stats.DirsSkippedByName[strings.ToLower(entry.Name())]++
+				return filepath.SkipDir
+			}
+			if opts.IgnoreHidden && isHiddenPath(rel) && !preservesHiddenPath(rel, preservedHidden) {
+				stats.DirsSkippedByName[".hidden"]++
 				return filepath.SkipDir
 			}
 			return nil
 		}
 
 		if shouldSkipFile(rel, opts.IgnoreHidden, preservedHidden) {
+			stats.FilesSkippedHidden++
+			return nil
+		}
+		if ext := matchedIgnoredExtension(entry.Name(), ignoredExts); ext != "" {
+			stats.FilesSkippedByExtension[ext]++
 			return nil
 		}
 		if !supported(path) {
@@ -150,11 +217,11 @@ func collectSupportedFiles(
 		files = append(files, path)
 		return nil
 	}); err != nil {
-		return nil, err
+		return nil, stats, err
 	}
 
 	sort.Strings(files)
-	return files, nil
+	return files, stats, nil
 }
 
 func groupFilesByRepository(scanRoot string, files []string) map[string][]string {
@@ -243,22 +310,6 @@ func pathWithinRoot(root, candidate string) bool {
 	return rel == "." || !strings.HasPrefix(rel, "../")
 }
 
-func shouldSkipDirectory(
-	name string,
-	rel string,
-	ignoredDirs map[string]struct{},
-	ignoreHidden bool,
-	preservedHidden []string,
-) bool {
-	if isIgnoredDir(name, ignoredDirs) {
-		return true
-	}
-	if !ignoreHidden {
-		return false
-	}
-	return isHiddenPath(rel) && !preservesHiddenPath(rel, preservedHidden)
-}
-
 func shouldSkipFile(rel string, ignoreHidden bool, preservedHidden []string) bool {
 	if !ignoreHidden {
 		return false
@@ -310,6 +361,31 @@ func pathPrefixMatches(path string, prefix string) bool {
 		return true
 	}
 	return strings.HasPrefix(prefix, path+"/")
+}
+
+func normalizeExtensions(exts []string) []string {
+	normalized := make([]string, 0, len(exts))
+	for _, ext := range exts {
+		ext = strings.TrimSpace(ext)
+		if ext == "" {
+			continue
+		}
+		normalized = append(normalized, strings.ToLower(ext))
+	}
+	return normalized
+}
+
+// matchedIgnoredExtension returns the specific extension that matched, or ""
+// if no extension matched. Used by collectSupportedFiles to record per-extension
+// skip counts.
+func matchedIgnoredExtension(name string, exts []string) string {
+	lower := strings.ToLower(name)
+	for _, ext := range exts {
+		if strings.HasSuffix(lower, ext) {
+			return ext
+		}
+	}
+	return ""
 }
 
 func normalizeIgnoredDirs(dirs []string) map[string]struct{} {

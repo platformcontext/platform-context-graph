@@ -34,6 +34,7 @@ const (
 	MetricDimensionDomain        = "domain"
 	MetricDimensionPartitionKey  = "partition_key"
 	MetricDimensionRepoSizeTier  = "repo_size_tier"
+	MetricDimensionSkipReason    = "skip_reason"
 )
 
 // Span names define the stable data-plane tracing contract.
@@ -78,6 +79,7 @@ var metricDimensionKeys = []string{
 	MetricDimensionDomain,
 	MetricDimensionPartitionKey,
 	MetricDimensionRepoSizeTier,
+	MetricDimensionSkipReason,
 }
 
 var spanNames = []string{

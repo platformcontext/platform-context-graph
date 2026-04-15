@@ -177,6 +177,94 @@ func TestResolveRepositoryFileSetsSkipsSymlinkTargetsOutsideRepoRoot(t *testing.
 	}
 }
 
+func TestResolveRepositoryFileSetsWithStatsReportsPerNameSkipCounts(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	mustMkdirGit(t, repo)
+
+	// Create files in ignored directories.
+	mustWriteFile(t, filepath.Join(repo, "node_modules", "react", "index.js"), "module.exports = {}")
+	mustWriteFile(t, filepath.Join(repo, "node_modules", "vue", "index.js"), "module.exports = {}")
+	mustWriteFile(t, filepath.Join(repo, "vendor", "autoload.php"), "<?php")
+	mustWriteFile(t, filepath.Join(repo, "__pycache__", "mod.cpython-311.pyc"), "")
+	mustWriteFile(t, filepath.Join(repo, ".terraform", "providers", "main.tf"), "")
+
+	// Create files with ignored extensions.
+	mustWriteFile(t, filepath.Join(repo, "app.min.js"), "minified")
+	mustWriteFile(t, filepath.Join(repo, "style.min.css"), "minified")
+	mustWriteFile(t, filepath.Join(repo, "build.log"), "output")
+	mustWriteFile(t, filepath.Join(repo, "result.out"), "output")
+	mustWriteFile(t, filepath.Join(repo, "app.js.map"), "sourcemap")
+
+	// Create kept files.
+	mustWriteFile(t, filepath.Join(repo, "main.py"), "print('hello')")
+	mustWriteFile(t, filepath.Join(repo, "lib", "utils.py"), "def f(): pass")
+
+	stats, fileSets, err := ResolveRepositoryFileSetsWithStats(
+		root,
+		func(path string) bool { return true },
+		Options{
+			IgnoredDirs:       []string{".git", "node_modules", "vendor", "__pycache__", ".terraform"},
+			IgnoredExtensions: []string{".min.js", ".min.css", ".log", ".out", ".map"},
+			HonorGitignore:    false,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ResolveRepositoryFileSetsWithStats() error = %v", err)
+	}
+
+	// Verify per-directory-name counts.
+	if got := stats.DirsSkippedByName["node_modules"]; got != 1 {
+		t.Errorf("DirsSkippedByName[node_modules] = %d, want 1", got)
+	}
+	if got := stats.DirsSkippedByName["vendor"]; got != 1 {
+		t.Errorf("DirsSkippedByName[vendor] = %d, want 1", got)
+	}
+	if got := stats.DirsSkippedByName["__pycache__"]; got != 1 {
+		t.Errorf("DirsSkippedByName[__pycache__] = %d, want 1", got)
+	}
+	if got := stats.DirsSkippedByName[".terraform"]; got != 1 {
+		t.Errorf("DirsSkippedByName[.terraform] = %d, want 1", got)
+	}
+	if got := stats.TotalDirsSkipped(); got < 4 {
+		t.Errorf("TotalDirsSkipped() = %d, want >= 4", got)
+	}
+
+	// Verify per-extension counts.
+	if got := stats.FilesSkippedByExtension[".min.js"]; got != 1 {
+		t.Errorf("FilesSkippedByExtension[.min.js] = %d, want 1", got)
+	}
+	if got := stats.FilesSkippedByExtension[".min.css"]; got != 1 {
+		t.Errorf("FilesSkippedByExtension[.min.css] = %d, want 1", got)
+	}
+	if got := stats.FilesSkippedByExtension[".log"]; got != 1 {
+		t.Errorf("FilesSkippedByExtension[.log] = %d, want 1", got)
+	}
+	if got := stats.FilesSkippedByExtension[".out"]; got != 1 {
+		t.Errorf("FilesSkippedByExtension[.out] = %d, want 1", got)
+	}
+	if got := stats.FilesSkippedByExtension[".map"]; got != 1 {
+		t.Errorf("FilesSkippedByExtension[.map] = %d, want 1", got)
+	}
+	if got := stats.TotalFilesSkipped(); got != 5 {
+		t.Errorf("TotalFilesSkipped() = %d, want 5", got)
+	}
+
+	// Verify the kept files made it through.
+	if len(fileSets) == 0 {
+		t.Fatal("expected at least one file set")
+	}
+	totalKept := 0
+	for _, fs := range fileSets {
+		totalKept += len(fs.Files)
+	}
+	if totalKept != 2 {
+		t.Errorf("kept file count = %d, want 2", totalKept)
+	}
+}
+
 func mustMkdirGit(t *testing.T, dir string) {
 	t.Helper()
 

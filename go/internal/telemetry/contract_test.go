@@ -17,6 +17,7 @@ func TestMetricDimensionKeys(t *testing.T) {
 		"domain",
 		"partition_key",
 		"repo_size_tier",
+		"skip_reason",
 	}
 
 	got := MetricDimensionKeys()

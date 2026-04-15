@@ -64,6 +64,10 @@ type Instruments struct {
 	ContentReReads        metric.Int64Counter
 	ContentReReadSkips    metric.Int64Counter
 
+	// Discovery skip counters — per-name breakdown of what discovery prunes
+	DiscoveryDirsSkipped  metric.Int64Counter
+	DiscoveryFilesSkipped metric.Int64Counter
+
 	// Size-tiered scheduling metrics
 	LargeRepoClassifications metric.Int64Counter
 	LargeRepoSemaphoreWait   metric.Float64Histogram
@@ -313,6 +317,22 @@ func NewInstruments(meter metric.Meter) (*Instruments, error) {
 		return nil, fmt.Errorf("register ContentReReadSkips counter: %w", err)
 	}
 
+	inst.DiscoveryDirsSkipped, err = meter.Int64Counter(
+		"pcg_dp_discovery_dirs_skipped_total",
+		metric.WithDescription("Directories pruned during file discovery, labeled by ignored directory name"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register DiscoveryDirsSkipped counter: %w", err)
+	}
+
+	inst.DiscoveryFilesSkipped, err = meter.Int64Counter(
+		"pcg_dp_discovery_files_skipped_total",
+		metric.WithDescription("Files skipped during file discovery, labeled by skip reason (extension or hidden)"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("register DiscoveryFilesSkipped counter: %w", err)
+	}
+
 	inst.LargeRepoClassifications, err = meter.Int64Counter(
 		"pcg_dp_large_repo_classifications_total",
 		metric.WithDescription("Repositories classified by size tier (small or large)"),
@@ -468,6 +488,11 @@ func AttrPartitionKey(v string) attribute.KeyValue {
 // AttrRepoSizeTier returns a repo_size_tier attribute for metric recording.
 func AttrRepoSizeTier(v string) attribute.KeyValue {
 	return attribute.String(MetricDimensionRepoSizeTier, v)
+}
+
+// AttrSkipReason returns a skip_reason attribute for discovery skip metrics.
+func AttrSkipReason(v string) attribute.KeyValue {
+	return attribute.String(MetricDimensionSkipReason, v)
 }
 
 // RecordGOMEMLIMIT registers and records the applied GOMEMLIMIT as a gauge.
