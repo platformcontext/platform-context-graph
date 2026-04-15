@@ -8,7 +8,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/reducer"
 )
 
-func TestSemanticEntityWriterWritesAnnotationTypedefTypeAliasAndComponentNodes(t *testing.T) {
+func TestSemanticEntityWriterWritesAnnotationTypedefTypeAliasComponentAndFunctionNodes(t *testing.T) {
 	t.Parallel()
 
 	executor := &recordingExecutor{}
@@ -77,15 +77,30 @@ func TestSemanticEntityWriterWritesAnnotationTypedefTypeAliasAndComponentNodes(t
 					"component_type_assertion": "ComponentType",
 				},
 			},
+			{
+				RepoID:       "repo-1",
+				EntityID:     "function-1",
+				EntityType:   "Function",
+				EntityName:   "getTab",
+				FilePath:     "/repo/src/app.js",
+				RelativePath: "src/app.js",
+				Language:     "javascript",
+				StartLine:    10,
+				EndLine:      24,
+				Metadata: map[string]any{
+					"docstring":   "Returns the active tab.",
+					"method_kind": "getter",
+				},
+			},
 		},
 	})
 	if err != nil {
 		t.Fatalf("WriteSemanticEntities() error = %v", err)
 	}
-	if got, want := result.CanonicalWrites, 4; got != want {
+	if got, want := result.CanonicalWrites, 5; got != want {
 		t.Fatalf("CanonicalWrites = %d, want %d", got, want)
 	}
-	if got, want := len(executor.calls), 5; got != want {
+	if got, want := len(executor.calls), 6; got != want {
 		t.Fatalf("executor calls = %d, want %d", got, want)
 	}
 	if executor.calls[0].Operation != OperationCanonicalRetract {
@@ -153,6 +168,20 @@ func TestSemanticEntityWriterWritesAnnotationTypedefTypeAliasAndComponentNodes(t
 	}
 	if !strings.Contains(executor.calls[4].Cypher, "MERGE (n:Component {uid: row.entity_id})") {
 		t.Fatalf("component cypher missing Component merge: %s", executor.calls[4].Cypher)
+	}
+
+	functionRows := executor.calls[5].Parameters["rows"].([]map[string]any)
+	if got, want := len(functionRows), 1; got != want {
+		t.Fatalf("function row count = %d, want %d", got, want)
+	}
+	if got, want := functionRows[0]["docstring"], "Returns the active tab."; got != want {
+		t.Fatalf("function docstring = %#v, want %#v", got, want)
+	}
+	if got, want := functionRows[0]["method_kind"], "getter"; got != want {
+		t.Fatalf("function method_kind = %#v, want %#v", got, want)
+	}
+	if !strings.Contains(executor.calls[5].Cypher, "MERGE (n:Function {uid: row.entity_id})") {
+		t.Fatalf("function cypher missing Function merge: %s", executor.calls[5].Cypher)
 	}
 }
 

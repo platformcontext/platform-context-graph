@@ -8,7 +8,7 @@ import (
 	"github.com/platformcontext/platform-context-graph/go/internal/facts"
 )
 
-func TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasAndComponentFacts(t *testing.T) {
+func TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasComponentAndFunctionFacts(t *testing.T) {
 	t.Parallel()
 
 	envelopes := []facts.Envelope{
@@ -94,6 +94,22 @@ func TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasAndComponentF
 				},
 			},
 		},
+		{
+			FactKind: "content_entity",
+			SourceRef: facts.Ref{
+				SourceURI: "/repo/src/app.js",
+			},
+			Payload: map[string]any{
+				"repo_id":       "repo-1",
+				"entity_id":     "function-1",
+				"relative_path": "src/app.js",
+				"entity_type":   "Function",
+				"entity_name":   "getTab",
+				"language":      "javascript",
+				"docstring":     "Returns the active tab.",
+				"method_kind":   "getter",
+			},
+		},
 	}
 
 	repoIDs, rows := ExtractSemanticEntityRows(envelopes)
@@ -101,7 +117,7 @@ func TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasAndComponentF
 	if got, want := repoIDs, []string{"repo-1"}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("ExtractSemanticEntityRows() repoIDs = %v, want %v", got, want)
 	}
-	if got, want := len(rows), 4; got != want {
+	if got, want := len(rows), 5; got != want {
 		t.Fatalf("ExtractSemanticEntityRows() rows = %d, want %d", got, want)
 	}
 
@@ -162,6 +178,17 @@ func TestExtractSemanticEntityRowsFiltersAnnotationTypedefTypeAliasAndComponentF
 	}
 	if got, want := component.Metadata["component_type_assertion"], "ComponentType"; got != want {
 		t.Fatalf("Component.Metadata[component_type_assertion] = %v, want %v", got, want)
+	}
+
+	jsFunction := rowsByType["Function"]
+	if jsFunction.EntityType != "Function" {
+		t.Fatalf("Function row missing")
+	}
+	if got, want := jsFunction.Metadata["docstring"], "Returns the active tab."; got != want {
+		t.Fatalf("Function.Metadata[docstring] = %v, want %v", got, want)
+	}
+	if got, want := jsFunction.Metadata["method_kind"], "getter"; got != want {
+		t.Fatalf("Function.Metadata[method_kind] = %v, want %v", got, want)
 	}
 }
 
@@ -252,11 +279,27 @@ func TestSemanticEntityMaterializationHandlerWritesAndRetracts(t *testing.T) {
 					},
 				},
 			},
+			{
+				FactKind: "content_entity",
+				SourceRef: facts.Ref{
+					SourceURI: "/repo/src/app.js",
+				},
+				Payload: map[string]any{
+					"repo_id":       "repo-1",
+					"entity_id":     "function-1",
+					"relative_path": "src/app.js",
+					"entity_type":   "Function",
+					"entity_name":   "getTab",
+					"language":      "javascript",
+					"docstring":     "Returns the active tab.",
+					"method_kind":   "getter",
+				},
+			},
 		},
 	}
 	writer := &recordingSemanticEntityWriter{
 		result: SemanticEntityWriteResult{
-			CanonicalWrites: 4,
+			CanonicalWrites: 5,
 		},
 	}
 
@@ -288,7 +331,7 @@ func TestSemanticEntityMaterializationHandlerWritesAndRetracts(t *testing.T) {
 	if got, want := len(writer.writes[0].RepoIDs), 1; got != want {
 		t.Fatalf("writer RepoIDs = %v, want 1 repo", writer.writes[0].RepoIDs)
 	}
-	if got, want := len(writer.writes[0].Rows), 4; got != want {
+	if got, want := len(writer.writes[0].Rows), 5; got != want {
 		t.Fatalf("writer Rows = %d, want %d", got, want)
 	}
 }

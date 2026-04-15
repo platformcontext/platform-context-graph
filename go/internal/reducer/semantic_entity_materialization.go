@@ -34,8 +34,8 @@ type SemanticEntityWriteResult struct {
 	CanonicalWrites int
 }
 
-// SemanticEntityWriter persists Annotation, Typedef, TypeAlias, and Component
-// semantic nodes into Neo4j.
+// SemanticEntityWriter persists Annotation, Typedef, TypeAlias, Component,
+// and JavaScript callable Function semantic nodes into Neo4j.
 type SemanticEntityWriter interface {
 	WriteSemanticEntities(context.Context, SemanticEntityWrite) (SemanticEntityWriteResult, error)
 }
@@ -119,7 +119,7 @@ func ExtractSemanticEntityRows(envelopes []facts.Envelope) ([]string, []Semantic
 
 		repoID := semanticPayloadString(env.Payload, "repo_id")
 		entityType := semanticPayloadString(env.Payload, "entity_type")
-		if repoID == "" || (entityType != "Annotation" && entityType != "Typedef" && entityType != "TypeAlias" && entityType != "Component") {
+		if repoID == "" || !isSemanticEntityType(env.Payload, entityType) {
 			continue
 		}
 
@@ -191,7 +191,12 @@ func collectSemanticMetadata(payload map[string]any) map[string]any {
 		metadata = make(map[string]any)
 	}
 	for _, key := range []string{"kind", "target_kind", "type"} {
-		if value := semanticPayloadString(payload, key); value != "" {
+		if value := semanticPayloadMetadataString(payload, key); value != "" {
+			metadata[key] = value
+		}
+	}
+	for _, key := range []string{"docstring", "method_kind"} {
+		if value := semanticPayloadMetadataString(payload, key); value != "" {
 			metadata[key] = value
 		}
 	}
@@ -229,6 +234,31 @@ func semanticPayloadString(payload map[string]any, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(str)
+}
+
+func semanticPayloadMetadataString(payload map[string]any, key string) string {
+	if value := semanticPayloadString(payload, key); value != "" {
+		return value
+	}
+	return semanticPayloadString(payloadMap(payload, "entity_metadata"), key)
+}
+
+func isSemanticEntityType(payload map[string]any, entityType string) bool {
+	switch entityType {
+	case "Annotation", "Typedef", "TypeAlias", "Component":
+		return true
+	case "Function":
+		return isJavaScriptCallableSemanticEntity(payload)
+	default:
+		return false
+	}
+}
+
+func isJavaScriptCallableSemanticEntity(payload map[string]any) bool {
+	if semanticPayloadString(payload, "language") != "javascript" {
+		return false
+	}
+	return semanticPayloadMetadataString(payload, "docstring") != "" || semanticPayloadMetadataString(payload, "method_kind") != ""
 }
 
 func semanticPayloadInt(payload map[string]any, key string) int {

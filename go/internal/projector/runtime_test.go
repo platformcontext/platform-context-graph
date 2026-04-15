@@ -311,11 +311,11 @@ func TestRuntimeProjectMaterializesExplicitEntityRecords(t *testing.T) {
 	}
 }
 
-func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationTypedefTypeAliasAndComponent(t *testing.T) {
+func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationTypedefTypeAliasComponentAndFunction(t *testing.T) {
 	t.Parallel()
 
 	contentWriter := &recordingContentWriter{result: content.Result{EntityCount: 2}}
-	intentWriter := &recordingIntentWriter{result: IntentResult{Count: 4}}
+	intentWriter := &recordingIntentWriter{result: IntentResult{Count: 5}}
 	runtime := Runtime{
 		ContentWriter: contentWriter,
 		IntentWriter:  intentWriter,
@@ -426,12 +426,31 @@ func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationTypedef
 				"language":      "go",
 			},
 		},
+		{
+			FactID:       "fact-6",
+			ScopeID:      "scope-123",
+			GenerationID: "generation-456",
+			FactKind:     "content_entity",
+			SourceRef: facts.Ref{
+				SourceSystem: "git",
+			},
+			Payload: map[string]any{
+				"entity_id":     "js-function-1",
+				"entity_type":   "Function",
+				"entity_name":   "getTab",
+				"relative_path": "src/app.js",
+				"repo_id":       "repository:r_12345678",
+				"language":      "javascript",
+				"docstring":     "Returns the active tab.",
+				"method_kind":   "getter",
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Project() error = %v, want nil", err)
 	}
 
-	if got, want := result.Intents.Count, 4; got != want {
+	if got, want := result.Intents.Count, 5; got != want {
 		t.Fatalf("result.Intents.Count = %d, want %d", got, want)
 	}
 	if got, want := result.Content.EntityCount, 2; got != want {
@@ -441,7 +460,7 @@ func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationTypedef
 		t.Fatalf("intent writer call count = %d, want %d", got, want)
 	}
 	intents := intentWriter.calls[0]
-	if got, want := len(intents), 4; got != want {
+	if got, want := len(intents), 5; got != want {
 		t.Fatalf("len(intents) = %d, want %d", got, want)
 	}
 	for i, intent := range intents {
@@ -455,11 +474,14 @@ func TestRuntimeProjectEnqueuesSemanticEntityMaterializationForAnnotationTypedef
 	if got, want := intents[1].EntityKey, "component-1"; got != want {
 		t.Fatalf("intents[1].EntityKey = %q, want %q", got, want)
 	}
-	if got, want := intents[2].EntityKey, "typealias-1"; got != want {
+	if got, want := intents[2].EntityKey, "js-function-1"; got != want {
 		t.Fatalf("intents[2].EntityKey = %q, want %q", got, want)
 	}
-	if got, want := intents[3].EntityKey, "typedef-1"; got != want {
+	if got, want := intents[3].EntityKey, "typealias-1"; got != want {
 		t.Fatalf("intents[3].EntityKey = %q, want %q", got, want)
+	}
+	if got, want := intents[4].EntityKey, "typedef-1"; got != want {
+		t.Fatalf("intents[4].EntityKey = %q, want %q", got, want)
 	}
 }
 
@@ -478,6 +500,36 @@ func TestBuildReducerIntentSkipsNonSemanticContentEntities(t *testing.T) {
 	})
 	if ok {
 		t.Fatal("buildReducerIntent() ok = true for Function, want false")
+	}
+}
+
+func TestBuildReducerIntentQueuesJavaScriptCallableSemanticEntities(t *testing.T) {
+	t.Parallel()
+
+	intent, ok := buildSemanticEntityReducerIntent(facts.Envelope{
+		FactID:       "fact-1",
+		ScopeID:      "scope-123",
+		GenerationID: "generation-456",
+		FactKind:     "content_entity",
+		Payload: map[string]any{
+			"entity_type":   "Function",
+			"entity_id":     "js-function-1",
+			"entity_name":   "getTab",
+			"relative_path": "src/app.js",
+			"repo_id":       "repo-1",
+			"language":      "javascript",
+			"docstring":     "Returns the active tab.",
+			"method_kind":   "getter",
+		},
+	})
+	if !ok {
+		t.Fatal("buildSemanticEntityReducerIntent() ok = false for JavaScript Function, want true")
+	}
+	if got, want := intent.Domain, reducer.DomainSemanticEntityMaterialization; got != want {
+		t.Fatalf("intent.Domain = %q, want %q", got, want)
+	}
+	if got, want := intent.EntityKey, "js-function-1"; got != want {
+		t.Fatalf("intent.EntityKey = %q, want %q", got, want)
 	}
 }
 

@@ -26,7 +26,9 @@ func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool)
 		return ReducerIntent{}, false
 	}
 	if _, ok := semanticEntityReducerTypes[entityType]; !ok {
-		return ReducerIntent{}, false
+		if !isJavaScriptCallableSemanticEntity(fact.Payload, entityType) {
+			return ReducerIntent{}, false
+		}
 	}
 
 	repoID, _ := payloadString(fact.Payload, "repo_id")
@@ -54,4 +56,33 @@ func buildSemanticEntityReducerIntent(fact facts.Envelope) (ReducerIntent, bool)
 		FactID:       fact.FactID,
 		SourceSystem: fact.SourceRef.SourceSystem,
 	}, true
+}
+
+func isJavaScriptCallableSemanticEntity(payload map[string]any, entityType string) bool {
+	if entityType != "Function" {
+		return false
+	}
+	if payloadMetadataString(payload, "language") != "javascript" {
+		return false
+	}
+	return payloadMetadataString(payload, "docstring") != "" || payloadMetadataString(payload, "method_kind") != ""
+}
+
+func payloadMetadataString(payload map[string]any, key string) string {
+	if value, ok := payloadString(payload, key); ok {
+		return value
+	}
+	raw, ok := payload["entity_metadata"]
+	if !ok || raw == nil {
+		return ""
+	}
+	metadata, ok := raw.(map[string]any)
+	if !ok {
+		return ""
+	}
+	value, ok := payloadString(metadata, key)
+	if !ok {
+		return ""
+	}
+	return value
 }
