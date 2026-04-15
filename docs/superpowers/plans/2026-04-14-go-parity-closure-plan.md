@@ -48,25 +48,25 @@ the Go-owned runtime exactly.
 - compose-backed operator proof
 - updated operator docs and parity audit
 
-## Phase 1: SQL And Data-Intelligence Closure
+## Phase 1: SQL And Data-Intelligence Validation Closure
 
 ### Scope
 
-Finish the remaining SQL and dbt lineage semantics that still keep the Go path
-at `partial` maturity.
+Keep the SQL and dbt parity story honest by expanding validation maturity and
+operator proof, not by pretending the remaining historical non-goals are
+missing Go parity features.
 
 ### Primary gaps
 
-- unresolved dbt references
-- templated expression handling and opaque macro bodies
-- lineage-preserving macro wrappers that still expose real source refs
-- window-function lineage semantics
-- multi-input derived expressions
 - broader real-repo and end-to-end proof for compiled analytics models
+- compose-backed proof that the current Go-owned runtime preserves the checked-in
+  SQL/dbt fixture semantics
+- docs and runbooks that clearly separate Python-era parity from optional
+  post-parity enhancements
 
 ### Validation
 
-- focused parser tests under `go/internal/parser`
+- focused parser, materialization, and query verification
 - compose-backed fixture verification
 - updated SQL language page and parity audit
 
