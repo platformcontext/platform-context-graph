@@ -157,6 +157,9 @@ Deployment-oriented trace responses are shaped around:
 - `runtime_overview`
 - `deployment_sources`
 - `cloud_resources`
+- `k8s_resources`
+- `image_refs`
+- `k8s_relationships`
 - `controller_driven_paths`
 - `delivery_paths`
 - `deployment_fact_summary`

@@ -46,6 +46,14 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 		},
 		"k8s_resources": []map[string]any{
 			{
+				"entity_id":        "k8s-0",
+				"entity_name":      "payments-api",
+				"kind":             "Service",
+				"qualified_name":   "payments/Service/payments-api",
+				"relative_path":    "deploy/service.yaml",
+				"container_images": []string{},
+			},
+			{
 				"entity_id":        "k8s-1",
 				"entity_name":      "payments-api",
 				"kind":             "Deployment",
@@ -188,8 +196,8 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	if !ok {
 		t.Fatalf("k8s_resources type = %T, want []map[string]any", got["k8s_resources"])
 	}
-	if len(k8sResources) != 1 {
-		t.Fatalf("k8s_resources len = %d, want 1", len(k8sResources))
+	if len(k8sResources) != 2 {
+		t.Fatalf("k8s_resources len = %d, want 2", len(k8sResources))
 	}
 
 	imageRefs, ok := got["image_refs"].([]string)
@@ -198,6 +206,14 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	}
 	if len(imageRefs) != 1 {
 		t.Fatalf("image_refs len = %d, want 1", len(imageRefs))
+	}
+
+	k8sRelationships, ok := got["k8s_relationships"].([]map[string]any)
+	if !ok {
+		t.Fatalf("k8s_relationships type = %T, want []map[string]any", got["k8s_relationships"])
+	}
+	if len(k8sRelationships) != 2 {
+		t.Fatalf("k8s_relationships len = %d, want 2", len(k8sRelationships))
 	}
 
 	controllerDrivenPaths, ok := got["controller_driven_paths"].([]map[string]any)
@@ -212,8 +228,8 @@ func TestBuildDeploymentTraceResponseSummarizesInstances(t *testing.T) {
 	if !ok {
 		t.Fatalf("delivery_paths type = %T, want []map[string]any", got["delivery_paths"])
 	}
-	if len(deliveryPaths) != 4 {
-		t.Fatalf("delivery_paths len = %d, want 4", len(deliveryPaths))
+	if len(deliveryPaths) != 7 {
+		t.Fatalf("delivery_paths len = %d, want 7", len(deliveryPaths))
 	}
 
 	drilldowns, ok := got["drilldowns"].(map[string]any)

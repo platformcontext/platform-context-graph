@@ -68,6 +68,7 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 	cloudResources, _ := workloadContext["cloud_resources"].([]map[string]any)
 	k8sResources, _ := workloadContext["k8s_resources"].([]map[string]any)
 	imageRefs, _ := workloadContext["image_refs"].([]string)
+	k8sRelationships := buildK8sRelationships(k8sResources)
 	platforms := distinctSortedInstanceField(instances, "platform_name")
 	platformKinds := distinctSortedInstanceField(instances, "platform_kind")
 	environments := distinctSortedInstanceField(instances, "environment")
@@ -91,9 +92,10 @@ func buildDeploymentTraceResponse(serviceName string, workloadContext map[string
 		"cloud_resources":         cloudResources,
 		"k8s_resources":           k8sResources,
 		"image_refs":              imageRefs,
+		"k8s_relationships":       k8sRelationships,
 		"deployment_facts":        deploymentFacts,
 		"controller_driven_paths": buildControllerDrivenPaths(platforms, platformKinds),
-		"delivery_paths":          buildDeliveryPaths(deploymentSources, cloudResources, k8sResources, imageRefs),
+		"delivery_paths":          buildDeliveryPaths(deploymentSources, cloudResources, k8sResources, imageRefs, k8sRelationships),
 		"story":                   buildWorkloadStory(workloadContext),
 		"story_sections":          buildStorySections(platforms, platformKinds, environments),
 		"deployment_overview": map[string]any{
@@ -232,8 +234,9 @@ func buildDeliveryPaths(
 	cloudResources []map[string]any,
 	k8sResources []map[string]any,
 	imageRefs []string,
+	k8sRelationships []map[string]any,
 ) []map[string]any {
-	paths := make([]map[string]any, 0, len(deploymentSources)+len(cloudResources)+len(k8sResources)+len(imageRefs))
+	paths := make([]map[string]any, 0, len(deploymentSources)+len(cloudResources)+len(k8sResources)+len(imageRefs)+len(k8sRelationships))
 	for _, source := range deploymentSources {
 		paths = append(paths, map[string]any{
 			"type":       "deployment_source",
@@ -262,6 +265,16 @@ func buildDeliveryPaths(
 		paths = append(paths, map[string]any{
 			"type":   "image_ref",
 			"target": imageRef,
+		})
+	}
+	for _, relationship := range k8sRelationships {
+		paths = append(paths, map[string]any{
+			"type":        "k8s_relationship",
+			"target":      safeStr(relationship, "target_name"),
+			"target_id":   safeStr(relationship, "target_id"),
+			"source_name": safeStr(relationship, "source_name"),
+			"reason":      safeStr(relationship, "reason"),
+			"kind":        safeStr(relationship, "type"),
 		})
 	}
 	return paths

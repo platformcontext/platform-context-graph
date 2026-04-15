@@ -74,6 +74,9 @@ Use these tools when the user is asking for a narrative answer such as
 - `runtime_overview`
 - `deployment_sources`
 - `cloud_resources`
+- `k8s_resources`
+- `image_refs`
+- `k8s_relationships`
 - `deployment_facts`
 - `controller_driven_paths`
 - `delivery_paths`
