@@ -1,0 +1,37 @@
+docs/docs/languages/javascript.md
+  1ca5ee6ce936a402 27-28,47-50
+docs/docs/languages/typescript.md
+  1ca5ee6ce936a402 25-27,51-53,58
+docs/docs/reference/python-to-go-parity.md
+  1ca5ee6ce936a402 77-80,100-103
+docs/docs/reference/parity-closure-matrix.md
+  1ca5ee6ce936a402 44-47,81
+docs/docs/languages/typescriptjsx.md
+  1ca5ee6ce936a402 24-25,43-45
+docs/docs/languages/python.md
+  1ca5ee6ce936a402 23-24,26,48-51
+docs/docs/reference/http-api.md
+  1ca5ee6ce936a402 99-105,143,152-157
+docs/docs/reference/mcp-reference.md
+  1ca5ee6ce936a402 63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "d778e9ef87469a7327721aaed18a5276c8eb1e38",
+  "prompts": {
+    "1ca5ee6ce936a402": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10d8dda6-1f89-4f6f-b5db-5392d41d7d03",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Allen Sanabria",
+      "messages": [],
+      "total_additions": 54,
+      "total_deletions": 2090,
+      "accepted_lines": 54,
+      "overriden_lines": 0
+    }
+  }
+}
