@@ -85,6 +85,35 @@ func buildCodeEntityIndex(envelopes []facts.Envelope) codeEntityIndex {
 				}
 			}
 		}
+		for _, item := range mapSlice(fileData["classes"]) {
+			entityID := anyToString(item["uid"])
+			if entityID == "" {
+				continue
+			}
+			if preferredPath != "" {
+				index.entityFileByID[entityID] = preferredPath
+			}
+			for _, pathKey := range codeCallPathKeys(rawPath, relativePath) {
+				for _, candidateName := range codeCallTypeCandidateNames(item) {
+					if _, ok := nameCandidates[pathKey]; !ok {
+						nameCandidates[pathKey] = make(map[string]map[string]struct{})
+					}
+					if _, ok := nameCandidates[pathKey][candidateName]; !ok {
+						nameCandidates[pathKey][candidateName] = make(map[string]struct{})
+					}
+					nameCandidates[pathKey][candidateName][entityID] = struct{}{}
+					if repositoryID != "" {
+						if _, ok := repoNameCandidates[repositoryID]; !ok {
+							repoNameCandidates[repositoryID] = make(map[string]map[string]struct{})
+						}
+						if _, ok := repoNameCandidates[repositoryID][candidateName]; !ok {
+							repoNameCandidates[repositoryID][candidateName] = make(map[string]struct{})
+						}
+						repoNameCandidates[repositoryID][candidateName][entityID] = struct{}{}
+					}
+				}
+			}
+		}
 	}
 
 	for pathKey, spans := range index.spansByPath {

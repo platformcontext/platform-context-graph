@@ -3,6 +3,7 @@ package parser
 import (
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -33,7 +34,6 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 	braceDepth := 0
 	stack := make([]scopedContext, 0)
 	seenVariables := make(map[string]struct{})
-	seenCalls := make(map[string]struct{})
 
 	for index, rawLine := range lines {
 		lineNumber := index + 1
@@ -68,8 +68,10 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			})
 		}
 
+		declaredTypeNames := make(map[string]struct{})
 		if matches := kotlinClassPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			name := matches[1]
+			declaredTypeNames[name] = struct{}{}
 			appendBucket(payload, "classes", map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
@@ -80,6 +82,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		}
 		if matches := kotlinObjectPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			name := matches[1]
+			declaredTypeNames[name] = struct{}{}
 			appendBucket(payload, "classes", map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
@@ -93,6 +96,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			if len(matches) == 2 && strings.TrimSpace(matches[1]) != "" {
 				name = matches[1]
 			}
+			declaredTypeNames[name] = struct{}{}
 			appendBucket(payload, "classes", map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
@@ -103,6 +107,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		}
 		if matches := kotlinInterfacePattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			name := matches[1]
+			declaredTypeNames[name] = struct{}{}
 			appendBucket(payload, "interfaces", map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
@@ -113,6 +118,7 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 		}
 		if matches := kotlinEnumPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
 			name := matches[1]
+			declaredTypeNames[name] = struct{}{}
 			appendBucket(payload, "classes", map[string]any{
 				"name":        name,
 				"line_number": lineNumber,
@@ -182,18 +188,21 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			}
 		}
 
+		seenLineCalls := make(map[string]struct{})
 		for _, match := range kotlinThisCallPattern.FindAllStringSubmatch(trimmed, -1) {
 			if len(match) != 2 {
 				continue
 			}
 			name := match[1]
-			if _, ok := seenCalls[name]; ok {
+			fullName := "this." + name
+			callKey := fullName + "#" + strconv.Itoa(lineNumber)
+			if _, ok := seenLineCalls[callKey]; ok {
 				continue
 			}
-			seenCalls[name] = struct{}{}
+			seenLineCalls[callKey] = struct{}{}
 			item := map[string]any{
 				"name":        name,
-				"full_name":   "this." + name,
+				"full_name":   fullName,
 				"line_number": lineNumber,
 				"lang":        "kotlin",
 			}
@@ -210,23 +219,30 @@ func (e *Engine) parseKotlin(path string, isDependency bool, options Options) (m
 			if functionDeclCutoff >= 0 && match[0] < functionDeclCutoff {
 				continue
 			}
+			receiver := strings.TrimSuffix(strings.TrimSpace(trimmed[match[2]:match[3]]), ".")
 			name := trimmed[match[4]:match[5]]
 			switch name {
 			case "fun", "if", "for", "while", "when", "return", "class", "interface":
 				continue
 			}
-			if _, ok := seenCalls[name]; ok {
+			if receiver == "" {
+				if _, declared := declaredTypeNames[name]; declared {
+					continue
+				}
+			}
+			fullName := strings.TrimSpace(trimmed[match[2]:match[3]] + trimmed[match[4]:match[5]])
+			callKey := fullName + "#" + strconv.Itoa(lineNumber)
+			if _, ok := seenLineCalls[callKey]; ok {
 				continue
 			}
-			seenCalls[name] = struct{}{}
-			fullName := strings.TrimSpace(trimmed[match[2]:match[3]] + trimmed[match[4]:match[5]])
+			seenLineCalls[callKey] = struct{}{}
 			item := map[string]any{
 				"name":        name,
 				"full_name":   fullName,
 				"line_number": lineNumber,
 				"lang":        "kotlin",
 			}
-			if receiver := strings.TrimSuffix(strings.TrimSpace(trimmed[match[2]:match[3]]), "."); receiver == "this" {
+			if receiver == "this" {
 				if classContext := currentScopedName(stack, "class"); classContext != "" {
 					item["class_context"] = classContext
 				}

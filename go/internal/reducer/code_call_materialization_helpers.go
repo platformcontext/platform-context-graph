@@ -163,6 +163,27 @@ func codeCallFunctionCandidateNames(item map[string]any) []string {
 	return names
 }
 
+func codeCallTypeCandidateNames(item map[string]any) []string {
+	names := make([]string, 0, 3)
+	appendName := func(value string) {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return
+		}
+		for _, existing := range names {
+			if existing == trimmed {
+				return
+			}
+		}
+		names = append(names, trimmed)
+	}
+
+	appendName(anyToString(item["name"]))
+	appendName(anyToString(item["full_name"]))
+	appendName(codeCallContextName(item["context"]))
+	return names
+}
+
 func codeCallImplContext(item map[string]any) string {
 	switch typed := item["impl_context"].(type) {
 	case string:
